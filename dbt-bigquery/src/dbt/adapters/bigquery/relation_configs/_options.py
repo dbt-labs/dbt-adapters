@@ -9,6 +9,7 @@ from typing_extensions import Self
 
 from dbt.adapters.bigquery.relation_configs._base import BigQueryBaseRelationConfig
 from dbt.adapters.bigquery.utility import bool_setting, float_setting, sql_escape
+from dbt.adapters.relation_configs import RelationConfigChangeAction
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
@@ -163,4 +164,4 @@ class BigQueryOptionsConfigChange(RelationConfigChange):
 
     @property
     def requires_full_refresh(self) -> bool:
-        return False
+        return self.action != RelationConfigChangeAction.alter
