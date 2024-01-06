@@ -9,7 +9,7 @@ For any architectural/engineering decisions we make, we will create an ADR (Arch
 - The common sections that each ADR should have are:
     - Title
     - Context
+    - Options
     - Decision
-    - Status
     - Consequences
 - Use this article as a reference: [https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
