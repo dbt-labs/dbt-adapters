@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Set
 
-from dbt.common.exceptions import DbtRuntimeError
+from dbt_common.exceptions import DbtRuntimeError
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)

@@ -21,10 +21,10 @@ from typing import (
 )
 
 import agate
-from dbt.common.events.functions import fire_event
-import dbt.common.exceptions.base
-from dbt.common.events.contextvars import get_node_info
-from dbt.common.utils import cast_to_str
+from dbt_common.events.functions import fire_event
+import dbt_common.exceptions.base
+from dbt_common.events.contextvars import get_node_info
+from dbt_common.utils import cast_to_str
 
 from dbt.adapter.base.query_headers import MacroQueryStringSetter
 from dbt.adapter.contracts.connection import (

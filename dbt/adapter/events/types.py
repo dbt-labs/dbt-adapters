@@ -1,4 +1,4 @@
-from dbt.common.ui import line_wrap_message, warning_tag
+from dbt_common.ui import line_wrap_message, warning_tag
 
 from dbt.adapter.events.base_types import (
     DebugLevel,

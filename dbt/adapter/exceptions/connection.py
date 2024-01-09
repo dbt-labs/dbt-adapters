@@ -1,6 +1,6 @@
 from typing import List
 
-from dbt.common.exceptions import DbtDatabaseError, DbtRuntimeError
+from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
 
 
 class InvalidConnectionError(DbtRuntimeError):

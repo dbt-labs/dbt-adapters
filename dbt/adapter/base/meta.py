@@ -2,7 +2,7 @@ import abc
 from functools import wraps
 from typing import Any, Callable, Dict, FrozenSet, Optional, Set
 
-from dbt.common.events.functions import warn_or_error
+from dbt_common.events.functions import warn_or_error
 
 from dbt.adapter.events.types import AdapterDeprecationWarning
 

@@ -23,20 +23,20 @@ from typing import (
 )
 
 import agate
-from dbt.common.clients.agate_helper import (
+from dbt_common.clients.agate_helper import (
     Integer,
     empty_table,
     get_column_value_uncased,
     merge_tables,
     table_from_rows,
 )
-from dbt.common.clients.jinja import CallableMacroGenerator
-from dbt.common.contracts.constraints import (
+from dbt_common.clients.jinja import CallableMacroGenerator
+from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
-from dbt.common.exceptions import (
+from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
     DbtValidationError,
@@ -45,8 +45,8 @@ from dbt.common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt.common.events.functions import fire_event, warn_or_error
-from dbt.common.utils import (
+from dbt_common.events.functions import fire_event, warn_or_error
+from dbt_common.utils import (
     AttrDict,
     cast_to_str,
     executor,

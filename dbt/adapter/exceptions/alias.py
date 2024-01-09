@@ -1,6 +1,6 @@
 from typing import Any, Mapping
 
-from dbt.common.exceptions import DbtValidationError
+from dbt_common.exceptions import DbtValidationError
 
 
 class AliasError(DbtValidationError):

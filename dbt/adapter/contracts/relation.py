@@ -2,10 +2,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from dbt.common.contracts.util import Replaceable
-from dbt.common.dataclass_schema import StrEnum, dbtClassMixin
-from dbt.common.exceptions import CompilationError, DataclassNotDictError
-from dbt.common.utils import deep_merge
+from dbt_common.contracts.util import Replaceable
+from dbt_common.dataclass_schema import StrEnum, dbtClassMixin
+from dbt_common.exceptions import CompilationError, DataclassNotDictError
+from dbt_common.utils import deep_merge
 from typing_extensions import Protocol
 
 

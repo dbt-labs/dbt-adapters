@@ -14,8 +14,8 @@ from typing import (
 from typing_extensions import Protocol
 
 import agate
-from dbt.common.clients.jinja import MacroProtocol
-from dbt.common.contracts.config.base import BaseConfig
+from dbt_common.clients.jinja import MacroProtocol
+from dbt_common.contracts.config.base import BaseConfig
 
 from dbt.adapter.contracts.connection import (
     AdapterRequiredConfig,

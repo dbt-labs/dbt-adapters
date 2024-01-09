@@ -12,18 +12,18 @@ from typing import (
     Tuple,
 )
 
-from dbt.common.contracts.util import Replaceable
-from dbt.common.dataclass_schema import (
+from dbt_common.contracts.util import Replaceable
+from dbt_common.dataclass_schema import (
     ExtensibleDbtClassMixin,
     StrEnum,
     ValidatedStringMixin,
     dbtClassMixin,
 )
 # TODO: this is a very bad dependency - shared global state
-from dbt.common.events.contextvars import get_node_info
-from dbt.common.events.functions import fire_event
-from dbt.common.exceptions import DbtInternalError
-from dbt.common.utils import md5
+from dbt_common.events.contextvars import get_node_info
+from dbt_common.events.functions import fire_event
+from dbt_common.exceptions import DbtInternalError
+from dbt_common.utils import md5
 from mashumaro.jsonschema.annotations import Pattern
 from typing_extensions import Protocol, Annotated
 

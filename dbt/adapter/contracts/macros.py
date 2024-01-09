@@ -1,6 +1,6 @@
 from typing import Optional
 
-from dbt.common.clients.jinja import MacroProtocol
+from dbt_common.clients.jinja import MacroProtocol
 from typing_extensions import Protocol
 
 

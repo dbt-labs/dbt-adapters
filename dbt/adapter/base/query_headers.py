@@ -1,7 +1,7 @@
 from threading import local
 from typing import Any, Callable, Dict, Optional
 
-from dbt.common.exceptions import DbtRuntimeError
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapter.clients.jinja import QueryStringGenerator
 from dbt.adapter.contracts.connection import AdapterRequiredConfig, QueryComment

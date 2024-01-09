@@ -1,7 +1,7 @@
 from typing import Any, List, Optional, Tuple, Type
 
 import agate
-from dbt.common.events.functions import fire_event
+from dbt_common.events.functions import fire_event
 
 from dbt.adapter.base import BaseAdapter, BaseRelation, available
 from dbt.adapter.cache import _make_ref_key_dict

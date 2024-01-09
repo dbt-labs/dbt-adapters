@@ -3,11 +3,11 @@ import time
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import agate
-import dbt.common.clients.agate_helper
-from dbt.common.events.contextvars import get_node_info
-from dbt.common.events.functions import fire_event
-import dbt.common.exceptions
-from dbt.common.utils import cast_to_str
+import dbt_common.clients.agate_helper
+from dbt_common.events.contextvars import get_node_info
+from dbt_common.events.functions import fire_event
+import dbt_common.exceptions
+from dbt_common.utils import cast_to_str
 
 from dbt.adapter.base import BaseConnectionManager
 from dbt.adapter.contracts.connection import (

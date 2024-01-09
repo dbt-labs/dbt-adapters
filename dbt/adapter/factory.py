@@ -6,9 +6,9 @@ import threading
 import traceback
 from typing import Any, Dict, List, Optional, Set, Type
 
-from dbt.common.semver import VersionSpecifier
-from dbt.common.events.functions import fire_event
-from dbt.common.exceptions import DbtInternalError, DbtRuntimeError
+from dbt_common.semver import VersionSpecifier
+from dbt_common.events.functions import fire_event
+from dbt_common.exceptions import DbtInternalError, DbtRuntimeError
 
 from dbt.adapter.base.plugin import AdapterPlugin
 from dbt.adapter.contracts.connection import AdapterRequiredConfig, Credentials
