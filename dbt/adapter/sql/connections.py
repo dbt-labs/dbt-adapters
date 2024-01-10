@@ -6,8 +6,7 @@ import agate
 from dbt_common.clients.agate_helper import empty_table, table_from_data_flat
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
-from dbt_common.exceptions import DbtInternalError
-from dbt_common.exceptions.base import NotImplementedError
+from dbt_common.exceptions import DbtInternalError, NotImplementedError
 from dbt_common.utils import cast_to_str
 
 from dbt.adapter.base import BaseConnectionManager

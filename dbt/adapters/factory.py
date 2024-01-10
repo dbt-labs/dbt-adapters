@@ -13,7 +13,7 @@ from dbt_common.semver import VersionSpecifier
 from dbt.adapter.base.plugin import AdapterPlugin
 from dbt.adapter.contracts.connection import AdapterRequiredConfig, Credentials
 from dbt.adapter.events.types import AdapterImportError, PluginLoadError, AdapterRegistered
-from dbt.adapter.include.global_project import (
+from dbt.adapters.include.global_project import (
     PACKAGE_PATH as GLOBAL_PROJECT_PATH,
     PROJECT_NAME as GLOBAL_PROJECT_NAME,
 )
