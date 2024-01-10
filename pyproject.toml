@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     "agate~=1.7.0",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@copy-code-from-dbt-core",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "mashumaro[msgpack]~=3.9",
     "protobuf>=4.0.0",
     "pytz>=2015.7",
