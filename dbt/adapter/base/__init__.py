@@ -1,6 +1,3 @@
-# TODO: Should we still include this in the `adapters` namespace?
-from dbt.adapter.contracts.connection import Credentials
-
 from dbt.adapter.base.meta import available
 from dbt.adapter.base.column import Column
 from dbt.adapter.base.connections import BaseConnectionManager

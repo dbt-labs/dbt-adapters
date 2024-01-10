@@ -1,6 +1,6 @@
 [project]
 name = "dbt-adapter"
-description = "The set of adapter protocols and base functionality that supports dbt-core"
+description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.8.0"

@@ -2,7 +2,7 @@
 from dbt_common.events.base_types import (
     BaseEvent,
     DebugLevel as CommonDebugLevel,
-    DynamicLevel as CommonDyanicLevel,
+    DynamicLevel as CommonDynamicLevel,
     ErrorLevel as CommonErrorLevel,
     InfoLevel as CommonInfoLevel,
     TestLevel as CommonTestLevel,
@@ -16,7 +16,7 @@ class AdapterBaseEvent(BaseEvent):
     PROTO_TYPES_MODULE = adapter_types_pb2
 
 
-class DynamicLevel(CommonDyanicLevel, AdapterBaseEvent):
+class DynamicLevel(CommonDynamicLevel, AdapterBaseEvent):
     pass
 
 

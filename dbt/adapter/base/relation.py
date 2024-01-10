@@ -13,7 +13,6 @@ from typing import (
     Union,
 )
 
-import dbt_common.exceptions
 from dbt_common.utils import deep_merge, filter_null_values
 
 from dbt.adapter.contracts.relation import (
