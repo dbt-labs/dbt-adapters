@@ -3,16 +3,16 @@ import threading
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from dbt_common.events.functions import fire_event, fire_event_if
-from dbt_common.exceptions.cache import (
+from dbt_common.utils.formatting import lowercase
+
+from dbt.adapter.events.types import CacheAction, CacheDumpGraph
+from dbt.adapter.exceptions.cache import (
     DependentLinkNotCachedError,
     NewNameAlreadyInCacheError,
     NoneRelationFoundError,
     ReferencedLinkNotCachedError,
     TruncatedModelNameCausedCollisionError,
 )
-from dbt_common.utils.formatting import lowercase
-
-from dbt.adapter.events.types import CacheAction, CacheDumpGraph
 from dbt.adapter.reference_keys import (
     _ReferenceKey,
     _make_ref_key,
