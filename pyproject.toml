@@ -102,7 +102,7 @@ env-include = ["DD_*"]
 
 [tool.hatch.envs.postgres]
 template = "integration"
-features = ["test", "postgres"]
+extra-dependencies = ["dbt-postgres"]
 
 [tool.black]
 extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
