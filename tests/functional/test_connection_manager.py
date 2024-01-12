@@ -1,7 +1,7 @@
 import sys
 from unittest import TestCase, mock
 
-from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
+from dbt.adapter.postgres import PostgresCredentials, PostgresConnectionManager
 import psycopg2
 
 from dbt.adapter.base import BaseConnectionManager

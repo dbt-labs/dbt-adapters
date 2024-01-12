@@ -2,8 +2,8 @@ from pathlib import Path
 from unittest import TestCase, mock
 
 from dbt.adapter.base import AdapterPlugin
-from dbt.adapters.factory import AdapterContainer
-from dbt.adapters.include.global_project import (
+from dbt.adapter.factory import AdapterContainer
+from dbt.adapter.include.global_project import (
     PROJECT_NAME as GLOBAL_PROJECT_NAME,
 )
 
