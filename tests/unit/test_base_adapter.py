@@ -42,16 +42,13 @@ class TestBaseAdapterConstraintRendering:
         ([{"type": "check"}, {"type": "unique"}], ["column_name integer unique"]),
     ]
 
-    @pytest.mark.parametrize(
-        "constraints,expected_rendered_constraints", column_constraints
-    )
+    @pytest.mark.parametrize("constraints,expected_rendered_constraints", column_constraints)
     def test_render_raw_columns_constraints(
         self, constraints, expected_rendered_constraints, request
     ):
         BaseAdapter.ConnectionManager = request.getfixturevalue("connection_manager")
         BaseAdapter.CONSTRAINT_SUPPORT = {
-            constraint: ConstraintSupport.ENFORCED
-            for constraint in BaseAdapter.CONSTRAINT_SUPPORT
+            constraint: ConstraintSupport.ENFORCED for constraint in BaseAdapter.CONSTRAINT_SUPPORT
         }
 
         rendered_constraints = BaseAdapter.render_raw_columns_constraints(
@@ -180,24 +177,19 @@ class TestBaseAdapterConstraintRendering:
         ),
     ]
 
-    @pytest.mark.parametrize(
-        "constraints,expected_rendered_constraints", model_constraints
-    )
+    @pytest.mark.parametrize("constraints,expected_rendered_constraints", model_constraints)
     def test_render_raw_model_constraints(
         self, constraints, expected_rendered_constraints, request
     ):
         BaseAdapter.ConnectionManager = request.getfixturevalue("connection_manager")
         BaseAdapter.CONSTRAINT_SUPPORT = {
-            constraint: ConstraintSupport.ENFORCED
-            for constraint in BaseAdapter.CONSTRAINT_SUPPORT
+            constraint: ConstraintSupport.ENFORCED for constraint in BaseAdapter.CONSTRAINT_SUPPORT
         }
 
         rendered_constraints = BaseAdapter.render_raw_model_constraints(constraints)
         assert rendered_constraints == expected_rendered_constraints
 
-    @pytest.mark.parametrize(
-        "constraints,expected_rendered_constraints", model_constraints
-    )
+    @pytest.mark.parametrize("constraints,expected_rendered_constraints", model_constraints)
     def test_render_raw_model_constraints_unsupported(
         self, constraints, expected_rendered_constraints, request
     ):

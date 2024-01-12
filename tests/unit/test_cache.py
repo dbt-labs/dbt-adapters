@@ -27,11 +27,7 @@ class TestCache(TestCase):
         relations = self.cache.get_relations(database, schema)
         for identifier, expect in identifiers.items():
             found = any(
-                (
-                    r.identifier == identifier
-                    and r.schema == schema
-                    and r.database == database
-                )
+                (r.identifier == identifier and r.schema == schema and r.database == database)
                 for r in relations
             )
             msg = "{}.{}.{} was{} found in the cache!".format(

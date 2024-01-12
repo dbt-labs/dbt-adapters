@@ -1,7 +1,7 @@
 import sys
 from unittest import TestCase, mock
 
-from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
+from dbt.adapter.postgres import PostgresCredentials, PostgresConnectionManager
 import psycopg2
 
 from dbt.adapter.base import BaseConnectionManager
@@ -21,9 +21,7 @@ class BaseConnectionManagerTest(TestCase):
             schema="test-schema",
         )
         self.logger = AdapterLogger("test")
-        self.postgres_connection = Connection(
-            "postgres", None, self.postgres_credentials
-        )
+        self.postgres_connection = Connection("postgres", None, self.postgres_credentials)
 
     def test_retry_connection(self):
         """Test a dummy handle is set on a connection on the first attempt.

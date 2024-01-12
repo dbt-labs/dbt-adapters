@@ -49,9 +49,7 @@ class TestAdapterLogger:
         logger.debug("hello {}", "world")
 
         # enters lower in the call stack to test that it formats correctly
-        event = types.AdapterEventDebug(
-            name="dbt_tests", base_msg="hello {}", args=["world"]
-        )
+        event = types.AdapterEventDebug(name="dbt_tests", base_msg="hello {}", args=["world"])
         assert "hello world" in event.message()
 
         # tests that it doesn't throw
@@ -67,9 +65,7 @@ class TestAdapterLogger:
         # enters lower in the call stack to test that it formats correctly
         # in this case it's that we didn't attempt to replace anything since there
         # were no args passed after the initial message
-        event = types.AdapterEventDebug(
-            name="dbt_tests", base_msg="boop{x}boop", args=[]
-        )
+        event = types.AdapterEventDebug(name="dbt_tests", base_msg="boop{x}boop", args=[])
         assert "boop{x}boop" in event.message()
 
         # ensure AdapterLogger and subclasses makes all base_msg members
@@ -195,9 +191,7 @@ class TestEventJSONSerialization:
             try:
                 msg_to_json(msg)
             except Exception as e:
-                raise Exception(
-                    f"{event} is not serializable to json. Originating exception: {e}"
-                )
+                raise Exception(f"{event} is not serializable to json. Originating exception: {e}")
             # Serialize to binary
             try:
                 msg.SerializeToString()

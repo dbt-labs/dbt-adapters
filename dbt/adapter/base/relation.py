@@ -13,6 +13,7 @@ from typing import (
     Union,
 )
 
+from dbt_common.exceptions import CompilationError, DbtRuntimeError
 from dbt_common.utils import deep_merge, filter_null_values
 
 from dbt.adapter.contracts.relation import (
@@ -110,9 +111,7 @@ class BaseRelation(FakeAPIObject, Hashable):
 
         if not search:
             # nothing was passed in
-            raise dbt.common.exceptions.DbtRuntimeError(
-                "Tried to match relation, but no search path was passed!"
-            )
+            raise DbtRuntimeError("Tried to match relation, but no search path was passed!")
 
         exact_match = True
         approximate_match = True
@@ -120,15 +119,13 @@ class BaseRelation(FakeAPIObject, Hashable):
         for k, v in search.items():
             if not self._is_exactish_match(k, v):
                 exact_match = False
-            if str(self.path.get_lowered_part(k)).strip(
+            if str(self.path.get_lowered_part(k)).strip(self.quote_character) != v.lower().strip(
                 self.quote_character
-            ) != v.lower().strip(self.quote_character):
+            ):
                 approximate_match = False  # type: ignore[union-attr]
 
         if approximate_match and not exact_match:
-            target = self.create(
-                database=database, schema=schema, identifier=identifier
-            )
+            target = self.create(database=database, schema=schema, identifier=identifier)
             raise ApproximateMatchError(target, self)
 
         return exact_match
@@ -377,14 +374,10 @@ class InformationSchema(BaseRelation):
 
     def __post_init__(self):
         if not isinstance(self.information_schema_view, (type(None), str)):
-            raise dbt.common.exceptions.CompilationError(
-                "Got an invalid name: {}".format(self.information_schema_view)
-            )
+            raise CompilationError("Got an invalid name: {}".format(self.information_schema_view))
 
     @classmethod
-    def get_path(
-        cls, relation: BaseRelation, information_schema_view: Optional[str]
-    ) -> Path:
+    def get_path(cls, relation: BaseRelation, information_schema_view: Optional[str]) -> Path:
         return Path(
             database=relation.database,
             schema=relation.schema,

@@ -43,9 +43,9 @@ class _CachedRelation:
         self.inner = inner
 
     def __str__(self) -> str:
-        return (
-            "_CachedRelation(database={}, schema={}, identifier={}, inner={})"
-        ).format(self.database, self.schema, self.identifier, self.inner)
+        return ("_CachedRelation(database={}, schema={}, identifier={}, inner={})").format(
+            self.database, self.schema, self.identifier, self.inner
+        )
 
     @property
     def database(self) -> Optional[str]:
@@ -230,10 +230,7 @@ class RelationsCache:
         # self.relations or any cache entry's referenced_by during iteration
         # it's a runtime error!
         with self.lock:
-            return {
-                dot_separated(k): str(v.dump_graph_entry())
-                for k, v in self.relations.items()
-            }
+            return {dot_separated(k): str(v.dump_graph_entry()) for k, v in self.relations.items()}
 
     def _setdefault(self, relation: _CachedRelation):
         """Add a relation to the cache, or return it if it already exists.
@@ -325,21 +322,15 @@ class RelationsCache:
         cached = _CachedRelation(relation)
         fire_event_if(
             self.log_cache_events,
-            lambda: CacheDumpGraph(
-                before_after="before", action="adding", dump=self.dump_graph()
-            ),
+            lambda: CacheDumpGraph(before_after="before", action="adding", dump=self.dump_graph()),
         )
-        fire_event(
-            CacheAction(action="add_relation", ref_key=_make_ref_key_dict(cached))
-        )
+        fire_event(CacheAction(action="add_relation", ref_key=_make_ref_key_dict(cached)))
 
         with self.lock:
             self._setdefault(cached)
         fire_event_if(
             self.log_cache_events,
-            lambda: CacheDumpGraph(
-                before_after="after", action="adding", dump=self.dump_graph()
-            ),
+            lambda: CacheDumpGraph(before_after="after", action="adding", dump=self.dump_graph()),
         )
 
     def _remove_refs(self, keys):
@@ -371,9 +362,7 @@ class RelationsCache:
         fire_event(CacheAction(action="drop_relation", ref_key=dropped_key_msg))
         with self.lock:
             if dropped_key not in self.relations:
-                fire_event(
-                    CacheAction(action="drop_missing_relation", ref_key=dropped_key_msg)
-                )
+                fire_event(CacheAction(action="drop_missing_relation", ref_key=dropped_key_msg))
                 return
             consequences = self.relations[dropped_key].collect_consequences()
             # convert from a list of _ReferenceKeys to a list of ReferenceKeyMsgs
@@ -442,9 +431,7 @@ class RelationsCache:
             raise TruncatedModelNameCausedCollisionError(new_key, self.relations)
 
         if old_key not in self.relations:
-            fire_event(
-                CacheAction(action="temporary_relation", ref_key=old_key._asdict())
-            )
+            fire_event(CacheAction(action="temporary_relation", ref_key=old_key._asdict()))
             return False
         return True
 
@@ -471,9 +458,7 @@ class RelationsCache:
         )
         fire_event_if(
             self.log_cache_events,
-            lambda: CacheDumpGraph(
-                before_after="before", action="rename", dump=self.dump_graph()
-            ),
+            lambda: CacheDumpGraph(before_after="before", action="rename", dump=self.dump_graph()),
         )
 
         with self.lock:
@@ -484,14 +469,10 @@ class RelationsCache:
 
         fire_event_if(
             self.log_cache_events,
-            lambda: CacheDumpGraph(
-                before_after="after", action="rename", dump=self.dump_graph()
-            ),
+            lambda: CacheDumpGraph(before_after="after", action="rename", dump=self.dump_graph()),
         )
 
-    def get_relations(
-        self, database: Optional[str], schema: Optional[str]
-    ) -> List[Any]:
+    def get_relations(self, database: Optional[str], schema: Optional[str]) -> List[Any]:
         """Case-insensitively yield all relations matching the given schema.
 
         :param str schema: The case-insensitive schema name to list from.
