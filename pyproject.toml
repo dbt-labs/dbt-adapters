@@ -90,20 +90,6 @@ lint-black = "python -m black ."
 lint-flake8 = "python -m flake8 ."
 lint-mypy = "python -m mypy ."
 
-[tool.hatch.envs.integration]
-features = ["test"]
-[tool.hatch.envs.integration.scripts]
-tests = "pytest {args:tests/functional}"
-
-[tool.hatch.envs.integration-ci]
-template = "integration"
-extra-dependencies = ["ddtrace"]
-env-include = ["DD_*"]
-
-[tool.hatch.envs.postgres]
-template = "integration"
-extra-dependencies = ["dbt-postgres"]
-
 [tool.black]
 extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
 line-length = 99
