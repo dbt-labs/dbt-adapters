@@ -66,11 +66,20 @@ class TestBaseAdapterConstraintRendering:
         ([{"type": "check"}], ["column_name integer"]),
         ([{"type": "check", "expression": "test expression"}], ["column_name integer"]),
         ([{"type": "not_null"}], ["column_name integer"]),
-        ([{"type": "not_null", "expression": "test expression"}], ["column_name integer"]),
+        (
+            [{"type": "not_null", "expression": "test expression"}],
+            ["column_name integer"],
+        ),
         ([{"type": "unique"}], ["column_name integer"]),
-        ([{"type": "unique", "expression": "test expression"}], ["column_name integer"]),
+        (
+            [{"type": "unique", "expression": "test expression"}],
+            ["column_name integer"],
+        ),
         ([{"type": "primary_key"}], ["column_name integer"]),
-        ([{"type": "primary_key", "expression": "test expression"}], ["column_name integer"]),
+        (
+            [{"type": "primary_key", "expression": "test expression"}],
+            ["column_name integer"],
+        ),
         ([{"type": "foreign_key"}], ["column_name integer"]),
         ([{"type": "check"}, {"type": "unique"}], ["column_name integer"]),
     ]
@@ -100,7 +109,10 @@ class TestBaseAdapterConstraintRendering:
 
     model_constraints = [
         ([{"type": "check"}], []),
-        ([{"type": "check", "expression": "test expression"}], ["check (test expression)"]),
+        (
+            [{"type": "check", "expression": "test expression"}],
+            ["check (test expression)"],
+        ),
         (
             [{"type": "check", "expression": "test expression", "name": "test_name"}],
             ["constraint test_name check (test expression)"],
@@ -122,7 +134,13 @@ class TestBaseAdapterConstraintRendering:
         ),
         ([{"type": "primary_key", "columns": ["c1", "c2"]}], ["primary key (c1, c2)"]),
         (
-            [{"type": "primary_key", "columns": ["c1", "c2"], "expression": "test expression"}],
+            [
+                {
+                    "type": "primary_key",
+                    "columns": ["c1", "c2"],
+                    "expression": "test expression",
+                }
+            ],
             ["primary key test expression (c1, c2)"],
         ),
         (
@@ -137,7 +155,13 @@ class TestBaseAdapterConstraintRendering:
             ["constraint test_name primary key test expression (c1, c2)"],
         ),
         (
-            [{"type": "foreign_key", "columns": ["c1", "c2"], "expression": "other_table (c1)"}],
+            [
+                {
+                    "type": "foreign_key",
+                    "columns": ["c1", "c2"],
+                    "expression": "other_table (c1)",
+                }
+            ],
             ["foreign key (c1, c2) references other_table (c1)"],
         ),
         (

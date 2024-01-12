@@ -131,7 +131,8 @@ class TestRename(TestCache):
 
     def test_dest_different_db(self):
         self.cache.rename(
-            make_relation("DBT", "schema", "foo"), make_relation("DBT_2", "schema", "foo")
+            make_relation("DBT", "schema", "foo"),
+            make_relation("DBT_2", "schema", "foo"),
         )
         self.assert_relations_exist("DBT_2", "schema", "foo")
         self.assert_relations_do_not_exist("DBT", "schema", "foo")
@@ -156,7 +157,8 @@ class TestRename(TestCache):
 
     def test_rename_db(self):
         self.cache.rename(
-            make_relation("DBT", "schema", "foo"), make_relation("DBT_2", "schema", "foo")
+            make_relation("DBT", "schema", "foo"),
+            make_relation("DBT_2", "schema", "foo"),
         )
 
         self.assertEqual(len(self.cache.get_relations("DBT", "schema")), 0)
@@ -176,7 +178,8 @@ class TestRename(TestCache):
 
     def test_rename_schema(self):
         self.cache.rename(
-            make_relation("DBT", "schema", "foo"), make_relation("DBT", "schema_2", "foo")
+            make_relation("DBT", "schema", "foo"),
+            make_relation("DBT", "schema_2", "foo"),
         )
 
         self.assertEqual(len(self.cache.get_relations("DBT", "schema")), 0)
@@ -326,12 +329,14 @@ class TestLikeDbt(TestCase):
         self.assert_has_relations(set("abcdef") | {"b__tmp"})
         # rename b -> b__backup
         self.cache.rename(
-            make_relation("dbt", "schema", "b"), make_relation("dbt", "schema", "b__backup")
+            make_relation("dbt", "schema", "b"),
+            make_relation("dbt", "schema", "b__backup"),
         )
         self.assert_has_relations(set("acdef") | {"b__tmp", "b__backup"})
         # rename temp to b
         self.cache.rename(
-            make_relation("dbt", "schema", "b__tmp"), make_relation("dbt", "schema", "b")
+            make_relation("dbt", "schema", "b__tmp"),
+            make_relation("dbt", "schema", "b"),
         )
         self.assert_has_relations(set("abcdef") | {"b__backup"})
 
@@ -357,7 +362,8 @@ class TestLikeDbt(TestCase):
         self.cache.add(make_relation("dbt", "schema", ident + "__tmp"))
         self._rand_sleep()
         self.cache.rename(
-            make_relation("dbt", "schema", ident + "__tmp"), make_relation("dbt", "schema", ident)
+            make_relation("dbt", "schema", ident + "__tmp"),
+            make_relation("dbt", "schema", ident),
         )
         self._rand_sleep()
         self.cache.drop(make_relation("dbt", "schema", ident + "__backup"))

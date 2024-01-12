@@ -49,7 +49,10 @@ class RelationProtocol(Protocol):
 
     @classmethod
     def create_from(
-        cls: Type[Self], quoting: HasQuoting, relation_config: RelationConfig, **kwargs: Any
+        cls: Type[Self],
+        quoting: HasQuoting,
+        relation_config: RelationConfig,
+        **kwargs: Any,
     ) -> Self:
         ...
 

@@ -20,25 +20,37 @@ class AdapterLogger:
 
     def debug(self, msg, *args) -> None:
         event = AdapterEventDebug(
-            name=self.name, base_msg=str(msg), args=list(args), node_info=get_node_info()
+            name=self.name,
+            base_msg=str(msg),
+            args=list(args),
+            node_info=get_node_info(),
         )
         fire_event(event)
 
     def info(self, msg, *args) -> None:
         event = AdapterEventInfo(
-            name=self.name, base_msg=str(msg), args=list(args), node_info=get_node_info()
+            name=self.name,
+            base_msg=str(msg),
+            args=list(args),
+            node_info=get_node_info(),
         )
         fire_event(event)
 
     def warning(self, msg, *args) -> None:
         event = AdapterEventWarning(
-            name=self.name, base_msg=str(msg), args=list(args), node_info=get_node_info()
+            name=self.name,
+            base_msg=str(msg),
+            args=list(args),
+            node_info=get_node_info(),
         )
         fire_event(event)
 
     def error(self, msg, *args) -> None:
         event = AdapterEventError(
-            name=self.name, base_msg=str(msg), args=list(args), node_info=get_node_info()
+            name=self.name,
+            base_msg=str(msg),
+            args=list(args),
+            node_info=get_node_info(),
         )
         fire_event(event)
 
@@ -56,7 +68,10 @@ class AdapterLogger:
 
     def critical(self, msg, *args) -> None:
         event = AdapterEventError(
-            name=self.name, base_msg=str(msg), args=list(args), node_info=get_node_info()
+            name=self.name,
+            base_msg=str(msg),
+            args=list(args),
+            node_info=get_node_info(),
         )
         fire_event(event)
 

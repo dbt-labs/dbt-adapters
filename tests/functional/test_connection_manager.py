@@ -76,7 +76,6 @@ class BaseConnectionManagerTest(TestCase):
             FailedToConnectError,
             "Something went horribly wrong",
         ):
-
             BaseConnectionManager.retry_connection(
                 conn,
                 connect,
@@ -112,7 +111,6 @@ class BaseConnectionManagerTest(TestCase):
             FailedToConnectError,
             "Something went horribly wrong",
         ):
-
             BaseConnectionManager.retry_connection(
                 conn,
                 connect,

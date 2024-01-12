@@ -36,9 +36,7 @@ class SQLConnectionManager(BaseConnectionManager):
     @abc.abstractmethod
     def cancel(self, connection: Connection):
         """Cancel the given connection."""
-        raise NotImplementedError(
-            "`cancel` is not implemented for this adapter!"
-        )
+        raise NotImplementedError("`cancel` is not implemented for this adapter!")
 
     def cancel_open(self) -> List[str]:
         names = []
@@ -82,7 +80,9 @@ class SQLConnectionManager(BaseConnectionManager):
 
             fire_event(
                 SQLQuery(
-                    conn_name=cast_to_str(connection.name), sql=log_sql, node_info=get_node_info()
+                    conn_name=cast_to_str(connection.name),
+                    sql=log_sql,
+                    node_info=get_node_info(),
                 )
             )
             pre = time.time()
@@ -104,9 +104,7 @@ class SQLConnectionManager(BaseConnectionManager):
     @abc.abstractmethod
     def get_response(cls, cursor: Any) -> AdapterResponse:
         """Get the status of the cursor."""
-        raise NotImplementedError(
-            "`get_response` is not implemented for this adapter!"
-        )
+        raise NotImplementedError("`get_response` is not implemented for this adapter!")
 
     @classmethod
     def process_results(
@@ -143,7 +141,11 @@ class SQLConnectionManager(BaseConnectionManager):
         return table_from_data_flat(data, column_names)
 
     def execute(
-        self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
+        self,
+        sql: str,
+        auto_begin: bool = False,
+        fetch: bool = False,
+        limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, agate.Table]:
         sql = self._add_query_comment(sql)
         _, cursor = self.add_query(sql, auto_begin)

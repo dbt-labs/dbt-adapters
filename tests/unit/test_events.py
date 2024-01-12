@@ -49,9 +49,7 @@ class TestAdapterLogger:
         logger.debug("hello {}", "world")
 
         # enters lower in the call stack to test that it formats correctly
-        event = types.AdapterEventDebug(
-            name="dbt_tests", base_msg="hello {}", args=["world"]
-        )
+        event = types.AdapterEventDebug(name="dbt_tests", base_msg="hello {}", args=["world"])
         assert "hello world" in event.message()
 
         # tests that it doesn't throw
@@ -84,7 +82,6 @@ class TestAdapterLogger:
 
 
 class TestEventCodes:
-
     # checks to see if event codes are duplicated to keep codes singular and clear.
     # also checks that event codes follow correct naming convention ex. E001
     def test_event_codes(self):
@@ -160,7 +157,6 @@ sample_values = [
 
 
 class TestEventJSONSerialization:
-
     # attempts to test that every event is serializable to json.
     # event types that take `Any` are not possible to test in this way since some will serialize
     # just fine and others won't.
@@ -170,10 +166,10 @@ class TestEventJSONSerialization:
         )
         all_event_values_list = list(map(lambda x: x.__class__, sample_values))
         diff = all_non_abstract_events.difference(set(all_event_values_list))
-        assert (
-            not diff
-        ), (f"{diff}test is missing concrete values in `sample_values`. "
-            f"Please add the values for the aforementioned event classes")
+        assert not diff, (
+            f"{diff}test is missing concrete values in `sample_values`. "
+            f"Please add the values for the aforementioned event classes"
+        )
 
         # make sure everything in the list is a value not a type
         for event in sample_values:

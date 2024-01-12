@@ -325,7 +325,11 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse(lambda *a, **k: ("", empty_table()))
     def execute(
-        self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
+        self,
+        sql: str,
+        auto_begin: bool = False,
+        fetch: bool = False,
+        limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, agate.Table]:
         """Execute the given SQL. This is a thin wrapper around
         ConnectionManager.execute.
@@ -1129,7 +1133,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         relations: List[BaseRelation],
         used_schemas: FrozenSet[Tuple[str, str]],
     ) -> agate.Table:
-
         kwargs = {
             "information_schema": information_schema,
             "relations": relations,
@@ -1290,7 +1293,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             "relations": [source],
         }
         result = self.execute_macro(
-            GET_RELATION_LAST_MODIFIED_MACRO_NAME, kwargs=kwargs, macro_resolver=macro_resolver
+            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+            kwargs=kwargs,
+            macro_resolver=macro_resolver,
         )
         adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
 
@@ -1526,7 +1531,9 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     def process_parsed_constraint(
-        cls, parsed_constraint: Union[ColumnLevelConstraint, ModelLevelConstraint], render_func
+        cls,
+        parsed_constraint: Union[ColumnLevelConstraint, ModelLevelConstraint],
+        render_func,
     ) -> Optional[str]:
         if (
             parsed_constraint.warn_unsupported

@@ -13,6 +13,7 @@ from typing import (
     Union,
 )
 
+from dbt_common.exceptions import CompilationError, DbtRuntimeError
 from dbt_common.utils import deep_merge, filter_null_values
 
 from dbt.adapter.contracts.relation import (
@@ -110,9 +111,7 @@ class BaseRelation(FakeAPIObject, Hashable):
 
         if not search:
             # nothing was passed in
-            raise dbt.common.exceptions.DbtRuntimeError(
-                "Tried to match relation, but no search path was passed!"
-            )
+            raise DbtRuntimeError("Tried to match relation, but no search path was passed!")
 
         exact_match = True
         approximate_match = True
@@ -191,7 +190,9 @@ class BaseRelation(FakeAPIObject, Hashable):
         """
         return self.include(identifier=False).replace_path(identifier=None)
 
-    def _render_iterator(self) -> Iterator[Tuple[Optional[ComponentName], Optional[str]]]:
+    def _render_iterator(
+        self,
+    ) -> Iterator[Tuple[Optional[ComponentName], Optional[str]]]:
         for key in ComponentName:
             path_part: Optional[str] = None
             if self.include_policy.get_part(key):
@@ -373,9 +374,7 @@ class InformationSchema(BaseRelation):
 
     def __post_init__(self):
         if not isinstance(self.information_schema_view, (type(None), str)):
-            raise dbt.common.exceptions.CompilationError(
-                "Got an invalid name: {}".format(self.information_schema_view)
-            )
+            raise CompilationError("Got an invalid name: {}".format(self.information_schema_view))
 
     @classmethod
     def get_path(cls, relation: BaseRelation, information_schema_view: Optional[str]) -> Path:

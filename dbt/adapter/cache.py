@@ -369,7 +369,9 @@ class RelationsCache:
             consequence_msgs = [key._asdict() for key in consequences]
             fire_event(
                 CacheAction(
-                    action="drop_cascade", ref_key=dropped_key_msg, ref_list=consequence_msgs
+                    action="drop_cascade",
+                    ref_key=dropped_key_msg,
+                    ref_list=consequence_msgs,
                 )
             )
             self._remove_refs(consequences)
