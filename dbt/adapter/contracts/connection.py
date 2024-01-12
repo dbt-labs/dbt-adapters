@@ -19,6 +19,7 @@ from dbt_common.dataclass_schema import (
     ValidatedStringMixin,
     dbtClassMixin,
 )
+
 # TODO: this is a very bad dependency - shared global state
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -113,7 +114,9 @@ class LazyHandle:
 
     def resolve(self, connection: Connection) -> Connection:
         fire_event(
-            NewConnectionOpening(connection_state=connection.state, node_info=get_node_info())
+            NewConnectionOpening(
+                connection_state=connection.state, node_info=get_node_info()
+            )
         )
         return self.opener(connection)
 
@@ -138,12 +141,16 @@ class Credentials(ExtensibleDbtClassMixin, Replaceable, metaclass=abc.ABCMeta):
         Return the field from Credentials that can uniquely identify
         one team/organization using this adapter
         """
-        raise NotImplementedError("unique_field not implemented for base credentials class")
+        raise NotImplementedError(
+            "unique_field not implemented for base credentials class"
+        )
 
     def hashed_unique_field(self) -> str:
         return md5(self.unique_field)
 
-    def connection_info(self, *, with_aliases: bool = False) -> Iterable[Tuple[str, Any]]:
+    def connection_info(
+        self, *, with_aliases: bool = False
+    ) -> Iterable[Tuple[str, Any]]:
         """Return an ordered iterator of key/value pairs for pretty-printing."""
         as_dict = self.to_dict(omit_none=False)
         connection_keys = set(self._connection_keys())
@@ -166,7 +173,9 @@ class Credentials(ExtensibleDbtClassMixin, Replaceable, metaclass=abc.ABCMeta):
         return data
 
     @classmethod
-    def translate_aliases(cls, kwargs: Dict[str, Any], recurse: bool = False) -> Dict[str, Any]:
+    def translate_aliases(
+        cls, kwargs: Dict[str, Any], recurse: bool = False
+    ) -> Dict[str, Any]:
         return translate_aliases(kwargs, cls._ALIASES, recurse)
 
     def __post_serialize__(self, dct):

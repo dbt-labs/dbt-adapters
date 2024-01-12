@@ -67,7 +67,9 @@ class TestAdapterLogger:
         # enters lower in the call stack to test that it formats correctly
         # in this case it's that we didn't attempt to replace anything since there
         # were no args passed after the initial message
-        event = types.AdapterEventDebug(name="dbt_tests", base_msg="boop{x}boop", args=[])
+        event = types.AdapterEventDebug(
+            name="dbt_tests", base_msg="boop{x}boop", args=[]
+        )
         assert "boop{x}boop" in event.message()
 
         # ensure AdapterLogger and subclasses makes all base_msg members
@@ -84,7 +86,6 @@ class TestAdapterLogger:
 
 
 class TestEventCodes:
-
     # checks to see if event codes are duplicated to keep codes singular and clear.
     # also checks that event codes follow correct naming convention ex. E001
     def test_event_codes(self):
@@ -160,7 +161,6 @@ sample_values = [
 
 
 class TestEventJSONSerialization:
-
     # attempts to test that every event is serializable to json.
     # event types that take `Any` are not possible to test in this way since some will serialize
     # just fine and others won't.
@@ -170,10 +170,10 @@ class TestEventJSONSerialization:
         )
         all_event_values_list = list(map(lambda x: x.__class__, sample_values))
         diff = all_non_abstract_events.difference(set(all_event_values_list))
-        assert (
-            not diff
-        ), (f"{diff}test is missing concrete values in `sample_values`. "
-            f"Please add the values for the aforementioned event classes")
+        assert not diff, (
+            f"{diff}test is missing concrete values in `sample_values`. "
+            f"Please add the values for the aforementioned event classes"
+        )
 
         # make sure everything in the list is a value not a type
         for event in sample_values:
@@ -195,7 +195,9 @@ class TestEventJSONSerialization:
             try:
                 msg_to_json(msg)
             except Exception as e:
-                raise Exception(f"{event} is not serializable to json. Originating exception: {e}")
+                raise Exception(
+                    f"{event} is not serializable to json. Originating exception: {e}"
+                )
             # Serialize to binary
             try:
                 msg.SerializeToString()

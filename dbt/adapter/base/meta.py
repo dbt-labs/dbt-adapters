@@ -68,7 +68,9 @@ class _Available:
             @wraps(func)
             def inner(*args, **kwargs):
                 warn_or_error(
-                    AdapterDeprecationWarning(old_name=func_name, new_name=supported_name)
+                    AdapterDeprecationWarning(
+                        old_name=func_name, new_name=supported_name
+                    )
                 )
                 return func(*args, **kwargs)
 

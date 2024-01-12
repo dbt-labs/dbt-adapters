@@ -30,7 +30,9 @@ class CollectFreshnessReturnSignature(WarnLevel):
             "query result, rather than just a table of values. See the v1.5 migration guide "
             "for details on how to update your custom macro: https://docs.getdbt.com/guides/migration/versions/upgrading-to-v1.5"
         )
-        return line_wrap_message(warning_tag(f"Deprecated functionality\n\n{description}"))
+        return line_wrap_message(
+            warning_tag(f"Deprecated functionality\n\n{description}")
+        )
 
 
 class AdapterDeprecationWarning(WarnLevel):
@@ -44,7 +46,9 @@ class AdapterDeprecationWarning(WarnLevel):
             f"\n\nDocumentation for {self.new_name} can be found here:"
             f"\n\nhttps://docs.getdbt.com/docs/adapter"
         )
-        return line_wrap_message(warning_tag(f"Deprecated functionality\n\n{description}"))
+        return line_wrap_message(
+            warning_tag(f"Deprecated functionality\n\n{description}")
+        )
 
 
 # =======================================================

@@ -42,12 +42,19 @@ class Column:
         if self.is_string():
             return self.string_type(self.string_size())
         elif self.is_numeric():
-            return self.numeric_type(self.dtype, self.numeric_precision, self.numeric_scale)
+            return self.numeric_type(
+                self.dtype, self.numeric_precision, self.numeric_scale
+            )
         else:
             return self.dtype
 
     def is_string(self) -> bool:
-        return self.dtype.lower() in ["text", "character varying", "character", "varchar"]
+        return self.dtype.lower() in [
+            "text",
+            "character varying",
+            "character",
+            "varchar",
+        ]
 
     def is_number(self):
         return any([self.is_integer(), self.is_numeric(), self.is_float()])

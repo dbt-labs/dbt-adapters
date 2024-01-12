@@ -25,7 +25,9 @@ def _make_ref_key(relation: Any) -> _ReferenceKey:
     """
     # databases and schemas can both be None
     return _ReferenceKey(
-        lowercase(relation.database), lowercase(relation.schema), lowercase(relation.identifier)
+        lowercase(relation.database),
+        lowercase(relation.schema),
+        lowercase(relation.identifier),
     )
 
 

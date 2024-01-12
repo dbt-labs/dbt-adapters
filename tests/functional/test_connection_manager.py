@@ -21,7 +21,9 @@ class BaseConnectionManagerTest(TestCase):
             schema="test-schema",
         )
         self.logger = AdapterLogger("test")
-        self.postgres_connection = Connection("postgres", None, self.postgres_credentials)
+        self.postgres_connection = Connection(
+            "postgres", None, self.postgres_credentials
+        )
 
     def test_retry_connection(self):
         """Test a dummy handle is set on a connection on the first attempt.
@@ -76,7 +78,6 @@ class BaseConnectionManagerTest(TestCase):
             FailedToConnectError,
             "Something went horribly wrong",
         ):
-
             BaseConnectionManager.retry_connection(
                 conn,
                 connect,
@@ -112,7 +113,6 @@ class BaseConnectionManagerTest(TestCase):
             FailedToConnectError,
             "Something went horribly wrong",
         ):
-
             BaseConnectionManager.retry_connection(
                 conn,
                 connect,

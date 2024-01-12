@@ -45,7 +45,9 @@ class _QueryComment(local):
         if isinstance(comment, str) and "*/" in comment:
             # tell the user "no" so they don't hurt themselves by writing
             # garbage
-            raise DbtRuntimeError(f'query comment contains illegal value "*/": {comment}')
+            raise DbtRuntimeError(
+                f'query comment contains illegal value "*/": {comment}'
+            )
         self.query_comment = comment
         self.append = append
 

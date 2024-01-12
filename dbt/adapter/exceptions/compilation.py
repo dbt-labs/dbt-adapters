@@ -8,9 +8,7 @@ class MissingConfigError(CompilationError):
     def __init__(self, unique_id: str, name: str):
         self.unique_id = unique_id
         self.name = name
-        msg = (
-            f"Model '{self.unique_id}' does not define a required config parameter '{self.name}'."
-        )
+        msg = f"Model '{self.unique_id}' does not define a required config parameter '{self.name}'."
         super().__init__(msg=msg)
 
 
@@ -220,7 +218,9 @@ class RenameToNoneAttemptedError(CompilationError):
         self.src_name = src_name
         self.dst_name = dst_name
         self.name = name
-        self.msg = f"Attempted to rename {self.src_name} to {self.dst_name} for {self.name}"
+        self.msg = (
+            f"Attempted to rename {self.src_name} to {self.dst_name} for {self.name}"
+        )
         super().__init__(msg=self.msg)
 
 

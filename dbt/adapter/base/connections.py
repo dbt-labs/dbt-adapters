@@ -68,7 +68,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
 
     TYPE: str = NotImplemented
 
-    def __init__(self, profile: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
+    def __init__(
+        self, profile: AdapterRequiredConfig, mp_context: SpawnContext
+    ) -> None:
         self.profile = profile
         self.thread_connections: Dict[Hashable, Connection] = {}
         self.lock: RLock = mp_context.RLock()
@@ -168,7 +170,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             # Add the connection to thread_connections for this thread
             self.set_thread_connection(conn)
             fire_event(
-                NewConnection(conn_name=conn_name, conn_type=self.TYPE, node_info=get_node_info())
+                NewConnection(
+                    conn_name=conn_name, conn_type=self.TYPE, node_info=get_node_info()
+                )
             )
         else:  # existing connection either wasn't open or didn't have the right name
             if conn.state != "open":
@@ -176,7 +180,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             if conn.name != conn_name:
                 orig_conn_name: str = conn.name or ""
                 conn.name = conn_name
-                fire_event(ConnectionReused(orig_conn_name=orig_conn_name, conn_name=conn_name))
+                fire_event(
+                    ConnectionReused(orig_conn_name=orig_conn_name, conn_name=conn_name)
+                )
 
         return conn
 
@@ -233,7 +239,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             # This guard is not perfect others may add to the recursion limit (e.g. built-ins).
             connection.handle = None
             connection.state = ConnectionState.FAIL
-            raise dbt.adapters.exceptions.FailedToConnectError("retry_limit cannot be negative")
+            raise dbt.adapters.exceptions.FailedToConnectError(
+                "retry_limit cannot be negative"
+            )
 
         try:
             connection.handle = connect()
@@ -309,9 +317,17 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         with self.lock:
             for connection in self.thread_connections.values():
                 if connection.state not in {"closed", "init"}:
-                    fire_event(ConnectionLeftOpenInCleanup(conn_name=cast_to_str(connection.name)))
+                    fire_event(
+                        ConnectionLeftOpenInCleanup(
+                            conn_name=cast_to_str(connection.name)
+                        )
+                    )
                 else:
-                    fire_event(ConnectionClosedInCleanup(conn_name=cast_to_str(connection.name)))
+                    fire_event(
+                        ConnectionClosedInCleanup(
+                            conn_name=cast_to_str(connection.name)
+                        )
+                    )
                 self.close(connection)
 
             # garbage collect these connections
@@ -351,7 +367,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         # On windows, sometimes connection handles don't have a close() attr.
         if hasattr(connection.handle, "close"):
             fire_event(
-                ConnectionClosed(conn_name=cast_to_str(connection.name), node_info=get_node_info())
+                ConnectionClosed(
+                    conn_name=cast_to_str(connection.name), node_info=get_node_info()
+                )
             )
             connection.handle.close()
         else:
@@ -370,7 +388,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
                 f'"{connection.name}", but it does not have one open!'
             )
 
-        fire_event(Rollback(conn_name=cast_to_str(connection.name), node_info=get_node_info()))
+        fire_event(
+            Rollback(conn_name=cast_to_str(connection.name), node_info=get_node_info())
+        )
         cls._rollback_handle(connection)
 
         connection.transaction_open = False
@@ -382,7 +402,11 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             return connection
 
         if connection.transaction_open and connection.handle:
-            fire_event(Rollback(conn_name=cast_to_str(connection.name), node_info=get_node_info()))
+            fire_event(
+                Rollback(
+                    conn_name=cast_to_str(connection.name), node_info=get_node_info()
+                )
+            )
             cls._rollback_handle(connection)
         connection.transaction_open = False
 
@@ -404,7 +428,11 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def execute(
-        self, sql: str, auto_begin: bool = False, fetch: bool = False, limit: Optional[int] = None
+        self,
+        sql: str,
+        auto_begin: bool = False,
+        fetch: bool = False,
+        limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, agate.Table]:
         """Execute the given SQL.
 

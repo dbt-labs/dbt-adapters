@@ -12,7 +12,11 @@ from dbt_common.semver import VersionSpecifier
 
 from dbt.adapter.base.plugin import AdapterPlugin
 from dbt.adapter.contracts.connection import AdapterRequiredConfig, Credentials
-from dbt.adapter.events.types import AdapterImportError, PluginLoadError, AdapterRegistered
+from dbt.adapter.events.types import (
+    AdapterImportError,
+    PluginLoadError,
+    AdapterRegistered,
+)
 from dbt.adapters.include.global_project import (
     PACKAGE_PATH as GLOBAL_PROJECT_PATH,
     PROJECT_NAME as GLOBAL_PROJECT_NAME,
@@ -92,15 +96,21 @@ class AdapterContainer:
 
         return plugin.credentials
 
-    def register_adapter(self, config: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
+    def register_adapter(
+        self, config: AdapterRequiredConfig, mp_context: SpawnContext
+    ) -> None:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
-        adapter_version = import_module(f".{adapter_name}.__version__", "dbt.adapters").version
+        adapter_version = import_module(
+            f".{adapter_name}.__version__", "dbt.adapters"
+        ).version
         adapter_version_specifier = VersionSpecifier.from_version_string(
             adapter_version
         ).to_version_string()
         fire_event(
-            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version_specifier)
+            AdapterRegistered(
+                adapter_name=adapter_name, adapter_version=adapter_version_specifier
+            )
         )
         with self.lock:
             if adapter_name in self.adapters:
@@ -153,7 +163,9 @@ class AdapterContainer:
         return plugins
 
     def get_adapter_package_names(self, name: Optional[str]) -> List[str]:
-        package_names: List[str] = [p.project_name for p in self.get_adapter_plugins(name)]
+        package_names: List[str] = [
+            p.project_name for p in self.get_adapter_plugins(name)
+        ]
         package_names.append(GLOBAL_PROJECT_NAME)
         return package_names
 
@@ -163,7 +175,9 @@ class AdapterContainer:
             try:
                 path = self.packages[package_name]
             except KeyError:
-                raise DbtInternalError(f"No internal package listing found for {package_name}")
+                raise DbtInternalError(
+                    f"No internal package listing found for {package_name}"
+                )
             paths.append(path)
         return paths
 

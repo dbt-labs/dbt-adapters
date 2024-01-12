@@ -21,7 +21,6 @@ class AdapterPlugin:
         dependencies: Optional[List[str]] = None,
         project_name: Optional[str] = None,
     ) -> None:
-
         self.adapter: Type[AdapterProtocol] = adapter
         self.credentials: Type[Credentials] = credentials
         self.include_path: str = include_path

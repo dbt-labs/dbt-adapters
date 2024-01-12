@@ -120,13 +120,15 @@ class BaseRelation(FakeAPIObject, Hashable):
         for k, v in search.items():
             if not self._is_exactish_match(k, v):
                 exact_match = False
-            if str(self.path.get_lowered_part(k)).strip(self.quote_character) != v.lower().strip(
+            if str(self.path.get_lowered_part(k)).strip(
                 self.quote_character
-            ):
+            ) != v.lower().strip(self.quote_character):
                 approximate_match = False  # type: ignore[union-attr]
 
         if approximate_match and not exact_match:
-            target = self.create(database=database, schema=schema, identifier=identifier)
+            target = self.create(
+                database=database, schema=schema, identifier=identifier
+            )
             raise ApproximateMatchError(target, self)
 
         return exact_match
@@ -191,7 +193,9 @@ class BaseRelation(FakeAPIObject, Hashable):
         """
         return self.include(identifier=False).replace_path(identifier=None)
 
-    def _render_iterator(self) -> Iterator[Tuple[Optional[ComponentName], Optional[str]]]:
+    def _render_iterator(
+        self,
+    ) -> Iterator[Tuple[Optional[ComponentName], Optional[str]]]:
         for key in ComponentName:
             path_part: Optional[str] = None
             if self.include_policy.get_part(key):
@@ -378,7 +382,9 @@ class InformationSchema(BaseRelation):
             )
 
     @classmethod
-    def get_path(cls, relation: BaseRelation, information_schema_view: Optional[str]) -> Path:
+    def get_path(
+        cls, relation: BaseRelation, information_schema_view: Optional[str]
+    ) -> Path:
         return Path(
             database=relation.database,
             schema=relation.schema,
