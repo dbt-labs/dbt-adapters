@@ -17,6 +17,7 @@ runs:
     - name: Get timestamp
       id: timestamp
       run: echo "ts=$(date +'%Y-%m-%dT%H_%M_%S')" >> $GITHUB_OUTPUT #no colons allowed for artifacts
+      shell: bash
 
     - uses: actions/upload-artifact@v3
       with:
