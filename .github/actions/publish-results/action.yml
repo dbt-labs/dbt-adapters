@@ -1,4 +1,4 @@
-name: Setup `hatch` on Python ${{ inputs.python-version }}
+name: Publish results
 
 inputs:
   file-name:

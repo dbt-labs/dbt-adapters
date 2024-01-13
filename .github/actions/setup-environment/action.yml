@@ -1,4 +1,4 @@
-name: Setup `hatch` on Python ${{ inputs.python-version }}
+name: Setup `hatch`
 
 inputs:
   python-version:
