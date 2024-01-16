@@ -9,13 +9,13 @@ from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
 from dbt_common.utils import cast_to_str
 
-from dbt.adapter.base import BaseConnectionManager
-from dbt.adapter.contracts.connection import (
+from dbt.adapters.base import BaseConnectionManager
+from dbt.adapters.contracts.connection import (
     AdapterResponse,
     Connection,
     ConnectionState,
 )
-from dbt.adapter.events.types import (
+from dbt.adapters.events.types import (
     ConnectionUsed,
     SQLCommit,
     SQLQuery,

@@ -4,7 +4,7 @@ from typing import Hashable
 
 from dbt_common.dataclass_schema import StrEnum
 
-from dbt.adapter.relation_configs.config_base import RelationConfigBase
+from dbt.adapters.relation_configs.config_base import RelationConfigBase
 
 
 class RelationConfigChangeAction(StrEnum):

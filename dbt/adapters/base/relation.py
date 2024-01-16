@@ -16,7 +16,7 @@ from typing import (
 from dbt_common.exceptions import CompilationError, DbtRuntimeError
 from dbt_common.utils import deep_merge, filter_null_values
 
-from dbt.adapter.contracts.relation import (
+from dbt.adapters.contracts.relation import (
     ComponentName,
     HasQuoting,
     FakeAPIObject,
@@ -25,11 +25,11 @@ from dbt.adapter.contracts.relation import (
     RelationConfig,
     RelationType,
 )
-from dbt.adapter.exceptions import (
+from dbt.adapters.exceptions import (
     ApproximateMatchError,
     MultipleDatabasesNotAllowedError,
 )
-from dbt.adapter.utils import classproperty
+from dbt.adapters.utils import classproperty
 
 
 Self = TypeVar("Self", bound="BaseRelation")
