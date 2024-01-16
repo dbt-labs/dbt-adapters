@@ -23,7 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "agate~=1.7.0",
+    "agate~=1.9.1",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "mashumaro[msgpack]~=3.9",
     "protobuf>=4.0.0",
