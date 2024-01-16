@@ -4,8 +4,8 @@
 ## Context
 
 We need to select a build tool for managing dependencies for, building, and distributing adapters,
-including `dbt-adapter`. While build tools can change for adapters that inherit from
-`dbt-adapter`, this repo also serves as a template for many third-party adapters.
+including `dbt-adapters`. While build tools can change for adapters that inherit from
+`dbt-adapters`, this repo also serves as a template for many third-party adapters.
 
 
 ## Options
