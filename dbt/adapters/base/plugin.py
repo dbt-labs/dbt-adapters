@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import List, Optional, Type
 
-from dbt.adapter.contracts.connection import Credentials
-from dbt.adapter.protocol import AdapterProtocol
+from dbt.adapters.contracts.connection import Credentials
+from dbt.adapters.protocol import AdapterProtocol
 
 
 class AdapterPlugin:

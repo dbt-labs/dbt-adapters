@@ -1,6 +1,6 @@
 import unittest
 
-from dbt.adapter.sql import SQLConnectionManager
+from dbt.adapters.sql import SQLConnectionManager
 
 
 class TestProcessSQLResult(unittest.TestCase):

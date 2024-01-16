@@ -1,9 +1,9 @@
 [project]
 dynamic = ["version"]
-name = "dbt-adapter"
+name = "dbt-adapters"
 description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
 readme = "README.md"
-keywords = ["dbt", "adapter", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
 requires-python = ">=3.8.0"
 authors = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
@@ -46,11 +46,11 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-adapter"
+Homepage = "https://github.com/dbt-labs/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-adapter.git"
-Issues = "https://github.com/dbt-labs/dbt-adapter/issues"
-Changelog = "https://github.com/dbt-labs/dbt-adapter/blob/main/CHANGELOG.md"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
@@ -68,14 +68,14 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["dbt.adapter"]
+packages = ["dbt.adapters"]
 
 [tool.hatch.metadata]
 # needed for installing `dbt-common` directly from github
 allow-direct-references = true
 
 [tool.hatch.version]
-path = "dbt/adapter/__about__.py"
+path = "dbt/adapters/__about__.py"
 
 [tool.hatch.envs.default]
 features = ["lint", "test"]
@@ -99,7 +99,7 @@ target-version = ['py38']
 select = ["E", "W", "F"]
 ignore = ["E203", "E501", "E741", "W503", "W504"]
 exclude = [
-    "dbt/adapter/events/adapter_types_pb2.py",
+    "dbt/adapters/events/adapter_types_pb2.py",
     "tests",
     "venv",
 ]
@@ -113,15 +113,15 @@ ignore_missing_imports = true
 pretty = true
 mypy_path = "third-party-stubs/"
 files = [
-    "dbt/adapter",
+    "dbt/adapters",
     "tests/unit",
 ]
 exclude = [
-    "dbt/adapter/events/adapter_types_pb2.py",
+    "dbt/adapters/events/adapter_types_pb2.py",
     "venv",
 ]
 [[tool.mypy.overrides]]
-module = ["dbt.adapter.events.adapter_types_pb2"]
+module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
 
 [tool.pytest]
