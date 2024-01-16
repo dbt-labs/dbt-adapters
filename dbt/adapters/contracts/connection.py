@@ -28,8 +28,8 @@ from dbt_common.utils import md5
 from mashumaro.jsonschema.annotations import Pattern
 from typing_extensions import Protocol, Annotated
 
-from dbt.adapter.events.types import NewConnectionOpening
-from dbt.adapter.utils import translate_aliases
+from dbt.adapters.events.types import NewConnectionOpening
+from dbt.adapters.utils import translate_aliases
 
 
 class Identifier(ValidatedStringMixin):

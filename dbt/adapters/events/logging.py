@@ -6,7 +6,7 @@ from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.event_handler import set_package_logging
 from dbt_common.events.functions import fire_event
 
-from dbt.adapter.events.types import (
+from dbt.adapters.events.types import (
     AdapterEventDebug,
     AdapterEventError,
     AdapterEventInfo,

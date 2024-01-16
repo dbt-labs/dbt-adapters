@@ -10,18 +10,18 @@ from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError
 from dbt_common.semver import VersionSpecifier
 
-from dbt.adapter.base.plugin import AdapterPlugin
-from dbt.adapter.contracts.connection import AdapterRequiredConfig, Credentials
-from dbt.adapter.events.types import (
+from dbt.adapters.base.plugin import AdapterPlugin
+from dbt.adapters.contracts.connection import AdapterRequiredConfig, Credentials
+from dbt.adapters.events.types import (
     AdapterImportError,
     PluginLoadError,
     AdapterRegistered,
 )
-from dbt.adapter.include.global_project import (
+from dbt.adapters.include.global_project import (
     PACKAGE_PATH as GLOBAL_PROJECT_PATH,
     PROJECT_NAME as GLOBAL_PROJECT_NAME,
 )
-from dbt.adapter.protocol import AdapterConfig, AdapterProtocol, RelationProtocol
+from dbt.adapters.protocol import AdapterConfig, AdapterProtocol, RelationProtocol
 
 
 Adapter = AdapterProtocol
