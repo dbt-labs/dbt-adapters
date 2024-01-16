@@ -1,0 +1,132 @@
+[project]
+dynamic = ["version"]
+name = "dbt-adapter"
+description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
+readme = "README.md"
+keywords = ["dbt", "adapter", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
+requires-python = ">=3.8.0"
+authors = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+maintainers = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "agate~=1.7.0",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "mashumaro[msgpack]~=3.9",
+    "protobuf>=4.0.0",
+    "pytz>=2015.7",
+    "typing-extensions~=4.4",
+]
+[project.optional-dependencies]
+lint = [
+    "black",
+    "flake8",
+    "Flake8-pyproject",
+    "mypy",
+    "types-protobuf",
+    "types-pytz",
+]
+test = [
+    "pytest",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapter"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapter.git"
+Issues = "https://github.com/dbt-labs/dbt-adapter/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapter/blob/main/CHANGELOG.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/.changes",
+  ".changie.yaml",
+  ".gitignore",
+  ".pre-commit-config.yaml",
+  "CONTRIBUTING.md",
+  "/tests",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dbt.adapter"]
+
+[tool.hatch.metadata]
+# needed for installing `dbt-common` directly from github
+allow-direct-references = true
+
+[tool.hatch.version]
+path = "dbt/adapter/__about__.py"
+
+[tool.hatch.envs.default]
+features = ["lint", "test"]
+[tool.hatch.envs.default.scripts]
+unit-tests = "- python -m pytest {args:tests/unit}"
+lint-all = [
+    "- lint-black",
+    "- lint-flake8",
+    "- lint-mypy",
+]
+lint-black = "python -m black ."
+lint-flake8 = "python -m flake8 ."
+lint-mypy = "python -m mypy ."
+
+[tool.black]
+extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
+line-length = 99
+target-version = ['py38']
+
+[tool.flake8]
+select = ["E", "W", "F"]
+ignore = ["E203", "E501", "E741", "W503", "W504"]
+exclude = [
+    "dbt/adapter/events/adapter_types_pb2.py",
+    "tests",
+    "venv",
+]
+per-file-ignores = ["*/__init__.py: F401"]
+
+[tool.mypy]
+namespace_packages = true
+show_error_codes = true
+explicit_package_bases = true
+ignore_missing_imports = true
+pretty = true
+mypy_path = "third-party-stubs/"
+files = [
+    "dbt/adapter",
+    "tests/unit",
+]
+exclude = [
+    "dbt/adapter/events/adapter_types_pb2.py",
+    "venv",
+]
+[[tool.mypy.overrides]]
+module = ["dbt.adapter.events.adapter_types_pb2"]
+follow_imports = "skip"
+
+[tool.pytest]
+env_files = ["test.env"]
+testpaths = [
+    "tests/functional",
+    "tests/unit",
+]
