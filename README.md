@@ -1,39 +1,36 @@
-# dbt Postgres
+<p align="center">
+  <img src="https://raw.githubusercontent.com/dbt-labs/dbt-postgres/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
+</p>
+<p align="center">
+  <a href="https://github.com/dbt-labs/dbt-core/actions/workflows/main.yml">
+    <img src="https://github.com/dbt-labs/dbt-core/actions/workflows/main.yml/badge.svg?event=push" alt="CI Badge"/>
+  </a>
+</p>
 
-This package is responsible for:
+**[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
-- defining database connection methods
-- caching information from databases
-- determining how relations are defined
+dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-aggregate the raw data in your warehouse so that it's ready for analysis.
 
-There are two major adapter types: base and sql
+## dbt-postgres
 
-# Directories
+The `dbt-postgres` package contains all of the code enabling dbt to work with a Postgres database. For
+more information on using dbt with Postgres, consult [the docs](https://docs.getdbt.com/docs/profile-postgres).
 
-## `base`
+## Getting started
 
-Defines the base implementation Adapters can use to build out full functionality.
+- [Install dbt](https://docs.getdbt.com/docs/installation)
+- Read the [introduction](https://docs.getdbt.com/docs/introduction/) and [viewpoint](https://docs.getdbt.com/docs/about/viewpoint/)
 
-## `sql`
+## Join the dbt Community
 
-Defines a sql implementation for adapters that initially inherits the base implementation
-and comes with some pre-made methods and macros that can be overwritten as needed per adapter.
-(most common type of adapter.)
+- Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
+- Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
 
-# Files
+## Reporting bugs and contributing code
 
-## `cache.py`
+- Want to report a bug or request a feature? Let us know on [Slack](http://community.getdbt.com/), or open [an issue](https://github.com/dbt-labs/dbt-postgres/issues/new)
+- Want to help us build dbt? Check out the [Contributing Guide](https://github.com/dbt-labs/dbt-postgres/blob/main/CONTRIBUTING.md)
 
-Cached information from the database.
+## Code of Conduct
 
-## `factory.py`
-
-Defines how we generate adapter objects
-
-## `protocol.py`
-
-Defines various interfaces for various adapter objects. Helps mypy correctly resolve methods.
-
-## `reference_keys.py`
-
-Configures naming scheme for cache elements to be universal.
+Everyone interacting in the dbt project's codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [dbt Code of Conduct](https://community.getdbt.com/code-of-conduct).
