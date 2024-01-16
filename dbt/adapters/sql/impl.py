@@ -3,12 +3,12 @@ from typing import Any, List, Optional, Tuple, Type
 import agate
 from dbt_common.events.functions import fire_event
 
-from dbt.adapter.base import BaseAdapter, BaseRelation, available
-from dbt.adapter.cache import _make_ref_key_dict
-from dbt.adapter.contracts.connection import AdapterResponse, Connection
-from dbt.adapter.events.types import ColTypeChange, SchemaCreation, SchemaDrop
-from dbt.adapter.exceptions import RelationTypeNullError
-from dbt.adapter.sql.connections import SQLConnectionManager
+from dbt.adapters.base import BaseAdapter, BaseRelation, available
+from dbt.adapters.cache import _make_ref_key_dict
+from dbt.adapters.contracts.connection import AdapterResponse, Connection
+from dbt.adapters.events.types import ColTypeChange, SchemaCreation, SchemaDrop
+from dbt.adapters.exceptions import RelationTypeNullError
+from dbt.adapters.sql.connections import SQLConnectionManager
 
 
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"

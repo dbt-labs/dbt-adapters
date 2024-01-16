@@ -44,7 +44,7 @@ Simply change it to these two lines with your adapter's database name, and all y
 
 ```python
 
-from dbt.adapter.events.logging import AdapterLogger
+from dbt.adapters.events.logging import AdapterLogger
 
 logger = AdapterLogger("<database name>")
 # e.g. AdapterLogger("Snowflake")

@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from dbt.adapter.base.impl import BaseAdapter, ConstraintSupport
+from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
 
 
 class TestBaseAdapterConstraintRendering:

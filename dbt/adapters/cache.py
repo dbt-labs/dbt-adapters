@@ -5,15 +5,15 @@ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 from dbt_common.events.functions import fire_event, fire_event_if
 from dbt_common.utils.formatting import lowercase
 
-from dbt.adapter.events.types import CacheAction, CacheDumpGraph
-from dbt.adapter.exceptions.cache import (
+from dbt.adapters.events.types import CacheAction, CacheDumpGraph
+from dbt.adapters.exceptions.cache import (
     DependentLinkNotCachedError,
     NewNameAlreadyInCacheError,
     NoneRelationFoundError,
     ReferencedLinkNotCachedError,
     TruncatedModelNameCausedCollisionError,
 )
-from dbt.adapter.reference_keys import (
+from dbt.adapters.reference_keys import (
     _ReferenceKey,
     _make_ref_key,
     _make_ref_key_dict,

@@ -1,13 +1,13 @@
 import sys
 from unittest import TestCase, mock
 
-from dbt.adapter.postgres import PostgresCredentials, PostgresConnectionManager
+from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
 import psycopg2
 
-from dbt.adapter.base import BaseConnectionManager
-from dbt.adapter.contracts.connection import Connection
-from dbt.adapter.events.logging import AdapterLogger
-from dbt.adapter.exceptions import FailedToConnectError
+from dbt.adapters.base import BaseConnectionManager
+from dbt.adapters.contracts.connection import Connection
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.exceptions import FailedToConnectError
 
 
 class BaseConnectionManagerTest(TestCase):

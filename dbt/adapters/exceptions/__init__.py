@@ -1,5 +1,5 @@
-from dbt.adapter.exceptions.alias import AliasError, DuplicateAliasError
-from dbt.adapter.exceptions.cache import (
+from dbt.adapters.exceptions.alias import AliasError, DuplicateAliasError
+from dbt.adapters.exceptions.cache import (
     CacheInconsistencyError,
     DependentLinkNotCachedError,
     NewNameAlreadyInCacheError,
@@ -7,7 +7,7 @@ from dbt.adapter.exceptions.cache import (
     ReferencedLinkNotCachedError,
     TruncatedModelNameCausedCollisionError,
 )
-from dbt.adapter.exceptions.compilation import (
+from dbt.adapters.exceptions.compilation import (
     ApproximateMatchError,
     ColumnTypeMissingError,
     DuplicateMacroInPackageError,
@@ -28,11 +28,11 @@ from dbt.adapter.exceptions.compilation import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapter.exceptions.connection import (
+from dbt.adapters.exceptions.connection import (
     FailedToConnectError,
     InvalidConnectionError,
 )
-from dbt.adapter.exceptions.database import (
+from dbt.adapters.exceptions.database import (
     CrossDbReferenceProhibitedError,
     IndexConfigError,
     IndexConfigNotDictError,

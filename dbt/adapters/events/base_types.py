@@ -9,7 +9,7 @@ from dbt_common.events.base_types import (
     WarnLevel as CommonWarnLevel,
 )
 
-from dbt.adapter.events import adapter_types_pb2
+from dbt.adapters.events import adapter_types_pb2
 
 
 class AdapterBaseEvent(BaseEvent):

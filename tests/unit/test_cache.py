@@ -5,8 +5,8 @@ from unittest import TestCase
 
 from dbt_common.exceptions import DbtInternalError
 
-from dbt.adapter.base import BaseRelation
-from dbt.adapter.cache import RelationsCache
+from dbt.adapters.base import BaseRelation
+from dbt.adapters.cache import RelationsCache
 
 
 def make_relation(database, schema, identifier):

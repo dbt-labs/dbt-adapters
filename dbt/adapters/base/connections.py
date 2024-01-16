@@ -26,8 +26,8 @@ from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
 from dbt_common.utils import cast_to_str
 
-from dbt.adapter.base.query_headers import MacroQueryStringSetter
-from dbt.adapter.contracts.connection import (
+from dbt.adapters.base.query_headers import MacroQueryStringSetter
+from dbt.adapters.contracts.connection import (
     AdapterRequiredConfig,
     AdapterResponse,
     Connection,
@@ -35,8 +35,8 @@ from dbt.adapter.contracts.connection import (
     Identifier,
     LazyHandle,
 )
-from dbt.adapter.events.logging import AdapterLogger
-from dbt.adapter.events.types import (
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import (
     ConnectionClosed,
     ConnectionClosedInCleanup,
     ConnectionLeftOpen,
@@ -46,7 +46,7 @@ from dbt.adapter.events.types import (
     Rollback,
     RollbackFailed,
 )
-from dbt.adapter.exceptions import FailedToConnectError, InvalidConnectionError
+from dbt.adapters.exceptions import FailedToConnectError, InvalidConnectionError
 
 
 SleepTime = Union[int, float]  # As taken by time.sleep.
