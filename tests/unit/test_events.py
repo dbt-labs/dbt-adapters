@@ -4,9 +4,9 @@ import re
 from dbt_common.events.base_types import msg_from_base_event
 from dbt_common.events.functions import msg_to_dict, msg_to_json
 
-from dbt.adapter.events import types
-from dbt.adapter.events.logging import AdapterLogger
-from dbt.adapter.events import base_types
+from dbt.adapters.events import types
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events import base_types
 
 
 _BASE_EVENTS = [

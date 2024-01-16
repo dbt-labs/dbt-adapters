@@ -54,25 +54,25 @@ from dbt_common.utils import (
 )
 import pytz
 
-from dbt.adapter.base.column import Column as BaseColumn
-from dbt.adapter.base.connections import (
+from dbt.adapters.base.column import Column as BaseColumn
+from dbt.adapters.base.connections import (
     AdapterResponse,
     BaseConnectionManager,
     Connection,
 )
-from dbt.adapter.base.meta import AdapterMeta, available
-from dbt.adapter.base.relation import (
+from dbt.adapters.base.meta import AdapterMeta, available
+from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
 )
-from dbt.adapter.cache import RelationsCache, _make_ref_key_dict
-from dbt.adapter.capability import Capability, CapabilityDict
-from dbt.adapter.contracts.connection import Credentials
-from dbt.adapter.contracts.macros import MacroResolverProtocol
-from dbt.adapter.contracts.relation import RelationConfig
-from dbt.adapter.events.types import (
+from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
+from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.contracts.connection import Credentials
+from dbt.adapters.contracts.macros import MacroResolverProtocol
+from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
     CodeExecution,
@@ -82,7 +82,7 @@ from dbt.adapter.events.types import (
     ConstraintNotSupported,
     ListRelations,
 )
-from dbt.adapter.exceptions import (
+from dbt.adapters.exceptions import (
     NullRelationCacheAttemptedError,
     NullRelationDropAttemptedError,
     QuoteConfigTypeError,
@@ -92,7 +92,7 @@ from dbt.adapter.exceptions import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapter.protocol import AdapterConfig, MacroContextGeneratorCallable
+from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 
 
 GET_CATALOG_MACRO_NAME = "get_catalog"

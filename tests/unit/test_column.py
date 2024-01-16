@@ -1,7 +1,7 @@
 import decimal
 from unittest import TestCase
 
-from dbt.adapter.base import Column
+from dbt.adapters.base import Column
 
 
 class TestStringType(TestCase):

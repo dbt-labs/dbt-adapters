@@ -1,6 +1,6 @@
 from typing import Mapping, Sequence, Any, Dict, List
 
-from dbt.adapter.exceptions import DuplicateAliasError
+from dbt.adapters.exceptions import DuplicateAliasError
 
 
 class Translator:
