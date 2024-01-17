@@ -23,9 +23,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-adapters<1.0",
     "psycopg2-binary~=2.9",
-    # installed via dbt-adapter but used directly, unpin minor to avoid version conflicts
+    # installed via dbt-adapters but used directly, unpin minor to avoid version conflicts
     "dbt-common<1.0",
     "agate<2.0",
 ]
@@ -60,10 +60,6 @@ include = ["dbt"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["dbt"]
-
-[tool.hatch.metadata]
-# needed for installing `dbt-adapters` directly from github
-allow-direct-references = true
 
 [tool.hatch.version]
 path = "dbt/adapters/postgres/__about__.py"
