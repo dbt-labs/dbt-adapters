@@ -17,7 +17,7 @@ from dbt.adapters.events.types import (
     PluginLoadError,
     AdapterRegistered,
 )
-from dbt.adapters.include.global_project import (
+from dbt.include.global_project import (
     PACKAGE_PATH as GLOBAL_PROJECT_PATH,
     PROJECT_NAME as GLOBAL_PROJECT_NAME,
 )
