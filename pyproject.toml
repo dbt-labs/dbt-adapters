@@ -26,10 +26,10 @@ dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pytz>=2015.7",
     # installed via dbt-common but used directly, unpin minor to avoid version conflicts
-    "agate~=1.7",
-    "mashumaro[msgpack]~=3.9",
-    "protobuf~=4.0",
-    "typing-extensions~=4.4",
+    "agate<2.0",
+    "mashumaro[msgpack]<4.0",
+    "protobuf<5.0",
+    "typing-extensions<5.0",
 ]
 [project.optional-dependencies]
 lint = [
