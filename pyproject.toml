@@ -119,3 +119,5 @@ testpaths = [
     "tests/functional",
     "tests/unit",
 ]
+color = true
+csv = "results.csv"
