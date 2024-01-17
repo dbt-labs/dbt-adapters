@@ -3,9 +3,7 @@ from unittest import TestCase, mock
 
 from dbt.adapters.base import AdapterPlugin
 from dbt.adapters.factory import AdapterContainer
-from dbt.adapters.include.global_project import (
-    PROJECT_NAME as GLOBAL_PROJECT_NAME,
-)
+from dbt.include.global_project import PROJECT_NAME as GLOBAL_PROJECT_NAME
 
 
 class TestGetPackageNames(TestCase):
