@@ -12,7 +12,7 @@ maintainers = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
@@ -25,6 +25,9 @@ classifiers = [
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "psycopg2-binary~=2.9",
+    # installed via dbt-common but used directly, unpin minor to avoid version conflicts
+    "agate<2.0",
 ]
 [project.optional-dependencies]
 lint = [
@@ -53,25 +56,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist]
-exclude = [
-  "/.github",
-  "/.changes",
-  ".changie.yaml",
-  ".gitignore",
-  ".pre-commit-config.yaml",
-  "CONTRIBUTING.md",
-  "/tests",
-]
+include = ["dbt/*"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["dbt.postgres"]
+packages = ["dbt"]
 
 [tool.hatch.metadata]
-# needed for installing `dbt-common` directly from github
+# needed for installing `dbt-adapters` and `dbt-common` directly from github
 allow-direct-references = true
 
 [tool.hatch.version]
-path = "dbt/postgres/__about__.py"
+path = "dbt/adapters/postgres/__about__.py"
 
 [tool.hatch.envs.default]
 features = ["lint", "test"]
@@ -87,18 +82,13 @@ lint-flake8 = "python -m flake8 ."
 lint-mypy = "python -m mypy ."
 
 [tool.black]
-extend-exclude = "dbt/postgres/events/adapter_types_pb2.py"
 line-length = 99
 target-version = ['py38']
 
 [tool.flake8]
 select = ["E", "W", "F"]
 ignore = ["E203", "E501", "E741", "W503", "W504"]
-exclude = [
-    "dbt/postgres/events/adapter_types_pb2.py",
-    "tests",
-    "venv",
-]
+exclude = ["tests", "venv"]
 per-file-ignores = ["*/__init__.py: F401"]
 
 [tool.mypy]
@@ -107,18 +97,11 @@ show_error_codes = true
 explicit_package_bases = true
 ignore_missing_imports = true
 pretty = true
-mypy_path = "third-party-stubs/"
 files = [
-    "dbt/postgres",
+    "dbt/adapters/postgres",
     "tests/unit",
 ]
-exclude = [
-    "dbt/postgres/events/adapter_types_pb2.py",
-    "venv",
-]
-[[tool.mypy.overrides]]
-module = ["dbt.postgres.events.adapter_types_pb2"]
-follow_imports = "skip"
+exclude = ["venv"]
 
 [tool.pytest]
 env_files = ["test.env"]
