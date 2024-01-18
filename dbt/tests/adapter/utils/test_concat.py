@@ -12,7 +12,9 @@ class BaseConcat(base_utils.BaseUtils):
     def models(self):
         return {
             "test_concat.yml": fixture_concat.models__test_concat_yml,
-            "test_concat.sql": self.interpolate_macro_namespace(fixture_concat.models__test_concat_sql, "concat"),
+            "test_concat.sql": self.interpolate_macro_namespace(
+                fixture_concat.models__test_concat_sql, "concat"
+            ),
         }
 
 

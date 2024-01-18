@@ -302,6 +302,7 @@ class TestProcessingException(Exception):
 
 # Testing utilities that use adapter code
 
+
 # Uses:
 #    adapter.config.credentials
 #    adapter.quote

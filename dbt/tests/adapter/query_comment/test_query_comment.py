@@ -37,7 +37,7 @@ class BaseQueryComments(BaseDefaultQueryComments):
     def project_config_update(self):
         return {"query-comment": "dbt\nrules!\n"}
 
-    def test_matches_comment(self, project) -> bool:
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         assert r"/* dbt\nrules! */\n" in logs
 
@@ -47,7 +47,7 @@ class BaseMacroQueryComments(BaseDefaultQueryComments):
     def project_config_update(self):
         return {"query-comment": "{{ query_header_no_args() }}"}
 
-    def test_matches_comment(self, project) -> bool:
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         assert r"/* dbt macros\nare pretty cool */\n" in logs
 
@@ -57,7 +57,7 @@ class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
     def project_config_update(self):
         return {"query-comment": "{{ return(ordered_to_json(query_header_args(target.name))) }}"}
 
-    def test_matches_comment(self, project) -> bool:
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         expected_dct = {
             "app": "dbt++",
@@ -86,7 +86,7 @@ class BaseNullQueryComments(BaseDefaultQueryComments):
     def project_config_update(self):
         return {"query-comment": None}
 
-    def test_matches_comment(self, project) -> bool:
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         assert "/*" not in logs or "*/" not in logs
 
@@ -96,7 +96,7 @@ class BaseEmptyQueryComments(BaseDefaultQueryComments):
     def project_config_update(self):
         return {"query-comment": ""}
 
-    def test_matches_comment(self, project) -> bool:
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         assert "/*" not in logs or "*/" not in logs
 

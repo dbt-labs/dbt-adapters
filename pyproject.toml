@@ -10,6 +10,7 @@ lint = [
 ]
 typecheck = [
     "mypy",
+    "types-PyYAML",
     "types-protobuf",
     "types-pytz",
 ]

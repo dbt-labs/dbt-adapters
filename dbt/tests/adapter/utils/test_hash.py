@@ -12,7 +12,9 @@ class BaseHash(base_utils.BaseUtils):
     def models(self):
         return {
             "test_hash.yml": fixture_hash.models__test_hash_yml,
-            "test_hash.sql": self.interpolate_macro_namespace(fixture_hash.models__test_hash_sql, "hash"),
+            "test_hash.sql": self.interpolate_macro_namespace(
+                fixture_hash.models__test_hash_sql, "hash"
+            ),
         }
 
 

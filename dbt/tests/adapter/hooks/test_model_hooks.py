@@ -206,7 +206,11 @@ class TestHookRefs(BaseTestPrePost):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooked.sql": fixtures.models__hooked, "post.sql": fixtures.models__post, "pre.sql": fixtures.models__pre}
+        return {
+            "hooked.sql": fixtures.models__hooked,
+            "post.sql": fixtures.models__post,
+            "pre.sql": fixtures.models__pre,
+        }
 
     def test_pre_post_model_hooks_refed(self, project, dbt_profile_target):
         run_dbt()

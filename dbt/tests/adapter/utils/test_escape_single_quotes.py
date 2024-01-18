@@ -9,7 +9,8 @@ class BaseEscapeSingleQuotesQuote(base_utils.BaseUtils):
         return {
             "test_escape_single_quotes.yml": fixture_escape_single_quotes.models__test_escape_single_quotes_yml,
             "test_escape_single_quotes.sql": self.interpolate_macro_namespace(
-                fixture_escape_single_quotes.models__test_escape_single_quotes_quote_sql, "escape_single_quotes"
+                fixture_escape_single_quotes.models__test_escape_single_quotes_quote_sql,
+                "escape_single_quotes",
             ),
         }
 
@@ -20,7 +21,8 @@ class BaseEscapeSingleQuotesBackslash(base_utils.BaseUtils):
         return {
             "test_escape_single_quotes.yml": fixture_escape_single_quotes.models__test_escape_single_quotes_yml,
             "test_escape_single_quotes.sql": self.interpolate_macro_namespace(
-                fixture_escape_single_quotes.models__test_escape_single_quotes_backslash_sql, "escape_single_quotes"
+                fixture_escape_single_quotes.models__test_escape_single_quotes_backslash_sql,
+                "escape_single_quotes",
             ),
         }
 

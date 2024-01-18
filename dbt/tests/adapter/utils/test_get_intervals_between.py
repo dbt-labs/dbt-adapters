@@ -9,7 +9,8 @@ class BaseGetIntervalsBetween(base_utils.BaseUtils):
         return {
             "test_get_intervals_between.yml": fixture_get_intervals_between.models__test_get_intervals_between_yml,
             "test_get_intervals_between.sql": self.interpolate_macro_namespace(
-                fixture_get_intervals_between.models__test_get_intervals_between_sql, "get_intervals_between"
+                fixture_get_intervals_between.models__test_get_intervals_between_sql,
+                "get_intervals_between",
             ),
         }
 

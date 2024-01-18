@@ -13,7 +13,9 @@ class BaseSafeCast(base_utils.BaseUtils):
         return {
             "test_safe_cast.yml": fixture_safe_cast.models__test_safe_cast_yml,
             "test_safe_cast.sql": self.interpolate_macro_namespace(
-                self.interpolate_macro_namespace(fixture_safe_cast.models__test_safe_cast_sql, "safe_cast"),
+                self.interpolate_macro_namespace(
+                    fixture_safe_cast.models__test_safe_cast_sql, "safe_cast"
+                ),
                 "type_string",
             ),
         }

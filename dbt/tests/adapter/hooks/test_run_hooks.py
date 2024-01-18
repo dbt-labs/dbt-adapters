@@ -17,7 +17,10 @@ class TestPrePostRunHooks(object):
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"hook.sql": fixtures.macros__hook, "before-and-after.sql": fixtures.macros__before_and_after}
+        return {
+            "hook.sql": fixtures.macros__hook,
+            "before-and-after.sql": fixtures.macros__before_and_after,
+        }
 
     @pytest.fixture(scope="class")
     def models(self):

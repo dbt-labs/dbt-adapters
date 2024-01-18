@@ -54,22 +54,24 @@ class BaseSimpleSnapshotBase:
         self.delete_snapshot_records()
         self.delete_fact_records()
 
-    def update_fact_records(self, updates: Dict[str, str], where: str = None):
+    def update_fact_records(self, updates: Dict[str, str], where: str = None):  # type: ignore
         common.update_records(self.project, "fact", updates, where)
 
-    def insert_fact_records(self, where: str = None):
+    def insert_fact_records(self, where: str = None):  # type: ignore
         common.insert_records(self.project, "fact", "seed", "*", where)
 
-    def delete_fact_records(self, where: str = None):
+    def delete_fact_records(self, where: str = None):  # type: ignore
         common.delete_records(self.project, "fact", where)
 
-    def add_fact_column(self, column: str = None, definition: str = None):
+    def add_fact_column(self, column: str = None, definition: str = None):  # type: ignore
         common.add_column(self.project, "fact", column, definition)
 
-    def create_fact_from_seed(self, where: str = None):
+    def create_fact_from_seed(self, where: str = None):  # type: ignore
         common.clone_table(self.project, "fact", "seed", "*", where)
 
-    def get_snapshot_records(self, select: str = None, where: str = None) -> List[tuple]:
+    def get_snapshot_records(
+        self, select: str = None, where: str = None  # type: ignore
+    ) -> List[tuple]:
         return common.get_records(self.project, "snapshot", select, where)
 
     def delete_snapshot_records(self):

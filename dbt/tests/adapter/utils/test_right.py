@@ -12,7 +12,9 @@ class BaseRight(base_utils.BaseUtils):
     def models(self):
         return {
             "test_right.yml": fixture_right.models__test_right_yml,
-            "test_right.sql": self.interpolate_macro_namespace(fixture_right.models__test_right_sql, "right"),
+            "test_right.sql": self.interpolate_macro_namespace(
+                fixture_right.models__test_right_sql, "right"
+            ),
         }
 
 
