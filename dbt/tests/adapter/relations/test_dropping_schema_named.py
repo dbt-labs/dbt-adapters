@@ -11,7 +11,6 @@ class BaseDropSchemaNamed:
         }
 
     def test_dropped_schema_named_drops_expected_schema(self, project):
-
         results = run_dbt(["run"])
         assert len(results) == 1
 

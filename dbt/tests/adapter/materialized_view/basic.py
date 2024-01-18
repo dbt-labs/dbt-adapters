@@ -150,7 +150,6 @@ class MaterializedViewBasic:
 
     @pytest.fixture(scope="function", autouse=True)
     def setup(self, project, my_materialized_view):
-
         run_dbt(["seed"])
         run_dbt(["run", "--models", my_materialized_view.identifier, "--full-refresh"])
 

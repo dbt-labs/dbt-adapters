@@ -54,7 +54,6 @@ class TestSimpleCopyUppercase:
         return {"seed.csv": _SEEDS__SEED_INITIAL}
 
     def test_simple_copy_uppercase(self, project):
-
         # Load the seed file and check that it worked
         results = run_dbt(["seed"])
         assert len(results) == 1

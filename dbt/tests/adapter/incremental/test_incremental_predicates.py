@@ -77,7 +77,6 @@ class BaseIncrementalPredicates:
     def get_test_fields(
         self, project, seed, incremental_model, update_sql_file, opt_model_count=None
     ):
-
         seed_count = len(run_dbt(["seed", "--select", seed, "--full-refresh"]))
 
         model_count = len(run_dbt(["run", "--select", incremental_model, "--full-refresh"]))

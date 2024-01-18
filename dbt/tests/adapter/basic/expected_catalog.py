@@ -26,7 +26,6 @@ def base_expected_catalog(
     case=None,
     case_columns=False,
 ):
-
     if case is None:
 
         def case(x):

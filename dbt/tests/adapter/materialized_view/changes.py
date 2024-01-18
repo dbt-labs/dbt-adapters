@@ -126,7 +126,6 @@ class MaterializedViewChanges:
 
     @pytest.fixture(scope="function", autouse=True)
     def setup(self, project, my_materialized_view):
-
         # make sure the model in the data reflects the files each time
         run_dbt(["seed"])
         run_dbt(["run", "--models", my_materialized_view.identifier, "--full-refresh"])

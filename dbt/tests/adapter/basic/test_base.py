@@ -49,7 +49,6 @@ class BaseSimpleMaterializations:
     pass
 
     def test_base(self, project):
-
         # seed command
         results = run_dbt(["seed"])
         # seed result length

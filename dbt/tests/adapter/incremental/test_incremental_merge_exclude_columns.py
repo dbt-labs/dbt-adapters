@@ -65,7 +65,6 @@ class BaseMergeExcludeColumns:
         return len(model_result_set)
 
     def get_test_fields(self, project, seed, incremental_model, update_sql_file):
-
         seed_count = len(run_dbt(["seed", "--select", seed, "--full-refresh"]))
 
         model_count = len(run_dbt(["run", "--select", incremental_model, "--full-refresh"]))
