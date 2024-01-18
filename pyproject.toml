@@ -36,6 +36,8 @@ lint = [
     "black",
     "flake8",
     "Flake8-pyproject",
+]
+typecheck = [
     "mypy",
     "types-protobuf",
     "types-pytz",
@@ -44,6 +46,11 @@ test = [
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
+]
+build = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
 ]
 
 [project.urls]
@@ -67,7 +74,12 @@ packages = ["dbt"]
 path = "dbt/adapters/__about__.py"
 
 [tool.hatch.envs.default]
-features = ["lint", "test"]
+features = [
+    "lint",
+    "typecheck",
+    "test",
+    "build",
+]
 [tool.hatch.envs.default.scripts]
 unit-tests = "- python -m pytest {args:tests/unit}"
 lint-all = [
@@ -78,6 +90,20 @@ lint-all = [
 lint-black = "python -m black ."
 lint-flake8 = "python -m flake8 ."
 lint-mypy = "python -m mypy ."
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_adapters-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
 
 [tool.black]
 extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
