@@ -1,10 +1,7 @@
 [project]
-name = "dbt-adapters"
-requires-python = ">=3.8.0"
-dependencies = [
-    "dbt-adapters",
-    "dbt-tests-adapter",
-]
+name = "dbt-adapters-tests-adapter"
+version = "0.1.0"
+description = ""
 [project.optional-dependencies]
 lint = [
     "black",
@@ -25,6 +22,15 @@ test = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.sdist]
+include = ["dbt"]
+
+[tool.hatch.build.targets.wheel]
+include = ["dbt"]
 
 [tool.hatch.envs.default]
 features = ["lint", "typecheck", "test"]
