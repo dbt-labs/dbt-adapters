@@ -1,41 +1,17 @@
 [project]
-dynamic = ["version"]
 name = "dbt-adapters"
-description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
-readme = "README.md"
-keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
 requires-python = ">=3.8.0"
-authors = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
-maintainers = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
-classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: MacOS :: MacOS X",
-    "Operating System :: Microsoft :: Windows",
-    "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-]
 dependencies = [
-    "dbt-common<1.0",
-    "pytz>=2015.7",
-    # installed via dbt-common but used directly, unpin minor to avoid version conflicts
-    "agate<2.0",
-    "mashumaro[msgpack]<4.0",
-    "protobuf<5.0",
-    "typing-extensions<5.0",
+    "dbt-adapters",
+    "dbt-tests-adapter",
 ]
 [project.optional-dependencies]
 lint = [
     "black",
     "flake8",
     "Flake8-pyproject",
+]
+typecheck = [
     "mypy",
     "types-protobuf",
     "types-pytz",
@@ -46,28 +22,12 @@ test = [
     "pytest-xdist",
 ]
 
-[project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-adapters"
-Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-adapters.git"
-Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
-Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.sdist]
-include = ["dbt"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["dbt"]
-
-[tool.hatch.version]
-path = "dbt/adapters/__about__.py"
-
 [tool.hatch.envs.default]
-features = ["lint", "test"]
+features = ["lint", "typecheck", "test"]
 [tool.hatch.envs.default.scripts]
 unit-tests = "- python -m pytest {args:tests/unit}"
 lint-all = [
@@ -102,7 +62,7 @@ ignore_missing_imports = true
 pretty = true
 mypy_path = "third-party-stubs/"
 files = [
-    "dbt/adapters",
+    "dbt",
     "tests/unit",
 ]
 exclude = [
