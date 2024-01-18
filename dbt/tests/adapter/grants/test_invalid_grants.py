@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+from base_grants import BaseGrants
 from dbt.tests.util import run_dbt_and_capture, write_file
 
 
@@ -61,7 +61,3 @@ class BaseInvalidGrants(BaseGrants):
         write_file(yaml_file, project.project_root, "models", "schema.yml")
         (results, log_output) = run_dbt_and_capture(["--debug", "run"], expect_pass=False)
         assert self.privilege_does_not_exist_error() in log_output
-
-
-class TestInvalidGrants(BaseInvalidGrants):
-    pass

@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt
+import files
 
 
 class BaseGenericTests:
@@ -52,7 +52,3 @@ class BaseGenericTests:
         # test command, all tests
         results = run_dbt(["test"])
         assert len(results) == 3
-
-
-class TestGenericTests(BaseGenericTests):
-    pass

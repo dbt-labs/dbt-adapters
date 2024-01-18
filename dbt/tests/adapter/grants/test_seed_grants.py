@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+from base_grants import BaseGrants
 from dbt.tests.util import (
     get_manifest,
     run_dbt,
@@ -139,7 +139,3 @@ class BaseSeedGrants(BaseGrants):
         assert "revoke " not in log_output
         assert "grant " not in log_output
         self.assert_expected_grants_match_actual(project, "my_seed", expected)
-
-
-class TestSeedGrants(BaseSeedGrants):
-    pass

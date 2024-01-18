@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.tests.adapter.dbt_show import fixtures
 from dbt.tests.util import run_dbt
+import fixtures
 
 
 # -- Below we define base classes for tests you import based on if your adapter supports dbt show or not --
@@ -45,11 +45,3 @@ class BaseShowSqlHeader:
 
     def test_sql_header(self, project):
         run_dbt(["show", "--select", "sql_header", "--vars", "timezone: Asia/Kolkata"])
-
-
-class TestPostgresShowSqlHeader(BaseShowSqlHeader):
-    pass
-
-
-class TestPostgresShowLimit(BaseShowLimit):
-    pass

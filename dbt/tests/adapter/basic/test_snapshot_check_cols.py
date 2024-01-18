@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import relation_from_name, run_dbt, update_rows
+import files
 
 
 def check_relation_rows(project, snapshot_name, count):
@@ -112,7 +112,3 @@ class BaseSnapshotCheckCols:
         check_relation_rows(project, "cc_name_snapshot", 30)
         # does not see name updates
         check_relation_rows(project, "cc_date_snapshot", 30)
-
-
-class TestSnapshotCheckCols(BaseSnapshotCheckCols):
-    pass

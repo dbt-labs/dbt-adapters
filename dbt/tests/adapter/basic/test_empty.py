@@ -24,7 +24,3 @@ class BaseEmpty:
         assert os.path.exists(catalog_path)
         assert len(catalog.nodes) == 0
         assert len(catalog.sources) == 0
-
-
-class TestEmpty(BaseEmpty):
-    pass

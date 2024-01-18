@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import check_result_nodes_by_name, run_dbt
+import files
 
 
 class BaseSingularTests:
@@ -41,7 +41,3 @@ class BaseSingularTests:
                 assert result.status == "pass"
             elif result.node.name == "failing":
                 assert result.status == "fail"
-
-
-class TestSingularTests(BaseSingularTests):
-    pass

@@ -1,76 +1,14 @@
-macros_missing_column = """
-{% macro export_table_check() %}
-
-    {% set table = 'test_column' %}
-
-    {% set query %}
-        SELECT column_name
-        FROM {{ref(table)}}
-        LIMIT 1
-    {% endset %}
-
-    {%- if flags.WHICH in ('run', 'build') -%}
-        {% set results = run_query(query) %}
-        {% if execute %}
-            {%- if results.rows -%}
-                {{ exceptions.raise_compiler_error("ON_RUN_START_CHECK_NOT_PASSED: Data already exported. DBT Run aborted.") }}
-            {% else -%}
-                {{ log("No data found in " ~ table ~ " for current day and runtime region. Proceeding...", true) }}
-            {%- endif -%}
-        {%- endif -%}
-    {%- endif -%}
-{% endmacro %}
-"""
-
-models__missing_column = """
+missing_column = """
 select 1 as col
 """
 
-macros__before_and_after = """
-{% macro custom_run_hook(state, target, run_started_at, invocation_id) %}
 
-   insert into {{ target.schema }}.on_run_hook (
-        test_state,
-        target_dbname,
-        target_host,
-        target_name,
-        target_schema,
-        target_type,
-        target_user,
-        target_pass,
-        target_threads,
-        run_started_at,
-        invocation_id,
-        thread_id
-   ) VALUES (
-    '{{ state }}',
-    '{{ target.dbname }}',
-    '{{ target.host }}',
-    '{{ target.name }}',
-    '{{ target.schema }}',
-    '{{ target.type }}',
-    '{{ target.user }}',
-    '{{ target.get("pass", "") }}',
-    {{ target.threads }},
-    '{{ run_started_at }}',
-    '{{ invocation_id }}',
-    '{{ thread_id }}'
-   )
-
-{% endmacro %}
-"""
-
-macros__hook = """
-{% macro hook() %}
-  select 1
-{% endmacro %}
-"""
-
-models__hooks = """
+hooks = """
 select 1 as id
 """
 
-models__hooks_configured = """
+
+hooks_configured = """
 {{
     config({
         "pre_hook": "\
@@ -136,7 +74,8 @@ models__hooks_configured = """
 select 3 as id
 """
 
-models__hooks_error = """
+
+hooks_error = """
 {{
     config({
         "pre_hook": "\
@@ -229,7 +168,8 @@ models__hooks_error = """
 select 3 as id
 """
 
-models__hooks_kwargs = """
+
+hooks_kwargs = """
 {{
     config(
         pre_hook="\
@@ -294,7 +234,8 @@ models__hooks_kwargs = """
 select 3 as id
 """
 
-models__hooked = """
+
+hooked = """
 {{
     config({
         "pre_hook": "\
@@ -318,45 +259,12 @@ models__hooked = """
 select 1 as id
 """
 
-models__post = """
+
+post = """
 select 'end' as test_state
 """
 
-models__pre = """
+
+pre = """
 select 'start' as test_state
-"""
-
-snapshots__test_snapshot = """
-{% snapshot example_snapshot %}
-{{
-    config(target_schema=schema, unique_key='a', strategy='check', check_cols='all')
-}}
-select * from {{ ref('example_seed') }}
-{% endsnapshot %}
-"""
-
-properties__seed_models = """
-version: 2
-seeds:
-- name: example_seed
-  columns:
-  - name: new_col
-    data_tests:
-    - not_null
-"""
-
-properties__test_snapshot_models = """
-version: 2
-snapshots:
-- name: example_snapshot
-  columns:
-  - name: new_col
-    data_tests:
-    - not_null
-"""
-
-seeds__example_seed_csv = """a,b,c
-1,2,3
-4,5,6
-7,8,9
 """

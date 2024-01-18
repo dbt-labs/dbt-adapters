@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+from base_grants import BaseGrants
 from dbt.tests.util import (
     get_connection,
     get_manifest,
@@ -98,7 +98,3 @@ class BaseIncrementalGrants(BaseGrants):
         assert "grant " in log_output
         assert "revoke " not in log_output
         self.assert_expected_grants_match_actual(project, "my_incremental_model", expected)
-
-
-class TestIncrementalGrants(BaseIncrementalGrants):
-    pass

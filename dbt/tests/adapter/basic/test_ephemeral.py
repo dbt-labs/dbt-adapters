@@ -2,7 +2,6 @@ import os
 
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import (
     check_relations_equal,
     check_result_nodes_by_name,
@@ -10,6 +9,7 @@ from dbt.tests.util import (
     relation_from_name,
     run_dbt,
 )
+import files
 
 
 class BaseEphemeral:
@@ -60,7 +60,3 @@ class BaseEphemeral:
         manifest = get_manifest(project.project_root)
         assert len(manifest.nodes) == 4
         assert len(manifest.sources) == 1
-
-
-class TestEphemeral(BaseEphemeral):
-    pass

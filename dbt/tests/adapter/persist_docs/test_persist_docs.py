@@ -2,11 +2,14 @@ import json
 import os
 import pytest
 
-from dbt.tests.adapter.persist_docs import fixtures
 from dbt.tests.util import run_dbt
+import docs
+import models
+import schemas
+import seeds
 
 
-class BasePersistDocsBase:
+class PersistDocsSetup:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         run_dbt(["seed"])
@@ -14,21 +17,21 @@ class BasePersistDocsBase:
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": fixtures._SEEDS__SEED}
+        return {"seed.csv": seeds.SEED}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "no_docs_model.sql": fixtures._MODELS__NO_DOCS_MODEL,
-            "table_model.sql": fixtures._MODELS__TABLE,
-            "view_model.sql": fixtures._MODELS__VIEW,
+            "no_docs_model.sql": models.NO_DOCS_MODEL,
+            "table_model.sql": models.TABLE,
+            "view_model.sql": models.VIEW,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
         return {
-            "my_fun_docs.md": fixtures._DOCS__MY_FUN_DOCS,
-            "schema.yml": fixtures._PROPERTIES__SCHEMA_YML,
+            "my_fun_docs.md": docs.MY_FUN_DOCS,
+            "schema.yml": schemas.SCHEMA_YML,
         }
 
     def _assert_common_comments(self, *comments):
@@ -76,7 +79,7 @@ class BasePersistDocsBase:
         assert view_name_comment is None
 
 
-class BasePersistDocs(BasePersistDocsBase):
+class PersistDocs(PersistDocsSetup):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -106,7 +109,7 @@ class BasePersistDocs(BasePersistDocsBase):
         self._assert_has_view_comments(no_docs_node, False, False)
 
 
-class BasePersistDocsColumnMissing(BasePersistDocsBase):
+class PersistDocsColumnMissing(PersistDocsSetup):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -121,11 +124,11 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"missing_column.sql": fixtures._MODELS__MISSING_COLUMN}
+        return {"missing_column.sql": models.MISSING_COLUMN}
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": schemas.MISSING_COL}
 
     def test_missing_column(self, project):
         run_dbt(["docs", "generate"])
@@ -138,17 +141,17 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
         assert table_id_comment.startswith("test id column description")
 
 
-class BasePersistDocsCommentOnQuotedColumn:
+class PersistDocsCommentOnQuotedColumn:
     """Covers edge case where column with comment must be quoted.
     We set this using the `quote:` tag in the property file."""
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"quote_model.sql": fixtures._MODELS__MODEL_USING_QUOTE_UTIL}
+        return {"quote_model.sql": models.MODEL_USING_QUOTE_UTIL}
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"properties.yml": fixtures._PROPERTIES__QUOTE_MODEL}
+        return {"properties.yml": schemas.QUOTE_MODEL}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -181,15 +184,3 @@ class BasePersistDocsCommentOnQuotedColumn:
 
     def test_quoted_column_comments(self, run_has_comments):
         run_has_comments()
-
-
-class TestPersistDocs(BasePersistDocs):
-    pass
-
-
-class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
-    pass
-
-
-class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
-    pass

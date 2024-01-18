@@ -90,7 +90,3 @@ class BaseTableMaterialization:
         assert len(results) == 1
 
         check_relations_equal(project.adapter, ["seed", "materialized"])
-
-
-class TestTableMat(BaseTableMaterialization):
-    pass

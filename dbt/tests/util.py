@@ -43,7 +43,6 @@ import os
 import shutil
 from typing import Any, Dict, List, Optional
 import warnings
-import yaml
 
 from dbt.contracts.graph.manifest import Manifest
 from dbt.cli.main import dbtRunner
@@ -56,6 +55,7 @@ from dbt_common.events.functions import (
 )
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.types import Note
+import yaml
 
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.factory import Adapter

@@ -1,6 +1,5 @@
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import (
     check_relation_types,
     check_relations_equal,
@@ -8,6 +7,7 @@ from dbt.tests.util import (
     relation_from_name,
     run_dbt,
 )
+import files
 
 
 class BaseSimpleMaterializations:
@@ -109,7 +109,3 @@ class BaseSimpleMaterializations:
             "swappable": "table",
         }
         check_relation_types(project.adapter, expected)
-
-
-class TestSimpleMaterializations(BaseSimpleMaterializations):
-    pass

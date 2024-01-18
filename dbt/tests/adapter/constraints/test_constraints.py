@@ -2,7 +2,6 @@ import re
 
 import pytest
 
-from dbt.tests.adapter.constraints import fixtures
 from dbt.tests.util import (
     run_dbt,
     get_manifest,
@@ -11,6 +10,7 @@ from dbt.tests.util import (
     read_file,
     relation_from_name,
 )
+import fixtures
 
 
 class BaseConstraintsColumnsEqual:
@@ -329,36 +329,6 @@ class BaseIncrementalConstraintsRollback(BaseConstraintsRollback):
         return fixtures.my_model_incremental_with_nulls_sql
 
 
-class TestTableConstraintsColumnsEqual(BaseTableConstraintsColumnsEqual):
-    pass
-
-
-class TestViewConstraintsColumnsEqual(BaseViewConstraintsColumnsEqual):
-    pass
-
-
-class TestIncrementalConstraintsColumnsEqual(BaseIncrementalConstraintsColumnsEqual):
-    pass
-
-
-class TestTableConstraintsRuntimeDdlEnforcement(BaseConstraintsRuntimeDdlEnforcement):
-    pass
-
-
-class TestTableConstraintsRollback(BaseConstraintsRollback):
-    pass
-
-
-class TestIncrementalConstraintsRuntimeDdlEnforcement(
-    BaseIncrementalConstraintsRuntimeDdlEnforcement
-):
-    pass
-
-
-class TestIncrementalConstraintsRollback(BaseIncrementalConstraintsRollback):
-    pass
-
-
 class BaseContractSqlHeader:
     """Tests a contracted model with a sql header dependency."""
 
@@ -388,14 +358,6 @@ class BaseIncrementalContractSqlHeader(BaseContractSqlHeader):
             "my_model_contract_sql_header.sql": fixtures.my_model_incremental_contract_sql_header_sql,
             "constraints_schema.yml": fixtures.model_contract_header_schema_yml,
         }
-
-
-class TestTableContractSqlHeader(BaseTableContractSqlHeader):
-    pass
-
-
-class TestIncrementalContractSqlHeader(BaseIncrementalContractSqlHeader):
-    pass
 
 
 class BaseModelConstraintsRuntimeEnforcement:
@@ -468,10 +430,6 @@ insert into <model_identifier> (
         assert _normalize_whitespace(expected_sql) == _normalize_whitespace(generated_sql_generic)
 
 
-class TestModelConstraintsRuntimeEnforcement(BaseModelConstraintsRuntimeEnforcement):
-    pass
-
-
 class BaseConstraintQuotedColumn(BaseConstraintsRuntimeDdlEnforcement):
     @pytest.fixture(scope="class")
     def models(self):
@@ -504,11 +462,7 @@ insert into <model_identifier> (
 """
 
 
-class TestConstraintQuotedColumn(BaseConstraintQuotedColumn):
-    pass
-
-
-class TestIncrementalForeignKeyConstraint:
+class BaseIncrementalForeignKeyConstraint:
     @pytest.fixture(scope="class")
     def macros(self):
         return {

@@ -1,7 +1,7 @@
 import pytest
 
-from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt, relation_from_name, update_rows
+import files
 
 
 def check_relation_rows(project, snapshot_name, count):
@@ -91,7 +91,3 @@ class BaseSnapshotTimestamp:
 
         # snapshot still has 30 rows because timestamp not updated
         check_relation_rows(project, "ts_snapshot", 30)
-
-
-class TestSnapshotTimestamp(BaseSnapshotTimestamp):
-    pass

@@ -1,15 +1,4 @@
-_PROPERTIES__SCHEMA_YML = """
-version: 2
-models:
-- name: disabled
-  columns:
-  - name: id
-    data_tests:
-    - unique
-"""
-
-
-_SEEDS__SEED_INITIAL = """
+INITIAL = """
 id,first_name,last_name,email,gender,ip_address
 1,Jack,Hunter,jhunter0@pbs.org,Male,59.80.20.168
 2,Kathryn,Walker,kwalker1@ezinearticles.com,Female,194.121.179.35
@@ -113,7 +102,8 @@ id,first_name,last_name,email,gender,ip_address
 100,Carl,Meyer,cmeyer2r@disqus.com,Male,204.117.7.88
 """.lstrip()
 
-_SEEDS__SEED_UPDATE = """
+
+UPDATE = """
 id,first_name,last_name,email,gender,ip_address
 1,Jack,Hunter,jhunter0@pbs.org,Male,59.80.20.168
 2,Kathryn,Walker,kwalker1@ezinearticles.com,Female,194.121.179.35
@@ -316,115 +306,3 @@ id,first_name,last_name,email,gender,ip_address
 199,Mary,Gray,mgray2q@constantcontact.com,Female,210.116.64.253
 200,Jean,Mcdonald,jmcdonald2r@baidu.com,Female,122.239.235.117
 """.lstrip()
-
-
-_MODELS__ADVANCED_INCREMENTAL = """
-{{
-  config(
-    materialized = "incremental",
-    unique_key = "id",
-    persist_docs = {"relation": true}
-  )
-}}
-
-select *
-from {{ ref('seed') }}
-
-{% if is_incremental() %}
-
-    where id > (select max(id) from {{this}})
-
-{% endif %}
-"""
-
-_MODELS__COMPOUND_SORT = """
-{{
-  config(
-    materialized = "table",
-    sort = 'first_name',
-    sort_type = 'compound'
-  )
-}}
-
-select * from {{ ref('seed') }}
-"""
-
-_MODELS__DISABLED = """
-{{
-  config(
-    materialized = "view",
-    enabled = False
-  )
-}}
-
-select * from {{ ref('seed') }}
-"""
-
-_MODELS__EMPTY = """
-"""
-
-
-_MODELS__GET_AND_REF = """
-{%- do adapter.get_relation(database=target.database, schema=target.schema, identifier='materialized') -%}
-
-select * from {{ ref('materialized') }}
-"""
-
-
-_MODELS_GET_AND_REF_UPPERCASE = """
-{%- do adapter.get_relation(database=target.database, schema=target.schema, identifier='MATERIALIZED') -%}
-
-select * from {{ ref('MATERIALIZED') }}
-"""
-
-
-_MODELS__INCREMENTAL = """
-{{
-  config(
-    materialized = "incremental"
-  )
-}}
-
-select * from {{ ref('seed') }}
-
-{% if is_incremental() %}
-    where id > (select max(id) from {{this}})
-{% endif %}
-"""
-
-_MODELS__INTERLEAVED_SORT = """
-{{
-  config(
-    materialized = "table",
-    sort = ['first_name', 'last_name'],
-    sort_type = 'interleaved'
-  )
-}}
-
-select * from {{ ref('seed') }}
-"""
-
-_MODELS__MATERIALIZED = """
-{{
-  config(
-    materialized = "table"
-  )
-}}
--- ensure that dbt_utils' relation check will work
-{% set relation = ref('seed') %}
-{%- if not (relation is mapping and relation.get('metadata', {}).get('type', '').endswith('Relation')) -%}
-    {%- do exceptions.raise_compiler_error("Macro " ~ macro ~ " expected a Relation but received the value: " ~ relation) -%}
-{%- endif -%}
--- this is a unicode character: å
-select * from {{ relation }}
-"""
-
-_MODELS__VIEW_MODEL = """
-{{
-  config(
-    materialized = "view"
-  )
-}}
-
-select * from {{ ref('seed') }}
-"""

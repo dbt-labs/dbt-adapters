@@ -3,12 +3,10 @@ import pytest
 from dbt.tests.util import get_connection, run_dbt
 
 
-class BaseDropSchemaNamed:
+class DropSchemaNamed:
     @pytest.fixture(scope="class")
     def models(self):
-        return {
-            "model_a.sql": "select 1 as id",
-        }
+        return {"model_a.sql": "select 1 as id"}
 
     def test_dropped_schema_named_drops_expected_schema(self, project):
         results = run_dbt(["run"])
@@ -28,7 +26,3 @@ class BaseDropSchemaNamed:
             schemas = adapter.list_schemas(project.database)
 
         assert project.test_schema not in schemas
-
-
-class TestDropSchemaNamed(BaseDropSchemaNamed):
-    pass

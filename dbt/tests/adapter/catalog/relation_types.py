@@ -1,8 +1,8 @@
 from dbt.artifacts.catalog import CatalogArtifact
 import pytest
 
-from dbt.tests.adapter.catalog import files
 from dbt.tests.util import run_dbt
+import files
 
 
 class CatalogRelationTypes:

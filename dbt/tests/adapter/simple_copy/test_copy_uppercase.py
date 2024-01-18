@@ -1,10 +1,12 @@
 import pytest
 
-from dbt.tests.adapter.simple_copy import fixtures
 from dbt.tests.util import run_dbt, check_relations_equal
+import models
+import schemas
+import seeds
 
 
-class TestSimpleCopyUppercase:
+class SimpleCopyUppercase:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
         return {
@@ -20,26 +22,24 @@ class TestSimpleCopyUppercase:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "ADVANCED_INCREMENTAL.sql": fixtures._MODELS__ADVANCED_INCREMENTAL,
-            "COMPOUND_SORT.sql": fixtures._MODELS__COMPOUND_SORT,
-            "DISABLED.sql": fixtures._MODELS__DISABLED,
-            "EMPTY.sql": fixtures._MODELS__EMPTY,
-            "GET_AND_REF.sql": fixtures._MODELS_GET_AND_REF_UPPERCASE,
-            "INCREMENTAL.sql": fixtures._MODELS__INCREMENTAL,
-            "INTERLEAVED_SORT.sql": fixtures._MODELS__INTERLEAVED_SORT,
-            "MATERIALIZED.sql": fixtures._MODELS__MATERIALIZED,
-            "VIEW_MODEL.sql": fixtures._MODELS__VIEW_MODEL,
+            "ADVANCED_INCREMENTAL.sql": models.ADVANCED_INCREMENTAL,
+            "COMPOUND_SORT.sql": models.COMPOUND_SORT,
+            "DISABLED.sql": models.DISABLED,
+            "EMPTY.sql": models.EMPTY,
+            "GET_AND_REF.sql": models.GET_AND_REF_UPPERCASE,
+            "INCREMENTAL.sql": models.INCREMENTAL,
+            "INTERLEAVED_SORT.sql": models.INTERLEAVED_SORT,
+            "MATERIALIZED.sql": models.MATERIALIZED,
+            "VIEW_MODEL.sql": models.VIEW_MODEL,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {
-            "schema.yml": fixtures._PROPERTIES__SCHEMA_YML,
-        }
+        return {"schema.yml": schemas.SCHEMA_YML}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": fixtures._SEEDS__SEED_INITIAL}
+        return {"seed.csv": seeds.INITIAL}
 
     def test_simple_copy_uppercase(self, project):
         # Load the seed file and check that it worked

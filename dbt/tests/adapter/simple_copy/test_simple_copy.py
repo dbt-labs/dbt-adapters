@@ -4,41 +4,41 @@ from pathlib import Path
 
 import pytest
 
-from dbt.tests.adapter.simple_copy import fixtures
 from dbt.tests.util import run_dbt, rm_file, write_file, check_relations_equal
+import models
+import schemas
+import seeds
 
 
 class SimpleCopySetup:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "advanced_incremental.sql": fixtures._MODELS__ADVANCED_INCREMENTAL,
-            "compound_sort.sql": fixtures._MODELS__COMPOUND_SORT,
-            "disabled.sql": fixtures._MODELS__DISABLED,
-            "empty.sql": fixtures._MODELS__EMPTY,
-            "get_and_ref.sql": fixtures._MODELS__GET_AND_REF,
-            "incremental.sql": fixtures._MODELS__INCREMENTAL,
-            "interleaved_sort.sql": fixtures._MODELS__INTERLEAVED_SORT,
-            "materialized.sql": fixtures._MODELS__MATERIALIZED,
-            "view_model.sql": fixtures._MODELS__VIEW_MODEL,
+            "advanced_incremental.sql": models.ADVANCED_INCREMENTAL,
+            "compound_sort.sql": models.COMPOUND_SORT,
+            "disabled.sql": models.DISABLED,
+            "empty.sql": models.EMPTY,
+            "get_and_ref.sql": models.GET_AND_REF,
+            "incremental.sql": models.INCREMENTAL,
+            "interleaved_sort.sql": models.INTERLEAVED_SORT,
+            "materialized.sql": models.MATERIALIZED,
+            "view_model.sql": models.VIEW_MODEL,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {
-            "schema.yml": fixtures._PROPERTIES__SCHEMA_YML,
-        }
+        return {"schema.yml": schemas.SCHEMA_YML}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": fixtures._SEEDS__SEED_INITIAL}
+        return {"seed.csv": seeds.INITIAL}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"seeds": {"quote_columns": False}}
 
 
-class SimpleCopyBase(SimpleCopySetup):
+class SimpleCopy(SimpleCopySetup):
     def test_simple_copy(self, project):
         # Load the seed file and check that it worked
         results = run_dbt(["seed"])
@@ -54,7 +54,7 @@ class SimpleCopyBase(SimpleCopySetup):
         # Change the seed.csv file and see if everything is the same, i.e. everything has been updated
         main_seed_file = project.project_root / Path("seeds") / Path("seed.csv")
         rm_file(main_seed_file)
-        write_file(fixtures._SEEDS__SEED_UPDATE, main_seed_file)
+        write_file(seeds.UPDATE, main_seed_file)
         results = run_dbt(["seed"])
         assert len(results) == 1
         results = run_dbt()
@@ -83,7 +83,7 @@ class SimpleCopyBase(SimpleCopySetup):
         assert len(results) == 7
 
 
-class EmptyModelsArentRunBase(SimpleCopySetup):
+class EmptyModelsArentRun(SimpleCopySetup):
     def test_dbt_doesnt_run_empty_models(self, project):
         results = run_dbt(["seed"])
         assert len(results) == 1
@@ -94,11 +94,3 @@ class EmptyModelsArentRunBase(SimpleCopySetup):
 
         assert "empty" not in tables.keys()
         assert "disabled" not in tables.keys()
-
-
-class TestSimpleCopyBase(SimpleCopyBase):
-    pass
-
-
-class TestEmptyModelsArentRun(EmptyModelsArentRunBase):
-    pass

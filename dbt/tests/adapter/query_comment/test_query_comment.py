@@ -1,14 +1,14 @@
 import json
 
-import pytest
 from dbt_common.exceptions import DbtRuntimeError
+import pytest
 
 from dbt.tests.__about__ import version as PACKAGE_VERSION
-from dbt.tests.adapter.query_comment import fixtures
 from dbt.tests.util import run_dbt_and_capture
+import fixtures
 
 
-class BaseDefaultQueryComments:
+class DefaultQueryComments:
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -31,8 +31,7 @@ class BaseDefaultQueryComments:
         return raw_logs
 
 
-# Base setup to be inherited #
-class BaseQueryComments(BaseDefaultQueryComments):
+class QueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": "dbt\nrules!\n"}
@@ -42,7 +41,7 @@ class BaseQueryComments(BaseDefaultQueryComments):
         assert r"/* dbt\nrules! */\n" in logs
 
 
-class BaseMacroQueryComments(BaseDefaultQueryComments):
+class MacroQueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": "{{ query_header_no_args() }}"}
@@ -52,7 +51,7 @@ class BaseMacroQueryComments(BaseDefaultQueryComments):
         assert r"/* dbt macros\nare pretty cool */\n" in logs
 
 
-class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
+class MacroArgsQueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": "{{ return(ordered_to_json(query_header_args(target.name))) }}"}
@@ -71,7 +70,7 @@ class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
         assert expected in logs
 
 
-class BaseMacroInvalidQueryComments(BaseDefaultQueryComments):
+class MacroInvalidQueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": "{{ invalid_query_header() }}"}
@@ -81,7 +80,7 @@ class BaseMacroInvalidQueryComments(BaseDefaultQueryComments):
             self.run_get_json(expect_pass=False)
 
 
-class BaseNullQueryComments(BaseDefaultQueryComments):
+class NullQueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": None}
@@ -91,7 +90,7 @@ class BaseNullQueryComments(BaseDefaultQueryComments):
         assert "/*" not in logs or "*/" not in logs
 
 
-class BaseEmptyQueryComments(BaseDefaultQueryComments):
+class EmptyQueryComments(DefaultQueryComments):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": ""}
@@ -99,28 +98,3 @@ class BaseEmptyQueryComments(BaseDefaultQueryComments):
     def test_matches_comment(self, project):
         logs = self.run_get_json()
         assert "/*" not in logs or "*/" not in logs
-
-
-# Tests #
-class TestQueryComments(BaseQueryComments):
-    pass
-
-
-class TestMacroQueryComments(BaseMacroQueryComments):
-    pass
-
-
-class TestMacroArgsQueryComments(BaseMacroArgsQueryComments):
-    pass
-
-
-class TestMacroInvalidQueryComments(BaseMacroInvalidQueryComments):
-    pass
-
-
-class TestNullQueryComments(BaseNullQueryComments):
-    pass
-
-
-class TestEmptyQueryComments(BaseEmptyQueryComments):
-    pass

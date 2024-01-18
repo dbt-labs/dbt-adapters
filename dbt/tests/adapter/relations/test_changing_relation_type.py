@@ -16,7 +16,7 @@ select '{{ var("materialized") }}' as materialization
 """
 
 
-class BaseChangeRelationTypeValidator:
+class ChangeRelationTypeValidator:
     @pytest.fixture(scope="class")
     def models(self):
         return {"model_mc_modelface.sql": _DEFAULT_CHANGE_RELATION_TYPE_MODEL}
@@ -35,7 +35,3 @@ class BaseChangeRelationTypeValidator:
         self._run_and_check_materialization("view")
         self._run_and_check_materialization("incremental")
         self._run_and_check_materialization("table", extra_args=["--full-refresh"])
-
-
-class TestChangeRelationTypes(BaseChangeRelationTypeValidator):
-    pass
