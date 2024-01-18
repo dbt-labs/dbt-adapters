@@ -1,23 +1,19 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_position import (
-    seeds__data_position_csv,
-    models__test_position_sql,
-    models__test_position_yml,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_position
 
 
-class BasePosition(BaseUtils):
+class BasePosition(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"data_position.csv": seeds__data_position_csv}
+        return {"data_position.csv": fixture_position.seeds__data_position_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "test_position.yml": models__test_position_yml,
+            "test_position.yml": fixture_position.models__test_position_yml,
             "test_position.sql": self.interpolate_macro_namespace(
-                models__test_position_sql, "position"
+                fixture_position.models__test_position_sql, "position"
             ),
         }
 

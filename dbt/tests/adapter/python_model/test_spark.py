@@ -1,5 +1,7 @@
 import pytest
+
 from dbt.tests.util import run_dbt
+
 
 PANDAS_MODEL = """
 import pandas as pd

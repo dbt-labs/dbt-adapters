@@ -1,36 +1,30 @@
 import pytest
 
-from dbt.tests.util import run_dbt, check_result_nodes_by_name
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    ephemeral_with_cte_sql,
-    test_ephemeral_passing_sql,
-    test_ephemeral_failing_sql,
-    schema_base_yml,
-)
+from dbt.tests.adapter.basic import files
+from dbt.tests.util import check_result_nodes_by_name, run_dbt
 
 
 class BaseSingularTestsEphemeral:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "base.csv": seeds_base_csv,
+            "base.csv": files.seeds_base_csv,
         }
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "ephemeral.sql": ephemeral_with_cte_sql,
-            "passing_model.sql": test_ephemeral_passing_sql,
-            "failing_model.sql": test_ephemeral_failing_sql,
-            "schema.yml": schema_base_yml,
+            "ephemeral.sql": files.ephemeral_with_cte_sql,
+            "passing_model.sql": files.test_ephemeral_passing_sql,
+            "failing_model.sql": files.test_ephemeral_failing_sql,
+            "schema.yml": files.schema_base_yml,
         }
 
     @pytest.fixture(scope="class")
     def tests(self):
         return {
-            "passing.sql": test_ephemeral_passing_sql,
-            "failing.sql": test_ephemeral_failing_sql,
+            "passing.sql": files.test_ephemeral_passing_sql,
+            "failing.sql": files.test_ephemeral_failing_sql,
         }
 
     @pytest.fixture(scope="class")

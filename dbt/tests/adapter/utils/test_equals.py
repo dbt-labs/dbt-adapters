@@ -1,31 +1,27 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import macros__equals_sql
-from dbt.tests.adapter.utils.fixture_equals import (
-    SEEDS__DATA_EQUALS_CSV,
-    MODELS__EQUAL_VALUES_SQL,
-    MODELS__NOT_EQUAL_VALUES_SQL,
-)
-from dbt.tests.util import run_dbt, relation_from_name
+
+from dbt.tests.adapter.utils import base_utils, fixture_equals
+from dbt.tests.util import relation_from_name, run_dbt
 
 
 class BaseEquals:
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "equals.sql": macros__equals_sql,
+            "equals.sql": base_utils.macros__equals_sql,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "data_equals.csv": SEEDS__DATA_EQUALS_CSV,
+            "data_equals.csv": fixture_equals.SEEDS__DATA_EQUALS_CSV,
         }
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "equal_values.sql": MODELS__EQUAL_VALUES_SQL,
-            "not_equal_values.sql": MODELS__NOT_EQUAL_VALUES_SQL,
+            "equal_values.sql": fixture_equals.MODELS__EQUAL_VALUES_SQL,
+            "not_equal_values.sql": fixture_equals.MODELS__NOT_EQUAL_VALUES_SQL,
         }
 
     def test_equal_values(self, project):

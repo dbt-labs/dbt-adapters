@@ -1,9 +1,8 @@
 import pytest
-from dbt.tests.util import (
-    run_dbt_and_capture,
-    write_file,
-)
+
 from dbt.tests.adapter.grants.base_grants import BaseGrants
+from dbt.tests.util import run_dbt_and_capture, write_file
+
 
 my_invalid_model_sql = """
   select 1 as fun

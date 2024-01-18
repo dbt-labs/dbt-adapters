@@ -1,21 +1,18 @@
 from typing import Optional
 
+from dbt_common.contracts.config.materialization import OnConfigurationChangeOption
 import pytest
 
 from dbt.adapters.base.relation import BaseRelation
-from dbt_common.contracts.config.materialization import OnConfigurationChangeOption
 from dbt.adapters.contracts.relation import RelationType
+
+from dbt.tests.adapter.materialized_view import files
 from dbt.tests.util import (
     assert_message_in_logs,
     get_model_file,
     run_dbt,
     run_dbt_and_capture,
     set_model_file,
-)
-
-from dbt.tests.adapter.materialized_view.files import (
-    MY_MATERIALIZED_VIEW,
-    MY_SEED,
 )
 
 
@@ -105,11 +102,11 @@ class MaterializedViewChanges:
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
-        yield {"my_seed.csv": MY_SEED}
+        yield {"my_seed.csv": files.MY_SEED}
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
-        yield {"my_materialized_view.sql": MY_MATERIALIZED_VIEW}
+        yield {"my_materialized_view.sql": files.MY_MATERIALIZED_VIEW}
 
     """
     Don't configure these unless absolutely necessary

@@ -1,10 +1,10 @@
-import pytest
 import os
-from dbt.tests.util import (
-    relation_from_name,
-    get_connection,
-)
+
 from dbt.context.base import BaseContext  # diff_of_two_dicts only
+import pytest
+
+from dbt.tests.util import get_connection, relation_from_name
+
 
 TEST_USER_ENV_VARS = ["DBT_TEST_USER_1", "DBT_TEST_USER_2", "DBT_TEST_USER_3"]
 

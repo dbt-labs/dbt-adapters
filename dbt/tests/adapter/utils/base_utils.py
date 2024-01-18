@@ -1,6 +1,7 @@
 import pytest
 from dbt.tests.util import run_dbt
 
+
 macros__equals_sql = """
 {% macro equals(expr1, expr2) -%}
 case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))

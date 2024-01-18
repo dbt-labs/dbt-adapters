@@ -1,18 +1,14 @@
-import pytest
 import os
+
+import pytest
+
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import (
-    run_dbt,
-    get_manifest,
     check_relations_equal,
     check_result_nodes_by_name,
+    get_manifest,
     relation_from_name,
-)
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    base_ephemeral_sql,
-    ephemeral_view_sql,
-    ephemeral_table_sql,
-    schema_base_yml,
+    run_dbt,
 )
 
 
@@ -23,15 +19,15 @@ class BaseEphemeral:
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"base.csv": seeds_base_csv}
+        return {"base.csv": files.seeds_base_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "ephemeral.sql": base_ephemeral_sql,
-            "view_model.sql": ephemeral_view_sql,
-            "table_model.sql": ephemeral_table_sql,
-            "schema.yml": schema_base_yml,
+            "ephemeral.sql": files.base_ephemeral_sql,
+            "view_model.sql": files.ephemeral_view_sql,
+            "table_model.sql": files.ephemeral_table_sql,
+            "schema.yml": files.schema_base_yml,
         }
 
     def test_ephemeral(self, project):

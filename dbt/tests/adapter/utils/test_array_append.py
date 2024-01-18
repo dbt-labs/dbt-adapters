@@ -1,17 +1,14 @@
 import pytest
-from dbt.tests.adapter.utils.base_array_utils import BaseArrayUtils
-from dbt.tests.adapter.utils.fixture_array_append import (
-    models__array_append_actual_sql,
-    models__array_append_expected_sql,
-)
+
+from dbt.tests.adapter.utils import base_array_utils, fixture_array_append
 
 
-class BaseArrayAppend(BaseArrayUtils):
+class BaseArrayAppend(base_array_utils.BaseArrayUtils):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "actual.sql": models__array_append_actual_sql,
-            "expected.sql": models__array_append_expected_sql,
+            "actual.sql": fixture_array_append.models__array_append_actual_sql,
+            "expected.sql": fixture_array_append.models__array_append_expected_sql,
         }
 
 

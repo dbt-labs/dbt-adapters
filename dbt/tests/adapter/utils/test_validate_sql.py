@@ -1,9 +1,9 @@
 from typing import Type
 
+from dbt_common.exceptions import DbtRuntimeError
 import pytest
 
 from dbt.adapters.base.impl import BaseAdapter
-from dbt.exceptions import DbtRuntimeError
 from dbt.adapters.exceptions import InvalidConnectionError
 
 

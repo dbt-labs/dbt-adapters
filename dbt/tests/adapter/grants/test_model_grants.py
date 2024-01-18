@@ -1,10 +1,12 @@
 import pytest
+
+from dbt.tests.adapter.grants.base_grants import BaseGrants
 from dbt.tests.util import (
-    run_dbt_and_capture,
     get_manifest,
+    run_dbt_and_capture,
     write_file,
 )
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+
 
 my_model_sql = """
   select 1 as fun

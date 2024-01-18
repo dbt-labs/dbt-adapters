@@ -1,13 +1,15 @@
 import pytest
+
+from dbt.tests.adapter.grants.base_grants import BaseGrants
 from dbt.tests.util import (
+    get_connection,
+    get_manifest,
+    relation_from_name,
     run_dbt,
     run_dbt_and_capture,
-    get_manifest,
     write_file,
-    relation_from_name,
-    get_connection,
 )
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+
 
 my_incremental_model_sql = """
   select 1 as fun

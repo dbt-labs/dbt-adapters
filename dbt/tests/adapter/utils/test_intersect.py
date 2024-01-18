@@ -1,52 +1,41 @@
 import pytest
-from dbt.tests.util import run_dbt, check_relations_equal
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_intersect import (
-    seeds__data_intersect_a_csv,
-    seeds__data_intersect_b_csv,
-    seeds__data_intersect_a_overlap_b_csv,
-    models__data_intersect_empty_sql,
-    models__test_intersect_a_overlap_b_sql,
-    models__test_intersect_b_overlap_a_sql,
-    models__test_intersect_a_overlap_a_sql,
-    models__test_intersect_a_overlap_empty_sql,
-    models__test_intersect_empty_overlap_a_sql,
-    models__test_intersect_empty_overlap_empty_sql,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_intersect
+from dbt.tests.util import check_relations_equal, run_dbt
 
 
-class BaseIntersect(BaseUtils):
+class BaseIntersect(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "data_intersect_a.csv": seeds__data_intersect_a_csv,
-            "data_intersect_b.csv": seeds__data_intersect_b_csv,
-            "data_intersect_a_overlap_b.csv": seeds__data_intersect_a_overlap_b_csv,
+            "data_intersect_a.csv": fixture_intersect.seeds__data_intersect_a_csv,
+            "data_intersect_b.csv": fixture_intersect.seeds__data_intersect_b_csv,
+            "data_intersect_a_overlap_b.csv": fixture_intersect.seeds__data_intersect_a_overlap_b_csv,
         }
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
             "data_intersect_empty.sql": self.interpolate_macro_namespace(
-                models__data_intersect_empty_sql, "intersect"
+                fixture_intersect.models__data_intersect_empty_sql, "intersect"
             ),
             "test_intersect_a_overlap_b.sql": self.interpolate_macro_namespace(
-                models__test_intersect_a_overlap_b_sql, "intersect"
+                fixture_intersect.models__test_intersect_a_overlap_b_sql, "intersect"
             ),
             "test_intersect_b_overlap_a.sql": self.interpolate_macro_namespace(
-                models__test_intersect_b_overlap_a_sql, "intersect"
+                fixture_intersect.models__test_intersect_b_overlap_a_sql, "intersect"
             ),
             "test_intersect_a_overlap_a.sql": self.interpolate_macro_namespace(
-                models__test_intersect_a_overlap_a_sql, "intersect"
+                fixture_intersect.models__test_intersect_a_overlap_a_sql, "intersect"
             ),
             "test_intersect_a_overlap_empty.sql": self.interpolate_macro_namespace(
-                models__test_intersect_a_overlap_empty_sql, "intersect"
+                fixture_intersect.models__test_intersect_a_overlap_empty_sql, "intersect"
             ),
             "test_intersect_empty_overlap_a.sql": self.interpolate_macro_namespace(
-                models__test_intersect_empty_overlap_a_sql, "intersect"
+                fixture_intersect.models__test_intersect_empty_overlap_a_sql, "intersect"
             ),
             "test_intersect_empty_overlap_empty.sql": self.interpolate_macro_namespace(
-                models__test_intersect_empty_overlap_empty_sql, "intersect"
+                fixture_intersect.models__test_intersect_empty_overlap_empty_sql, "intersect"
             ),
         }
 

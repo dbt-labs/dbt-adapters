@@ -1,11 +1,7 @@
 import pytest
+
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt, relation_from_name, update_rows
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    seeds_newcolumns_csv,
-    seeds_added_csv,
-    ts_snapshot_sql,
-)
 
 
 def check_relation_rows(project, snapshot_name, count):
@@ -18,15 +14,15 @@ class BaseSnapshotTimestamp:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "base.csv": seeds_base_csv,
-            "newcolumns.csv": seeds_newcolumns_csv,
-            "added.csv": seeds_added_csv,
+            "base.csv": files.seeds_base_csv,
+            "newcolumns.csv": files.seeds_newcolumns_csv,
+            "added.csv": files.seeds_added_csv,
         }
 
     @pytest.fixture(scope="class")
     def snapshots(self):
         return {
-            "ts_snapshot.sql": ts_snapshot_sql,
+            "ts_snapshot.sql": files.ts_snapshot_sql,
         }
 
     @pytest.fixture(scope="class")

@@ -1,52 +1,37 @@
 # mix in biguery
 # mix in snowflake
+from pathlib import Path
 
 import pytest
 
-from pathlib import Path
-
+from dbt.tests.adapter.simple_copy import fixtures
 from dbt.tests.util import run_dbt, rm_file, write_file, check_relations_equal
-
-from dbt.tests.adapter.simple_copy.fixtures import (
-    _PROPERTIES__SCHEMA_YML,
-    _SEEDS__SEED_INITIAL,
-    _SEEDS__SEED_UPDATE,
-    _MODELS__ADVANCED_INCREMENTAL,
-    _MODELS__COMPOUND_SORT,
-    _MODELS__DISABLED,
-    _MODELS__EMPTY,
-    _MODELS__GET_AND_REF,
-    _MODELS__INCREMENTAL,
-    _MODELS__INTERLEAVED_SORT,
-    _MODELS__MATERIALIZED,
-    _MODELS__VIEW_MODEL,
-)
 
 
 class SimpleCopySetup:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "advanced_incremental.sql": _MODELS__ADVANCED_INCREMENTAL,
-            "compound_sort.sql": _MODELS__COMPOUND_SORT,
-            "disabled.sql": _MODELS__DISABLED,
-            "empty.sql": _MODELS__EMPTY,
-            "get_and_ref.sql": _MODELS__GET_AND_REF,
-            "incremental.sql": _MODELS__INCREMENTAL,
-            "interleaved_sort.sql": _MODELS__INTERLEAVED_SORT,
-            "materialized.sql": _MODELS__MATERIALIZED,
-            "view_model.sql": _MODELS__VIEW_MODEL,
+            "advanced_incremental.sql": fixtures._MODELS__ADVANCED_INCREMENTAL,
+            "compound_sort.sql": fixtures._MODELS__COMPOUND_SORT,
+            "disabled.sql": fixtures._MODELS__DISABLED,
+            "empty.sql": fixtures._MODELS__EMPTY,
+            "get_and_ref.sql": fixtures._MODELS__GET_AND_REF,
+            "incremental.sql": fixtures._MODELS__INCREMENTAL,
+            "interleaved_sort.sql": fixtures._MODELS__INTERLEAVED_SORT,
+            "materialized.sql": fixtures._MODELS__MATERIALIZED,
+            "view_model.sql": fixtures._MODELS__VIEW_MODEL,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
         return {
-            "schema.yml": _PROPERTIES__SCHEMA_YML,
+            "schema.yml": fixtures._PROPERTIES__SCHEMA_YML,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": _SEEDS__SEED_INITIAL}
+        return {"seed.csv": fixtures._SEEDS__SEED_INITIAL}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -69,7 +54,7 @@ class SimpleCopyBase(SimpleCopySetup):
         # Change the seed.csv file and see if everything is the same, i.e. everything has been updated
         main_seed_file = project.project_root / Path("seeds") / Path("seed.csv")
         rm_file(main_seed_file)
-        write_file(_SEEDS__SEED_UPDATE, main_seed_file)
+        write_file(fixtures._SEEDS__SEED_UPDATE, main_seed_file)
         results = run_dbt(["seed"])
         assert len(results) == 1
         results = run_dbt()

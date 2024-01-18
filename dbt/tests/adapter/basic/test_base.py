@@ -1,17 +1,12 @@
 import pytest
+
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import (
-    run_dbt,
-    check_result_nodes_by_name,
-    relation_from_name,
     check_relation_types,
     check_relations_equal,
-)
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    base_view_sql,
-    base_table_sql,
-    base_materialized_var_sql,
-    schema_base_yml,
+    check_result_nodes_by_name,
+    relation_from_name,
+    run_dbt,
 )
 
 
@@ -19,16 +14,16 @@ class BaseSimpleMaterializations:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "view_model.sql": base_view_sql,
-            "table_model.sql": base_table_sql,
-            "swappable.sql": base_materialized_var_sql,
-            "schema.yml": schema_base_yml,
+            "view_model.sql": files.base_view_sql,
+            "table_model.sql": files.base_table_sql,
+            "swappable.sql": files.base_materialized_var_sql,
+            "schema.yml": files.schema_base_yml,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "base.csv": seeds_base_csv,
+            "base.csv": files.seeds_base_csv,
         }
 
     @pytest.fixture(scope="class")

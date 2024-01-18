@@ -1,23 +1,7 @@
 import pytest
+
+from dbt.tests.adapter.aliases import fixtures
 from dbt.tests.util import run_dbt
-from dbt.tests.adapter.aliases.fixtures import (
-    MACROS__CAST_SQL,
-    MACROS__EXPECT_VALUE_SQL,
-    MODELS__SCHEMA_YML,
-    MODELS__FOO_ALIAS_SQL,
-    MODELS__ALIAS_IN_PROJECT_SQL,
-    MODELS__ALIAS_IN_PROJECT_WITH_OVERRIDE_SQL,
-    MODELS__REF_FOO_ALIAS_SQL,
-    MODELS_DUPE__MODEL_A_SQL,
-    MODELS_DUPE__MODEL_B_SQL,
-    MODELS_DUPE_CUSTOM_SCHEMA__SCHEMA_YML,
-    MODELS_DUPE_CUSTOM_SCHEMA__MODEL_A_SQL,
-    MODELS_DUPE_CUSTOM_SCHEMA__MODEL_B_SQL,
-    MODELS_DUPE_CUSTOM_SCHEMA__MODEL_C_SQL,
-    MODELS_DUPE_CUSTOM_DATABASE__SCHEMA_YML,
-    MODELS_DUPE_CUSTOM_DATABASE__MODEL_A_SQL,
-    MODELS_DUPE_CUSTOM_DATABASE__MODEL_B_SQL,
-)
 
 
 class BaseAliases:
@@ -41,16 +25,16 @@ class BaseAliases:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "schema.yml": MODELS__SCHEMA_YML,
-            "foo_alias.sql": MODELS__FOO_ALIAS_SQL,
-            "alias_in_project.sql": MODELS__ALIAS_IN_PROJECT_SQL,
-            "alias_in_project_with_override.sql": MODELS__ALIAS_IN_PROJECT_WITH_OVERRIDE_SQL,
-            "ref_foo_alias.sql": MODELS__REF_FOO_ALIAS_SQL,
+            "schema.yml": fixtures.MODELS__SCHEMA_YML,
+            "foo_alias.sql": fixtures.MODELS__FOO_ALIAS_SQL,
+            "alias_in_project.sql": fixtures.MODELS__ALIAS_IN_PROJECT_SQL,
+            "alias_in_project_with_override.sql": fixtures.MODELS__ALIAS_IN_PROJECT_WITH_OVERRIDE_SQL,
+            "ref_foo_alias.sql": fixtures.MODELS__REF_FOO_ALIAS_SQL,
         }
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"cast.sql": MACROS__CAST_SQL, "expect_value.sql": MACROS__EXPECT_VALUE_SQL}
+        return {"cast.sql": fixtures.MACROS__CAST_SQL, "expect_value.sql": fixtures.MACROS__EXPECT_VALUE_SQL}
 
     def test_alias_model_name(self, project):
         results = run_dbt(["run"])
@@ -68,13 +52,13 @@ class BaseAliasErrors:
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"cast.sql": MACROS__CAST_SQL, "expect_value.sql": MACROS__EXPECT_VALUE_SQL}
+        return {"cast.sql": fixtures.MACROS__CAST_SQL, "expect_value.sql": fixtures.MACROS__EXPECT_VALUE_SQL}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "model_a.sql": MODELS_DUPE__MODEL_A_SQL,
-            "model_b.sql": MODELS_DUPE__MODEL_B_SQL,
+            "model_a.sql": fixtures.MODELS_DUPE__MODEL_A_SQL,
+            "model_b.sql": fixtures.MODELS_DUPE__MODEL_B_SQL,
         }
 
     def test_alias_dupe_thorews_exeption(self, project):
@@ -94,15 +78,15 @@ class BaseSameAliasDifferentSchemas:
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"cast.sql": MACROS__CAST_SQL, "expect_value.sql": MACROS__EXPECT_VALUE_SQL}
+        return {"cast.sql": fixtures.MACROS__CAST_SQL, "expect_value.sql": fixtures.MACROS__EXPECT_VALUE_SQL}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "schema.yml": MODELS_DUPE_CUSTOM_SCHEMA__SCHEMA_YML,
-            "model_a.sql": MODELS_DUPE_CUSTOM_SCHEMA__MODEL_A_SQL,
-            "model_b.sql": MODELS_DUPE_CUSTOM_SCHEMA__MODEL_B_SQL,
-            "model_c.sql": MODELS_DUPE_CUSTOM_SCHEMA__MODEL_C_SQL,
+            "schema.yml": fixtures.MODELS_DUPE_CUSTOM_SCHEMA__SCHEMA_YML,
+            "model_a.sql": fixtures.MODELS_DUPE_CUSTOM_SCHEMA__MODEL_A_SQL,
+            "model_b.sql": fixtures.MODELS_DUPE_CUSTOM_SCHEMA__MODEL_B_SQL,
+            "model_c.sql": fixtures.MODELS_DUPE_CUSTOM_SCHEMA__MODEL_C_SQL,
         }
 
     def test_same_alias_succeeds_in_different_schemas(self, project):
@@ -128,14 +112,14 @@ class BaseSameAliasDifferentDatabases:
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"cast.sql": MACROS__CAST_SQL, "expect_value.sql": MACROS__EXPECT_VALUE_SQL}
+        return {"cast.sql": fixtures.MACROS__CAST_SQL, "expect_value.sql": fixtures.MACROS__EXPECT_VALUE_SQL}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "schema.yml": MODELS_DUPE_CUSTOM_DATABASE__SCHEMA_YML,
-            "model_a.sql": MODELS_DUPE_CUSTOM_DATABASE__MODEL_A_SQL,
-            "model_b.sql": MODELS_DUPE_CUSTOM_DATABASE__MODEL_B_SQL,
+            "schema.yml": fixtures.MODELS_DUPE_CUSTOM_DATABASE__SCHEMA_YML,
+            "model_a.sql": fixtures.MODELS_DUPE_CUSTOM_DATABASE__MODEL_A_SQL,
+            "model_b.sql": fixtures.MODELS_DUPE_CUSTOM_DATABASE__MODEL_B_SQL,
         }
 
     def test_alias_model_name_diff_database(self, project):

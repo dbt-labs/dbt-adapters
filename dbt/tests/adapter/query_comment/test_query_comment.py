@@ -1,22 +1,24 @@
-import pytest
 import json
-from dbt.exceptions import DbtRuntimeError
-from dbt.version import __version__ as dbt_version
+
+import pytest
+from dbt_common.exceptions import DbtRuntimeError
+
+from dbt.tests.__about__ import version as PACKAGE_VERSION
+from dbt.tests.adapter.query_comment import fixtures
 from dbt.tests.util import run_dbt_and_capture
-from dbt.tests.adapter.query_comment.fixtures import MACROS__MACRO_SQL, MODELS__X_SQL
 
 
 class BaseDefaultQueryComments:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "x.sql": MODELS__X_SQL,
+            "x.sql": fixtures.MODELS__X_SQL,
         }
 
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "macro.sql": MACROS__MACRO_SQL,
+            "macro.sql": fixtures.MACROS__MACRO_SQL,
         }
 
     def run_get_json(self, expect_pass=True):
@@ -59,7 +61,7 @@ class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
         logs = self.run_get_json()
         expected_dct = {
             "app": "dbt++",
-            "dbt_version": dbt_version,
+            "dbt_version": PACKAGE_VERSION,
             "macro_version": "0.1.0",
             "message": f"blah: {project.adapter.config.target_name}",
         }

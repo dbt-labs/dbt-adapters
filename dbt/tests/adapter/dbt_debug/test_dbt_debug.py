@@ -1,10 +1,12 @@
-import pytest
 import os
 import re
 import yaml
 
 from dbt.cli.exceptions import DbtUsageException
+import pytest
+
 from dbt.tests.util import run_dbt, run_dbt_and_capture
+
 
 MODELS__MODEL_SQL = """
 seled 1 as id

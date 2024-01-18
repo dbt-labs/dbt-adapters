@@ -1,5 +1,7 @@
 import pytest
+
 from dbt.tests.adapter.utils.data_types.base_data_type_macro import BaseDataTypeMacro
+
 
 seeds__expected_csv = """numeric_col
 1.2345

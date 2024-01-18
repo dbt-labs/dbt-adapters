@@ -1,8 +1,11 @@
-import pytest
-from dbt.tests.util import run_dbt, check_relations_equal
-from dbt.artifacts.results import RunStatus
 from collections import namedtuple
 from pathlib import Path
+
+from dbt.artifacts.results import RunStatus
+import pytest
+
+from dbt.tests.util import check_relations_equal, run_dbt
+
 
 models__trinary_unique_key_list_sql = """
 -- a multi-argument unique key list should see overwriting on rows in the model

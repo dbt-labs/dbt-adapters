@@ -1,15 +1,13 @@
-import pytest
 import os
 from datetime import datetime
-import dbt
 
-from dbt.tests.util import run_dbt, rm_file, get_artifact, check_datetime_between
+import pytest
+
+from dbt.tests.__about__ import version as PACKAGE_VERSION
+from dbt.tests.adapter.basic import expected_catalog
 from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.adapter.basic.expected_catalog import (
-    base_expected_catalog,
-    no_stats,
-    expected_references_catalog,
-)
+from dbt.tests.util import run_dbt, rm_file, get_artifact, check_datetime_between
+
 
 models__schema_yml = """
 version: 2
@@ -338,7 +336,7 @@ def verify_metadata(metadata, dbt_schema_version, start_time):
     assert "generated_at" in metadata
     check_datetime_between(metadata["generated_at"], start=start_time)
     assert "dbt_version" in metadata
-    assert metadata["dbt_version"] == dbt.version.__version__
+    assert metadata["dbt_version"] == PACKAGE_VERSION
     assert "dbt_schema_version" in metadata
     assert metadata["dbt_schema_version"] == dbt_schema_version
     key = "env_key"
@@ -417,7 +415,7 @@ class BaseDocsGenerate(BaseGenerateProject):
 
     @pytest.fixture(scope="class")
     def expected_catalog(self, project, profile_user):
-        return base_expected_catalog(
+        return expected_catalog.base_expected_catalog(
             project,
             role=profile_user,
             id_type="integer",
@@ -425,7 +423,7 @@ class BaseDocsGenerate(BaseGenerateProject):
             time_type="timestamp without time zone",
             view_type="VIEW",
             table_type="BASE TABLE",
-            model_stats=no_stats(),
+            model_stats=expected_catalog.no_stats(),
         )
 
     @pytest.fixture(autouse=True)
@@ -475,7 +473,7 @@ class BaseDocsGenReferences(BaseGenerateProject):
 
     @pytest.fixture(scope="class")
     def expected_catalog(self, project, profile_user):
-        return expected_references_catalog(
+        return expected_catalog.expected_references_catalog(
             project,
             role=profile_user,
             id_type="integer",
@@ -484,7 +482,7 @@ class BaseDocsGenReferences(BaseGenerateProject):
             bigint_type="bigint",
             view_type="VIEW",
             table_type="BASE TABLE",
-            model_stats=no_stats(),
+            model_stats=expected_catalog.no_stats(),
         )
 
     def test_references(self, project, expected_catalog):

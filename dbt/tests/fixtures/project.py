@@ -1,29 +1,3 @@
-import os
-from pathlib import Path
-import pytest  # type: ignore
-import random
-from argparse import Namespace
-from datetime import datetime
-import warnings
-import yaml
-
-from dbt.mp_context import get_mp_context
-from dbt.parser.manifest import ManifestLoader
-from dbt_common.exceptions import CompilationError, DbtDatabaseError
-from dbt.context.providers import generate_runtime_macro_context
-import dbt.flags as flags
-from dbt.config.runtime import RuntimeConfig
-from dbt.adapters.factory import get_adapter, register_adapter, reset_adapters, get_adapter_by_type
-from dbt_common.events.event_manager_client import cleanup_event_logger
-from dbt.events.logging import setup_event_logger
-from dbt.tests.util import (
-    write_file,
-    run_sql_with_adapter,
-    TestProcessingException,
-    get_connection,
-)
-
-
 # These are the fixtures that are used in dbt core functional tests
 #
 # The main functional test fixture is the 'project' fixture, which combines
@@ -61,6 +35,36 @@ from dbt.tests.util import (
 #
 # Please see the pytest docs for further information:
 #     https://docs.pytest.org
+from argparse import Namespace
+from datetime import datetime
+import os
+from pathlib import Path
+import random
+import warnings
+import yaml
+
+from dbt.parser.manifest import ManifestLoader
+from dbt.context.providers import generate_runtime_macro_context
+from dbt.config.runtime import RuntimeConfig
+from dbt.events.logging import setup_event_logger
+from dbt.mp_context import get_mp_context
+from dbt_common.events.event_manager_client import cleanup_event_logger
+from dbt_common.exceptions import CompilationError, DbtDatabaseError
+import pytest
+
+from dbt.adapters.factory import (
+    get_adapter,
+    get_adapter_by_type,
+    register_adapter,
+    reset_adapters,
+)
+
+from dbt.tests.util import (
+    TestProcessingException,
+    get_connection,
+    run_sql_with_adapter,
+    write_file,
+)
 
 
 # Used in constructing the unique_schema and logs_dir
@@ -286,7 +290,6 @@ def adapter(
         profile=None,
         threads=None,
     )
-    flags.set_from_args(args, {})
     runtime_config = RuntimeConfig.from_args(args)
     register_adapter(runtime_config, get_mp_context())
     adapter = get_adapter(runtime_config)

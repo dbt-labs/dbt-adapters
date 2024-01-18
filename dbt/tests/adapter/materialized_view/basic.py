@@ -4,19 +4,14 @@ import pytest
 
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.contracts.relation import RelationType
+
+from dbt.tests.adapter.materialized_view import files
 from dbt.tests.util import (
     assert_message_in_logs,
     get_model_file,
     run_dbt,
     run_dbt_and_capture,
     set_model_file,
-)
-
-from dbt.tests.adapter.materialized_view.files import (
-    MY_MATERIALIZED_VIEW,
-    MY_SEED,
-    MY_TABLE,
-    MY_VIEW,
 )
 
 
@@ -66,14 +61,14 @@ class MaterializedViewBasic:
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
-        return {"my_seed.csv": MY_SEED}
+        return {"my_seed.csv": files.MY_SEED}
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
         yield {
-            "my_table.sql": MY_TABLE,
-            "my_view.sql": MY_VIEW,
-            "my_materialized_view.sql": MY_MATERIALIZED_VIEW,
+            "my_table.sql": files.MY_TABLE,
+            "my_view.sql": files.MY_VIEW,
+            "my_materialized_view.sql": files.MY_MATERIALIZED_VIEW,
         }
 
     """

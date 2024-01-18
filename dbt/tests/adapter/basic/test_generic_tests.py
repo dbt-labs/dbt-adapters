@@ -1,14 +1,7 @@
 import pytest
+
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    generic_test_seed_yml,
-    base_view_sql,
-    base_table_sql,
-    schema_base_yml,
-    generic_test_view_yml,
-    generic_test_table_yml,
-)
 
 
 class BaseGenericTests:
@@ -19,18 +12,18 @@ class BaseGenericTests:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "base.csv": seeds_base_csv,
-            "schema.yml": generic_test_seed_yml,
+            "base.csv": files.seeds_base_csv,
+            "schema.yml": files.generic_test_seed_yml,
         }
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "view_model.sql": base_view_sql,
-            "table_model.sql": base_table_sql,
-            "schema.yml": schema_base_yml,
-            "schema_view.yml": generic_test_view_yml,
-            "schema_table.yml": generic_test_table_yml,
+            "view_model.sql": files.base_view_sql,
+            "table_model.sql": files.base_table_sql,
+            "schema.yml": files.schema_base_yml,
+            "schema_view.yml": files.generic_test_view_yml,
+            "schema_table.yml": files.generic_test_table_yml,
         }
 
     @pytest.fixture(autouse=True)

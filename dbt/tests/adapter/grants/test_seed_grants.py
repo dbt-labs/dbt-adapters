@@ -1,11 +1,13 @@
 import pytest
+
+from dbt.tests.adapter.grants.base_grants import BaseGrants
 from dbt.tests.util import (
+    get_manifest,
     run_dbt,
     run_dbt_and_capture,
-    get_manifest,
     write_file,
 )
-from dbt.tests.adapter.grants.base_grants import BaseGrants
+
 
 seeds__my_seed_csv = """
 id,name,some_date

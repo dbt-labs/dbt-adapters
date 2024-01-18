@@ -1,27 +1,3 @@
-from io import StringIO
-import os
-import shutil
-import yaml
-import json
-import warnings
-from datetime import datetime
-from typing import Any, Dict, List, Optional
-from contextlib import contextmanager
-from dbt.adapters.factory import Adapter
-
-from dbt.cli.main import dbtRunner
-from dbt.logger import log_manager
-from dbt.contracts.graph.manifest import Manifest
-from dbt_common.events.functions import (
-    fire_event,
-    capture_stdout_logs,
-    stop_capture_stdout_logs,
-    reset_metadata_vars,
-)
-from dbt_common.events.base_types import EventLevel
-from dbt_common.events.types import Note
-from dbt.adapters.base.relation import BaseRelation
-
 # =============================================================================
 # Test utilities
 #   run_dbt
@@ -59,20 +35,49 @@ from dbt.adapters.base.relation import BaseRelation
 #   AnyString
 #   AnyStringWith
 # =============================================================================
+from contextlib import contextmanager
+from datetime import datetime
+from io import StringIO
+import json
+import os
+import shutil
+from typing import Any, Dict, List, Optional
+import warnings
+import yaml
+
+from dbt.contracts.graph.manifest import Manifest
+from dbt.cli.main import dbtRunner
+from dbt.logger import log_manager
+from dbt_common.events.functions import (
+    capture_stdout_logs,
+    fire_event,
+    reset_metadata_vars,
+    stop_capture_stdout_logs,
+)
+from dbt_common.events.base_types import EventLevel
+from dbt_common.events.types import Note
+
+from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.factory import Adapter
 
 
-# 'run_dbt' is used in pytest tests to run dbt commands. It will return
-# different objects depending on the command that is executed.
-# For a run command (and most other commands) it will return a list
-# of results. For the 'docs generate' command it returns a CatalogArtifact.
-# The first parameter is a list of dbt command line arguments, such as
-#   run_dbt(["run", "--vars", "seed_name: base"])
-# If the command is expected to fail, pass in "expect_pass=False"):
-#   run_dbt(["test"], expect_pass=False)
 def run_dbt(
     args: Optional[List[str]] = None,
     expect_pass: bool = True,
 ):
+    """
+    'run_dbt' is used in pytest tests to run dbt commands.
+    It will return different objects depending on the command that is executed.
+    For a run command (and most other commands) it will return a list of results.
+    For the 'docs generate' command it returns a CatalogArtifact.
+
+    The first parameter is a list of dbt command line arguments, such as
+        run_dbt(["run", "--vars", "seed_name: base"])
+
+    If the command is expected to fail, pass in "expect_pass=False"):
+        run_dbt(["test"], expect_pass=False)
+    """
+
     # Ignore logbook warnings
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="logbook")
 

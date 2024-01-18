@@ -1,4 +1,5 @@
 from typing import List, Optional
+
 import pytest
 
 from dbt.tests.util import run_dbt

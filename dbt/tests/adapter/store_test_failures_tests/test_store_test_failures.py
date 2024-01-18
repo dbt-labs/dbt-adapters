@@ -1,23 +1,8 @@
 import pytest
 
-from dbt.tests.util import (
-    check_relations_equal,
-    run_dbt,
-)
+from dbt.tests.adapter.store_test_failures_tests import fixtures
+from dbt.tests.util import check_relations_equal, run_dbt
 
-from dbt.tests.adapter.store_test_failures_tests.fixtures import (
-    seeds__people,
-    seeds__expected_accepted_values,
-    seeds__expected_failing_test,
-    seeds__expected_not_null_problematic_model_id,
-    seeds__expected_unique_problematic_model_id,
-    properties__schema_yml,
-    models__problematic_model,
-    models__fine_model,
-    models__file_model_but_with_a_no_good_very_long_name,
-    tests__failing_test,
-    tests__passing_test,
-)
 
 # used to rename test audit schema to help test schema meet max char limit
 # the default is _dbt_test__audit but this runs over the postgres 63 schema name char limit
@@ -35,30 +20,30 @@ class StoreTestFailuresBase:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "people.csv": seeds__people,
-            "expected_accepted_values.csv": seeds__expected_accepted_values,
-            "expected_failing_test.csv": seeds__expected_failing_test,
-            "expected_not_null_problematic_model_id.csv": seeds__expected_not_null_problematic_model_id,
-            "expected_unique_problematic_model_id.csv": seeds__expected_unique_problematic_model_id,
+            "people.csv": fixtures.seeds__people,
+            "expected_accepted_values.csv": fixtures.seeds__expected_accepted_values,
+            "expected_failing_test.csv": fixtures.seeds__expected_failing_test,
+            "expected_not_null_problematic_model_id.csv": fixtures.seeds__expected_not_null_problematic_model_id,
+            "expected_unique_problematic_model_id.csv": fixtures.seeds__expected_unique_problematic_model_id,
         }
 
     @pytest.fixture(scope="class")
     def tests(self):
         return {
-            "failing_test.sql": tests__failing_test,
-            "passing_test.sql": tests__passing_test,
+            "failing_test.sql": fixtures.tests__failing_test,
+            "passing_test.sql": fixtures.tests__passing_test,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": properties__schema_yml}
+        return {"schema.yml": fixtures.properties__schema_yml}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "fine_model.sql": models__fine_model,
-            "fine_model_but_with_a_no_good_very_long_name.sql": models__file_model_but_with_a_no_good_very_long_name,
-            "problematic_model.sql": models__problematic_model,
+            "fine_model.sql": fixtures.models__fine_model,
+            "fine_model_but_with_a_no_good_very_long_name.sql": fixtures.models__file_model_but_with_a_no_good_very_long_name,
+            "problematic_model.sql": fixtures.models__problematic_model,
         }
 
     @pytest.fixture(scope="class")

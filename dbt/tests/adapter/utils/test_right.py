@@ -1,22 +1,18 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_right import (
-    seeds__data_right_csv,
-    models__test_right_sql,
-    models__test_right_yml,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_right
 
 
-class BaseRight(BaseUtils):
+class BaseRight(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"data_right.csv": seeds__data_right_csv}
+        return {"data_right.csv": fixture_right.seeds__data_right_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "test_right.yml": models__test_right_yml,
-            "test_right.sql": self.interpolate_macro_namespace(models__test_right_sql, "right"),
+            "test_right.yml": fixture_right.models__test_right_yml,
+            "test_right.sql": self.interpolate_macro_namespace(fixture_right.models__test_right_sql, "right"),
         }
 
 

@@ -1,42 +1,25 @@
 import pytest
 
-from dbt.tests.util import (
-    check_relations_equal,
-    run_dbt,
-)
-
-from dbt.tests.adapter.incremental.fixtures import (
-    _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY,
-    _MODELS__INCREMENTAL_IGNORE,
-    _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY_TARGET,
-    _MODELS__INCREMENTAL_IGNORE_TARGET,
-    _MODELS__INCREMENTAL_FAIL,
-    _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS,
-    _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE,
-    _MODELS__A,
-    _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_TARGET,
-    _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,
-    _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
-    _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET,
-)
+from dbt.tests.adapter.incremental import fixtures
+from dbt.tests.util import check_relations_equal, run_dbt
 
 
 class BaseIncrementalOnSchemaChangeSetup:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "incremental_sync_remove_only.sql": _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY,
-            "incremental_ignore.sql": _MODELS__INCREMENTAL_IGNORE,
-            "incremental_sync_remove_only_target.sql": _MODELS__INCREMENTAL_SYNC_REMOVE_ONLY_TARGET,
-            "incremental_ignore_target.sql": _MODELS__INCREMENTAL_IGNORE_TARGET,
-            "incremental_fail.sql": _MODELS__INCREMENTAL_FAIL,
-            "incremental_sync_all_columns.sql": _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS,
-            "incremental_append_new_columns_remove_one.sql": _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE,
-            "model_a.sql": _MODELS__A,
-            "incremental_append_new_columns_target.sql": _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_TARGET,
-            "incremental_append_new_columns.sql": _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,
-            "incremental_sync_all_columns_target.sql": _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
-            "incremental_append_new_columns_remove_one_target.sql": _MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET,
+            "incremental_sync_remove_only.sql": fixtures._MODELS__INCREMENTAL_SYNC_REMOVE_ONLY,
+            "incremental_ignore.sql": fixtures._MODELS__INCREMENTAL_IGNORE,
+            "incremental_sync_remove_only_target.sql": fixtures._MODELS__INCREMENTAL_SYNC_REMOVE_ONLY_TARGET,
+            "incremental_ignore_target.sql": fixtures._MODELS__INCREMENTAL_IGNORE_TARGET,
+            "incremental_fail.sql": fixtures._MODELS__INCREMENTAL_FAIL,
+            "incremental_sync_all_columns.sql": fixtures._MODELS__INCREMENTAL_SYNC_ALL_COLUMNS,
+            "incremental_append_new_columns_remove_one.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE,
+            "model_a.sql": fixtures._MODELS__A,
+            "incremental_append_new_columns_target.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_TARGET,
+            "incremental_append_new_columns.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,
+            "incremental_sync_all_columns_target.sql": fixtures._MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
+            "incremental_append_new_columns_remove_one_target.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET,
         }
 
     def run_twice_and_assert(self, include, compare_source, compare_target, project):

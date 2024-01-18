@@ -1,28 +1,12 @@
-import pytest
-
 from pathlib import Path
 
 from dbt_common.exceptions import CompilationError
 from dbt.exceptions import ParsingError
+import pytest
 
-from dbt.tests.util import (
-    run_dbt,
-    write_file,
-)
+from dbt.tests.adapter.hooks import fixtures
+from dbt.tests.util import run_dbt, write_file
 
-from dbt.tests.adapter.hooks.fixtures import (
-    models__hooked,
-    models__hooks,
-    models__hooks_configured,
-    models__hooks_error,
-    models__hooks_kwargs,
-    models__post,
-    models__pre,
-    properties__seed_models,
-    properties__test_snapshot_models,
-    seeds__example_seed_csv,
-    snapshots__test_snapshot,
-)
 
 MODEL_PRE_HOOK = """
    insert into {{this.schema}}.on_model_hook (
@@ -160,7 +144,7 @@ class TestPrePostModelHooks(BaseTestPrePost):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooks.sql": models__hooks}
+        return {"hooks.sql": fixtures.models__hooks}
 
     def test_pre_and_post_run_hooks(self, project, dbt_profile_target):
         run_dbt()
@@ -222,7 +206,7 @@ class TestHookRefs(BaseTestPrePost):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooked.sql": models__hooked, "post.sql": models__post, "pre.sql": models__pre}
+        return {"hooked.sql": fixtures.models__hooked, "post.sql": fixtures.models__post, "pre.sql": fixtures.models__pre}
 
     def test_pre_post_model_hooks_refed(self, project, dbt_profile_target):
         run_dbt()
@@ -233,11 +217,11 @@ class TestHookRefs(BaseTestPrePost):
 class TestPrePostModelHooksOnSeeds(object):
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"example_seed.csv": seeds__example_seed_csv}
+        return {"example_seed.csv": fixtures.seeds__example_seed_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"schema.yml": properties__seed_models}
+        return {"schema.yml": fixtures.properties__seed_models}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -270,11 +254,11 @@ class TestHooksRefsOnSeeds:
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"example_seed.csv": seeds__example_seed_csv}
+        return {"example_seed.csv": fixtures.seeds__example_seed_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"schema.yml": properties__seed_models, "post.sql": models__post}
+        return {"schema.yml": fixtures.properties__seed_models, "post.sql": fixtures.models__post}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -329,15 +313,15 @@ class TestPrePostModelHooksOnSnapshots(object):
     def setUp(self, project):
         path = Path(project.project_root) / "test-snapshots"
         Path.mkdir(path)
-        write_file(snapshots__test_snapshot, path, "snapshot.sql")
+        write_file(fixtures.snapshots__test_snapshot, path, "snapshot.sql")
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"schema.yml": properties__test_snapshot_models}
+        return {"schema.yml": fixtures.properties__test_snapshot_models}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"example_seed.csv": seeds__example_seed_csv}
+        return {"example_seed.csv": fixtures.seeds__example_seed_csv}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -374,7 +358,7 @@ class PrePostModelHooksInConfigSetup(BaseTestPrePost):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooks.sql": models__hooks_configured}
+        return {"hooks.sql": fixtures.models__hooks_configured}
 
 
 class TestPrePostModelHooksInConfig(PrePostModelHooksInConfigSetup):
@@ -417,7 +401,7 @@ class TestPrePostModelHooksInConfigWithCount(PrePostModelHooksInConfigSetup):
 class TestPrePostModelHooksInConfigKwargs(TestPrePostModelHooksInConfig):
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooks.sql": models__hooks_kwargs}
+        return {"hooks.sql": fixtures.models__hooks_kwargs}
 
 
 class TestPrePostSnapshotHooksInConfigKwargs(TestPrePostModelHooksOnSnapshots):
@@ -425,7 +409,7 @@ class TestPrePostSnapshotHooksInConfigKwargs(TestPrePostModelHooksOnSnapshots):
     def setUp(self, project):
         path = Path(project.project_root) / "test-kwargs-snapshots"
         Path.mkdir(path)
-        write_file(snapshots__test_snapshot, path, "snapshot.sql")
+        write_file(fixtures.snapshots__test_snapshot, path, "snapshot.sql")
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -448,7 +432,7 @@ class TestPrePostSnapshotHooksInConfigKwargs(TestPrePostModelHooksOnSnapshots):
 class TestDuplicateHooksInConfigs(object):
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooks.sql": models__hooks_error}
+        return {"hooks.sql": fixtures.models__hooks_error}
 
     def test_run_duplicate_hook_defs(self, project):
         with pytest.raises(CompilationError) as exc:

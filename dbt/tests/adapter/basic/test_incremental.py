@@ -1,13 +1,8 @@
 import pytest
-from dbt.tests.util import run_dbt, check_relations_equal, relation_from_name
+
 from dbt.artifacts.results import RunStatus
-from dbt.tests.adapter.basic.files import (
-    seeds_base_csv,
-    seeds_added_csv,
-    schema_base_yml,
-    incremental_sql,
-    incremental_not_schema_change_sql,
-)
+from dbt.tests.adapter.basic import files
+from dbt.tests.util import run_dbt, check_relations_equal, relation_from_name
 
 
 class BaseIncremental:
@@ -17,11 +12,11 @@ class BaseIncremental:
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"incremental.sql": incremental_sql, "schema.yml": schema_base_yml}
+        return {"incremental.sql": files.incremental_sql, "schema.yml": files.schema_base_yml}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"base.csv": seeds_base_csv, "added.csv": seeds_added_csv}
+        return {"base.csv": files.seeds_base_csv, "added.csv": files.seeds_added_csv}
 
     @pytest.fixture(autouse=True)
     def clean_up(self, project):
@@ -78,7 +73,7 @@ class BaseIncrementalNotSchemaChange:
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"incremental_not_schema_change.sql": incremental_not_schema_change_sql}
+        return {"incremental_not_schema_change.sql": files.incremental_not_schema_change_sql}
 
     def test_incremental_not_schema_change(self, project):
         # Schema change is not evaluated on first run, so two are needed

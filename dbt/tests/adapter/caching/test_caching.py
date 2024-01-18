@@ -2,6 +2,7 @@ import pytest
 
 from dbt.tests.util import run_dbt
 
+
 model_sql = """
 {{
     config(

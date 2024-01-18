@@ -1,24 +1,12 @@
-import os
-import shutil
 from collections import Counter
 from copy import deepcopy
+import os
+import shutil
 
+from dbt_common.exceptions import DbtRuntimeError
 import pytest
 
-from dbt.exceptions import DbtRuntimeError
-from dbt.tests.adapter.dbt_clone.fixtures import (
-    seed_csv,
-    table_model_sql,
-    view_model_sql,
-    ephemeral_model_sql,
-    exposures_yml,
-    schema_yml,
-    snapshot_sql,
-    get_schema_name_sql,
-    macros_sql,
-    infinite_macros_sql,
-    custom_can_clone_tables_false_macros_sql,
-)
+from dbt.tests.adapter.dbt_clone import fixtures
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 
@@ -26,31 +14,31 @@ class BaseClone:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "table_model.sql": table_model_sql,
-            "view_model.sql": view_model_sql,
-            "ephemeral_model.sql": ephemeral_model_sql,
-            "schema.yml": schema_yml,
-            "exposures.yml": exposures_yml,
+            "table_model.sql": fixtures.table_model_sql,
+            "view_model.sql": fixtures.view_model_sql,
+            "ephemeral_model.sql": fixtures.ephemeral_model_sql,
+            "schema.yml": fixtures.schema_yml,
+            "exposures.yml": fixtures.exposures_yml,
         }
 
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "macros.sql": macros_sql,
-            "infinite_macros.sql": infinite_macros_sql,
-            "get_schema_name.sql": get_schema_name_sql,
+            "macros.sql": fixtures.macros_sql,
+            "infinite_macros.sql": fixtures.infinite_macros_sql,
+            "get_schema_name.sql": fixtures.get_schema_name_sql,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "seed.csv": seed_csv,
+            "seed.csv": fixtures.seed_csv,
         }
 
     @pytest.fixture(scope="class")
     def snapshots(self):
         return {
-            "snapshot.sql": snapshot_sql,
+            "snapshot.sql": fixtures.snapshot_sql,
         }
 
     @pytest.fixture(scope="class")
@@ -160,10 +148,10 @@ class BaseCloneNotPossible(BaseClone):
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "macros.sql": macros_sql,
-            "my_can_clone_tables.sql": custom_can_clone_tables_false_macros_sql,
-            "infinite_macros.sql": infinite_macros_sql,
-            "get_schema_name.sql": get_schema_name_sql,
+            "macros.sql": fixtures.macros_sql,
+            "my_can_clone_tables.sql": fixtures.custom_can_clone_tables_false_macros_sql,
+            "infinite_macros.sql": fixtures.infinite_macros_sql,
+            "get_schema_name.sql": fixtures.get_schema_name_sql,
         }
 
     def test_can_clone_false(self, project, unique_schema, other_schema):

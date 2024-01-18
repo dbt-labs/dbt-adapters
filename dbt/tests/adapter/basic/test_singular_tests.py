@@ -1,8 +1,6 @@
 import pytest
-from dbt.tests.adapter.basic.files import (
-    test_passing_sql,
-    test_failing_sql,
-)
+
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import check_result_nodes_by_name, run_dbt
 
 
@@ -10,8 +8,8 @@ class BaseSingularTests:
     @pytest.fixture(scope="class")
     def tests(self):
         return {
-            "passing.sql": test_passing_sql,
-            "failing.sql": test_failing_sql,
+            "passing.sql": files.test_passing_sql,
+            "failing.sql": files.test_failing_sql,
         }
 
     @pytest.fixture(scope="class")

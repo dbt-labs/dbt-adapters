@@ -1,13 +1,9 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_dateadd import (
-    seeds__data_dateadd_csv,
-    models__test_dateadd_sql,
-    models__test_dateadd_yml,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_dateadd
 
 
-class BaseDateAdd(BaseUtils):
+class BaseDateAdd(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -28,14 +24,14 @@ class BaseDateAdd(BaseUtils):
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"data_dateadd.csv": seeds__data_dateadd_csv}
+        return {"data_dateadd.csv": fixture_dateadd.seeds__data_dateadd_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "test_dateadd.yml": models__test_dateadd_yml,
+            "test_dateadd.yml": fixture_dateadd.models__test_dateadd_yml,
             "test_dateadd.sql": self.interpolate_macro_namespace(
-                models__test_dateadd_sql, "dateadd"
+                fixture_dateadd.models__test_dateadd_sql, "dateadd"
             ),
         }
 

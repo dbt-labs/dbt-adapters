@@ -1,6 +1,8 @@
-import pytest
 import re
 
+import pytest
+
+from dbt.tests.adapter.constraints import fixtures
 from dbt.tests.util import (
     run_dbt,
     get_manifest,
@@ -8,36 +10,6 @@ from dbt.tests.util import (
     write_file,
     read_file,
     relation_from_name,
-)
-
-from dbt.tests.adapter.constraints.fixtures import (
-    my_model_sql,
-    my_incremental_model_sql,
-    my_model_wrong_order_sql,
-    my_model_wrong_name_sql,
-    my_model_data_type_sql,
-    model_data_type_schema_yml,
-    my_model_view_wrong_order_sql,
-    my_model_view_wrong_name_sql,
-    my_model_incremental_wrong_order_sql,
-    my_model_incremental_wrong_name_sql,
-    my_model_with_nulls_sql,
-    my_model_incremental_with_nulls_sql,
-    my_model_with_quoted_column_name_sql,
-    model_schema_yml,
-    model_fk_constraint_schema_yml,
-    constrained_model_schema_yml,
-    model_quoted_column_schema_yml,
-    foreign_key_model_sql,
-    my_model_wrong_order_depends_on_fk_sql,
-    my_model_incremental_wrong_order_depends_on_fk_sql,
-    my_model_contract_sql_header_sql,
-    my_model_incremental_contract_sql_header_sql,
-    model_contract_header_schema_yml,
-    create_table_macro_sql,
-    incremental_foreign_key_schema_yml,
-    incremental_foreign_key_model_raw_numbers_sql,
-    incremental_foreign_key_model_stg_numbers_sql,
 )
 
 
@@ -107,7 +79,7 @@ class BaseConstraintsColumnsEqual:
         for sql_column_value, schema_data_type, error_data_type in data_types:
             # Write parametrized data_type to sql file
             write_file(
-                my_model_data_type_sql.format(sql_value=sql_column_value),
+                fixtures.my_model_data_type_sql.format(sql_value=sql_column_value),
                 "models",
                 "my_model_data_type.sql",
             )
@@ -123,7 +95,7 @@ class BaseConstraintsColumnsEqual:
                 int_type if schema_data_type.upper() != schema_int_type.upper() else string_type
             )
             write_file(
-                model_data_type_schema_yml.format(data_type=wrong_schema_data_type),
+                fixtures.model_data_type_schema_yml.format(data_type=wrong_schema_data_type),
                 "models",
                 "constraints_schema.yml",
             )
@@ -149,13 +121,13 @@ class BaseConstraintsColumnsEqual:
         for sql_column_value, schema_data_type, _ in data_types:
             # Write parametrized data_type to sql file
             write_file(
-                my_model_data_type_sql.format(sql_value=sql_column_value),
+                fixtures.my_model_data_type_sql.format(sql_value=sql_column_value),
                 "models",
                 "my_model_data_type.sql",
             )
             # Write correct data_type to corresponding schema file
             write_file(
-                model_data_type_schema_yml.format(data_type=schema_data_type),
+                fixtures.model_data_type_schema_yml.format(data_type=schema_data_type),
                 "models",
                 "constraints_schema.yml",
             )
@@ -192,9 +164,9 @@ class BaseConstraintsRuntimeDdlEnforcement:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_model_wrong_order_depends_on_fk_sql,
-            "foreign_key_model.sql": foreign_key_model_sql,
-            "constraints_schema.yml": model_fk_constraint_schema_yml,
+            "my_model.sql": fixtures.my_model_wrong_order_depends_on_fk_sql,
+            "foreign_key_model.sql": fixtures.foreign_key_model_sql,
+            "constraints_schema.yml": fixtures.model_fk_constraint_schema_yml,
         }
 
     @pytest.fixture(scope="class")
@@ -254,13 +226,13 @@ class BaseConstraintsRollback:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_model_sql,
-            "constraints_schema.yml": model_schema_yml,
+            "my_model.sql": fixtures.my_model_sql,
+            "constraints_schema.yml": fixtures.model_schema_yml,
         }
 
     @pytest.fixture(scope="class")
     def null_model_sql(self):
-        return my_model_with_nulls_sql
+        return fixtures.my_model_with_nulls_sql
 
     @pytest.fixture(scope="class")
     def expected_color(self):
@@ -308,9 +280,9 @@ class BaseTableConstraintsColumnsEqual(BaseConstraintsColumnsEqual):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model_wrong_order.sql": my_model_wrong_order_sql,
-            "my_model_wrong_name.sql": my_model_wrong_name_sql,
-            "constraints_schema.yml": model_schema_yml,
+            "my_model_wrong_order.sql": fixtures.my_model_wrong_order_sql,
+            "my_model_wrong_name.sql": fixtures.my_model_wrong_name_sql,
+            "constraints_schema.yml": fixtures.model_schema_yml,
         }
 
 
@@ -318,9 +290,9 @@ class BaseViewConstraintsColumnsEqual(BaseConstraintsColumnsEqual):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model_wrong_order.sql": my_model_view_wrong_order_sql,
-            "my_model_wrong_name.sql": my_model_view_wrong_name_sql,
-            "constraints_schema.yml": model_schema_yml,
+            "my_model_wrong_order.sql": fixtures.my_model_view_wrong_order_sql,
+            "my_model_wrong_name.sql": fixtures.my_model_view_wrong_name_sql,
+            "constraints_schema.yml": fixtures.model_schema_yml,
         }
 
 
@@ -328,9 +300,9 @@ class BaseIncrementalConstraintsColumnsEqual(BaseConstraintsColumnsEqual):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model_wrong_order.sql": my_model_incremental_wrong_order_sql,
-            "my_model_wrong_name.sql": my_model_incremental_wrong_name_sql,
-            "constraints_schema.yml": model_schema_yml,
+            "my_model_wrong_order.sql": fixtures.my_model_incremental_wrong_order_sql,
+            "my_model_wrong_name.sql": fixtures.my_model_incremental_wrong_name_sql,
+            "constraints_schema.yml": fixtures.model_schema_yml,
         }
 
 
@@ -338,9 +310,9 @@ class BaseIncrementalConstraintsRuntimeDdlEnforcement(BaseConstraintsRuntimeDdlE
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_model_incremental_wrong_order_depends_on_fk_sql,
-            "foreign_key_model.sql": foreign_key_model_sql,
-            "constraints_schema.yml": model_fk_constraint_schema_yml,
+            "my_model.sql": fixtures.my_model_incremental_wrong_order_depends_on_fk_sql,
+            "foreign_key_model.sql": fixtures.foreign_key_model_sql,
+            "constraints_schema.yml": fixtures.model_fk_constraint_schema_yml,
         }
 
 
@@ -348,13 +320,13 @@ class BaseIncrementalConstraintsRollback(BaseConstraintsRollback):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_incremental_model_sql,
-            "constraints_schema.yml": model_schema_yml,
+            "my_model.sql": fixtures.my_incremental_model_sql,
+            "constraints_schema.yml": fixtures.model_schema_yml,
         }
 
     @pytest.fixture(scope="class")
     def null_model_sql(self):
-        return my_model_incremental_with_nulls_sql
+        return fixtures.my_model_incremental_with_nulls_sql
 
 
 class TestTableConstraintsColumnsEqual(BaseTableConstraintsColumnsEqual):
@@ -404,8 +376,8 @@ class BaseTableContractSqlHeader(BaseContractSqlHeader):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model_contract_sql_header.sql": my_model_contract_sql_header_sql,
-            "constraints_schema.yml": model_contract_header_schema_yml,
+            "my_model_contract_sql_header.sql": fixtures.my_model_contract_sql_header_sql,
+            "constraints_schema.yml": fixtures.model_contract_header_schema_yml,
         }
 
 
@@ -413,8 +385,8 @@ class BaseIncrementalContractSqlHeader(BaseContractSqlHeader):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model_contract_sql_header.sql": my_model_incremental_contract_sql_header_sql,
-            "constraints_schema.yml": model_contract_header_schema_yml,
+            "my_model_contract_sql_header.sql": fixtures.my_model_incremental_contract_sql_header_sql,
+            "constraints_schema.yml": fixtures.model_contract_header_schema_yml,
         }
 
 
@@ -436,9 +408,9 @@ class BaseModelConstraintsRuntimeEnforcement:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_model_wrong_order_depends_on_fk_sql,
-            "foreign_key_model.sql": foreign_key_model_sql,
-            "constraints_schema.yml": constrained_model_schema_yml,
+            "my_model.sql": fixtures.my_model_wrong_order_depends_on_fk_sql,
+            "foreign_key_model.sql": fixtures.foreign_key_model_sql,
+            "constraints_schema.yml": fixtures.constrained_model_schema_yml,
         }
 
     @pytest.fixture(scope="class")
@@ -504,8 +476,8 @@ class BaseConstraintQuotedColumn(BaseConstraintsRuntimeDdlEnforcement):
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "my_model.sql": my_model_with_quoted_column_name_sql,
-            "constraints_schema.yml": model_quoted_column_schema_yml,
+            "my_model.sql": fixtures.my_model_with_quoted_column_name_sql,
+            "constraints_schema.yml": fixtures.model_quoted_column_schema_yml,
         }
 
     @pytest.fixture(scope="class")
@@ -540,15 +512,15 @@ class TestIncrementalForeignKeyConstraint:
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "create_table.sql": create_table_macro_sql,
+            "create_table.sql": fixtures.create_table_macro_sql,
         }
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "schema.yml": incremental_foreign_key_schema_yml,
-            "raw_numbers.sql": incremental_foreign_key_model_raw_numbers_sql,
-            "stg_numbers.sql": incremental_foreign_key_model_stg_numbers_sql,
+            "schema.yml": fixtures.incremental_foreign_key_schema_yml,
+            "raw_numbers.sql": fixtures.incremental_foreign_key_model_raw_numbers_sql,
+            "stg_numbers.sql": fixtures.incremental_foreign_key_model_stg_numbers_sql,
         }
 
     def test_incremental_foreign_key_constraint(self, project):

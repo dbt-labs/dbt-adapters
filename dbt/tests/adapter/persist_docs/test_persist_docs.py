@@ -2,20 +2,8 @@ import json
 import os
 import pytest
 
+from dbt.tests.adapter.persist_docs import fixtures
 from dbt.tests.util import run_dbt
-
-from dbt.tests.adapter.persist_docs.fixtures import (
-    _DOCS__MY_FUN_DOCS,
-    _MODELS__MISSING_COLUMN,
-    _MODELS__MODEL_USING_QUOTE_UTIL,
-    _MODELS__NO_DOCS_MODEL,
-    _MODELS__TABLE,
-    _MODELS__VIEW,
-    _PROPERTIES__QUOTE_MODEL,
-    _PROPERITES__SCHEMA_MISSING_COL,
-    _PROPERTIES__SCHEMA_YML,
-    _SEEDS__SEED,
-)
 
 
 class BasePersistDocsBase:
@@ -26,21 +14,21 @@ class BasePersistDocsBase:
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": _SEEDS__SEED}
+        return {"seed.csv": fixtures._SEEDS__SEED}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "no_docs_model.sql": _MODELS__NO_DOCS_MODEL,
-            "table_model.sql": _MODELS__TABLE,
-            "view_model.sql": _MODELS__VIEW,
+            "no_docs_model.sql": fixtures._MODELS__NO_DOCS_MODEL,
+            "table_model.sql": fixtures._MODELS__TABLE,
+            "view_model.sql": fixtures._MODELS__VIEW,
         }
 
     @pytest.fixture(scope="class")
     def properties(self):
         return {
-            "my_fun_docs.md": _DOCS__MY_FUN_DOCS,
-            "schema.yml": _PROPERTIES__SCHEMA_YML,
+            "my_fun_docs.md": fixtures._DOCS__MY_FUN_DOCS,
+            "schema.yml": fixtures._PROPERTIES__SCHEMA_YML,
         }
 
     def _assert_common_comments(self, *comments):
@@ -133,11 +121,11 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"missing_column.sql": _MODELS__MISSING_COLUMN}
+        return {"missing_column.sql": fixtures._MODELS__MISSING_COLUMN}
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": _PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": fixtures._PROPERITES__SCHEMA_MISSING_COL}
 
     def test_missing_column(self, project):
         run_dbt(["docs", "generate"])
@@ -156,11 +144,11 @@ class BasePersistDocsCommentOnQuotedColumn:
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"quote_model.sql": _MODELS__MODEL_USING_QUOTE_UTIL}
+        return {"quote_model.sql": fixtures._MODELS__MODEL_USING_QUOTE_UTIL}
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"properties.yml": _PROPERTIES__QUOTE_MODEL}
+        return {"properties.yml": fixtures._PROPERTIES__QUOTE_MODEL}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):

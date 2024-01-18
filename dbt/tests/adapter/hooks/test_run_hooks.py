@@ -1,21 +1,10 @@
 import os
-import pytest
-
 from pathlib import Path
 
-from dbt.tests.adapter.hooks.fixtures import (
-    macros__hook,
-    macros__before_and_after,
-    models__hooks,
-    seeds__example_seed_csv,
-    macros_missing_column,
-    models__missing_column,
-)
+import pytest
 
-from dbt.tests.util import (
-    check_table_does_not_exist,
-    run_dbt,
-)
+from dbt.tests.adapter.hooks import fixtures
+from dbt.tests.util import check_table_does_not_exist, run_dbt
 
 
 class TestPrePostRunHooks(object):
@@ -28,15 +17,15 @@ class TestPrePostRunHooks(object):
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"hook.sql": macros__hook, "before-and-after.sql": macros__before_and_after}
+        return {"hook.sql": fixtures.macros__hook, "before-and-after.sql": fixtures.macros__before_and_after}
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"hooks.sql": models__hooks}
+        return {"hooks.sql": fixtures.models__hooks}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"example_seed.csv": seeds__example_seed_csv}
+        return {"example_seed.csv": fixtures.seeds__example_seed_csv}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -146,11 +135,11 @@ class TestPrePostRunHooks(object):
 class TestAfterRunHooks(object):
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"temp_macro.sql": macros_missing_column}
+        return {"temp_macro.sql": fixtures.macros_missing_column}
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"test_column.sql": models__missing_column}
+        return {"test_column.sql": fixtures.models__missing_column}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):

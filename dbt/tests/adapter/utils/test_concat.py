@@ -1,22 +1,18 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_concat import (
-    seeds__data_concat_csv,
-    models__test_concat_sql,
-    models__test_concat_yml,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_concat
 
 
-class BaseConcat(BaseUtils):
+class BaseConcat(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"data_concat.csv": seeds__data_concat_csv}
+        return {"data_concat.csv": fixture_concat.seeds__data_concat_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "test_concat.yml": models__test_concat_yml,
-            "test_concat.sql": self.interpolate_macro_namespace(models__test_concat_sql, "concat"),
+            "test_concat.yml": fixture_concat.models__test_concat_yml,
+            "test_concat.sql": self.interpolate_macro_namespace(fixture_concat.models__test_concat_sql, "concat"),
         }
 
 

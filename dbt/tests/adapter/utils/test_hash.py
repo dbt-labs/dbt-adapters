@@ -1,22 +1,18 @@
 import pytest
-from dbt.tests.adapter.utils.base_utils import BaseUtils
-from dbt.tests.adapter.utils.fixture_hash import (
-    seeds__data_hash_csv,
-    models__test_hash_sql,
-    models__test_hash_yml,
-)
+
+from dbt.tests.adapter.utils import base_utils, fixture_hash
 
 
-class BaseHash(BaseUtils):
+class BaseHash(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"data_hash.csv": seeds__data_hash_csv}
+        return {"data_hash.csv": fixture_hash.seeds__data_hash_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "test_hash.yml": models__test_hash_yml,
-            "test_hash.sql": self.interpolate_macro_namespace(models__test_hash_sql, "hash"),
+            "test_hash.yml": fixture_hash.models__test_hash_yml,
+            "test_hash.sql": self.interpolate_macro_namespace(fixture_hash.models__test_hash_sql, "hash"),
         }
 
 
