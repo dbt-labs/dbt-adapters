@@ -36,7 +36,10 @@ include = ["dbt"]
 [tool.hatch.envs.default]
 features = ["lint", "typecheck", "test"]
 [tool.hatch.envs.default.scripts]
-unit-tests = "- python -m pytest {args:tests/unit}"
+unit-tests = [
+    "pip install -e ./dbt-adapters ./dbt-tests-adapter",
+    "python -m pytest {args:tests/unit}",
+]
 lint-all = [
     "- lint-black",
     "- lint-flake8",

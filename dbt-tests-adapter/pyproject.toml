@@ -24,7 +24,6 @@ classifiers = [
 ]
 dependencies = [
     "dbt-adapters<1.0",
-    "yaml",
 ]
 
 [project.urls]
@@ -45,4 +44,4 @@ build-backend = "hatchling.build"
 "../dbt/tests" = "dbt/tests"
 
 [tool.hatch.version]
-path = "../dbt/tests/adapter/__about__.py"
+path = "../dbt/tests/__about__.py"
