@@ -1,5 +1,6 @@
 import pytest
 
+# TODO: update to new dbt-artifacts once available
 from dbt.artifacts.results import RunStatus
 from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt, check_relations_equal, relation_from_name

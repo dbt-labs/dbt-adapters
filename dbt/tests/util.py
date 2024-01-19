@@ -43,8 +43,8 @@ import os
 import shutil
 from typing import Any, Dict, List, Optional
 import warnings
-import yaml
 
+# TODO: replace this runner to avoid a dependency on dbt-core
 from dbt.contracts.graph.manifest import Manifest
 from dbt.cli.main import dbtRunner
 from dbt.logger import log_manager
@@ -56,6 +56,7 @@ from dbt_common.events.functions import (
 )
 from dbt_common.events.base_types import EventLevel
 from dbt_common.events.types import Note
+import yaml
 
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.factory import Adapter

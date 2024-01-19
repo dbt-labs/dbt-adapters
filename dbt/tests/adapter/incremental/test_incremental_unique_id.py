@@ -1,6 +1,7 @@
 from collections import namedtuple
 from pathlib import Path
 
+# TODO: repoint to dbt-artifacts when it's available
 from dbt.artifacts.results import RunStatus
 import pytest
 

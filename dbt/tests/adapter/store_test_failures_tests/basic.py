@@ -1,6 +1,7 @@
 from collections import namedtuple
 from typing import Set
 
+# TODO: repoint to dbt-artifacts when it's available
 from dbt.artifacts.results import TestStatus
 import pytest
 

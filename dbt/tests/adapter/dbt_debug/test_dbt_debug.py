@@ -1,9 +1,10 @@
 import os
 import re
-import yaml
 
+# TODO: does this belong in dbt-tests-adapters?
 from dbt.cli.exceptions import DbtUsageException
 import pytest
+import yaml
 
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 

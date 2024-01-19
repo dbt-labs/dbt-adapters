@@ -1,3 +1,4 @@
+# TODO: repoint to dbt-artifacts when it is available
 from dbt.artifacts.catalog import CatalogArtifact
 import pytest
 

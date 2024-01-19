@@ -1,5 +1,6 @@
 import os
 
+# TODO: does this belong in dbt-tests-adapter?
 from dbt.context.base import BaseContext  # diff_of_two_dicts only
 import pytest
 
