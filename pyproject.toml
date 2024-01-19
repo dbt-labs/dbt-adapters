@@ -71,20 +71,39 @@ include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 
 [tool.hatch.envs.default]
-features = ["lint", "typecheck", "test"]
+features = ["lint", "typecheck", "test", "postgres"]
 extra-dependencies = [
     "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
 ]
-[tool.hatch.envs.default.scripts]
-unit-tests = "python -m pytest {args:tests/unit}"
-lint-all = [
+
+[tool.hatch.envs.lint]
+detached = true
+features = ["lint"]
+[tool.hatch.envs.lint.scripts]
+all = [
     "- lint-black",
     "- lint-flake8",
-    "- lint-mypy",
 ]
 lint-black = "python -m black ."
 lint-flake8 = "python -m flake8 ."
-lint-mypy = "python -m mypy ."
+
+[tool.hatch.envs.typecheck]
+features = ["typecheck"]
+[tool.hatch.envs.typecheck.scripts]
+all = "python -m mypy ."
+
+[tool.hatch.envs.unit-tests]
+features = ["test"]
+[tool.hatch.envs.unit-tests.scripts]
+all = "python -m pytest {args:tests/unit}"
+
+[tool.hatch.envs.integration-tests]
+features = ["test"]
+extra-dependencies = [
+    "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
+]
+[tool.hatch.envs.integration-tests.scripts]
+all = "python -m pytest {args:tests/functional}"
 
 [tool.black]
 extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
