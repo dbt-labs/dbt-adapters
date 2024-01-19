@@ -111,3 +111,7 @@ class BaseAdapterMethod:
         result = run_dbt()
         assert len(result) == 3
         check_relations_equal(project.adapter, equal_tables)
+
+
+class TestBaseCaching(BaseAdapterMethod):
+    pass

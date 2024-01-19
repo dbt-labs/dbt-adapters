@@ -7,3 +7,7 @@ class BaseValidateConnection:
         dbt.task.debug.DebugTask.validate_connection(
             dbt_profile_data["test"]["outputs"]["default"]
         )
+
+
+class TestValidateConnection(BaseValidateConnection):
+    pass

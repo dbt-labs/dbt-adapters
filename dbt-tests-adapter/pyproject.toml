@@ -24,9 +24,6 @@ classifiers = [
 ]
 dependencies = [
     "dbt-adapters~=0.1.0a1",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#egg=dbt-core&subdirectory=core",
-    # installed via dbt-core but used directly, unpin minor to avoid version conflicts
-    "pyyaml<7.0",
 ]
 
 [project.urls]
@@ -39,9 +36,6 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.hatch.metadata]
-allow-direct-references = true
 
 [tool.hatch.build.targets.sdist.force-include]
 "../dbt/tests" = "dbt/tests"

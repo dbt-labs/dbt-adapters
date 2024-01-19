@@ -1,8 +1,8 @@
 import pytest
 
 from dbt.artifacts.results import RunStatus
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import run_dbt, check_relations_equal, relation_from_name
-import files
 
 
 class BaseIncremental:
@@ -83,3 +83,11 @@ class BaseIncrementalNotSchemaChange:
         )
 
         assert run_result == RunStatus.Success
+
+
+class Testincremental(BaseIncremental):
+    pass
+
+
+class TestBaseIncrementalNotSchemaChange(BaseIncrementalNotSchemaChange):
+    pass

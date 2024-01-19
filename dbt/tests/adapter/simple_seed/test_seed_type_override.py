@@ -1,29 +1,27 @@
 import pytest
 
+from dbt.tests.adapter.simple_seed import fixtures, seeds
 from dbt.tests.util import run_dbt
-import expected_sql
-import macros
-import models
-import schemas
-import seeds
 
 
 class BaseSimpleSeedColumnOverride:
     @pytest.fixture(scope="class")
     def models(self):
-        return {"schema.yml": schemas.schema_yml}
+        return {
+            "schema.yml": fixtures.properties__schema_yml,
+        }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "seed_enabled.csv": seeds.enabled_in_config_csv,
-            "seed_disabled.csv": seeds.disabled_in_config_csv,
-            "seed_tricky.csv": seeds.tricky_csv,
+            "seed_enabled.csv": seeds.seeds__enabled_in_config_csv,
+            "seed_disabled.csv": seeds.seeds__disabled_in_config_csv,
+            "seed_tricky.csv": seeds.seeds__tricky_csv,
         }
 
     @pytest.fixture(scope="class")
     def macros(self):
-        return {"schema_test.sql": macros.schema_test}
+        return {"schema_test.sql": fixtures.macros__schema_test}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):

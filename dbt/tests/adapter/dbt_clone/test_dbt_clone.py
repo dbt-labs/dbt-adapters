@@ -6,8 +6,8 @@ import shutil
 from dbt_common.exceptions import DbtRuntimeError
 import pytest
 
+from dbt.tests.adapter.dbt_clone import fixtures
 from dbt.tests.util import run_dbt, run_dbt_and_capture
-import fixtures
 
 
 class BaseClone:
@@ -154,20 +154,6 @@ class BaseCloneNotPossible(BaseClone):
             "get_schema_name.sql": fixtures.get_schema_name_sql,
         }
 
-    @pytest.fixture(autouse=True)
-    def clean_up(self, project):
-        yield
-        with project.adapter.connection_named("__test"):
-            relation = project.adapter.Relation.create(
-                database=project.database, schema=f"{project.test_schema}_seeds"
-            )
-            project.adapter.drop_schema(relation)
-
-            relation = project.adapter.Relation.create(
-                database=project.database, schema=project.test_schema
-            )
-            project.adapter.drop_schema(relation)
-
     def test_can_clone_false(self, project, unique_schema, other_schema):
         project.create_test_schema(other_schema)
         self.run_and_save_state(project.project_root, with_snapshot=True)
@@ -203,8 +189,25 @@ class BaseCloneNotPossible(BaseClone):
         assert all("no-op" in r.message.lower() for r in results)
 
 
-class BaseCloneSameTargetAndState(BaseClone):
+class TestPostgresCloneNotPossible(BaseCloneNotPossible):
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=f"{project.test_schema}_seeds"
+            )
+            project.adapter.drop_schema(relation)
 
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    pass
+
+
+class TestCloneSameTargetAndState(BaseClone):
     def test_clone_same_target_and_state(self, project, unique_schema, other_schema):
         project.create_test_schema(other_schema)
         self.run_and_save_state(project.project_root)

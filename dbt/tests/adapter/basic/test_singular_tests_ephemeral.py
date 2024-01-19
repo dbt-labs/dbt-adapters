@@ -1,7 +1,7 @@
 import pytest
 
+from dbt.tests.adapter.basic import files
 from dbt.tests.util import check_result_nodes_by_name, run_dbt
-import files
 
 
 class BaseSingularTestsEphemeral:
@@ -66,3 +66,7 @@ class BaseSingularTestsEphemeral:
         results = run_dbt()
         assert len(results) == 2
         check_result_nodes_by_name(results, ["failing_model", "passing_model"])
+
+
+class TestSingularTestsEphemeral(BaseSingularTestsEphemeral):
+    pass

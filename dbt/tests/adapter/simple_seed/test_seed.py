@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from dbt.tests.adapter.simple_seed import fixtures, seeds
 from dbt.tests.util import (
     check_relations_equal,
     check_table_does_exist,
@@ -14,12 +15,9 @@ from dbt.tests.util import (
     rm_dir,
     run_dbt,
 )
-import expected_sql
-import models
-import seeds
 
 
-class SeedConfig:
+class SeedConfigBase(object):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -29,20 +27,20 @@ class SeedConfig:
         }
 
 
-class SeedTest(SeedConfig):
+class SeedTestBase(SeedConfigBase):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
-        project.run_sql(expected_sql.expected_sql)
+        project.run_sql(seeds.seeds__expected_sql)
 
     @pytest.fixture(scope="class")
     def seeds(self, test_data_dir):
-        return {"seed_actual.csv": seeds.actual_csv}
+        return {"seed_actual.csv": seeds.seed__actual_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "models__downstream_from_seed_actual.sql": models.downstream_from_seed_actual,
+            "models__downstream_from_seed_actual.sql": fixtures.models__downstream_from_seed_actual,
         }
 
     def _build_relations_for_test(self, project):
@@ -66,7 +64,7 @@ class SeedTest(SeedConfig):
             check_table_does_not_exist(project.adapter, "models__downstream_from_seed_actual")
 
 
-class TestBasicSeedTests(SeedTest):
+class TestBasicSeedTests(SeedTestBase):
     def test_simple_seed(self, project):
         """Build models and observe that run truncates a seed and re-inserts rows"""
         self._build_relations_for_test(project)
@@ -81,10 +79,12 @@ class TestBasicSeedTests(SeedTest):
         )
 
 
-class TestSeedConfigFullRefreshOn(SeedTest):
+class TestSeedConfigFullRefreshOn(SeedTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
-        return {"seeds": {"quote_columns": False, "full_refresh": True}}
+        return {
+            "seeds": {"quote_columns": False, "full_refresh": True},
+        }
 
     def test_simple_seed_full_refresh_config(self, project):
         """config option should drop current model and cascade drop to downstream models"""
@@ -92,7 +92,7 @@ class TestSeedConfigFullRefreshOn(SeedTest):
         self._check_relation_end_state(run_result=run_dbt(["seed"]), project=project, exists=False)
 
 
-class TestSeedConfigFullRefreshOff(SeedTest):
+class TestSeedConfigFullRefreshOff(SeedTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -108,7 +108,7 @@ class TestSeedConfigFullRefreshOff(SeedTest):
         )
 
 
-class TestSeedCustomSchema(SeedTest):
+class TestSeedCustomSchema(SeedTestBase):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
@@ -148,7 +148,7 @@ class TestSeedCustomSchema(SeedTest):
         check_relations_equal(project.adapter, [f"{custom_schema}.seed_actual", "seed_expected"])
 
 
-class SeedUniqueDelimiter(SeedConfig):
+class SeedUniqueDelimiterTestBase(SeedConfigBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -158,16 +158,16 @@ class SeedUniqueDelimiter(SeedConfig):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
-        project.run_sql(expected_sql.expected_sql)
+        project.run_sql(seeds.seeds__expected_sql)
 
     @pytest.fixture(scope="class")
     def seeds(self, test_data_dir):
-        return {"seed_pipe_separated.csv": seeds.pipe_separated_csv}
+        return {"seed_pipe_separated.csv": seeds.seeds__pipe_separated_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "models__downstream_from_seed_pipe_separated.sql": models.downstream_from_seed_pipe_separated,
+            "models__downstream_from_seed_pipe_separated.sql": fixtures.models__downstream_from_seed_pipe_separated,
         }
 
     def _build_relations_for_test(self, project):
@@ -193,14 +193,14 @@ class SeedUniqueDelimiter(SeedConfig):
             )
 
 
-class TestSeedWithUniqueDelimiter(SeedUniqueDelimiter):
+class TestSeedWithUniqueDelimiter(SeedUniqueDelimiterTestBase):
     def test_seed_with_unique_delimiter(self, project):
         """Testing correct run of seeds with a unique delimiter (pipe in this case)"""
         self._build_relations_for_test(project)
         self._check_relation_end_state(run_result=run_dbt(["seed"]), project=project, exists=True)
 
 
-class TestSeedWithWrongDelimiter(SeedUniqueDelimiter):
+class TestSeedWithWrongDelimiter(SeedUniqueDelimiterTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -213,7 +213,7 @@ class TestSeedWithWrongDelimiter(SeedUniqueDelimiter):
         assert "syntax error" in seed_result.results[0].message.lower()
 
 
-class TestSeedWithEmptyDelimiter(SeedUniqueDelimiter):
+class TestSeedWithEmptyDelimiter(SeedUniqueDelimiterTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -226,13 +226,13 @@ class TestSeedWithEmptyDelimiter(SeedUniqueDelimiter):
         assert "compilation error" in seed_result.results[0].message.lower()
 
 
-class TestSimpleSeedEnabledViaConfig:
+class TestSimpleSeedEnabledViaConfig(object):
     @pytest.fixture(scope="session")
     def seeds(self):
         return {
-            "seed_enabled.csv": seeds.enabled_in_config_csv,
-            "seed_disabled.csv": seeds.disabled_in_config_csv,
-            "seed_tricky.csv": seeds.tricky_csv,
+            "seed_enabled.csv": seeds.seeds__enabled_in_config_csv,
+            "seed_disabled.csv": seeds.seeds__disabled_in_config_csv,
+            "seed_tricky.csv": seeds.seeds__tricky_csv,
         }
 
     @pytest.fixture(scope="class")
@@ -271,19 +271,19 @@ class TestSimpleSeedEnabledViaConfig:
         check_table_does_exist(project.adapter, "seed_tricky")
 
 
-class TestSeedParsing(SeedConfig):
+class TestSeedParsing(SeedConfigBase):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
-        project.run_sql(expected_sql.expected_sql)
+        project.run_sql(seeds.seeds__expected_sql)
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"seed.csv": seeds.wont_parse_csv}
+        return {"seed.csv": seeds.seeds__wont_parse_csv}
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"model.sql": models.from_basic_seed}
+        return {"model.sql": fixtures.models__from_basic_seed}
 
     def test_dbt_run_skips_seeds(self, project):
         # run does not try to parse the seed files
@@ -293,13 +293,13 @@ class TestSeedParsing(SeedConfig):
         run_dbt(["seed"], expect_pass=False)
 
 
-class TestSimpleSeedWithBOM(SeedConfig):
+class TestSimpleSeedWithBOM(SeedConfigBase):
     # Reference: BOM = byte order mark; see https://www.ibm.com/docs/en/netezza?topic=formats-byte-order-mark
     # Tests for hidden unicode character in csv
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
-        project.run_sql(expected_sql.expected_sql)
+        project.run_sql(seeds.seeds__expected_sql)
         copy_file(
             project.test_dir,
             "seed_bom.csv",
@@ -319,7 +319,7 @@ class TestSimpleSeedWithBOM(SeedConfig):
         check_relations_equal(project.adapter, ["seed_expected", "seed_bom"])
 
 
-class TestSeedSpecificFormats(SeedConfig):
+class TestSeedSpecificFormats(SeedConfigBase):
     """Expect all edge cases to build"""
 
     @staticmethod
@@ -340,8 +340,8 @@ class TestSeedSpecificFormats(SeedConfig):
 
         yield {
             "big_seed.csv": big_seed,
-            "seed.with.dots.csv": seeds.with_dots_csv,
-            "seed_unicode.csv": seeds.unicode_csv,
+            "seed.with.dots.csv": seeds.seed__with_dots_csv,
+            "seed_unicode.csv": seeds.seed__unicode_csv,
         }
         rm_dir(test_data_dir)
 

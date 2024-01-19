@@ -1,6 +1,6 @@
 import pytest
 
-from base_grants import BaseGrants
+from dbt.tests.adapter.grants.base_grants import BaseGrants
 from dbt.tests.util import (
     get_manifest,
     run_dbt_and_capture,
@@ -152,3 +152,7 @@ class BaseModelGrants(BaseGrants):
         assert model.config.materialized == "table"
         expected = {select_privilege_name: [test_users[0]], insert_privilege_name: [test_users[1]]}
         self.assert_expected_grants_match_actual(project, "my_model", expected)
+
+
+class TestModelGrants(BaseModelGrants):
+    pass

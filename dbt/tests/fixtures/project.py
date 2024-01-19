@@ -41,6 +41,7 @@ import os
 from pathlib import Path
 import random
 import warnings
+import yaml
 
 from dbt.parser.manifest import ManifestLoader
 from dbt.context.providers import generate_runtime_macro_context
@@ -50,7 +51,6 @@ from dbt.mp_context import get_mp_context
 from dbt_common.events.event_manager_client import cleanup_event_logger
 from dbt_common.exceptions import CompilationError, DbtDatabaseError
 import pytest
-import yaml
 
 from dbt.adapters.factory import (
     get_adapter,

@@ -1,6 +1,6 @@
 import pytest
 
-from base_grants import BaseGrants
+from dbt.tests.adapter.grants.base_grants import BaseGrants
 from dbt.tests.util import (
     get_manifest,
     run_dbt,
@@ -74,3 +74,7 @@ class BaseSnapshotGrants(BaseGrants):
         assert len(results) == 1
         expected = {select_privilege_name: [test_users[1]]}
         self.assert_expected_grants_match_actual(project, "my_snapshot", expected)
+
+
+class TestSnapshotGrants(BaseSnapshotGrants):
+    pass

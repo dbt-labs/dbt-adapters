@@ -1,7 +1,7 @@
 import pytest
 
+from dbt.tests.adapter.column_types import fixtures
 from dbt.tests.util import run_dbt
-import fixtures
 
 
 class BaseColumnTypes:
@@ -14,3 +14,12 @@ class BaseColumnTypes:
         assert len(results) == 1
         results = run_dbt(["test"])
         assert len(results) == 1
+
+
+class TestPostgresColumnTypes(BaseColumnTypes):
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"model.sql": fixtures.model_sql, "schema.yml": fixtures.schema_yml}
+
+    def test_run_and_test(self, project):
+        self.run_and_test()

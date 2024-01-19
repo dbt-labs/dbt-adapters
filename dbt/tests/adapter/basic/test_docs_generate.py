@@ -4,9 +4,9 @@ from datetime import datetime
 import pytest
 
 from dbt.tests.__about__ import version as PACKAGE_VERSION
+from dbt.tests.adapter.basic import expected_catalog
 from dbt.tests.fixtures.project import write_project_files
 from dbt.tests.util import run_dbt, rm_file, get_artifact, check_datetime_between
-import expected_catalog
 
 
 models__schema_yml = """
@@ -455,6 +455,10 @@ class BaseDocsGenerate(BaseGenerateProject):
         assert not os.path.exists(os.path.join(".", "target", "non-existent-assets"))
 
 
+class TestDocsGenerate(BaseDocsGenerate):
+    pass
+
+
 class BaseDocsGenReferences(BaseGenerateProject):
     @pytest.fixture(scope="class")
     def models(self):
@@ -484,3 +488,7 @@ class BaseDocsGenReferences(BaseGenerateProject):
     def test_references(self, project, expected_catalog):
         start_time = run_and_generate(project)
         verify_catalog(project, expected_catalog, start_time)
+
+
+class TestDocsGenReferences(BaseDocsGenReferences):
+    pass

@@ -1,13 +1,1 @@
-from test_adapter_methods import BaseAdapterMethod
-from test_base import BaseSimpleMaterializations
-from test_docs_generate import BaseDocsGenReferences, BaseDocsGenerate
-from test_empty import BaseEmpty
-from test_ephemeral import BaseEphemeral
-from test_generic_tests import BaseGenericTests
-from test_incremental import BaseIncremental, BaseIncrementalNotSchemaChange
-from test_singular_tests import BaseSingularTests
-from test_singular_tests_ephemeral import BaseSingularTestsEphemeral
-from test_snapshot_check_cols import BaseSnapshotCheckCols
-from test_snapshot_timestamp import BaseSnapshotTimestamp
-from test_table_materialization import BaseTableMaterialization
-from test_validate_connection import BaseValidateConnection
+# Adapter tests

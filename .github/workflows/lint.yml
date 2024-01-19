@@ -32,9 +32,5 @@ jobs:
           python-version: "3.8"
 
       - name: Run linters
-        run: hatch run lint:all
-        shell: bash
-
-      - name: Run typechecks
-        run: hatch run typecheck:all
+        run: hatch run lint-all
         shell: bash

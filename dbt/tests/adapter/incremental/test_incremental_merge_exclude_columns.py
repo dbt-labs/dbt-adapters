@@ -3,9 +3,42 @@ from collections import namedtuple
 import pytest
 
 from dbt.tests.util import check_relations_equal, run_dbt
-import models
-import seeds
 
+
+models__merge_exclude_columns_sql = """
+{{ config(
+    materialized = 'incremental',
+    unique_key = 'id',
+    incremental_strategy='merge',
+    merge_exclude_columns=['msg']
+) }}
+
+{% if not is_incremental() %}
+
+-- data for first invocation of model
+
+select 1 as id, 'hello' as msg, 'blue' as color
+union all
+select 2 as id, 'goodbye' as msg, 'red' as color
+
+{% else %}
+
+-- data for subsequent incremental update
+
+select 1 as id, 'hey' as msg, 'blue' as color
+union all
+select 2 as id, 'yo' as msg, 'green' as color
+union all
+select 3 as id, 'anyway' as msg, 'purple' as color
+
+{% endif %}
+"""
+
+seeds__expected_merge_exclude_columns_csv = """id,msg,color
+1,hello,blue
+2,goodbye,green
+3,anyway,purple
+"""
 
 ResultHolder = namedtuple(
     "ResultHolder",
@@ -19,14 +52,14 @@ ResultHolder = namedtuple(
 )
 
 
-class MergeExcludeColumns:
+class BaseMergeExcludeColumns:
     @pytest.fixture(scope="class")
     def models(self):
-        return {"merge_exclude_columns.sql": models.merge_exclude_columns_sql}
+        return {"merge_exclude_columns.sql": models__merge_exclude_columns_sql}
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"expected_merge_exclude_columns.csv": seeds.expected_merge_exclude_columns_csv}
+        return {"expected_merge_exclude_columns.csv": seeds__expected_merge_exclude_columns_csv}
 
     def update_incremental_model(self, incremental_model):
         """update incremental model after the seed table has been updated"""

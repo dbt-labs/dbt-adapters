@@ -3,9 +3,38 @@ from collections import namedtuple
 import pytest
 
 from dbt.tests.util import check_relations_equal, run_dbt
-import models
-import seeds
 
+
+models__delete_insert_incremental_predicates_sql = """
+{{ config(
+    materialized = 'incremental',
+    unique_key = 'id'
+) }}
+
+{% if not is_incremental() %}
+
+select 1 as id, 'hello' as msg, 'blue' as color
+union all
+select 2 as id, 'goodbye' as msg, 'red' as color
+
+{% else %}
+
+-- delete will not happen on the above record where id = 2, so new record will be inserted instead
+select 1 as id, 'hey' as msg, 'blue' as color
+union all
+select 2 as id, 'yo' as msg, 'green' as color
+union all
+select 3 as id, 'anyway' as msg, 'purple' as color
+
+{% endif %}
+"""
+
+seeds__expected_delete_insert_incremental_predicates_csv = """id,msg,color
+1,hey,blue
+2,goodbye,red
+2,yo,green
+3,anyway,purple
+"""
 
 ResultHolder = namedtuple(
     "ResultHolder",
@@ -20,17 +49,17 @@ ResultHolder = namedtuple(
 )
 
 
-class IncrementalPredicates:
+class BaseIncrementalPredicates:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "delete_insert_incremental_predicates.sql": models.delete_insert_incremental_predicates_sql
+            "delete_insert_incremental_predicates.sql": models__delete_insert_incremental_predicates_sql
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "expected_delete_insert_incremental_predicates.csv": seeds.expected_delete_insert_incremental_predicates_csv
+            "expected_delete_insert_incremental_predicates.csv": seeds__expected_delete_insert_incremental_predicates_csv
         }
 
     @pytest.fixture(scope="class")
@@ -112,7 +141,11 @@ class IncrementalPredicates:
         self.check_scenario_correctness(expected_fields, test_case_fields, project)
 
 
-class PredicatesDeleteInsert(IncrementalPredicates):
+class TestIncrementalPredicatesDeleteInsert(BaseIncrementalPredicates):
+    pass
+
+
+class TestPredicatesDeleteInsert(BaseIncrementalPredicates):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"models": {"+predicates": ["id != 2"], "+incremental_strategy": "delete+insert"}}
