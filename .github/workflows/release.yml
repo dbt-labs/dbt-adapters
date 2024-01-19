@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy-to:
+        type: choice
+        description: Choose where to publish (test/prod)
+        options:
+        - prod
+        - test
+        default: prod
+
+permissions: read-all
+
+defaults:
+  run:
+    shell: bash
+
+# will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+
+  release:
+    name: PyPI - ${{ inputs.deploy-to }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.deploy-to }}
+      url: ${{ vars.PYPI_URL }}
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Publish to PyPI
+        uses: ./.github/actions/publish-pypi
+        with:
+          python-version: "3.11"

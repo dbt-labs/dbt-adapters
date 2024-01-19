@@ -6,7 +6,7 @@ inputs:
     required: true
 
 runs:
-  using: "composite"
+  using: composite
   steps:
     - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v4
