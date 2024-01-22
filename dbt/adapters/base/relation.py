@@ -193,7 +193,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     def _render_iterator(
         self,
     ) -> Iterator[Tuple[Optional[ComponentName], Optional[str]]]:
-        for key in ComponentName:
+        for key in ComponentName:  # type: ignore
             path_part: Optional[str] = None
             if self.include_policy.get_part(key):
                 path_part = self.path.get_part(key)
@@ -416,7 +416,7 @@ class InformationSchema(BaseRelation):
         quote_policy = cls.get_quote_policy(relation, information_schema_view)
         path = cls.get_path(relation, information_schema_view)
         return cls(
-            type=RelationType.View,
+            type=RelationType.View,  # type: ignore
             path=path,
             include_policy=include_policy,
             quote_policy=quote_policy,

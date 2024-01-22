@@ -154,7 +154,7 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             conn = Connection(
                 type=Identifier(self.TYPE),
                 name=conn_name,
-                state=ConnectionState.INIT,
+                state=ConnectionState.INIT,  # type: ignore
                 transaction_open=False,
                 handle=None,
                 credentials=self.profile.credentials,
@@ -227,18 +227,18 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         if retry_limit < 0 or retry_limit > sys.getrecursionlimit():
             # This guard is not perfect others may add to the recursion limit (e.g. built-ins).
             connection.handle = None
-            connection.state = ConnectionState.FAIL
+            connection.state = ConnectionState.FAIL  # type: ignore
             raise FailedToConnectError("retry_limit cannot be negative")
 
         try:
             connection.handle = connect()
-            connection.state = ConnectionState.OPEN
+            connection.state = ConnectionState.OPEN  # type: ignore
             return connection
 
         except tuple(retryable_exceptions) as e:
             if retry_limit <= 0:
                 connection.handle = None
-                connection.state = ConnectionState.FAIL
+                connection.state = ConnectionState.FAIL  # type: ignore
                 raise FailedToConnectError(str(e))
 
             logger.debug(
@@ -260,7 +260,7 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
 
         except Exception as e:
             connection.handle = None
-            connection.state = ConnectionState.FAIL
+            connection.state = ConnectionState.FAIL  # type: ignore
             raise FailedToConnectError(str(e))
 
     @abc.abstractmethod
@@ -374,7 +374,7 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         connection.transaction_open = False
 
         cls._close_handle(connection)
-        connection.state = ConnectionState.CLOSED
+        connection.state = ConnectionState.CLOSED  # type: ignore
 
         return connection
 

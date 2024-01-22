@@ -1,8 +1,5 @@
 import sys
-from unittest import TestCase, mock
-
-from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
-import psycopg2
+from unittest import TestCase
 
 from dbt.adapters.base import BaseConnectionManager
 from dbt.adapters.contracts.connection import Connection
@@ -10,18 +7,14 @@ from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.exceptions import FailedToConnectError
 
 
-class BaseConnectionManagerTest(TestCase):
+class ConnectionManagerRetry(TestCase):
+
     def setUp(self):
-        self.postgres_credentials = PostgresCredentials(
-            host="localhost",
-            user="test-user",
-            port=1111,
-            password="test-password",
-            database="test-db",
-            schema="test-schema",
-        )
         self.logger = AdapterLogger("test")
-        self.postgres_connection = Connection("postgres", None, self.postgres_credentials)
+        self.connection = self.get_connection()
+
+    def get_connection(self) -> Connection:
+        raise NotImplementedError("Implement `ConnectionManagerRetry.get_connection` to use this test.")
 
     def test_retry_connection(self):
         """Test a dummy handle is set on a connection on the first attempt.
@@ -34,7 +27,7 @@ class BaseConnectionManagerTest(TestCase):
         be raised for retrying. A mock connect function is used to simulate a real connection
         passing on the first attempt.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -64,7 +57,7 @@ class BaseConnectionManagerTest(TestCase):
           ValueError.
         * retry_connection should raise a FailedToConnectError with the Exception message.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -99,7 +92,7 @@ class BaseConnectionManagerTest(TestCase):
         * The resulting attempt count should be 2 as we are configured to handle a ValueError.
         * retry_connection should raise a FailedToConnectError with the Exception message.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -133,7 +126,7 @@ class BaseConnectionManagerTest(TestCase):
         * The Connection state should be "open" and the handle True.
         * The resulting attempt count should be 2 as we are configured to handle a ValueError.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         is_handled = False
         attempts = 0
 
@@ -173,7 +166,7 @@ class BaseConnectionManagerTest(TestCase):
         * The resulting attempt count should be 11 as we are configured to handle a ValueError.
         * retry_connection should raise a FailedToConnectError with the Exception message.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -209,7 +202,7 @@ class BaseConnectionManagerTest(TestCase):
         * The resulting attempt count should be 11 as we are configured to handle all Exceptions.
         * retry_connection should raise a FailedToConnectError with the Exception message.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -245,7 +238,7 @@ class BaseConnectionManagerTest(TestCase):
           returns after both exceptions have been handled.
         * The resulting attempt count should be 3.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         is_value_err_handled = False
         is_type_err_handled = False
         attempts = 0
@@ -291,7 +284,7 @@ class BaseConnectionManagerTest(TestCase):
           returns after both exceptions have been handled.
         * The resulting attempt count should be 3.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         is_value_err_handled = False
         is_type_err_handled = False
         attempts = 0
@@ -329,7 +322,7 @@ class BaseConnectionManagerTest(TestCase):
 
     def test_retry_connection_retry_limit(self):
         """Test retry_connection raises an exception with a negative retry limit."""
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -356,7 +349,7 @@ class BaseConnectionManagerTest(TestCase):
 
     def test_retry_connection_retry_timeout(self):
         """Test retry_connection raises an exception with a negative timeout."""
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -384,7 +377,7 @@ class BaseConnectionManagerTest(TestCase):
 
     def test_retry_connection_exceeds_recursion_limit(self):
         """Test retry_connection raises an exception with retries that exceed recursion limit."""
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
 
         def connect():
@@ -415,7 +408,7 @@ class BaseConnectionManagerTest(TestCase):
         We assert the provided exponential backoff function gets passed the right attempt number
         and produces the expected timeouts.
         """
-        conn = self.postgres_connection
+        conn = self.connection
         attempts = 0
         timeouts = []
 
@@ -448,48 +441,3 @@ class BaseConnectionManagerTest(TestCase):
         assert conn.handle is True
         assert attempts == 12
         assert timeouts == [(n, 2**n) for n in range(12)]
-
-
-class PostgresConnectionManagerTest(TestCase):
-    def setUp(self):
-        self.credentials = PostgresCredentials(
-            host="localhost",
-            user="test-user",
-            port=1111,
-            password="test-password",
-            database="test-db",
-            schema="test-schema",
-            retries=2,
-        )
-        self.connection = Connection("postgres", None, self.credentials)
-
-    def test_open(self):
-        """Test opening a Postgres Connection with failures in the first 3 attempts.
-
-        This test uses a Connection populated with test PostgresCredentials values, and
-        expects a mock connect to raise a psycopg2.errors.ConnectionFailuer
-        in the first 3 invocations, after which the mock should return True. As a result:
-        * The Connection state should be "open" and the handle True, as connect
-          returns in the 4th attempt.
-        * The resulting attempt count should be 4.
-        """
-        conn = self.connection
-        attempt = 0
-
-        def connect(*args, **kwargs):
-            nonlocal attempt
-            attempt += 1
-
-            if attempt <= 2:
-                raise psycopg2.errors.ConnectionFailure("Connection has failed")
-
-            return True
-
-        with mock.patch("psycopg2.connect", wraps=connect) as mock_connect:
-            PostgresConnectionManager.open(conn)
-
-            assert mock_connect.call_count == 3
-
-        assert attempt == 3
-        assert conn.state == "open"
-        assert conn.handle is True

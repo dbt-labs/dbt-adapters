@@ -58,7 +58,7 @@ class Connection(ExtensibleDbtClassMixin, Replaceable):
     # Annotated is used by mashumaro for jsonschema generation
     type: Annotated[Identifier, Pattern(r"^[A-Za-z_][A-Za-z0-9_]+$")]
     name: Optional[str] = None
-    state: ConnectionState = ConnectionState.INIT
+    state: ConnectionState = ConnectionState.INIT  # type: ignore
     transaction_open: bool = False
     _handle: Optional[Any] = None
     _credentials: Optional[Any] = None
@@ -68,7 +68,7 @@ class Connection(ExtensibleDbtClassMixin, Replaceable):
         type: Identifier,
         name: Optional[str],
         credentials: dbtClassMixin,
-        state: ConnectionState = ConnectionState.INIT,
+        state: ConnectionState = ConnectionState.INIT,  # type: ignore
         transaction_open: bool = False,
         handle: Optional[Any] = None,
     ) -> None:

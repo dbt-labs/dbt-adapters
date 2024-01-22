@@ -18,7 +18,7 @@ runs:
       shell: bash
 
     - name: Check artifacts
-      run: hatch run check-all
+      run: hatch run build:check-all
       shell: bash
 
     - name: Publish artifacts to PyPI

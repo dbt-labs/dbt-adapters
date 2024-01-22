@@ -31,6 +31,7 @@ dependencies = [
     "protobuf<5.0",
     "typing-extensions<5.0",
 ]
+
 [project.optional-dependencies]
 lint = [
     "black",
@@ -39,6 +40,7 @@ lint = [
 ]
 typecheck = [
     "mypy",
+    "types-PyYAML",
     "types-protobuf",
     "types-pytz",
 ]
@@ -64,14 +66,14 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.sdist]
-include = ["dbt"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["dbt"]
-
 [tool.hatch.version]
 path = "dbt/adapters/__about__.py"
+
+[tool.hatch.build.targets.sdist]
+include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
+
+[tool.hatch.build.targets.wheel]
+include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 
 [tool.hatch.envs.default]
 features = [
@@ -80,16 +82,40 @@ features = [
     "test",
     "build",
 ]
-[tool.hatch.envs.default.scripts]
-unit-tests = "- python -m pytest {args:tests/unit}"
-lint-all = [
-    "- lint-black",
-    "- lint-flake8",
-    "- lint-mypy",
+
+[tool.hatch.envs.lint]
+detached = true
+features = ["lint"]
+[tool.hatch.envs.lint.scripts]
+all = [
+    "- black-only",
+    "- flake8-only",
 ]
-lint-black = "python -m black ."
-lint-flake8 = "python -m flake8 ."
-lint-mypy = "python -m mypy ."
+black-only = "python -m black ."
+flake8-only = "python -m flake8 ."
+
+[tool.hatch.envs.typecheck]
+features = ["typecheck"]
+[tool.hatch.envs.typecheck.scripts]
+all = "python -m mypy ."
+
+[tool.hatch.envs.unit-tests]
+features = ["test"]
+[tool.hatch.envs.unit-tests.scripts]
+all = "python -m pytest {args:tests/unit}"
+
+[tool.hatch.envs.integration-tests]
+features = ["test"]
+extra-dependencies = [
+    "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
+]
+[tool.hatch.envs.integration-tests.scripts]
+all = "python -m pytest {args:tests/functional}"
+
+[tool.hatch.envs.build]
+detached = true
+features = ["build"]
+[tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",
     "- check-sdist",
@@ -115,7 +141,7 @@ select = ["E", "W", "F"]
 ignore = ["E203", "E501", "E741", "W503", "W504"]
 exclude = [
     "dbt/adapters/events/adapter_types_pb2.py",
-    "tests",
+    "tests/functional",
     "venv",
 ]
 per-file-ignores = ["*/__init__.py: F401"]
@@ -128,7 +154,7 @@ ignore_missing_imports = true
 pretty = true
 mypy_path = "third-party-stubs/"
 files = [
-    "dbt/adapters",
+    "dbt",
     "tests/unit",
 ]
 exclude = [
