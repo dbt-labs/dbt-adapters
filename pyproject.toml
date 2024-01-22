@@ -130,6 +130,7 @@ check-sdist = [
     "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-adapters",
 ]
+protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
 
 [tool.black]
 extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
