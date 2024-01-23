@@ -1,10 +1,12 @@
 import os
 from pathlib import Path
 
-from dbt.tests.util import run_dbt, update_config_file, write_config_file
+from dbt.tests.util import update_config_file, write_config_file
 from dbt.exceptions import ProjectContractError
 import pytest
 import yaml
+
+from tests.functional.utils import run_dbt
 
 
 simple_model_sql = """

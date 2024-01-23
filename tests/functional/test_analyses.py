@@ -1,7 +1,9 @@
 import os
 
-from dbt.tests.util import get_manifest, run_dbt
+from dbt.tests.util import get_manifest
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 my_model_sql = """

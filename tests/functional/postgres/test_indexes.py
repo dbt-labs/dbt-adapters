@@ -1,6 +1,5 @@
 import re
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture
 import pytest
 
 from tests.functional.postgres.fixtures import (
@@ -13,6 +12,7 @@ from tests.functional.postgres.fixtures import (
     seeds__seed_csv,
     snapshots__colors_sql,
 )
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 INDEX_DEFINITION_PATTERN = re.compile(r"using\s+(\w+)\s+\((.+)\)\Z")

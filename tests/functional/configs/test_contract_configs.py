@@ -1,15 +1,11 @@
 import os
 
 from dbt.exceptions import ParsingError
-from dbt.tests.util import (
-    get_artifact,
-    get_manifest,
-    run_dbt,
-    run_dbt_and_capture,
-    write_file,
-)
+from dbt.tests.util import get_artifact, get_manifest, write_file
 from dbt_common.exceptions import ValidationError
 import pytest
+
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 my_model_sql = """

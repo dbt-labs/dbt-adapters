@@ -4,12 +4,7 @@ from pathlib import Path
 from dbt.adapters.exceptions import FailedToConnectError
 from dbt.constants import SECRET_ENV_PREFIX
 from dbt.exceptions import ParsingError
-from dbt.tests.util import (
-    get_manifest,
-    run_dbt,
-    run_dbt_and_capture,
-    write_file,
-)
+from dbt.tests.util import get_manifest, write_file
 import pytest
 
 from tests.functional.partial_parsing.fixtures import (
@@ -31,6 +26,7 @@ from tests.functional.partial_parsing.fixtures import (
     raw_customers_csv,
     test_color_sql,
 )
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 os.environ["DBT_PP_TEST"] = "true"

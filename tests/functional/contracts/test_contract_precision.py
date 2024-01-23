@@ -1,5 +1,6 @@
-from dbt.tests.util import run_dbt_and_capture
 import pytest
+
+from tests.functional.utils import run_dbt_and_capture
 
 
 my_numeric_model_sql = """

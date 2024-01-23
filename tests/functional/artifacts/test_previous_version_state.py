@@ -6,8 +6,10 @@ from dbt.artifacts.base import get_artifact_schema_version
 from dbt.artifacts.run import RunResultsArtifact
 from dbt.contracts.graph.manifest import WritableManifest
 from dbt.exceptions import IncompatibleSchemaError
-from dbt.tests.util import get_manifest, run_dbt
+from dbt.tests.util import get_manifest
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 # This project must have one of each kind of node type, plus disabled versions, for

@@ -1,8 +1,9 @@
 import os
 import shutil
 
-from dbt.tests.util import run_dbt
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 model_sql = """

@@ -1,5 +1,7 @@
-from dbt.tests.util import get_artifact, get_manifest, run_dbt
+from dbt.tests.util import get_artifact, get_manifest
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 # This is a place to put specific tests for contents of artifacts that we

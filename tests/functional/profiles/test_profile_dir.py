@@ -2,15 +2,11 @@ from contextlib import contextmanager
 import os
 from pathlib import Path
 
+from dbt.tests.util import rm_file, write_file
 import pytest
 import yaml
 
-from dbt.tests.util import (
-    rm_file,
-    run_dbt,
-    run_dbt_and_capture,
-    write_file,
-)
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 @pytest.fixture(scope="class")

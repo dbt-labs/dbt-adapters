@@ -1,9 +1,11 @@
 import json
 import os
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
+from dbt.tests.util import write_file
 from dbt_common.exceptions import CompilationError
 import pytest
+
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 macros__validate_set_sql = """

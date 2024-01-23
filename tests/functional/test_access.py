@@ -1,8 +1,10 @@
 from dbt.exceptions import DbtReferenceError, InvalidAccessTypeError
 from dbt.node_types import AccessType
 from dbt.tests.fixtures.project import write_project_files
-from dbt.tests.util import get_manifest, rm_file, run_dbt, write_file
+from dbt.tests.util import get_manifest, rm_file, write_file
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 my_model_sql = "select 1 as fun"

@@ -7,8 +7,6 @@ from dbt.tests.util import (
     get_manifest,
     rename_dir,
     rm_file,
-    run_dbt,
-    run_dbt_and_capture,
     write_file,
 )
 from dbt.contracts.files import ParseFileType
@@ -75,7 +73,11 @@ from tests.functional.partial_parsing.fixtures import (
     test_macro_sql,
     test_macro2_sql,
 )
-from tests.functional.utils import up_one
+from tests.functional.utils import (
+    run_dbt,
+    run_dbt_and_capture,
+    up_one,
+)
 
 
 os.environ["DBT_PP_TEST"] = "true"

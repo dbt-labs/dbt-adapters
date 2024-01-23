@@ -1,4 +1,3 @@
-from dbt.tests.util import run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtBaseException, DbtRuntimeError
 import pytest
 
@@ -13,6 +12,7 @@ from tests.functional.show.fixtures import (
     schema_yml,
     seeds__sample_seed,
 )
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 class ShowBase:

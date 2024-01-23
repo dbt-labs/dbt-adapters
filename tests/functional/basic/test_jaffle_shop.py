@@ -1,6 +1,7 @@
-from dbt.tests.util import run_dbt, get_manifest, run_dbt_and_capture, write_file
+from dbt.tests.util import get_manifest, write_file
 
 from tests.functional.projects import JaffleShop
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 class TestBasic(JaffleShop):

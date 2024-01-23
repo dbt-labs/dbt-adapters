@@ -2,9 +2,9 @@ import json
 from multiprocessing import Process
 from pathlib import Path
 
-from dbt.tests.util import run_dbt
 import pytest
 
+from tests.functional.utils import run_dbt
 
 good_model_sql = """
 select 1 as id

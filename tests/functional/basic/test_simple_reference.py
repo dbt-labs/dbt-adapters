@@ -1,5 +1,7 @@
-from dbt.tests.util import check_relations_equal, copy_file, read_file, run_dbt
+from dbt.tests.util import check_relations_equal, copy_file, read_file
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 ephemeral_copy_sql = """

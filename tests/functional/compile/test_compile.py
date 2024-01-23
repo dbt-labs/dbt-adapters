@@ -2,12 +2,13 @@ import json
 import pathlib
 import re
 
-from dbt.tests.util import read_file, run_dbt, run_dbt_and_capture
+from dbt.tests.util import read_file
 from dbt_common.exceptions import DbtBaseException, DbtRuntimeError
 import pytest
 
 from tests.functional.compile import fixtures
 from tests.functional.dbt_runner import dbtTestRunner
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 def norm_whitespace(string):

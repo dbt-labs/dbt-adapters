@@ -1,8 +1,9 @@
 import json
 import os
 
-from dbt.tests.util import run_dbt_and_capture
 import pytest
+
+from tests.functional.utils import run_dbt_and_capture
 
 
 def parse_json_logs(json_log_output):

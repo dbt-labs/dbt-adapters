@@ -4,17 +4,12 @@ import shutil
 import string
 
 from dbt.exceptions import ContractBreakingChangeError
-from dbt.tests.util import (
-    get_manifest,
-    run_dbt,
-    run_dbt_and_capture,
-    update_config_file,
-    write_file,
-)
+from dbt.tests.util import get_manifest, update_config_file, write_file
 from dbt_common.exceptions import CompilationError
 import pytest
 
 from tests.functional.defer_state import fixtures
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 class BaseModifiedState:

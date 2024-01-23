@@ -1,6 +1,7 @@
-from dbt.tests.util import run_dbt
 from dbt_common.exceptions import DbtRuntimeError
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 class TestCleanSourcePath:

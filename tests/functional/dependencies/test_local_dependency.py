@@ -5,13 +5,17 @@ import shutil
 from unittest import mock
 
 from dbt.exceptions import DbtProjectError, DependencyError
-from dbt.tests.util import check_relations_equal, run_dbt, run_dbt_and_capture
+from dbt.tests.util import check_relations_equal
 from dbt_common.exceptions import CompilationError, DbtRuntimeError
 import dbt_common.semver as semver
 import pytest
 import yaml
 
-from tests.functional.utils import up_one
+from tests.functional.utils import (
+    run_dbt,
+    run_dbt_and_capture,
+    up_one,
+)
 
 
 models__dep_source = """

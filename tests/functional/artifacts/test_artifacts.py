@@ -9,8 +9,6 @@ from dbt.contracts.graph.manifest import WritableManifest
 from dbt.tests.util import (
     check_datetime_between,
     get_artifact,
-    run_dbt,
-    run_dbt_and_capture,
 )
 import pytest
 
@@ -24,6 +22,7 @@ from tests.functional.artifacts.expected_run_results import (
     expected_run_results,
     expected_versions_run_results,
 )
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 models__schema_yml = """

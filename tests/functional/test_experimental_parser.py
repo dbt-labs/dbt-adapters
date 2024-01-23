@@ -2,8 +2,9 @@ import os
 
 from dbt.contracts.graph.manifest import Manifest
 from dbt.contracts.graph.nodes import RefArgs
-from dbt.tests.util import run_dbt, run_dbt_and_capture
 import pytest
+
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 def get_manifest():

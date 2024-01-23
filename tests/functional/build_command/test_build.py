@@ -1,7 +1,7 @@
-from dbt.tests.util import run_dbt
 import pytest
 
 from tests.functional.build_command import fixtures
+from tests.functional.utils import run_dbt
 
 
 class TestBuildBase:

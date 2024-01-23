@@ -2,11 +2,12 @@ import os
 
 from dbt.constants import SECRET_ENV_PREFIX
 from dbt.exceptions import ParsingError
-from dbt.tests.util import read_file, run_dbt, run_dbt_and_capture
+from dbt.tests.util import read_file
 from dbt_common.exceptions import DbtInternalError
 import pytest
 
 from tests.functional.context_methods.first_dependency import FirstDependencyProject
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 secret_bad__context_sql = """

@@ -1,6 +1,7 @@
-from dbt.tests.util import run_dbt
 from dbt_common.exceptions import CompilationError
 import pytest
+
+from tests.functional.utils import run_dbt
 
 
 model_sql = """

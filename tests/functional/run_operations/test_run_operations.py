@@ -5,8 +5,6 @@ from dbt.tests.util import (
     mkdir,
     rm_dir,
     rm_file,
-    run_dbt,
-    run_dbt_and_capture,
     write_file,
 )
 from dbt_common.exceptions import DbtInternalError
@@ -18,6 +16,7 @@ from tests.functional.run_operations.fixtures import (
     model_sql,
     sad_macros_sql,
 )
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 class TestOperations:

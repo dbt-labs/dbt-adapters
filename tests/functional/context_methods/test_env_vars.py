@@ -1,8 +1,10 @@
 import os
 
 from dbt.constants import DEFAULT_ENV_PLACEHOLDER, SECRET_ENV_PREFIX
-from dbt.tests.util import get_manifest, run_dbt, run_dbt_and_capture
+from dbt.tests.util import get_manifest
 import pytest
+
+from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 
 context_sql = """
