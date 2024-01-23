@@ -1,0 +1,19 @@
+from dbt.tests.util import run_dbt
+import pytest
+
+
+model_one_sql = """
+someting bad
+"""
+
+
+class TestHandledExit:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"model_one.sql": model_one_sql}
+
+    def test_failed_run_does_not_throw(self, project):
+        run_dbt(["run"], expect_pass=False)
+
+    def test_fail_fast_failed_run_does_not_throw(self, project):
+        run_dbt(["--fail-fast", "run"], expect_pass=False)
