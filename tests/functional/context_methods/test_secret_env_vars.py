@@ -6,7 +6,7 @@ from dbt.tests.util import read_file, run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtInternalError
 import pytest
 
-from first_dependency import FirstDependencyProject
+from tests.functional.context_methods.first_dependency import FirstDependencyProject
 
 
 secret_bad__context_sql = """

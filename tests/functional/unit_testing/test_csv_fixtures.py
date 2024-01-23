@@ -2,7 +2,7 @@ from dbt.exceptions import ParsingError, YamlParseDictError, DuplicateResourceNa
 from dbt.tests.util import rm_file, run_dbt, write_file
 import pytest
 
-from fixtures import (
+from tests.functional.unit_testing.fixtures import (
     datetime_test,
     datetime_test_invalid_csv_values,
     datetime_test_invalid_format_key,

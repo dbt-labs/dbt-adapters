@@ -11,7 +11,7 @@ import dbt.tracking
 import yaml
 
 from dbt.adapters.postgres import PostgresCredentials
-from .utils import normalize
+from tests.functional.utils import normalize
 
 
 INITIAL_ROOT = os.getcwd()

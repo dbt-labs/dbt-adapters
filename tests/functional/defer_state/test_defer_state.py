@@ -8,7 +8,7 @@ from dbt.exceptions import DbtRuntimeError
 from dbt.tests.util import rm_file, run_dbt, write_file
 import pytest
 
-import fixtures
+from tests.functional.defer_state import fixtures
 
 
 class BaseDeferState:

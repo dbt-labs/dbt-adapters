@@ -4,7 +4,7 @@ import shutil
 from dbt.tests.util import run_dbt, write_file
 import pytest
 
-import fixtures
+from tests.functional.defer_state import fixtures
 
 
 class BaseRunResultsState:

@@ -1,7 +1,7 @@
 import pytest
 from dbt.tests.util import run_dbt
 
-import fixtures
+from tests.functional.custom_aliases import fixtures
 
 
 class TestAliases:

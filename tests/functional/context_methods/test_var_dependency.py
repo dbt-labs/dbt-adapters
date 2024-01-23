@@ -1,7 +1,7 @@
 from dbt.tests.util import check_relations_equal, run_dbt
 import pytest
 
-from first_dependency import (
+from tests.functional.context_methods.first_dependency import (
     FirstDependencyConfigProject,
     FirstDependencyProject,
 )

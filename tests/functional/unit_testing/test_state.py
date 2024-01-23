@@ -5,7 +5,7 @@ import shutil
 from dbt.tests.util import run_dbt, write_config_file, write_file
 import pytest
 
-from fixtures import (
+from tests.functional.unit_testing.fixtures import (
     my_model_a_sql,
     my_model_b_sql,
     my_model_vars_sql,

@@ -288,7 +288,7 @@ class TestGraphSelection(GraphSelection):
         )
 
 
-class TestListPathGraphSelection(SelectionFixtures):
+class TestListPathGraphSelection(GraphSelection):
     def test_list_select_with_project_dir(self, project):
         # Check that list command works
         os.chdir(

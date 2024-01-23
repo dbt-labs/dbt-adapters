@@ -48,7 +48,7 @@ test = [
     "pytest-xdist",
 ]
 integration = [
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git@migrate-dbt-tests-adapter#egg=dbt-tests-adapter&subdirectory=dbt-tests-adapter",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#egg=dbt-tests-adapter&subdirectory=dbt-tests-adapter",
 ]
 build = [
     "wheel",

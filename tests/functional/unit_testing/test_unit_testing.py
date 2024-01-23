@@ -3,7 +3,7 @@ from dbt.exceptions import DuplicateResourceNameError, ParsingError
 from dbt.tests.util import get_manifest, run_dbt, write_file
 import pytest
 
-from fixtures import (
+from tests.functional.unit_testing.fixtures import (
     datetime_test,
     event_sql,
     my_incremental_model_sql,

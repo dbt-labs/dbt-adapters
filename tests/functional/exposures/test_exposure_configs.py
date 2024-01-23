@@ -3,7 +3,7 @@ from dbt.tests.util import get_manifest, run_dbt, update_config_file
 from dbt_common.dataclass_schema import ValidationError
 import pytest
 
-import fixtures
+from tests.functional.exposures import fixtures
 
 
 class ExposureConfigTests:

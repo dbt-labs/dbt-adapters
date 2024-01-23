@@ -4,7 +4,7 @@ from dbt_common.exceptions import CompilationError
 import pytest
 import yaml
 
-import fixtures
+from tests.functional.deprecations import fixtures
 
 
 class TestConfigPathDeprecation:

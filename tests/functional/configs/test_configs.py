@@ -10,7 +10,10 @@ from dbt.tests.util import (
 from dbt_common.dataclass_schema import ValidationError
 import pytest
 
-from fixtures import BaseConfigProject, simple_snapshot
+from tests.functional.configs.fixtures import (
+    BaseConfigProject,
+    simple_snapshot,
+)
 
 
 class TestConfigs(BaseConfigProject):

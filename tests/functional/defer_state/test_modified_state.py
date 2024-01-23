@@ -14,7 +14,7 @@ from dbt.tests.util import (
 from dbt_common.exceptions import CompilationError
 import pytest
 
-import fixtures
+from tests.functional.defer_state import fixtures
 
 
 class BaseModifiedState:

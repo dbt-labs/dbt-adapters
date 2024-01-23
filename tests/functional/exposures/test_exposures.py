@@ -1,7 +1,7 @@
 from dbt.tests.util import get_manifest, run_dbt
 import pytest
 
-import fixtures
+from tests.functional.exposures import fixtures
 
 
 class TestBasicExposures:

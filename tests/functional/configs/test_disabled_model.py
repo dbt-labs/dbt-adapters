@@ -4,7 +4,7 @@ from dbt_common.dataclass_schema import ValidationError
 from dbt_common.exceptions import CompilationError
 import pytest
 
-import fixtures
+from tests.functional.configs import fixtures
 
 
 # ensure double disabled doesn't throw error when set at schema level

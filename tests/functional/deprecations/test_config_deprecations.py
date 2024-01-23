@@ -5,7 +5,7 @@ from dbt.tests.util import run_dbt, update_config_file
 from dbt_common.exceptions import CompilationError
 import pytest
 
-import fixtures
+from tests.functional.deprecations import fixtures
 
 
 # test deprecation messages

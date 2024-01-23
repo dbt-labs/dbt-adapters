@@ -6,7 +6,7 @@ from dbt.tests.util import (
 )
 import pytest
 
-import fixtures
+from tests.functional.exit_codes import fixtures
 
 
 class BaseConfigProject:
