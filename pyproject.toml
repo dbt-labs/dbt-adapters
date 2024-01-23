@@ -23,7 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "dbt-adapters<1.0",
+    "dbt-adapters",
     "psycopg2-binary~=2.9",
     # installed via dbt-adapters but used directly, unpin minor to avoid version conflicts
     "dbt-common<1.0",
@@ -34,14 +34,26 @@ lint = [
     "black",
     "flake8",
     "Flake8-pyproject",
+]
+typecheck = [
     "mypy",
     "types-protobuf",
     "types-pytz",
 ]
 test = [
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#egg=dbt-core&subdirectory=core",
+    "freezegun",
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
+]
+integration = [
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git@migrate-dbt-tests-adapter#egg=dbt-tests-adapter&subdirectory=dbt-tests-adapter",
+]
+build = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
 ]
 
 [project.urls]
@@ -55,6 +67,9 @@ Changelog = "https://github.com/dbt-labs/dbt-postgres/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.sdist]
 include = ["dbt"]
 
@@ -65,18 +80,58 @@ packages = ["dbt"]
 path = "dbt/adapters/postgres/__about__.py"
 
 [tool.hatch.envs.default]
-features = ["lint", "test"]
-[tool.hatch.envs.default.scripts]
-unit-tests = "- python -m pytest {args:tests/unit}"
-lint-all = [
-    "- lint-black",
-    "- lint-flake8",
-    "- lint-mypy",
+features = [
+    "lint",
+    "typecheck",
+    "test",
+    "integration",
+    "build",
 ]
-lint-black = "python -m black ."
-lint-flake8 = "python -m flake8 ."
-lint-mypy = "python -m mypy ."
 
+[tool.hatch.envs.lint]
+detached = true
+features = ["lint"]
+[tool.hatch.envs.lint.scripts]
+all = [
+    "- black-only",
+    "- flake8-only",
+]
+black-only = "python -m black ."
+flake8-only = "python -m flake8 ."
+
+[tool.hatch.envs.typecheck]
+features = ["typecheck"]
+[tool.hatch.envs.typecheck.scripts]
+all = "python -m mypy ."
+
+[tool.hatch.envs.unit-tests]
+features = ["test"]
+[tool.hatch.envs.unit-tests.scripts]
+all = "python -m pytest {args:tests/unit}"
+
+[tool.hatch.envs.integration-tests]
+features = ["test", "integration"]
+[tool.hatch.envs.integration-tests.scripts]
+all = "python -m pytest {args:tests/functional}"
+
+[tool.hatch.envs.build]
+detached = true
+features = ["build"]
+[tool.hatch.envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_adapters-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
 [tool.black]
 line-length = 99
 target-version = ['py38']

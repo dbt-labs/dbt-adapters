@@ -2,8 +2,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.base import Credentials
-from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.sql import SQLConnectionManager
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
