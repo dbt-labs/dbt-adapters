@@ -17,8 +17,7 @@ from dbt_common.exceptions import DbtConfigError, DbtValidationError
 from psycopg2 import DatabaseError, extensions as psycopg2_extensions
 
 from dbt.adapters.postgres import Plugin as PostgresPlugin, PostgresAdapter
-
-from utils import (
+from tests.unit.utils import (
     TestAdapterConversions,
     clear_plugin,
     config_from_parts_or_dicts,
@@ -26,9 +25,6 @@ from utils import (
     load_internal_manifest_macros,
     mock_connection,
 )
-
-
-# set_from_args(Namespace(WARN_ERROR=False), None)
 
 
 class TestPostgresAdapter(TestCase):
