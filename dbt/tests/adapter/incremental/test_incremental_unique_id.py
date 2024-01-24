@@ -2,7 +2,7 @@ from collections import namedtuple
 from pathlib import Path
 
 # TODO: repoint to dbt-artifacts when it's available
-from dbt.artifacts.results import RunStatus
+from dbt.artifacts.schemas.results import RunStatus
 import pytest
 
 from dbt.tests.util import check_relations_equal, run_dbt

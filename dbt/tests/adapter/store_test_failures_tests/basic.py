@@ -2,7 +2,7 @@ from collections import namedtuple
 from typing import Set
 
 # TODO: repoint to dbt-artifacts when it's available
-from dbt.artifacts.results import TestStatus
+from dbt.artifacts.schemas.results import TestStatus
 import pytest
 
 from dbt.tests.adapter.store_test_failures_tests import _files
