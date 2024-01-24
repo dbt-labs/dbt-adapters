@@ -228,7 +228,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     def create_ephemeral_from(
         cls: Type[Self],
         relation_config: RelationConfig,
-        limit: Optional[int],
+        limit: Optional[int] = None,
     ) -> Self:
         # Note that ephemeral models are based on the name.
         identifier = cls.add_ephemeral_prefix(relation_config.name)
