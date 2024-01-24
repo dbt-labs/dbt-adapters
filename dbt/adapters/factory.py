@@ -99,12 +99,9 @@ class AdapterContainer:
     def register_adapter(self, config: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
-        adapter_version = import_module(f".{adapter_name}.__version__", "dbt.adapters").version
-        adapter_version_specifier = VersionSpecifier.from_version_string(
-            adapter_version
-        ).to_version_string()
+        adapter_version = self._adapter_version(adapter_name)
         fire_event(
-            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version_specifier)
+            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version)
         )
         with self.lock:
             if adapter_name in self.adapters:
@@ -113,6 +110,16 @@ class AdapterContainer:
 
             adapter: Adapter = adapter_type(config, mp_context)  # type: ignore
             self.adapters[adapter_name] = adapter
+
+    def _adapter_version(self, adapter_name: str) -> str:
+        try:
+            raw_version = import_module(f".{adapter_name}.__about__", "dbt.adapters").version
+        except ModuleNotFoundError:
+            raw_version = import_module(f".{adapter_name}.__version__", "dbt.adapters").version
+        return self._validate_version(raw_version)
+
+    def _validate_version(self, raw_version: str) -> str:
+        return VersionSpecifier.from_version_string(raw_version).to_version_string()
 
     def lookup_adapter(self, adapter_name: str) -> Adapter:
         return self.adapters[adapter_name]
