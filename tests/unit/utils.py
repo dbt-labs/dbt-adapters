@@ -1,9 +1,7 @@
 from argparse import Namespace
 import os
-import string
-from unittest import TestCase, mock
+from unittest import mock
 
-import agate
 from dbt.config.project import PartialProject
 
 
@@ -87,8 +85,9 @@ def _project_from_dict(project, profile, packages=None, selectors=None, cli_vars
 
 
 def inject_adapter(adapter, plugin):
-    """Inject the given adapter into the adapter factory, so your hand-crafted
-    artisanal adapter will be available from get_adapter() as if dbt loaded it.
+    """
+    Inject the given adapter into the factory
+    so that it will be available from get_adapter() as if dbt loaded it.
     """
     from dbt.adapters.factory import FACTORY
 
@@ -100,34 +99,14 @@ def inject_adapter(adapter, plugin):
 
 
 def clear_plugin(plugin):
+    """
+    Remove the adapter on the given plugin from the factory.
+    """
     from dbt.adapters.factory import FACTORY
 
     adapter_key = plugin.adapter.type()
     FACTORY.plugins.pop(adapter_key, None)
     FACTORY.adapters.pop(adapter_key, None)
-
-
-class TestAdapterConversions(TestCase):
-    def _get_tester_for(self, column_type):
-        from dbt_common.clients import agate_helper
-
-        if column_type is agate.TimeDelta:  # dbt never makes this!
-            return agate.TimeDelta()
-
-        for instance in agate_helper.DEFAULT_TYPE_TESTER._possible_types:
-            if isinstance(instance, column_type):  # include child types
-                return instance
-
-        raise ValueError(f"no tester for {column_type}")
-
-    def _make_table_of(self, rows, column_types):
-        column_names = list(string.ascii_letters[: len(rows[0])])
-        if isinstance(column_types, type):
-            column_types = [self._get_tester_for(column_types) for _ in column_names]
-        else:
-            column_types = [self._get_tester_for(typ) for typ in column_types]
-        table = agate.Table(rows, column_names=column_names, column_types=column_types)
-        return table
 
 
 def load_internal_manifest_macros(config, macro_hook=lambda m: None):
