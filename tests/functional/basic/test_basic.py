@@ -4,14 +4,9 @@ import pytest
 from tests.functional.utils import run_dbt
 
 
-my_model_sql = """
-  select 1 as fun
-"""
-
-
 @pytest.fixture(scope="class")
 def models():
-    return {"my_model.sql": my_model_sql}
+    return {"my_model.sql": "select 1 as fun"}
 
 
 def test_basic(project):
