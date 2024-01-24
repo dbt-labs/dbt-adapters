@@ -1,3 +1,4 @@
+from argparse import Namespace
 import os
 import string
 from unittest import TestCase, mock
@@ -6,59 +7,11 @@ import agate
 from dbt.config.project import PartialProject
 
 
-class Obj:
-    which = "blah"
-    single_threaded = False
-
-
 def mock_connection(name, state="open"):
     conn = mock.MagicMock()
     conn.name = name
     conn.state = state
     return conn
-
-
-def profile_from_dict(profile, profile_name, cli_vars="{}"):
-    from dbt.config import Profile
-    from dbt.config.renderer import ProfileRenderer
-    from dbt.config.utils import parse_cli_vars
-
-    if not isinstance(cli_vars, dict):
-        cli_vars = parse_cli_vars(cli_vars)
-
-    renderer = ProfileRenderer(cli_vars)
-
-    # in order to call dbt's internal profile rendering, we need to set the
-    # flags global. This is a bit of a hack, but it's the best way to do it.
-    from dbt.flags import set_from_args
-    from argparse import Namespace
-
-    set_from_args(Namespace(), None)
-    return Profile.from_raw_profile_info(
-        profile,
-        profile_name,
-        renderer,
-    )
-
-
-def project_from_dict(project, profile, packages=None, selectors=None, cli_vars="{}"):
-    from dbt.config.renderer import DbtProjectYamlRenderer
-    from dbt.config.utils import parse_cli_vars
-
-    if not isinstance(cli_vars, dict):
-        cli_vars = parse_cli_vars(cli_vars)
-
-    renderer = DbtProjectYamlRenderer(profile, cli_vars)
-
-    project_root = project.pop("project-root", os.getcwd())
-
-    partial = PartialProject.from_dicts(
-        project_root=project_root,
-        project_dict=project,
-        packages_dict=packages,
-        selectors_dict=selectors,
-    )
-    return partial.render(renderer)
 
 
 def config_from_parts_or_dicts(project, profile, packages=None, selectors=None, cli_vars={}):
@@ -71,14 +24,14 @@ def config_from_parts_or_dicts(project, profile, packages=None, selectors=None, 
         profile_name = project.get("profile")
 
     if not isinstance(profile, Profile):
-        profile = profile_from_dict(
+        profile = _profile_from_dict(
             deepcopy(profile),
             profile_name,
             cli_vars,
         )
 
     if not isinstance(project, Project):
-        project = project_from_dict(
+        project = _project_from_dict(
             deepcopy(project),
             profile,
             packages,
@@ -86,36 +39,72 @@ def config_from_parts_or_dicts(project, profile, packages=None, selectors=None, 
             cli_vars,
         )
 
-    args = Obj()
-    args.vars = cli_vars
-    args.profile_dir = "/dev/null"
+    args = Namespace(
+        which="blah",
+        single_threaded=False,
+        vars=cli_vars,
+        profile_dir="/dev/null",
+    )
     return RuntimeConfig.from_parts(project=project, profile=profile, args=args)
 
 
-def inject_plugin(plugin):
-    from dbt.adapters.factory import FACTORY
+def _profile_from_dict(profile, profile_name, cli_vars="{}"):
+    from dbt.config import Profile
+    from dbt.config.renderer import ProfileRenderer
+    from dbt.config.utils import parse_cli_vars
 
-    key = plugin.adapter.type()
-    FACTORY.plugins[key] = plugin
+    if not isinstance(cli_vars, dict):
+        cli_vars = parse_cli_vars(cli_vars)
+
+    renderer = ProfileRenderer(cli_vars)
+
+    return Profile.from_raw_profile_info(
+        profile,
+        profile_name,
+        renderer,
+    )
 
 
-def inject_adapter(value, plugin):
+def _project_from_dict(project, profile, packages=None, selectors=None, cli_vars="{}"):
+    from dbt.config.renderer import DbtProjectYamlRenderer
+    from dbt.config.utils import parse_cli_vars
+
+    project_root = project.pop("project-root", os.getcwd())
+    partial = PartialProject.from_dicts(
+        project_root=project_root,
+        project_dict=project,
+        packages_dict=packages,
+        selectors_dict=selectors,
+    )
+
+    if not isinstance(cli_vars, dict):
+        cli_vars = parse_cli_vars(cli_vars)
+
+    renderer = DbtProjectYamlRenderer(profile, cli_vars)
+    project = partial.render(renderer)
+
+    return project
+
+
+def inject_adapter(adapter, plugin):
     """Inject the given adapter into the adapter factory, so your hand-crafted
     artisanal adapter will be available from get_adapter() as if dbt loaded it.
     """
-    inject_plugin(plugin)
     from dbt.adapters.factory import FACTORY
 
-    key = value.type()
-    FACTORY.adapters[key] = value
+    plugin_key = plugin.adapter.type()
+    FACTORY.plugins[plugin_key] = plugin
+
+    adapter_key = adapter.type()
+    FACTORY.adapters[adapter_key] = adapter
 
 
 def clear_plugin(plugin):
     from dbt.adapters.factory import FACTORY
 
-    key = plugin.adapter.type()
-    FACTORY.plugins.pop(key, None)
-    FACTORY.adapters.pop(key, None)
+    adapter_key = plugin.adapter.type()
+    FACTORY.plugins.pop(adapter_key, None)
+    FACTORY.adapters.pop(adapter_key, None)
 
 
 class TestAdapterConversions(TestCase):
