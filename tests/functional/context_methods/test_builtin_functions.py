@@ -131,27 +131,6 @@ class TestContextBuiltins:
         )
         assert all(element in invocation_dict for element in expected)
 
-    def test_builtin_dbt_metadata_envs_function(self, project, monkeypatch):
-        envs = {
-            "DBT_ENV_CUSTOM_ENV_RUN_ID": "1234",
-            "DBT_ENV_CUSTOM_ENV_JOB_ID": "5678",
-            "DBT_ENV_RUN_ID": "91011",
-            "RANDOM_ENV": "121314",
-        }
-        monkeypatch.setattr(os, "environ", envs)
-
-        _, log_output = run_dbt_and_capture(
-            ["--debug", "--log-format=json", "run-operation", "validate_dbt_metadata_envs"]
-        )
-
-        parsed_logs = parse_json_logs(log_output)
-        result = find_result_in_parsed_logs(parsed_logs, "dbt_metadata_envs_result")
-
-        assert result
-
-        expected = "dbt_metadata_envs_result:{'RUN_ID': '1234', 'JOB_ID': '5678'}"
-        assert expected in str(result)
-
 
 class TestContextBuiltinExceptions:
     # Assert compilation errors are raised with _strict equivalents

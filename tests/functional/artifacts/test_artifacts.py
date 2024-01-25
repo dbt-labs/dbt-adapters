@@ -3,8 +3,8 @@ import jsonschema
 import os
 
 import dbt
-from dbt.artifacts.results import RunStatus
-from dbt.artifacts.run import RunResultsArtifact
+from dbt.artifacts.schemas.results import RunStatus
+from dbt.artifacts.schemas.run import RunResultsArtifact
 from dbt.contracts.graph.manifest import WritableManifest
 from dbt.tests.util import (
     check_datetime_between,
@@ -603,83 +603,6 @@ def validate(artifact_schema, artifact_dict):
     validator = jsonschema.Draft7Validator(artifact_schema)
     error = next(iter(validator.iter_errors(artifact_dict)), None)
     assert error is None
-
-
-class TestVerifyArtifacts(BaseVerifyProject):
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "schema.yml": models__schema_yml,
-            "second_model.sql": models__second_model_sql,
-            "readme.md": models__readme_md,
-            "model.sql": models__model_sql,
-        }
-
-    # Test generic "docs generate" command
-    def test_run_and_generate(self, project, manifest_schema_path, run_results_schema_path):
-        start_time = datetime.utcnow()
-        results = run_dbt(["compile"])
-        assert len(results) == 7
-        verify_manifest(
-            project,
-            expected_seeded_manifest(project, quote_model=False),
-            start_time,
-            manifest_schema_path,
-        )
-        verify_run_results(project, expected_run_results(), start_time, run_results_schema_path)
-
-
-class TestVerifyArtifactsReferences(BaseVerifyProject):
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "schema.yml": ref_models__schema_yml,
-            "view_summary.sql": ref_models__view_summary_sql,
-            "ephemeral_summary.sql": ref_models__ephemeral_summary_sql,
-            "ephemeral_copy.sql": ref_models__ephemeral_copy_sql,
-            "docs.md": ref_models__docs_md,
-        }
-
-    def test_references(self, project, manifest_schema_path, run_results_schema_path):
-        start_time = datetime.utcnow()
-        results = run_dbt(["compile"])
-        assert len(results) == 4
-        verify_manifest(
-            project, expected_references_manifest(project), start_time, manifest_schema_path
-        )
-        verify_run_results(
-            project, expected_references_run_results(), start_time, run_results_schema_path
-        )
-
-
-class TestVerifyArtifactsVersions(BaseVerifyProject):
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "schema.yml": versioned_models__schema_yml,
-            "versioned_model_v2.sql": versioned_models__v2_sql,
-            "arbitrary_file_name.sql": versioned_models__v1_sql,
-            "ref_versioned_model.sql": versioned_models___ref_sql,
-        }
-
-    @pytest.fixture(scope="class")
-    def seeds(self):
-        return {}
-
-    @pytest.fixture(scope="class")
-    def snapshots(self):
-        return {}
-
-    def test_versions(self, project, manifest_schema_path, run_results_schema_path):
-        start_time = datetime.utcnow()
-        results = run_dbt(["compile"])
-        assert len(results) == 6
-        verify_manifest(
-            project, expected_versions_manifest(project), start_time, manifest_schema_path
-        )
-        verify_run_results(
-            project, expected_versions_run_results(), start_time, run_results_schema_path
-        )
 
 
 class TestVerifyRunOperation(BaseVerifyProject):

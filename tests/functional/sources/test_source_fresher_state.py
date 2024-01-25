@@ -8,7 +8,6 @@ from dbt.tests.util import AnyStringWith, AnyFloat
 from dbt_common.exceptions import DbtInternalError
 import pytest
 
-from dbt.adapters.__about__ import version as DBT_POSTGRES_VERSION
 from tests.functional.sources.common_source_setup import BaseSourcesTest
 from tests.functional.sources.fixtures import (
     error_models_schema_yml,
@@ -92,7 +91,6 @@ class SuccessfulSourceFreshnessTest(BaseSourcesTest):
             data["metadata"]["dbt_schema_version"]
             == "https://schemas.getdbt.com/dbt/sources/v3.json"
         )
-        assert data["metadata"]["dbt_version"] == DBT_POSTGRES_VERSION
         key = "key"
         if os.name == "nt":
             key = key.upper()

@@ -3,9 +3,9 @@ from functools import partial
 from tests.functional.projects.utils import read
 
 
-read_macro = partial(read, project="dbt_integration", file_type="macros")
-read_model = partial(read, project="dbt_integration", file_type="models")
-read_schema = partial(read, project="dbt_integration", file_type="schemas")
+read_macro = partial(read, "dbt_integration", "macros")
+read_model = partial(read, "dbt_integration", "models")
+read_schema = partial(read, "dbt_integration", "schemas")
 
 
 def dbt_integration():

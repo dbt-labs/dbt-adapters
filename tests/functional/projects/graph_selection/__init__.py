@@ -5,9 +5,9 @@ import pytest
 from tests.functional.projects.utils import read
 
 
-read_data = partial(read, project="graph_selection", file_type="data")
-read_model = partial(read, project="graph_selection", file_type="models")
-read_schema = partial(read, project="graph_selection", file_type="schemas")
+read_data = partial(read, "graph_selection", "data")
+read_model = partial(read, "graph_selection", "models")
+read_schema = partial(read, "graph_selection", "schemas")
 
 
 class GraphSelection:

@@ -5,11 +5,11 @@ import pytest
 from tests.functional.projects.utils import read
 
 
-read_data = partial(read, project="jaffle_shop", file_type="data")
-read_doc = partial(read, project="jaffle_shop", file_type="docs")
-read_model = partial(read, project="jaffle_shop", file_type="models")
-read_schema = partial(read, project="jaffle_shop", file_type="schemas")
-read_staging = partial(read, project="jaffle_shop", file_type="staging")
+read_data = partial(read, "jaffle_shop", "data")
+read_doc = partial(read, "jaffle_shop", "docs")
+read_model = partial(read, "jaffle_shop", "models")
+read_schema = partial(read, "jaffle_shop", "schemas")
+read_staging = partial(read, "jaffle_shop", "staging")
 
 
 class JaffleShop:

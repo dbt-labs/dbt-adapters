@@ -28,14 +28,14 @@ class TestGroupSelection:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "schema.yml": read_model("schema"),
+            "schema.yml": read_schema("schema"),
             "base_users.sql": read_model("base_users"),
             "users.sql": read_model("users"),
             "users_rollup.sql": read_model("users_rollup"),
             "versioned_v3.sql": read_model("base_users"),
             "users_rollup_dependency.sql": read_model("users_rollup_dependency"),
             "emails.sql": read_model("emails"),
-            "emails_alt.sql": read_model("emails"),
+            "emails_alt.sql": read_model("emails_alt"),
             "alternative.users.sql": read_model("alternative_users"),
             "never_selected.sql": read_model("never_selected"),
             "test": {

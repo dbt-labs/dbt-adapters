@@ -25,6 +25,8 @@ class TestConnectionManagerRetry(ConnectionManagerRetry):
 
 
 class TestConnectionManagerOpen(TestCase):
+    connection = None
+
     # Postgres-specific
     def setUp(self):
         self.connection = self.get_connection()
