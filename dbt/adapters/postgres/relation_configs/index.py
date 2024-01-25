@@ -43,7 +43,7 @@ class PostgresIndexConfig(RelationConfigBase, RelationConfigValidationMixin):
     - nulls_distinct: `True`
     """
 
-    name: str = field(default=None, hash=False, compare=False)
+    name: str = field(default="", hash=False, compare=False)
     column_names: FrozenSet[str] = field(default_factory=frozenset, hash=True)
     unique: bool = field(default=False, hash=True)
     method: PostgresIndexMethod = field(default=PostgresIndexMethod.default(), hash=True)

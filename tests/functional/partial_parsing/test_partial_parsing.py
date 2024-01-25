@@ -572,7 +572,6 @@ class TestSnapshots:
         }
 
     def test_pp_snapshots(self, project):
-
         # initial run
         results = run_dbt()
         assert len(results) == 1
@@ -616,7 +615,6 @@ class TestTests:
         return {"generic": {"readme.md": ""}}
 
     def test_pp_generic_tests(self, project):
-
         # initial run
         results = run_dbt()
         assert len(results) == 1

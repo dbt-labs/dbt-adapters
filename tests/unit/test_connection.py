@@ -164,11 +164,13 @@ class TestPostgresConnection(TestCase):
             ]
         )
 
-    @pytest.mark.skip("""
+    @pytest.mark.skip(
+        """
         We moved from __version__ to __about__ when establishing `hatch` as our build tool.
         However, `adapters.factory.register_adapter` assumes __version__ when determining 
         the adapter version. This test causes an import error
-    """)
+    """
+    )
     def test_debug_connection_ok(self):
         DebugTask.validate_connection(self.target_dict)
         self.mock_execute.assert_has_calls([mock.call("/* dbt */\nselect 1 as id", None)])
@@ -178,11 +180,13 @@ class TestPostgresConnection(TestCase):
         with self.assertRaises(DbtConfigError):
             DebugTask.validate_connection(self.target_dict)
 
-    @pytest.mark.skip("""
+    @pytest.mark.skip(
+        """
         We moved from __version__ to __about__ when establishing `hatch` as our build tool.
         However, `adapters.factory.register_adapter` assumes __version__ when determining 
         the adapter version. This test causes an import error
-    """)
+    """
+    )
     def test_connection_fail_select(self):
         self.mock_execute.side_effect = DatabaseError()
         with self.assertRaises(DbtConfigError):

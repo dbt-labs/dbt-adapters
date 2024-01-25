@@ -16,7 +16,6 @@ def models():
 
 @pytest.fixture(scope="class")
 def dbt_profile_data(unique_schema):
-
     return {
         "test": {
             "outputs": {
@@ -37,7 +36,6 @@ def dbt_profile_data(unique_schema):
 
 
 def test_basic(project_root, project):
-
     assert project.database == "dbtMixedCase"
 
     # Tests that a project with a single model works

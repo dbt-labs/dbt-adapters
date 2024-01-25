@@ -61,7 +61,6 @@ class TestCLIVarOverridePorject:
         }
 
     def test__override_vars_project_level(self, project):
-
         # This should be "override"
         run_dbt(["run", "--vars", "{required: override}"])
         run_dbt(["test"])

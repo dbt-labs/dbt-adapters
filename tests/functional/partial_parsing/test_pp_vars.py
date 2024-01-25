@@ -40,7 +40,6 @@ class TestEnvVars:
         }
 
     def test_env_vars_models(self, project):
-
         # initial run
         results = run_dbt(["run"])
         assert len(results) == 1
@@ -329,7 +328,6 @@ class TestProfileEnvVars:
         }
 
     def test_profile_env_vars(self, project, logs_dir):
-
         # Initial run
         os.environ["ENV_VAR_USER"] = "root"
         os.environ["ENV_VAR_PASS"] = "password"
@@ -381,7 +379,6 @@ class TestProfileSecretEnvVars:
         }
 
     def test_profile_secret_env_vars(self, project):
-
         # Initial run
         os.environ[SECRET_ENV_PREFIX + "USER"] = "root"
         os.environ["ENV_VAR_PASS"] = "password"

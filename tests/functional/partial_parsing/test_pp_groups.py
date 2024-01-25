@@ -24,7 +24,6 @@ class TestGroups:
         }
 
     def test_pp_groups(self, project):
-
         # initial run
         results = run_dbt()
         assert len(results) == 2

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Set, FrozenSet, List, Dict
+from typing import Any, Set, FrozenSet, List, Dict
 from typing_extensions import Self
 
 import agate
@@ -74,10 +74,10 @@ class PostgresMaterializedViewConfig(RelationConfigBase, RelationConfigValidatio
 
     @classmethod
     def parse_config(cls, relation_config: RelationConfig) -> Dict:
-        indexes: List[dict] = relation_config.config.extra.get("indexes", [])
+        indexes: List[Dict[Any, Any]] = relation_config.config.get("indexes", [])  # type: ignore
         config_dict = {
             "table_name": relation_config.identifier,
-            "query": relation_config.compiled_code,
+            "query": getattr(relation_config, "compiled_code", None),
             "indexes": [PostgresIndexConfig.parse_model_node(index) for index in indexes],
         }
         return config_dict

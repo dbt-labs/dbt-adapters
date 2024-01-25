@@ -22,7 +22,6 @@ second_file_diff = {
 
 class TestFileDiffPaths:
     def test_file_diffs(self, project):
-
         os.environ["DBT_PP_FILE_DIFF_TEST"] = "true"
 
         run_dbt(["deps"])

@@ -101,7 +101,6 @@ def tests():
 
 
 def test_simple_snapshot(project):
-
     results = run_dbt(["snapshot", "--vars", "version: 1"])
     assert len(results) == 1
 

@@ -167,7 +167,6 @@ class TestSchemaFileConfigs:
         self,
         project,
     ):
-
         # run seed
         assert len(run_dbt(["seed"])) == 1
 

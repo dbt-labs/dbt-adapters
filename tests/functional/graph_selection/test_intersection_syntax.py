@@ -79,47 +79,38 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users"])
 
     def test_same_model_intersection_selectors(self, project):
-
         results = run_dbt(["run", "--selector", "same_intersection"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_tags_intersection(self, project):
-
         results = run_dbt(["run", "--models", "tag:bi,tag:users"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_tags_intersection_selectors(self, project):
-
         results = run_dbt(["run", "--selector", "tags_intersection"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_triple_descending(self, project):
-
         results = run_dbt(["run", "--models", "*,tag:bi,tag:users"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_triple_descending_schema(self, project):
-
         results = run_dbt(["run", "--models", "*,tag:bi,tag:users"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_triple_descending_schema_selectors(self, project):
-
         results = run_dbt(["run", "--selector", "triple_descending"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_triple_ascending(self, project):
-
         results = run_dbt(["run", "--models", "tag:users,tag:bi,*"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_triple_ascending_schema_selectors(self, project):
-
         results = run_dbt(["run", "--selector", "triple_ascending"], expect_pass=False)
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_with_exclusion(self, project):
-
         results = run_dbt(
             [
                 "run",
@@ -133,12 +124,10 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "users_rollup"])
 
     def test_intersection_with_exclusion_selectors(self, project):
-
         results = run_dbt(["run", "--selector", "intersection_with_exclusion"], expect_pass=False)
         check_result_nodes_by_name(results, ["users", "users_rollup"])
 
     def test_intersection_exclude_intersection(self, project):
-
         results = run_dbt(
             ["run", "--models", "tag:bi,@users", "--exclude", "tag:bi,users_rollup+"],
             expect_pass=False,
@@ -146,7 +135,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_exclude_intersection_selectors(self, project):
-
         results = run_dbt(
             ["run", "--selector", "intersection_exclude_intersection"],
             expect_pass=False,
@@ -154,7 +142,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_exclude_intersection_lack(self, project):
-
         results = run_dbt(
             ["run", "--models", "tag:bi,@users", "--exclude", "@emails,@emails_alt"],
             expect_pass=False,
@@ -162,7 +149,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "users_rollup"])
 
     def test_intersection_exclude_intersection_lack_selector(self, project):
-
         results = run_dbt(
             ["run", "--selector", "intersection_exclude_intersection_lack"],
             expect_pass=False,
@@ -170,7 +156,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "users_rollup"])
 
     def test_intersection_exclude_triple_intersection(self, project):
-
         results = run_dbt(
             ["run", "--models", "tag:bi,@users", "--exclude", "*,tag:bi,users_rollup"],
             expect_pass=False,
@@ -178,12 +163,10 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users"])
 
     def test_intersection_concat(self, project):
-
         results = run_dbt(["run", "--models", "tag:bi,@users", "emails_alt"], expect_pass=False)
         check_result_nodes_by_name(results, ["users", "users_rollup", "emails_alt"])
 
     def test_intersection_concat_intersection(self, project):
-
         results = run_dbt(
             ["run", "--models", "tag:bi,@users", "@emails_alt,emails_alt"],
             expect_pass=False,
@@ -191,7 +174,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "users_rollup", "emails_alt"])
 
     def test_intersection_concat_exclude(self, project):
-
         results = run_dbt(
             [
                 "run",
@@ -206,7 +188,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "emails_alt"])
 
     def test_intersection_concat_exclude_concat(self, project):
-
         results = run_dbt(
             [
                 "run",
@@ -222,7 +203,6 @@ class TestIntersectionSyncs(GraphSelection):
         check_result_nodes_by_name(results, ["users", "emails_alt"])
 
     def test_intersection_concat_exclude_intersection_concat(self, project):
-
         results = run_dbt(
             [
                 "run",

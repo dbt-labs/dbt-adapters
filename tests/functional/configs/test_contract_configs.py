@@ -405,7 +405,6 @@ class TestModelLevelContractDisabledConfigs:
         }
 
     def test__model_contract_false(self, project):
-
         run_dbt(["parse"])
         manifest = get_manifest(project.project_root)
         model_id = "model.test.my_model"

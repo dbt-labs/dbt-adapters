@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
@@ -199,7 +199,7 @@ class PostgresConnectionManager(SQLConnectionManager):
         return AdapterResponse(_message=message, code=code, rows_affected=rows)
 
     @classmethod
-    def data_type_code_to_name(cls, type_code: int) -> str:
+    def data_type_code_to_name(cls, type_code: Union[int, str]) -> str:
         if type_code in psycopg2.extensions.string_types:
             return psycopg2.extensions.string_types[type_code].name
         else:

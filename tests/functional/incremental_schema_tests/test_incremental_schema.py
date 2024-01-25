@@ -62,7 +62,6 @@ class TestIncrementalSchemaChange:
         }
 
     def run_twice_and_assert(self, include, compare_source, compare_target, project):
-
         # dbt run (twice)
         run_args = ["run"]
         if include:

@@ -348,4 +348,3 @@ class TestPostgresAdapter(TestCase):
             self.assertEqual(tupled_catalog, {rows[0], rows[1], rows[3]})
 
         self.assertEqual(exceptions, [])
-

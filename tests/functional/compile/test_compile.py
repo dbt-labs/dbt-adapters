@@ -161,7 +161,9 @@ class TestCompile:
             run_dbt(["show", "--inline", "slect asdlkjfsld;j"])
 
     def test_multiline_jinja(self, project):
-        (results, log_output) = run_dbt_and_capture(["compile", "--inline", fixtures.model_multiline_jinja])
+        (results, log_output) = run_dbt_and_capture(
+            ["compile", "--inline", fixtures.model_multiline_jinja]
+        )
         assert len(results) == 1
         assert "Compiled inline node is:" in log_output
 

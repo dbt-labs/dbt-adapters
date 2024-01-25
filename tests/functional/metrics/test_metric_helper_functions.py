@@ -25,7 +25,6 @@ class TestMetricHelperFunctions:
         self,
         project,
     ):
-
         # initial parse
         manifest = run_dbt(["parse"])
         assert isinstance(manifest, Manifest)

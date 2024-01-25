@@ -123,7 +123,6 @@ class TestModelLevelProjectColorConfigs(BaseCustomNodeColorModelvsProject):
         return {"custom_color_model.sql": models__custom_node_color__model_sql}
 
     def test__model_override_project(self, project):
-
         run_dbt(["compile"])
         manifest = get_manifest(project.project_root)
         model_id = "model.test.custom_color_model"
@@ -152,7 +151,6 @@ class TestModelLevelSchemaColorConfigs(BaseCustomNodeColorModelvsProject):
         }
 
     def test__model_override_schema(self, project):
-
         run_dbt(["compile"])
         manifest = get_manifest(project.project_root)
         model_id = "model.test.custom_color_model"
@@ -214,7 +212,6 @@ class TestSchemaOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
         self,
         project,
     ):
-
         run_dbt(["compile"])
         manifest = get_manifest(project.project_root)
 
@@ -245,7 +242,6 @@ class TestModelOverProjectColorConfigs(BaseCustomNodeColorModelvsProject):
         self,
         project,
     ):
-
         run_dbt(["compile"])
         manifest = get_manifest(project.project_root)
 

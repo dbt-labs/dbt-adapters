@@ -5,7 +5,6 @@ from dbt_common.events.base_types import EventLevel
 
 
 def test_performance_report(project):
-
     resource_report_level = None
 
     def check_for_report(e):

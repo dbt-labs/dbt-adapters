@@ -70,6 +70,7 @@ class PostgresRelation(BaseRelation):
         #     {% if configuration_changes is none %}
         if config_change_collection.has_changes:
             return config_change_collection
+        return None
 
     def _get_index_config_changes(
         self,
@@ -100,4 +101,4 @@ class PostgresRelation(BaseRelation):
             )
             for index in new_indexes.difference(existing_indexes)
         )
-        return set().union(drop_changes, create_changes)
+        return set().union(drop_changes, create_changes)  # type: ignore

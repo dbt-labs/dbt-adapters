@@ -110,7 +110,7 @@ class PostgresAdapter(SQLAdapter):
         database = self.config.credentials.database
         table = self.execute_macro(GET_RELATIONS_MACRO_NAME)
 
-        for (dep_schema, dep_name, refed_schema, refed_name) in table:
+        for dep_schema, dep_name, refed_schema, refed_name in table:
             dependent = self.Relation.create(
                 database=database, schema=dep_schema, identifier=dep_name
             )
@@ -131,12 +131,12 @@ class PostgresAdapter(SQLAdapter):
         except DbtRuntimeError as exc:
             raise CrossDbReferenceProhibitedError(self.type(), exc.msg)
 
-    def _link_cached_relations(self, manifest):
+    def _link_cached_relations(self, manifest) -> None:
         schemas: Set[str] = set()
         relations_schemas = self._get_cache_schemas(manifest)
         for relation in relations_schemas:
             self.verify_database(relation.database)
-            schemas.add(relation.schema.lower())
+            schemas.add(relation.schema.lower())  # type: ignore
 
         self._link_cached_database_relations(schemas)
 

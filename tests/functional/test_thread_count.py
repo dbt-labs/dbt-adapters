@@ -6,10 +6,7 @@ class TestThreadCount:
     @pytest.fixture(scope="class")
     def models(self):
         sql = "with x as (select pg_sleep(1)) select 1"
-        independent_models = {
-            f"do_nothing_{num}.sql": sql
-            for num in range(1, 21)
-        }
+        independent_models = {f"do_nothing_{num}.sql": sql for num in range(1, 21)}
         return independent_models
 
     @pytest.fixture(scope="class")
