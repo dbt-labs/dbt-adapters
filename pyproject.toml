@@ -31,7 +31,7 @@ dependencies = [
 ]
 [project.optional-dependencies]
 dev = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@fix-dependencies",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
 ]
 lint = [
     "black",
@@ -49,10 +49,11 @@ test = [
     "freezegun",
     "pytest",
     "pytest-dotenv",
+    "pytest-mock",
     "pytest-xdist",
 ]
 integration = [
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git@fix-dependencies#subdirectory=dbt-tests-adapter",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
 ]
 build = [
     "wheel",
@@ -71,6 +72,8 @@ Changelog = "https://github.com/dbt-labs/dbt-postgres/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# TODO: this is needed to install from github in optoinal-dependencies
+# alternatively, we can stick the github dependencies directly in the hatch envs
 [tool.hatch.metadata]
 allow-direct-references = true
 
@@ -96,12 +99,9 @@ features = [
 detached = true
 features = ["lint"]
 [tool.hatch.envs.lint.scripts]
-all = [
-    "- black-only",
-    "- flake8-only",
-]
-black-only = "python -m black ."
-flake8-only = "python -m flake8 ."
+all = ["- black", "- flake8", ]
+black = "python -m black ."
+flake8 = "python -m flake8 ."
 
 [tool.hatch.envs.typecheck]
 features = ["typecheck"]
@@ -124,10 +124,7 @@ all = "python -m pytest {args:tests/functional}"
 detached = true
 features = ["build"]
 [tool.hatch.envs.build.scripts]
-check-all = [
-    "- check-wheel",
-    "- check-sdist",
-]
+check-all = ["- check-wheel", "- check-sdist"]
 check-wheel = [
     "twine check dist/*",
     "find ./dist/dbt_postgres-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
@@ -138,6 +135,7 @@ check-sdist = [
     "find ./dist/dbt_postgres-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-postgres",
 ]
+
 [tool.black]
 line-length = 99
 target-version = ['py38']
