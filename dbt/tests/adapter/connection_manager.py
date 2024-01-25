@@ -1,12 +1,15 @@
 import sys
 from unittest import TestCase
 
+import pytest
+
 from dbt.adapters.base import BaseConnectionManager
 from dbt.adapters.contracts.connection import Connection
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.exceptions import FailedToConnectError
 
 
+@pytest.mark.skip("This gets run on import by pytest because it's an instance of TestCase.")
 class ConnectionManagerRetry(TestCase):
 
     def setUp(self):
