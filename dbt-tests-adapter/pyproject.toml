@@ -23,10 +23,20 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "dbt-adapters~=0.1.0a1",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#egg=dbt-core&subdirectory=core",
-    # installed via dbt-core but used directly, unpin minor to avoid version conflicts
-    "pyyaml<7.0",
+    # `dbt-tests-adapter` will ultimately depend on the packages below
+    # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
+    # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
+    # TODO: remove `dbt-core` dependency, but do not necessarily pin, pin may be determined by dependent adapter's pin on `dbt-adapters`
+    "dbt-adapters",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+build = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
 ]
 
 [project.urls]
@@ -51,3 +61,22 @@ allow-direct-references = true
 
 [tool.hatch.version]
 path = "../dbt/tests/__about__.py"
+
+[tool.hatch.envs.build]
+detached = true
+features = ["build"]
+[tool.hatch.envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_tests_adapter-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-tests-adapter",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_tests_adapter-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-tests-adapter",
+]
