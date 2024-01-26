@@ -10,6 +10,10 @@ on:
 
 permissions: read-all
 
+defaults:
+  run:
+    shell: bash
+
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
@@ -17,8 +21,10 @@ concurrency:
 
 jobs:
   lint:
-    name: Python 3.8
+    name: Python ${{ vars.PYTHON_DEFAULT_VERSION }}
     runs-on: ubuntu-latest
+    environment:
+      name: ci
 
     steps:
       - name: Check out repository
@@ -29,12 +35,10 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-environment
         with:
-          python-version: "3.8"
+          python-version: ${{ vars.PYTHON_DEFAULT_VERSION }}
 
       - name: Run linters
         run: hatch run lint:all
-        shell: bash
 
       - name: Run typechecks
         run: hatch run typecheck:all
-        shell: bash

@@ -4,14 +4,17 @@ inputs:
   setup-command:
     description: The command to setup development dependencies
     default: "python -m pip install hatch"
+  python-version:
+    description: The python version to use
+    required: true
 
 runs:
   using: composite
   steps:
-    - name: Set up Python ${{ vars.PYTHON_VERSION }}
+    - name: Set up Python ${{ inputs.python-version }}
       uses: actions/setup-python@v4
       with:
-        python-version: ${{ vars.PYTHON_VERSION }}
+        python-version: ${{ inputs.python-version }}
 
     - name: Install dev dependencies
       run: ${{ inputs.setup-command }}

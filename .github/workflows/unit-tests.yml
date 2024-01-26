@@ -19,11 +19,13 @@ jobs:
   unit:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
+    environment:
+      name: ci
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ${{ vars.PYTHON_SUPPORTED_VERSIONS }}
 
     steps:
       - name: Check out repository

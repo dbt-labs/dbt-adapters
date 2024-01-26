@@ -48,6 +48,8 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
+        with:
+          python-version: ${{ vars.PYTHON_VERSION }}
 
       # keep this in the workflow so that the publishing actions are generic
       - name: Change working directory if `dbt-tests-adapter`
