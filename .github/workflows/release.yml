@@ -60,4 +60,4 @@ jobs:
         uses: ./.github/actions/publish-pypi
         with:
           pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          working-dir: dbt-tests-adapter/
+          working-dir: ./dbt-tests-adapter/

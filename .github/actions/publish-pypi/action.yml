@@ -12,7 +12,7 @@ inputs:
     default: "hatch run build:check-all"
   working-dir:
     description: Where to run commands from, supports namespace packaging
-    default: "/"
+    default: "./"
 
 runs:
   using: composite
