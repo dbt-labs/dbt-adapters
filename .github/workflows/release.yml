@@ -3,9 +3,16 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      package:
+        type: choice
+        description: Choose what to publish
+        options:
+        - dbt-adapters
+        - dbt-tests-adapter
+        default: dbt-adapters
       deploy-to:
         type: choice
-        description: Choose where to publish (test/prod)
+        description: Choose where to publish
         options:
         - prod
         - test
@@ -39,7 +46,17 @@ jobs:
         with:
           persist-credentials: false
 
+      # keep this in the workflow so that the publish actions are generic
+      - name: Setup environment
+        uses: ./.github/actions/setup-environment
+
+      # keep this in the workflow so that the publish actions is generic
+      - name: Change working directory if `dbt-tests-adapter`
+        if: ${{ inputs.package }} == dbt-tests-adapter
+        run: cd dbt-tests-adapter
+        shell: bash
+
       - name: Publish to PyPI
         uses: ./.github/actions/publish-pypi
         with:
-          python-version: "3.11"
+          deploy-to: ${{ inputs.deploy-to }}

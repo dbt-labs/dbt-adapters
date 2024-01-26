@@ -1,25 +1,33 @@
 name: Publish PyPI
 
 inputs:
-  python-version:
-    description: Create an environment with the appropriate version of python and hatch installed
-    default: "3.11"
+  deploy-to:
+    description: The PyPI index to publish to, test or prod
+    default: "prod"
+  build-command:
+    description: The command to build distributable artifacts
+    default: "hatch build"
+  check-command:
+    description: The command to check built artifacts
+    default: "hatch run build:check-all"
 
 runs:
   using: composite
   steps:
-    - name: Setup environment
-      uses: ./.github/actions/setup-environment
-      with:
-        python-version: ${{ inputs.python-version }}
-
     - name: Build artifacts
-      run: hatch build
+      run: ${{ inputs.build-command }}
       shell: bash
 
     - name: Check artifacts
-      run: hatch run build:check-all
+      run: ${{ inputs.check-command }}
       shell: bash
 
-    - name: Publish artifacts to PyPI
+    - name: Publish artifacts to PyPI Prod
+      if: ${{ inputs.deploy-to }} == prod
       uses: pypa/gh-action-pypi-publish@release/v1
+
+    - name: Publish artifacts to PyPI Test
+      if: ${{ inputs.deploy-to }} == test
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        url: https://test.pypi.org/legacy
