@@ -25,7 +25,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ${{ vars.PYTHON_SUPPORTED_VERSIONS }}
+        python-version: ${{ fromJSON(vars.PYTHON_SUPPORTED_VERSIONS) }}
 
     steps:
       - name: Check out repository
