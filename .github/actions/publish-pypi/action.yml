@@ -4,7 +4,7 @@ description: Publish artifacts saved during build step to PyPI
 inputs:
   artifacts-dir:
     description: Where to download the artifacts
-    default: "/dist"
+    default: "dist"
   pypi-repository-url:
     description: The PyPI index to publish to, test or prod
     required: true

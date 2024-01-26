@@ -13,7 +13,7 @@ inputs:
     default: "./"
   artifacts-dir:
     description: Where to upload the artifacts
-    default: "/dist"
+    default: "dist"
 
 runs:
   using: composite
