@@ -21,10 +21,8 @@ concurrency:
 
 jobs:
   lint:
-    name: Python ${{ vars.PYTHON_DEFAULT_VERSION }}
+    name: Python 3.8
     runs-on: ubuntu-latest
-    environment:
-      name: ci
 
     steps:
       - name: Check out repository
@@ -35,7 +33,7 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-environment
         with:
-          python-version: ${{ vars.PYTHON_DEFAULT_VERSION }}
+          python-version: "3.8"
 
       - name: Run linters
         run: hatch run lint:all
