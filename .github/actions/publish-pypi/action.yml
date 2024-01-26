@@ -25,4 +25,4 @@ runs:
     - name: Publish artifacts
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        url: ${{ inputs.pypi-repository-url }}
+        repository-url: ${{ inputs.pypi-repository-url }}
