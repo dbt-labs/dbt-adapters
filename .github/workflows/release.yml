@@ -50,14 +50,14 @@ jobs:
         uses: ./.github/actions/setup-hatch
 
       - name: Build `dbt-adapters`
-        if: ${{ inputs.package }} == dbt-adapters
+        if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
 
       - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package }} == dbt-tests-adapter
+        if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:
-          working-dir: "./dbt-tests-adapter"
+          working-dir: "./dbt-tests-adapter/"
 
       - name: Publish to PyPI
         uses: ./.github/actions/publish-pypi
