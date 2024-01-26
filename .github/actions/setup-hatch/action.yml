@@ -1,4 +1,5 @@
-name: Setup `hatch`
+name: Setup - `hatch`
+description: Setup a python environment with `hatch` installed
 
 inputs:
   setup-command:

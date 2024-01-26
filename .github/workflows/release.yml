@@ -46,18 +46,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
 
-      - name: Publish dbt-adapters to PyPI
+      - name: Build `dbt-adapters`
         if: ${{ inputs.package }} == dbt-adapters
         uses: ./.github/actions/publish-pypi
         with:
           pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
 
-      - name: Publish dbt-adapters to PyPI
+      - name: Build `dbt-tests-adapter`
         if: ${{ inputs.package }} == dbt-tests-adapter
         uses: ./.github/actions/publish-pypi
         with:
           pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          working-dir: ./dbt-tests-adapter/
+          working-dir: "./dbt-tests-adapter"
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}

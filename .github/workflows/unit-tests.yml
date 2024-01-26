@@ -31,8 +31,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
         with:
           python-version: ${{ matrix.python-version }}
 
