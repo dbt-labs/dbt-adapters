@@ -52,14 +52,11 @@ jobs:
       - name: Build `dbt-adapters`
         if: ${{ inputs.package }} == dbt-adapters
         uses: ./.github/actions/build-hatch
-        with:
-          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
 
       - name: Build `dbt-tests-adapter`
         if: ${{ inputs.package }} == dbt-tests-adapter
         uses: ./.github/actions/build-hatch
         with:
-          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
           working-dir: "./dbt-tests-adapter"
 
       - name: Publish to PyPI
