@@ -421,7 +421,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         populate.
         """
         return {
-            self.Relation.create_from(quoting=self.config, relation_config=relation_config)
+            self.Relation.create_from(quoting=self.config, relation_config=relation_config).without_identifier()
             for relation_config in relation_configs
         }
 
