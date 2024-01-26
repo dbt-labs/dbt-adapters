@@ -1,27 +1,9 @@
 from unittest import TestCase, mock
 
 from dbt.adapters.contracts.connection import Connection
-from dbt.tests.adapter.connection_manager import ConnectionManagerRetry
 import psycopg2
 
 from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
-
-
-class TestConnectionManagerRetry(ConnectionManagerRetry):
-    def get_connection(self) -> Connection:
-        if connection := self.connection:
-            pass
-        else:
-            credentials = PostgresCredentials(
-                host="localhost",
-                user="test-user",
-                port=1111,
-                password="test-password",
-                database="test-db",
-                schema="test-schema",
-            )
-            connection = Connection("postgres", None, credentials)
-        return connection
 
 
 class TestConnectionManagerOpen(TestCase):
