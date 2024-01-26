@@ -10,23 +10,26 @@ inputs:
   check-command:
     description: The command to check built artifacts
     default: "hatch run build:check-all"
+  working-dir:
+    description: Where to run commands from, supports namespace packaging
+    default: "/"
 
 runs:
   using: composite
   steps:
-    - name: Check current directory
-      run: pwd
-      shell: bash
 
     - name: Build artifacts
       run: ${{ inputs.build-command }}
       shell: bash
+      working-directory: ${{ inputs.working-dir }}
 
     - name: Check artifacts
       run: ${{ inputs.check-command }}
       shell: bash
+      working-directory: ${{ inputs.working-dir }}
 
     - name: Publish artifacts
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: ${{ inputs.pypi-repository-url }}
+        packages-dir: ${{ inputs.working-dir }}dist

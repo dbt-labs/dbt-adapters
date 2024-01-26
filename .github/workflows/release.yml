@@ -49,13 +49,15 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-environment
 
-      # keep this in the workflow so that the publishing actions are generic
-      - name: Change working directory if `dbt-tests-adapter`
-        if: ${{ inputs.package }} == 'dbt-tests-adapter'
-        run: cd dbt-tests-adapter && pwd
-        shell: bash
-
-      - name: Publish to PyPI
+      - name: Publish dbt-adapters to PyPI
+        if: ${{ inputs.package }} == dbt-adapters
         uses: ./.github/actions/publish-pypi
         with:
           pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+
+      - name: Publish dbt-adapters to PyPI
+        if: ${{ inputs.package }} == dbt-tests-adapter
+        uses: ./.github/actions/publish-pypi
+        with:
+          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+          working-dir: dbt-tests-adapter/
