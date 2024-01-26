@@ -1,10 +1,9 @@
-# requires github environment with PYPI_REPOSITORY_URL defined
 name: Publish PyPI
 
 inputs:
-  deploy-to:
+  pypi-repository-url:
     description: The PyPI index to publish to, test or prod
-    default: "prod"
+    required: true
   build-command:
     description: The command to build distributable artifacts
     default: "hatch build"
@@ -26,4 +25,4 @@ runs:
     - name: Publish artifacts
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        url: ${{ vars.PYPI_REPOSITORY_URL }}
+        url: ${{ inputs.pypi-repository-url }}

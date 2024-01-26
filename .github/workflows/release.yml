@@ -58,4 +58,4 @@ jobs:
       - name: Publish to PyPI
         uses: ./.github/actions/publish-pypi
         with:
-          deploy-to: ${{ inputs.deploy-to }}
+          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
