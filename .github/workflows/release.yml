@@ -51,8 +51,8 @@ jobs:
 
       # keep this in the workflow so that the publishing actions are generic
       - name: Change working directory if `dbt-tests-adapter`
-        if: ${{ inputs.package }} == dbt-tests-adapter
-        run: cd dbt-tests-adapter
+        if: ${{ inputs.package }} == 'dbt-tests-adapter'
+        run: cd dbt-tests-adapter && pwd
         shell: bash
 
       - name: Publish to PyPI
