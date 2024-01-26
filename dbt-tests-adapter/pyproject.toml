@@ -52,9 +52,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.sdist.force-include]
 "../dbt/tests" = "dbt/tests"
+"../dbt/__init__.py" = "dbt/__init__.py"
 
 [tool.hatch.build.targets.wheel.force-include]
 "../dbt/tests" = "dbt/tests"
+"../dbt/__init__.py" = "dbt/__init__.py"
 
 [tool.hatch.version]
 path = "../dbt/tests/__about__.py"
