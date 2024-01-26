@@ -22,12 +22,7 @@ runs:
       run: ${{ inputs.check-command }}
       shell: bash
 
-    - name: Publish artifacts to PyPI Prod
-      if: ${{ inputs.deploy-to }} == prod
-      uses: pypa/gh-action-pypi-publish@release/v1
-
-    - name: Publish artifacts to PyPI Test
-      if: ${{ inputs.deploy-to }} == test
+    - name: Publish artifacts
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        url: https://test.pypi.org/legacy
+        url: ${{ vars.PYPI_REPOSITORY_URL }}

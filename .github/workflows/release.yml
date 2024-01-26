@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.deploy-to }}
-      url: ${{ vars.PYPI_URL }}
+      url: ${{ vars.PYPI_PROJECT_URL }}
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
 
@@ -46,11 +46,10 @@ jobs:
         with:
           persist-credentials: false
 
-      # keep this in the workflow so that the publish actions are generic
       - name: Setup environment
         uses: ./.github/actions/setup-environment
 
-      # keep this in the workflow so that the publish actions is generic
+      # keep this in the workflow so that the publishing actions are generic
       - name: Change working directory if `dbt-tests-adapter`
         if: ${{ inputs.package }} == dbt-tests-adapter
         run: cd dbt-tests-adapter
