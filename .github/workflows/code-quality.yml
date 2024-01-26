@@ -32,8 +32,6 @@ jobs:
 
       - name: Setup environment
         uses: ./.github/actions/setup-environment
-        with:
-          python-version: "3.8"
 
       - name: Run linters
         run: hatch run lint:all

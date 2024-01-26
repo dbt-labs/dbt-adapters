@@ -5,8 +5,8 @@ inputs:
     description: The command to setup development dependencies
     default: "python -m pip install hatch"
   python-version:
-    description: The python version to use
-    required: true
+    description: The version of python to install
+    default: "3.11"
 
 runs:
   using: composite
