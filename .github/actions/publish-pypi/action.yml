@@ -14,6 +14,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Check current directory
+      run: pwd
+      shell: bash
+
     - name: Build artifacts
       run: ${{ inputs.build-command }}
       shell: bash
