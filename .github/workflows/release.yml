@@ -10,8 +10,21 @@ on:
         - prod
         - test
         default: prod
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: true
+      release-type:
+        type: choice
+        description: Choose what to bump, raise a PR to bump major or minor versions
+        options:
+        - patch
+        - beta
+        - alpha
+        default: alpha
 
-permissions: read-all
+# this is the permission that allows creating a new release
+permissions: write
 
 defaults:
   run:
@@ -23,7 +36,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   release:
     name: PyPI - ${{ inputs.deploy-to }}
     runs-on: ubuntu-latest
@@ -32,14 +44,57 @@ jobs:
       url: ${{ vars.PYPI_URL }}
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-
     steps:
-      - name: Check out repository
+      - name: "Check out repository"
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          branch: ${{ inputs.target_branch }}
 
-      - name: Publish to PyPI
+      - name: "Generate Branch Name"
+        id: variables
+        run: |
+          name="prep-release/${{ inputs.deploy-to }}/$(hatch version)_$GITHUB_RUN_ID"
+          echo "branch_name=$name" >> $GITHUB_OUTPUT
+
+      - name: "Create Branch - ${{ steps.variables.outputs.branch_name }}"
+        run: |
+          git checkout -b ${{ steps.variables.outputs.branch_name }}
+          git push -u origin ${{ steps.variables.outputs.branch_name }}
+
+      - name: "[Notification] Temp branch created"
+        run: |
+          # Send notification
+          title="Temp branch generated"
+          message="The ${{ steps.variables.outputs.branch_name }} branch created"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
+      - name: "Generate Changelog"
+        uses: ./.github/actions/generate-changelog
+        with:
+          target-branch: ${{ inputs.target_branch }}
+          release-type: ${{ inputs.release-type }}
+
+      - name: "Publish to PyPI"
         uses: ./.github/actions/publish-pypi
         with:
           python-version: "3.11"
+
+      - name: "Bump version"
+        uses: ./.github/actions/release-type
+        run: |
+          hatch version ${{ inputs.release-type }}
+
+      - name: "Merge Changes Into ${{ inputs.target_branch }}"
+        uses: everlytic/branch-merge@1.1.5
+        with:
+          source_ref: ${{ needs.create-temp-branch.outputs.branch_name }}
+          target_branch: ${{ inputs.target_branch }}
+          github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
+          commit_message_template: "[Automated] Merged {source_ref} into target {target_branch} during release process"
+
+      - name: "[Notification] Changes Merged into ${{ inputs.target_branch }}"
+        run: |
+          title="Changelog and Version Bump Branch Merge"
+          message="The ${{ needs.create-temp-branch.outputs.branch_name }} branch was merged into ${{ inputs.target_branch }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
