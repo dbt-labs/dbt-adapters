@@ -6,7 +6,8 @@
 {%-   set columns_in_relation = adapter.get_columns_in_relation(this) -%}
 {%-   set column_name_to_data_types = {} -%}
 {%-   for column in columns_in_relation -%}
-{%-     do column_name_to_data_types.update({column.name: column.dtype}) -%}
+{#-- This needs to be a case-insensitive comparison --#}
+{%-     do column_name_to_data_types.update({column.name|lower: column.data_type}) -%}
 {%-   endfor -%}
 {%- endif -%}
 
@@ -23,7 +24,7 @@
 {%-   set default_row_copy = default_row.copy() -%}
 {%-   do default_row_copy.update(row) -%}
 select
-{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%}, {%- endif %}
+{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
 {%-   endfor %}
 {%-   if not loop.last %}
 union all
@@ -32,7 +33,7 @@ union all
 
 {%- if (rows | length) == 0 -%}
     select
-    {%- for column_name, column_value in default_row.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%},{%- endif %}
+    {%- for column_name, column_value in default_row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%},{%- endif %}
     {%- endfor %}
     limit 0
 {%- endif -%}
@@ -48,7 +49,7 @@ union all
 {%- for row in rows -%}
 {%- do format_row(row, column_name_to_data_types) -%}
 select
-{%- for column_name, column_value in row.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%}, {%- endif %}
+{%- for column_name, column_value in row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
 {%- endfor %}
 {%- if not loop.last %}
 union all
@@ -64,7 +65,7 @@ union all
 {%- for column_name, column_value in row.items() -%}
 {% set row_update = {column_name: column_value} %}
 {%- if column_value is string -%}
-{%- set row_update = {column_name: safe_cast(dbt.string_literal(column_value), column_name_to_data_types[column_name]) } -%}
+{%- set row_update = {column_name: safe_cast(dbt.string_literal(dbt.escape_single_quotes(column_value)), column_name_to_data_types[column_name]) } -%}
 {%- elif column_value is none -%}
 {%- set row_update = {column_name: safe_cast('null', column_name_to_data_types[column_name]) } -%}
 {%- else -%}
