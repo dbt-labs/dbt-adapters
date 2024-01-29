@@ -1,0 +1,22 @@
+name: Setup - `hatch`
+description: Setup a python environment with `hatch` installed
+
+inputs:
+  setup-command:
+    description: The command to setup development dependencies
+    default: "python -m pip install hatch"
+  python-version:
+    description: The version of python to install
+    default: "3.11"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install dev dependencies
+      run: ${{ inputs.setup-command }}
+      shell: bash
