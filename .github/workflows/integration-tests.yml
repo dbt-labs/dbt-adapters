@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   integration:
-    name: Python ${{ matrix.python-version }}
+    name: Integration Tests
     runs-on: ubuntu-latest
 
     strategy:

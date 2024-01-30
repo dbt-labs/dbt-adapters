@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   code-quality:
-    name: Python 3.8
+    name: Code Quality
     runs-on: ubuntu-latest
 
     steps:
