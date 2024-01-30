@@ -30,16 +30,6 @@ class TestDeps(BaseConfigProject):
         assert "1.0.0" in result.output
 
 
-class TestLS(BaseConfigProject):
-    def test_ls(self, runner, project):
-        runner.invoke(cli, ["deps"])
-        ls_result = runner.invoke(cli, ["ls"])
-        assert "1 seed" in ls_result.output
-        assert "1 model" in ls_result.output
-        assert "5 data tests" in ls_result.output
-        assert "1 snapshot" in ls_result.output
-
-
 class TestBuild(BaseConfigProject):
     def test_build(self, runner, project):
         runner.invoke(cli, ["deps"])

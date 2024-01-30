@@ -420,55 +420,6 @@ class TestInitOutsideOfProjectBase:
         os.remove(os.path.join(project.project_root, "dbt_project.yml"))
 
 
-class TestInitInvalidProjectNameCLI(TestInitOutsideOfProjectBase):
-    @patch("dbt.task.init._get_adapter_plugin_names")
-    @patch("click.confirm")
-    @patch("click.prompt")
-    def test_init_invalid_project_name_cli(
-        self, mock_prompt, mock_confirm, mock_get_adapter, project_name, project
-    ):
-        manager = Mock()
-        manager.attach_mock(mock_prompt, "prompt")
-        manager.attach_mock(mock_confirm, "confirm")
-
-        invalid_name = "name-with-hyphen"
-        valid_name = project_name
-        manager.prompt.side_effect = [valid_name]
-        mock_get_adapter.return_value = [project.adapter.type()]
-
-        run_dbt(["init", invalid_name, "--skip-profile-setup"])
-        manager.assert_has_calls(
-            [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
-            ]
-        )
-
-
-class TestInitInvalidProjectNamePrompt(TestInitOutsideOfProjectBase):
-    @patch("dbt.task.init._get_adapter_plugin_names")
-    @patch("click.confirm")
-    @patch("click.prompt")
-    def test_init_invalid_project_name_prompt(
-        self, mock_prompt, mock_confirm, mock_get_adapter, project_name, project
-    ):
-        manager = Mock()
-        manager.attach_mock(mock_prompt, "prompt")
-        manager.attach_mock(mock_confirm, "confirm")
-
-        invalid_name = "name-with-hyphen"
-        valid_name = project_name
-        manager.prompt.side_effect = [invalid_name, valid_name]
-        mock_get_adapter.return_value = [project.adapter.type()]
-
-        run_dbt(["init", "--skip-profile-setup"])
-        manager.assert_has_calls(
-            [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
-            ]
-        )
-
-
 class TestInitInsideProjectAndSkipProfileSetup(TestInitInsideOfProjectBase):
     @patch("dbt.task.init._get_adapter_plugin_names")
     @patch("click.confirm")

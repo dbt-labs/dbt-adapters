@@ -31,8 +31,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
+      - name: Setup `hatch`
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -41,7 +41,7 @@ jobs:
         shell: bash
 
       - name: Publish results
-        uses: ./.github/actions/publish-results
+        uses: dbt-labs/dbt-adapters/.github/actions/publish-results@main
         if: always()
         with:
           source-file: "results.csv"

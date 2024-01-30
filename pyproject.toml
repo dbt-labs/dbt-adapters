@@ -99,7 +99,7 @@ features = [
 detached = true
 features = ["lint"]
 [tool.hatch.envs.lint.scripts]
-all = ["- black", "- flake8", ]
+all = ["black", "flake8"]
 black = "python -m black ."
 flake8 = "python -m flake8 ."
 

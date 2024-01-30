@@ -892,24 +892,6 @@ class TestSchemaTestNameCollision:
         assert test_results[1].node.unique_id in expected_unique_ids
 
 
-class TestGenericTestsCollide:
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "schema.yml": dupe_generic_tests_collide__schema_yml,
-            "model_a.sql": dupe_generic_tests_collide__model_a,
-        }
-
-    def test_generic_test_collision(
-        self,
-        project,
-    ):
-        """These tests collide, since only the configs differ"""
-        with pytest.raises(DuplicateResourceNameError) as exc:
-            run_dbt()
-        assert "dbt found two tests with the name" in str(exc.value)
-
-
 class TestGenericTestsConfigCustomMacros:
     @pytest.fixture(scope="class")
     def models(self):

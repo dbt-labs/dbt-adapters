@@ -1,7 +1,7 @@
 import os
 
+from dbt.context.providers import RefArgs
 from dbt.contracts.graph.manifest import Manifest
-from dbt.contracts.graph.nodes import RefArgs
 import pytest
 
 from tests.functional.utils import run_dbt, run_dbt_and_capture

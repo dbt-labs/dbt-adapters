@@ -13,23 +13,18 @@ on:
 
 permissions: read-all
 
-defaults:
-  run:
-    shell: bash
-
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.deploy-to }}
   cancel-in-progress: true
 
 jobs:
-
   release:
     name: PyPI - ${{ inputs.deploy-to }}
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.deploy-to }}
-      url: ${{ vars.PYPI_URL }}
+      url: ${{ vars.PYPI_PROJECT_URL }}
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
 
@@ -39,7 +34,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup `hatch`
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
+
+      - name: Build `dbt-postgres`
+        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
+
       - name: Publish to PyPI
-        uses: ./.github/actions/publish-pypi
+        uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
         with:
-          python-version: "3.11"
+          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}

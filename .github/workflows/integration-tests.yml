@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  unit:
+  integration:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
 
@@ -25,35 +25,50 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
 
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
 
-      - name: Setup environment
-        uses: ./.github/actions/setup-environment
+      - name: Setup postgres
+        shell: bash
+        run: psql -f ./scripts/setup_test_database.sql
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: postgres
+
+      - name: Setup `hatch`
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Set up postgres (linux)
-        if: runner.os == 'Linux'
-        uses: ./.github/actions/setup-postgres-linux
-
-      - name: Set up postgres (macos)
-        if: runner.os == 'macOS'
-        uses: ./.github/actions/setup-postgres-macos
-
-      - name: Set up postgres (windows)
-        if: runner.os == 'Windows'
-        uses: ./.github/actions/setup-postgres-windows
-
       - name: Run integration tests
         run: hatch run integration-tests:all
-        shell: bash
+        env:
+          POSTGRES_TEST_HOST: localhost
+          POSTGRES_TEST_PORT: 5432
+          POSTGRES_TEST_USER: root
+          POSTGRES_TEST_PASS: password
+          POSTGRES_TEST_DATABASE: dbt
+          POSTGRES_TEST_THREADS: 4
 
       - name: Publish results
-        uses: ./.github/actions/publish-results
+        uses: dbt-labs/dbt-adapters/.github/actions/publish-results@main
         if: always()
         with:
           source-file: "results.csv"
