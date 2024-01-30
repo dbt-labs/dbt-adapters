@@ -1,25 +1,25 @@
-name: Publish PyPI
+name: Publish - PyPI
+description: Publish artifacts saved during build step to PyPI
 
 inputs:
-  python-version:
-    description: Create an environment with the appropriate version of python and hatch installed
-    default: "3.11"
+  artifacts-dir:
+    description: Where to download the artifacts
+    default: "dist"
+  repository-url:
+    description: The PyPI index to publish to, test or prod
+    required: true
 
 runs:
   using: composite
   steps:
-    - name: Setup environment
-      uses: ./.github/actions/setup-environment
+
+    - name: Download artifacts
+      uses: actions/download-artifact@v3
       with:
-        python-version: ${{ inputs.python-version }}
-
-    - name: Build artifacts
-      run: hatch build
-      shell: bash
-
-    - name: Check artifacts
-      run: hatch run build:check-all
-      shell: bash
+        name: ${{ inputs.artifacts-dir }}
+        path: dist/
 
     - name: Publish artifacts to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        repository-url: ${{ inputs.repository-url }}

@@ -3,9 +3,16 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
+      package:
+        type: choice
+        description: Choose what to publish
+        options:
+        - dbt-adapters
+        - dbt-tests-adapter
+        default: dbt-adapters
       deploy-to:
         type: choice
-        description: Choose where to publish (test/prod)
+        description: Choose where to publish
         options:
         - prod
         - test
@@ -32,7 +39,7 @@ defaults:
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.package }}-${{ inputs.deploy-to }}
   cancel-in-progress: true
 
 jobs:
@@ -41,7 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.deploy-to }}
-      url: ${{ vars.PYPI_URL }}
+      url: ${{ vars.PYPI_PROJECT_URL }}
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
@@ -69,6 +76,20 @@ jobs:
           message="The ${{ steps.variables.outputs.branch_name }} branch created"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
+
+      - name: Build `dbt-adapters`
+        if: ${{ inputs.package == 'dbt-adapters' }}
+        uses: ./.github/actions/build-hatch
+
+      - name: Build `dbt-tests-adapter`
+        if: ${{ inputs.package == 'dbt-tests-adapter' }}
+        uses: ./.github/actions/build-hatch
+        with:
+          working-dir: "./dbt-tests-adapter/"
+
+      - name: Publish to PyPI
       - name: "Generate Changelog"
         uses: ./.github/actions/generate-changelog
         with:
@@ -78,7 +99,7 @@ jobs:
       - name: "Publish to PyPI"
         uses: ./.github/actions/publish-pypi
         with:
-          python-version: "3.11"
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
 
       - name: "Bump version"
         uses: ./.github/actions/release-type
