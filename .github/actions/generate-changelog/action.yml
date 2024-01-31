@@ -1,0 +1,25 @@
+name: Generate Changelog
+description: Generate a changelog for a release
+inputs:
+  bump-type:
+    description: The type of version bump to perform. One of "major", "minor", "patch", "beta", "alpha".
+    required: true
+
+runs:
+  using: composite
+  steps:
+      - name: "Generate Release Changelog"
+        shell: bash
+        run: |
+          if [[ ${{ inputs.bump-type == "beta" | inputs.bump-type ==  "alpha"  }} -eq 1 ]]
+          then
+            changie batch ${{ needs.audit-changelog.outputs.base_version }} --move-dir '${{ needs.audit-changelog.outputs.base_version }}' --prerelease ${{ needs.audit-changelog.outputs.prerelease }}
+          elif [[ -d ".changes/${{ needs.audit-changelog.outputs.base_version }}" ]]
+          then
+            changie batch ${{ needs.audit-changelog.outputs.base_version }} --include '${{ needs.audit-changelog.outputs.base_version }}' --remove-prereleases
+          else # releasing a final patch with no prereleases
+            changie batch ${{ needs.audit-changelog.outputs.base_version }}
+          fi
+          changie merge
+          
+ 

@@ -89,6 +89,19 @@ jobs:
         with:
           working-dir: "./dbt-tests-adapter/"
 
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
+
+      - name: Build `dbt-adapters`
+        if: ${{ inputs.package == 'dbt-adapters' }}
+        uses: ./.github/actions/build-hatch
+
+      - name: Build `dbt-tests-adapter`
+        if: ${{ inputs.package == 'dbt-tests-adapter' }}
+        uses: ./.github/actions/build-hatch
+        with:
+          working-dir: "./dbt-tests-adapter/"
+
       - name: Publish to PyPI
       - name: "Generate Changelog"
         uses: ./.github/actions/generate-changelog
@@ -99,6 +112,7 @@ jobs:
       - name: "Publish to PyPI"
         uses: ./.github/actions/publish-pypi
         with:
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
 
       - name: "Bump version"
