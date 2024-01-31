@@ -3,7 +3,7 @@
 {% set default_row = {} %}
 
 {%- if not column_name_to_data_types -%}
-{%-   set columns_in_relation = adapter.get_columns_in_relation(this) -%}
+{%-   set columns_in_relation = adapter.get_columns_in_relation(defer_relation or this) -%}
 {%-   set column_name_to_data_types = {} -%}
 {%-   for column in columns_in_relation -%}
 {%-     do column_name_to_data_types.update({column.name: column.dtype}) -%}
