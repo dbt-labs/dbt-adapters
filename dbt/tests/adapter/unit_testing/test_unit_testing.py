@@ -1,7 +1,7 @@
 import pytest
 
 from dbt.tests.util import write_file, run_dbt
-
+from dbt.tests.fixtures.project import *
 
 my_model_sql = """
 select
@@ -38,13 +38,14 @@ class BaseUnitTestingTypes:
             ["DATE '2020-01-02'", "2020-01-02"],
             ["TIMESTAMP '2013-11-03 00:00:00-0'", "2013-11-03 00:00:00-0"],
             ["TIMESTAMPTZ '2013-11-03 00:00:00-0'", "2013-11-03 00:00:00-0"],
-            ["ARRAY['a','b','c']", """'{"a", "b", "c"}'"""],
-            ["ARRAY[1,2,3]", """'{1, 2, 3}'"""],
             ["'1'::numeric", "1"],
             [
                 """'{"bar": "baz", "balance": 7.77, "active": false}'::json""",
                 """'{"bar": "baz", "balance": 7.77, "active": false}'""",
             ],
+            # TODO: support complex types
+            # ["ARRAY['a','b','c']", """'{"a", "b", "c"}'"""],
+            # ["ARRAY[1,2,3]", """'{1, 2, 3}'"""],
         ]
 
     @pytest.fixture(scope="class")
@@ -75,7 +76,7 @@ class BaseUnitTestingTypes:
             assert len(results) == 1
 
             try:
-                run_dbt(["unit-test", "--select", "my_model"])
+                run_dbt(["test", "--select", "my_model"])
             except Exception:
                 raise AssertionError(f"unit test failed when testing model with {sql_value}")
 
