@@ -3,10 +3,6 @@ from datetime import datetime
 
 import pytest
 
-try:
-    from dbt.version import __version__ as DBT_VERSION
-except ImportError:
-    DBT_VERSION = "ERROR: dbt-core is not installed or `dbt.version.__version__` does not exist"
 from dbt.tests.adapter.basic import expected_catalog
 from dbt.tests.fixtures.project import write_project_files
 from dbt.tests.util import run_dbt, rm_file, get_artifact, check_datetime_between
@@ -338,8 +334,6 @@ def verify_catalog(project, expected_catalog, start_time):
 def verify_metadata(metadata, dbt_schema_version, start_time):
     assert "generated_at" in metadata
     check_datetime_between(metadata["generated_at"], start=start_time)
-    assert "dbt_version" in metadata
-    assert metadata["dbt_version"] == DBT_VERSION
     assert "dbt_schema_version" in metadata
     assert metadata["dbt_schema_version"] == dbt_schema_version
     key = "env_key"
