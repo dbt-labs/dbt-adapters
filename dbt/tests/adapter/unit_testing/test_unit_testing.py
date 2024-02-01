@@ -81,5 +81,5 @@ class BaseUnitTestingTypes:
                 raise AssertionError(f"unit test failed when testing model with {sql_value}")
 
 
-class TestUnitTestingTypes(BaseUnitTestingTypes):
+class TestPostgresUnitTestingTypes(BaseUnitTestingTypes):
     pass
