@@ -84,7 +84,7 @@ include = ["dbt"]
 packages = ["dbt"]
 
 [tool.hatch.version]
-path = "dbt/adapters/postgres/__about__.py"
+path = "dbt/adapters/postgres/__version__.py"
 
 [tool.hatch.envs.default]
 features = [

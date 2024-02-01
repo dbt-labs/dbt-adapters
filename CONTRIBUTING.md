@@ -86,6 +86,7 @@ will be reflected in the virtual environment immediately.
 `dbt-postgres` contains [unit](https://github.com/dbt-labs/dbt-postgres/tree/main/tests/unit)
 and [functional](https://github.com/dbt-labs/dbt-postgres/tree/main/tests/functional) tests.
 
+
 ### Unit tests
 
 Unit tests can be run locally without setting up a database connection:
