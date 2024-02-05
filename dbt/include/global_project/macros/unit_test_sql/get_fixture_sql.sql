@@ -48,9 +48,9 @@ union all
     limit 0
 {%- else -%}
 {%- for row in rows -%}
-{%- do format_row(row, column_name_to_data_types) -%}
+{%- set formatted_row = format_row(row, column_name_to_data_types) -%}
 select
-{%- for column_name, column_value in row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
+{%- for column_name, column_value in formatted_row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
 {%- endfor %}
 {%- if not loop.last %}
 union all
