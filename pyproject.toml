@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "dbt-adapters",
-    "psycopg2-binary~=2.9",
+    "psycopg2~=2.9",
     # installed via dbt-adapters but used directly, unpin minor to avoid version conflicts
     "dbt-common<1.0",
     "agate<2.0",
