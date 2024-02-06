@@ -61,21 +61,32 @@ union all
 {% endmacro %}
 
 {%- macro format_row(row, column_name_to_data_types) -%}
+    {#-- generate case-insensitive formatted row --#}
     {% set formatted_row = {} %}
     {%- for column_name, column_value in row.items() -%}
-        {#-- generate case-insensitive formatted row --#}
         {% set column_name = column_name|lower %}
-        {% set row_update = {column_name: column_value} %}
+
+        {%- if column_name not in column_name_to_data_types %}
+            {#-- if user-provided row contains column name that relation does not contain, raise an error --#}
+            {% set fixture_name = "expected output" if model.resource_type == 'unit_test' else ("'" ~ model.name ~ "'") %}
+            {{ exceptions.raise_compiler_error(
+                "Invalid column name: '" ~ column_name ~ "' in unit test fixture for " ~ fixture_name ~ "."
+                "\nAccepted columns for " ~ fixture_name ~ " are: " ~ (column_name_to_data_types.keys()|list)
+            ) }}
+        {%- endif -%}
+
+        {%- set column_type = column_name_to_data_types[column_name] %}
         
         {#-- wrap yaml strings in quotes, apply cast --#}
         {%- if column_value is string -%}
-            {%- set row_update = {column_name: safe_cast(dbt.string_literal(dbt.escape_single_quotes(column_value)), column_name_to_data_types[column_name]) } -%}
+            {%- set row_update = {column_name: safe_cast(dbt.string_literal(dbt.escape_single_quotes(column_value)), column_type) } -%}
         {%- elif column_value is none -%}
-            {%- set row_update = {column_name: safe_cast('null', column_name_to_data_types[column_name]) } -%}
+            {%- set row_update = {column_name: safe_cast('null', column_type) } -%}
         {%- else -%}
-            {%- set row_update = {column_name: safe_cast(column_value, column_name_to_data_types[column_name]) } -%}
-    {%- endif -%}
-    {%- do formatted_row.update(row_update) -%}
+            {%- set row_update = {column_name: safe_cast(column_value, column_type) } -%}
+        {%- endif -%}
+
+        {%- do formatted_row.update(row_update) -%}
     {%- endfor -%}
     {{ return(formatted_row) }}
 {%- endmacro -%}
