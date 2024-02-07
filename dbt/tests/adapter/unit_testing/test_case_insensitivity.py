@@ -39,7 +39,7 @@ class BaseUnitTestCaseInsensivity:
             "unit_tests.yml": test_my_model_yml,
         }
 
-    def test_dim_wizards(self, project):
+    def test_case_insensitivity(self, project):
         results = run_dbt(["run"])
         assert len(results) == 2
 

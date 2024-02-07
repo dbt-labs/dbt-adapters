@@ -44,7 +44,7 @@ class BaseUnitTestInvalidInput:
             "unit_tests.yml": test_my_model_yml,
         }
 
-    def test_dim_wizards(self, project):
+    def test_invalid_input(self, project):
         results = run_dbt(["run"])
         assert len(results) == 2
         
