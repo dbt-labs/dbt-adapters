@@ -1,11 +1,11 @@
-name: 🛠️ Implementation
-description: This is an implementation ticket intended for use by the maintainers of `dbt-adapters`
+name: 🛠️ Feature Implementation
+description: This is a feature implementation ticket intended for use by the maintainers of `dbt-adapters`
 title: "[<project>] <title>"
-labels: ["user docs","refinement"]
+labels: ["user docs","enhancement","refinement"]
 body:
   - type: markdown
     attributes:
-      value: This is an implementation ticket intended for use by the maintainers of `dbt-adapters`
+      value: This is a feature implementation ticket intended for use by the maintainers of `dbt-adapters`
 
   - type: checkboxes
     attributes:
@@ -13,8 +13,9 @@ body:
       description: >
         A couple friendly reminders:
           1. Remove the `user docs` label if the scope of this work does not require changes to https://docs.getdbt.com/docs: no end-user interface (e.g. yml spec, CLI, error messages, etc) or functional changes.
-          2. Will this change need to be backported? Add the appropriate `backport 1.x.latest` label(s).
-          3. Is this an `enhancement`, `bug`, or `regression`? Add the appropriate label.
+          2. Only remove the `refinement` label if you're confident this is ready to estimate and/or you've received feedback from at least one other engineer.
+          3. Will this change need to be backported? Add the appropriate `backport 1.x.latest` label(s).
+          4. Will this impact other teams? Add the appropriate `Impact:[Team]` labels.
       options:
         - label: I am a maintainer of `dbt-adapters`
           required: true
@@ -23,7 +24,7 @@ body:
     attributes:
       label: Short description
       description: |
-        Describe the scope of the ticket, a high-level implementation approach and any tradeoffs to consider.
+        Describe the scope of this feature, a high-level implementation approach and any tradeoffs to consider.
     validations:
       required: true
 
@@ -31,7 +32,7 @@ body:
     attributes:
       label: Context
       description: |
-        Provide the "why", motivation, and alternative approaches considered -- linking to previous refinement issues, spikes and documentation as appropriate
+        Provide the "why", motivation, and alternative approaches considered -- linking to previous refinement issues, spikes and documentation as appropriate.
     validations:
       required: false
 
@@ -39,7 +40,7 @@ body:
     attributes:
       label: Acceptance criteria
       description: |
-        What is the definition of done for this ticket? Include any relevant edge cases and/or test cases.
+        What is the definition of done for this feature? Include any relevant edge cases and/or test cases.
     validations:
       required: true
 
@@ -58,9 +59,9 @@ body:
     attributes:
       label: Consequences
       description: |
-        Will this change impact other teams? Include details of the kinds of changes required (new tests, code changes, related tickets) and add the relevant `Impact:[team]` label.
-        Will this limit/enhance our ability to make a related change? Call that out for discussion.
+        Will this impact dbt Labs' ability, or a partner's ability, to make a related change? Call that out for discussion.
+        Review `Impact:<team>` labels to ensure they capture these consequences.
       placeholder: |
-        Example: This change impacts `dbt-redshift` because the tests will need to be modified. The `Impact:[Adapter]` label has been added.
+        Example: This change impacts `dbt-databricks` because we added a new macro to the global space. The `Impact:[Databricks]` label has been added.
     validations:
       required: true
