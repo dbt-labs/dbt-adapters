@@ -62,6 +62,6 @@ body:
         Will this impact dbt Labs' ability, or a partner's ability, to make a related change? Call that out for discussion.
         Review `Impact:<team>` labels to ensure they capture these consequences.
       placeholder: |
-        Example: This change impacts `dbt-databricks` because we added a new macro to the global space. The `Impact:[Databricks]` label has been added.
+        Example: This change impacts `dbt-databricks` because we updated a macro in `dbt-spark`. (Add the `Impact:[Databricks]` label.)
     validations:
       required: true
