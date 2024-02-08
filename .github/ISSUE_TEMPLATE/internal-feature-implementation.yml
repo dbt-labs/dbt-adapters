@@ -41,6 +41,14 @@ body:
       label: Acceptance criteria
       description: |
         What is the definition of done for this feature? Include any relevant edge cases and/or test cases.
+        
+        Example:
+        - [ ] If there are no config changes, don't alter the materialized view
+        - [ ] If the materialized view is scheduled to refresh, a manual refresh should not be issued
+      value: |
+        ```[tasklist]
+        - [ ] Criterion
+        ```
     validations:
       required: true
 
@@ -48,10 +56,16 @@ body:
     attributes:
       label: Suggested tests
       description: |
-        Provide scenarios to test. Include both positive and negative tests if possible. Link to existing similar tests if appropriate.
-      placeholder: |
-         1. Test with no `materialized` field in the model config. Expect pass.
-         2. Test with a `materialized` field in the model config that is not valid. Expect ConfigError.
+        Provide scenarios to test. Include both positive and negative tests if possible.
+        Link to existing similar tests if appropriate.
+        
+        Example:
+         - [ ] Test with no `materialized` field in the model config. Expect pass.
+         - [ ] Test with a `materialized` field in the model config that is not valid. Expect ConfigError.
+      value: |
+        ```[tasklist]
+         - [ ] Test
+        ```
     validations:
       required: true
 
@@ -62,6 +76,7 @@ body:
         Will this impact dbt Labs' ability, or a partner's ability, to make a related change? Call that out for discussion.
         Review `Impact:<team>` labels to ensure they capture these consequences.
       placeholder: |
-        Example: This change impacts `dbt-databricks` because we updated a macro in `dbt-spark`. (Add the `Impact:[Databricks]` label.)
+        Example:
+        - This change impacts `dbt-databricks` because we updated a macro in `dbt-spark`. (Add the `Impact:[Databricks]` label.)
     validations:
       required: true
