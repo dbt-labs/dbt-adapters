@@ -29,12 +29,35 @@ body:
     attributes:
       label: Objectives
       description: |
-        What are the goals we are trying to achieve? Provide use cases if available.
-      placeholder: |
-        - [ ] Add option to ...
-        - [ ] Allow adapter maintainers to configure ...
+        What are the high level goals we are trying to achieve? Provide use cases if available.
+        
+        Example:
+        - [ ] Allow adapter maintainers to support custom materializations
+        - [ ] Reduce maintenance burden for incremental users by offering materialized views
+      value: |
+        ```[tasklist]
+        - [ ] Objective
+        ```
     validations:
       required: true
+
+  - type: textarea
+    attributes:
+      label: Implementation tasks
+      description: |
+        Provide a list of GH issues that will build out this functionality.
+        This may start empty, or as a checklist of items.
+        However, it should eventually become a list of Feature Implementation tickets.
+        
+        Example:
+        - [ ] Create new macro to select warehouse
+        - [ ] https://github.com/dbt-labs/dbt-adapters/issues/42
+      value: |
+        ```[tasklist]
+        - [ ] Task
+        ```
+    validations:
+      required: false
 
   - type: textarea
     attributes:
@@ -48,19 +71,3 @@ body:
         - This allows internal analytics to do more robust analysis of infrastructure usage (Add the `Impact:[Analytics]` label.)
     validations:
       required: true
-
-  - type: textarea
-    attributes:
-      label: Implementation tasks
-      description: |
-        Provide a list of GH issues that will build out this functionality. This may start empty.
-      placeholder: |
-        - [ ] https://github.com/dbt-labs/dbt-adapters/issues/123
-        - [ ] https://github.com/dbt-labs/dbt-postgres/issues/456
-      value: |
-        ```[tasklist]
-        ### Implementation tasks
-        - [ ]
-        ```
-    validations:
-      required: false
