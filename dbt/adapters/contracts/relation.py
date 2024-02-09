@@ -30,7 +30,6 @@ class MaterializationConfig(Mapping, ABC):
     materialized: str
     incremental_strategy: Optional[str]
     persist_docs: Dict[str, Any]
-    compiled_code: Optional[str]
     column_types: Dict[str, Any]
     full_refresh: Optional[bool]
     quoting: Dict[str, Any]
@@ -52,6 +51,7 @@ class RelationConfig(Protocol):
     database: str
     schema: str
     identifier: str
+    compiled_code: Optional[str]
     quoting_dict: Dict[str, bool]
     config: MaterializationConfig
 
