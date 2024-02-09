@@ -3,10 +3,11 @@
 {% set default_row = {} %}
 
 {%- if not column_name_to_data_types -%}
-{%-   set columns_in_relation = adapter.get_columns_in_relation(defer_relation or this) -%}
+{%-   set columns_in_relation = adapter.get_columns_in_relation(this) -%}
 {%-   set column_name_to_data_types = {} -%}
 {%-   for column in columns_in_relation -%}
-{%-     do column_name_to_data_types.update({column.name: column.dtype}) -%}
+{#-- This needs to be a case-insensitive comparison --#}
+{%-     do column_name_to_data_types.update({column.name|lower: column.data_type}) -%}
 {%-   endfor -%}
 {%- endif -%}
 
@@ -18,12 +19,13 @@
     {%- do default_row.update({column_name: (safe_cast("null", column_type) | trim )}) -%}
 {%- endfor -%}
 
+
 {%- for row in rows -%}
-{%-   do format_row(row, column_name_to_data_types) -%}
+{%-   set formatted_row = format_row(row, column_name_to_data_types) -%}
 {%-   set default_row_copy = default_row.copy() -%}
-{%-   do default_row_copy.update(row) -%}
+{%-   do default_row_copy.update(formatted_row) -%}
 select
-{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%}, {%- endif %}
+{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
 {%-   endfor %}
 {%-   if not loop.last %}
 union all
@@ -32,7 +34,7 @@ union all
 
 {%- if (rows | length) == 0 -%}
     select
-    {%- for column_name, column_value in default_row.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%},{%- endif %}
+    {%- for column_name, column_value in default_row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%},{%- endif %}
     {%- endfor %}
     limit 0
 {%- endif -%}
@@ -46,9 +48,9 @@ union all
     limit 0
 {%- else -%}
 {%- for row in rows -%}
-{%- do format_row(row, column_name_to_data_types) -%}
+{%- set formatted_row = format_row(row, column_name_to_data_types) -%}
 select
-{%- for column_name, column_value in row.items() %} {{ column_value }} AS {{ column_name }}{% if not loop.last -%}, {%- endif %}
+{%- for column_name, column_value in formatted_row.items() %} {{ column_value }} as {{ column_name }}{% if not loop.last -%}, {%- endif %}
 {%- endfor %}
 {%- if not loop.last %}
 union all
@@ -59,18 +61,32 @@ union all
 {% endmacro %}
 
 {%- macro format_row(row, column_name_to_data_types) -%}
+    {#-- generate case-insensitive formatted row --#}
+    {% set formatted_row = {} %}
+    {%- for column_name, column_value in row.items() -%}
+        {% set column_name = column_name|lower %}
 
-{#-- wrap yaml strings in quotes, apply cast --#}
-{%- for column_name, column_value in row.items() -%}
-{% set row_update = {column_name: column_value} %}
-{%- if column_value is string -%}
-{%- set row_update = {column_name: safe_cast(dbt.string_literal(column_value), column_name_to_data_types[column_name]) } -%}
-{%- elif column_value is none -%}
-{%- set row_update = {column_name: safe_cast('null', column_name_to_data_types[column_name]) } -%}
-{%- else -%}
-{%- set row_update = {column_name: safe_cast(column_value, column_name_to_data_types[column_name]) } -%}
-{%- endif -%}
-{%- do row.update(row_update) -%}
-{%- endfor -%}
+        {%- if column_name not in column_name_to_data_types %}
+            {#-- if user-provided row contains column name that relation does not contain, raise an error --#}
+            {% set fixture_name = "expected output" if model.resource_type == 'unit_test' else ("'" ~ model.name ~ "'") %}
+            {{ exceptions.raise_compiler_error(
+                "Invalid column name: '" ~ column_name ~ "' in unit test fixture for " ~ fixture_name ~ "."
+                "\nAccepted columns for " ~ fixture_name ~ " are: " ~ (column_name_to_data_types.keys()|list)
+            ) }}
+        {%- endif -%}
 
+        {%- set column_type = column_name_to_data_types[column_name] %}
+        
+        {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
+        {%- set column_value_clean = column_value -%}
+        {%- if column_value is string -%}
+            {%- set column_value_clean = dbt.string_literal(dbt.escape_single_quotes(column_value)) -%}
+        {%- elif column_value is none -%}
+            {%- set column_value_clean = 'null' -%}
+        {%- endif -%}
+
+        {%- set row_update = {column_name: safe_cast(column_value_clean, column_type) } -%}
+        {%- do formatted_row.update(row_update) -%}
+    {%- endfor -%}
+    {{ return(formatted_row) }}
 {%- endmacro -%}
