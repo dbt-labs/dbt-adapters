@@ -113,7 +113,6 @@ jobs:
         uses: ./.github/actions/publish-pypi
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
 
       - name: "Bump version"
         uses: ./.github/actions/release-type
