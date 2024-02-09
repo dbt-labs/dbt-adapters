@@ -77,15 +77,15 @@ union all
 
         {%- set column_type = column_name_to_data_types[column_name] %}
         
-        {#-- wrap yaml strings in quotes, apply cast --#}
+        {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
+        {%- set column_value_clean = column_value -%}
         {%- if column_value is string -%}
-            {%- set row_update = {column_name: safe_cast(dbt.string_literal(dbt.escape_single_quotes(column_value)), column_type) } -%}
+            {%- set column_value_clean = dbt.string_literal(dbt.escape_single_quotes(column_value)) -%}
         {%- elif column_value is none -%}
-            {%- set row_update = {column_name: safe_cast('null', column_type) } -%}
-        {%- else -%}
-            {%- set row_update = {column_name: safe_cast(column_value, column_type) } -%}
+            {%- set column_value_clean = 'null' -%}
         {%- endif -%}
 
+        {%- set row_update = {column_name: safe_cast(column_value_clean, column_type) } -%}
         {%- do formatted_row.update(row_update) -%}
     {%- endfor -%}
     {{ return(formatted_row) }}

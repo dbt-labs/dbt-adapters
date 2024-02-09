@@ -1,7 +1,6 @@
 import pytest
 
 from dbt.tests.util import write_file, run_dbt
-from dbt.tests.fixtures.project import *
 
 my_model_sql = """
 select
