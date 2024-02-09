@@ -1,12 +1,15 @@
+from abc import ABC
+
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Dict, Optional
+from dbt_common.contracts.config.materialization import OnConfigurationChangeOption
+from typing import Dict, Optional, Any, Union, List
 
 from dbt_common.contracts.util import Replaceable
 from dbt_common.dataclass_schema import StrEnum, dbtClassMixin
 from dbt_common.exceptions import CompilationError, DataclassNotDictError
 from dbt_common.utils import deep_merge
-from typing_extensions import Protocol
+from typing_extensions import Protocol, TypedDict
 
 
 class RelationType(StrEnum):
@@ -18,13 +21,39 @@ class RelationType(StrEnum):
     Ephemeral = "ephemeral"
 
 
+class MaterializationContract(Protocol):
+    enforced: bool
+    alias_types: bool
+
+
+class MaterializationConfig(Mapping, ABC):
+    materialized: str
+    incremental_strategy: Optional[str]
+    persist_docs: Dict[str, Any]
+    compiled_code: Optional[str]
+    column_types: Dict[str, Any]
+    full_refresh: Optional[bool]
+    quoting: Dict[str, Any]
+    unique_key: Union[str, List[str], None]
+    on_schema_change: Optional[str]
+    on_configuration_change: OnConfigurationChangeOption
+    contract: MaterializationContract
+    extra: Dict[str, Any]
+
+    def __contains__(self, item):
+        ...
+
+    def __delitem__(self, key):
+        ...
+
+
 class RelationConfig(Protocol):
     name: str
     database: str
     schema: str
     identifier: str
     quoting_dict: Dict[str, bool]
-    config: Dict[str, str]
+    config: MaterializationConfig
 
 
 class ComponentName(StrEnum):
