@@ -23,11 +23,11 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "dbt-core",
+    # TODO: remove `dbt-core` dependency
+    "dbt-core>=1.8.0a1<1.9.0",
     # `dbt-tests-adapter` will ultimately depend on the packages below
     # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
-    # TODO: remove `dbt-core` dependency, but do not necessarily pin, pin may be determined by dependent adapter's pin on `dbt-adapters`
     "dbt-adapters",
     "pyyaml",
 ]

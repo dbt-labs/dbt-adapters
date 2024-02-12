@@ -26,10 +26,10 @@ dependencies = [
     "dbt-common<1.0",
     "pytz>=2015.7",
     # installed via dbt-common but used directly, unpin minor to avoid version conflicts
-    "agate<2.0",
-    "mashumaro[msgpack]<4.0",
-    "protobuf<5.0",
-    "typing-extensions<5.0",
+    "agate>=1.0,<2.0",
+    "mashumaro[msgpack]>=3.0,<4.0",
+    "protobuf>=3.0,<5.0",
+    "typing-extensions>=4.0,<5.0",
 ]
 
 [project.optional-dependencies]
@@ -102,6 +102,8 @@ all = "python -m mypy ."
 [tool.hatch.envs.unit-tests]
 features = ["test"]
 extra-dependencies = [
+    # override the requirement in `dbt-tests-adapter` to make sure we get `main` instead of PyPI
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@main#subdirectory=core",
     "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
 ]
 [tool.hatch.envs.unit-tests.scripts]
@@ -110,6 +112,8 @@ all = "python -m pytest {args:tests/unit}"
 [tool.hatch.envs.integration-tests]
 features = ["test"]
 extra-dependencies = [
+    # override the requirement in `dbt-tests-adapter` to make sure we get `main` instead of PyPI
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@main#subdirectory=core",
     "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
 ]
 [tool.hatch.envs.integration-tests.scripts]
