@@ -1,15 +1,38 @@
+from argparse import Namespace
 import dataclasses
+from multiprocessing import get_context
 from unittest import TestCase, mock
 
 import agate
-from dbt.adapters.base import BaseAdapter, BaseRelation
+from dbt.config import RuntimeConfig
+
+from dbt.adapters.base import AdapterPlugin, BaseAdapter, BaseRelation
 from dbt.adapters.contracts.relation import Path
+
+from tests.unit.utils import inject_adapter
 
 
 class TestGetCatalog(TestCase):
     """
     Migrated from `dbt-postgres/unit/test_adapter.py::TestPostgresAdapter`
     """
+    def setUp(self):
+        args = Namespace(
+            which="blah",
+            single_threaded=False,
+            vars={},
+            profile_dir="/dev/null",
+        )
+        self.config = RuntimeConfig.from_parts(args=args)
+        self.mp_context = get_context("spawn")
+        self._adapter = None
+
+    @property
+    def adapter(self):
+        if self._adapter is None:
+            self._adapter = BaseAdapter(self.config, self.mp_context)
+            inject_adapter(self._adapter, AdapterPlugin)
+        return self._adapter
 
     @mock.patch.object(BaseAdapter, "execute_macro")
     @mock.patch.object(BaseAdapter, "_get_catalog_relations")
