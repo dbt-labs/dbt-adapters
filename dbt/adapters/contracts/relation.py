@@ -2,14 +2,15 @@ from abc import ABC
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from dbt_common.contracts.config.materialization import OnConfigurationChangeOption
 from typing import Dict, Optional, Any, Union, List
 
+
+from dbt_common.contracts.config.materialization import OnConfigurationChangeOption
 from dbt_common.contracts.util import Replaceable
 from dbt_common.dataclass_schema import StrEnum, dbtClassMixin
 from dbt_common.exceptions import CompilationError, DataclassNotDictError
 from dbt_common.utils import deep_merge
-from typing_extensions import Protocol, TypedDict
+from typing_extensions import Protocol
 
 
 class RelationType(StrEnum):
