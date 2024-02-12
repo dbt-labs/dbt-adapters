@@ -25,36 +25,12 @@ classifiers = [
 dependencies = [
     "dbt-common<1.0",
     "pytz>=2015.7",
-    # installed via dbt-common but used directly, unpin minor to avoid version conflicts
+    # installed via dbt-common but used directly
     "agate>=1.0,<2.0",
     "mashumaro[msgpack]>=3.0,<4.0",
     "protobuf>=3.0,<5.0",
     "typing-extensions>=4.0,<5.0",
 ]
-
-[project.optional-dependencies]
-lint = [
-    "black",
-    "flake8",
-    "Flake8-pyproject",
-]
-typecheck = [
-    "mypy",
-    "types-PyYAML",
-    "types-protobuf",
-    "types-pytz",
-]
-test = [
-    "pytest",
-    "pytest-dotenv",
-    "pytest-xdist",
-]
-build = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
@@ -76,16 +52,17 @@ include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 
 [tool.hatch.envs.default]
-features = [
-    "lint",
-    "typecheck",
-    "test",
-    "build",
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
 ]
 
 [tool.hatch.envs.lint]
 detached = true
-features = ["lint"]
+dependencies = [
+    "black",
+    "flake8",
+    "Flake8-pyproject",
+]
 [tool.hatch.envs.lint.scripts]
 all = [
     "- black-only",
@@ -95,23 +72,31 @@ black-only = "python -m black ."
 flake8-only = "python -m flake8 ."
 
 [tool.hatch.envs.typecheck]
-features = ["typecheck"]
+dependencies = [
+    "mypy",
+    "types-PyYAML",
+    "types-protobuf",
+    "types-pytz",
+]
 [tool.hatch.envs.typecheck.scripts]
 all = "python -m mypy ."
 
 [tool.hatch.envs.unit-tests]
-features = ["test"]
-extra-dependencies = [
-    # override the requirement in `dbt-tests-adapter` to make sure we get `main` instead of PyPI
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@main#subdirectory=core",
-    "dbt-tests-adapter @ {root:uri}/dbt-tests-adapter",
+dependencies = [
+    "pytest",
+    "pytest-dotenv",
+    "pytest-xdist",
 ]
 [tool.hatch.envs.unit-tests.scripts]
 all = "python -m pytest {args:tests/unit}"
 
 [tool.hatch.envs.build]
 detached = true
-features = ["build"]
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
 [tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",
