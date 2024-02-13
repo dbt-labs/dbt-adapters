@@ -5,7 +5,7 @@
 #  version_number:        The release version number (i.e. 1.0.0b1, 1.2.3rc2, 1.0.0)
 #  target_branch:         The branch that we will release from
 #  env_setup_script_path: Path to the environment setup script
-#  test_run:              Test run (The temp branch will be used for release)
+#  deploy_to:             If we are deploying to prod or test, if test then release from branch
 #  nightly_release:       Identifier that this is nightly release
 #
 # Outputs:
@@ -18,8 +18,7 @@
 #  - For normal runs the temp branch will be removed once changes were merged to target branch;
 #  - For test runs we will keep temp branch and will use it for release;
 #  Naming strategy:
-#  - For normal runs:      prep-release/${{ inputs.version_number }}_$GITHUB_RUN_ID
-#  - For test runs:        prep-release/test-run/${{ inputs.version_number }}_$GITHUB_RUN_ID
+#  - For normal runs:      prep-release/${{ inputs.deploy_to}}/${{ inputs.version_number }}_$GITHUB_RUN_ID
 #  - For nightly releases: prep-release/nightly-release/${{ inputs.version_number }}_$GITHUB_RUN_ID
 #
 # **why?**
@@ -35,17 +34,19 @@
 #
 
 name: Version Bump and Changelog Generation
-
+run-name: Bump ${{ inputs.package }}==${{ inputs.version_number }} for release to ${{ inputs.deploy-to }} and generate changelog
 on:
   workflow_call:
     inputs:
       version_number:
         required: true
         type: string
-      test_run:
-        required: false
-        default: true
-        type: boolean
+      deploy_to:
+        type: choice
+        description: Choose where to publish
+        options:
+          - prod
+          - test
       nightly_release:
         type: boolean
         default: false
@@ -89,7 +90,7 @@ jobs:
         run: |
           # WORKFLOW INPUTS
           echo The release version number:           ${{ inputs.version_number }}
-          echo Test run:                             ${{ inputs.test_run }}
+          echo Deploy to:                            ${{ inputs.deploy_to }}
           echo Nightly release:                      ${{ inputs.nightly_release }}
           echo Optional env setup script:            ${{ inputs.env_setup_script_path }}
           # ENVIRONMENT VARIABLES
@@ -233,9 +234,8 @@ jobs:
           if [[ ${{ inputs.nightly_release }} == true  ]]
           then
             name+="nightly-release/"
-          elif [[ ${{ inputs.test_run }} == true ]]
-          then
-            name+="test-run/"
+          else
+            name+="${{ inputs.deploy_to }}/"
           fi
           name+="${{ inputs.version_number }}_$GITHUB_RUN_ID"
           echo "branch_name=$name" >> $GITHUB_OUTPUT
@@ -430,7 +430,7 @@ jobs:
     needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
     if: |
         !failure() && !cancelled() &&
-        inputs.test_run == false &&
+        inputs.deploy_to == 'test' &&
         (
           needs.audit-changelog.outputs.exists == 'false' ||
           needs.audit-version-in-code.outputs.up_to_date == 'false'
@@ -439,7 +439,7 @@ jobs:
       - name: "[Debug] Print Variables"
         run: |
           echo branch_name:   ${{ needs.create-temp-branch.outputs.branch_name }}
-          echo inputs.test_run: ${{ inputs.test_run }}
+          echo inputs.deploy_to: ${{ inputs.deploy_to }}
           echo needs.audit-changelog.outputs.exists: ${{ needs.audit-changelog.outputs.exists }}
           echo needs.audit-version-in-code.outputs.up_to_date: ${{ needs.audit-version-in-code.outputs.up_to_date }}
       - name: "Checkout Repo ${{ github.repository }}"
@@ -486,7 +486,7 @@ jobs:
         id: resolve_branch
         run: |
           branch=""
-          if [[ ${{ inputs.test_run == true }} or ${{ inputs.nightly_release == true }}]]
+          if [[ ${{ inputs.deploy_to == test }} or ${{ inputs.nightly_release == true }}]]
           then
             branch=${{ needs.create-temp-branch.outputs.branch_name }}
           else
@@ -507,6 +507,6 @@ jobs:
         run: git status
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
-        if: ${{ inputs.test_run == false && inputs.nightly_release == false && needs.create-temp-branch.outputs.branch_name != '' }}
+        if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == false && needs.create-temp-branch.outputs.branch_name != '' }}
         run: |
           git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
