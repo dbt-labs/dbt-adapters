@@ -23,44 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "dbt-adapters",
-    "psycopg2~=2.9",
-    # installed via dbt-adapters but used directly, unpin minor to avoid version conflicts
+    "dbt-adapters>=0.1.0a6,<0.2.0",
+    "psycopg2>=2.9,<3.0",
+    # installed via dbt-adapters but used directly
     "dbt-common<1.0",
-    "agate<2.0",
+    "agate>=1.0,<2.0",
 ]
-[project.optional-dependencies]
-dev = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
-]
-lint = [
-    "black",
-    "flake8",
-    "Flake8-pyproject",
-]
-typecheck = [
-    "mypy",
-    "types-protobuf",
-    "types-pytz",
-]
-test = [
-    # TODO: remove `dbt-core` dependencies from unit tests
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "freezegun",
-    "pytest",
-    "pytest-dotenv",
-    "pytest-mock",
-    "pytest-xdist",
-]
-integration = [
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
-]
-build = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-postgres"
 Documentation = "https://docs.getdbt.com"
@@ -72,11 +40,6 @@ Changelog = "https://github.com/dbt-labs/dbt-postgres/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# TODO: this is needed to install from github in optoinal-dependencies
-# alternatively, we can stick the github dependencies directly in the hatch envs
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.build.targets.sdist]
 include = ["dbt"]
 
@@ -87,44 +50,68 @@ packages = ["dbt"]
 path = "dbt/adapters/postgres/__version__.py"
 
 [tool.hatch.envs.default]
-features = [
-    "lint",
-    "typecheck",
-    "test",
-    "integration",
-    "build",
+dependencies = [
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
 ]
 
 [tool.hatch.envs.lint]
 detached = true
-features = ["lint"]
+dependencies = [
+    "black",
+    "flake8",
+    "Flake8-pyproject",
+]
 [tool.hatch.envs.lint.scripts]
-all = ["black", "flake8"]
+all = [
+    "black",
+    "flake8",
+]
 black = "python -m black ."
 flake8 = "python -m flake8 ."
 
 [tool.hatch.envs.typecheck]
-features = ["typecheck"]
+dependencies = [
+    "mypy",
+    "types-protobuf",
+    "types-pytz",
+]
 [tool.hatch.envs.typecheck.scripts]
 all = "python -m mypy ."
 
 [tool.hatch.envs.unit-tests]
-# TODO: confirm this works for production testing or add appropriate hatch envs
-features = ["dev", "test"]
+dependencies = [
+    # TODO: remove `dbt-core` dependencies from unit tests
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "freezegun",
+    "pytest",
+    "pytest-dotenv",
+    "pytest-mock",
+    "pytest-xdist",
+]
 [tool.hatch.envs.unit-tests.scripts]
 all = "python -m pytest {args:tests/unit}"
 
 [tool.hatch.envs.integration-tests]
-# TODO: confirm this works for production testing or add appropriate hatch envs
-features = ["dev", "test", "integration"]
+template = "unit-tests"
+extra-dependencies = [
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
+]
 [tool.hatch.envs.integration-tests.scripts]
 all = "python -m pytest {args:tests/functional}"
 
 [tool.hatch.envs.build]
 detached = true
-features = ["build"]
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
 [tool.hatch.envs.build.scripts]
-check-all = ["- check-wheel", "- check-sdist"]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
 check-wheel = [
     "twine check dist/*",
     "find ./dist/dbt_postgres-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
