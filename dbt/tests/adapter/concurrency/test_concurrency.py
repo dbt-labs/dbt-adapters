@@ -303,8 +303,6 @@ class BaseConcurrency:
             "skip.sql": models__skip_sql,
         }
 
-
-class TestConcurenncy(BaseConcurrency):
     def test_concurrency(self, project):
         run_dbt(["seed", "--select", "seed"])
         results = run_dbt(["run"], expect_pass=False)
@@ -329,3 +327,7 @@ class TestConcurenncy(BaseConcurrency):
         check_table_does_not_exist(project.adapter, "skip")
 
         assert "PASS=5 WARN=0 ERROR=1 SKIP=1 TOTAL=7" in output
+
+
+class TestConcurenncy(BaseConcurrency):
+    pass

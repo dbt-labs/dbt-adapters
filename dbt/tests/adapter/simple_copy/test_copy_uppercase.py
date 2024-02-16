@@ -4,7 +4,7 @@ from dbt.tests.adapter.simple_copy import fixtures
 from dbt.tests.util import run_dbt, check_relations_equal
 
 
-class TestSimpleCopyUppercase:
+class BaseSimpleCopyUppercase:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
         return {
@@ -53,3 +53,7 @@ class TestSimpleCopyUppercase:
         check_relations_equal(
             project.adapter, ["seed", "VIEW_MODEL", "INCREMENTAL", "MATERIALIZED", "GET_AND_REF"]
         )
+
+
+class TestSimpleCopyUppercase(BaseSimpleCopyUppercase):
+    pass

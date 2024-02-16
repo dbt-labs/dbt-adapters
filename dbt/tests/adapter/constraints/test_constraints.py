@@ -508,7 +508,7 @@ class TestConstraintQuotedColumn(BaseConstraintQuotedColumn):
     pass
 
 
-class TestIncrementalForeignKeyConstraint:
+class BaseIncrementalForeignKeyConstraint:
     @pytest.fixture(scope="class")
     def macros(self):
         return {
@@ -534,3 +534,7 @@ class TestIncrementalForeignKeyConstraint:
         run_dbt(["run", "--select", "raw_numbers"])
         run_dbt(["run", "--select", "stg_numbers"])
         run_dbt(["run", "--select", "stg_numbers"])
+
+
+class TestIncrementalForeignKeyConstraint(BaseIncrementalForeignKeyConstraint):
+    pass

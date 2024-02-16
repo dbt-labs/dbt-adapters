@@ -64,7 +64,7 @@ class SeedTestBase(SeedConfigBase):
             check_table_does_not_exist(project.adapter, "models__downstream_from_seed_actual")
 
 
-class TestBasicSeedTests(SeedTestBase):
+class BaseBasicSeedTests(SeedTestBase):
     def test_simple_seed(self, project):
         """Build models and observe that run truncates a seed and re-inserts rows"""
         self._build_relations_for_test(project)
@@ -79,7 +79,11 @@ class TestBasicSeedTests(SeedTestBase):
         )
 
 
-class TestSeedConfigFullRefreshOn(SeedTestBase):
+class TestBasicSeedTests(BaseBasicSeedTests):
+    pass
+
+
+class BaseSeedConfigFullRefreshOn(SeedTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -92,7 +96,11 @@ class TestSeedConfigFullRefreshOn(SeedTestBase):
         self._check_relation_end_state(run_result=run_dbt(["seed"]), project=project, exists=False)
 
 
-class TestSeedConfigFullRefreshOff(SeedTestBase):
+class TestSeedConfigFullRefreshOn(BaseSeedConfigFullRefreshOn):
+    pass
+
+
+class BaseSeedConfigFullRefreshOff(SeedTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -108,7 +116,11 @@ class TestSeedConfigFullRefreshOff(SeedTestBase):
         )
 
 
-class TestSeedCustomSchema(SeedTestBase):
+class TestSeedConfigFullRefreshOff(BaseSeedConfigFullRefreshOff):
+    pass
+
+
+class BaseSeedCustomSchema(SeedTestBase):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
@@ -146,6 +158,10 @@ class TestSeedCustomSchema(SeedTestBase):
         assert len(results) == 1
         custom_schema = f"{project.test_schema}_custom_schema"
         check_relations_equal(project.adapter, [f"{custom_schema}.seed_actual", "seed_expected"])
+
+
+class TestSeedCustomSchema(BaseSeedCustomSchema):
+    pass
 
 
 class SeedUniqueDelimiterTestBase(SeedConfigBase):
@@ -193,14 +209,18 @@ class SeedUniqueDelimiterTestBase(SeedConfigBase):
             )
 
 
-class TestSeedWithUniqueDelimiter(SeedUniqueDelimiterTestBase):
+class BaseSeedWithUniqueDelimiter(SeedUniqueDelimiterTestBase):
     def test_seed_with_unique_delimiter(self, project):
         """Testing correct run of seeds with a unique delimiter (pipe in this case)"""
         self._build_relations_for_test(project)
         self._check_relation_end_state(run_result=run_dbt(["seed"]), project=project, exists=True)
 
 
-class TestSeedWithWrongDelimiter(SeedUniqueDelimiterTestBase):
+class TestSeedWithUniqueDelimiter(BaseSeedWithUniqueDelimiter):
+    pass
+
+
+class BaseSeedWithWrongDelimiter(SeedUniqueDelimiterTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -213,7 +233,11 @@ class TestSeedWithWrongDelimiter(SeedUniqueDelimiterTestBase):
         assert "syntax error" in seed_result.results[0].message.lower()
 
 
-class TestSeedWithEmptyDelimiter(SeedUniqueDelimiterTestBase):
+class TestSeedWithWrongDelimiter(BaseSeedWithWrongDelimiter):
+    pass
+
+
+class BaseSeedWithEmptyDelimiter(SeedUniqueDelimiterTestBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -226,7 +250,11 @@ class TestSeedWithEmptyDelimiter(SeedUniqueDelimiterTestBase):
         assert "compilation error" in seed_result.results[0].message.lower()
 
 
-class TestSimpleSeedEnabledViaConfig(object):
+class TestSeedWithEmptyDelimiter(BaseSeedWithEmptyDelimiter):
+    pass
+
+
+class BaseSimpleSeedEnabledViaConfig:
     @pytest.fixture(scope="session")
     def seeds(self):
         return {
@@ -271,7 +299,11 @@ class TestSimpleSeedEnabledViaConfig(object):
         check_table_does_exist(project.adapter, "seed_tricky")
 
 
-class TestSeedParsing(SeedConfigBase):
+class TestSimpleSeedEnabledViaConfig(BaseSimpleSeedEnabledViaConfig):
+    pass
+
+
+class BaseSeedParsing(SeedConfigBase):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         """Create table for ensuring seeds and models used in tests build correctly"""
@@ -293,7 +325,11 @@ class TestSeedParsing(SeedConfigBase):
         run_dbt(["seed"], expect_pass=False)
 
 
-class TestSimpleSeedWithBOM(SeedConfigBase):
+class TestSeedParsing(BaseSeedParsing):
+    pass
+
+
+class BaseSimpleSeedWithBOM(SeedConfigBase):
     # Reference: BOM = byte order mark; see https://www.ibm.com/docs/en/netezza?topic=formats-byte-order-mark
     # Tests for hidden unicode character in csv
     @pytest.fixture(scope="class", autouse=True)
@@ -319,7 +355,11 @@ class TestSimpleSeedWithBOM(SeedConfigBase):
         check_relations_equal(project.adapter, ["seed_expected", "seed_bom"])
 
 
-class TestSeedSpecificFormats(SeedConfigBase):
+class TestSimpleSeedWithBOM(BaseSimpleSeedWithBOM):
+    pass
+
+
+class BaseSeedSpecificFormats(SeedConfigBase):
     """Expect all edge cases to build"""
 
     @staticmethod
@@ -348,6 +388,10 @@ class TestSeedSpecificFormats(SeedConfigBase):
     def test_simple_seed(self, project):
         results = run_dbt(["seed"])
         assert len(results) == 3
+
+
+class TestSeedSpecificFormats(BaseSeedSpecificFormats):
+    pass
 
 
 class BaseTestEmptySeed:
