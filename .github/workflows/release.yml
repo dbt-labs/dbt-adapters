@@ -83,8 +83,13 @@ jobs:
   log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
     if: ${{ !failure() && !cancelled() }}
-
     needs: [bump-version-generate-changelog]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print variables
+        run: |
+          echo Final SHA     : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
+          echo Changelog path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
 
   build-and-publish:
     name: Build, Test and publish to PyPi
