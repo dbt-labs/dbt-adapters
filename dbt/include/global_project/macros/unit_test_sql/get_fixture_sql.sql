@@ -3,7 +3,7 @@
 {% set default_row = {} %}
 
 {%- if not column_name_to_data_types -%}
-{%-   set columns_in_relation = adapter.get_columns_in_relation(this) -%}
+{%-   set columns_in_relation = adapter.get_columns_in_relation(load_relation(this) or defer_relation) -%}
 {%-   set column_name_to_data_types = {} -%}
 {%-   for column in columns_in_relation -%}
 {#-- This needs to be a case-insensitive comparison --#}
@@ -44,7 +44,7 @@ union all
 {% macro get_expected_sql(rows, column_name_to_data_types) %}
 
 {%- if (rows | length) == 0 -%}
-    select * FROM dbt_internal_unit_test_actual
+    select * from dbt_internal_unit_test_actual
     limit 0
 {%- else -%}
 {%- for row in rows -%}
