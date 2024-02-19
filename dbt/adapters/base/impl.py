@@ -1535,6 +1535,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         parsed_constraint: Union[ColumnLevelConstraint, ModelLevelConstraint],
         render_func,
     ) -> Optional[str]:
+        # skip checking enforcement if this is a 'custom' constraint
+        if parsed_constraint.type == ConstraintType.custom:
+            return render_func(parsed_constraint)
         if (
             parsed_constraint.warn_unsupported
             and cls.CONSTRAINT_SUPPORT[parsed_constraint.type] == ConstraintSupport.NOT_SUPPORTED
