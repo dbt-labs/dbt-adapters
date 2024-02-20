@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Remove __init__.py file from dbt.tests
+time: 2024-02-20T16:42:23.706-05:00
+custom:
+  Author: gshank
+  Issue: "96"
