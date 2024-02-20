@@ -59,10 +59,17 @@ defaults:
   run:
     shell: bash
 
-env:
-  TEST_RUN : ${{ inputs.deploy-to == 'test' && 'true' || 'false' }}
-
 jobs:
+  setup-job-vars:
+    name: setup job variables
+    runs-on: ubuntu-latest
+    outputs:
+      TEST_RUN: ${{ steps.is_test_run.outputs.TEST_RUN }}
+    steps:
+      - id: is_test_run
+        run: |
+          echo "TEST_RUN=${{ inputs.deploy-to == 'test' && 'true' || 'false' }}" >> $GITHUB_OUTPUT
+
   bump-version-generate-changelog:
     name: Bump package version, Generate changelog
 
@@ -70,7 +77,7 @@ jobs:
 
     with:
       version_number: ${{ inputs.version_number }}
-      test_run: ${{ env.TEST_RUN }}
+      test_run: ${{ steps.setup-job-vars.outputs.TEST_RUN }}
       nightly_release: ${{ inputs.nightly_release }}
 
     secrets: inherit
@@ -143,7 +150,7 @@ jobs:
       with:
         version_number: ${{ inputs.version_number }}
         changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-        test_run:  ${{ env.TEST_RUN }}
+        test_run:  ${{ steps.setup-job-vars.outputs.TEST_RUN }}
 
     pypi-release:
       name: Publish to PyPI
