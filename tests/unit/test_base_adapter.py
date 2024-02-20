@@ -40,6 +40,7 @@ class TestBaseAdapterConstraintRendering:
             ["column_name integer references other_table (c1)"],
         ),
         ([{"type": "check"}, {"type": "unique"}], ["column_name integer unique"]),
+        ([{"type": "custom", "expression": "-- noop"}], ["column_name integer -- noop"]),
     ]
 
     @pytest.mark.parametrize("constraints,expected_rendered_constraints", column_constraints)
