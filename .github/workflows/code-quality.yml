@@ -7,6 +7,19 @@ on:
       - "*.latest"
   pull_request:
   workflow_dispatch:
+    inputs:
+      dbt_adapters_branch:
+          description: "The branch of dbt-adapters to evaluate"
+          type: string
+          required: true
+          default: "main"
+  workflow_call:
+    inputs:
+      dbt_adapters_branch:
+        description: "The branch of dbt-adapters to evaluate"
+        type: string
+        required: true
+        default: "main"
 
 permissions: read-all
 
@@ -14,17 +27,28 @@ permissions: read-all
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
-
+env:
+  # set DBT_ADAPTERS_BRANCH to the input value if the event is a workflow_dispatch (workflow_call uses the same event_name),
+  # otherwise use 'main'
+  DBT_ADAPTERS_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.dbt_adapters_branch || 'main' }}
 jobs:
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
+
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Update Adapters and Core branches
+        shell: bash
+        run: |
+          ./.github/scripts/update_dev_packages.sh \
+            $DBT_ADAPTERS_BRANCH \
+            "main"
 
       - name: Setup `hatch`
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main

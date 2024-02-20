@@ -7,6 +7,30 @@ on:
       - "*.latest"
   pull_request:
   workflow_dispatch:
+    inputs:
+      dbt_adapters_branch:
+        description: "The branch of dbt-adapters to use"
+        type: string
+        required: false
+        default: "main"
+      core_branch:
+        description: "The branch of dbt-core to use"
+        type: string
+        required: false
+        default: "main"
+  workflow_call:
+    inputs:
+      dbt_adapters_branch:
+        description: "The branch of dbt-adapters to use"
+        type: string
+        required: false
+        default: "main"
+      core_branch:
+        description: "The branch of dbt-core to use"
+        type: string
+        required: false
+        default: "main"
+
 
 permissions: read-all
 
@@ -41,6 +65,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Update Adapters and Core branches
+        if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'}}
+        shell: bash
+        run: |
+          ./.github/scripts/update_dev_packages.sh \
+            ${{ github.event.inputs.dbt_adapters_branch }} \
+            ${{ github.event.inputs.core_branch }}
 
       - name: Setup postgres
         shell: bash
