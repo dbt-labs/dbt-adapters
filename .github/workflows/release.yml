@@ -77,7 +77,7 @@ jobs:
 
     with:
       version_number: ${{ inputs.version_number }}
-      test_run: ${{ needs.setup-job-vars.outputs.TEST_RUN }}
+      deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
 
     secrets: inherit
