@@ -139,31 +139,31 @@ jobs:
             ./dist/
           retention-days: 3
 
-    github-release:
-      name: GitHub Release
-      if: ${{ !failure() && !cancelled() }}
+  github-release:
+    name: GitHub Release
+    if: ${{ !failure() && !cancelled() }}
 
-      needs: [build-and-publish]
+    needs: [build-and-publish]
 
-      uses: dbt-labs/dbt-release/.github/workflows/github-release.yml@main
+    uses: dbt-labs/dbt-release/.github/workflows/github-release.yml@main
 
-      with:
-        version_number: ${{ inputs.version_number }}
-        changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-        test_run:  ${{ needs.setup-job-vars.outputs.TEST_RUN }}
+    with:
+      version_number: ${{ inputs.version_number }}
+      changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
+      test_run:  ${{ needs.setup-job-vars.outputs.TEST_RUN }}
 
-    pypi-release:
-      name: Publish to PyPI
-      runs-on: ubuntu-latest
-      needs: [github-release]
-      environment:
-        name: ${{ inputs.deploy-to }}
-        url: ${{ vars.PYPI_PROJECT_URL }}
-      steps:
-        - name: "Publish to PyPI"
-          uses: ./.github/actions/publish-pypi
-          with:
-            repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-            artifacts-dir: ${{ inputs.version_number }}
+  pypi-release:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [github-release]
+    environment:
+      name: ${{ inputs.deploy-to }}
+      url: ${{ vars.PYPI_PROJECT_URL }}
+    steps:
+      - name: "Publish to PyPI"
+        uses: ./.github/actions/publish-pypi
+        with:
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+          artifacts-dir: ${{ inputs.version_number }}
 
 
