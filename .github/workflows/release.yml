@@ -3,10 +3,13 @@ run-name: Release ${{ inputs.package }}==${{ inputs.version_number }} to ${{ inp
 
 on:
   workflow_dispatch:
-    package:
-      type: string
-      description: Choose what to publish
     inputs:
+      package:
+        type: choice
+        description: Choose what to publish
+        options:
+          - dbt-adapters
+          - dbt-tests-adapter
       version_number:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
@@ -26,22 +29,17 @@ on:
   workflow_call:
     inputs:
       package:
-        type: choice
+        type: string
         description: Choose what to publish
-        options:
-          - dbt-adapters
-          - dbt-tests-adapter
+        required: true
       version_number:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
       deploy-to:
         type: choice
-        description: Choose where to publish
-        options:
-        - prod
-        - test
         default: prod
+        required: false
       nightly_release:
         description: "Nightly release to dev environment"
         type: boolean
