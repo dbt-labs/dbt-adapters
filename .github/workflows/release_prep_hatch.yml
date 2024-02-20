@@ -41,12 +41,10 @@ on:
       version_number:
         required: true
         type: string
-      deploy_to:
-        type: choice
-        description: Choose where to publish
-        options:
-          - prod
-          - test
+      deploy-to:
+        type: string
+        default: prod
+        required: false
       nightly_release:
         type: boolean
         default: false
