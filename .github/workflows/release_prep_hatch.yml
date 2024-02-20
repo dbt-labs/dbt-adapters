@@ -484,7 +484,7 @@ jobs:
         id: resolve_branch
         run: |
           branch=""
-          if [[ ${{ inputs.deploy_to == test }} or ${{ inputs.nightly_release == true }}]]
+          if [[ ${{ inputs.deploy_to == 'test' }} or ${{ inputs.nightly_release == 'true' }}]]
           then
             branch=${{ needs.create-temp-branch.outputs.branch_name }}
           else
@@ -505,6 +505,6 @@ jobs:
         run: git status
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
-        if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == false && needs.create-temp-branch.outputs.branch_name != '' }}
+        if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
         run: |
           git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
