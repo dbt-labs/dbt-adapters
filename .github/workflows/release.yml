@@ -152,6 +152,7 @@ jobs:
       version_number: ${{ inputs.version_number }}
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
       test_run:  ${{ needs.setup-job-vars.outputs.TEST_RUN }}
+      sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
   pypi-release:
     name: Publish to PyPI
