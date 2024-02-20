@@ -72,12 +72,12 @@ jobs:
 
   bump-version-generate-changelog:
     name: Bump package version, Generate changelog
-
+    needs: [ setup-job-vars ]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
 
     with:
       version_number: ${{ inputs.version_number }}
-      test_run: ${{ steps.setup-job-vars.outputs.TEST_RUN }}
+      test_run: ${{ needs.setup-job-vars.outputs.TEST_RUN }}
       nightly_release: ${{ inputs.nightly_release }}
 
     secrets: inherit
@@ -150,7 +150,7 @@ jobs:
       with:
         version_number: ${{ inputs.version_number }}
         changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-        test_run:  ${{ steps.setup-job-vars.outputs.TEST_RUN }}
+        test_run:  ${{ needs.setup-job-vars.outputs.TEST_RUN }}
 
     pypi-release:
       name: Publish to PyPI
