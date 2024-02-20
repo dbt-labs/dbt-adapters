@@ -27,13 +27,13 @@ on:
         default: false
         required: false
   workflow_call:
-    package:
-      type: choice
-      description: Choose what to publish
-      options:
-        - dbt-adapters
-        - dbt-tests-adapter
     inputs:
+      package:
+        type: choice
+        description: Choose what to publish
+        options:
+          - dbt-adapters
+          - dbt-tests-adapter
       version_number:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
