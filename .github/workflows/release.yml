@@ -4,11 +4,8 @@ run-name: Release ${{ inputs.package }}==${{ inputs.version_number }} to ${{ inp
 on:
   workflow_dispatch:
     package:
-      type: choice
+      type: string
       description: Choose what to publish
-      options:
-        - dbt-adapters
-        - dbt-tests-adapter
     inputs:
       version_number:
         description: "The release version number (i.e. 1.0.0b1)"
