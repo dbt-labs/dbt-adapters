@@ -47,7 +47,8 @@ on:
         required: false
 
 # this is the permission that allows creating a new release
-permissions: write
+permissions:
+  contents: write
 
 defaults:
   run:
