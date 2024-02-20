@@ -37,7 +37,7 @@ on:
         type: string
         required: true
       deploy-to:
-        type: choice
+        type: string
         default: prod
         required: false
       nightly_release:
