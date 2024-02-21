@@ -52,7 +52,7 @@ path = "dbt/adapters/postgres/__version__.py"
 [tool.hatch.envs.default]
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
 ]
 
 [tool.hatch.envs.lint]
@@ -81,13 +81,17 @@ all = "python -m mypy ."
 
 [tool.hatch.envs.unit-tests]
 dependencies = [
-    # TODO: remove `dbt-core` dependencies from unit tests
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "freezegun",
     "pytest",
     "pytest-dotenv",
     "pytest-mock",
     "pytest-xdist",
+]
+extra-dependencies = [
+    # TODO: remove `dbt-core` dependencies from unit tests
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
 ]
 [tool.hatch.envs.unit-tests.scripts]
 all = "python -m pytest {args:tests/unit}"
@@ -95,8 +99,16 @@ all = "python -m pytest {args:tests/unit}"
 [tool.hatch.envs.integration-tests]
 template = "unit-tests"
 extra-dependencies = [
+    # TODO: remove `dbt-core` dependencies from integration tests
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
 ]
+[tool.hatch.envs.integration-tests.env-vars]
+DBT_TEST_USER_1 = "dbt_test_user_1"
+DBT_TEST_USER_2 = "dbt_test_user_2"
+DBT_TEST_USER_3 = "dbt_test_user_3"
 [tool.hatch.envs.integration-tests.scripts]
 all = "python -m pytest {args:tests/functional}"
 
@@ -130,7 +142,7 @@ target-version = ['py38']
 [tool.flake8]
 select = ["E", "W", "F"]
 ignore = ["E203", "E501", "E741", "W503", "W504"]
-exclude = ["tests", "venv"]
+exclude = ["tests", "venv", ".hatch_venvs"]
 per-file-ignores = ["*/__init__.py: F401"]
 
 [tool.mypy]
@@ -145,7 +157,8 @@ files = [
 ]
 exclude = [
     "tests/functional",
-    "venv"
+    "venv",
+    ".hatch_venvs",
 ]
 
 [tool.pytest]
