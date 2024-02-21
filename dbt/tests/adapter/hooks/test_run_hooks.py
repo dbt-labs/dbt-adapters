@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import pytest
 
@@ -7,10 +6,10 @@ from dbt.tests.adapter.hooks import fixtures
 from dbt.tests.util import check_table_does_not_exist, run_dbt
 
 
-class TestPrePostRunHooks(object):
+class BasePrePostRunHooks:
     @pytest.fixture(scope="function")
     def setUp(self, project):
-        project.run_sql_file(project.test_data_dir / Path("seed_run.sql"))
+        project.run_sql(fixtures.tables__on_run_hook)
         project.run_sql(f"drop table if exists { project.test_schema }.schemas")
         project.run_sql(f"drop table if exists { project.test_schema }.db_schemas")
         os.environ["TERM_TEST"] = "TESTING"
@@ -135,7 +134,11 @@ class TestPrePostRunHooks(object):
         self.assert_used_schemas(project)
 
 
-class TestAfterRunHooks(object):
+class TestPrePostRunHooks(BasePrePostRunHooks):
+    pass
+
+
+class BaseAfterRunHooks:
     @pytest.fixture(scope="class")
     def macros(self):
         return {"temp_macro.sql": fixtures.macros_missing_column}
@@ -155,3 +158,7 @@ class TestAfterRunHooks(object):
 
     def test_missing_column_pre_hook(self, project):
         run_dbt(["run"], expect_pass=False)
+
+
+class TestAfterRunHooks(BaseAfterRunHooks):
+    pass
