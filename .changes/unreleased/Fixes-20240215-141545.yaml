@@ -1,0 +1,6 @@
+kind: Fixes
+body: Ignore adapter-level support warnings for 'custom' constraints
+time: 2024-02-15T14:15:45.764145+01:00
+custom:
+  Author: jtcohen6
+  Issue: "90"
