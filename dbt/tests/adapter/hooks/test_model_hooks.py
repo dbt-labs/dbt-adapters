@@ -70,10 +70,10 @@ MODEL_POST_HOOK = """
 """
 
 
-class BaseTestPrePost(object):
+class BaseTestPrePost:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
-        project.run_sql_file(project.test_data_dir / Path("seed_model.sql"))
+        project.run_sql(fixtures.tables__on_model_hook)
 
     def get_ctx_vars(self, state, count, project):
         fields = [
@@ -121,7 +121,7 @@ class BaseTestPrePost(object):
             assert ctx["thread_id"].startswith("Thread-")
 
 
-class TestPrePostModelHooks(BaseTestPrePost):
+class BasePrePostModelHooks(BaseTestPrePost):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -153,7 +153,11 @@ class TestPrePostModelHooks(BaseTestPrePost):
         self.check_hooks("end", project, dbt_profile_target.get("host", None))
 
 
-class TestPrePostModelHooksUnderscores(TestPrePostModelHooks):
+class TestPrePostModelHooks(BasePrePostModelHooks):
+    pass
+
+
+class TestPrePostModelHooksUnderscores(BasePrePostModelHooks):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -176,7 +180,7 @@ class TestPrePostModelHooksUnderscores(TestPrePostModelHooks):
         }
 
 
-class TestHookRefs(BaseTestPrePost):
+class BaseHookRefs(BaseTestPrePost):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -219,7 +223,11 @@ class TestHookRefs(BaseTestPrePost):
         self.check_hooks("end", project, dbt_profile_target.get("host", None))
 
 
-class TestPrePostModelHooksOnSeeds(object):
+class TestHookRefs(BaseHookRefs):
+    pass
+
+
+class BasePrePostModelHooksOnSeeds:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"example_seed.csv": fixtures.seeds__example_seed_csv}
@@ -251,7 +259,11 @@ class TestPrePostModelHooksOnSeeds(object):
         assert len(res) == 1, "Expected exactly one item"
 
 
-class TestHooksRefsOnSeeds:
+class TestPrePostModelHooksOnSeeds(BasePrePostModelHooksOnSeeds):
+    pass
+
+
+class BaseHooksRefsOnSeeds:
     """
     This should not succeed, and raise an explicit error
     https://github.com/dbt-labs/dbt-core/issues/6806
@@ -281,7 +293,11 @@ class TestHooksRefsOnSeeds:
         assert "Seeds cannot depend on other nodes" in str(excinfo.value)
 
 
-class TestPrePostModelHooksOnSeedsPlusPrefixed(TestPrePostModelHooksOnSeeds):
+class TestHooksRefsOnSeeds(BaseHooksRefsOnSeeds):
+    pass
+
+
+class BasePrePostModelHooksOnSeedsPlusPrefixed(BasePrePostModelHooksOnSeeds):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -297,7 +313,11 @@ class TestPrePostModelHooksOnSeedsPlusPrefixed(TestPrePostModelHooksOnSeeds):
         }
 
 
-class TestPrePostModelHooksOnSeedsPlusPrefixedWhitespace(TestPrePostModelHooksOnSeeds):
+class TestPrePostModelHooksOnSeedsPlusPrefixed(BasePrePostModelHooksOnSeedsPlusPrefixed):
+    pass
+
+
+class BasePrePostModelHooksOnSeedsPlusPrefixedWhitespace(BasePrePostModelHooksOnSeeds):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -313,7 +333,13 @@ class TestPrePostModelHooksOnSeedsPlusPrefixedWhitespace(TestPrePostModelHooksOn
         }
 
 
-class TestPrePostModelHooksOnSnapshots(object):
+class TestPrePostModelHooksOnSeedsPlusPrefixedWhitespace(
+    BasePrePostModelHooksOnSeedsPlusPrefixedWhitespace
+):
+    pass
+
+
+class BasePrePostModelHooksOnSnapshots:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         path = Path(project.project_root) / "test-snapshots"
@@ -354,6 +380,10 @@ class TestPrePostModelHooksOnSnapshots(object):
         assert len(res) == 1, "Expected exactly one item"
 
 
+class TestPrePostModelHooksOnSnapshots(BasePrePostModelHooksOnSnapshots):
+    pass
+
+
 class PrePostModelHooksInConfigSetup(BaseTestPrePost):
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -366,7 +396,7 @@ class PrePostModelHooksInConfigSetup(BaseTestPrePost):
         return {"hooks.sql": fixtures.models__hooks_configured}
 
 
-class TestPrePostModelHooksInConfig(PrePostModelHooksInConfigSetup):
+class BasePrePostModelHooksInConfig(PrePostModelHooksInConfigSetup):
     def test_pre_and_post_model_hooks_model(self, project, dbt_profile_target):
         run_dbt()
 
@@ -374,7 +404,11 @@ class TestPrePostModelHooksInConfig(PrePostModelHooksInConfigSetup):
         self.check_hooks("end", project, dbt_profile_target.get("host", None))
 
 
-class TestPrePostModelHooksInConfigWithCount(PrePostModelHooksInConfigSetup):
+class TestPrePostModelHooksInConfig(BasePrePostModelHooksInConfig):
+    pass
+
+
+class BasePrePostModelHooksInConfigWithCount(PrePostModelHooksInConfigSetup):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -403,13 +437,21 @@ class TestPrePostModelHooksInConfigWithCount(PrePostModelHooksInConfigSetup):
         self.check_hooks("end", project, dbt_profile_target.get("host", None), count=2)
 
 
-class TestPrePostModelHooksInConfigKwargs(TestPrePostModelHooksInConfig):
+class TestPrePostModelHooksInConfigWithCount(BasePrePostModelHooksInConfigWithCount):
+    pass
+
+
+class BasePrePostModelHooksInConfigKwargs(BasePrePostModelHooksInConfig):
     @pytest.fixture(scope="class")
     def models(self):
         return {"hooks.sql": fixtures.models__hooks_kwargs}
 
 
-class TestPrePostSnapshotHooksInConfigKwargs(TestPrePostModelHooksOnSnapshots):
+class TestPrePostModelHooksInConfigKwargs(BasePrePostModelHooksInConfigKwargs):
+    pass
+
+
+class BasePrePostSnapshotHooksInConfigKwargs(BasePrePostModelHooksOnSnapshots):
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
         path = Path(project.project_root) / "test-kwargs-snapshots"
@@ -434,7 +476,11 @@ class TestPrePostSnapshotHooksInConfigKwargs(TestPrePostModelHooksOnSnapshots):
         }
 
 
-class TestDuplicateHooksInConfigs(object):
+class TestPrePostSnapshotHooksInConfigKwargs(BasePrePostSnapshotHooksInConfigKwargs):
+    pass
+
+
+class BaseDuplicateHooksInConfigs:
     @pytest.fixture(scope="class")
     def models(self):
         return {"hooks.sql": fixtures.models__hooks_error}
@@ -444,3 +490,7 @@ class TestDuplicateHooksInConfigs(object):
             run_dbt()
         assert "pre_hook" in str(exc.value)
         assert "pre-hook" in str(exc.value)
+
+
+class TestDuplicateHooksInConfigs(BaseDuplicateHooksInConfigs):
+    pass

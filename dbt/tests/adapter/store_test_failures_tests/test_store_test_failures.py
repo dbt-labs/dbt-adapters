@@ -118,7 +118,7 @@ class StoreTestFailuresBase:
         )
 
 
-class TestStoreTestFailures(StoreTestFailuresBase):
+class BaseStoreTestFailures(StoreTestFailuresBase):
     @pytest.fixture(scope="function")
     def clean_up(self, project):
         yield
@@ -150,3 +150,7 @@ class TestStoreTestFailures(StoreTestFailuresBase):
     def test__store_and_assert(self, project, clean_up):
         self.run_tests_store_one_failure(project)
         self.run_tests_store_failures_and_assert(project)
+
+
+class TestStoreTestFailures(BaseStoreTestFailures):
+    pass

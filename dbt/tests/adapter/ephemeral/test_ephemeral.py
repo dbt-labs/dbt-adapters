@@ -248,8 +248,6 @@ class BaseEphemeralMulti:
             },
         }
 
-
-class TestEphemeralMulti(BaseEphemeralMulti):
     def test_ephemeral_multi(self, project):
         run_dbt(["seed"])
         results = run_dbt(["run"])
@@ -281,7 +279,11 @@ class TestEphemeralMulti(BaseEphemeralMulti):
         assert sql_file == expected_sql
 
 
-class TestEphemeralNested(BaseEphemeral):
+class TestEphemeralMulti(BaseEphemeralMulti):
+    pass
+
+
+class BaseEphemeralNested(BaseEphemeral):
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -314,7 +316,11 @@ class TestEphemeralNested(BaseEphemeral):
         assert sql_file == expected_sql
 
 
-class TestEphemeralErrorHandling(BaseEphemeral):
+class TestEphemeralNested(BaseEphemeralNested):
+    pass
+
+
+class BaseEphemeralErrorHandling(BaseEphemeral):
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -330,3 +336,7 @@ class TestEphemeralErrorHandling(BaseEphemeral):
         assert len(results) == 1
         assert results[0].status == "skipped"
         assert "Compilation Error" in results[0].message
+
+
+class TestEphemeralErrorHandling(BaseEphemeralErrorHandling):
+    pass

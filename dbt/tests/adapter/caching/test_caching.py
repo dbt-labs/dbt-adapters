@@ -92,7 +92,7 @@ class BaseCachingSelectedSchemaOnly(BaseCachingTest):
         self.run_and_inspect_cache(project, run_args)
 
 
-class TestNoPopulateCache(BaseCachingTest):
+class BaseNoPopulateCache(BaseCachingTest):
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -115,4 +115,8 @@ class TestCachingUppercaseModel(BaseCachingUppercaseModel):
 
 
 class TestCachingSelectedSchemaOnly(BaseCachingSelectedSchemaOnly):
+    pass
+
+
+class TestNoPopulateCache(BaseNoPopulateCache):
     pass
