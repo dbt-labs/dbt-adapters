@@ -368,7 +368,7 @@ jobs:
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
       - name: "Run Unit Tests"
-        run: hatch run test:unit
+        run: hatch run unit-tests:all
 
   run-integration-tests:
     runs-on: ubuntu-20.04
