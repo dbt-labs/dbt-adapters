@@ -136,7 +136,7 @@ jobs:
       - name: "Upload Build Artifact"
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ steps.version.outputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
           path: |
             ${{ inputs.changelog_path }}
             ./dist/
@@ -154,7 +154,7 @@ jobs:
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
       test_run: ${{ inputs.deploy-to == 'test' && true || false }}
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
-      artifact_name: ${{ steps.version.outputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+      artifact_name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   pypi-release:
     name: Publish to PyPI
