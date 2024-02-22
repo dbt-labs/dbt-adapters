@@ -452,6 +452,7 @@ jobs:
           title="Changelog and Version Bump Branch Merge"
           message="The ${{ needs.create-temp-branch.outputs.branch_name }} branch was merged into mains"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
   determine-release-branch:
     runs-on: ubuntu-latest
     needs:
@@ -480,7 +481,7 @@ jobs:
         id: resolve_branch
         run: |
           branch=""
-          if [[ ${{ inputs.deploy_to == 'test' }} or ${{ inputs.nightly_release == 'true' }}]]
+          if [ ${{ inputs.deploy_to == 'test' }}] || [ ${{ inputs.nightly_release == 'true' }} ]
           then
             branch=${{ needs.create-temp-branch.outputs.branch_name }}
           else
