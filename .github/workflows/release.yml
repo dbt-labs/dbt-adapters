@@ -147,7 +147,7 @@ jobs:
     if: ${{ !failure() && !cancelled() }}
 
     needs: [build-and-test]
-    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
+    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@bumpVersion
 
     with:
       version_number: ${{ inputs.version_number }}
@@ -168,6 +168,6 @@ jobs:
         uses: ./.github/actions/publish-pypi
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          artifacts-dir: ${{ inputs.version_number }}
+          artifacts-dir: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
 
