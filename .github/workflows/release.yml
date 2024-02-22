@@ -74,7 +74,6 @@ jobs:
 
   bump-version-generate-changelog:
     name: Bump package version, Generate changelog
-    needs: [ setup-job-vars ]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
 
     with:
