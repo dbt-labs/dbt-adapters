@@ -133,12 +133,10 @@ jobs:
         with:
           working-dir: "./dbt-tests-adapter/"
 
-      # this step is only needed for the release process
       - name: "Upload Build Artifact"
-        if: ${{ github.event_name == 'workflow_call' }}
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ steps.version.outputs.version_number }}
+          name: ${{ steps.version.outputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
           path: |
             ${{ inputs.changelog_path }}
             ./dist/
@@ -149,14 +147,14 @@ jobs:
     if: ${{ !failure() && !cancelled() }}
 
     needs: [build-and-test]
-
-    uses: dbt-labs/dbt-release/.github/workflows/github-release.yml@main
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
 
     with:
       version_number: ${{ inputs.version_number }}
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
       test_run: ${{ inputs.deploy-to == 'test' && true || false }}
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
+      artifact_name: ${{ steps.version.outputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   pypi-release:
     name: Publish to PyPI
