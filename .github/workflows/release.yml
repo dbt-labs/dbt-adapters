@@ -26,6 +26,12 @@ on:
         type: boolean
         default: false
         required: false
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: false
+        default: main
+
   workflow_call:
     inputs:
       package:
@@ -45,6 +51,11 @@ on:
         type: boolean
         default: false
         required: false
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: false
+        default: main
 
 # this is the permission that allows creating a new release
 permissions:
@@ -60,25 +71,16 @@ defaults:
     shell: bash
 
 jobs:
-  setup-job-vars:
-    name: setup job variables
-    runs-on: ubuntu-latest
-    outputs:
-      TEST_RUN: ${{ steps.is_test_run.outputs.TEST_RUN }}
-    steps:
-      - id: is_test_run
-        run: |
-          echo "TEST_RUN=${{ inputs.deploy-to == 'test' && 'true' || 'false' }}" >> $GITHUB_OUTPUT
 
   bump-version-generate-changelog:
     name: Bump package version, Generate changelog
-    needs: [ setup-job-vars ]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
 
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
+      target_branch: ${{ inputs.target_branch }}
 
     secrets: inherit
 
@@ -93,8 +95,8 @@ jobs:
           echo Final SHA     : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
           echo Changelog path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
 
-  build-and-publish:
-    name: Build, Test and publish to PyPi
+  build-and-test:
+    name: "Build and Test"
     needs: [log-outputs-bump-version-generate-changelog]
     runs-on: ubuntu-latest
     permissions:
@@ -102,6 +104,8 @@ jobs:
     steps:
       - name: "Check out repository"
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
@@ -144,14 +148,14 @@ jobs:
     name: GitHub Release
     if: ${{ !failure() && !cancelled() }}
 
-    needs: [build-and-publish]
+    needs: [build-and-test]
 
     uses: dbt-labs/dbt-release/.github/workflows/github-release.yml@main
 
     with:
       version_number: ${{ inputs.version_number }}
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-      test_run:  ${{ needs.setup-job-vars.outputs.TEST_RUN }}
+      test_run: ${{ inputs.deploy-to == 'test' && 'true' || 'false' }}
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
   pypi-release:
