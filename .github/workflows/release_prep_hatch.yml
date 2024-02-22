@@ -449,11 +449,11 @@ jobs:
       - name: "Checkout Repo ${{ github.repository }}"
         uses: actions/checkout@v3
 
-      - name: "Merge Changes Into main"
+      - name: "Merge Changes Into ${{ inputs.target_branch }}"
         uses: everlytic/branch-merge@1.1.5
         with:
           source_ref: ${{ needs.create-temp-branch.outputs.branch_name }}
-          target_branch: "main"
+          target_branch: ${{ inputs.target_branch }}
           github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
           commit_message_template: "[Automated] Merged {source_ref} into target {target_branch} during release process"
 
@@ -495,7 +495,7 @@ jobs:
           then
             branch=${{ needs.create-temp-branch.outputs.branch_name }}
           else
-            branch="main"
+            branch="${{ inputs.target_branch }}"
           fi
           echo "target_branch=$branch" >> $GITHUB_OUTPUT
       - name: "[Notification] Resolve Branch To Checkout"
