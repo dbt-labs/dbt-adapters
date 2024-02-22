@@ -154,6 +154,7 @@ jobs:
           echo base_version:   ${{ steps.semver.outputs.base-version }}
           echo prerelease:     ${{ steps.semver.outputs.pre-release }}
           echo is_prerelease:  ${{ steps.semver.outputs.is-pre-release }}
+
   audit-version-in-code:
     runs-on: ubuntu-latest
 
@@ -165,6 +166,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.target_branch }}
+
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
 
       - name: "Check Current Version In Code"
         id: version-check
