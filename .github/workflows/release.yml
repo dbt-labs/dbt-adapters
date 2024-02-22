@@ -26,6 +26,12 @@ on:
         type: boolean
         default: false
         required: false
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: false
+        default: main
+
   workflow_call:
     inputs:
       package:
@@ -45,6 +51,11 @@ on:
         type: boolean
         default: false
         required: false
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: false
+        default: main
 
 # this is the permission that allows creating a new release
 permissions:
@@ -70,6 +81,7 @@ jobs:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
+      target_branch: ${{ inputs.target_branch }}
 
     secrets: inherit
 
@@ -93,6 +105,8 @@ jobs:
     steps:
       - name: "Check out repository"
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch

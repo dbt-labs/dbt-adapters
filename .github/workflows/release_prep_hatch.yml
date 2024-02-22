@@ -56,6 +56,11 @@ on:
       run-integration-tests:
         type: boolean
         default: false
+      target_branch:
+        description: "The branch to release from"
+        type: string
+        required: false
+        default: main
     outputs:
       changelog_path:
         description: The path to the changelog for this version
@@ -89,6 +94,7 @@ jobs:
           # WORKFLOW INPUTS
           echo The release version number:           ${{ inputs.version_number }}
           echo Deploy to:                            ${{ inputs.deploy_to }}
+          echo Target branch:                        ${{ inputs.target_branch }}
           echo Nightly release:                      ${{ inputs.nightly_release }}
           echo Optional env setup script:            ${{ inputs.env_setup_script_path }}
           # ENVIRONMENT VARIABLES
@@ -107,6 +113,8 @@ jobs:
     steps:
       - name: "Checkout ${{ github.repository }}"
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
 
       - name: "Audit Version And Parse Into Parts"
         id: semver
@@ -228,6 +236,8 @@ jobs:
     steps:
       - name: "Checkout ${{ github.repository }}"
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
 
       - name: "Generate Branch Name"
         id: variables
