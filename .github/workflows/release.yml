@@ -113,19 +113,6 @@ jobs:
       - name: Build `dbt-adapters`
         if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
-
-      - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch
-        with:
-          working-dir: "./dbt-tests-adapter/"
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-
-      - name: Build `dbt-adapters`
-        if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: ./.github/actions/build-hatch
         with:
           artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
