@@ -514,14 +514,7 @@ jobs:
       - name: "Resolve Commit SHA For Release"
         id: resolve_commit_sha
         run: |
-          commit_sha=""
-          if [[ ${{ needs.audit-changelog.outputs.exists }} == false ]] || [[ ${{ needs.audit-version-in-code.outputs.up_to_date }} == false ]]
-          then
-            commit_sha=$(git rev-parse HEAD)
-          else
-            commit_sha=${{ inputs.sha }}
-          fi
-          echo "release_sha=$commit_sha" >> $GITHUB_OUTPUT
+          echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
         if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
