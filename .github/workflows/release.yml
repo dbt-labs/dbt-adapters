@@ -126,21 +126,15 @@ jobs:
       - name: Build `dbt-adapters`
         if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
+        with:
+          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
       - name: Build `dbt-tests-adapter`
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:
           working-dir: "./dbt-tests-adapter/"
-
-      - name: "Upload Build Artifact"
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
-          path: |
-            ${{ inputs.changelog_path }}
-            ./dist/
-          retention-days: 3
+          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   github-release:
     name: GitHub Release

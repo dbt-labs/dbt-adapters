@@ -11,7 +11,7 @@ inputs:
   working-dir:
     description: Where to run commands from, supports namespace packaging
     default: "./"
-  artifacts-dir:
+  artifacts-name:
     description: Where to upload the artifacts
     default: "dist"
 
@@ -32,5 +32,6 @@ runs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: ${{ inputs.artifacts-dir}}
+        name: ${{ inputs.artifacts-name}}
         path: ${{ inputs.working-dir }}dist/
+        retention-days: 3
