@@ -127,7 +127,7 @@ jobs:
     name: GitHub Release
     if: ${{ !failure() && !cancelled() }}
 
-    needs: [build-and-test]
+    needs: [build-and-test, log-outputs-bump-version-generate-changelog]
     uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@bumpVersion
 
     with:
