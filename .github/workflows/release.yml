@@ -111,12 +111,14 @@ jobs:
         if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
         with:
+          changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
       - name: Build `dbt-tests-adapter`
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:
+          changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           working-dir: "./dbt-tests-adapter/"
           artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 

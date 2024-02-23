@@ -14,6 +14,9 @@ inputs:
   artifacts-name:
     description: Where to upload the artifacts
     default: "dist"
+  changelog-path:
+    description: Path to changelog file
+    required: true
 
 runs:
   using: composite
@@ -33,5 +36,7 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.artifacts-name}}
-        path: ${{ inputs.working-dir }}dist/
+        path: |
+          ${{ inputs.changelog-path }}
+          ${{ inputs.working-dir }}dist/
         retention-days: 3

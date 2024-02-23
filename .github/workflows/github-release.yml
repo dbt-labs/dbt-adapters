@@ -206,7 +206,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.artifact_name }}
-          path: ./dist/
+          path: .
 
       - name: "[DEBUG] Display Structure Of All Downloaded Files"
         run: ls -R
