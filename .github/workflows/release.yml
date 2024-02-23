@@ -71,16 +71,14 @@ defaults:
     shell: bash
 
 jobs:
-
   bump-version-generate-changelog:
-    name: Bump package version, Generate changelog
+    name: "Bump package version, Generate changelog"
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@bumpVersion
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
-
     secrets: inherit
 
   log-outputs-bump-version-generate-changelog:
@@ -126,13 +124,13 @@ jobs:
     name: "GitHub Release"
     if: ${{ !failure() && !cancelled() }}
 
-    needs: [build-and-test, log-outputs-bump-version-generate-changelog]
+    needs: [build-and-test, bump-version-generate-changelog]
     uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@bumpVersion
     with:
+      sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
       version_number: ${{ inputs.version_number }}
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
       test_run: ${{ inputs.deploy-to == 'test' && true || false }}
-      sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
       artifact_name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   pypi-release:
