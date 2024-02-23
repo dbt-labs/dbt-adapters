@@ -65,6 +65,9 @@ on:
       changelog_path:
         description: The path to the changelog for this version
         value: ${{ jobs.audit-changelog.outputs.changelog_path }}
+      final_sha:
+        description: The sha that will actually be released
+        value: ${{ jobs.determine-release-branch.outputs.final_sha }}
     secrets:
       FISHTOWN_BOT_PAT:
         description: "Token to commit/merge changes into branches"
