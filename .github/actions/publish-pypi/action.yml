@@ -2,9 +2,9 @@ name: Publish - PyPI
 description: Publish artifacts saved during build step to PyPI
 
 inputs:
-  artifacts-dir:
-    description: Where to download the artifacts
-    default: "dist"
+  artifacts-dir-name:
+    description: Where to download the artifacts from
+    required: true
   repository-url:
     description: The PyPI index to publish to, test or prod
     required: true
@@ -17,7 +17,7 @@ runs:
       uses: actions/download-artifact@v3
       with:
         name: ${{ inputs.artifacts-dir }}
-        path: dist/
+        path: .
 
     - name: Publish artifacts to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1

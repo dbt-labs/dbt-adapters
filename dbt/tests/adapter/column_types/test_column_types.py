@@ -15,6 +15,8 @@ class BaseColumnTypes:
         results = run_dbt(["test"])
         assert len(results) == 1
 
+
+class BasePostgresColumnTypes(BaseColumnTypes):
     @pytest.fixture(scope="class")
     def models(self):
         return {"model.sql": fixtures.model_sql, "schema.yml": fixtures.schema_yml}
@@ -23,5 +25,5 @@ class BaseColumnTypes:
         self.run_and_test()
 
 
-class TestPostgresColumnTypes(BaseColumnTypes):
+class TestPostgresColumnTypes(BasePostgresColumnTypes):
     pass
