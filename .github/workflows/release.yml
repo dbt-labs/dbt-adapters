@@ -94,7 +94,7 @@ jobs:
 
   build-and-test:
     name: "Build and Test"
-    needs: [log-outputs-bump-version-generate-changelog]
+    needs: [log-outputs-bump-version-generate-changelog, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
