@@ -116,7 +116,7 @@ jobs:
 
       - name: "Build `dbt-tests-adapter`"
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch@bumpVersion
+        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@bumpVersion
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           working-dir: "./dbt-tests-adapter/"
