@@ -31,11 +31,13 @@ from dbt_common.clients.agate_helper import (
     table_from_rows,
 )
 from dbt_common.clients.jinja import CallableMacroGenerator
+from dbt_common.context import get_invocation_context
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.events.contextvars import get_node_info
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -46,6 +48,7 @@ from dbt_common.exceptions import (
     UnexpectedNullError,
 )
 from dbt_common.events.functions import fire_event, warn_or_error
+from dbt_common.record import record_function
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
@@ -93,7 +96,7 @@ from dbt.adapters.exceptions import (
     UnexpectedNonTimestampError,
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
-
+from dbt.record import QueryRecord
 
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
@@ -324,6 +327,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 self.connections.query_header.reset()
 
     @available.parse(lambda *a, **k: ("", empty_table()))
+    @record_function(QueryRecord)
     def execute(
         self,
         sql: str,
