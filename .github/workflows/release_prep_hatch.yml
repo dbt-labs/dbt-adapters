@@ -440,7 +440,7 @@ jobs:
     needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
     if: |
         !failure() && !cancelled() &&
-        inputs.deploy_to == 'test' &&
+        inputs.deploy_to == 'prod' &&
         (
           needs.audit-changelog.outputs.exists == 'false' ||
           needs.audit-version-in-code.outputs.up_to_date == 'false'
