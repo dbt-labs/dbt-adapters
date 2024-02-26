@@ -1,0 +1,6 @@
+kind: Fixes
+body: Make all adapter zone tests importable by removing "Test" prefix
+time: 2024-02-16T13:54:20.411864-05:00
+custom:
+  Author: mikealfare
+  Issue: "93"

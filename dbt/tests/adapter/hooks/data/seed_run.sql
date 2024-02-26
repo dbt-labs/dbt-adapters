@@ -1,4 +1,3 @@
-
 drop table if exists {schema}.on_run_hook;
 
 create table {schema}.on_run_hook (

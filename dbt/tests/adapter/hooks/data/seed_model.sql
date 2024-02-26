@@ -1,4 +1,3 @@
-
 drop table if exists {schema}.on_model_hook;
 
 create table {schema}.on_model_hook (

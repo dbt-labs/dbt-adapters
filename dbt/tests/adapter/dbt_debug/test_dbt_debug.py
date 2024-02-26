@@ -49,7 +49,7 @@ class BaseDebugProfileVariable(BaseDebug):
         return {"config-version": 2, "profile": '{{ "te" ~ "st" }}'}
 
 
-class TestDebugPostgres(BaseDebug):
+class BaseDebugPostgres(BaseDebug):
     def test_ok(self, project):
         run_dbt(["debug"])
         assert "ERROR" not in self.capsys.readouterr().out
@@ -85,11 +85,11 @@ class TestDebugPostgres(BaseDebug):
         self.assertGotValue(re.compile(r"\s+output 'none_target'"), "misconfigured")
 
 
-class TestDebugProfileVariablePostgres(BaseDebugProfileVariable):
+class TestDebugPostgres(BaseDebugPostgres):
     pass
 
 
-class TestDebugInvalidProjectPostgres(BaseDebug):
+class BaseDebugInvalidProjectPostgres(BaseDebug):
     def test_empty_project(self, project):
         with open("dbt_project.yml", "w") as f:  # noqa: F841
             pass
@@ -128,3 +128,7 @@ class TestDebugInvalidProjectPostgres(BaseDebug):
         )
         assert "Profile loading failed for the following reason" in out
         assert "Could not find profile named 'NONE'" in out
+
+
+class TestDebugInvalidProjectPostgres(BaseDebugInvalidProjectPostgres):
+    pass
