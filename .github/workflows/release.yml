@@ -105,7 +105,7 @@ jobs:
           ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
       - name: "Setup `hatch`"
-        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@bumpVersion
 
       - name: "Build `dbt-adapters`"
         if: ${{ inputs.package == 'dbt-adapters' }}
