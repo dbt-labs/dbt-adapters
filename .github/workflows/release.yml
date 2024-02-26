@@ -104,19 +104,19 @@ jobs:
         with:
           ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
+      - name: "Setup `hatch`"
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch
 
-      - name: Build `dbt-adapters`
+      - name: "Build `dbt-adapters`"
         if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: ./.github/actions/build-hatch
+        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@bumpVersion
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
-      - name: Build `dbt-tests-adapter`
+      - name: "Build `dbt-tests-adapter`"
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch
+        uses: ./.github/actions/build-hatch@bumpVersion
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           working-dir: "./dbt-tests-adapter/"
@@ -125,7 +125,6 @@ jobs:
   github-release:
     name: "GitHub Release"
     if: ${{ !failure() && !cancelled() }}
-
     needs: [build-and-test, bump-version-generate-changelog]
     uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@bumpVersion
     with:

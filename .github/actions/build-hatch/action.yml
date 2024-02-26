@@ -13,7 +13,7 @@ inputs:
     default: "./"
   artifacts-name:
     description: Where to upload the artifacts
-    default: "dist"
+    required: true
   changelog-path:
     description: Path to changelog file
     required: true
