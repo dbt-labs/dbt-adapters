@@ -142,6 +142,9 @@ jobs:
       name: ${{ inputs.deploy-to }}
       url: ${{ vars.PYPI_PROJECT_URL }}
     steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4
+
       - name: "Publish to PyPI"
         uses: ./.github/actions/publish-pypi
         with:
