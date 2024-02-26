@@ -213,8 +213,10 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: .
 
-      - name: "[DEBUG] Display Structure Of All Downloaded Files"
-        run: ls -R
+      - name: "[DEBUG] Display Structure Of Expected Files"
+        run: |
+          ls -R .changes
+          ls -l dist
 
       - name: "Set Release Type"
         id: release_type
