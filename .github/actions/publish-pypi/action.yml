@@ -2,7 +2,7 @@ name: Publish - PyPI
 description: Publish artifacts saved during build step to PyPI
 
 inputs:
-  artifacts-dir-name:
+  artifacts-dir:
     description: Where to download the artifacts from
     required: true
   repository-url:
