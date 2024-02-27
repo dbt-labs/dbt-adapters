@@ -240,6 +240,8 @@ union all
 select 'NY','New York','Manhattan','2021-04-01'
 union all
 select 'PA','Philadelphia','Philadelphia','2021-05-21'
+union all
+select 'CO','Denver',null,'2021-06-18'
 
 """
 
@@ -265,6 +267,8 @@ union all
 select 'NY','New York','Manhattan','2021-04-01'
 union all
 select 'PA','Philadelphia','Philadelphia','2021-05-21'
+union all
+select 'CO','Devner',null,'2021-06-18'
 
 """
 
@@ -288,6 +292,7 @@ NJ,Mercer,Trenton,2022-01-01
 NY,Kings,Brooklyn,2021-04-02
 NY,New York,Manhattan,2021-04-01
 PA,Philadelphia,Philadelphia,2021-05-21
+CO,Denver,,2021-06-18
 """
 
 seeds__add_new_rows_sql = """
