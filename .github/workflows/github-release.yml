@@ -1,5 +1,5 @@
 # **what?**
-# Create a new release on GitHub and include any artifacts in the `/dist` directory of the GitHUb artifacts store.
+# Create a new release on GitHub and include any artifacts in the `/dist` directory of the GitHub artifacts store.
 #
 # Inputs:
 #  sha:            The commit to attach to this release
