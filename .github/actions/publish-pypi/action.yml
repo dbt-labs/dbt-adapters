@@ -2,7 +2,7 @@ name: Publish - PyPI
 description: Publish artifacts saved during build step to PyPI
 
 inputs:
-  artifacts-dir-name:
+  archive-name:
     description: Where to download the artifacts from
     required: true
   repository-url:
@@ -16,7 +16,7 @@ runs:
     - name: Download artifacts
       uses: actions/download-artifact@v3
       with:
-        name: ${{ inputs.artifacts-dir }}
+        name: ${{ inputs.archive-name }}
         path: .
 
     - name: Publish artifacts to PyPI

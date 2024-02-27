@@ -65,6 +65,9 @@ on:
       changelog_path:
         description: The path to the changelog for this version
         value: ${{ jobs.audit-changelog.outputs.changelog_path }}
+      final_sha:
+        description: The sha that will actually be released
+        value: ${{ jobs.determine-release-branch.outputs.final_sha }}
     secrets:
       FISHTOWN_BOT_PAT:
         description: "Token to commit/merge changes into branches"
@@ -201,6 +204,7 @@ jobs:
       - name: "[DEBUG] Print Outputs"
         run: |
           echo up_to_date: ${{ steps.version-check.outputs.up_to_date }}
+
   skip-generate-changelog:
     runs-on: ubuntu-latest
     needs: [audit-changelog]
@@ -213,6 +217,7 @@ jobs:
           title="Skip changelog generation"
           message="A changelog file already exists at ${{ needs.audit-changelog.outputs.changelog_path }}, skipping generating changelog"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
   skip-version-bump:
     runs-on: ubuntu-latest
     needs: [audit-version-in-code]
@@ -225,6 +230,7 @@ jobs:
           title="Skip version bump"
           message="The version has already been bumped to ${{ inputs.version_number }}, skipping version bump"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
   create-temp-branch:
     runs-on: ubuntu-latest
     needs: [audit-changelog, audit-version-in-code]
@@ -344,13 +350,13 @@ jobs:
       - name: "Remove Trailing Whitespace Via Pre-commit"
         continue-on-error: true
         run: |
-          pre-commit run trailing-whitespace --files dbt_common/__about__.py CHANGELOG.md .changes/*
+          pre-commit run trailing-whitespace --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
       # this step will fail on newline errors but also correct them
       - name: "Removing Extra Newlines Via Pre-commit"
         continue-on-error: true
         run: |
-          pre-commit run end-of-file-fixer --files dbt_common/__about__.py CHANGELOG.md .changes/*
+          pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
       - name: "Commit & Push Changes"
         run: |
@@ -434,7 +440,7 @@ jobs:
     needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
     if: |
         !failure() && !cancelled() &&
-        inputs.deploy_to == 'test' &&
+        inputs.deploy_to == 'prod' &&
         (
           needs.audit-changelog.outputs.exists == 'false' ||
           needs.audit-version-in-code.outputs.up_to_date == 'false'
@@ -449,11 +455,11 @@ jobs:
       - name: "Checkout Repo ${{ github.repository }}"
         uses: actions/checkout@v3
 
-      - name: "Merge Changes Into main"
+      - name: "Merge Changes Into ${{ inputs.target_branch }}"
         uses: everlytic/branch-merge@1.1.5
         with:
           source_ref: ${{ needs.create-temp-branch.outputs.branch_name }}
-          target_branch: "main"
+          target_branch: ${{ inputs.target_branch }}
           github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
           commit_message_template: "[Automated] Merged {source_ref} into target {target_branch} during release process"
 
@@ -495,7 +501,7 @@ jobs:
           then
             branch=${{ needs.create-temp-branch.outputs.branch_name }}
           else
-            branch="main"
+            branch="${{ inputs.target_branch }}"
           fi
           echo "target_branch=$branch" >> $GITHUB_OUTPUT
       - name: "[Notification] Resolve Branch To Checkout"
@@ -510,6 +516,11 @@ jobs:
 
       - name: "[Debug] Log Branch"
         run: git status
+
+      - name: "Resolve Commit SHA For Release"
+        id: resolve_commit_sha
+        run: |
+          echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
         if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
