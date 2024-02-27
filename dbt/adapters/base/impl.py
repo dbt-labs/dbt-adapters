@@ -48,7 +48,6 @@ from dbt_common.exceptions import (
     UnexpectedNullError,
 )
 from dbt_common.events.functions import fire_event, warn_or_error
-from dbt_common.record import record_function
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
@@ -327,7 +326,6 @@ class BaseAdapter(metaclass=AdapterMeta):
                 self.connections.query_header.reset()
 
     @available.parse(lambda *a, **k: ("", empty_table()))
-    @record_function(QueryRecord)
     def execute(
         self,
         sql: str,
