@@ -73,7 +73,7 @@ MODEL_POST_HOOK = """
 class BaseTestPrePost:
     @pytest.fixture(scope="class", autouse=True)
     def setUp(self, project):
-        project.run_sql(fixtures.tables__on_model_hook)
+        project.run_sql_file(project.test_data_dir / Path("seed_model.sql"))
 
     def get_ctx_vars(self, state, count, project):
         fields = [
