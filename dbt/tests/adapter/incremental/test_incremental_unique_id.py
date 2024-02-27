@@ -268,7 +268,7 @@ select 'NY','New York','Manhattan','2021-04-01'
 union all
 select 'PA','Philadelphia','Philadelphia','2021-05-21'
 union all
-select 'CO','Devner',null,'2021-06-18'
+select 'CO','Denver',null,'2021-06-18'
 
 """
 
