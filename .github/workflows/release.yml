@@ -113,7 +113,7 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@bumpVersion
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
       - name: "Build `dbt-tests-adapter`"
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
@@ -121,7 +121,7 @@ jobs:
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           working-dir: "./dbt-tests-adapter/"
-          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   github-release:
     name: "GitHub Release"
@@ -133,7 +133,7 @@ jobs:
       version_number: ${{ inputs.version_number }}
       changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
       test_run: ${{ inputs.deploy-to == 'test' && true || false }}
-      artifact_name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+      archive_name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
   pypi-release:
     name: "Publish to PyPI"
@@ -150,6 +150,6 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@bumpVersion
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
 

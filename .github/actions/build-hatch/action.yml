@@ -11,7 +11,7 @@ inputs:
   working-dir:
     description: Where to run commands from, supports namespace packaging
     default: "./"
-  artifacts-name:
+  archive-name:
     description: Where to upload the artifacts
     required: true
   changelog-path:
@@ -35,7 +35,7 @@ runs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: ${{ inputs.artifacts-name}}
+        name: ${{ inputs.archive-name}}
         path: |
           ${{ inputs.changelog-path }}
           ${{ inputs.working-dir }}dist/

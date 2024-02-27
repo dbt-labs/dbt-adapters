@@ -43,7 +43,7 @@ on:
         description: Test run (Publish release as draft)
         required: true
         type: boolean
-      artifact_name:
+      archive_name:
         description: artifact name to download
         required: true
         type: string
@@ -207,10 +207,10 @@ jobs:
         with:
           ref: ${{ inputs.sha }}
 
-      - name: "Download Artifact ${{ inputs.artifact_name }}"
+      - name: "Download Artifact ${{ inputs.archive_name }}"
         uses: actions/download-artifact@v3
         with:
-          name: ${{ inputs.artifact_name }}
+          name: ${{ inputs.archive_name }}
           path: .
 
       - name: "[DEBUG] Display Structure Of Expected Files"
