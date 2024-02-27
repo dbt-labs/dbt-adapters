@@ -150,6 +150,6 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@bumpVersion
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          artifacts-dir: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          artifacts-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
 
