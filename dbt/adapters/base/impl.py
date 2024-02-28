@@ -31,13 +31,11 @@ from dbt_common.clients.agate_helper import (
     table_from_rows,
 )
 from dbt_common.clients.jinja import CallableMacroGenerator
-from dbt_common.context import get_invocation_context
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
-from dbt_common.events.contextvars import get_node_info
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -95,7 +93,6 @@ from dbt.adapters.exceptions import (
     UnexpectedNonTimestampError,
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
-from dbt.record import QueryRecord
 
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
