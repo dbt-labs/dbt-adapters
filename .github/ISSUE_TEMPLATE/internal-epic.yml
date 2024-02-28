@@ -61,6 +61,24 @@ body:
 
   - type: textarea
     attributes:
+      label: Documentation
+      description: |
+        Provide a list of relevant documentation. Is there a proof of concept?
+        Does this require and RFCs, ADRs, etc.?
+        If the documentation exists, link it; if it does not exist yet, reference it descriptively.
+        
+        Example:
+        - [ ] RFC for updating connection interface to accept new parameters
+        - [ ] POC: https://github.com/dbt-labs/dbt-adapters/pull/42
+      value: |
+        ```[tasklist]
+        - [ ] Task
+        ```
+    validations:
+      required: false
+
+  - type: textarea
+    attributes:
       label: Consequences
       description: |
         Will this impact dbt Labs' ability, or a partner's ability, to make a related change? Call that out for discussion.
