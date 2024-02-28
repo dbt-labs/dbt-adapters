@@ -1,5 +1,5 @@
-from dbt.tests.adapter.column_types.test_column_types import BaseColumnTypes
+from dbt.tests.adapter.column_types.test_column_types import BasePostgresColumnTypes
 
 
-class TestPostgresColumnTypes(BaseColumnTypes):
+class TestPostgresColumnTypes(BasePostgresColumnTypes):
     pass
