@@ -53,13 +53,15 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.sdist.force-include]
 "../dbt/tests" = "dbt/tests"
 "../dbt/__init__.py" = "dbt/__init__.py"
+"dbt/tests/__about__.py" = "dbt/tests/__about__.py"
 
 [tool.hatch.build.targets.wheel.force-include]
 "../dbt/tests" = "dbt/tests"
 "../dbt/__init__.py" = "dbt/__init__.py"
+"dbt/tests/__about__.py" = "dbt/tests/__about__.py"
 
 [tool.hatch.version]
-path = "../dbt/tests/__about__.py"
+path = "dbt/tests/__about__.py"
 
 [tool.hatch.envs.build]
 detached = true
@@ -76,6 +78,7 @@ check-wheel = [
 ]
 check-sdist = [
     "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "python -m pip install setuptools_scm toml",
     "find ./dist/dbt_tests_adapter-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-tests-adapter",
 ]
