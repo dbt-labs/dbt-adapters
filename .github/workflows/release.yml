@@ -73,18 +73,32 @@ defaults:
 
 jobs:
   bump-version-generate-changelog:
-    name: "Bump package version, Generate changelog"
+    name: "Bump package version, Generate changelog - dbt-adapters"
+    if: ${{ inputs.package == 'dbt-adapters' }}
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@main
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
+      run-unit-tests: true
     secrets: inherit
+
+  bump-version-generate-changelog-dbt-tests-adapter:
+    name: "Bump package version, Generate changelog - dbt-tests-adapter"
+    if: ${{ inputs.package == 'dbt-tests-adapter' }}
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@main
+    with:
+      version_number: ${{ inputs.version_number }}
+      deploy_to: ${{ inputs.deploy-to }}
+      nightly_release: ${{ inputs.nightly_release }}
+      target_branch: ${{ inputs.target_branch }}
+      working-dir: "./dbt-tests-adapter/"
+      secrets: inherit
 
   log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [bump-version-generate-changelog]
     runs-on: ubuntu-latest
     steps:
@@ -120,8 +134,10 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-          working-dir: "./dbt-tests-adapter/"
           archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+          working-dir: "./dbt-tests-adapter/"
+          build-command: "hatch build -t wheel"
+          check-command: "hatch run build:check-wheel"
 
   github-release:
     name: "GitHub Release"
@@ -152,5 +168,3 @@ jobs:
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
           archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
-
-

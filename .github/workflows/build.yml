@@ -59,19 +59,8 @@ jobs:
         uses: ./.github/actions/build-hatch
         with:
           working-dir: "./dbt-tests-adapter/"
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-
-      - name: Build `dbt-adapters`
-        if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: ./.github/actions/build-hatch
-
-      - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch
-        with:
-          working-dir: "./dbt-tests-adapter/"
+          build-command: "hatch build -t wheel"
+          check-command: "hatch run build:check-wheel"
 
       # this step is only needed for the release process
       - name: "Upload Build Artifact"

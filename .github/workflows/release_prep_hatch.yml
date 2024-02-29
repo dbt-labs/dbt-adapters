@@ -53,6 +53,9 @@ on:
         type: string
         required: false
         default: ''
+      run-unit-tests:
+        type: boolean
+        default: false
       run-integration-tests:
         type: boolean
         default: false
@@ -61,6 +64,11 @@ on:
         type: string
         required: false
         default: main
+      working-dir:
+        description: Where to run commands from, supports namespace packaging
+        type: string
+        required: false
+        default: "./"
     outputs:
       changelog_path:
         description: The path to the changelog for this version
@@ -191,6 +199,7 @@ jobs:
             is_updated=true
           fi
           echo "up_to_date=$is_updated" >> $GITHUB_OUTPUT
+        working-directory: ${{ inputs.working-dir }}
       - name: "[Notification] Check Current Version In Code"
         run: |
           title="Version check"
@@ -339,6 +348,7 @@ jobs:
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
           hatch version ${{ inputs.version_number }}
+        working-directory: ${{ inputs.working-dir }}
       - name: "[Notification] Bump Version To ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
@@ -350,13 +360,13 @@ jobs:
       - name: "Remove Trailing Whitespace Via Pre-commit"
         continue-on-error: true
         run: |
-          pre-commit run trailing-whitespace --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
+          pre-commit run trailing-whitespace --files dbt/adapters/__about__.py dbt/tests/__about__.py CHANGELOG.md .changes/*
           git status
       # this step will fail on newline errors but also correct them
       - name: "Removing Extra Newlines Via Pre-commit"
         continue-on-error: true
         run: |
-          pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
+          pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py dbt/tests/__about__.py CHANGELOG.md .changes/*
           git status
       - name: "Commit & Push Changes"
         run: |
@@ -375,6 +385,7 @@ jobs:
   run-unit-tests:
     runs-on: ubuntu-latest
     needs: [create-temp-branch, generate-changelog-bump-version]
+    if: inputs.run-unit-tests == true
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
@@ -385,6 +396,7 @@ jobs:
         uses: ./.github/actions/setup-hatch
       - name: "Run Unit Tests"
         run: hatch run unit-tests:all
+        working-directory: ${{ inputs.working-dir }}
 
   run-integration-tests:
     runs-on: ubuntu-20.04
@@ -433,7 +445,8 @@ jobs:
           python-version: ${{ env.PYTHON_TARGET_VERSION }}
 
       - name: Run tests
-        run: hatch run test:integration
+        run: hatch run integration-tests:all
+        working-directory: ${{ inputs.working-dir }}
 
   merge-changes-into-target-branch:
     runs-on: ubuntu-latest
