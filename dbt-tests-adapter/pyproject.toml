@@ -31,14 +31,6 @@ dependencies = [
     "dbt-adapters",
     "pyyaml",
 ]
-
-[project.optional-dependencies]
-build = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
@@ -50,22 +42,24 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.version]
+path = "../dbt/tests/__about__.py"
+
 [tool.hatch.build.targets.sdist.force-include]
 "../dbt/tests" = "dbt/tests"
 "../dbt/__init__.py" = "dbt/__init__.py"
-"dbt/tests/__about__.py" = "dbt/tests/__about__.py"
 
 [tool.hatch.build.targets.wheel.force-include]
 "../dbt/tests" = "dbt/tests"
 "../dbt/__init__.py" = "dbt/__init__.py"
-"dbt/tests/__about__.py" = "dbt/tests/__about__.py"
-
-[tool.hatch.version]
-path = "dbt/tests/__about__.py"
 
 [tool.hatch.envs.build]
 detached = true
-features = ["build"]
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
 [tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",
@@ -78,7 +72,6 @@ check-wheel = [
 ]
 check-sdist = [
     "check-wheel-contents dist/*.whl --ignore W007,W008",
-    "python -m pip install setuptools_scm toml",
     "find ./dist/dbt_tests_adapter-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-tests-adapter",
 ]
