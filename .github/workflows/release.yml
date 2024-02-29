@@ -98,7 +98,7 @@ jobs:
 
   log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
-    if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
+    if: ${{ !failure() && !cancelled() }}
     needs: [bump-version-generate-changelog]
     runs-on: ubuntu-latest
     steps:
