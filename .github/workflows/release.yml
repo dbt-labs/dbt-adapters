@@ -94,7 +94,7 @@ jobs:
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
       working-dir: "./dbt-tests-adapter/"
-      secrets: inherit
+    secrets: inherit
 
   log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
