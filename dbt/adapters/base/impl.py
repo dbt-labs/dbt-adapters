@@ -94,7 +94,6 @@ from dbt.adapters.exceptions import (
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 
-
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"

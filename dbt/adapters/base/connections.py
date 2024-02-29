@@ -48,7 +48,6 @@ from dbt.adapters.events.types import (
 )
 from dbt.adapters.exceptions import FailedToConnectError, InvalidConnectionError
 
-
 SleepTime = Union[int, float]  # As taken by time.sleep.
 AdapterHandle = Any  # Adapter connection handle objects can be any class.
 
