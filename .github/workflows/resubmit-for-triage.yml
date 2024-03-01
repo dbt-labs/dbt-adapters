@@ -10,7 +10,7 @@
 # **when?**
 # This will run when a comment is added to an issue and that issue has an `awaiting_response` label.
 
-name: "Resubmit for Triage"
+name: "Resubmit for triage"
 
 on: issue_comment
 

@@ -33,7 +33,7 @@
 #  2. Generate the changelog (via changie) if there is no markdown file for this version
 #
 
-name: "Version Bump and Changelog Generation"
+name: "Version bump and changelog generation"
 run-name: Bump ${{ inputs.package }}==${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
 
 on:
@@ -96,7 +96,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: "[DEBUG] Print Variables"
+      - name: "[DEBUG] Print variables"
         run: |
           # WORKFLOW INPUTS
           echo The release version number:           ${{ inputs.version_number }}
@@ -123,13 +123,13 @@ jobs:
         with:
           ref: ${{ inputs.target_branch }}
 
-      - name: "Audit Version And Parse Into Parts"
+      - name: "Audit version and parse into parts"
         id: semver
         uses: dbt-labs/actions/parse-semver@v1.1.0
         with:
           version: ${{ inputs.version_number }}
 
-      - name: "Set Changelog Path"
+      - name: "Set changelog path"
         id: set_path
         run: |
           path=".changes/"
@@ -144,7 +144,7 @@ jobs:
           title="Changelog path"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$changelog_path"
 
-      - name: "Set Changelog Existence For Subsequent Jobs"
+      - name: "Set changelog existence for subsequent jobs"
         id: set_existence
         run: |
           does_exist=false
@@ -154,7 +154,7 @@ jobs:
           fi
           echo "exists=$does_exist">> $GITHUB_OUTPUT
 
-      - name: "[Notification] Set Changelog Existence For Subsequent Jobs"
+      - name: "[Notification] Set changelog existence for subsequent jobs"
         run: |
           title="Changelog exists"
           if [[ ${{ steps.set_existence.outputs.exists }} == true ]]
@@ -165,7 +165,7 @@ jobs:
           fi
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
-      - name: "[DEBUG] Print Outputs"
+      - name: "[DEBUG] Print outputs"
         run: |
           echo changelog_path: ${{ steps.set_path.outputs.changelog_path }}
           echo exists:         ${{ steps.set_existence.outputs.exists }}
@@ -187,7 +187,7 @@ jobs:
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch@isoloate-dbt-tests-adapter
 
-      - name: "Check Current Version In Code"
+      - name: "Check current version in code"
         id: version-check
         run: |
           is_updated=false
@@ -199,7 +199,7 @@ jobs:
           echo "up_to_date=$is_updated" >> $GITHUB_OUTPUT
         working-directory: ${{ inputs.working-dir }}
 
-      - name: "[Notification] Check Current Version In Code"
+      - name: "[Notification] Check current version in code"
         run: |
           title="Version check"
           if [[ ${{ steps.version-check.outputs.up_to_date }} == true ]]
@@ -210,7 +210,7 @@ jobs:
           fi
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
-      - name: "[DEBUG] Print Outputs"
+      - name: "[DEBUG] Print outputs"
         run: |
           echo up_to_date: ${{ steps.version-check.outputs.up_to_date }}
 
@@ -220,7 +220,7 @@ jobs:
     needs: [audit-changelog]
 
     steps:
-      - name: "Changelog Exists, Skip Generating New Changelog"
+      - name: "Changelog exists, skip generating new changelog"
         run: |
           # Send notification
           title="Skip changelog generation"
@@ -233,7 +233,7 @@ jobs:
     needs: [audit-version-in-code]
 
     steps:
-      - name: "Version Already Bumped"
+      - name: "Version already bumped"
         run: |
           # Send notification
           title="Skip version bump"
@@ -253,7 +253,7 @@ jobs:
         with:
           ref: ${{ inputs.target_branch }}
 
-      - name: "Generate Branch Name"
+      - name: "Generate branch name"
         id: variables
         run: |
           name="prep-release/"
@@ -265,17 +265,20 @@ jobs:
           fi
           name+="${{ inputs.version_number }}_$GITHUB_RUN_ID"
           echo "branch_name=$name" >> $GITHUB_OUTPUT
-      - name: "Create Branch - ${{ steps.variables.outputs.branch_name }}"
+
+      - name: "Create branch - ${{ steps.variables.outputs.branch_name }}"
         run: |
           git checkout -b ${{ steps.variables.outputs.branch_name }}
           git push -u origin ${{ steps.variables.outputs.branch_name }}
+
       - name: "[Notification] Temp branch created"
         run: |
           # Send notification
           title="Temp branch generated"
           message="The ${{ steps.variables.outputs.branch_name }} branch created"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
-      - name: "[DEBUG] Print Outputs"
+
+      - name: "[DEBUG] Print outputs"
         run: |
           echo branch_name ${{ steps.variables.outputs.branch_name }}
 
@@ -292,28 +295,28 @@ jobs:
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
-      - name: "Add Homebrew To PATH"
+      - name: "Add homebrew to PATH"
         run: |
           echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
-      - name: "Install Homebrew Packages"
+      - name: "Install homebrew packages"
         run: |
           brew install pre-commit
           brew tap miniscruff/changie https://github.com/miniscruff/changie
           brew install changie
 
-      - name: "Set json File Name"
+      - name: "Set json file name"
         id: json_file
         run: |
           echo "name=output_$GITHUB_RUN_ID.json" >> $GITHUB_OUTPUT
 
-      - name: "Get Core Team Membership"
+      - name: "Get Core team membership"
         run: |
           gh api -H "Accept: application/vnd.github+json" orgs/dbt-labs/teams/core-group/members > ${{ steps.json_file.outputs.name }}
         env:
           GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
 
-      - name: "Set Core Team Membership for Changie Contributors exclusion"
+      - name: "Set Core team membership for changie contributors exclusion"
         id: set_team_membership
         run: |
           team_list=$(jq -r '.[].login' ${{ steps.json_file.outputs.name }})
@@ -321,11 +324,11 @@ jobs:
           team_list_single=$(echo $team_list | tr '\n' ' ')
           echo "CHANGIE_CORE_TEAM=$team_list_single" >> $GITHUB_ENV
 
-      - name: "Delete the json File"
+      - name: "Delete the json file"
         run: |
           rm ${{ steps.json_file.outputs.name }}
 
-      - name: "Generate Release Changelog"
+      - name: "Generate release changelog"
         if: needs.audit-changelog.outputs.exists == 'false'
         run: |
           if [[ ${{ needs.audit-changelog.outputs.is_prerelease }} -eq 1 ]]
@@ -340,7 +343,7 @@ jobs:
           changie merge
           git status
 
-      - name: "Check Changelog Created Successfully"
+      - name: "Check changelog created successfully"
         if: needs.audit-changelog.outputs.exists == 'false'
         run: |
           title="Changelog"
@@ -354,12 +357,12 @@ jobs:
             exit 1
           fi
 
-      - name: "Bump Version To ${{ inputs.version_number }}"
+      - name: "Bump version to ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: hatch version ${{ inputs.version_number }}
         working-directory: ${{ inputs.working-dir }}
 
-      - name: "[Notification] Bump Version To ${{ inputs.version_number }}"
+      - name: "[INFO] Bump version to ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
           title="Version bump"
@@ -368,20 +371,20 @@ jobs:
 
       # TODO: can these 2 steps be done via hatch? probably.
       # this step will fail on whitespace errors but also correct them
-      - name: "Remove Trailing Whitespace Via Pre-commit"
+      - name: "Remove trailing whitespace via pre-commit"
         continue-on-error: true
         run: |
           pre-commit run trailing-whitespace --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
 
       # this step will fail on newline errors but also correct them
-      - name: "Removing Extra Newlines Via Pre-commit"
+      - name: "Removing extra newlines via pre-commit"
         continue-on-error: true
         run: |
           pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
 
-      - name: "Commit & Push Changes"
+      - name: "Commit & push changes"
         run: |
           #Data for commit
           user="Github Build Bot"
@@ -401,7 +404,7 @@ jobs:
     needs: [create-temp-branch, generate-changelog-bump-version]
 
     steps:
-      - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
+      - name: "Checkout ${{ github.repository }} branch ${{ needs.create-temp-branch.outputs.branch_name }}"
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
@@ -409,7 +412,7 @@ jobs:
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
-      - name: "Run Unit Tests"
+      - name: "Run unit tests"
         run: hatch run unit-tests:all
 
   run-integration-tests:
@@ -418,16 +421,16 @@ jobs:
     needs: [create-temp-branch, generate-changelog-bump-version]
 
     steps:
-      - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
+      - name: "Checkout ${{ github.repository }} branch ${{ needs.create-temp-branch.outputs.branch_name }}"
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
 
-      - name: "Setup Environment Variables - ./${{ inputs.env_setup_script_path }}"
+      - name: "Setup environment variables - ./${{ inputs.env_setup_script_path }}"
         if: inputs.env_setup_script_path != ''
         run: source ./${{ inputs.env_setup_script_path }}
 
-      - name: "Setup Environment Variables - Secrets Context"
+      - name: "Setup environment variables - secrets context"
         if: inputs.env_setup_script_path != ''
         uses: actions/github-script@v6
         id: check-env
@@ -453,13 +456,13 @@ jobs:
         env:
           SECRETS_CONTEXT: ${{ toJson(secrets) }}
 
-      - name: "Set up Python & Hatch - ${{ env.PYTHON_TARGET_VERSION }}"
+      - name: "Set up python & `hatch` - ${{ env.PYTHON_TARGET_VERSION }}"
         uses: ./.github/actions/setup-python-env
         with:
           python-version: ${{ env.PYTHON_TARGET_VERSION }}
 
-      - name: Run tests
-        run: hatch run test:integration
+      - name: "Run integration tests"
+        run: hatch run integration-tests:all
 
   merge-changes-into-target-branch:
     if: |
@@ -473,17 +476,17 @@ jobs:
     needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
 
     steps:
-      - name: "[Debug] Print Variables"
+      - name: "[DEBUG] Print variables"
         run: |
           echo branch_name:   ${{ needs.create-temp-branch.outputs.branch_name }}
           echo inputs.deploy_to: ${{ inputs.deploy_to }}
           echo needs.audit-changelog.outputs.exists: ${{ needs.audit-changelog.outputs.exists }}
           echo needs.audit-version-in-code.outputs.up_to_date: ${{ needs.audit-version-in-code.outputs.up_to_date }}
 
-      - name: "Checkout Repo ${{ github.repository }}"
+      - name: "Checkout repo ${{ github.repository }}"
         uses: actions/checkout@v4
 
-      - name: "Merge Changes Into ${{ inputs.target_branch }}"
+      - name: "Merge changes into ${{ inputs.target_branch }}"
         uses: everlytic/branch-merge@1.1.5
         with:
           source_ref: ${{ needs.create-temp-branch.outputs.branch_name }}
@@ -491,7 +494,7 @@ jobs:
           github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
           commit_message_template: "[Automated] Merged {source_ref} into target {target_branch} during release process"
 
-      - name: "[Notification] Changes Merged into main"
+      - name: "[Notification] Changes merged into main"
         run: |
           title="Changelog and Version Bump Branch Merge"
           message="The ${{ needs.create-temp-branch.outputs.branch_name }} branch was merged into mains"
@@ -515,13 +518,13 @@ jobs:
       final_sha: ${{ steps.resolve_commit_sha.outputs.release_sha }}
 
     steps:
-      - name: "[Debug] Print Variables"
+      - name: "[DEBUG] Print variables"
         run: |
           echo new_branch:       ${{ needs.create-temp-branch.outputs.branch_name }}
           echo changelog_exists: ${{ needs.audit-changelog.outputs.exists }}
           echo up_to_date:       ${{ needs.audit-version-in-code.outputs.up_to_date }}
 
-      - name: "Resolve Branch To Checkout"
+      - name: "Resolve branch to checkout"
         id: resolve_branch
         run: |
           branch=""
@@ -533,24 +536,24 @@ jobs:
           fi
           echo "target_branch=$branch" >> $GITHUB_OUTPUT
 
-      - name: "[Notification] Resolve Branch To Checkout"
+      - name: "[INFO] Resolve branch to checkout"
         run: |
           title="Branch pick"
           message="The ${{ steps.resolve_branch.outputs.target_branch }} branch will be used for release"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
-      - name: "Checkout Resolved Branch - ${{ steps.resolve_branch.outputs.target_branch }}"
+      - name: "Checkout resolved branch - ${{ steps.resolve_branch.outputs.target_branch }}"
         uses: actions/checkout@v3
         with:
           ref: ${{ steps.resolve_branch.outputs.target_branch }}
 
-      - name: "[Debug] Log Branch"
+      - name: "[DEBUG] Log branch"
         run: git status
 
-      - name: "Resolve Commit SHA For Release"
+      - name: "Resolve commit sha for release"
         id: resolve_commit_sha
         run: echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
+      - name: "Remove temp branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
         if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
         run: git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
