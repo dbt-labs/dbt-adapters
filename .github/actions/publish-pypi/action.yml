@@ -1,4 +1,4 @@
-name: Publish - PyPI
+name: "Publish - PyPI"
 description: Publish artifacts saved during build step to PyPI
 
 inputs:
@@ -13,13 +13,13 @@ runs:
   using: composite
   steps:
 
-    - name: Download artifacts
+    - name: "Download artifacts"
       uses: actions/download-artifact@v3
       with:
         name: ${{ inputs.archive-name }}
         path: .
 
-    - name: Publish artifacts to PyPI
+    - name: "Publish artifacts to PyPI"
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: ${{ inputs.repository-url }}

@@ -22,7 +22,7 @@
 # 3. If a release exists for this commit under a different tag, fail.
 # 4. If the commit is already associated with a different release, fail.
 
-name: GitHub Release
+name: "GitHub Release"
 
 on:
   workflow_call:

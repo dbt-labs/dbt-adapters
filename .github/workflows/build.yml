@@ -1,5 +1,5 @@
 # **what?**
-# Verifies python build on all code commited to the repository. This workflow
+# Verifies python build on all code committed to the repository. This workflow
 # should not require any secrets since it runs for PRs from forked repos. By
 # default, secrets are not passed to workflows running from a forked repos.
 
@@ -19,8 +19,22 @@ on:
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
+    inputs:
+      package:
+        type: choice
+        description: Choose what to publish
+        options:
+          - dbt-adapters
+          - dbt-tests-adapter
+      changelog_path:
+        description: "Path to changelog file"
+        required: true
+        type: string
   workflow_call:
     inputs:
+      package:
+        type: string
+        description: Choose what to publish
       changelog_path:
         description: "Path to changelog file"
         required: true
@@ -30,7 +44,7 @@ permissions: read-all
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.package }}
   cancel-in-progress: true
 
 defaults:
@@ -39,7 +53,7 @@ defaults:
 
 jobs:
   build:
-    name: Build, Test and publish to PyPi
+    name: "Build, Test and publish to PyPi"
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
@@ -47,27 +61,14 @@ jobs:
       - name: "Check out repository"
         uses: actions/checkout@v4
 
-      - name: Setup `hatch`
+      - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
-      - name: Build `dbt-adapters`
+      - name: "Build `dbt-adapters`"
         if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
 
-      - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch
-        with:
-          working-dir: "./dbt-tests-adapter/"
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-
-      - name: Build `dbt-adapters`
-        if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: ./.github/actions/build-hatch
-
-      - name: Build `dbt-tests-adapter`
+      - name: "Build `dbt-tests-adapter`"
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:

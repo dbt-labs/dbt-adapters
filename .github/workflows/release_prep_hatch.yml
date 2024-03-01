@@ -33,34 +33,38 @@
 #  2. Generate the changelog (via changie) if there is no markdown file for this version
 #
 
-name: Version Bump and Changelog Generation
+name: "Version Bump and Changelog Generation"
 run-name: Bump ${{ inputs.package }}==${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
+
 on:
   workflow_call:
     inputs:
       version_number:
-        required: true
         type: string
+        required: true
       deploy_to:
         type: string
         default: prod
-        required: false
       nightly_release:
         type: boolean
         default: false
-        required: false
       env_setup_script_path:
         type: string
-        required: false
         default: ''
+      run-unit-tests:
+        type: boolean
+        default: false
       run-integration-tests:
         type: boolean
         default: false
       target_branch:
         description: "The branch to release from"
         type: string
-        required: false
         default: main
+      working-dir:
+        description: "The working directory to use for run statements"
+        type: string
+        default: "./"
     outputs:
       changelog_path:
         description: The path to the changelog for this version
@@ -103,9 +107,9 @@ jobs:
           # ENVIRONMENT VARIABLES
           echo Python target version:                ${{ env.PYTHON_TARGET_VERSION }}
           echo Notification prefix:                  ${{ env.NOTIFICATION_PREFIX }}
+
   audit-changelog:
     runs-on: ubuntu-latest
-
     outputs:
       changelog_path: ${{ steps.set_path.outputs.changelog_path }}
       exists: ${{ steps.set_existence.outputs.exists }}
@@ -139,6 +143,7 @@ jobs:
           echo "changelog_path=$path" >> $GITHUB_OUTPUT
           title="Changelog path"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$changelog_path"
+
       - name: "Set Changelog Existence For Subsequent Jobs"
         id: set_existence
         run: |
@@ -148,6 +153,7 @@ jobs:
             does_exist=true
           fi
           echo "exists=$does_exist">> $GITHUB_OUTPUT
+
       - name: "[Notification] Set Changelog Existence For Subsequent Jobs"
         run: |
           title="Changelog exists"
@@ -158,6 +164,7 @@ jobs:
             message="Changelog file ${{ steps.set_path.outputs.changelog_path }} doesn't exist"
           fi
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
       - name: "[DEBUG] Print Outputs"
         run: |
           echo changelog_path: ${{ steps.set_path.outputs.changelog_path }}
@@ -168,7 +175,6 @@ jobs:
 
   audit-version-in-code:
     runs-on: ubuntu-latest
-
     outputs:
       up_to_date: ${{ steps.version-check.outputs.up_to_date }}
 
@@ -178,7 +184,7 @@ jobs:
         with:
           ref: ${{ inputs.target_branch }}
 
-      - name: Setup `hatch`
+      - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
       - name: "Check Current Version In Code"
@@ -191,6 +197,8 @@ jobs:
             is_updated=true
           fi
           echo "up_to_date=$is_updated" >> $GITHUB_OUTPUT
+        working-directory: ${{ inputs.working-dir }}
+
       - name: "[Notification] Check Current Version In Code"
         run: |
           title="Version check"
@@ -201,14 +209,15 @@ jobs:
             message="The version in the codebase differs from the provided version"
           fi
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
       - name: "[DEBUG] Print Outputs"
         run: |
           echo up_to_date: ${{ steps.version-check.outputs.up_to_date }}
 
   skip-generate-changelog:
+    if: needs.audit-changelog.outputs.exists == 'true'
     runs-on: ubuntu-latest
     needs: [audit-changelog]
-    if: needs.audit-changelog.outputs.exists == 'true'
 
     steps:
       - name: "Changelog Exists, Skip Generating New Changelog"
@@ -219,9 +228,9 @@ jobs:
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
   skip-version-bump:
+    if: needs.audit-version-in-code.outputs.up_to_date == 'true'
     runs-on: ubuntu-latest
     needs: [audit-version-in-code]
-    if: needs.audit-version-in-code.outputs.up_to_date == 'true'
 
     steps:
       - name: "Version Already Bumped"
@@ -232,10 +241,9 @@ jobs:
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
   create-temp-branch:
+    if: needs.audit-changelog.outputs.exists == 'false' || needs.audit-version-in-code.outputs.up_to_date == 'false'
     runs-on: ubuntu-latest
     needs: [audit-changelog, audit-version-in-code]
-    if: needs.audit-changelog.outputs.exists == 'false' || needs.audit-version-in-code.outputs.up_to_date == 'false'
-
     outputs:
       branch_name: ${{ steps.variables.outputs.branch_name }}
 
@@ -270,34 +278,41 @@ jobs:
       - name: "[DEBUG] Print Outputs"
         run: |
           echo branch_name ${{ steps.variables.outputs.branch_name }}
+
   generate-changelog-bump-version:
     runs-on: ubuntu-latest
     needs: [audit-changelog, audit-version-in-code, create-temp-branch]
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
-      - name: Setup `hatch`
+
+      - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
+
       - name: "Add Homebrew To PATH"
         run: |
           echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
       - name: "Install Homebrew Packages"
         run: |
           brew install pre-commit
           brew tap miniscruff/changie https://github.com/miniscruff/changie
           brew install changie
+
       - name: "Set json File Name"
         id: json_file
         run: |
           echo "name=output_$GITHUB_RUN_ID.json" >> $GITHUB_OUTPUT
+
       - name: "Get Core Team Membership"
         run: |
           gh api -H "Accept: application/vnd.github+json" orgs/dbt-labs/teams/core-group/members > ${{ steps.json_file.outputs.name }}
         env:
           GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
+
       - name: "Set Core Team Membership for Changie Contributors exclusion"
         id: set_team_membership
         run: |
@@ -305,9 +320,11 @@ jobs:
           echo $team_list
           team_list_single=$(echo $team_list | tr '\n' ' ')
           echo "CHANGIE_CORE_TEAM=$team_list_single" >> $GITHUB_ENV
+
       - name: "Delete the json File"
         run: |
           rm ${{ steps.json_file.outputs.name }}
+
       - name: "Generate Release Changelog"
         if: needs.audit-changelog.outputs.exists == 'false'
         run: |
@@ -322,6 +339,7 @@ jobs:
           fi
           changie merge
           git status
+
       - name: "Check Changelog Created Successfully"
         if: needs.audit-changelog.outputs.exists == 'false'
         run: |
@@ -335,16 +353,19 @@ jobs:
             echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
             exit 1
           fi
+
       - name: "Bump Version To ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
-        run: |
-          hatch version ${{ inputs.version_number }}
+        run: hatch version ${{ inputs.version_number }}
+        working-directory: ${{ inputs.working-dir }}
+
       - name: "[Notification] Bump Version To ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
           title="Version bump"
           message="Version successfully bumped in codebase to ${{ inputs.version_number }}"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
       # TODO: can these 2 steps be done via hatch? probably.
       # this step will fail on whitespace errors but also correct them
       - name: "Remove Trailing Whitespace Via Pre-commit"
@@ -352,12 +373,14 @@ jobs:
         run: |
           pre-commit run trailing-whitespace --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
+
       # this step will fail on newline errors but also correct them
       - name: "Removing Extra Newlines Via Pre-commit"
         continue-on-error: true
         run: |
           pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
+
       - name: "Commit & Push Changes"
         run: |
           #Data for commit
@@ -373,27 +396,30 @@ jobs:
           git push
 
   run-unit-tests:
+    if: inputs.run-unit-tests == true
     runs-on: ubuntu-latest
     needs: [create-temp-branch, generate-changelog-bump-version]
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
+
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
+
       - name: "Run Unit Tests"
         run: hatch run unit-tests:all
 
   run-integration-tests:
-    runs-on: ubuntu-20.04
-    needs: [create-temp-branch, generate-changelog-bump-version]
     if: inputs.run-integration-tests == true
+    runs-on: ubuntu-latest
+    needs: [create-temp-branch, generate-changelog-bump-version]
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
 
@@ -436,8 +462,6 @@ jobs:
         run: hatch run test:integration
 
   merge-changes-into-target-branch:
-    runs-on: ubuntu-latest
-    needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
     if: |
         !failure() && !cancelled() &&
         inputs.deploy_to == 'prod' &&
@@ -445,6 +469,9 @@ jobs:
           needs.audit-changelog.outputs.exists == 'false' ||
           needs.audit-version-in-code.outputs.up_to_date == 'false'
         )
+    runs-on: ubuntu-latest
+    needs: [run-unit-tests, run-integration-tests, create-temp-branch, audit-version-in-code, audit-changelog]
+
     steps:
       - name: "[Debug] Print Variables"
         run: |
@@ -452,8 +479,9 @@ jobs:
           echo inputs.deploy_to: ${{ inputs.deploy_to }}
           echo needs.audit-changelog.outputs.exists: ${{ needs.audit-changelog.outputs.exists }}
           echo needs.audit-version-in-code.outputs.up_to_date: ${{ needs.audit-version-in-code.outputs.up_to_date }}
+
       - name: "Checkout Repo ${{ github.repository }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: "Merge Changes Into ${{ inputs.target_branch }}"
         uses: everlytic/branch-merge@1.1.5
@@ -470,6 +498,8 @@ jobs:
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
   determine-release-branch:
+    # always run this job, regardless of if the dependant jobs were skipped
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     needs:
       [
@@ -478,9 +508,6 @@ jobs:
         audit-changelog,
         audit-version-in-code,
       ]
-    # always run this job, regardless of if the dependant jobs were skipped
-    if: ${{ !failure() && !cancelled() }}
-
     # Get the sha that will be released.  If the changelog already exists on the input sha and the version has already been bumped,
     # then it is what we will release. Otherwise we generated a changelog and did the version bump in this workflow and there is a
     # new sha to use from the merge we just did.  Grab that here instead.
@@ -493,6 +520,7 @@ jobs:
           echo new_branch:       ${{ needs.create-temp-branch.outputs.branch_name }}
           echo changelog_exists: ${{ needs.audit-changelog.outputs.exists }}
           echo up_to_date:       ${{ needs.audit-version-in-code.outputs.up_to_date }}
+
       - name: "Resolve Branch To Checkout"
         id: resolve_branch
         run: |
@@ -504,11 +532,13 @@ jobs:
             branch="${{ inputs.target_branch }}"
           fi
           echo "target_branch=$branch" >> $GITHUB_OUTPUT
+
       - name: "[Notification] Resolve Branch To Checkout"
         run: |
           title="Branch pick"
           message="The ${{ steps.resolve_branch.outputs.target_branch }} branch will be used for release"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
       - name: "Checkout Resolved Branch - ${{ steps.resolve_branch.outputs.target_branch }}"
         uses: actions/checkout@v3
         with:
@@ -519,10 +549,8 @@ jobs:
 
       - name: "Resolve Commit SHA For Release"
         id: resolve_commit_sha
-        run: |
-          echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        run: echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
         if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
-        run: |
-          git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
+        run: git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
