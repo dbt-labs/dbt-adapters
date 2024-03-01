@@ -1,4 +1,4 @@
-name: "Publish - Test Results"
+name: Publish results
 description: Publish test results with a unique archive name
 
 inputs:
@@ -6,7 +6,7 @@ inputs:
     description: File type for file name stub (e.g. "unit-tests")
     required: true
   python-version:
-    description: Python version for the archive name stub (e.g. "3.8")
+    description: Python version for the file name stub (e.g. "3.8")
     required: true
   source-file:
     description: File to be uploaded
@@ -15,13 +15,12 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: "Get timestamp"
+    - name: Get timestamp
       id: timestamp
       run: echo "ts=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_OUTPUT #no colons allowed for artifacts
       shell: bash
 
-    - name: "Publish test results to archive"
-      uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.file-name }}_python-${{ inputs.python-version }}_${{ steps.timestamp.outputs.ts }}.csv
         path: ${{ inputs.source-file }}

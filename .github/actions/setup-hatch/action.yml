@@ -1,4 +1,4 @@
-name: "Setup - `hatch`"
+name: Setup - `hatch`
 description: Setup a python environment with `hatch` installed
 
 inputs:
@@ -12,11 +12,11 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: "Set up Python ${{ inputs.python-version }}"
-      uses: actions/setup-python@v5
+    - name: Set up Python ${{ inputs.python-version }}
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ inputs.python-version }}
 
-    - name: "Install dev dependencies"
+    - name: Install dev dependencies
       run: ${{ inputs.setup-command }}
       shell: bash

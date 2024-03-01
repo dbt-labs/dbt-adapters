@@ -14,7 +14,7 @@
 # and when new code is pushed to the branch.  The action will get
 # skipped if the 'Skip Changelog' label is present is any of the labels.
 
-name: "Check Changelog Entry"
+name: Check Changelog Entry
 
 on:
   pull_request_target:

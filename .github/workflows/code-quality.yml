@@ -1,4 +1,4 @@
-name: "Code Quality"
+name: Code Quality
 
 on:
   push:
@@ -21,20 +21,20 @@ concurrency:
 
 jobs:
   lint:
-    name: "Code Quality"
+    name: Code Quality
     runs-on: ubuntu-latest
 
     steps:
-      - name: "Check out repository"
+      - name: Check out repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: "Setup `hatch`"
+      - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: "Run linters"
+      - name: Run linters
         run: hatch run lint:all
 
-      - name: "Run typechecks"
+      - name: Run typechecks
         run: hatch run typecheck:all

@@ -1,12 +1,12 @@
-name: "Release"
-run-name: "Release ${{ inputs.package }}==${{ inputs.version_number }} to ${{ inputs.deploy-to }}"
+name: Release
+run-name: Release ${{ inputs.package }}==${{ inputs.version_number }} to ${{ inputs.deploy-to }}
 
 on:
   workflow_dispatch:
     inputs:
       package:
-        description: "Choose what to publish"
         type: choice
+        description: Choose what to publish
         options:
           - dbt-adapters
           - dbt-tests-adapter
@@ -15,8 +15,8 @@ on:
         type: string
         required: true
       deploy-to:
-        description: "Choose where to publish"
         type: choice
+        description: Choose where to publish
         options:
         - prod
         - test
@@ -25,6 +25,7 @@ on:
         description: "Nightly release to dev environment"
         type: boolean
         default: false
+        required: false
       target_branch:
         description: "The branch to release from"
         type: string
@@ -33,17 +34,17 @@ on:
   workflow_call:
     inputs:
       package:
-        description: "Choose what to publish"
         type: string
+        description: Choose what to publish
         required: true
       version_number:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
       deploy-to:
-        description: "Choose where to publish"
         type: string
         default: prod
+        required: true
       nightly_release:
         description: "Nightly release to dev environment"
         type: boolean
@@ -51,6 +52,7 @@ on:
       target_branch:
         description: "The branch to release from"
         type: string
+        required: false
         default: main
 
 # this is the permission that allows creating a new release
@@ -101,8 +103,7 @@ jobs:
           echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
 
   bump-version-generate-changelog:
-    name: "Bump package version, generate changelogs"
-    if: ${{ !failure() && !cancelled() }}
+    name: "Bump package version, Generate changelogs"
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
@@ -114,19 +115,19 @@ jobs:
       run-unit-tests: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) }}
     secrets: inherit
 
-  bump-version-generate-changelog-debug:
-    name: "[DEBUG] Bump package version, generate changelog"
+  log-ouputs-bump-version-generate-changelog:
+    name: "[Log output] Bump package version, Generate changelog"
     if: ${{ always() }}
     needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     steps:
-      - name: "[DEBUG]"
+      - name: Print variables
         run: |
-          echo Final SHA      : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
-          echo Changelog Path : ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
+          echo Final SHA     : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
+          echo Changelog path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
 
   build-and-test:
-    name: "Build and test"
+    name: "Build and Test"
     if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
@@ -139,17 +140,17 @@ jobs:
           ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
       - name: "Setup `hatch`"
-        uses: ./.github/actions/setup-hatch
+        uses: dbt-labs/dbt-adapters/./.github/actions/setup-hatch@main
 
       - name: "Build ${{ inputs.package }}"
         uses: ./.github/actions/build-hatch
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-          archive-name: ${{ needs.release-inputs.outputs.archive-name }}
           working-dir: ${{ needs.release-inputs.outputs.working-dir }}
+          archive-name: ${{ needs.release-inputs.outputs.archive-name }}
 
   github-release:
-    name: "GitHub release"
+    name: "GitHub Release"
     # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [release-inputs, build-and-test, bump-version-generate-changelog]
@@ -174,7 +175,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: "Publish to PyPI"
-        uses: ./.github/actions/publish-pypi
+        uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
         with:
-          archive-name: ${{ needs.release-inputs.outputs.archive-name }}
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+          archive-name: ${{ needs.release-inputs.outputs.archive-name }}

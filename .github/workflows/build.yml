@@ -53,7 +53,7 @@ defaults:
 
 jobs:
   build:
-    name: "Build, Test and publish to PyPi"
+    name: Build, Test and publish to PyPi
     runs-on: ubuntu-latest
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
@@ -61,14 +61,14 @@ jobs:
       - name: "Check out repository"
         uses: actions/checkout@v4
 
-      - name: "Setup `hatch`"
+      - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: "Build `dbt-adapters`"
+      - name: Build `dbt-adapters`
         if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
 
-      - name: "Build `dbt-tests-adapter`"
+      - name: Build `dbt-tests-adapter`
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:
@@ -77,7 +77,7 @@ jobs:
       # this step is only needed for the release process
       - name: "Upload Build Artifact"
         if: ${{ github.event_name == 'workflow_call' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ steps.version.outputs.version_number }}
           path: |
