@@ -111,7 +111,7 @@ jobs:
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
       working-dir: ${{ needs.release-inputs.outputs.working-dir }}
-      run-unit-tests: fromJSON(needs.release-inputs.outputs.run-unit-tests)
+      run-unit-tests: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) }}
     secrets: inherit
 
   bump-version-generate-changelog-debug:
