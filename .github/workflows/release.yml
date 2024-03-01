@@ -76,7 +76,8 @@ jobs:
       run-unit-tests: ${{ steps.release-inputs.outputs.run-unit-tests }}
       archive-name: ${{ steps.release-inputs.outputs.archive-name }}
     steps:
-      - id: release-inputs
+      - name: "Inputs"
+        id: release-inputs
         run: |
           working_dir="./"
           run_unit_tests=true
@@ -92,7 +93,7 @@ jobs:
           echo "run-unit-tests=$run_unit_tests" >> $GITHUB_OUTPUT
           echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
 
-      - name: "[DEBUG] Release inputs"
+      - name: "[DEBUG]"
         run: |
           echo package        : ${{ inputs.package }}
           echo working-dir    : ${{ steps.release-inputs.outputs.working-dir }}
@@ -101,7 +102,7 @@ jobs:
 
   bump-version-generate-changelog:
     name: "Bump package version, generate changelogs"
-    if: ${{ !failure() && !cancelled() }}
+    if: ${{ always() }}
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
