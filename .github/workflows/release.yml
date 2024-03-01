@@ -70,7 +70,7 @@ defaults:
 jobs:
   bump-version-generate-changelog-dbt-adapters:
     name: "Bump package version, Generate changelog - dbt-adapters"
-    uses: .github/workflows/release_prep_hatch.yml
+    uses: .github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -81,7 +81,7 @@ jobs:
 
   bump-version-generate-changelog-dbt-tests-adapter:
     name: "Bump package version, Generate changelog - dbt-tests-adapter"
-    uses: .github/workflows/release_prep_hatch.yml
+    uses: .github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -118,14 +118,14 @@ jobs:
 
       - name: "Build `dbt-adapters`"
         if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: .github/actions/build-hatch
+        uses: .github/actions/build-hatch@isoloate-dbt-tests-adapter
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
 
       - name: "Build `dbt-tests-adapter`"
         if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: .github/actions/build-hatch
+        uses: .github/actions/build-hatch@isoloate-dbt-tests-adapter
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
@@ -136,7 +136,7 @@ jobs:
     # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [build-and-test, bump-version-generate-changelog]
-    uses: .github/workflows/github-release.yml
+    uses: .github/workflows/github-release.yml@isoloate-dbt-tests-adapter
     with:
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
       version_number: ${{ inputs.version_number }}
@@ -157,7 +157,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: "Publish to PyPI"
-        uses: .github/actions/publish-pypi
+        uses: .github/actions/publish-pypi@isoloate-dbt-tests-adapter
         with:
           archive-name: ${{ inputs.version_number }}-${{ inputs.package }}-${{ inputs.deploy-to }}
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}

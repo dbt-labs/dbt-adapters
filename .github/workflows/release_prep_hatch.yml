@@ -185,7 +185,7 @@ jobs:
           ref: ${{ inputs.target_branch }}
 
       - name: "Setup `hatch`"
-        uses: ./.github/actions/setup-hatch
+        uses: ./.github/actions/setup-hatch@isoloate-dbt-tests-adapter
 
       - name: "Check Current Version In Code"
         id: version-check
