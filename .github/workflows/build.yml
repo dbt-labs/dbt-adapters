@@ -19,22 +19,8 @@ on:
   merge_group:
     types: [checks_requested]
   workflow_dispatch:
-    inputs:
-      package:
-        type: choice
-        description: Choose what to publish
-        options:
-          - dbt-adapters
-          - dbt-tests-adapter
-      changelog_path:
-        description: "Path to changelog file"
-        required: true
-        type: string
   workflow_call:
     inputs:
-      package:
-        type: string
-        description: Choose what to publish
       changelog_path:
         description: "Path to changelog file"
         required: true
@@ -44,7 +30,7 @@ permissions: read-all
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.package }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
 defaults:
@@ -60,6 +46,19 @@ jobs:
     steps:
       - name: "Check out repository"
         uses: actions/checkout@v4
+
+      - name: Setup `hatch`
+        uses: ./.github/actions/setup-hatch
+
+      - name: Build `dbt-adapters`
+        if: ${{ inputs.package == 'dbt-adapters' }}
+        uses: ./.github/actions/build-hatch
+
+      - name: Build `dbt-tests-adapter`
+        if: ${{ inputs.package == 'dbt-tests-adapter' }}
+        uses: ./.github/actions/build-hatch
+        with:
+          working-dir: "./dbt-tests-adapter/"
 
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
