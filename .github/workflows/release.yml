@@ -102,7 +102,7 @@ jobs:
 
   bump-version-generate-changelog:
     name: "Bump package version, generate changelogs"
-    if: ${{ always() }}
+    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
@@ -114,13 +114,13 @@ jobs:
       run-unit-tests: ${{ needs.release-inputs.outputs.run-unit-tests }}
     secrets: inherit
 
-  log-outputs-bump-version-generate-changelog:
+  bump-version-generate-changelog-debug:
     name: "[DEBUG] Bump package version, generate changelog"
-    if: ${{ !failure() && !cancelled() }}
-    needs: [bump-version-generate-changelog]
+    if: ${{ always() }}
+    needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     steps:
-      - name: Print variables
+      - name: "[DEBUG]"
         run: |
           echo Final SHA      : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
           echo Changelog Path : ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
