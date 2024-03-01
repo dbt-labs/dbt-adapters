@@ -49,10 +49,12 @@ class MaterializationConfig(Mapping, ABC):
 
 class RelationConfig(Protocol):
     name: str
+    description: str
     database: str
     schema: str
     identifier: str
     compiled_code: Optional[str]
+    meta: Dict
     quoting_dict: Dict[str, bool]
     config: Optional[MaterializationConfig]
 
