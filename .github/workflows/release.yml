@@ -70,7 +70,7 @@ defaults:
 jobs:
   bump-version-generate-changelog-dbt-adapters:
     name: "Bump package version, Generate changelog - dbt-adapters"
-    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -81,7 +81,7 @@ jobs:
 
   bump-version-generate-changelog-dbt-tests-adapter:
     name: "Bump package version, Generate changelog - dbt-tests-adapter"
-    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -136,7 +136,7 @@ jobs:
     # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [build-and-test, bump-version-generate-changelog]
-    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@isoloate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@isolate-dbt-tests-adapter
     with:
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
       version_number: ${{ inputs.version_number }}
