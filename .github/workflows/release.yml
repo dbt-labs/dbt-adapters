@@ -29,6 +29,7 @@ on:
       target_branch:
         description: "The branch to release from"
         type: string
+        required: false
         default: main
 
   workflow_call:
@@ -44,11 +45,12 @@ on:
       deploy-to:
         type: string
         default: prod
-        required: true
+        required: false
       nightly_release:
         description: "Nightly release to dev environment"
         type: boolean
         default: false
+        required: false
       target_branch:
         description: "The branch to release from"
         type: string
@@ -103,7 +105,7 @@ jobs:
           echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
 
   bump-version-generate-changelog:
-    name: "Bump package version, Generate changelogs"
+    name: "Bump package version, Generate changelog"
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
@@ -115,9 +117,9 @@ jobs:
       run-unit-tests: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) }}
     secrets: inherit
 
-  log-ouputs-bump-version-generate-changelog:
+  log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
-    if: ${{ always() }}
+    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     steps:

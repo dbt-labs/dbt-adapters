@@ -1,5 +1,4 @@
 name: Publish results
-description: Publish test results with a unique archive name
 
 inputs:
   file-name:
