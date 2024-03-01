@@ -99,14 +99,17 @@ jobs:
       - name: "[DEBUG] Print variables"
         run: |
           # WORKFLOW INPUTS
-          echo The release version number:           ${{ inputs.version_number }}
-          echo Deploy to:                            ${{ inputs.deploy_to }}
-          echo Target branch:                        ${{ inputs.target_branch }}
-          echo Nightly release:                      ${{ inputs.nightly_release }}
-          echo Optional env setup script:            ${{ inputs.env_setup_script_path }}
+          echo version_number        : ${{ inputs.version_number }}
+          echo deploy_to             : ${{ inputs.deploy_to }}
+          echo nightly_release       : ${{ inputs.nightly_release }}
+          echo env_setup_script_path : ${{ inputs.env_setup_script_path }}
+          echo run-unit-tests        : ${{ inputs.run-unit-tests }}
+          echo run-integration-tests : ${{ inputs.run-integration-tests }}
+          echo target_branch         : ${{ inputs.target_branch }}
+          echo working-dir           : ${{ inputs.working-dir }}
           # ENVIRONMENT VARIABLES
-          echo Python target version:                ${{ env.PYTHON_TARGET_VERSION }}
-          echo Notification prefix:                  ${{ env.NOTIFICATION_PREFIX }}
+          echo Python target version : ${{ env.PYTHON_TARGET_VERSION }}
+          echo Notification prefix   : ${{ env.NOTIFICATION_PREFIX }}
 
   audit-changelog:
     runs-on: ubuntu-latest
@@ -543,7 +546,7 @@ jobs:
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
 
       - name: "Checkout resolved branch - ${{ steps.resolve_branch.outputs.target_branch }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ steps.resolve_branch.outputs.target_branch }}
 
