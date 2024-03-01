@@ -85,19 +85,19 @@ jobs:
 
           if test "${{ inputs.package }}" = "dbt-tests-adapter"
           then
-            working_dir="./dbt-tests-adapter"
+            working_dir="./dbt-tests-adapter/"
             run_unit_tests=false
           fi
 
           echo "working-dir=$working_dir" >> $GITHUB_OUTPUT
-          echo "run-unit-tests=$run_unit_tests" >> $GITHUB_OUTPUT
+          echo "run-unit-tests=toJSON($run_unit_tests)" >> $GITHUB_OUTPUT
           echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
 
       - name: "[DEBUG]"
         run: |
           echo package        : ${{ inputs.package }}
           echo working-dir    : ${{ steps.release-inputs.outputs.working-dir }}
-          echo run-unit-tests : ${{ steps.release-inputs.outputs.run-unit-tests }}
+          echo run-unit-tests : ${{ fromJSON(steps.release-inputs.outputs.run-unit-tests) }}
           echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
 
   bump-version-generate-changelog:
@@ -111,7 +111,7 @@ jobs:
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
       working-dir: ${{ needs.release-inputs.outputs.working-dir }}
-      run-unit-tests: ${{ needs.release-inputs.outputs.run-unit-tests }}
+      run-unit-tests: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) }}
     secrets: inherit
 
   bump-version-generate-changelog-debug:

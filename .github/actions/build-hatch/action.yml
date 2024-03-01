@@ -33,7 +33,7 @@ runs:
       working-directory: ${{ inputs.working-dir }}
 
     - name: "Upload artifacts"
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.archive-name}}
         path: |
