@@ -93,7 +93,7 @@ jobs:
   log-outputs-bump-version-generate-changelog:
     name: "[Log output] Bump package version, Generate changelog"
     if: ${{ !failure() && !cancelled() }}
-    needs: [bump-version-generate-changelog]
+    needs: [bump-version-generate-changelog-dbt-adapters, bump-version-generate-changelog-dbt-tests-adapter]
     runs-on: ubuntu-latest
     steps:
       - name: Print variables
