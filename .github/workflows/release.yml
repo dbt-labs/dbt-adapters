@@ -90,7 +90,7 @@ jobs:
           fi
 
           echo "working-dir=$working_dir" >> $GITHUB_OUTPUT
-          echo "run-unit-tests=toJSON($run_unit_tests)" >> $GITHUB_OUTPUT
+          echo "run-unit-tests=$run_unit_tests" >> $GITHUB_OUTPUT
           echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
 
       - name: "[DEBUG]"
