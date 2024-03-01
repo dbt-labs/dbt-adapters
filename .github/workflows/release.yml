@@ -70,7 +70,7 @@ defaults:
 jobs:
   bump-version-generate-changelog-dbt-adapters:
     name: "Bump package version, Generate changelog - dbt-adapters"
-    uses: .github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -81,7 +81,7 @@ jobs:
 
   bump-version-generate-changelog-dbt-tests-adapter:
     name: "Bump package version, Generate changelog - dbt-tests-adapter"
-    uses: .github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isoloate-dbt-tests-adapter
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
