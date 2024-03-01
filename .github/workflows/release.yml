@@ -144,7 +144,7 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
 
       - name: "Build ${{ inputs.package }}"
-        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@isolate-dbt-tests-adapter
+        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
         with:
           changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
           working-dir: ${{ needs.release-inputs.outputs.working-dir }}

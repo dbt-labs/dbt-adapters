@@ -366,7 +366,7 @@ jobs:
           pre-commit run trailing-whitespace --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
           git status
       # this step will fail on newline errors but also correct them
-      - name: "Removing extra newlines via pre-commit"
+      - name: "Removing Extra Newlines Via Pre-commit"
         continue-on-error: true
         run: |
           pre-commit run end-of-file-fixer --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
@@ -407,7 +407,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
 
@@ -459,7 +459,6 @@ jobs:
           needs.audit-changelog.outputs.exists == 'false' ||
           needs.audit-version-in-code.outputs.up_to_date == 'false'
         )
-
     steps:
       - name: "[Debug] Print Variables"
         run: |
@@ -534,8 +533,10 @@ jobs:
 
       - name: "Resolve Commit SHA For Release"
         id: resolve_commit_sha
-        run: echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+        run: |
+          echo "release_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       - name: "Remove Temp Branch - ${{ needs.create-temp-branch.outputs.branch_name }}"
         if: ${{ inputs.deploy_to == 'prod' && inputs.nightly_release == 'false' && needs.create-temp-branch.outputs.branch_name != '' }}
-        run: git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
+        run: |
+          git push origin -d ${{ needs.create-temp-branch.outputs.branch_name }}
