@@ -101,6 +101,7 @@ jobs:
 
   bump-version-generate-changelog:
     name: "Bump package version, generate changelogs"
+    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
@@ -125,6 +126,7 @@ jobs:
 
   build-and-test:
     name: "Build and test"
+    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     permissions:
