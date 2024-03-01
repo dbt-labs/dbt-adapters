@@ -106,8 +106,8 @@ jobs:
 
   bump-version-generate-changelog:
     name: "Bump package version, Generate changelog"
-    needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
+    needs: [release-inputs]
     with:
       version_number: ${{ inputs.version_number }}
       deploy_to: ${{ inputs.deploy-to }}
@@ -130,7 +130,6 @@ jobs:
 
   build-and-test:
     name: "Build and Test"
-    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs, bump-version-generate-changelog]
     runs-on: ubuntu-latest
     permissions:
@@ -142,7 +141,7 @@ jobs:
           ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
 
       - name: "Setup `hatch`"
-        uses: dbt-labs/dbt-adapters/./.github/actions/setup-hatch@main
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
 
       - name: "Build ${{ inputs.package }}"
         uses: ./.github/actions/build-hatch
@@ -167,7 +166,6 @@ jobs:
   pypi-release:
     name: "Publish to PyPI"
     runs-on: ubuntu-latest
-    if: ${{ !failure() && !cancelled() }}
     needs: [release-inputs, build-and-test]
     environment:
       name: ${{ inputs.deploy-to }}
