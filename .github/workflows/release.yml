@@ -106,7 +106,7 @@ jobs:
 
   bump-version-generate-changelog:
     name: "Bump package version, Generate changelog"
-    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@main
     needs: [release-inputs]
     with:
       version_number: ${{ inputs.version_number }}
@@ -154,7 +154,7 @@ jobs:
     # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [release-inputs, build-and-test, bump-version-generate-changelog]
-    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@isolate-dbt-tests-adapter
+    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@main
     with:
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
       version_number: ${{ inputs.version_number }}
@@ -174,7 +174,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: "Publish to PyPI"
-        uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@isolate-dbt-tests-adapter
+        uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
         with:
           repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
           archive-name: ${{ needs.release-inputs.outputs.archive-name }}
