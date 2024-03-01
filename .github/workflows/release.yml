@@ -37,10 +37,20 @@ jobs:
       - name: Setup `hatch`
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
 
+      - name: Inputs
+        id: release-inputs
+        run: |
+          version=$(hatch version)
+          archive_name=dbt-postgres-$version-${{ inputs.deploy-to }}
+          echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
+
       - name: Build `dbt-postgres`
         uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
+        with:
+          archive-name: ${{ steps.release-inputs.outputs.archive-name }}
 
       - name: Publish to PyPI
         uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
         with:
           pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+          archive-name: ${{ steps.release-inputs.outputs.archive-name }}
