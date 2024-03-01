@@ -19,8 +19,11 @@ runs:
         name: ${{ inputs.archive-name }}
         path: .
 
+    - name: "[DEBUG]"
+      run : ls -R
+      shell: bash
+
     - name: Publish artifacts to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        packages-dir: ${{ inputs.archive-name }}
         repository-url: ${{ inputs.repository-url }}
