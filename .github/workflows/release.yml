@@ -69,13 +69,14 @@ defaults:
 
 jobs:
   release-inputs:
+    name: "Release inputs"
     runs-on: ubuntu-latest
     outputs:
-      working-dir: ${{ steps.release_inputs.outputs.working_dir }}
-      run-unit-tests: ${{ steps.release_inputs.outputs.run_unit_tests }}
-      archive-name: ${{ steps.release_inputs.outputs.archive_name }}
+      working-dir: ${{ steps.release-inputs.outputs.working-dir }}
+      run-unit-tests: ${{ steps.release-inputs.outputs.run-unit-tests }}
+      archive-name: ${{ steps.release-inputs.outputs.archive-name }}
     steps:
-      - id: release_inputs
+      - id: release-inputs
         run: |
           working_dir="./"
           run_unit_tests=true
@@ -87,12 +88,19 @@ jobs:
             run_unit_tests=false
           fi
 
-          echo "working_dir=working_dir" >> $GITHUB_OUTPUT
-          echo "run_unit_tests=run_unit_tests" >> $GITHUB_OUTPUT
-          echo "archive_name=archive_name" >> $GITHUB_OUTPUT
+          echo "working-dir=$working_dir" >> $GITHUB_OUTPUT
+          echo "run-unit-tests=$run_unit_tests" >> $GITHUB_OUTPUT
+          echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
+
+      - name: "[DEBUG] Release inputs"
+        run: |
+          echo package        : ${{ inputs.package }}
+          echo working-dir    : ${{ steps.release-inputs.outputs.working-dir }}
+          echo run-unit-tests : ${{ steps.release-inputs.outputs.run-unit-tests }}
+          echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
 
   bump-version-generate-changelog:
-    name: "Bump package version, generate changelog - dbt-adapters"
+    name: "Bump package version, generate changelogs"
     needs: [release-inputs]
     uses: dbt-labs/dbt-adapters/.github/workflows/release_prep_hatch.yml@isolate-dbt-tests-adapter
     with:
@@ -105,7 +113,7 @@ jobs:
     secrets: inherit
 
   log-outputs-bump-version-generate-changelog:
-    name: "[Log output] Bump package version, generate changelog"
+    name: "[DEBUG] Bump package version, generate changelog"
     if: ${{ !failure() && !cancelled() }}
     needs: [bump-version-generate-changelog]
     runs-on: ubuntu-latest
@@ -154,7 +162,7 @@ jobs:
     name: "Publish to PyPI"
     runs-on: ubuntu-latest
     if: ${{ !failure() && !cancelled() }}
-    needs: [release-inputs]
+    needs: [release-inputs, build-and-test]
     environment:
       name: ${{ inputs.deploy-to }}
       url: ${{ vars.PYPI_PROJECT_URL }}
