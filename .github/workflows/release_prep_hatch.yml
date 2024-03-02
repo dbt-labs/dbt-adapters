@@ -53,6 +53,9 @@ on:
         type: string
         required: false
         default: ''
+      run-unit-tests:
+        type: boolean
+        default: false
       run-integration-tests:
         type: boolean
         default: false
@@ -61,6 +64,10 @@ on:
         type: string
         required: false
         default: main
+      working-dir:
+        description: "The working directory to use for run statements"
+        type: string
+        default: "./"
     outputs:
       changelog_path:
         description: The path to the changelog for this version
@@ -100,6 +107,9 @@ jobs:
           echo Target branch:                        ${{ inputs.target_branch }}
           echo Nightly release:                      ${{ inputs.nightly_release }}
           echo Optional env setup script:            ${{ inputs.env_setup_script_path }}
+          echo run-unit-tests:                       ${{ inputs.run-unit-tests }}
+          echo run-integration-tests:                ${{ inputs.run-integration-tests }}
+          echo working-dir:                          ${{ inputs.working-dir }}
           # ENVIRONMENT VARIABLES
           echo Python target version:                ${{ env.PYTHON_TARGET_VERSION }}
           echo Notification prefix:                  ${{ env.NOTIFICATION_PREFIX }}
@@ -191,6 +201,8 @@ jobs:
             is_updated=true
           fi
           echo "up_to_date=$is_updated" >> $GITHUB_OUTPUT
+        working-directory: ${{ inputs.working-dir }}
+
       - name: "[Notification] Check Current Version In Code"
         run: |
           title="Version check"
@@ -339,6 +351,7 @@ jobs:
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
           hatch version ${{ inputs.version_number }}
+        working-directory: ${{ inputs.working-dir }}
       - name: "[Notification] Bump Version To ${{ inputs.version_number }}"
         if: needs.audit-version-in-code.outputs.up_to_date == 'false'
         run: |
@@ -373,6 +386,7 @@ jobs:
           git push
 
   run-unit-tests:
+    if: inputs.run-unit-tests == true
     runs-on: ubuntu-latest
     needs: [create-temp-branch, generate-changelog-bump-version]
 
@@ -433,7 +447,7 @@ jobs:
           python-version: ${{ env.PYTHON_TARGET_VERSION }}
 
       - name: Run tests
-        run: hatch run test:integration
+        run: hatch run integration-tests:all
 
   merge-changes-into-target-branch:
     runs-on: ubuntu-latest
