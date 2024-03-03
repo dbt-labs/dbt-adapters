@@ -1,0 +1,26 @@
+name: "Publish GitHub draft release as full release"
+description: "Publish an existing draft release as a non-draft release"
+
+inputs:
+  tag:
+    description: "The tag to publish (i.e. v1.0.0b1)"
+    required: true
+  repo-url:
+    description: "The URL to the repo (https://github.com/dbt-labs/dbt-adapters"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: "Publish draft release"
+      shell: bash
+      run: gh release edit ${{ inputs.tag }} --draft=false --repo ${{ inputs.repo-url }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "[INFO] Released draft as non-draft release on GitHub"
+      shell: bash
+      run: |
+        title="Released draft as non-draft release on GitHub"
+        message="tag: ${{ inputs.tag }}"
+        echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

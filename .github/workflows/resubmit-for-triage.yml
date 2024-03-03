@@ -10,7 +10,7 @@
 # **when?**
 # This will run when a comment is added to an issue and that issue has an `awaiting_response` label.
 
-name: Resubmit for Triage
+name: "Resubmit for triage"
 
 on: issue_comment
 
@@ -22,7 +22,7 @@ permissions:
   issues: write
 
 jobs:
-  triage_label:
+  triage-label:
     if: contains(github.event.issue.labels.*.name, 'awaiting_response')
     uses: dbt-labs/actions/.github/workflows/swap-labels.yml@main
     with:

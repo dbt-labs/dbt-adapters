@@ -1,0 +1,74 @@
+# When the GitHub CLI doesn't find a release for the given tag, it will exit 1 with a
+# message of "release not found". In our case, it's not an actual error, just a
+# confirmation that the release does not already exist, so we can create it.
+# The `|| true` makes it so the step does not exit with a non-zero exit code.
+# Also check if the release already exists is draft state. If it's a draft,
+# and we are not testing, then we can publish that draft as-is. If it's in draft,
+# and we are testing, skip the release.
+name: "Audit GitHub tag"
+description: "Get basic metadata associated with a release tag"
+
+inputs:
+  tag:
+    description: "The tag to audit (i.e. v1.0.0b1)"
+    required: true
+  repo-url:
+    description: "The URL to the repo (https://github.com/dbt-labs/dbt-adapters"
+    required: true
+outputs:
+  exists:
+    description: "Does the tag exist?"
+    value: ${{ steps.tag.outputs.exists }}
+  sha:
+    description: "The commit associated with the tag if the tag exists"
+    value: ${{ steps.commit.outputs.sha }}
+  is-draft:
+    description: "If the tag exists, is it a draft?"
+    value: ${{ steps.draft.outputs.is-draft }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Check if tag exists"
+      id: tag
+      shell: bash
+      run: |
+        output=$((gh release view ${{ inputs.tag }} --json isDraft,targetCommitish --repo ${{ inputs.repo-url }}) 2>&1) || true
+        echo "results=$output" >> $GITHUB_OUTPUT
+        if [[ "$output" == "release not found" ]]
+        then
+          echo "exists=false" >> $GITHUB_OUTPUT
+        else
+          echo "exists=true" >> $GITHUB_OUTPUT
+        fi
+      with:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "Get commit associate with the tag"
+      id: commit
+      if: ${{ fromJSON(steps.tag.outputs.exists) == true }}
+      shell: bash
+      run: |
+        sha=$(jq -r '.targetCommitish' <<< "$output")
+        echo "sha=$sha" >> $GITHUB_OUTPUT
+
+    - name: "Check if tag is a draft release"
+      id: draft
+      if: ${{ fromJSON(steps.tag.outputs.exists) == true }}
+      shell: bash
+      run: |
+        is-draft=$(jq -r '.isDraft' <<< "${{ steps.tag.outputs.results }}")
+        if [[ $is-draft == true ]]
+        then
+          echo "is-draft=true" >> $GITHUB_OUTPUT
+        else
+          echo "is-draft=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: "[DEBUG] Tag metadata"
+      shell: bash
+      run: |
+        echo tag       : ${{ inputs.tag }}
+        echo exists:   : ${{ steps.release.outputs.exists }}
+        echo sha       : ${{ steps.commit.outputs.sha }}
+        echo is-draft  : ${{ steps.draft.outputs.is-draft }}

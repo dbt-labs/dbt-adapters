@@ -1,0 +1,159 @@
+# **what?**
+# 1. If a release exists for this commit under a different tag, fail.
+# 2. If the commit is already associated with a different release, fail.
+# 3. If no release/tag exists for this commit and version, create the tag and release it to GitHub as a draft.
+# 4. If a release already exists for this commit, skip creating the release as a draft.
+# 5. If this is deployed to prod, mark the draft release (created in this run or previously) as a full release.
+#
+# **when?**
+# 1. Call after a successful build. Build artifacts should be ready to release.defaults:
+#    They need to either live in a dist/ directory locally, or an archive name needs to be provided.
+# 2. Call to publish a draft release to become a full release. No archive or artifacts are needed in this case.
+name: "Publish to GitHub"
+run-name: "Publish `${{ version }}` to GitHub in ${{ deploy-to }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive-name:
+        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
+        type: string
+        default: ""
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      sha:
+        description: "Commit SHA being released"
+        type: string
+        required: true
+      changelog-path:
+        description: "Path to the release notes"
+        type: string
+        required: true
+      deploy-to:
+        description: "Choose where to publish"
+        type: choice
+        options:
+        - "prod"
+        - "test"
+  workflow_call:
+    inputs:
+      archive-name:
+        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
+        type: string
+        default: ""
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      sha:
+        description: "Commit SHA being released"
+        type: string
+        required: true
+      changelog-path:
+        description: "Path to the release notes"
+        type: string
+        required: true
+      deploy-to:
+        description: "Choose where to publish"
+        type: string
+        default: "prod"
+
+permissions:
+  contents: write
+
+# will cancel previous workflows triggered by the same event and for the same package and environment
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+  cancel-in-progress: true
+
+env:
+  REPO_LINK: ${{ github.server_url }}/${{ github.repository }}
+  NOTIFICATION_PREFIX: "[GitHub Release]"
+
+jobs:
+  log-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo The last commit sha in the release: ${{ inputs.sha }}
+          echo The release version number:         ${{ inputs.version_number }}
+          echo Expected Changelog path:            ${{ inputs.changelog_path }}
+          echo Test run:                           ${{ inputs.test_run }}
+          echo Repo link:                          ${{ env.REPO_LINK }}
+          echo Notification prefix:                ${{ env.NOTIFICATION_PREFIX }}
+
+  publish:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.release_check.outputs.exists }}
+      draft_exists: ${{ steps.release_check.outputs.draft_exists }}
+      tag: ${{ steps.set_tag.outputs.tag }}
+
+    steps:
+      - name: "Build tag"
+        id: tag
+        shell: bash
+        run: echo "tag=v${{ inputs.version }}" >> $GITHUB_OUTPUT
+
+      - name: "Get tag metadata"
+        id: tag-metadata
+        uses: ./.github/actions/audit-github-tag
+        with:
+          tag: ${{ steps.tag.output.tag }}
+          repo-url: ${{ env.REPO_LINK }}
+
+      - name: "[INFO] Release already exists"
+        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == true }}
+        id: release_check
+        run: |
+          title="Tag already exists, skip publishing artifacts"
+          message="Tag ${{ steps.tag.outputs.tag }} already exists and is associated with the commit ${{ steps.tag-metadata.outputs.sha }}."
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
+      - name: "[ERROR] Exit if the tag exists an is associated with a different commit than the one provided"
+        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == true }} && ${{ steps.tag-metadata.outputs.sha }} != ${{ inputs.sha }}
+        shell: bash
+        run: |
+          title="Tag ${{ inputs.tag }} already exists with a different commit!"
+          message="Existing commit: {{ steps.tag-metadata.outputs.sha }} New commit: ${{ inputs.sha }}. Exiting."
+          echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+          exit 1
+
+      - name: "Get commit metadata"
+        id: commit-metadata
+        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == false }}
+        uses: ./.github/actions/audit-github-commit
+        with:
+          tag: ${{ inputs.sha }}
+
+      - name: "[ERROR] Exit if the commit is associated with a different tag than the version that was provided"
+        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == false && steps.commit-metadata.outputs.tag != '' }}
+        run: |
+          title="Commit ${{ inputs.sha }} is already associated with a different tag!"
+          message="Existing tag: ${{ steps.commit-metadata.outputs.tag }} New tag: ${{ steps.tag.outputs.tag }}"
+          echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+          exit 1
+
+      - name: "Publish to GitHub as draft release"
+        if: fromJSON(steps.tag-metadata.outputs.exists) == false
+        uses: ./.github/actions/publish-github-draft
+        with:
+          archive-name: ${{ inputs.archive-name }}
+          tag: ${{ needs.check-release-exists.outputs.tag }}
+          repo-url: ${{ env.REPO_LINK }}
+          sha: ${{ inputs.sha }}
+          changelog-path: ${{ inputs.changelog_path }}
+
+      - name: "Publish draft release as full release"
+        if: >-
+          inputs.deploy-to == "prod" && (
+            fromJSON(steps.tag-metadata.outputs.exists) == false ||
+            fromJSON(steps.tag-metadata.outputs.is-draft) == true
+          )
+        uses: ./.github/actions/publish-github-full
+        with:
+          tag: ${{ steps.tag.output.tag }}
+          repo-url: ${{ env.REPO_LINK }}

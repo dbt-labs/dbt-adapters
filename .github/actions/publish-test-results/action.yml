@@ -1,0 +1,48 @@
+name: "Publish test results"
+description: "Upload test artifacts to a unique archive name"
+
+inputs:
+  archive-type:
+    description: "File type for archive name stub (e.g. unit-tests)"
+    required: true
+  python-version:
+    description: "Python version for the archive name stub (e.g. 3.8)"
+    required: true
+  os:
+    description: "OS for the archive name stub (e.g. ubuntu-latest)"
+    required: true
+  source-file:
+    description: "File/directory to be uploaded"
+    required: true
+outputs:
+  archive-name:
+    description: "Name of the archive containing the test artifacts"
+    value: ${{ steps.archive.outputs.archive-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Get timestamp for archive name"
+      id: timestamp
+      shell: bash
+      run: echo "ts=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_OUTPUT #no colons allowed for artifacts
+
+    - name: "Build archive name"
+      id: archive
+      shell: bash
+      run: |
+        archive_name = ${{ inputs.archive-type }}_python-${{ inputs.python-version }}_${{ inputs.os }}_${{ steps.timestamp.outputs.ts }}
+        echo "archive-name=archive_name" >> $GITHUB_OUTPUT
+
+    - name: "Upload test results"
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ steps.archive.outputs.archive-name }}
+        path: ${{ inputs.source-file }}
+
+    - name: "[INFO] Uploaded test artifacts"
+      shell: bash
+      run: |
+        title="Uploaded test artifacts"
+        message="Uploaded ${{ inputs.source-file }} to ${{ steps.archive.outputs.archive-name }}"
+        echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

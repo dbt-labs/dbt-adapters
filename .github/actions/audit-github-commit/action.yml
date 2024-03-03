@@ -1,0 +1,41 @@
+name: "Audit GitHub commit"
+description: "Get basic metadata associated with a commit"
+
+inputs:
+  sha:
+    description: "The commit to audit"
+    required: true
+outputs:
+  tag:
+    description: "The associated release tag, if the release exists"
+    value: ${{ steps.commit.outputs.tag_name }}
+  release-id:
+    description: "The associated release id, if the release exists"
+    value: ${{ steps.commit.outputs.id }}
+  pre-release:
+    description: "If the associated release exists, is it a pre-release?"
+    value: ${{ steps.commit.outputs.prerelease }}
+  commitish:
+    description: "The associated commitish, if the release exists"
+    value: ${{ steps.commit.outputs.target_commitish }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Check if a release exists for this commit"
+      id: commit
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: cardinalby/git-get-release-action@1.2.4
+      with:
+        commitSha: ${{ inputs.sha }}
+        doNotFailIfNotFound: true  # returns blank outputs when not found instead of error
+        searchLimit: 15            # Since we only care about recent releases, speed up the process
+
+    - name: "[DEBUG] Print Release Details"
+      shell: bash
+      run: |
+        echo tag         : ${{ steps.check_release_commit.outputs.tag_name }}
+        echo release-id  : ${{ steps.check_release_commit.outputs.id }}
+        echo pre-release : ${{ steps.check_release_commit.outputs.prerelease }}
+        echo commitish   : ${{ steps.check_release_commit.outputs.target_commitish }}

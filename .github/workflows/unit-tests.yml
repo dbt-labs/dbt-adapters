@@ -1,4 +1,4 @@
-name: Unit Tests
+name: "Unit tests"
 
 on:
   push:
@@ -17,33 +17,35 @@ concurrency:
 
 jobs:
   unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
+    name: "Unit tests"
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
+        os: [ubuntu-latest]
 
     steps:
-      - name: Check out repository
+      - name: "Check out repository"
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Setup `hatch`
+      - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run unit tests
+      - name: "Run unit tests"
         run: hatch run unit-tests:all
         shell: bash
 
-      - name: Publish results
-        uses: ./.github/actions/publish-results
+      - name: "Publish results"
+        uses: ./.github/actions/publish-test-results
         if: always()
         with:
-          source-file: "results.csv"
-          file-name: "unit_results"
+          archive-type: "unit_results"
           python-version: ${{ matrix.python-version }}
+          os: ${{ matrix.os }}
+          source-file: "results.csv"

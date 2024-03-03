@@ -1,70 +1,64 @@
-name: Release
-run-name: Release ${{ inputs.package }}==${{ inputs.version_number }} to ${{ inputs.deploy-to }}
+name: "Release"
+run-name: "Release `${{ inputs.package }}==${{ inputs.version }}` to ${{ inputs.deploy-to }}"
 
 on:
   workflow_dispatch:
     inputs:
       package:
+        description: "Choose what to release"
         type: choice
-        description: Choose what to publish
         options:
-          - dbt-adapters
-          - dbt-tests-adapter
-      version_number:
+          - "dbt-adapters"
+          - "dbt-tests-adapter"
+      target-branch:
+        description: "Choose what branch to release from"
+        type: string
+        default: "main"
+      version:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
       deploy-to:
+        description: "Choose where to publish"
         type: choice
-        description: Choose where to publish
         options:
-        - prod
-        - test
-        default: prod
-      nightly_release:
-        description: "Nightly release to dev environment"
+        - "prod"
+        - "test"
+      nightly-release:
+        description: "Is this the nightly release to the dev environment?"
         type: boolean
         default: false
-        required: false
-      target_branch:
-        description: "The branch to release from"
-        type: string
-        required: false
-        default: main
-
   workflow_call:
     inputs:
       package:
+        description: "Choose what to release"
         type: string
-        description: Choose what to publish
-        required: true
-      version_number:
+        default: "dbt-adapters"
+      target-branch:
+        description: "Choose what branch to release from"
+        type: string
+        default: "main"
+      version:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
       deploy-to:
+        description: "Choose where to publish"
         type: string
-        default: prod
-        required: false
-      nightly_release:
-        description: "Nightly release to dev environment"
+        default: "prod"
+      nightly-release:
+        description: "Is this the nightly release to the dev environment?"
         type: boolean
         default: false
-        required: false
-      target_branch:
-        description: "The branch to release from"
-        type: string
-        required: false
-        default: main
 
-# this is the permission that allows creating a new release
+# this is the permission that allows creating a new release to both GitHub and PyPI
 permissions:
   contents: write
   id-token: write
 
-# will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
+# will cancel previous workflows triggered by the same event and for the same package and environment
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-to }}
   cancel-in-progress: true
 
 defaults:
@@ -128,53 +122,33 @@ jobs:
           echo Final SHA     : ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
           echo Changelog path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
 
-  build-and-test:
-    name: "Build and Test"
+  build-artifacts:
+    name: "Build ${{ inputs.package }} ${{ inputs.version }}"
     needs: [release-inputs, bump-version-generate-changelog]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-    steps:
-      - name: "Check out repository"
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
-
-      - name: "Setup `hatch`"
-        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
-
-      - name: "Build ${{ inputs.package }}"
-        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
-        with:
-          working-dir: ${{ needs.release-inputs.outputs.working-dir }}
-          archive-name: ${{ needs.release-inputs.outputs.archive-name }}
-
-  github-release:
-    name: "GitHub Release"
-    # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
-    if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
-    needs: [release-inputs, build-and-test, bump-version-generate-changelog]
-    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@main
+    uses: dbt-labs/dbt-adapters/.github/workflows/build.yml@update-workflows
     with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      deploy-to: ${{ inputs.deploy-to }}
+
+  # TODO: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
+  publish-github:
+    name: "Publish to GitHub"
+    if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
+    needs: [build-artifacts, bump-version-generate-changelog]
+    uses: dbt-labs/dbt-adapters/.github/workflows/publish-github.yml@update-workflows
+    with:
+      archive-name: ${{ needs.build-artifacts.outputs.archive-name }}
+      version: ${{ inputs.version }}
       sha: ${{ needs.bump-version-generate-changelog.outputs.final_sha }}
-      version_number: ${{ inputs.version_number }}
-      changelog_path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-      test_run: ${{ inputs.deploy-to == 'test' && true || false }}
-      archive_name: ${{ needs.release-inputs.outputs.archive-name }}
+      changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
+      deploy-to: ${{ inputs.deploy-to }}
 
-  pypi-release:
+  publish-0pypi:
     name: "Publish to PyPI"
-    runs-on: ubuntu-latest
-    needs: [release-inputs, build-and-test]
-    environment:
-      name: ${{ inputs.deploy-to }}
-      url: ${{ vars.PYPI_PROJECT_URL }}
-    steps:
-      - name: "Check out repository"
-        uses: actions/checkout@v4
-
-      - name: "Publish to PyPI"
-        uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
-        with:
-          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          archive-name: ${{ needs.release-inputs.outputs.archive-name }}
+    needs: [build-artifacts]
+    uses: dbt-labs/dbt-adapters/.github/workflows/publish-github.yml@update-workflows
+    with:
+      archive-name: ${{ needs.build-artifacts.outputs.archive-name }}
+      version: ${{ inputs.version }}
+      deploy-to: ${{ inputs.deploy-to }}

@@ -14,13 +14,12 @@
 # and when new code is pushed to the branch.  The action will get
 # skipped if the 'Skip Changelog' label is present is any of the labels.
 
-name: Check Changelog Entry
+name: "Check for changelog entry"
 
 on:
-  pull_request_target:
+  pull_request:
     types: [opened, reopened, labeled, unlabeled, synchronize]
     paths-ignore: ['.changes/**', '.github/**', 'tests/**', 'third-party-stubs/**', '**.md', '**.yml']
-
   workflow_dispatch:
 
 defaults:
@@ -37,4 +36,4 @@ jobs:
     with:
       changelog_comment: 'Thank you for your pull request! We could not find a changelog entry for this change. For details on how to document a change, see [the contributing guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md#adding-changelog-entry).'
       skip_label: 'Skip Changelog'
-    secrets: inherit
+    secrets: inherit # this is only acceptable because we own the action we're calling

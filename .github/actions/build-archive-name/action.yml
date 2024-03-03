@@ -1,0 +1,28 @@
+name: "Build"
+description: "Provide a standard archive name for build artifacts"
+
+inputs:
+  package:
+    description: "Choose what to publish"
+    required: true
+  version:
+    description: "The release version number (i.e. 1.0.0b1)"
+    required: true
+  deploy-to:
+    description: "Choose where to publish"
+    default: prod
+outputs:
+  archive-name:
+    description: "A unique archive name"
+    value: ${{ steps.archive.outputs.archive-name }}
+
+runs:
+  using: composite
+
+  steps:
+    - name: "Archive name"
+      id: archive
+      shell: bash
+      run: |
+        archive_name=${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+        echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
