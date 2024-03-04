@@ -69,6 +69,7 @@ from dbt.adapters.base.relation import (
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.clients.tags import get_relation_tags, add_relation_tag
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
@@ -421,7 +422,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         populate.
         """
         return {
-            self.Relation.create_from(quoting=self.config, relation_config=relation_config).without_identifier()
+            self.Relation.create_from(
+                quoting=self.config, relation_config=relation_config
+            ).without_identifier()
             for relation_config in relation_configs
         }
 
@@ -1604,6 +1607,19 @@ class BaseAdapter(metaclass=AdapterMeta):
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
+
+    @classmethod
+    def get_relation_tags(cls):
+        return get_relation_tags()
+
+    @classmethod
+    def set_relation_tag(cls, name: str, value: str):
+        add_relation_tag(name=name, value=value)
+
+    @classmethod
+    def set_relation_tags(cls, tags: List[Tuple[str, str]]):
+        for tag in tags:
+            add_relation_tag(tag[0], tag[1])
 
 
 COLUMNS_EQUAL_SQL = """
