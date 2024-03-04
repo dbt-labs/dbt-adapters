@@ -21,7 +21,7 @@ def test_base_impl_get_relation_tags(connection_manager):
     adapter = BaseAdapter(config=Mock(), mp_context=Mock())
     _RELATION_TAGS.append(RelationTag(name='name', value='value'))
     assert adapter.get_relation_tags() == [RelationTag(name='name', value='value')]
-
+    _RELATION_TAGS.clear()
 
 @patch.multiple(BaseAdapter, __abstractmethods__=set())
 def test_base_impl_set_relation_tags(connection_manager):
@@ -29,3 +29,4 @@ def test_base_impl_set_relation_tags(connection_manager):
     adapter = BaseAdapter(config=Mock(), mp_context=Mock())
     adapter.set_relation_tag('name', 'value')
     assert adapter.get_relation_tags() == [RelationTag(name='name', value='value')]
+    _RELATION_TAGS.clear()
