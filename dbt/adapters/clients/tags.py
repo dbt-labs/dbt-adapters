@@ -9,7 +9,9 @@ _rlock = threading.RLock()
 
 def add_relation_tag(name: str, value: str) -> None:
     with _rlock:
-        _RELATION_TAGS.append(RelationTag(name=name, value=value))
+        rel_tag = RelationTag(name=name, value=value)
+        if rel_tag not in _RELATION_TAGS:
+            _RELATION_TAGS.append(rel_tag)
 
 
 def get_relation_tags() -> List[RelationTag]:
