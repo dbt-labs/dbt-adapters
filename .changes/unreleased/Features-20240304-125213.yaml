@@ -1,0 +1,6 @@
+kind: Features
+body: Add metadata tags method and tags client
+time: 2024-03-04T12:52:13.388984-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "115"
