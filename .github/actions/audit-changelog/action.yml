@@ -1,0 +1,54 @@
+name: "Audit changelog"
+description: "Get metadata about a changelog, including the expected file path, and if it exists"
+
+inputs:
+  version:
+    description: "The version whose changelog is being audited"
+    required: true
+
+outputs:
+  path:
+    description: "The expected file path to the change log, relative to the repo root"
+    value: ${{ steps.path.outputs.path }}
+  exists:
+    description: "Indicates if the changelog exists"
+    value: ${{ steps.exists.outputs.exists }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Parse version: `${{ inputs.version }}`"
+      id: semver
+      uses: dbt-labs/actions/parse-semver@v1.1.0
+      with:
+        version: ${{ inputs.version }}
+
+    - name: "Set: path"
+      id: path
+      shell: bash
+      run: |
+        path=".changes/${{ steps.semver.outputs.base-version }}"
+        if [[ ${{ steps.semver.outputs.is-pre-release }} -eq 1 ]]
+        then
+          path+="-${{ steps.semver.outputs.pre-release }}"
+        fi
+        path+=".md"
+        echo "path=$path" >> $GITHUB_OUTPUT
+
+    - name: "Set: exists"
+      id: exists
+      shell: bash
+      run: |
+        exists=false
+        if test -f ${{ steps.path.outputs.path }}
+        then
+          exists=true
+        fi
+        echo "exists=exists">> $GITHUB_OUTPUT
+
+    - name: "[DEBUG] Changelog metadata"
+      shell: bash
+      run: |
+        echo version : ${{ inputs.version }}
+        echo path    : ${{ steps.path.outputs.path }}
+        echo exists  : ${{ steps.exists.outputs.exists }}

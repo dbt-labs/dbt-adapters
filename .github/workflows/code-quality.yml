@@ -6,7 +6,31 @@ on:
       - "main"
       - "*.latest"
   pull_request:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The branch to run code quality on"
+        type: string
+        default: "main"
+      lint-command:
+        description: "The lint command to run"
+        type: string
+        default: "hatch run lint:all"
+      typecheck-command:
+        description: "The typecheck command to run"
+        type: string
+        default: "hatch run typecheck:all"
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch to run code quality on"
+        default: "main"
+      lint-command:
+        description: "The lint command to run"
+        default: "hatch run lint:all"
+      typecheck-command:
+        description: "The typecheck command to run"
+        default: "hatch run typecheck:all"
 
 permissions: read-all
 
@@ -14,27 +38,41 @@ defaults:
   run:
     shell: bash
 
-# will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
+# cancel the previous code quality run if a new one starts with the same parameters
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
+env:
+  NOTIFICATION_PREFIX: "[Code quality]"
+
 jobs:
-  lint:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo lint-command        : ${{ inputs.lint-command }}
+          echo typecheck-command   : ${{ inputs.typecheck-command }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  code-quality:
     name: "Code quality"
     runs-on: ubuntu-latest
-
     steps:
-      - name: "Check out repository"
+      - name: "Check out `${{ inputs.branch }}`"
         uses: actions/checkout@v4
         with:
+          ref: ${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
           persist-credentials: false
 
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
       - name: "Run linters"
-        run: hatch run lint:all
+        run: ${{ inputs.lint-command }}
 
       - name: "Run typechecks"
-        run: hatch run typecheck:all
+        run: ${{ inputs.typecheck-command }}

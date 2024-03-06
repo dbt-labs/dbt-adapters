@@ -1,0 +1,35 @@
+name: "Create temp branch"
+description: "Create a unique temporary branch for running CI workflows, such as version bumps, changelog consolidation, etc."
+
+inputs:
+  branch-stub:
+    description: "Stub to use for naming the branch (e.g. prep-release/, nightly-release/, etc.)"
+    default: "temp/"
+
+outputs:
+  branch:
+    description: "Name of the newly created branch"
+    value: ${{ steps.branch.outputs.branch-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Create a unique branch name"
+      id: branch
+      run: |
+        name="${{ inputs.branch-stub }}"
+        name+="$(date +'%Y-%m-%d')/$GITHUB_RUN_ID"
+        echo "branch-name=$name" >> $GITHUB_OUTPUT
+
+    - name: "Create branch: `${{ steps.branch.outputs.branch-name }}`"
+      shell: bash
+      run: |
+        git checkout -b ${{ steps.branch.outputs.branch-name }}
+        git push -u origin ${{ steps.branch.outputs.branch-name }}
+
+    - name: "[INFO] Created branch"
+      shell: bash
+      run: |
+        title="Created branch"
+        message="${{ steps.branch.outputs.branch-name }}"
+        echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

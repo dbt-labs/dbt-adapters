@@ -1,0 +1,16 @@
+name: "Setup `changie`"
+description: "Setup `changie` using `linuxbrew`"
+
+runs:
+  using: composite
+  steps:
+    - name: "Add `linuxbrew` to PATH"
+      shell: bash
+      run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+    - name: "Install `linuxbrew` packages"
+      shell: bash
+      run: |
+        brew install pre-commit
+        brew tap miniscruff/changie https://github.com/miniscruff/changie
+        brew install changie

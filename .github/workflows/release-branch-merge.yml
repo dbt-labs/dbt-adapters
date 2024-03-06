@@ -1,0 +1,85 @@
+name: "Merge release branch"
+run-name: "Merge `${{ release-branch }}` into `${{ inputs.branch }}`"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The base branch receiving the changes"
+        type: string
+        default: "main"
+      release-branch:
+        description: "The branch containing the release changes"
+        type: string
+        default: "main"
+    outputs:
+      sha:
+        description: "The sha associated with this merge"
+        value: ${{ jobs.merge-release-branch.outputs.sha }}
+
+# this is the permission that allows creating a new release to both GitHub and PyPI
+permissions:
+  contents: write
+  id-token: write
+
+# will cancel previous workflows triggered by the same event and for the same package and environment
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.branch }}-${{ inputs.release-branch }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NOTIFICATION_PREFIX: "[Merge release branch]"
+
+jobs:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo release-branch      : ${{ inputs.release-branch }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  merge-release-branch:
+    name: "Merge `${{ inputs.release-branch }}` into `${{ inputs.branch }}`"
+    runs-on: ubuntu-latest
+    needs: [temp-branch]
+    outputs:
+      sha: ${{ steps.release-sha.outputs.sha }}
+    steps:
+      - name: "Checkout `${{ inputs.release-branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.temp-branch }}
+
+      - name: "Merge `${{ inputs.release-branch }}` into `${{ inputs.branch }}`"
+        uses: everlytic/branch-merge@1.1.5
+        with:
+          source_ref: ${{ inputs.release-branch }}
+          target_branch: ${{ inputs.branch }}
+          github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
+          commit_message_template: "[automated] merge {source_ref} into {target_branch} for a release"
+
+      - name: "Checkout `${{ inputs.branch }}`"
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ inputs.branch }}
+
+      # TODO: see if everlytic/branch-merge has outputs that have this information
+      - name: "Get commit SHA for the merge"
+        id: release-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: "Delete `${{ inputs.release-branch }}`"
+        run: git push origin -d ${{ inputs.release-branch }}
+
+      - name: "[INFO] Merged changes"
+        run: |
+          title="Merged changes"
+          message="The ${{ inputs.release-branch }} branch was merged into ${{ inputs.branch }} with sha ${{ steps.release-sha.outputs.sha }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

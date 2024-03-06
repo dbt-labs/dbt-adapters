@@ -1,10 +1,11 @@
 name: "Audit GitHub commit"
-description: "Get basic metadata associated with a commit"
+description: "Get metadata about a commit"
 
 inputs:
   sha:
     description: "The commit to audit"
     required: true
+
 outputs:
   tag:
     description: "The associated release tag, if the release exists"
@@ -22,7 +23,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: "Check if a release exists for this commit"
+    - name: "Check if a release exists for `${{ inputs.sha }}`"
       id: commit
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -32,9 +33,10 @@ runs:
         doNotFailIfNotFound: true  # returns blank outputs when not found instead of error
         searchLimit: 15            # Since we only care about recent releases, speed up the process
 
-    - name: "[DEBUG] Print Release Details"
+    - name: "[DEBUG] Commit metadata"
       shell: bash
       run: |
+        echo sha         : ${{ inputs.sha }}
         echo tag         : ${{ steps.check_release_commit.outputs.tag_name }}
         echo release-id  : ${{ steps.check_release_commit.outputs.id }}
         echo pre-release : ${{ steps.check_release_commit.outputs.prerelease }}

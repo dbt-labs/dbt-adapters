@@ -14,6 +14,7 @@ inputs:
   source-file:
     description: "File/directory to be uploaded"
     required: true
+
 outputs:
   archive-name:
     description: "Name of the archive containing the test artifacts"
@@ -22,16 +23,12 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: "Get timestamp for archive name"
-      id: timestamp
-      shell: bash
-      run: echo "ts=$(date +'%Y-%m-%dT%H-%M-%S')" >> $GITHUB_OUTPUT #no colons allowed for artifacts
-
-    - name: "Build archive name"
+    - name: "Create unique test archive name"
       id: archive
       shell: bash
       run: |
-        archive_name = ${{ inputs.archive-type }}_python-${{ inputs.python-version }}_${{ inputs.os }}_${{ steps.timestamp.outputs.ts }}
+        timestamp=$(date +'%Y-%m-%dT%H-%M-%S')   #no colons allowed for artifacts
+        archive_name = ${{ inputs.archive-type }}_python-${{ inputs.python-version }}_${{ inputs.os }}_$timestamp
         echo "archive-name=archive_name" >> $GITHUB_OUTPUT
 
     - name: "Upload test results"

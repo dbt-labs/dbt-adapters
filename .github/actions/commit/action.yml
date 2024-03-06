@@ -1,0 +1,34 @@
+name: "Commit changes"
+description: "Commit changes and push back up to the remote"
+
+inputs:
+  message:
+    description: "The commit message"
+    required: true
+  user:
+    description: "The user for the commit"
+    default: "Github Build Bot"
+  email:
+    description: "The email for the commit"
+    default: "buildbot@fishtownanalytics.com"
+
+outputs:
+  path:
+    description: "The file path to the change log, relative to the repo root"
+    value: ${{ steps.path.outputs.path }}
+  exists:
+    description: "Does the changelog exist?"
+    value: ${{ steps.exists.outputs.exists }}
+
+runs:
+  using: composite
+  steps:
+    - name: "Commit and push changes"
+      shell: bash
+      run: |
+        git config user.name "${{ inputs.user }}"
+        git config user.email "${{ inputs.email }}"
+        git pull
+        git add .
+        git commit -m "${{ inputs.message }}"
+        git push

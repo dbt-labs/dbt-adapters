@@ -12,15 +12,15 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: "Publish draft release"
+    - name: "Publish `${{ inputs.tag }}` as full release"
       shell: bash
       run: gh release edit ${{ inputs.tag }} --draft=false --repo ${{ inputs.repo-url }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: "[INFO] Released draft as non-draft release on GitHub"
+    - name: "[INFO] Published draft as full release"
       shell: bash
       run: |
         title="Released draft as non-draft release on GitHub"
-        message="tag: ${{ inputs.tag }}"
+        message="tag: ${{ inputs.tag }} repo: ${{ inputs.repo-url }}"
         echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

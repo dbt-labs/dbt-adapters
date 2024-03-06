@@ -43,11 +43,15 @@ permissions:
 
 # will cancel previous workflows triggered by the same event and for the same package and environment
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+  group: ${{ github.workflow }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
   cancel-in-progress: true
 
+env:
+  NOTIFICATION_PREFIX: "[Publish - PyPI]"
+
 jobs:
-  log-inputs:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
     runs-on: ubuntu-latest
     steps:
       - name: "[DEBUG] Inputs"
@@ -65,7 +69,7 @@ jobs:
       name: ${{ inputs.deploy-to }}
       url: ${{ vars.PYPI_PROJECT_URL }}
     steps:
-      - name: "Check out repository"
+      - name: "Check out `main`"
         uses: actions/checkout@v4
 
       - name: "Publish to PyPI"

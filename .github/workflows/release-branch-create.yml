@@ -1,0 +1,67 @@
+name: "Create release branch"
+run-name: "Create a release branch for `${{ inputs.version }}` using `${{ inputs.branch }}`"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The base branch to use when creating the release branch"
+        type: string
+        default: "main"
+      version:
+        description: "The version to use in the release branch name"
+        type: string
+        required: true
+    outputs:
+      branch:
+        description: "The name of the created release branch"
+        value: ${{ jobs.create-release-branch.outputs.branch }}
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The base branch to use when creating the release branch"
+        default: "main"
+      version:
+        description: "The version to use in the release branch name"
+        required: true
+
+permissions:
+  contents: write
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NOTIFICATION_PREFIX: "[Create release branch]"
+
+jobs:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo version             : ${{ inputs.version }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  create-release-branch:
+    name: "Create a release branch from `${{ inputs.branch }}`"
+    runs-on: ubuntu-latest
+    outputs:
+      branch: ${{ steps.create-branch.outputs.branch }}
+    steps:
+      - name: "Checkout `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Create release branch"
+        id: create-branch
+        uses: ./.github/actions/create-temp-branch
+        with:
+          branch-stub: "release/${{ inputs.version }}/"
+        env:
+          NOTIFICATION_PREFIX: "[create release branch]"

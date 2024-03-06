@@ -7,29 +7,51 @@ on:
       - "*.latest"
   pull_request:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: "Choose what branch to test"
+        type: string
+        default: "main"
+  workflow_call:
+    inputs:
+      branch:
+        description: "Choose what branch to test"
+        type: string
+        default: "main"
 
 permissions: read-all
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
+env:
+  NOTIFICATION_PREFIX: "[Unit tests]"
+
 jobs:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
   unit:
     name: "Unit tests"
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         os: [ubuntu-latest]
-
     steps:
-      - name: "Check out repository"
+      - name: "Check out `${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}`"
         uses: actions/checkout@v4
         with:
+          ref: ${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
           persist-credentials: false
 
       - name: "Setup `hatch`"
@@ -43,7 +65,7 @@ jobs:
 
       - name: "Publish results"
         uses: ./.github/actions/publish-test-results
-        if: always()
+        if: ${{ contains(github.event_name, 'workflow_call') }}
         with:
           archive-type: "unit_results"
           python-version: ${{ matrix.python-version }}
