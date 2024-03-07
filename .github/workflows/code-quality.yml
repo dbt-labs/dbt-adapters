@@ -1,4 +1,5 @@
 name: "Code quality"
+run-name: "Code quality"
 
 on:
   push:
@@ -48,6 +49,7 @@ env:
 
 jobs:
   code-quality:
+    name: "Code quality"
     runs-on: ubuntu-latest
     steps:
       - name: "[DEBUG] Inputs"
