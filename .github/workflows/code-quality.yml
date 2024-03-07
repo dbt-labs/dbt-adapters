@@ -48,7 +48,6 @@ env:
 
 jobs:
   code-quality:
-    name: "Code quality"
     runs-on: ubuntu-latest
     steps:
       - name: "[DEBUG] Inputs"
