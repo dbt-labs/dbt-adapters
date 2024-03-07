@@ -30,15 +30,6 @@ env:
   NOTIFICATION_PREFIX: "[Unit tests]"
 
 jobs:
-  debug-inputs:
-    name: "[DEBUG] Inputs"
-    runs-on: ubuntu-latest
-    steps:
-      - name: "[DEBUG] Inputs"
-        run: |
-          echo branch              : ${{ inputs.branch }}
-          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
-
   unit:
     name: "Unit tests"
     runs-on: ${{ matrix.os }}
@@ -48,6 +39,11 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         os: [ubuntu-latest]
     steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
       - name: "Check out `${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}`"
         uses: actions/checkout@v4
         with:

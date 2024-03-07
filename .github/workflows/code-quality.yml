@@ -47,8 +47,8 @@ env:
   NOTIFICATION_PREFIX: "[Code quality]"
 
 jobs:
-  debug-inputs:
-    name: "[DEBUG] Inputs"
+  code-quality:
+    name: "Code quality"
     runs-on: ubuntu-latest
     steps:
       - name: "[DEBUG] Inputs"
@@ -58,10 +58,6 @@ jobs:
           echo typecheck-command   : ${{ inputs.typecheck-command }}
           echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
 
-  code-quality:
-    name: "Code quality"
-    runs-on: ubuntu-latest
-    steps:
       - name: "Check out `${{ inputs.branch }}`"
         uses: actions/checkout@v4
         with:
