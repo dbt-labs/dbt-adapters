@@ -1,5 +1,4 @@
 name: "Code quality"
-run-name: "Code quality"
 
 on:
   push:
