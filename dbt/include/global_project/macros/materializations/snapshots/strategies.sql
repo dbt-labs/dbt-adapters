@@ -50,7 +50,7 @@
     Core strategy definitions
 #}
 {% macro snapshot_timestamp_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
-    {% set primary_key = config['unique_key'] %}
+    {% set unique_key = config['unique_key'] %}
     {% set updated_at = config['updated_at'] %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
 
@@ -67,10 +67,19 @@
         ({{ snapshotted_rel }}.dbt_valid_from < {{ current_rel }}.{{ updated_at }})
     {%- endset %}
 
-    {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
+    {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+        {% set scd_args = [] %}
+        {% for key in unique_key %}
+            {{ scd_args.append(key) }}
+        {% endfor %}
+        {{ scd_args.append(updated_at) }}
+        {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
+    {% else %}
+        {% set scd_id_expr = snapshot_hash_arguments([unique_key, updated_at]) %}
+    {% endif %}
 
     {% do return({
-        "unique_key": primary_key,
+        "unique_key": unique_key,
         "updated_at": updated_at,
         "row_changed": row_changed_expr,
         "scd_id": scd_id_expr,
@@ -135,7 +144,7 @@
 
 {% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
     {% set check_cols_config = config['check_cols'] %}
-    {% set primary_key = config['unique_key'] %}
+    {% set unique_key = config['unique_key'] %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
     {% set updated_at = config.get('updated_at', snapshot_get_time()) %}
 
@@ -162,10 +171,19 @@
     )
     {%- endset %}
 
-    {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
+    {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+        {% set scd_args = [] %}
+        {% for key in unique_key %}
+            {{ scd_args.append(key) }}
+        {% endfor %}
+        {{ scd_args.append(updated_at) }}
+        {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
+    {% else %}
+        {% set scd_id_expr = snapshot_hash_arguments([unique_key, updated_at]) %}
+    {% endif %}
 
     {% do return({
-        "unique_key": primary_key,
+        "unique_key": unique_key,
         "updated_at": updated_at,
         "row_changed": row_changed_expr,
         "scd_id": scd_id_expr,
