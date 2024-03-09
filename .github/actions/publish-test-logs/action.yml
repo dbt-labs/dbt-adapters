@@ -1,5 +1,5 @@
-name: "Publish test results"
-description: "Upload test artifacts to a unique archive name"
+name: "Publish test logs"
+description: "Upload test logs to a unique archive name"
 
 inputs:
   archive-type:
@@ -11,9 +11,6 @@ inputs:
   os:
     description: "OS for the archive name stub (e.g. ubuntu-latest)"
     required: true
-  source-file:
-    description: "File/directory to be uploaded"
-    required: true
 
 outputs:
   archive-name:
@@ -23,7 +20,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: "Create unique test archive name"
+    - name: "Create unique archive name"
       id: archive
       shell: bash
       run: |
@@ -31,15 +28,15 @@ runs:
         archive_name="${{ inputs.archive-type }}_python-${{ inputs.python-version }}_${{ inputs.os }}_$timestamp"
         echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
 
-    - name: "Upload test results"
-      uses: actions/upload-artifact@v3
+    - name: "Upload test logs"
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.archive.outputs.archive-name }}
-        path: ./${{ inputs.source-file }}
+        path: ./logs
 
-    - name: "[INFO] Uploaded test artifacts"
+    - name: "[INFO] Uploaded test logs"
       shell: bash
       run: |
-        title="Uploaded test artifacts"
-        message="Uploaded ${{ inputs.source-file }} to ${{ steps.archive.outputs.archive-name }}"
+        title="Uploaded test logs"
+        message="Uploaded `./logs` to ${{ steps.archive.outputs.archive-name }}"
         echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

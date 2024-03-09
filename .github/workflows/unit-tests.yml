@@ -59,11 +59,10 @@ jobs:
         run: hatch run unit-tests:all
         shell: bash
 
-      - name: "Publish results"
-        uses: ./.github/actions/publish-test-results
+      - name: "Publish test logs"
+        uses: ./.github/actions/publish-test-logs
         if: ${{ contains(github.event_name, 'workflow_') }}
         with:
-          archive-type: "unit_results"
+          archive-type: "unit-test"
           python-version: ${{ matrix.python-version }}
           os: ${{ matrix.os }}
-          source-file: "results.csv"
