@@ -61,7 +61,7 @@ jobs:
 
       - name: "Publish results"
         uses: ./.github/actions/publish-test-results
-        if: ${{ contains(github.event_name, 'workflow_call') }}
+        if: ${{ contains(github.event_name, 'workflow_') }}
         with:
           archive-type: "unit_results"
           python-version: ${{ matrix.python-version }}
