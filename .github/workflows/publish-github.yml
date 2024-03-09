@@ -33,10 +33,7 @@ on:
         required: true
       deploy-to:
         description: "Choose where to publish"
-        type: choice
-        options:
-        - "prod"
-        - "test"
+        type: environment
   workflow_call:
     inputs:
       archive-name:
@@ -119,7 +116,6 @@ jobs:
 
       - name: "[INFO] Release already exists"
         if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == true }} && ${{ steps.tag-metadata.outputs.sha }} == ${{ inputs.sha }}
-        id: release_check
         run: |
           title="Tag already exists, skip publishing artifacts"
           message="Tag ${{ steps.tag.outputs.tag }} already exists and is associated with the commit ${{ steps.tag-metadata.outputs.sha }}."

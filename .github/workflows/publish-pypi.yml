@@ -19,10 +19,7 @@ on:
         required: true
       deploy-to:
         description: "Choose where to publish"
-        type: choice
-        options:
-        - "prod"
-        - "test"
+        type: environment
   workflow_call:
     inputs:
       archive-name:
