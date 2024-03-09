@@ -27,7 +27,6 @@ runs:
       id: archive
       shell: bash
       run: |
-        echo "Create unique test archive name"
         timestamp=$(date +'%Y-%m-%dT%H-%M-%S')
         archive_name="${{ inputs.archive-type }}_python-${{ inputs.python-version }}_${{ inputs.os }}_$timestamp"
         echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
@@ -36,12 +35,11 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ steps.archive.outputs.archive-name }}
-        path: ${{ inputs.source-file }}
+        path: ./${{ inputs.source-file }}
 
     - name: "[INFO] Uploaded test artifacts"
       shell: bash
       run: |
-        echo "[INFO] Uploaded test artifacts"
         title="Uploaded test artifacts"
         message="Uploaded ${{ inputs.source-file }} to ${{ steps.archive.outputs.archive-name }}"
         echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
