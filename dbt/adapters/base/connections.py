@@ -18,9 +18,9 @@ from typing import (
     Tuple,
     Type,
     Union,
+    TYPE_CHECKING,
 )
 
-import agate
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
@@ -47,6 +47,9 @@ from dbt.adapters.events.types import (
     RollbackFailed,
 )
 from dbt.adapters.exceptions import FailedToConnectError, InvalidConnectionError
+
+if TYPE_CHECKING:
+    import agate
 
 
 SleepTime = Union[int, float]  # As taken by time.sleep.
@@ -396,7 +399,7 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         auto_begin: bool = False,
         fetch: bool = False,
         limit: Optional[int] = None,
-    ) -> Tuple[AdapterResponse, agate.Table]:
+    ) -> Tuple[AdapterResponse, "agate.Table"]:
         """Execute the given SQL.
 
         :param str sql: The sql to execute.

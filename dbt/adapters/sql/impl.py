@@ -1,6 +1,5 @@
-from typing import Any, List, Optional, Tuple, Type
+from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
-import agate
 from dbt_common.events.functions import fire_event
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
@@ -22,6 +21,9 @@ TRUNCATE_RELATION_MACRO_NAME = "truncate_relation"
 DROP_RELATION_MACRO_NAME = "drop_relation"
 ALTER_COLUMN_TYPE_MACRO_NAME = "alter_column_type"
 VALIDATE_SQL_MACRO_NAME = "validate_sql"
+
+if TYPE_CHECKING:
+    import agate
 
 
 class SQLAdapter(BaseAdapter):
@@ -65,33 +67,35 @@ class SQLAdapter(BaseAdapter):
         return self.connections.add_query(sql, auto_begin, bindings, abridge_sql_log)
 
     @classmethod
-    def convert_text_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_text_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "text"
 
     @classmethod
     def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+        import agate
+
         # TODO CT-211
         decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))  # type: ignore[attr-defined]
         return "float8" if decimals else "integer"
 
     @classmethod
-    def convert_integer_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_integer_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "integer"
 
     @classmethod
-    def convert_boolean_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_boolean_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "boolean"
 
     @classmethod
-    def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_datetime_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "timestamp without time zone"
 
     @classmethod
-    def convert_date_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_date_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "date"
 
     @classmethod
-    def convert_time_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_time_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "time"
 
     @classmethod
