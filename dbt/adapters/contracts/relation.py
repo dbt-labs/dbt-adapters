@@ -38,7 +38,7 @@ class MaterializationConfig(Mapping, ABC):
     on_schema_change: Optional[str]
     on_configuration_change: OnConfigurationChangeOption
     contract: MaterializationContract
-    _extra: Dict[str, Any]
+    extra: Dict[str, Any]
 
     def __contains__(self, item):
         ...
@@ -48,7 +48,6 @@ class MaterializationConfig(Mapping, ABC):
 
 
 class RelationConfig(Protocol):
-    resource_type: str
     name: str
     database: str
     schema: str
@@ -56,8 +55,6 @@ class RelationConfig(Protocol):
     compiled_code: Optional[str]
     quoting_dict: Dict[str, bool]
     config: Optional[MaterializationConfig]
-    meta: Dict[str, Any]
-    tags: List[str]
 
 
 class ComponentName(StrEnum):

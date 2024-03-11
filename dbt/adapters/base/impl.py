@@ -1283,6 +1283,54 @@ class BaseAdapter(metaclass=AdapterMeta):
         }
         return adapter_response, freshness
 
+    def calculate_freshness_from_metadata_batch(
+        self, 
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[Optional[AdapterResponse], List[FreshnessResponse]]:
+        assert len(sources) > 0
+
+        # TODO: what should information_schema here be?
+        kwargs: Dict[str, Any] = {
+            "information_schema": sources[0].information_schema_only(),
+            "relations": sources,
+        }
+        result = self.execute_macro(
+            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+            kwargs=kwargs,
+            macro_resolver=macro_resolver,
+        )
+        
+        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+
+        freshness_responses = []
+        # TODO: refactor most of this to reuse internals from calculate_freshness_from_metadata
+        for row in table:
+            try: 
+                last_modified_val = get_column_value_uncased("last_modified", row)
+                snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
+            except Exception:
+                raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
+
+            if last_modified_val is None:
+                # Interpret missing value as "infinitely long ago"
+                max_loaded_at = datetime(1, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
+            else:
+                max_loaded_at = _utc(last_modified_val, None, "last_modified")
+
+            snapshotted_at = _utc(snapshotted_at_val, None, "snapshotted_at")
+
+            age = (snapshotted_at - max_loaded_at).total_seconds()
+
+            freshness: FreshnessResponse = {
+                "max_loaded_at": max_loaded_at,
+                "snapshotted_at": snapshotted_at,
+                "age": age,
+            }
+            freshness_responses.append(freshness)
+
+        return adapter_response, freshness_responses
+        
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
