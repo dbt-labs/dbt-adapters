@@ -1286,25 +1286,21 @@ class BaseAdapter(metaclass=AdapterMeta):
     def calculate_freshness_from_metadata_batch(
         self, 
         sources: List[BaseRelation],
+        information_schema: InformationSchema,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], List[FreshnessResponse]]:
-        assert len(sources) > 0
-
-        # TODO: what should information_schema here be?
-        kwargs: Dict[str, Any] = {
-            "information_schema": sources[0].information_schema_only(),
-            "relations": sources,
-        }
         result = self.execute_macro(
             GET_RELATION_LAST_MODIFIED_MACRO_NAME,
-            kwargs=kwargs,
+            kwargs={
+                "information_schema": information_schema,
+                "relations": sources,
+            },
             macro_resolver=macro_resolver,
         )
-        
         adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
 
-        freshness_responses = []
         # TODO: refactor most of this to reuse internals from calculate_freshness_from_metadata
+        freshness_responses = []
         for row in table:
             try: 
                 last_modified_val = get_column_value_uncased("last_modified", row)
