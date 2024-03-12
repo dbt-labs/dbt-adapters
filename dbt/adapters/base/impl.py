@@ -1148,6 +1148,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         used_schemas: FrozenSet[Tuple[str, str]],
         relations: Optional[Set[BaseRelation]] = None,
     ):
+        if len(relation_configs) != len(relations):
+            raise DbtInternalError("get_filtered_catalog expects 'relation_configs' and 'relations' to represent the same set for catalog generation")
+
         catalogs: agate.Table
         if (
             relations is None
