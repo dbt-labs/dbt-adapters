@@ -254,6 +254,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         ConstraintType.foreign_key: ConstraintSupport.ENFORCED,
     }
 
+    MAX_SCHEMA_METADATA_RELATIONS = 100
+
     # This static member variable can be overriden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
@@ -1153,7 +1155,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         catalogs: agate.Table
         if (
             relations is None
-            or len(relations) > 100
+            or len(relations) > self.MAX_SCHEMA_METADATA_RELATIONS
             or not self.supports(Capability.SchemaMetadataByRelations)
         ):
             # Do it the traditional way. We get the full catalog.
