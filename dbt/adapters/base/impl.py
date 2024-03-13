@@ -421,7 +421,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         populate.
         """
         return {
-            self.Relation.create_from(quoting=self.config, relation_config=relation_config).without_identifier()
+            self.Relation.create_from(
+                quoting=self.config, relation_config=relation_config
+            ).without_identifier()
             for relation_config in relation_configs
         }
 
@@ -1284,11 +1286,11 @@ class BaseAdapter(metaclass=AdapterMeta):
         return adapter_response, freshness
 
     def calculate_freshness_from_metadata_batch(
-        self, 
+        self,
         sources: List[BaseRelation],
         information_schema: InformationSchema,
         macro_resolver: Optional[MacroResolverProtocol] = None,
-    ) -> Tuple[Optional[AdapterResponse], List[FreshnessResponse]]:
+    ) -> Tuple[Optional[AdapterResponse], Dict[Tuple[str, str], FreshnessResponse]]:
         result = self.execute_macro(
             GET_RELATION_LAST_MODIFIED_MACRO_NAME,
             kwargs={
@@ -1299,12 +1301,13 @@ class BaseAdapter(metaclass=AdapterMeta):
         )
         adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
 
-        # TODO: refactor most of this to reuse internals from calculate_freshness_from_metadata
-        freshness_responses = []
+        freshness_responses: Dict[Tuple[str, str], FreshnessResponse] = {}
         for row in table:
-            try: 
+            try:
                 last_modified_val = get_column_value_uncased("last_modified", row)
                 snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
+                identifier = get_column_value_uncased("identifier", row)
+                schema = get_column_value_uncased("schema", row)
             except Exception:
                 raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
 
@@ -1323,23 +1326,21 @@ class BaseAdapter(metaclass=AdapterMeta):
                 "snapshotted_at": snapshotted_at,
                 "age": age,
             }
-            freshness_responses.append(freshness)
+            freshness_responses[(schema, identifier)] = freshness
 
         return adapter_response, freshness_responses
-        
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
-
         adapter_response, freshness_responses = self.calculate_freshness_from_metadata_batch(
             sources=[source],
             information_schema=source.information_schema_only(),
-            macro_resolver=macro_resolver
+            macro_resolver=macro_resolver,
         )
-
-        return adapter_response, freshness_responses[0]
+        return adapter_response, list(freshness_responses.values())[0]
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Any:
         """A hook for running some operation before the model materialization
