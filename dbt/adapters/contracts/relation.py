@@ -54,7 +54,7 @@ class RelationConfig(Protocol):
     identifier: str
     compiled_code: Optional[str]
     quoting_dict: Dict[str, bool]
-    config: Optional[MaterializationConfig]
+    config: MaterializationConfig
 
 
 class ComponentName(StrEnum):
