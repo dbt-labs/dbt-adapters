@@ -1,0 +1,127 @@
+name: "Version bump"
+run-name: "Bump branch `${{ inputs.branch }}` to `${{ inputs.version }}`"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The branch to bump"
+        type: string
+        default: "main"
+      version:
+        description: "The version to bump to"
+        type: string
+        required: true
+      working-dir:
+        description: "The working directory, useful for mono-repos"
+        type: string
+        default: "./"
+    outputs:
+      current-version: ${{ jobs.bump-version.outputs.version }}
+      bumped: ${{ jobs.bump-version.outputs.bumped }}
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch to bump"
+        type: string
+        default: "main"
+      version:
+        description: "The version to bump to"
+        required: true
+      working-dir:
+        description: "The working directory, useful for mono-repos"
+        default: "./"
+
+permissions: write-all
+
+# only bump a branch/working-dir (package) to one version at a time
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.branch }}-${{ inputs.working-dir }}
+  cancel-in-progress: true
+
+env:
+  NOTIFICATION_PREFIX: "[Version bump]"
+
+jobs:
+  calculated-inputs:
+    name: "Calculated inputs"
+    runs-on: ubuntu-latest
+    outputs:
+      current-version: ${{ steps.current-version.outputs.version }}
+      needs-version-bump: ${{ steps.version-bump.outputs.needs-version-bump }}
+    steps:
+      - name: "Check out `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Setup `hatch`"
+        uses: ./.github/actions/setup-environment
+
+      - name: "Set: current-version"
+        id: current-version
+        shell: bash
+        run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
+        working-directory: ${{ inputs.working-dir }}
+
+      - name: "Set: need-to-bump"
+        id: version-bump
+        shell: bash
+        run: |
+          if [[ ${{ steps.current-version.outputs.version }} == "${{ inputs.version }} ]]
+          then
+            echo "needs-version-bump=false" >> $GITHUB_OUTPUT
+          else
+            echo "needs-version-bump=true" >> $GITHUB_OUTPUT
+         fi
+
+      - name: "[DEBUG] Parameters"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo version             : ${{ inputs.version }}
+          echo working-dir         : ${{ inputs.working-dir }}
+          echo current-version     : ${{ steps.current-version.outputs.version }}
+          echo need-to-bump        : ${{ steps.version-bump.outputs.needs-version-bump }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  bump-version:
+    name: "Bump version"
+    if: ${{ fromJSON(needs.calculated-inputs.outputs.needs-version-bump) }}
+    needs: [calculated-inputs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check out `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Setup `hatch`"
+        uses: ./.github/actions/setup-environment
+
+      - name: "Bump version to `${{ inputs.version }}`"
+        shell: bash
+        run: hatch version ${{ inputs.version }}
+        working-directory: ${{ inputs.working-dir }}
+
+      - name: "Commit and push changes"
+        uses: ./.github/actions/github-commit
+        with:
+          message: "bump version to ${{ inputs.version }}"
+
+      - name: "[INFO] Bumped version"
+        run: |
+          title="Bumped version"
+          message="Bumped version from ${{ needs.calculated-inputs.outputs.current-version }} to ${{ inputs.version }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
+  skip-version-bump:
+    name: "Skip version bump"
+    if: ${{ !fromJSON(needs.calculated-inputs.outputs.needs-version-bump) }}
+    needs: [calculated-inputs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[INFO] Skipped version bump"
+        run: |
+          title="Skipped version bump"
+          message="${{ inputs.branch }} is already at version ${{ inputs.version }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

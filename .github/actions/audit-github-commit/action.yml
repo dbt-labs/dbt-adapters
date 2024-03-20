@@ -23,6 +23,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo sha : ${{ inputs.sha }}
+
     - name: "Check if a release exists for `${{ inputs.sha }}`"
       id: commit
       env:
@@ -37,7 +42,7 @@ runs:
       shell: bash
       run: |
         echo sha         : ${{ inputs.sha }}
-        echo tag         : ${{ steps.check_release_commit.outputs.tag_name }}
-        echo release-id  : ${{ steps.check_release_commit.outputs.id }}
-        echo pre-release : ${{ steps.check_release_commit.outputs.prerelease }}
-        echo commitish   : ${{ steps.check_release_commit.outputs.target_commitish }}
+        echo tag         : ${{ steps.commit.outputs.tag_name }}
+        echo release-id  : ${{ steps.commit.outputs.id }}
+        echo pre-release : ${{ steps.commit.outputs.prerelease }}
+        echo commitish   : ${{ steps.commit.outputs.target_commitish }}

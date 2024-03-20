@@ -6,96 +6,83 @@
 # 5. If this is deployed to prod, mark the draft release (created in this run or previously) as a full release.
 #
 # **when?**
-# 1. Call after a successful build. Build artifacts should be ready to release.defaults:
+# 1. Call after a successful build. Build artifacts should be ready to release.
 #    They need to either live in a dist/ directory locally, or an archive name needs to be provided.
-# 2. Call to publish a draft release to become a full release. No archive or artifacts are needed in this case.
+# 2. Call to publish a draft release to become a full release. No archive, artifacts, or changelog path are needed in this case.
 name: "Publish to GitHub"
-run-name: "Publish `${{ version }}` to GitHub in ${{ deploy-to }}"
+run-name: "Publish `${{ version }}` to GitHub in ${{ deploy-environment }}"
 
 on:
-  workflow_dispatch:
-    inputs:
-      archive-name:
-        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
-        type: string
-        default: ""
-      version:
-        description: "The release version number (i.e. 1.0.0b1)"
-        type: string
-        required: true
-      sha:
-        description: "Commit SHA being released"
-        type: string
-        required: true
-      changelog-path:
-        description: "Path to the release notes"
-        type: string
-        required: true
-      deploy-to:
-        description: "Choose where to publish"
-        type: environment
   workflow_call:
     inputs:
-      archive-name:
-        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
-        type: string
-        default: ""
       version:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
       sha:
-        description: "Commit SHA being released"
+        description: "The SHA for the commit being released"
         type: string
         required: true
+      archive-name:
+        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
+        type: string
+        default: ""
       changelog-path:
-        description: "Path to the release notes"
+        description: "Path to the release notes, leave blank if publishing draft to full"
         type: string
-        required: true
-      deploy-to:
+        default: ""
+      deploy-environment:
         description: "Choose where to publish"
         type: string
         default: "prod"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      sha:
+        description: "The SHA for the commit being released"
+        type: string
+        required: true
+      archive-name:
+        description: "Name of the archive containing the artifacts, leave blank if local or publishing draft to full"
+        type: string
+        default: ""
+      changelog-path:
+        description: "Path to the release notes, leave blank if publishing draft to full"
+        type: string
+        default: ""
+      deploy-environment:
+        description: "Choose where to publish"
+        type: environment
 
 permissions:
   contents: write
 
 # will cancel previous workflows triggered by the same event and for the same package and environment
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+  group: ${{ github.workflow }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-environment }}
   cancel-in-progress: true
 
 env:
-  REPO_LINK: ${{ github.server_url }}/${{ github.repository }}
   NOTIFICATION_PREFIX: "[Publish - GitHub]"
 
 jobs:
-  debug-inputs:
-    name: "[DEBUG] Inputs"
-    runs-on: ubuntu-latest
-    steps:
-      - name: "[DEBUG] Inputs"
-        run: |
-          echo archive-name        : ${{ inputs.archive-name }}
-          echo version             : ${{ inputs.version }}
-          echo sha                 : ${{ inputs.sha }}
-          echo changelog-path      : ${{ inputs.changelog-path }}
-          echo deploy-to           : ${{ inputs.deploy-to }}
-          echo REPO_LINK           : ${{ env.REPO_LINK }}
-          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
-
-  publish:
-    name: "Publish to GitHub"
+  calculated-inputs:
+    name: "Calculated inputs"
     runs-on: ubuntu-latest
     outputs:
-      exists: ${{ steps.release_check.outputs.exists }}
-      draft_exists: ${{ steps.release_check.outputs.draft_exists }}
-      tag: ${{ steps.set_tag.outputs.tag }}
+      tag: ${{ steps.tag.outputs.tag }}
+      tag-sha: ${{ steps.tag-metadata.outputs.sha }}
+      tag-exists: ${{ steps.tag-metadata.outputs.exists }}
+      tag-is-draft: ${{ steps.tag-metadata.outputs.is-draft }}
+      commit-tag: ${{ steps.commit-metadata.outputs.tag }}
     steps:
       - name: "Check out `main`"
         uses: actions/checkout@v4
 
-      - name: "Create tag"
+      - name: "Set: tag"
         id: tag
         shell: bash
         run: echo "tag=v${{ inputs.version }}" >> $GITHUB_OUTPUT
@@ -114,47 +101,93 @@ jobs:
         with:
           tag: ${{ inputs.sha }}
 
-      - name: "[INFO] Release already exists"
-        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == true }} && ${{ steps.tag-metadata.outputs.sha }} == ${{ inputs.sha }}
+      - name: "[DEBUG] Inputs"
         run: |
-          title="Tag already exists, skip publishing artifacts"
-          message="Tag ${{ steps.tag.outputs.tag }} already exists and is associated with the commit ${{ steps.tag-metadata.outputs.sha }}."
-          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+          echo archive-name        : ${{ inputs.archive-name }}
+          echo version             : ${{ inputs.version }}
+          echo sha                 : ${{ inputs.sha }}
+          echo changelog-path      : ${{ inputs.changelog-path }}
+          echo deploy-environment  : ${{ inputs.deploy-environment }}
+          echo tag                 : ${{ steps.tag.outputs.tag }}
+          echo tag-sha             : ${{ steps.tag-metadata.outputs.sha }}
+          echo tag-exists          : ${{ steps.tag-metadata.outputs.exists }}
+          echo tag-is-draft        : ${{ steps.tag-metadata.outputs.is-draft }}
+          echo commit-tag          : ${{ steps.commit-metadata.outputs.tag }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
 
-      - name: "[ERROR] Exit if the tag exists and is associated with a different commit than the one provided"
-        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == true }} && ${{ steps.tag-metadata.outputs.sha }} != ${{ inputs.sha }}
+  validation:
+    name: "Validate input scenarios"
+    needs: [calculated-inputs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[INFO] Exit gracefully if the tag exists and it's a full release"
+        if: ${{ fromJSON(needs.calculated-inputs.outputs.tag-exists) && !fromJSON(needs.calculated-inputs.outputs.tag-is-draft) }}
+        run: |
+          title="Full release already exists"
+          message="`${{ needs.calculated-inputs.outputs.tag }}` already exists as a full release and is associated with the commit ${{ needs.calculated-inputs.outputs.tag-sha }}."
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+          exit 0
+
+      - name: "[ERROR] Exit with error if the tag exists and is associated with a different commit than the one provided"
+        if: ${{ fromJSON(needs.calculated-inputs.outputs.tag-exists) }} && ${{ needs.calculated-inputs.outputs.tag-sha }} != ${{ inputs.sha }}
         shell: bash
         run: |
-          title="Tag ${{ inputs.tag }} already exists with a different commit!"
+          title="Tag `v${{ inputs.version }}` already exists with a different commit!"
           message="Existing commit: {{ steps.tag-metadata.outputs.sha }} New commit: ${{ inputs.sha }}. Exiting."
           echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
           exit 1
 
-      - name: "[ERROR] Exit if the commit is associated with a different tag than the version that was provided"
-        if: ${{ fromJSON(steps.tag-metadata.outputs.exists) == false }} && ${{ steps.commit-metadata.outputs.tag != '' }}
+      - name: "[ERROR] Exit with error if the commit is associated with a different tag than the version that was provided"
+        if: ${{ needs.calculated-inputs.outputs.commit-tag != '' }} && ${{ needs.calculated-inputs.outputs.commit-tag != needs.calculated-inputs.outputs.tag }}
         run: |
           title="Commit ${{ inputs.sha }} is already associated with a different tag!"
-          message="Existing tag: ${{ steps.commit-metadata.outputs.tag }} New tag: ${{ steps.tag.outputs.tag }}"
+          message="Existing tag: ${{ needs.calculated-inputs.outputs.commit-tag }} New tag: ${{ needs.calculated-inputs.outputs.tag }}"
           echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
           exit 1
 
-      - name: "Publish to GitHub as draft release"
-        if: fromJSON(steps.tag-metadata.outputs.exists) == false
+  new-tag:
+    name: "Publish draft release to GitHub"
+    needs: [calculated-inputs, validation]
+    if: ${{ !fromJSON(needs.calculated-inputs.outputs.tag-exists) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check out `main`"
+        uses: actions/checkout@v4
+
+      - name: "Publish to GitHub as a draft release"
         uses: ./.github/actions/publish-github-draft
         with:
-          archive-name: ${{ inputs.archive-name }}
-          tag: ${{ needs.check-release-exists.outputs.tag }}
-          repo-url: ${{ env.REPO_LINK }}
+          repo-url: ${{ github.server_url }}/${{ github.repository }}
+          tag: ${{ needs.calculated-inputs.outputs.tag }}
           sha: ${{ inputs.sha }}
-          changelog-path: ${{ inputs.changelog_path }}
+          archive-name: ${{ inputs.archive-name }}
+          changelog-path: ${{ inputs.changelog-path }}
 
-      - name: "Publish draft release as full release"
-        if: >-
-          inputs.deploy-to == "prod" && (
-            fromJSON(steps.tag-metadata.outputs.exists) == false ||
-            fromJSON(steps.tag-metadata.outputs.is-draft) == true
-          )
+      - name: "[INFO] Published to GitHub as a draft release"
+        run: |
+          title="Published to GitHub as a draft release"
+          message="${{ needs.calculated-inputs.outputs.tag }} was created as a draft release with the commit ${{ inputs.sha }}."
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
+  existing-tag:
+    name: "Publish GitHub draft as full release"
+    # require publish-draft to cover the scenario where a production release is being created without an existing draft release
+    needs: [calculated-inputs, validation, publish-draft]
+    # allow for publish-draft to be skipped, e.g. if this is a production release where the draft already existed
+    if: ${{ !failure() && inputs.deploy-environment == "prod" }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check out `main`"
+        uses: actions/checkout@v4
+
+      - name: "Publish draft release as a full release"
         uses: ./.github/actions/publish-github-full
         with:
-          tag: ${{ steps.tag.output.tag }}
-          repo-url: ${{ env.REPO_LINK }}
+          repo-url: ${{ github.server_url }}/${{ github.repository }}
+          tag: ${{ needs.calculated-inputs.outputs.tag }}
+
+      - name: "[INFO] Published draft release as a full release"
+        run: |
+          title="Published draft release as a full release"
+          message="`${{ needs.calculated-inputs.outputs.tag }}` was published as a full release."
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

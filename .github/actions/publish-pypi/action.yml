@@ -5,7 +5,7 @@ inputs:
   archive-name:
     description: "Name of the archive containing the artifacts, leave blank if local"
     default: ""
-  repository-url:
+  index-url:
     description: "The url for the PyPI index"
     required: true
   working-dir:
@@ -15,6 +15,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo archive-name : ${{ inputs.archive-name }}
+        echo index-url    : ${{ inputs.index-url }}
+        echo working-dir  : ${{ inputs.working-dir }}
+
     - name: "Download artifacts from `${{ inputs.archive-name }}`"
       if: ${{ !(inputs.archive-name == "" }}
       uses: actions/download-artifact@v4
@@ -38,7 +45,7 @@ runs:
     - name: "Publish artifacts to PyPI"
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        repository-url: ${{ inputs.repository-url }}
+        repository-url: ${{ inputs.index-url }}
         packages-dir: ${{ inputs.working-dir }}dist/
 
     - name: "[INFO] Published artifacts to PyPI"

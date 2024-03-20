@@ -8,9 +8,8 @@ runs:
       shell: bash
       run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
 
-    - name: "Install `linuxbrew` packages"
+    - name: "Install `changie`"
       shell: bash
       run: |
-        brew install pre-commit
         brew tap miniscruff/changie https://github.com/miniscruff/changie
         brew install changie

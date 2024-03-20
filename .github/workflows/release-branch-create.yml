@@ -63,5 +63,3 @@ jobs:
         uses: ./.github/actions/create-temp-branch
         with:
           branch-stub: "release/${{ inputs.version }}/"
-        env:
-          NOTIFICATION_PREFIX: "[create release branch]"

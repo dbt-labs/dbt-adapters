@@ -9,14 +9,9 @@
 
 # **when?**
 # This will run when a comment is added to an issue and that issue has an `awaiting_response` label.
-
 name: "Resubmit for triage"
 
 on: issue_comment
-
-defaults:
-  run:
-    shell: bash
 
 permissions:
   issues: write
@@ -28,4 +23,4 @@ jobs:
     with:
       add_label: "triage"
       remove_label: "awaiting_response"
-    secrets: inherit # this is only acceptable because we own the action we're calling
+    secrets: inherit

@@ -12,17 +12,16 @@ inputs:
     description: "The email for the commit"
     default: "buildbot@fishtownanalytics.com"
 
-outputs:
-  path:
-    description: "The file path to the change log, relative to the repo root"
-    value: ${{ steps.path.outputs.path }}
-  exists:
-    description: "Does the changelog exist?"
-    value: ${{ steps.exists.outputs.exists }}
-
 runs:
   using: composite
   steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo message : ${{ inputs.message }}
+        echo user    : ${{ inputs.user }}
+        echo email   : ${{ inputs.email }}
+
     - name: "Commit and push changes"
       shell: bash
       run: |
@@ -30,5 +29,12 @@ runs:
         git config user.email "${{ inputs.email }}"
         git pull
         git add .
-        git commit -m "${{ inputs.message }}"
+        git commit -m "[automated] ${{ inputs.message }}"
         git push
+
+    - name: "[INFO] Committed and pushed changes"
+      shell: bash
+      run: |
+        title="Committed and pushed changes"
+        message="Committed and pushed changes back up to remote"
+        echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

@@ -1,10 +1,10 @@
 name: "Audit GitHub team"
-description: "Get metadata about a GitHub team, such as a list of team members"
+description: "Get metadata about a GitHub team"
 
 inputs:
   organization:
     description: "The GitHub organization that owns the team"
-    required: true
+    default: "dbt-labs"
   team:
     description: "The name of the team"
     required: true
@@ -17,11 +17,19 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: "Set: output file name"
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo organization : ${{ inputs.organization }}
+        echo team         : ${{ inputs.team }}
+
+    - name: "Create output file name"
       id: output-file
+      shell: bash
       run: echo "name=output_$GITHUB_RUN_ID.json" >> $GITHUB_OUTPUT
 
-    - name: "Get team membership for `${{ inputs.organization }}/${{ inputs.team }}`"
+    - name: "Get team membership"
+      shell: bash
       run: |
         url = orgs/${{ inputs.organization }}/teams/${{ inputs.team }}/members
         header = Accept: application/vnd.github+json
@@ -29,11 +37,15 @@ runs:
 
     - name: "Parse team membership"
       id: members
-      shell:
+      shell: bash
       run: |
         team_list=$(jq -r '.[].login' ${{ steps.output-file.outputs.name }})
         team_list_single=$(echo $team_list | tr '\n' ' ')
         echo "membership=$team_list_single" >> $GITHUB_OUTPUT
+
+    - name: "Delete the output file"
+      shell: bash
+      run: rm ${{ steps.output-file.outputs.name }}
 
     - name: "[DEBUG] Parse team membership"
       shell: bash
@@ -41,6 +53,3 @@ runs:
         echo organization : ${{ inputs.organization }}
         echo team         : ${{ inputs.team }}
         echo members      : ${{ steps.members.outputs.membership }}
-
-    - name: "Delete the output file"
-      run: rm ${{ steps.output-file.outputs.name }}

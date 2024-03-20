@@ -1,21 +1,20 @@
 name: "Unit tests"
 
 on:
-  push:
+  pull_request:
     branches:
       - "main"
       - "*.latest"
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: "Choose what branch to test"
-        type: string
-        default: "main"
   workflow_call:
     inputs:
       branch:
-        description: "Choose what branch to test"
+        description: "The branch to run unit tests on"
+        type: string
+        default: "main"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch to run unit tests on"
         type: string
         default: "main"
 
@@ -23,7 +22,7 @@ permissions: read-all
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref }}
   cancel-in-progress: true
 
 env:
@@ -44,7 +43,7 @@ jobs:
           echo branch              : ${{ inputs.branch }}
           echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
 
-      - name: "Check out `${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}`"
+      - name: "Check out `${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref }}`"
         uses: actions/checkout@v4
         with:
           ref: ${{ contains(github.event_name, 'workflow_') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}

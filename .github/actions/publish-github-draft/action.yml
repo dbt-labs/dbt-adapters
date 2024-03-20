@@ -1,71 +1,32 @@
-name: "Publish to GitHub as draft release"
-description: "Publish artifacts from an archive to GitHub as a draft release"
+name: "Publish GitHub draft release as full release"
+description: "Publish an existing draft release as a non-draft release"
 
 inputs:
-  archive-name:
-    description: "Name of the archive containing the artifacts, leave blank if local"
-    default: ""
   tag:
-    description: "The release tag to publish under"
+    description: "The tag to publish (i.e. v1.0.0b1)"
     required: true
   repo-url:
     description: "The URL to the repo (https://github.com/dbt-labs/dbt-adapters"
-    required: true
-  sha:
-    description: "Commit SHA being released"
-    required: true
-  changelog-path:
-    description: "Path to the release notes"
     required: true
 
 runs:
   using: composite
   steps:
-    - name: "Download artifacts from `${{ inputs.archive-name }}`"
-      if: ${{ !(inputs.archive-name == "" }}
-      uses: actions/download-artifact@v4
-      with:
-        name: ${{ inputs.archive-name }}
-        path: dist/
-
-    - name: "[INFO] Downloaded artifacts"
-      if: ${{ !(inputs.archive-name == "" }}
+    - name: "[DEBUG] Inputs"
       shell: bash
       run: |
-        title="Downloaded artifacts"
-        message="Downloaded artifacts from ${{ inputs.archive-name }}"
-        echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+        echo tag      : ${{ inputs.tag }}
+        echo repo-url : ${{ inputs.repo-url }}
 
-    - name: "[DEBUG] Found artifacts"
+    - name: "Publish `${{ inputs.tag }}` as full release"
       shell: bash
-      working-directory: ${{ inputs.working-dir }}
-      run: echo $(ls ./dist)
-
-    - name: "Set: pre-release"
-      id: pre-release
-      shell: bash
-      run: |
-        if ${{ contains(inputs.tag, 'rc') || contains(inputs.tag, 'b') || contains(inputs.tag, 'a') }}
-        then
-          echo "pre-release=--prerelease" >> $GITHUB_OUTPUT
-        fi
-
-    - name: "Publish artifacts to GitHub as draft release"
-      shell: bash
-      run: |
-        gh release create $TAG ./dist/* --title "$TITLE" --notes-file $RELEASE_NOTES --target $COMMIT $PRERELEASE --draft --repo ${{ inputs.repo-url }}
+      run: gh release edit ${{ inputs.tag }} --repo ${{ inputs.repo-url }} --draft=false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        TAG: ${{ inputs.tag }}
-        TITLE: ${{ github.event.repository.name }} ${{ inputs.tag }}
-        RELEASE_NOTES: ${{ inputs.changelog-path }}
-        COMMIT: ${{ inputs.sha }}
-        PRERELEASE: ${{ steps.pre-release.outputs.pre-release }}
-        DRAFT: ${{ inputs.draft-flag }}
 
-    - name: "[INFO] Published artifacts to GitHub as draft release"
+    - name: "[INFO] Published draft as full release"
       shell: bash
       run: |
-        title="Published artifacts to GitHub as draft release"
-        message="artifacts: $(ls ./dist) tag: ${{ inputs.tag }} pre-release: ${{ steps.prerelease.outputs.prerelease }}"
+        title="Released draft as non-draft release on GitHub"
+        message="tag: ${{ inputs.tag }} repo: ${{ inputs.repo-url }}"
         echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

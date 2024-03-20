@@ -23,7 +23,13 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: "Check if `${{ inputs.tag }}` exists in `${{ inputs.repo-url }}`"
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo tag      : ${{ inputs.tag }}
+        echo repo-url : ${{ inputs.repo-url }}
+
+    - name: "Set: exists"
       id: tag
       shell: bash
       run: |
@@ -38,15 +44,15 @@ runs:
       with:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: "Get the commit associated with `${{ inputs.tag }}`"
+    - name: "Set: sha"
       id: commit
       if: ${{ fromJSON(steps.tag.outputs.exists) == true }}
       shell: bash
       run: |
-        sha=$(jq -r '.targetCommitish' <<< "$output")
+        sha=$(jq -r '.targetCommitish' <<< "${{ steps.tag.outputs.results }}")
         echo "sha=$sha" >> $GITHUB_OUTPUT
 
-    - name: "Check if `${{ inputs.tag }}` is a draft release"
+    - name: "Set: is-draft"
       id: draft
       if: ${{ fromJSON(steps.tag.outputs.exists) == true }}
       shell: bash

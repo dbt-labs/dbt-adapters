@@ -14,8 +14,14 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo branch-stub : ${{ inputs.branch-stub }}
+
     - name: "Create a unique branch name"
       id: branch
+      shell: bash
       run: |
         name="${{ inputs.branch-stub }}"
         name+="$(date +'%Y-%m-%d')/$GITHUB_RUN_ID"

@@ -1,36 +1,22 @@
 name: "Code quality"
 
 on:
-  push:
+  pull_request:
     branches:
       - "main"
       - "*.latest"
-  pull_request:
   workflow_call:
     inputs:
       branch:
         description: "The branch to run code quality on"
         type: string
         default: "main"
-      lint-command:
-        description: "The lint command to run"
-        type: string
-        default: "hatch run lint:all"
-      typecheck-command:
-        description: "The typecheck command to run"
-        type: string
-        default: "hatch run typecheck:all"
   workflow_dispatch:
     inputs:
       branch:
         description: "The branch to run code quality on"
+        type: string
         default: "main"
-      lint-command:
-        description: "The lint command to run"
-        default: "hatch run lint:all"
-      typecheck-command:
-        description: "The typecheck command to run"
-        default: "hatch run typecheck:all"
 
 permissions: read-all
 
@@ -40,7 +26,7 @@ defaults:
 
 # cancel the previous code quality run if a new one starts with the same parameters
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+  group: ${{ github.workflow }}-${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref }}
   cancel-in-progress: true
 
 env:
@@ -61,14 +47,14 @@ jobs:
       - name: "Check out `${{ inputs.branch }}`"
         uses: actions/checkout@v4
         with:
-          ref: ${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
+          ref: ${{ contains(github.event_name, 'workflow') && inputs.branch || contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref }}
           persist-credentials: false
 
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
 
       - name: "Run linters"
-        run: ${{ inputs.lint-command }}
+        run: hatch run lint:all
 
       - name: "Run typechecks"
-        run: ${{ inputs.typecheck-command }}
+        run: hatch run typecheck:all

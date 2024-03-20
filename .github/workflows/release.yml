@@ -2,43 +2,43 @@ name: "Release"
 run-name: "Release `${{ inputs.package }}==${{ inputs.version }}` to `${{ inputs.deploy-to }}`"
 
 on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "Choose what branch to release from"
+        type: string
+        default: "main"
+      package:
+        description: "Choose what to release"
+        type: string
+        default: "dbt-adapters"
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      deploy-environment:
+        description: "Choose where to publish"
+        type: string
+        default: "prod"
   workflow_dispatch:
     inputs:
+      branch:
+        description: "Choose what branch to release from"
+        type: string
+        default: "main"
       package:
         description: "Choose what to release"
         type: choice
         options:
           - "dbt-adapters"
           - "dbt-tests-adapter"
-      branch:
-        description: "Choose what branch to release from"
-        type: string
-        default: "main"
       version:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
-      deploy-to:
+      deploy-environment:
         description: "Choose where to publish"
         type: environment
-  workflow_call:
-    inputs:
-      package:
-        description: "Choose what to release"
-        type: string
-        default: "dbt-adapters"
-      branch:
-        description: "Choose what branch to release from"
-        type: string
-        default: "main"
-      version:
-        description: "The release version number (i.e. 1.0.0b1)"
-        type: string
-        required: true
-      deploy-to:
-        description: "Choose where to publish"
-        type: string
-        default: "prod"
 
 # this is the permission that allows creating a new release to both GitHub and PyPI
 permissions:
@@ -47,7 +47,7 @@ permissions:
 
 # deploying the same version of a package to the same environment should override any previous deployment with those attributes
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+  group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-environment }}
   cancel-in-progress: true
 
 defaults:
@@ -55,7 +55,7 @@ defaults:
     shell: bash
 
 jobs:
-  release-inputs:
+  calculated-inputs:
     name: "Release inputs"
     runs-on: ubuntu-latest
     outputs:
@@ -66,7 +66,7 @@ jobs:
       - name: "Computed inputs"
         id: computed-inputs
         run: |
-          archive_name=${{ inputs.package }}-${{ inputs.version_number }}-${{ inputs.deploy-to }}
+          archive_name=${{ inputs.package }}-${{ inputs.version_number }}-${{ inputs.deploy-environment }}
           working_dir="./"
           run_unit_tests=true
 
@@ -82,25 +82,25 @@ jobs:
 
       - name: "[DEBUG] Inputs"
         run: |
-          echo package        : ${{ inputs.package }}
-          echo branch         : ${{ inputs.branch }}
-          echo version        : ${{ inputs.version }}
-          echo deploy-to      : ${{ inputs.deploy-to }}
-          echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
-          echo working-dir    : ${{ steps.release-inputs.outputs.working-dir }}
-          echo run-unit-tests : ${{ steps.release-inputs.outputs.run-unit-tests }}
+          echo branch             : ${{ inputs.branch }}
+          echo package            : ${{ inputs.package }}
+          echo version            : ${{ inputs.version }}
+          echo deploy-environment : ${{ inputs.deploy-environment }}
+          echo archive-name       : ${{ steps.release-inputs.outputs.archive-name }}
+          echo working-dir        : ${{ steps.release-inputs.outputs.working-dir }}
+          echo run-unit-tests     : ${{ steps.release-inputs.outputs.run-unit-tests }}
 
   code-quality:
     name: "Run code quality"
-    uses: dbt-labs/dbt-adapters/.github/workflows/code-quality.yml
+    uses: dbt-labs/dbt-adapters/.github/workflows/check-code-quality.yml@update-workflows
     with:
       branch: ${{ inputs.branch }}
 
   unit-tests:
     name: "Run unit tests"
-    needs: [release-inputs]
-    if: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) == true }}
-    uses: dbt-labs/dbt-adapters/.github/workflows/unit-tests.yml@update-workflows
+    needs: [calculated-inputs]
+    if: ${{ fromJSON(needs.calculated-inputs.outputs.run-unit-tests) }}
+    uses: dbt-labs/dbt-adapters/.github/workflows/check-unit-tests.yml@update-workflows
     with:
       branch: ${{ inputs.branch }}
 
@@ -112,69 +112,70 @@ jobs:
       version: ${{ inputs.version }}
     secrets: inherit
 
-  bump-version:
+  version-bump:
     name: "Bump the version"
-    uses: dbt-labs/dbt-adapters/.github/workflows/bump-version.yml@update-workflows
-    needs: [release-branch, release-inputs]
+    uses: dbt-labs/dbt-adapters/.github/workflows/build-version-bump.yml@update-workflows
+    needs: [release-branch, calculated-inputs]
     with:
       branch: ${{ needs.release-branch.outputs.branch }}
       version: ${{ inputs.version }}
       working-dir: ${{ needs.release-inputs.outputs.working-dir }}
     secrets: inherit
 
-  generate-changelog:
+  changelog:
     name: "Generate a new changelog"
     needs: [release-branch]
-    uses: dbt-labs/dbt-adapters/.github/workflows/generate-changelog.yml@update-workflows
+    uses: dbt-labs/dbt-adapters/.github/workflows/build-changelog.yml@update-workflows
     with:
       branch: ${{ needs.release-branch.outputs.branch }}
       version: ${{ inputs.version }}
     secrets: inherit
 
-  merge-changes:
-    name: "Merge the version bump and changelog updates"
-    needs: [
-      release-branch,
-      bump-version,
-      generate-changelog,
-      code-quality,
-      unit-tests,
-    ]
-    if: ${{ !failure() && !cancelled() && (needs.bump-version.outputs.bumped || needs.generate-changelog.outputs.created) }}
-    uses: dbt-labs/dbt-adapters/.github/workflows/release-branch-merge.yml@update-workflows
-    with:
-      branch: ${{ inputs.branch }}
-      temp-branch: ${{ needs.release-branch.outputs.branch }}
-    secrets: inherit
-
   build-artifacts:
     name: "Build the artifacts"
     if: ${{ !failure() && !cancelled() }}
-    needs: [merge-changes, release-inputs]
-    uses: dbt-labs/dbt-adapters/.github/workflows/build.yml@update-workflows
+    needs: [
+      code-quality,
+      unit-tests,
+      release-branch,
+      version-bump,
+      changelog,
+    ]
+    uses: dbt-labs/dbt-adapters/.github/workflows/build-artifacts.yml@update-workflows
     with:
+      branch: ${{ needs.release-branch.outputs.branch }}
       package: ${{ inputs.package }}
       version: ${{ inputs.version }}
-      deploy-to: ${{ inputs.deploy-to }}
+      deploy-to: ${{ inputs.deploy-environment }}
+
+  merge-changes:
+    name: "Merge the version bump and changelog updates"
+    needs: [build-artifacts, version-bump, changelog]
+    if: ${{ !failure() && !cancelled() && inputs.deploy-environment == "prod" && (needs.version-bump.outputs.bumped || needs.changelog.outputs.created) }}
+    uses: dbt-labs/dbt-adapters/.github/workflows/release-branch-merge.yml@update-workflows
+    with:
+      branch: ${{ inputs.branch }}
+      release-branch: ${{ needs.release-branch.outputs.branch }}
+    secrets: inherit
 
   publish-github:
     name: "Publish the artifacts to GitHub"
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
-    needs: [build-artifacts, merge-changes]
+    needs: [build-artifacts, changelog, merge-changes]
     uses: dbt-labs/dbt-adapters/.github/workflows/publish-github.yml@update-workflows
     with:
       archive-name: ${{ needs.build-artifacts.outputs.archive-name }}
       version: ${{ inputs.version }}
+      deploy-to: ${{ inputs.deploy-environment }}
       sha: ${{ needs.merge-changes.outputs.sha }}
-      changelog-path: ${{ needs.bump-version-generate-changelog.outputs.changelog_path }}
-      deploy-to: ${{ inputs.deploy-to }}
+      changelog-path: ${{ needs.changelog.outputs.changelog-path }}
 
-  publish-0pypi:
+  publish-pypi:
     name: "Publish the artifacts to PyPI"
     if: ${{ !failure() && !cancelled() }}
-    needs: [build-artifacts]
-    uses: dbt-labs/dbt-adapters/.github/workflows/publish-github.yml@update-workflows
+    needs: [build-artifacts, merge-changes]
+    uses: dbt-labs/dbt-adapters/.github/workflows/publish-pypi.yml@update-workflows
     with:
       archive-name: ${{ needs.build-artifacts.outputs.archive-name }}
       version: ${{ inputs.version }}
-      deploy-to: ${{ inputs.deploy-to }}
+      deploy-to: ${{ inputs.deploy-environment }}

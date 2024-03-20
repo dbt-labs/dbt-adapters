@@ -5,7 +5,7 @@
 # Call after a successful build. Build artifacts should be ready to release.defaults:
 # They need to either live in a dist/ directory locally, or an archive name needs to be provided.
 name: "Publish to PyPI"
-run-name: "Publish `${{ version }}` to PyPI in ${{ deploy-to }}"
+run-name: "Publish `${{ version }}` to PyPI in ${{ deploy-environment }}"
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
-      deploy-to:
+      deploy-environment:
         description: "Choose where to publish"
         type: environment
   workflow_call:
@@ -30,7 +30,7 @@ on:
         description: "The release version number (i.e. 1.0.0b1)"
         type: string
         required: true
-      deploy-to:
+      deploy-environment:
         description: "Choose where to publish"
         type: string
         default: "prod"
@@ -40,7 +40,7 @@ permissions:
 
 # will cancel previous workflows triggered by the same event and for the same package and environment
 concurrency:
-  group: ${{ github.workflow }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+  group: ${{ github.workflow }}-${{ inputs.archive-name }}-${{ inputs.version }}-${{ inputs.deploy-environment }}
   cancel-in-progress: true
 
 env:
@@ -55,7 +55,7 @@ jobs:
         run: |
           echo archive-name        : ${{ inputs.archive-name }}
           echo version             : ${{ inputs.version }}
-          echo deploy-to           : ${{ inputs.deploy-to }}
+          echo deploy-environment  : ${{ inputs.deploy-environment }}
           echo PYPI_PROJECT_URL    : ${{ vars.PYPI_PROJECT_URL }}
           echo PYPI_REPOSITORY_URL : ${{ vars.PYPI_REPOSITORY_URL }}
 
@@ -63,7 +63,7 @@ jobs:
     name: "Publish to PyPI"
     runs-on: ubuntu-latest
     environment:
-      name: ${{ inputs.deploy-to }}
+      name: ${{ inputs.deploy-environment }}
       url: ${{ vars.PYPI_PROJECT_URL }}
     steps:
       - name: "Check out `main`"

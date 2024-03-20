@@ -1,5 +1,5 @@
 name: "Audit changelog"
-description: "Get metadata about a changelog, including the expected file path, and if it exists"
+description: "Get metadata about a changelog"
 
 inputs:
   version:
@@ -17,6 +17,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo version : ${{ inputs.version }}
+
     - name: "Parse version: `${{ inputs.version }}`"
       id: semver
       uses: dbt-labs/actions/parse-semver@v1.1.0

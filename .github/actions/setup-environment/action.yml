@@ -1,0 +1,28 @@
+name: "Setup environment"
+description: "Setup a python environment with `hatch` as the default build frontend"
+
+inputs:
+  python-version:
+    description: "The version of python to install"
+    default: "3.8"
+  setup-build-command:
+    description: "The command to setup build dependencies"
+    default: "python -m pip install hatch"
+
+runs:
+  using: composite
+  steps:
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo python-version  : ${{ inputs.python-version }}
+        echo setup-build-command : ${{ inputs.setup-build-command }}
+
+    - name: "Set up python ${{ inputs.python-version }}"
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: "Install build dependencies"
+      shell: bash
+      run: ${{ inputs.setup-build-command }}
