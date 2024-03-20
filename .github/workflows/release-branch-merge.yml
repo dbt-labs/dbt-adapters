@@ -1,0 +1,74 @@
+name: "Merge release branch"
+run-name: "Merge `${{ release-branch }}` into `${{ inputs.branch }}`"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The base branch receiving the changes"
+        type: string
+        required: true
+      release-branch:
+        description: "The branch containing the release changes"
+        type: string
+        required: true
+      deploy-environment:
+        description: "Choose where to publish"
+        type: string
+        required: true
+    outputs:
+      sha:
+        description: "The sha associated with this merge"
+        value: ${{ jobs.merge.outputs.sha }}
+
+# this is the permission that allows creating a new release to both GitHub and PyPI
+permissions:
+  contents: write
+  id-token: write
+
+# will cancel previous workflows triggered by the same event and for the same package and environment
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.branch }}-${{ inputs.release-branch }}
+  cancel-in-progress: true
+
+env:
+  NOTIFICATION_PREFIX: "[Merge release branch]"
+
+jobs:
+  debug-inputs:
+    name: "[DEBUG] Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo release-branch      : ${{ inputs.release-branch }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  merge:
+    name: "Merge `${{ inputs.release-branch }}` into `${{ inputs.branch }}`"
+    runs-on: ubuntu-latest
+    needs: [temp-branch]
+    outputs:
+      sha: ${{ steps.merge.outputs.sha }} || ${{ steps.test-merge.outputs.sha }}
+    steps:
+      - name: "Checkout `${{ inputs.release-branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-branch }}
+
+      - name: "Merge `${{ inputs.release-branch }}` into `${{ inputs.branch }}`"
+        if: ${{ inputs.deploy-environment == "prod" }}
+        id: merge
+        uses: ./.github/actions/github-merge
+        with:
+          source-branch: ${{ inputs.release-branch }}
+          target-branch: ${{ inputs.branch }}
+          message: "merge {source_ref} into {target_branch} for a release"
+
+      - name: "Get HEAD sha for test release"
+        id: test-merge
+        shell: bash
+        run: |
+          git pull
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT

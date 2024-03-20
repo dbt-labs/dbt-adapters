@@ -1,0 +1,91 @@
+name: "Publish to GitHub as draft release"
+description: "Publish artifacts from an archive to GitHub as a draft release"
+
+inputs:
+  archive-name:
+    description: "Name of the archive containing the artifacts, leave blank if local"
+    default: ""
+  tag:
+    description: "The release tag to publish under"
+    required: true
+  repo-url:
+    description: "The URL to the repo (e.g. https://github.com/dbt-labs/dbt-adapters)"
+    required: true
+  sha:
+    description: "Commit SHA being released"
+    required: true
+  changelog-path:
+    description: "Path to the release notes"
+    required: true
+  is-draft:
+    description: "Indicates that this is a draft release"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: "Set: pre-release"
+      id: pre-release
+      shell: bash
+      run: |
+        if ${{ contains(inputs.tag, 'rc') || contains(inputs.tag, 'b') || contains(inputs.tag, 'a' || contains(inputs.tag, 'dev') }}
+        then
+          echo "pre-release=--prerelease" >> $GITHUB_OUTPUT
+        fi
+
+    - name: "Set: draft"
+      id: draft
+      shell: bash
+      run: |
+        if ${{ fromJSON(inputs.is-draft) }}
+        then
+        echo "draft=--draft" >> $GITHUB_OUTPUT
+        fi
+
+    - name: "[DEBUG] Inputs"
+      shell: bash
+      run: |
+        echo archive-name   : ${{ inputs.archive-name }}
+        echo tag            : ${{ inputs.tag }}
+        echo repo-url       : ${{ inputs.repo-url }}
+        echo sha            : ${{ inputs.sha }}
+        echo changelog-path : ${{ inputs.changelog-path }}
+        echo is-draft       : ${{ inputs.is-draft }}
+        echo pre-release    : ${{ steps.pre-release.outputs.pre-release }}
+        echo draft          : ${{ steps.draft.outputs.draft }}
+
+    - name: "Download artifacts from `${{ inputs.archive-name }}`"
+      if: ${{ !(inputs.archive-name == "" }}
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.archive-name }}
+        path: dist/
+
+    - name: "[INFO] Downloaded artifacts"
+      if: ${{ !(inputs.archive-name == "" }}
+      uses: ./.github/actions/log-info
+      with:
+        title: "Downloaded artifacts"
+        message: "${{ inputs.archive-name }} contained: $(ls ./dist)"
+        prefix: ${{ env.NOTIFICATION_PREFIX }}
+
+    - name: "Publish artifacts to GitHub as draft release"
+      shell: bash
+      run: gh release create $TAG $ARTIFACTS --repo $REPO --title "$TITLE" --notes-file $RELEASE_NOTES --target $COMMIT $PRERELEASE $DRAFT
+      env:
+        TAG: ${{ inputs.tag }}
+        ARTIFACTS: "./dist/*"
+        REPO: ${{ inputs.repo-url }}
+        TITLE: ${{ github.event.repository.name }} ${{ inputs.tag }}
+        RELEASE_NOTES: ${{ inputs.changelog-path }}
+        COMMIT: ${{ inputs.sha }}
+        PRERELEASE: ${{ steps.pre-release.outputs.pre-release }}
+        DRAFT: ${{ steps.draft.outputs.draft }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: "[INFO] Published artifacts to GitHub as draft release"
+      uses: ./.github/actions/log-info
+      with:
+        title: "Published artifacts to GitHub as draft release"
+        message: "tag: ${{ inputs.tag }} pre-release: ${{ steps.pre-release.outputs.pre-release }} artifacts: $(ls ./dist)"
+        prefix: ${{ env.NOTIFICATION_PREFIX }}

@@ -65,11 +65,16 @@ dependencies = [
 ]
 [tool.hatch.envs.lint.scripts]
 all = [
-    "- black-only",
-    "- flake8-only",
+    "- black",
+    "- flake8",
+    "- pre-commit"
 ]
-black-only = "python -m black ."
-flake8-only = "python -m flake8 ."
+black = "python -m black {args:.}"
+flake8 = "python -m flake8 {args:.}"
+pre-commit = [
+    "pre-commit run trailing-whitespace {args}",
+    "pre-commit run end-of-file-fixer {args}",
+]
 
 [tool.hatch.envs.typecheck]
 dependencies = [

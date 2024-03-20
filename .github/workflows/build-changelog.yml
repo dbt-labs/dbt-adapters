@@ -1,0 +1,174 @@
+name: "Build changelog"
+run-name: "Merge changelogs into one changelog on ${{ inputs.branch }} for ${{ inputs.version }}"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The branch where the changelogs should be merged"
+        type: string
+        default: "main"
+      version:
+        description: "The version whose changelogs should be merged"
+        type: string
+        required: true
+    outputs:
+      changelog-path:
+        description: "The path to the changelog for this version"
+        value: ${{ jobs.audit-changelog.outputs.path }}
+      created:
+        description: "Identifies if this workflows created the changelog"
+        value: ${{ !jobs.audit-changelog.outputs.path }}
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch where the changelogs should be merged"
+        type: string
+        default: "main"
+      version:
+        description: "The version whose changelogs should be merged"
+        type: string
+        required: true
+    secrets:
+      FISHTOWN_BOT_PAT:
+        description: "Token to commit/merge changes into branches"
+        required: true
+      IT_TEAM_MEMBERSHIP:
+        description: "Token that can view org level teams"
+        required: true
+
+permissions:
+  contents: write
+
+# cancel the previous run for this version if a new run is called on this branch
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.branch }}-${{ inputs.version }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NOTIFICATION_PREFIX: "[Build changelog]"
+
+jobs:
+  calculated-inputs:
+    name: "Calculated inputs"
+    runs-on: ubuntu-latest
+    outputs:
+      changelog-path: ${{ steps.audit-changelog.outputs.path }}
+      changelog-exists: ${{ steps.audit-changelog.outputs.exists }}
+    steps:
+      - name: "Check out `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Setup `changie`"
+        uses: ./.github/actions/setup-changie
+
+      - name: "Audit changelog"
+        id: audit-changelog
+        uses: ./.github/actions/audit-changelog
+        with:
+          version: ${{ inputs.version }}
+
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo branch              : ${{ inputs.branch }}
+          echo version             : ${{ inputs.version }}
+          echo changelog-path      : ${{ steps.audit-changelog.outputs.path }}
+          echo changelog-exists    : ${{ steps.audit-changelog.outputs.exists }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  generate-changelog:
+    name: "Generate changelog"
+    if: ${{ !needs.calculated-inputs.outputs.changelog-exists }}
+    runs-on: ubuntu-latest
+    needs: [audit-changelog]
+    steps:
+      - name: "Check out `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Setup `hatch`"
+        uses: ./.github/actions/setup-hatch
+
+      - name: "Parse `${{ inputs.version }}`"
+        id: semver
+        uses: dbt-labs/actions/parse-semver@v1.1.0
+        with:
+          version: ${{ inputs.version }}
+
+      - name: "Get Core team membership"
+        id: core-membership
+        uses: ./.github/actions/audit-github-team
+        with:
+          team: "core-group"
+        env:
+          GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
+
+      - name: "Set Core team membership for `changie` contributors exclusion"
+        id: set-team-membership
+        run: echo "CHANGIE_CORE_TEAM=${{ steps.core_membership.outputs.members }}" >> $GITHUB_ENV
+
+      - name: "Generate changelog"
+        run: |
+          # this is a pre-release
+          if [[ ${{ steps.semver.outputs.is_prerelease }} -eq 1 ]]
+          then
+            changie batch ${{ steps.semver.outputs.base_version }} --move-dir '${{ steps.semver.outputs.base_version }}' --prerelease ${{ steps.semver.outputs.prerelease }}
+
+          # this is a final release with associated pre-releases
+          elif [[ -d ".changes/${{ steps.semver.outputs.base_version }}" ]]
+          then
+            changie batch ${{ steps.semver.outputs.base_version }} --include '${{ steps.semver.outputs.base_version }}' --remove-prereleases
+
+          # this is a final release with no associated pre-releases
+          else
+            changie batch ${{ needs.audit-changelog.outputs.base_version }}
+          fi
+
+          changie merge
+
+      - name: "Remove trailing whitespace and extra newlines"
+        continue-on-error: true
+        run: hatch run lint:pre-commit --files dbt/adapters/__about__.py CHANGELOG.md .changes/*
+
+      - name: "Check changelog generated successfully"
+        run: |
+          title="Generate changelog"
+          if [[ -f ${{ needs.calculated-inputs.outputs.changelog-path }} ]]
+          then
+            message="Changelog file created successfully"
+            echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+          else
+            message="Changelog failed to generate"
+            echo "::error title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+            exit 1
+          fi
+
+      - name: "Commit and push changes"
+        uses: ./.github/actions/github-commit
+        with:
+          message: "generate changelog for ${{ inputs.version }}"
+
+      - name: "[INFO] Generated changelog"
+        run: |
+          title="Generated changelog"
+          message="Generated changelog for version ${{ inputs.version }}: ${{ needs.calculated-inputs.outputs.changelog-path }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
+
+  skip-changelog:
+    name: "Skip changelog generation"
+    if: ${{ needs.calculated-inputs.outputs.changelog-exists }}
+    runs-on: ubuntu-latest
+    needs: [audit-changelog]
+    steps:
+      - name: "[INFO] Skipped changelog generation"
+        run: |
+          title="Skipped changelog"
+          message="The changelog already exists for version ${{ inputs.version }}: ${{ needs.calculated-inputs.outputs.changelog-path }}"
+          echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"

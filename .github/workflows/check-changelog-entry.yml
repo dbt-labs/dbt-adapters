@@ -1,0 +1,35 @@
+name: "Changelog entry"
+
+on:
+  # run on pull_request_target because this workflow requires secrets to post comments
+  pull_request_target:
+    branches:
+      - "main"
+      - "*.latest"
+    # this is a cheap check, any change should trigger it
+    types:
+      - opened
+      - reopened
+      - labeled
+      - unlabeled
+      - synchronize
+    # we are only concerned about functional code changes, i.e. code changes that will appear in production
+    paths-ignore:
+      - ".changes/**"
+      - ".github/**"
+      - "tests/**"
+      - "third-party-stubs/**"
+      - "**.md"
+      - "**.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  changelog:
+    uses: dbt-labs/actions/.github/workflows/changelog-existence.yml@main
+    with:
+      changelog_comment: "Thank you for your pull request! We could not find a changelog entry for this change. For details on how to document a change, see [the contributing guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md#adding-changelog-entry)."
+      skip_label: "Skip Changelog"
+    secrets: inherit # this is only acceptable because we own the action we're calling

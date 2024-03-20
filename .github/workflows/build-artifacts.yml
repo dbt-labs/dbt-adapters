@@ -1,0 +1,112 @@
+name: "Build artifacts"
+run-name: "Build `${{ inputs.package }}==${{ inputs.version}}` from `${{ inputs.branch }}` for deployment to `${{ deploy-environment }}`"
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "The branch being used to build the package"
+        type: string
+        default: "main"
+      package:
+        description: "The name of the package being built"
+        type: string
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      deploy-environment:
+        description: "The environment where this package will be deployed"
+        type: string
+        default: "prod"
+    outputs:
+      archive-name: ${{ jobs.calculated-inputs.outputs.archive-name }}
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The branch being used to build the package"
+        type: string
+        default: "main"
+      package:
+        description: "The name of the package being built"
+        type: choice
+        options:
+          - "dbt-adapters"
+          - "dbt-tests-adapter"
+      version:
+        description: "The release version number (i.e. 1.0.0b1)"
+        type: string
+        required: true
+      deploy-environment:
+        description: "The environment where this package will be deployed"
+        type: environment
+
+permissions: read-all
+
+# don't try to build the same version of the same package, the archive name could collide
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-environment }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NOTIFICATION_PREFIX: "[Build]"
+
+jobs:
+  calculated-inputs:
+    name: "Calculated inputs"
+    runs-on: ubuntu-latest
+    outputs:
+      archive-name: ${{ steps.archive.outputs.name }}
+      working-dir: ${{ steps.working-dir.outputs.path }}
+    steps:
+      - name: "Set: archive-name"
+        id: archive
+        shell: bash
+        run: |
+          name=${{ inputs.package }}-${{ inputs.version }}-${{ inputs.deploy-environment }}
+          echo "name=$name" >> $GITHUB_OUTPUT
+
+      - name: "Set: working-dir"
+        id: working-dir
+        shell: bash
+        run: |
+          if [[ ${{ inputs.package }} == "dbt-tests-adapter" ]]
+          then
+            path="./dbt-tests-adapter/"
+          else
+            path="./"
+          fi
+          echo "path=$path" >> $GITHUB_OUTPUT
+
+      - name: "[DEBUG] Inputs"
+        run: |
+          echo package             : ${{ inputs.package }}
+          echo branch              : ${{ inputs.branch }}
+          echo version             : ${{ inputs.version }}
+          echo deploy-environment  : ${{ inputs.deploy-environment }}
+          echo archive-name        : ${{ steps.archive.outputs.name }}
+          echo working-dir         : ${{ steps.working-dir.outputs.path }}
+          echo NOTIFICATION_PREFIX : ${{ env.NOTIFICATION_PREFIX }}
+
+  build:
+    name: "Build the artifacts"
+    needs: [calculated-inputs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Check out `${{ inputs.branch }}`"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: "Setup `hatch`"
+        uses: ./.github/actions/setup-environment
+
+      - name: "Build `${{ inputs.package }}`"
+        uses: ./.github/actions/build
+        with:
+          archive-name: ${{ needs.calculated-inputs.outputs.archive-name }}
+          working-dir: ${{ needs.calculated-inputs.outputs.working-dir }}
