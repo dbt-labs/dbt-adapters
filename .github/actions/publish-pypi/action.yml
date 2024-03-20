@@ -17,7 +17,11 @@ runs:
       uses: actions/download-artifact@v3
       with:
         name: ${{ inputs.archive-name }}
-        path: .
+        path: dist/
+
+    - name: "[DEBUG]"
+      run : ls -R
+      shell: bash
 
     - name: Publish artifacts to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1

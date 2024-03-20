@@ -54,7 +54,7 @@ body:
 
   - type: textarea
     attributes:
-      label: Suggested tests
+      label: Testing
       description: |
         Provide scenarios to test. Include both positive and negative tests if possible.
         Link to existing similar tests if appropriate.
@@ -71,13 +71,24 @@ body:
       
   - type: textarea
     attributes:
-      label: Are there any security concerns with these changes?
+      label: Security
       description: |
+        Are there any security concerns with these changes?
         When in doubt, run it by the security team.
       placeholder: |
         Example: Logging sensitive data
     validations:
-      required: true       
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Docs
+      description: |
+        Are there any docs the will need to be added or updated?
+      placeholder: |
+        Example: We need to document how to configure this new authentication method.
+    validations:
+      required: true
 
   - type: textarea
     attributes:
