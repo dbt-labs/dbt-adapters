@@ -71,8 +71,8 @@ jobs:
         shell: bash
         run: |
           ./.github/scripts/update_dev_packages.sh \
-            ${{ github.event.inputs.dbt_adapters_branch }} \
-            ${{ github.event.inputs.core_branch }}
+            ${{ inputs.dbt_adapters_branch }} \
+            ${{ inputs.core_branch }}
 
       - name: Setup postgres
         shell: bash
