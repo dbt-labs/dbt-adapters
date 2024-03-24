@@ -515,3 +515,13 @@ message ConstraintNotSupportedMsg {
     AdapterCommonEventInfo info = 1;
     ConstraintNotSupported data = 2;
 }
+
+// E050
+message TypeCodeNotFound {
+    int32 type_code = 1;
+}
+
+message TypeCodeNotFoundMsg {
+    AdapterCommonEventInfo info = 1;
+    TypeCodeNotFound data = 2;
+}
