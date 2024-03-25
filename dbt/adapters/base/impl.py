@@ -1290,45 +1290,65 @@ class BaseAdapter(metaclass=AdapterMeta):
     def calculate_freshness_from_metadata_batch(
         self,
         sources: List[BaseRelation],
-        information_schema: InformationSchema,
         macro_resolver: Optional[MacroResolverProtocol] = None,
-    ) -> Tuple[Optional[AdapterResponse], Dict[Tuple[str, str], FreshnessResponse]]:
-        result = self.execute_macro(
-            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
-            kwargs={
-                "information_schema": information_schema,
-                "relations": sources,
-            },
-            macro_resolver=macro_resolver,
-        )
-        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+    ) -> Tuple[Optional[AdapterResponse], Dict[BaseRelation, FreshnessResponse]]:
+        # Track schema, identifiers of sources for lookup from batch query
+        schema_identifier_to_source = {
+            (source.schema.lower(), source.identifier.lower()): source for source in sources
+        }
 
-        freshness_responses: Dict[Tuple[str, str], FreshnessResponse] = {}
-        for row in table:
-            try:
-                last_modified_val = get_column_value_uncased("last_modified", row)
-                snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
-                identifier = get_column_value_uncased("identifier", row)
-                schema = get_column_value_uncased("schema", row)
-            except Exception:
-                raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
-
-            if last_modified_val is None:
-                # Interpret missing value as "infinitely long ago"
-                max_loaded_at = datetime(1, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
+        # Group metadata sources by information schema -- one query per information schema will be necessary
+        information_schema_to_metadata_sources: Dict[InformationSchema, List[BaseRelation]] = {}
+        for source in sources:
+            information_schema = source.information_schema_only()
+            if information_schema not in information_schema_to_metadata_sources:
+                information_schema_to_metadata_sources[information_schema] = [source]
             else:
-                max_loaded_at = _utc(last_modified_val, None, "last_modified")
+                information_schema_to_metadata_sources[information_schema].append(source)
 
-            snapshotted_at = _utc(snapshotted_at_val, None, "snapshotted_at")
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+        for (
+            information_schema,
+            sources_for_information_schema,
+        ) in information_schema_to_metadata_sources.items():
+            result = self.execute_macro(
+                GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+                kwargs={
+                    "information_schema": information_schema,
+                    "relations": sources_for_information_schema,
+                },
+                macro_resolver=macro_resolver,
+            )
+            adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
 
-            age = (snapshotted_at - max_loaded_at).total_seconds()
+            for row in table:
+                try:
+                    last_modified_val = get_column_value_uncased("last_modified", row)
+                    snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
+                    identifier = get_column_value_uncased("identifier", row)
+                    schema = get_column_value_uncased("schema", row)
+                except Exception:
+                    raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
 
-            freshness: FreshnessResponse = {
-                "max_loaded_at": max_loaded_at,
-                "snapshotted_at": snapshotted_at,
-                "age": age,
-            }
-            freshness_responses[(schema, identifier)] = freshness
+                if last_modified_val is None:
+                    # Interpret missing value as "infinitely long ago"
+                    max_loaded_at = datetime(1, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
+                else:
+                    max_loaded_at = _utc(last_modified_val, None, "last_modified")
+
+                snapshotted_at = _utc(snapshotted_at_val, None, "snapshotted_at")
+
+                age = (snapshotted_at - max_loaded_at).total_seconds()
+
+                freshness: FreshnessResponse = {
+                    "max_loaded_at": max_loaded_at,
+                    "snapshotted_at": snapshotted_at,
+                    "age": age,
+                }
+                source_relation_for_result = schema_identifier_to_source[
+                    (schema.lower(), identifier.lower())
+                ]
+                freshness_responses[source_relation_for_result] = freshness
 
         return adapter_response, freshness_responses
 
