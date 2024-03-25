@@ -1294,7 +1294,11 @@ class BaseAdapter(metaclass=AdapterMeta):
     ) -> Tuple[Optional[AdapterResponse], Dict[BaseRelation, FreshnessResponse]]:
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
-            (source.schema.lower(), source.identifier.lower()): source for source in sources
+            (
+                source.path.get_lowered_part(ComponentName.Schema),
+                source.path.get_lowered_part(ComponentName.Identifier),
+            ): source
+            for source in sources
         }
 
         # Group metadata sources by information schema -- one query per information schema will be necessary
@@ -1330,7 +1334,9 @@ class BaseAdapter(metaclass=AdapterMeta):
                 except Exception:
                     raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
 
-                freshness_response = self._create_freshness_response(last_modified_val, snapshotted_at_val)
+                freshness_response = self._create_freshness_response(
+                    last_modified_val, snapshotted_at_val
+                )
                 source_relation_for_result = schema_identifier_to_source[
                     (schema.lower(), identifier.lower())
                 ]
@@ -1349,7 +1355,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         )
         return adapter_response, list(freshness_responses.values())[0]
 
-    def _create_freshness_response(self, last_modified: Optional[datetime], snapshotted_at: Optional[datetime]) -> FreshnessResponse:
+    def _create_freshness_response(
+        self, last_modified: Optional[datetime], snapshotted_at: Optional[datetime]
+    ) -> FreshnessResponse:
         if last_modified is None:
             # Interpret missing value as "infinitely long ago"
             max_loaded_at = datetime(1, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
