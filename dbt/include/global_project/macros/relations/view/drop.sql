@@ -5,7 +5,7 @@ actually executes the drop, and `get_drop_sql`, which returns the template.
 */ #}
 
 {% macro drop_view(relation) -%}
-    {{ return(adapter.dispatch('drop_view', 'dbt')(relation)) }}
+    {{- adapter.dispatch('drop_view', 'dbt')(relation) -}}
 {%- endmacro %}
 
 

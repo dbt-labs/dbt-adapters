@@ -52,13 +52,13 @@ class BaseRelation(FakeAPIObject, Hashable):
     # adding a relation type here also requires defining the associated rename macro
     # e.g. adding RelationType.View in dbt-postgres requires that you define:
     # include/postgres/macros/relations/view/rename.sql::postgres__get_rename_view_sql()
-    renameable_relations: SerializableIterable = ()
+    renameable_relations: SerializableIterable = field(default_factory=frozenset)
 
     # register relation types that are atomically replaceable, e.g. they have "create or replace" syntax
     # adding a relation type here also requires defining the associated replace macro
     # e.g. adding RelationType.View in dbt-postgres requires that you define:
     # include/postgres/macros/relations/view/replace.sql::postgres__get_replace_view_sql()
-    replaceable_relations: SerializableIterable = ()
+    replaceable_relations: SerializableIterable = field(default_factory=frozenset)
 
     def _is_exactish_match(self, field: ComponentName, value: str) -> bool:
         if self.dbt_created and self.quote_policy.get_part(field) is False:
