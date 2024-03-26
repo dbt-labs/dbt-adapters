@@ -71,7 +71,7 @@ class SQLAdapter(BaseAdapter):
         return "text"
 
     @classmethod
-    def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_number_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         import agate
 
         # TODO CT-211

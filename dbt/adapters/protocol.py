@@ -47,7 +47,8 @@ Self = TypeVar("Self", bound="RelationProtocol")
 
 class RelationProtocol(Protocol):
     @classmethod
-    def get_default_quote_policy(cls) -> Policy: ...
+    def get_default_quote_policy(cls) -> Policy:
+        ...
 
     @classmethod
     def create_from(
@@ -55,7 +56,8 @@ class RelationProtocol(Protocol):
         quoting: HasQuoting,
         relation_config: RelationConfig,
         **kwargs: Any,
-    ) -> Self: ...
+    ) -> Self:
+        ...
 
 
 AdapterConfig_T = TypeVar("AdapterConfig_T", bound=AdapterConfig)
@@ -71,7 +73,8 @@ class MacroContextGeneratorCallable(Protocol):
         config: AdapterRequiredConfig,
         macro_resolver: MacroResolverProtocol,
         package_name: Optional[str],
-    ) -> Dict[str, Any]: ...
+    ) -> Dict[str, Any]:
+        ...
 
 
 # TODO CT-211

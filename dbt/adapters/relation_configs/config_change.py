@@ -16,9 +16,7 @@ class RelationConfigChangeAction(StrEnum):
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
 class RelationConfigChange(RelationConfigBase, ABC):
     action: RelationConfigChangeAction
-    context: (
-        Hashable  # this is usually a RelationConfig, e.g. IndexConfig, but shouldn't be limited
-    )
+    context: Hashable  # this is usually a RelationConfig, e.g. IndexConfig, but shouldn't be limited
 
     @property
     @abstractmethod
