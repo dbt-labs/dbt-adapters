@@ -20,16 +20,9 @@ from typing import (
     Type,
     TypedDict,
     Union,
+    TYPE_CHECKING,
 )
 
-import agate
-from dbt_common.clients.agate_helper import (
-    Integer,
-    empty_table,
-    get_column_value_uncased,
-    merge_tables,
-    table_from_rows,
-)
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -95,6 +88,9 @@ from dbt.adapters.exceptions import (
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 
+if TYPE_CHECKING:
+    import agate
+
 
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
@@ -108,7 +104,14 @@ class ConstraintSupport(str, Enum):
     NOT_SUPPORTED = "not_supported"
 
 
-def _expect_row_value(key: str, row: agate.Row):
+def _parse_callback_empty_table(*args, **kwargs) -> Tuple[str, "agate.Table"]:
+    # Lazy load agate_helper to avoid importing agate when it is not necessary.
+    from dbt_common.clients.agate_helper import empty_table
+
+    return "", empty_table()
+
+
+def _expect_row_value(key: str, row: "agate.Row"):
     if key not in row.keys():
         raise DbtInternalError(
             'Got a row without "{}" column, columns: {}'.format(key, row.keys())
@@ -118,13 +121,13 @@ def _expect_row_value(key: str, row: agate.Row):
 
 def _catalog_filter_schemas(
     used_schemas: FrozenSet[Tuple[str, str]]
-) -> Callable[[agate.Row], bool]:
+) -> Callable[["agate.Row"], bool]:
     """Return a function that takes a row and decides if the row should be
     included in the catalog output.
     """
     schemas = frozenset((d.lower(), s.lower()) for d, s in used_schemas)
 
-    def test(row: agate.Row) -> bool:
+    def test(row: "agate.Row") -> bool:
         table_database = _expect_row_value("table_database", row)
         table_schema = _expect_row_value("table_schema", row)
         # the schema may be present but None, which is not an error and should
@@ -255,6 +258,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         ConstraintType.foreign_key: ConstraintSupport.ENFORCED,
     }
 
+    MAX_SCHEMA_METADATA_RELATIONS = 100
+
     # This static member variable can be overriden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
@@ -324,14 +329,14 @@ class BaseAdapter(metaclass=AdapterMeta):
             if self.connections.query_header is not None:
                 self.connections.query_header.reset()
 
-    @available.parse(lambda *a, **k: ("", empty_table()))
+    @available.parse(_parse_callback_empty_table)
     def execute(
         self,
         sql: str,
         auto_begin: bool = False,
         fetch: bool = False,
         limit: Optional[int] = None,
-    ) -> Tuple[AdapterResponse, agate.Table]:
+    ) -> Tuple[AdapterResponse, "agate.Table"]:
         """Execute the given SQL. This is a thin wrapper around
         ConnectionManager.execute.
 
@@ -341,7 +346,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         :param bool fetch: If set, fetch results.
         :param Optional[int] limit: If set, only fetch n number of rows
         :return: A tuple of the query status and results (empty if fetch=False).
-        :rtype: Tuple[AdapterResponse, agate.Table]
+        :rtype: Tuple[AdapterResponse, "agate.Table"]
         """
         return self.connections.execute(sql=sql, auto_begin=auto_begin, fetch=fetch, limit=limit)
 
@@ -369,8 +374,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         ]
         return columns
 
-    @available.parse(lambda *a, **k: ("", empty_table()))
-    def get_partitions_metadata(self, table: str) -> Tuple[agate.Table]:
+    @available.parse(_parse_callback_empty_table)
+    def get_partitions_metadata(self, table: str) -> Tuple["agate.Table"]:
         """
         TODO: Can we move this to dbt-bigquery?
         Obtain partitions metadata for a BigQuery partitioned table.
@@ -378,7 +383,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         :param str table: a partitioned table id, in standard SQL format.
         :return: a partition metadata tuple, as described in
             https://cloud.google.com/bigquery/docs/creating-partitioned-tables#getting_partition_metadata_using_meta_tables.
-        :rtype: agate.Table
+        :rtype: "agate.Table"
         """
         if hasattr(self.connections, "get_partitions_metadata"):
             return self.connections.get_partitions_metadata(table=table)
@@ -666,7 +671,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     # Methods about grants
     ###
     @available
-    def standardize_grants_dict(self, grants_table: agate.Table) -> dict:
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of `show grants` (or equivalent) to match the
         grants which a user would configure in their project.
 
@@ -941,7 +946,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     ###
     @classmethod
     @abc.abstractmethod
-    def convert_text_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_text_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.Text
         type for the given agate table and column index.
 
@@ -953,7 +958,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_number_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.Number
         type for the given agate table and column index.
 
@@ -964,7 +969,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`convert_number_type` is not implemented for this adapter!")
 
     @classmethod
-    def convert_integer_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_integer_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.Number
         type for the given agate table and column index.
 
@@ -976,7 +981,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def convert_boolean_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_boolean_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.Boolean
         type for the given agate table and column index.
 
@@ -988,7 +993,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_datetime_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.DateTime
         type for the given agate table and column index.
 
@@ -1000,7 +1005,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def convert_date_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_date_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the agate.Date
         type for the given agate table and column index.
 
@@ -1012,7 +1017,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     @abc.abstractmethod
-    def convert_time_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+    def convert_time_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         """Return the type in the database that best maps to the
         agate.TimeDelta type for the given agate table and column index.
 
@@ -1024,11 +1029,14 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     @classmethod
-    def convert_type(cls, agate_table: agate.Table, col_idx: int) -> Optional[str]:
+    def convert_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
         return cls.convert_agate_type(agate_table, col_idx)
 
     @classmethod
-    def convert_agate_type(cls, agate_table: agate.Table, col_idx: int) -> Optional[str]:
+    def convert_agate_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
+        import agate
+        from dbt_common.clients.agate_helper import Integer
+
         agate_type: Type = agate_table.column_types[col_idx]
         conversions: List[Tuple[Type, Callable[..., str]]] = [
             (Integer, cls.convert_integer_type),
@@ -1105,11 +1113,13 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     def _catalog_filter_table(
-        cls, table: agate.Table, used_schemas: FrozenSet[Tuple[str, str]]
-    ) -> agate.Table:
+        cls, table: "agate.Table", used_schemas: FrozenSet[Tuple[str, str]]
+    ) -> "agate.Table":
         """Filter the table as appropriate for catalog entries. Subclasses can
         override this to change filtering rules on a per-adapter basis.
         """
+        from dbt_common.clients.agate_helper import table_from_rows
+
         # force database + schema to be strings
         table = table_from_rows(
             table.rows,
@@ -1123,7 +1133,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         information_schema: InformationSchema,
         schemas: Set[str],
         used_schemas: FrozenSet[Tuple[str, str]],
-    ) -> agate.Table:
+    ) -> "agate.Table":
         kwargs = {"information_schema": information_schema, "schemas": schemas}
         table = self.execute_macro(GET_CATALOG_MACRO_NAME, kwargs=kwargs)
 
@@ -1135,7 +1145,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         information_schema: InformationSchema,
         relations: List[BaseRelation],
         used_schemas: FrozenSet[Tuple[str, str]],
-    ) -> agate.Table:
+    ) -> "agate.Table":
         kwargs = {
             "information_schema": information_schema,
             "relations": relations,
@@ -1151,10 +1161,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         used_schemas: FrozenSet[Tuple[str, str]],
         relations: Optional[Set[BaseRelation]] = None,
     ):
-        catalogs: agate.Table
+        catalogs: "agate.Table"
         if (
             relations is None
-            or len(relations) > 100
+            or len(relations) > self.MAX_SCHEMA_METADATA_RELATIONS
             or not self.supports(Capability.SchemaMetadataByRelations)
         ):
             # Do it the traditional way. We get the full catalog.
@@ -1174,7 +1184,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 for r in relations
             }
 
-            def in_map(row: agate.Row):
+            def in_map(row: "agate.Row"):
                 d = _expect_row_value("table_database", row)
                 s = _expect_row_value("table_schema", row)
                 i = _expect_row_value("table_name", row)
@@ -1187,16 +1197,16 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return catalogs, exceptions
 
-    def row_matches_relation(self, row: agate.Row, relations: Set[BaseRelation]):
+    def row_matches_relation(self, row: "agate.Row", relations: Set[BaseRelation]):
         pass
 
     def get_catalog(
         self,
         relation_configs: Iterable[RelationConfig],
         used_schemas: FrozenSet[Tuple[str, str]],
-    ) -> Tuple[agate.Table, List[Exception]]:
+    ) -> Tuple["agate.Table", List[Exception]]:
         with executor(self.config) as tpe:
-            futures: List[Future[agate.Table]] = []
+            futures: List[Future["agate.Table"]] = []
             schema_map: SchemaSearchMap = self._get_catalog_schemas(relation_configs)
             for info, schemas in schema_map.items():
                 if len(schemas) == 0:
@@ -1212,9 +1222,9 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     def get_catalog_by_relations(
         self, used_schemas: FrozenSet[Tuple[str, str]], relations: Set[BaseRelation]
-    ) -> Tuple[agate.Table, List[Exception]]:
+    ) -> Tuple["agate.Table", List[Exception]]:
         with executor(self.config) as tpe:
-            futures: List[Future[agate.Table]] = []
+            futures: List[Future["agate.Table"]] = []
             relations_by_schema = self._get_catalog_relations_by_info_schema(relations)
             for info_schema in relations_by_schema:
                 name = ".".join([str(info_schema.database), "information_schema"])
@@ -1244,6 +1254,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
         """Calculate the freshness of sources in dbt, and return it"""
+        import agate
+
         kwargs: Dict[str, Any] = {
             "source": source,
             "loaded_at_field": loaded_at_field,
@@ -1254,8 +1266,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         # in older versions of dbt-core, the 'collect_freshness' macro returned the table of results directly
         # starting in v1.5, by default, we return both the table and the adapter response (metadata about the query)
         result: Union[
-            AttrDict,  # current: contains AdapterResponse + agate.Table
-            agate.Table,  # previous: just table
+            AttrDict,  # current: contains AdapterResponse + "agate.Table"
+            "agate.Table",  # previous: just table
         ]
         result = self.execute_macro(
             FRESHNESS_MACRO_NAME, kwargs=kwargs, macro_resolver=macro_resolver
@@ -1303,6 +1315,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
 
         try:
+            from dbt_common.clients.agate_helper import get_column_value_uncased
+
             row = table[0]
             last_modified_val = get_column_value_uncased("last_modified", row)
             snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
@@ -1652,10 +1666,12 @@ join diff_count using (id)
 
 
 def catch_as_completed(
-    futures,  # typing: List[Future[agate.Table]]
-) -> Tuple[agate.Table, List[Exception]]:
-    # catalogs: agate.Table = agate.Table(rows=[])
-    tables: List[agate.Table] = []
+    futures,  # typing: List[Future["agate.Table"]]
+) -> Tuple["agate.Table", List[Exception]]:
+    from dbt_common.clients.agate_helper import merge_tables
+
+    # catalogs: "agate.Table" =".Table(rows=[])
+    tables: List["agate.Table"] = []
     exceptions: List[Exception] = []
 
     for future in as_completed(futures):
