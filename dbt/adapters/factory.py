@@ -100,9 +100,7 @@ class AdapterContainer:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
         adapter_version = self._adapter_version(adapter_name)
-        fire_event(
-            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version)
-        )
+        fire_event(AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version))
         with self.lock:
             if adapter_name in self.adapters:
                 # this shouldn't really happen...
