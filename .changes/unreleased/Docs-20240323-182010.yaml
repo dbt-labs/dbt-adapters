@@ -1,0 +1,6 @@
+kind: Docs
+body: Use `dbt-adapters` throughout the contributing guide
+time: 2024-03-23T18:20:10.796497-06:00
+custom:
+  Author: dbeatty10
+  Issue: "136"
