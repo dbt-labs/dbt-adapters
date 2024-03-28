@@ -1,0 +1,6 @@
+kind: Security
+body: Pin `black>=24.3` in `pyproject.toml`
+time: 2024-03-27T19:39:42.633016-04:00
+custom:
+  Author: mikealfare
+  Issue: "40"

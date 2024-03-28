@@ -58,7 +58,7 @@ dependencies = [
 [tool.hatch.envs.lint]
 detached = true
 dependencies = [
-    "black",
+    "black>=24.3",
     "flake8",
     "Flake8-pyproject",
 ]
