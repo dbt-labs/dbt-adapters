@@ -1291,7 +1291,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self,
         sources: List[BaseRelation],
         macro_resolver: Optional[MacroResolverProtocol] = None,
-    ) -> Tuple[Optional[AdapterResponse], Dict[BaseRelation, FreshnessResponse]]:
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
             (
@@ -1302,19 +1302,14 @@ class BaseAdapter(metaclass=AdapterMeta):
         }
 
         # Group metadata sources by information schema -- one query per information schema will be necessary
-        information_schema_to_metadata_sources: Dict[InformationSchema, List[BaseRelation]] = {}
-        for source in sources:
-            information_schema = source.information_schema_only()
-            if information_schema not in information_schema_to_metadata_sources:
-                information_schema_to_metadata_sources[information_schema] = [source]
-            else:
-                information_schema_to_metadata_sources[information_schema].append(source)
+        sources_by_info_schema: Dict[InformationSchema, List[BaseRelation]] = self._get_catalog_relations_by_info_schema(sources)
 
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+        adapter_responses: List[Optional[AdapterResponse]] = []
         for (
             information_schema,
             sources_for_information_schema,
-        ) in information_schema_to_metadata_sources.items():
+        ) in sources_by_info_schema.items():
             result = self.execute_macro(
                 GET_RELATION_LAST_MODIFIED_MACRO_NAME,
                 kwargs={
@@ -1324,35 +1319,25 @@ class BaseAdapter(metaclass=AdapterMeta):
                 macro_resolver=macro_resolver,
             )
             adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+            adapter_responses.append(adapter_response)
 
             for row in table:
-                try:
-                    last_modified_val = get_column_value_uncased("last_modified", row)
-                    snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
-                    identifier = get_column_value_uncased("identifier", row)
-                    schema = get_column_value_uncased("schema", row)
-                except Exception:
-                    raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
-
-                freshness_response = self._create_freshness_response(
-                    last_modified_val, snapshotted_at_val
-                )
-                source_relation_for_result = schema_identifier_to_source[
-                    (schema.lower(), identifier.lower())
-                ]
+                raw_relation, freshness_response = self._parse_freshness_row(row, table)
+                source_relation_for_result = schema_identifier_to_source[raw_relation]
                 freshness_responses[source_relation_for_result] = freshness_response
 
-        return adapter_response, freshness_responses
+        return adapter_responses, freshness_responses
 
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
-        adapter_response, freshness_responses = self.calculate_freshness_from_metadata_batch(
+        adapter_responses, freshness_responses = self.calculate_freshness_from_metadata_batch(
             sources=[source],
             macro_resolver=macro_resolver,
         )
+        adapter_response = adapter_responses[0] if adapter_responses else None
         return adapter_response, list(freshness_responses.values())[0]
 
     def _create_freshness_response(
@@ -1373,6 +1358,22 @@ class BaseAdapter(metaclass=AdapterMeta):
         }
 
         return freshness
+
+    def _parse_freshness_row(self, row: agate.Row, table: agate.Table) -> Tuple[Any, FreshnessResponse]:
+        try:
+            last_modified_val = get_column_value_uncased("last_modified", row)
+            snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
+            identifier = get_column_value_uncased("identifier", row)
+            schema = get_column_value_uncased("schema", row)
+        except Exception:
+            raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
+
+        freshness_response = self._create_freshness_response(
+            last_modified_val,
+            snapshotted_at_val
+        )
+        raw_relation = schema.lower(), identifier.lower()
+        return raw_relation, freshness_response
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Any:
         """A hook for running some operation before the model materialization
