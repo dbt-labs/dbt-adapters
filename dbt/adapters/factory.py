@@ -7,6 +7,7 @@ import traceback
 from typing import Any, Dict, List, Optional, Set, Type
 
 from dbt_common.events.functions import fire_event
+from dbt_common.events.base_types import EventLevel
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError
 from dbt_common.semver import VersionSpecifier
 
@@ -96,11 +97,22 @@ class AdapterContainer:
 
         return plugin.credentials
 
-    def register_adapter(self, config: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
+    def register_adapter(
+        self,
+        config: AdapterRequiredConfig,
+        mp_context: SpawnContext,
+        AdapterRegistered_log_level: EventLevel=EventLevel.INFO
+    ) -> None:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
         adapter_version = self._adapter_version(adapter_name)
-        fire_event(AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version))
+        fire_event(
+            AdapterRegistered(
+                adapter_name=adapter_name,
+                adapter_version=adapter_version
+            ),
+            level=AdapterRegistered_log_level
+        )
         with self.lock:
             if adapter_name in self.adapters:
                 # this shouldn't really happen...
