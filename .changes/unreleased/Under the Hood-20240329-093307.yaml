@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add the option to set the log level of the AdapterRegistered event
+time: 2024-03-29T09:33:07.737464-05:00
+custom:
+  Author: emmyoop
+  Issue: "141"
