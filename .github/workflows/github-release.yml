@@ -211,7 +211,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.archive_name }}
-          path: .
+          path: dist/
 
       - name: "[DEBUG] Display Structure Of Expected Files"
         run: |

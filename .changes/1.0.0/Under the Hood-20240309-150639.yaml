@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Lazy load agate to improve dbt-core performance
-time: 2024-03-09T15:06:39.038593-05:00
-custom:
-  Author: dwreeves
-  Issue: "125"
