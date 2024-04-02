@@ -1372,7 +1372,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             last_modified_val,
             snapshotted_at_val
         )
-        raw_relation = schema.lower(), identifier.lower()
+        raw_relation = schema.lower().strip(), identifier.lower().strip()
         return raw_relation, freshness_response
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Any:
