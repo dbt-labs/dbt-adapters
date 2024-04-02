@@ -198,7 +198,11 @@ class AdapterContainer:
 FACTORY: AdapterContainer = AdapterContainer()
 
 
-def register_adapter(config: AdapterRequiredConfig, mp_context: SpawnContext, AdapterRegistered_log_level: EventLevel) -> None:
+def register_adapter(
+        config: AdapterRequiredConfig,
+        mp_context: SpawnContext,
+        AdapterRegistered_log_level: Optional[EventLevel] = EventLevel.INFO
+) -> None:
     FACTORY.register_adapter(config, mp_context, AdapterRegistered_log_level)
 
 
