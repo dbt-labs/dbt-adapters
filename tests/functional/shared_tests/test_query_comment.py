@@ -6,6 +6,7 @@ from dbt.tests.adapter.query_comment.test_query_comment import (
     BaseNullQueryComments,
     BaseEmptyQueryComments,
 )
+import pytest
 
 
 class TestQueryComments(BaseQueryComments):
@@ -17,7 +18,12 @@ class TestMacroQueryComments(BaseMacroQueryComments):
 
 
 class TestMacroArgsQueryComments(BaseMacroArgsQueryComments):
-    pass
+    @pytest.mark.skip(
+        "This test is incorrectly comparing the version of `dbt-core`"
+        "to the version of `dbt-postgres`, which is not always the same."
+    )
+    def test_matches_comment(self, project, get_package_version):
+        pass
 
 
 class TestMacroInvalidQueryComments(BaseMacroInvalidQueryComments):
