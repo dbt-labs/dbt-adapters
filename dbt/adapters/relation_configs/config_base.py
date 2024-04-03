@@ -1,8 +1,10 @@
 from dataclasses import dataclass
-from typing import Dict, Union
+from typing import Dict, Union, TYPE_CHECKING
 
-import agate
 from dbt_common.utils import filter_null_values
+
+if TYPE_CHECKING:
+    import agate
 
 
 """
@@ -18,7 +20,7 @@ like name. But it also can have multiple indexes, which needs to be a separate q
     ])
 }
 """
-RelationResults = Dict[str, Union[agate.Row, agate.Table]]
+RelationResults = Dict[str, Union["agate.Row", "agate.Table"]]
 
 
 @dataclass(frozen=True)
