@@ -1062,6 +1062,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         project: Optional[str] = None,
         context_override: Optional[Dict[str, Any]] = None,
         kwargs: Optional[Dict[str, Any]] = None,
+        needs_conn: bool = False,
     ) -> AttrDict:
         """Look macro_name up in the manifest and execute its results.
 
@@ -1074,6 +1075,10 @@ class BaseAdapter(metaclass=AdapterMeta):
             execution context.
         :param kwargs: An optional dict of keyword args used to pass to the
             macro.
+        : param needs_conn: A boolean that indicates whether the specified macro
+            requires an open connection to execute. If needs_conn is True, a
+            connection is expected and opened if necessary. Otherwise (and by default),
+            no connection is expected prior to executing the macro.
         """
 
         if kwargs is None:
@@ -1106,10 +1111,8 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         macro_function = CallableMacroGenerator(macro, macro_context)
 
-        # A connection may or may not be required for a given macro execution
-        connection = self.connections.get_if_exists()
-        # If a connection exists, ensure it is open prior to executing a macro
-        if connection:
+        if needs_conn:
+            connection = self.connections.get_thread_connection()
             self.connections.open(connection)
 
         with self.connections.exception_handler(f"macro {macro_name}"):
@@ -1333,6 +1336,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                     "relations": sources_for_information_schema,
                 },
                 macro_resolver=macro_resolver,
+                needs_conn=True,
             )
             adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
             adapter_responses.append(adapter_response)
