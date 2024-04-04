@@ -1100,6 +1100,12 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         macro_function = CallableMacroGenerator(macro, macro_context)
 
+        # A connection may or may not be required for a given macro execution
+        connection = self.connections.get_if_exists()
+        # If a connection exists, ensure it is open prior to executing a macro
+        if connection:
+            self.connections.open(connection)
+
         with self.connections.exception_handler(f"macro {macro_name}"):
             result = macro_function(**kwargs)
         return result
