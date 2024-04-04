@@ -10,10 +10,10 @@ from typing import (
     Type,
     TypeVar,
     Tuple,
+    TYPE_CHECKING,
 )
 from typing_extensions import Protocol
 
-import agate
 from dbt_common.clients.jinja import MacroProtocol
 from dbt_common.contracts.config.base import BaseConfig
 
@@ -24,6 +24,9 @@ from dbt.adapters.contracts.connection import (
 )
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import HasQuoting, Policy, RelationConfig
+
+if TYPE_CHECKING:
+    import agate
 
 
 @dataclass
@@ -169,5 +172,5 @@ class AdapterProtocol(  # type: ignore[misc]
 
     def execute(
         self, sql: str, auto_begin: bool = False, fetch: bool = False
-    ) -> Tuple[AdapterResponse, agate.Table]:
+    ) -> Tuple[AdapterResponse, "agate.Table"]:
         ...
