@@ -1375,7 +1375,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return freshness
 
-    def _parse_freshness_row(self, row: agate.Row, table: agate.Table) -> Tuple[Any, FreshnessResponse]:
+    def _parse_freshness_row(self, row: "agate.Row", table: "agate.Table") -> Tuple[Any, FreshnessResponse]:
         try:
             last_modified_val = get_column_value_uncased("last_modified", row)
             snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
