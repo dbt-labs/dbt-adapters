@@ -1311,6 +1311,20 @@ class BaseAdapter(metaclass=AdapterMeta):
         sources: List[BaseRelation],
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        """
+        Given a list of sources (BaseRelations), calculate the metadata-based freshness in batch.
+        This method should _not_ execute a warehouse query per source, but rather batch up
+        the sources into as few requests as possible to minimize the number of roundtrips required
+        to compute metadata-based freshness for each input source.
+
+        :param sources: The list of sources to calculate metadata-based freshness for
+        :param macro_resolver: An optional macro_resolver to use for get_relation_last_modified
+        :return: a tuple where:
+            * the first element is a list of optional AdapterResponses indicating the response
+              for each request the method made to compute the freshness for the provided sources.
+            * the second element is a dictionary mapping an input source BaseRelation to a FreshnessResponse,
+              if it was possible to calculate a FreshnessResponse for the source.
+        """
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
             (
