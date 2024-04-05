@@ -2,6 +2,7 @@ from dbt_common.ui import line_wrap_message, warning_tag
 
 from dbt.adapters.events.base_types import (
     DebugLevel,
+    DynamicLevel,
     ErrorLevel,
     InfoLevel,
     WarnLevel,
@@ -281,7 +282,7 @@ class CacheDumpGraph(DebugLevel):
 # Skipping E032, E033, E034
 
 
-class AdapterRegistered(InfoLevel):
+class AdapterRegistered(DynamicLevel):
     def code(self) -> str:
         return "E034"
 
