@@ -15,11 +15,10 @@
   {%-   do column_name_to_data_types.update({column.name|lower: column.data_type}) -%}
   {%- endfor -%}
 
-  {%- if expected_rows -%}
-    {%- set expected_sql = get_expected_sql(expected_rows, column_name_to_data_types) -%}
-  {%- endif -%}
-
-  {%- set unit_test_sql = get_unit_test_sql(sql, expected_sql, tested_expected_column_names) -%}
+  {% if not expected_sql %}
+  {%   set expected_sql = get_expected_sql(expected_rows, column_name_to_data_types) %}
+  {% endif %}
+  {% set unit_test_sql = get_unit_test_sql(sql, expected_sql, tested_expected_column_names) %}
 
   {% call statement('main', fetch_result=True) -%}
 
