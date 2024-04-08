@@ -13,6 +13,9 @@ class Capability(str, Enum):
     TableLastModifiedMetadata = "TableLastModifiedMetadata"
     """Indicates support for determining the time of the last table modification by querying database metadata."""
 
+    RelationTags = "RelationTags"
+    """Indicates support for setting relation tags"""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"
