@@ -1,8 +1,42 @@
 version: 2
 updates:
-  # python dependencies
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "daily"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "pip"
+    directory: "/dbt-tests-adapter"
+    schedule:
+      interval: "daily"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/build"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/build-hatch"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/publish-pypi"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/publish-results"
+    schedule:
+      interval: "weekly"
+    rebase-strategy: "disabled"
+  - package-ecosystem: "github-actions"
+    directory: "/.github/actions/setup-hatch"
+    schedule:
+      interval: "weekly"
     rebase-strategy: "disabled"
