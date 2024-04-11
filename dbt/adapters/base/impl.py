@@ -1372,7 +1372,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             macro_resolver=macro_resolver,
         )
         adapter_response = adapter_responses[0] if adapter_responses else None
-        return adapter_response, list(freshness_responses.values())[0]
+        return adapter_response, freshness_responses[source]
 
     def _create_freshness_response(
         self, last_modified: Optional[datetime], snapshotted_at: Optional[datetime]
