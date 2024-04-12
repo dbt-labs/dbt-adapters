@@ -11,32 +11,7 @@ updates:
       interval: "daily"
     rebase-strategy: "disabled"
   - package-ecosystem: "github-actions"
-    directory: "/.github/workflows"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/build"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/build-hatch"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/publish-pypi"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/publish-results"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-  - package-ecosystem: "github-actions"
-    directory: "/.github/actions/setup-hatch"
+    directory: "/"
     schedule:
       interval: "weekly"
     rebase-strategy: "disabled"
