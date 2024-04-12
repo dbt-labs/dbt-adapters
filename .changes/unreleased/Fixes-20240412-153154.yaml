@@ -1,0 +1,6 @@
+kind: Fixes
+body: Determine `psycopg2` based on `platform_system` (Linux or other)
+time: 2024-04-12T15:31:54.861201-04:00
+custom:
+  Author: mikealfare
+  Issue: "60"

@@ -39,6 +39,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   integration:
     name: Integration Tests
@@ -68,14 +72,12 @@ jobs:
 
       - name: Update Adapters and Core branches
         if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'}}
-        shell: bash
         run: |
           ./.github/scripts/update_dev_packages.sh \
             ${{ inputs.dbt_adapters_branch }} \
             ${{ inputs.core_branch }}
 
       - name: Setup postgres
-        shell: bash
         run: psql -f ./scripts/setup_test_database.sql
         env:
           PGHOST: localhost
@@ -106,3 +108,27 @@ jobs:
           source-file: "results.csv"
           file-name: "integration_results"
           python-version: ${{ matrix.python-version }}
+
+  psycopg2-check:
+    name: "Test psycopg2 build version"
+    runs-on: ${{ matrix.scenario.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          - {platform: ubuntu-latest, psycopg2-name: psycopg2}
+          - {platform: macos-latest, psycopg2-name: psycopg2-binary}
+    steps:
+      - name: "Check out repository"
+        uses: actions/checkout@v4
+
+      - name: "Test psycopg2 name"
+        run: |
+          python -m pip install .
+          PSYCOPG2_PIP_ENTRY=$(pip list | grep "psycopg2 " || pip list | grep psycopg2-binary)
+          echo $PSYCOPG2_PIP_ENTRY
+          PSYCOPG2_NAME="${PSYCOPG2_PIP_ENTRY%% *}"
+          echo $PSYCOPG2_NAME
+          if [[ "${PSYCOPG2_NAME}" != "${{ matrix.scenario.psycopg2-name }}" ]]; then
+            exit 1
+          fi

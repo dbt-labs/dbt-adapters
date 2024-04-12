@@ -1,5 +1,5 @@
 [project]
-dynamic = ["version", "dependencies"]
+dynamic = ["version"]
 name = "dbt-postgres"
 description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
 readme = "README.md"
@@ -22,6 +22,18 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
+dependencies = [
+    # install `psycopg2` on linux (assumed production)
+    'psycopg2>=2.9,<3.0; platform_system == "Linux"',
+    # install `psycopg2-binary` on macos/windows (assumed development)
+    'psycopg2-binary>=2.9,<3.0; platform_system != "Linux"',
+    "dbt-adapters>=0.1.0a1,<2.0",
+    # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
+    "dbt-core>=1.8.0a1",
+    # installed via dbt-adapters but used directly
+    "dbt-common>=0.1.0a1,<2.0",
+    "agate>=1.0,<2.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-postgres"
@@ -42,9 +54,6 @@ packages = ["dbt"]
 
 [tool.hatch.version]
 path = "dbt/adapters/postgres/__version__.py"
-
-[tool.hatch.build.hooks.custom]
-path = "./hatch_build.py"
 
 [tool.hatch.envs.default]
 dependencies = [
