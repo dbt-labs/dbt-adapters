@@ -10,17 +10,13 @@ on:
 
 permissions: read-all
 
-defaults:
-  run:
-    shell: bash
-
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
 jobs:
-  lint:
+  code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
 
@@ -33,8 +29,6 @@ jobs:
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: Run linters
-        run: hatch run lint:all
-
-      - name: Run typechecks
-        run: hatch run typecheck:all
+      - name: Run code quality
+        shell: bash
+        run: hatch run code-quality
