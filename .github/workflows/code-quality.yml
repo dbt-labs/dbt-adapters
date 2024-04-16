@@ -33,11 +33,5 @@ jobs:
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: Add brew to the PATH
-        run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
-
-      - name: Install pre-commit
-        run: brew install pre-commit
-
       - name: Run code quality
         run: hatch run code-quality
