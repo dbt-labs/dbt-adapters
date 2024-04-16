@@ -109,7 +109,14 @@ target-version = ['py38']
 
 [tool.flake8]
 select = ["E", "W", "F"]
-ignore = ["E203", "E501", "E741", "W503", "W504"]
+ignore = [
+    "E203",
+    "E501",
+    "E741",
+    "W503",
+    "W504",
+    "E704",  # generates false positives on protocols
+]
 exclude = [
     "dbt/adapters/events/adapter_types_pb2.py",
     "tests/functional",
