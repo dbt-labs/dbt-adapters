@@ -1,6 +1,0 @@
-kind: Fixes
-body: Determine `psycopg2` based on `platform_system` (Linux or other), remove usage of `DBT_PSYCOPG2_NAME` environment variable
-time: 2024-04-12T15:31:54.861201-04:00
-custom:
-  Author: mikealfare
-  Issue: "60"
