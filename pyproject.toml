@@ -58,6 +58,7 @@ dependencies = [
     "flake8",
     "Flake8-pyproject",
     "mypy",
+    "pre-commit==3.7.0",
     "types-PyYAML",
     "types-protobuf",
     "types-pytz",
