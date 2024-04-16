@@ -63,6 +63,7 @@ dependencies = [
     "types-protobuf",
     "types-pytz",
 ]
+post-install-commands = ["pre-commit install"]
 [tool.hatch.envs.default.scripts]
 code-quality = "pre-commit run --all-files"  # runs others via hooks
 black = "python -m black ."
