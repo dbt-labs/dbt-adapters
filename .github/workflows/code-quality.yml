@@ -15,6 +15,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
   cancel-in-progress: true
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   code-quality:
     name: Code Quality
@@ -29,11 +33,11 @@ jobs:
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: "Install Homebrew Packages"
-        run: |
-          echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
-          brew install pre-commit
+      - name: Add brew to the PATH
+        run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+      - name: Install pre-commit
+        run: brew install pre-commit
 
       - name: Run code quality
-        shell: bash
         run: hatch run code-quality
