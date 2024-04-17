@@ -18,7 +18,7 @@ def get_imports(module: Path) -> Iterator[Import]:
                 yield imported_module_path.split(".") + imported_object_path.name.split(".")
 
 
-def invalid_import(module: Import) -> bool:
+def is_invalid_import(module: Import) -> bool:
     return (
         len(module) > 1 and
         module[0] == "dbt" and
@@ -29,7 +29,7 @@ def invalid_import(module: Import) -> bool:
 def check_package(package: Path):
     for module in package.rglob("*.py"):
         for imported_module in get_imports(module):
-            if invalid_import(imported_module):
+            if is_invalid_import(imported_module):
                 offending_module = module.relative_to(package)
                 imported_module_path = ".".join(imported_module)
                 raise Exception(f"A dbt-core module is being imported in {offending_module}: {imported_module_path}")
