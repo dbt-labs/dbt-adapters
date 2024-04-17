@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix adapter-specific cast handling for constraint enforcement
+time: 2024-04-11T18:52:03.960202-07:00
+custom:
+  Author: michelleark
+  Issue: "166"
