@@ -71,7 +71,8 @@ class BaseTestEmpty:
         run_dbt(["run", "--empty"])
         self.assert_row_count(project, "model", 0)
 
-class BaseTestEmptyInlineSourceRef(BaseTestEmpty)
+
+class BaseTestEmptyInlineSourceRef(BaseTestEmpty):
     @pytest.fixture(scope="class")
     def models(self):
         model_sql = """
