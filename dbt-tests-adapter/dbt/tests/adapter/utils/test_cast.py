@@ -3,7 +3,7 @@ import pytest
 from dbt.tests.adapter.utils import base_utils, fixture_cast
 
 
-class BaseSafeCast(base_utils.BaseUtils):
+class BaseCast(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"data_cast.csv": fixture_cast.seeds__data_cast_csv}
@@ -21,5 +21,5 @@ class BaseSafeCast(base_utils.BaseUtils):
         }
 
 
-class TestSafeCast(BaseSafeCast):
+class TestCast(BaseCast):
     pass
