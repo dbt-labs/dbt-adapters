@@ -54,32 +54,21 @@ include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 [tool.hatch.envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-]
-
-[tool.hatch.envs.lint]
-detached = true
-dependencies = [
     "black>=24.3",
     "flake8",
     "Flake8-pyproject",
-]
-[tool.hatch.envs.lint.scripts]
-all = [
-    "- black-only",
-    "- flake8-only",
-]
-black-only = "python -m black ."
-flake8-only = "python -m flake8 ."
-
-[tool.hatch.envs.typecheck]
-dependencies = [
     "mypy",
+    "pre-commit==3.7.0",
     "types-PyYAML",
     "types-protobuf",
     "types-pytz",
 ]
-[tool.hatch.envs.typecheck.scripts]
-all = "python -m mypy ."
+[tool.hatch.envs.default.scripts]
+dev = "pre-commit install"
+code-quality = "pre-commit run --all-files"  # runs others via hooks
+black = "python -m black ."
+flake8 = "python -m flake8 ."
+mypy = "python -m mypy ."
 
 [tool.hatch.envs.unit-tests]
 dependencies = [
@@ -115,13 +104,20 @@ check-sdist = [
 protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
 
 [tool.black]
-extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
+force-exclude = "dbt/adapters/events/adapter_types_pb2.py"
 line-length = 99
 target-version = ['py38']
 
 [tool.flake8]
 select = ["E", "W", "F"]
-ignore = ["E203", "E501", "E741", "W503", "W504"]
+ignore = [
+    "E203",
+    "E501",
+    "E741",
+    "W503",
+    "W504",
+    "E704",  # generates false positives on protocols
+]
 exclude = [
     "dbt/adapters/events/adapter_types_pb2.py",
     "tests/functional",
@@ -144,6 +140,7 @@ exclude = [
     "dbt/adapters/events/adapter_types_pb2.py",
     "dbt-tests-adapter/dbt/__init__.py",  # overlaps with `dbt/__init__.py` as expected for namespaces
     "venv",
+    ".hatch_venvs",
 ]
 [[tool.mypy.overrides]]
 module = ["dbt.adapters.events.adapter_types_pb2"]
