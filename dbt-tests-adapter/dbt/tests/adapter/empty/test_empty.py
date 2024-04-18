@@ -71,6 +71,24 @@ class BaseTestEmpty:
         run_dbt(["run", "--empty"])
         self.assert_row_count(project, "model", 0)
 
+class BaseTestEmptyInlineSourceRef(BaseTestEmpty)
+    @pytest.fixture(scope="class")
+    def models(self):
+        model_sql = """
+            select * from {{ source('seed_sources', 'raw_source') }} as raw_source
+            """
+
+        return {
+            "model.sql": model_sql,
+            "sources.yml": schema_sources_yml,
+        }
+
+    def test_run_with_empty(self, project):
+        # create source from seed
+        run_dbt(["seed"])
+        run_dbt(["run", "--empty", "--debug"])
+        self.assert_row_count(project, "model", 0)
+
 
 class TestEmpty(BaseTestEmpty):
     pass

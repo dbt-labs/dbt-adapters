@@ -47,6 +47,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     quote_policy: Policy = field(default_factory=lambda: Policy())
     dbt_created: bool = False
     limit: Optional[int] = None
+    require_alias: bool = True  # used to govern whether to add an alias when render_limited is called
 
     # register relation types that can be renamed for the purpose of replacing relations using stages and backups
     # adding a relation type here also requires defining the associated rename macro
@@ -205,14 +206,22 @@ class BaseRelation(FakeAPIObject, Hashable):
         # if there is nothing set, this will return the empty string.
         return ".".join(part for _, part in self._render_iterator() if part is not None)
 
+    def _render_limited_alias(self) -> str:
+        """ Some databases require an alias for subqueries (postgres, mysql) for all others we want to avoid adding
+        an alias as it has the potential to introduce issues with the query if the user also defines an alias.
+        """
+        if self.require_alias:
+            return f" _dbt_limit_subq_{self.table}"
+        return ""
+
     def render_limited(self) -> str:
         rendered = self.render()
         if self.limit is None:
             return rendered
         elif self.limit == 0:
-            return f"(select * from {rendered} where false limit 0) _dbt_limit_subq"
+            return f"(select * from {rendered} where false limit 0){self._render_limited_alias()}"
         else:
-            return f"(select * from {rendered} limit {self.limit}) _dbt_limit_subq"
+            return f"(select * from {rendered} limit {self.limit}){self._render_limited_alias()}"
 
     def quoted(self, identifier):
         return "{quote_char}{identifier}{quote_char}".format(
