@@ -137,10 +137,10 @@ files = [
     "tests/unit",
 ]
 exclude = [
+    ".hatch",
     "dbt/adapters/events/adapter_types_pb2.py",
     "dbt-tests-adapter/dbt/__init__.py",  # overlaps with `dbt/__init__.py` as expected for namespaces
     "venv",
-    ".hatch_venvs",
 ]
 [[tool.mypy.overrides]]
 module = ["dbt.adapters.events.adapter_types_pb2"]

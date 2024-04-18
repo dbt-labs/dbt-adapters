@@ -12,7 +12,7 @@ repos:
     -   id: trailing-whitespace
     -   id: check-case-conflict
 -   repo: https://github.com/dbt-labs/pre-commit-hooks
-    rev: f4c9dd9c22dfe3370ef971f1bd5a2d7d51ebceb7
+    rev: b6720967cc3795b4490c3810161854856754088e
     hooks:
     -   id: dbt-core-in-adapters-check
 -   repo: local
