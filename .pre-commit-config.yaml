@@ -3,7 +3,7 @@ default_language_version:
 
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.6.0
     hooks:
     -   id: check-yaml
         args: [--unsafe]
@@ -12,7 +12,7 @@ repos:
     -   id: trailing-whitespace
     -   id: check-case-conflict
 -   repo: https://github.com/dbt-labs/pre-commit-hooks
-    rev: main
+    rev: a93d1821274bc66123e4d8d696d07f077ff8e4b1
     hooks:
     -   id: dbt-core-check
 -   repo: local
