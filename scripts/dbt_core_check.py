@@ -13,17 +13,14 @@ def get_imports(module: Path) -> Iterator[Import]:
 
     for node in ast.iter_child_nodes(parsed_module):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
-            imported_module_path = getattr(node, "module", "")
+            imported_module = getattr(node, "module", "").split(".")
             for imported_object_path in node.names:
-                yield imported_module_path.split(".") + imported_object_path.name.split(".")
+                imported_object = imported_object_path.name.split(".")
+                yield imported_module + imported_object
 
 
 def is_invalid_import(module: Import) -> bool:
-    return (
-        len(module) > 1 and
-        module[0] == "dbt" and
-        module[1] not in ["adapters", "include"]
-    )
+    return len(module) > 1 and module[0] == "dbt" and module[1] not in ["adapters", "include"]
 
 
 def check_package(package: Path):
@@ -32,7 +29,10 @@ def check_package(package: Path):
             if is_invalid_import(imported_module):
                 offending_module = module.relative_to(package)
                 imported_module_path = ".".join(imported_module)
-                raise Exception(f"A dbt-core module is being imported in {offending_module}: {imported_module_path}")
+                raise Exception(
+                    f"A dbt-core module is imported in {offending_module}:"
+                    f" {imported_module_path}"
+                )
 
 
 def main():
