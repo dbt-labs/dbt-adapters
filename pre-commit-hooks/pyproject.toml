@@ -11,5 +11,5 @@ license = {file = "LICENSE"}
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[project.scripts]
-dbt-core-check = "dbt_core_check:main"
+[project.entry-points."console_scripts"]
+    dbt-core-check = "dbt_core_check:main"
