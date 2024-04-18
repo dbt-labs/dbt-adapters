@@ -43,7 +43,9 @@ class _CachedRelation:
         self.inner = inner
 
     def __str__(self) -> str:
-        return ("_CachedRelation(database={}, schema={}, identifier={}, inner={})").format(self.database, self.schema, self.identifier, self.inner)
+        return ("_CachedRelation(database={}, schema={}, identifier={}, inner={})").format(
+            self.database, self.schema, self.identifier, self.inner
+        )
 
     @property
     def database(self) -> Optional[str]:
