@@ -104,7 +104,7 @@ check-sdist = [
 protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
 
 [tool.black]
-extend-exclude = "dbt/adapters/events/adapter_types_pb2.py"
+force-exclude = "dbt/adapters/events/adapter_types_pb2.py"
 line-length = 99
 target-version = ['py38']
 
