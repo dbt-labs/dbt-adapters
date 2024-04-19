@@ -101,17 +101,14 @@ class AdapterContainer:
         self,
         config: AdapterRequiredConfig,
         mp_context: SpawnContext,
-        adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO
+        adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO,
     ) -> None:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
         adapter_version = self._adapter_version(adapter_name)
         fire_event(
-            AdapterRegistered(
-                adapter_name=adapter_name,
-                adapter_version=adapter_version
-            ),
-            level=adapter_registered_log_level
+            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version),
+            level=adapter_registered_log_level,
         )
         with self.lock:
             if adapter_name in self.adapters:
@@ -199,9 +196,9 @@ FACTORY: AdapterContainer = AdapterContainer()
 
 
 def register_adapter(
-        config: AdapterRequiredConfig,
-        mp_context: SpawnContext,
-        adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO
+    config: AdapterRequiredConfig,
+    mp_context: SpawnContext,
+    adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO,
 ) -> None:
     FACTORY.register_adapter(config, mp_context, adapter_registered_log_level)
 
