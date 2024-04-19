@@ -13,9 +13,7 @@ class BaseCast(base_utils.BaseUtils):
         return {
             "test_cast.yml": fixture_cast.models__test_cast_yml,
             "test_cast.sql": self.interpolate_macro_namespace(
-                self.interpolate_macro_namespace(
-                    fixture_cast.models__test_cast_sql, "cast"
-                ),
+                self.interpolate_macro_namespace(fixture_cast.models__test_cast_sql, "cast"),
                 "type_string",
             ),
         }
