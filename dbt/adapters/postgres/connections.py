@@ -4,8 +4,10 @@ from typing import Optional, Union
 
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import TypeCodeNotFound
 from dbt.adapters.sql import SQLConnectionManager
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
+from dbt_common.events.functions import warn_or_error
 from dbt_common.helper_types import Port
 from mashumaro.jsonschema.annotations import Maximum, Minimum
 import psycopg2
@@ -203,4 +205,5 @@ class PostgresConnectionManager(SQLConnectionManager):
         if type_code in psycopg2.extensions.string_types:
             return psycopg2.extensions.string_types[type_code].name
         else:
+            warn_or_error(TypeCodeNotFound(type_code=type_code))
             return f"unknown type_code {type_code}"
