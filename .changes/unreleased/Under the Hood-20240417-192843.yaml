@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Validate that dbt-core and dbt-adapters remain de-coupled
+time: 2024-04-17T19:28:43.400023-04:00
+custom:
+  Author: mikealfare
+  Issue: "144"

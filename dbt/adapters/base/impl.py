@@ -1328,14 +1328,16 @@ class BaseAdapter(metaclass=AdapterMeta):
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
             (
-                source.path.get_lowered_part(ComponentName.Schema),
-                source.path.get_lowered_part(ComponentName.Identifier),
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
             ): source
             for source in sources
         }
 
         # Group metadata sources by information schema -- one query per information schema will be necessary
-        sources_by_info_schema: Dict[InformationSchema, List[BaseRelation]] = self._get_catalog_relations_by_info_schema(sources)
+        sources_by_info_schema: Dict[InformationSchema, List[BaseRelation]] = (
+            self._get_catalog_relations_by_info_schema(sources)
+        )
 
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
         adapter_responses: List[Optional[AdapterResponse]] = []
@@ -1393,7 +1395,9 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return freshness
 
-    def _parse_freshness_row(self, row: "agate.Row", table: "agate.Table") -> Tuple[Any, FreshnessResponse]:
+    def _parse_freshness_row(
+        self, row: "agate.Row", table: "agate.Table"
+    ) -> Tuple[Any, FreshnessResponse]:
         from dbt_common.clients.agate_helper import get_column_value_uncased
 
         try:
@@ -1404,10 +1408,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         except Exception:
             raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
 
-        freshness_response = self._create_freshness_response(
-            last_modified_val,
-            snapshotted_at_val
-        )
+        freshness_response = self._create_freshness_response(last_modified_val, snapshotted_at_val)
         raw_relation = schema.lower().strip(), identifier.lower().strip()
         return raw_relation, freshness_response
 

@@ -40,11 +40,9 @@ class MaterializationConfig(Mapping, ABC):
     contract: MaterializationContract
     extra: Dict[str, Any]
 
-    def __contains__(self, item):
-        ...
+    def __contains__(self, item): ...
 
-    def __delitem__(self, key):
-        ...
+    def __delitem__(self, key): ...
 
 
 class RelationConfig(Protocol):
