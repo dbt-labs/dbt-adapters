@@ -1328,8 +1328,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
             (
-                source.path.get_lowered_part(ComponentName.Schema),
-                source.path.get_lowered_part(ComponentName.Identifier),
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
             ): source
             for source in sources
         }
