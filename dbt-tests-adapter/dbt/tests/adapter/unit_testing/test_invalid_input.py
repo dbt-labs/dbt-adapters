@@ -46,16 +46,22 @@ class BaseUnitTestInvalidInput:
     def test_invalid_input(self, project):
         results = run_dbt(["run"])
         assert len(results) == 2
-        
+
         _, out = run_dbt_and_capture(
             ["test", "--select", "test_name:test_invalid_input_column_name"], expect_pass=False
         )
-        assert "Invalid column name: 'invalid_column_name' in unit test fixture for 'my_upstream_model'." in out
-        
+        assert (
+            "Invalid column name: 'invalid_column_name' in unit test fixture for 'my_upstream_model'."
+            in out
+        )
+
         _, out = run_dbt_and_capture(
             ["test", "--select", "test_name:test_invalid_expect_column_name"], expect_pass=False
         )
-        assert "Invalid column name: 'invalid_column_name' in unit test fixture for expected output." in out
+        assert (
+            "Invalid column name: 'invalid_column_name' in unit test fixture for expected output."
+            in out
+        )
 
 
 class TestPostgresUnitTestInvalidInput(BaseUnitTestInvalidInput):

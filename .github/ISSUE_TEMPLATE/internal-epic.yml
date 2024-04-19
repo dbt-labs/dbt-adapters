@@ -30,7 +30,7 @@ body:
       label: Objectives
       description: |
         What are the high level goals we are trying to achieve? Provide use cases if available.
-        
+
         Example:
         - [ ] Allow adapter maintainers to support custom materializations
         - [ ] Reduce maintenance burden for incremental users by offering materialized views
@@ -48,7 +48,7 @@ body:
         Provide a list of GH issues that will build out this functionality.
         This may start empty, or as a checklist of items.
         However, it should eventually become a list of Feature Implementation tickets.
-        
+
         Example:
         - [ ] Create new macro to select warehouse
         - [ ] https://github.com/dbt-labs/dbt-adapters/issues/42
@@ -66,7 +66,7 @@ body:
         Provide a list of relevant documentation. Is there a proof of concept?
         Does this require and RFCs, ADRs, etc.?
         If the documentation exists, link it; if it does not exist yet, reference it descriptively.
-        
+
         Example:
         - [ ] RFC for updating connection interface to accept new parameters
         - [ ] POC: https://github.com/dbt-labs/dbt-adapters/pull/42
