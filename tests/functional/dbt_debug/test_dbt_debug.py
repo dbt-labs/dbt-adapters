@@ -1,9 +1,6 @@
 import pytest
-import os
-import re
-import yaml
 
-from tests.functional.utils import run_dbt, run_dbt_and_capture
+from tests.functional.utils import run_dbt_and_capture
 
 MODELS__MODEL_SQL = """
 seled 1 as id

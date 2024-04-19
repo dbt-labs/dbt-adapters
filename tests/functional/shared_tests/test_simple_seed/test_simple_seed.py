@@ -2,6 +2,7 @@
 This file needs to be in its own directory because it creates a `data` directory at run time.
 Placing this file in its own directory avoids collisions.
 """
+
 from dbt.tests.adapter.simple_seed.test_seed import (
     BaseBasicSeedTests,
     BaseSeedConfigFullRefreshOn,

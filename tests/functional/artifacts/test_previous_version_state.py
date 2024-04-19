@@ -5,7 +5,7 @@ import shutil
 from dbt.artifacts.schemas.base import get_artifact_schema_version
 from dbt.artifacts.schemas.run import RunResultsArtifact
 from dbt.contracts.graph.manifest import WritableManifest
-from dbt.exceptions import IncompatibleSchemaError
+from dbt.artifacts.exceptions import IncompatibleSchemaError
 from dbt.tests.util import get_manifest
 import pytest
 

@@ -39,11 +39,3 @@ jobs:
       - name: Run unit tests
         run: hatch run unit-tests:all
         shell: bash
-
-      - name: Publish results
-        uses: dbt-labs/dbt-adapters/.github/actions/publish-results@main
-        if: always()
-        with:
-          source-file: "results.csv"
-          file-name: "unit_results"
-          python-version: ${{ matrix.python-version }}

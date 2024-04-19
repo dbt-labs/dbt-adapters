@@ -1,4 +1,3 @@
-from datetime import datetime
 import jsonschema
 import os
 
@@ -12,16 +11,6 @@ from dbt.tests.util import (
 )
 import pytest
 
-from tests.functional.artifacts.expected_manifest import (
-    expected_references_manifest,
-    expected_seeded_manifest,
-    expected_versions_manifest,
-)
-from tests.functional.artifacts.expected_run_results import (
-    expected_references_run_results,
-    expected_run_results,
-    expected_versions_run_results,
-)
 from tests.functional.utils import run_dbt, run_dbt_and_capture
 
 

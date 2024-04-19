@@ -23,7 +23,7 @@ class PostgresIndexMethod(StrEnum):
 
     @classmethod
     def default(cls) -> "PostgresIndexMethod":
-        return cls.btree
+        return cls("btree")
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)

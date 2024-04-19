@@ -9,8 +9,10 @@ def test_renameable_relation():
         identifier="my_table",
         type=RelationType.Table,
     )
-    assert relation.renameable_relations == frozenset({
-        RelationType.View,
-        RelationType.Table,
-        RelationType.MaterializedView,
-    })
+    assert relation.renameable_relations == frozenset(
+        {
+            RelationType.View,
+            RelationType.Table,
+            RelationType.MaterializedView,
+        }
+    )

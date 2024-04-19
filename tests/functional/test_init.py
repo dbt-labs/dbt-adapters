@@ -6,7 +6,6 @@ import click
 from dbt_common.exceptions import DbtRuntimeError
 from dbt.tests.util import run_dbt
 import pytest
-import yaml
 
 
 class TestInitProjectWithExistingProfilesYml:

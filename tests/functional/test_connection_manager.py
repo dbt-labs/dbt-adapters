@@ -1,6 +1,7 @@
 from unittest import TestCase, mock
 
-from dbt.adapters.contracts.connection import Connection
+from dbt.adapters.contracts.connection import Connection, Identifier
+from dbt_common.helper_types import Port
 import psycopg2
 
 from dbt.adapters.postgres import PostgresCredentials, PostgresConnectionManager
@@ -20,13 +21,13 @@ class TestConnectionManagerOpen(TestCase):
             credentials = PostgresCredentials(
                 host="localhost",
                 user="test-user",
-                port=1111,
+                port=Port(1111),
                 password="test-password",
                 database="test-db",
                 schema="test-schema",
                 retries=2,
             )
-            connection = Connection("postgres", None, credentials)
+            connection = Connection(Identifier("postgres"), None, credentials)
         return connection
 
     def test_open(self):

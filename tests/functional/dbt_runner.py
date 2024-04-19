@@ -25,13 +25,15 @@ _STANDARD_ASSERTIONS = [assert_run_results_have_compiled_node_attributes]
 
 
 class dbtTestRunner(dbtRunner):
+    exit_assertions: List[Callable[[List[str], dbtRunnerResult], None]]
+
     def __init__(
         self,
         manifest: Optional[Manifest] = None,
         callbacks: Optional[List[Callable[[EventMsg], None]]] = None,
         exit_assertions: Optional[List[Callable[[List[str], dbtRunnerResult], None]]] = None,
     ):
-        self.exit_assertions = exit_assertions if exit_assertions else _STANDARD_ASSERTIONS
+        self.exit_assertions = exit_assertions if exit_assertions else _STANDARD_ASSERTIONS  # type: ignore
         super().__init__(manifest, callbacks)
 
     def invoke(self, args: List[str], **kwargs) -> dbtRunnerResult:

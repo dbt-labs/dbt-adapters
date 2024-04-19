@@ -59,45 +59,23 @@ path = "dbt/adapters/postgres/__version__.py"
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    'pre-commit==3.7.0;python_version>="3.9"',
+    'pre-commit==3.5.0;python_version=="3.8"',
 ]
-
-[tool.hatch.envs.lint]
-detached = true
-dependencies = [
-    "black>=24.3",
-    "flake8",
-    "Flake8-pyproject",
-]
-[tool.hatch.envs.lint.scripts]
-all = [
-    "black",
-    "flake8",
-]
-black = "python -m black ."
-flake8 = "python -m flake8 ."
-
-[tool.hatch.envs.typecheck]
-dependencies = [
-    "mypy",
-    "types-protobuf",
-    "types-pytz",
-]
-[tool.hatch.envs.typecheck.scripts]
-all = "python -m mypy ."
+[tool.hatch.envs.default.scripts]
+dev = "pre-commit install"
+code-quality = "pre-commit run --all-files"
 
 [tool.hatch.envs.unit-tests]
 dependencies = [
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "freezegun",
     "pytest",
     "pytest-dotenv",
     "pytest-mock",
     "pytest-xdist",
-]
-extra-dependencies = [
-    # TODO: remove `dbt-core` dependencies from unit tests
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
 ]
 [tool.hatch.envs.unit-tests.scripts]
 all = "python -m pytest {args:tests/unit}"
@@ -105,10 +83,6 @@ all = "python -m pytest {args:tests/unit}"
 [tool.hatch.envs.integration-tests]
 template = "unit-tests"
 extra-dependencies = [
-    # TODO: remove `dbt-core` dependencies from integration tests
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
 ]
 [tool.hatch.envs.integration-tests.env-vars]
@@ -125,8 +99,6 @@ dependencies = [
     "twine",
     "check-wheel-contents",
 ]
-
-
 [tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",
@@ -141,32 +113,6 @@ check-sdist = [
     "check-wheel-contents dist/*.whl --ignore W007,W008",
     "find ./dist/dbt_postgres-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-postgres",
-]
-
-[tool.black]
-line-length = 99
-target-version = ['py38']
-
-[tool.flake8]
-select = ["E", "W", "F"]
-ignore = ["E203", "E501", "E741", "W503", "W504"]
-exclude = ["tests", "venv", ".hatch_venvs"]
-per-file-ignores = ["*/__init__.py: F401"]
-
-[tool.mypy]
-namespace_packages = true
-show_error_codes = true
-explicit_package_bases = true
-ignore_missing_imports = true
-pretty = true
-files = [
-    "dbt/adapters/postgres",
-    "tests/unit",
-]
-exclude = [
-    "tests/functional",
-    "venv",
-    ".hatch_venvs",
 ]
 
 [tool.pytest]

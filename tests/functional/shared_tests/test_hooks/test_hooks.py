@@ -2,6 +2,7 @@
 This file needs to be in its own directory because it uses a `data` directory.
 Placing this file in its own directory avoids collisions.
 """
+
 from dbt.tests.adapter.hooks.test_model_hooks import (
     BasePrePostModelHooks,
     BaseHookRefs,

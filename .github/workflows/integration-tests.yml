@@ -31,7 +31,6 @@ on:
         required: false
         default: "main"
 
-
 permissions: read-all
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
@@ -100,14 +99,6 @@ jobs:
           POSTGRES_TEST_PASS: password
           POSTGRES_TEST_DATABASE: dbt
           POSTGRES_TEST_THREADS: 4
-
-      - name: Publish results
-        uses: dbt-labs/dbt-adapters/.github/actions/publish-results@main
-        if: always()
-        with:
-          source-file: "results.csv"
-          file-name: "integration_results"
-          python-version: ${{ matrix.python-version }}
 
   psycopg2-check:
     name: "Test psycopg2 build version"

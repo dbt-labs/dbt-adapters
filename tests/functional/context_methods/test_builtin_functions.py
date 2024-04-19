@@ -1,5 +1,4 @@
 import json
-import os
 
 from dbt.tests.util import write_file
 from dbt_common.exceptions import CompilationError

@@ -2,7 +2,7 @@ import os
 import re
 
 from dbt.contracts.results import TestStatus
-from dbt.exceptions import ParsingError, DuplicateResourceNameError
+from dbt.exceptions import ParsingError
 from dbt.tests.fixtures.project import write_project_files
 from dbt.tests.util import run_dbt, write_file
 from dbt_common.exceptions import CompilationError
@@ -20,8 +20,6 @@ from tests.functional.schema_tests.fixtures import (
     custom_generic_test_names__schema_yml,
     custom_generic_test_names_alt_format__model_a,
     custom_generic_test_names_alt_format__schema_yml,
-    dupe_generic_tests_collide__model_a,
-    dupe_generic_tests_collide__schema_yml,
     ephemeral__ephemeral_sql,
     ephemeral__schema_yml,
     invalid_schema_models__model_sql,

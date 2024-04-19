@@ -1,0 +1,55 @@
+default_language_version:
+  python: python3
+
+repos:
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v4.4.0
+  hooks:
+  - id: check-yaml
+    args: [--unsafe]
+  - id: check-json
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: check-case-conflict
+
+-   repo: https://github.com/dbt-labs/pre-commit-hooks
+    rev: v0.1.0a1
+    hooks:
+    -   id: dbt-core-in-adapters-check
+
+-   repo: https://github.com/psf/black
+    rev: 24.4.0
+    hooks:
+    -   id: black
+        args:
+        -   --line-length=99
+        -   --target-version=py38
+        -   --target-version=py39
+        -   --target-version=py310
+        -   --target-version=py311
+
+-   repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+    -   id: flake8
+        exclude: tests/
+        args:
+        -   --max-line-length=99
+        -   --select=E,F,W
+        -   --ignore=E203,E501,E741,W503,W504
+        -   --per-file-ignores=*/__init__.py:F401
+
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.9.0
+    hooks:
+    -   id: mypy
+        args:
+        -   --explicit-package-bases
+        -   --ignore-missing-imports
+        -   --pretty
+        -   --show-error-codes
+        files: ^dbt/adapters/postgres
+        additional_dependencies:
+        -   types-PyYAML
+        -   types-protobuf
+        -   types-pytz
