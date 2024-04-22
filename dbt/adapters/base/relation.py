@@ -47,7 +47,9 @@ class BaseRelation(FakeAPIObject, Hashable):
     quote_policy: Policy = field(default_factory=lambda: Policy())
     dbt_created: bool = False
     limit: Optional[int] = None
-    require_alias: bool = True  # used to govern whether to add an alias when render_limited is called
+    require_alias: bool = (
+        True  # used to govern whether to add an alias when render_limited is called
+    )
 
     # register relation types that can be renamed for the purpose of replacing relations using stages and backups
     # adding a relation type here also requires defining the associated rename macro
@@ -207,7 +209,7 @@ class BaseRelation(FakeAPIObject, Hashable):
         return ".".join(part for _, part in self._render_iterator() if part is not None)
 
     def _render_limited_alias(self) -> str:
-        """ Some databases require an alias for subqueries (postgres, mysql) for all others we want to avoid adding
+        """Some databases require an alias for subqueries (postgres, mysql) for all others we want to avoid adding
         an alias as it has the potential to introduce issues with the query if the user also defines an alias.
         """
         if self.require_alias:
