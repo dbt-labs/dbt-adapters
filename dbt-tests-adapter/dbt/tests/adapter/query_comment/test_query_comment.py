@@ -55,7 +55,7 @@ class BaseMacroQueryComments(BaseDefaultQueryComments):
 class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
     @pytest.fixture(scope="class")
     def get_package_version(self, project):
-        return import_module("." + project.adapter_type, "dbt.adapters").__version__.version
+        return import_module("dbt.version").__version__
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
