@@ -25,7 +25,6 @@ class PostgresRelation(BaseRelation):
             {
                 RelationType.View,
                 RelationType.Table,
-                RelationType.MaterializedView,
             }
         )
     )
