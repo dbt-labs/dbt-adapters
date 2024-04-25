@@ -108,7 +108,7 @@ jobs:
       matrix:
         scenario:
           - {platform: ubuntu-latest, psycopg2-name: psycopg2}
-          - {platform: macos-latest, psycopg2-name: psycopg2-binary}
+          - {platform: macos-12, psycopg2-name: psycopg2-binary}
     steps:
       - name: "Check out repository"
         uses: actions/checkout@v4
