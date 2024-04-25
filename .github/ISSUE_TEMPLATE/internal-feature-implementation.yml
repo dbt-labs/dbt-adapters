@@ -41,7 +41,7 @@ body:
       label: Acceptance criteria
       description: |
         What is the definition of done for this feature? Include any relevant edge cases and/or test cases.
-        
+
         Example:
         - [ ] If there are no config changes, don't alter the materialized view
         - [ ] If the materialized view is scheduled to refresh, a manual refresh should not be issued
@@ -54,11 +54,11 @@ body:
 
   - type: textarea
     attributes:
-      label: Suggested tests
+      label: Testing
       description: |
         Provide scenarios to test. Include both positive and negative tests if possible.
         Link to existing similar tests if appropriate.
-        
+
         Example:
          - [ ] Test with no `materialized` field in the model config. Expect pass.
          - [ ] Test with a `materialized` field in the model config that is not valid. Expect ConfigError.
@@ -68,16 +68,27 @@ body:
         ```
     validations:
       required: true
-      
+
   - type: textarea
     attributes:
-      label: Are there any security concerns with these changes?
+      label: Security
       description: |
+        Are there any security concerns with these changes?
         When in doubt, run it by the security team.
       placeholder: |
         Example: Logging sensitive data
     validations:
-      required: true       
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Docs
+      description: |
+        Are there any docs the will need to be added or updated?
+      placeholder: |
+        Example: We need to document how to configure this new authentication method.
+    validations:
+      required: true
 
   - type: textarea
     attributes:

@@ -1,9 +1,7 @@
 import abc
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
 
-import agate
-from dbt_common.clients.agate_helper import empty_table, table_from_data_flat
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
@@ -23,6 +21,10 @@ from dbt.adapters.events.types import (
     SQLQueryStatus,
 )
 from dbt.record import QueryRecord
+
+if TYPE_CHECKING:
+    import agate
+
 
 class SQLConnectionManager(BaseConnectionManager):
     """The default connection manager with some common SQL methods implemented.
@@ -127,7 +129,9 @@ class SQLConnectionManager(BaseConnectionManager):
         return [dict(zip(column_names, row)) for row in rows]
 
     @classmethod
-    def get_result_from_cursor(cls, cursor: Any, limit: Optional[int]) -> agate.Table:
+    def get_result_from_cursor(cls, cursor: Any, limit: Optional[int]) -> "agate.Table":
+        from dbt_common.clients.agate_helper import table_from_data_flat
+
         data: List[Any] = []
         column_names: List[str] = []
 
@@ -148,7 +152,9 @@ class SQLConnectionManager(BaseConnectionManager):
         auto_begin: bool = False,
         fetch: bool = False,
         limit: Optional[int] = None,
-    ) -> Tuple[AdapterResponse, agate.Table]:
+    ) -> Tuple[AdapterResponse, "agate.Table"]:
+        from dbt_common.clients.agate_helper import empty_table
+
         sql = self._add_query_comment(sql)
         _, cursor = self.add_query(sql, auto_begin)
         response = self.get_response(cursor)
