@@ -2,7 +2,7 @@ import dataclasses
 from io import StringIO
 import json
 import re
-from typing import Any, Optional, Mapping, Tuple
+from typing import Any, Optional, Mapping
 
 from agate import Table
 
@@ -32,7 +32,9 @@ class QueryRecordParams:
         return sql.replace(" ", "").replace("\n", "")
 
     def _matches(self, other: "QueryRecordParams") -> bool:
-        return self.node_unique_id == other.node_unique_id and self._clean_up_sql(self.sql) == self._clean_up_sql(other.sql)
+        return self.node_unique_id == other.node_unique_id and self._clean_up_sql(
+            self.sql
+        ) == self._clean_up_sql(other.sql)
 
 
 @dataclasses.dataclass

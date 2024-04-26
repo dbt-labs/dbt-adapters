@@ -20,7 +20,7 @@ from dbt.adapters.events.types import (
     SQLQuery,
     SQLQueryStatus,
 )
-from dbt.record import QueryRecord
+from dbt.adapters.record import QueryRecord
 
 if TYPE_CHECKING:
     import agate
