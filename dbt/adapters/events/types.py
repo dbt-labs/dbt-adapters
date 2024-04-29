@@ -2,6 +2,7 @@ from dbt_common.ui import line_wrap_message, warning_tag
 
 from dbt.adapters.events.base_types import (
     DebugLevel,
+    DynamicLevel,
     ErrorLevel,
     InfoLevel,
     WarnLevel,
@@ -281,7 +282,7 @@ class CacheDumpGraph(DebugLevel):
 # Skipping E032, E033, E034
 
 
-class AdapterRegistered(InfoLevel):
+class AdapterRegistered(DynamicLevel):
     def code(self) -> str:
         return "E034"
 
@@ -419,5 +420,18 @@ class ConstraintNotSupported(WarnLevel):
         msg = (
             f"The constraint type {self.constraint} is not supported by {self.adapter}, and will "
             "be ignored. Set 'warn_unsupported: false' on this constraint to ignore this warning."
+        )
+        return line_wrap_message(warning_tag(msg))
+
+
+class TypeCodeNotFound(DebugLevel):
+    def code(self) -> str:
+        return "E050"
+
+    def message(self) -> str:
+        msg = (
+            f"The `type_code` {self.type_code} was not recognized, which may affect error "
+            "messages for enforced contracts that fail as well as `Column.data_type` values "
+            "returned by `get_column_schema_from_query`"
         )
         return line_wrap_message(warning_tag(msg))

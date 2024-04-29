@@ -1,6 +1,6 @@
 # RelationConfig
 This package serves as an initial abstraction for managing the inspection of existing relations and determining
-changes on those relations. It arose from the materialized view work and is currently only supporting 
+changes on those relations. It arose from the materialized view work and is currently only supporting
 materialized views for Postgres and Redshift as well as dynamic tables for Snowflake. There are three main
 classes in this package.
 

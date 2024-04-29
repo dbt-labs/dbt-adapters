@@ -14,7 +14,7 @@ When events are processed via `fire_event`, nearly everything is logged. Whether
 
 We have switched from using betterproto to using google protobuf, because of a lack of support for Struct fields in betterproto.
 
-The google protobuf interface is janky and very much non-Pythonic. The "generated" classes in types_pb2.py do not resemble regular Python classes. They do not have normal constructors; they can only be constructed empty. They can be "filled" by setting fields individually or using a json_format method like ParseDict.  We have wrapped the logging events with a class (in types.py) which allows using a constructor -- keywords only, no positional parameters. 
+The google protobuf interface is janky and very much non-Pythonic. The "generated" classes in types_pb2.py do not resemble regular Python classes. They do not have normal constructors; they can only be constructed empty. They can be "filled" by setting fields individually or using a json_format method like ParseDict.  We have wrapped the logging events with a class (in types.py) which allows using a constructor -- keywords only, no positional parameters.
 
 ## Required for Every Event
 

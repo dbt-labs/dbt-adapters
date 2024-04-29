@@ -7,6 +7,7 @@ import traceback
 from typing import Any, Dict, List, Optional, Set, Type
 
 from dbt_common.events.functions import fire_event
+from dbt_common.events.base_types import EventLevel
 from dbt_common.exceptions import DbtInternalError, DbtRuntimeError
 from dbt_common.semver import VersionSpecifier
 
@@ -96,11 +97,19 @@ class AdapterContainer:
 
         return plugin.credentials
 
-    def register_adapter(self, config: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
+    def register_adapter(
+        self,
+        config: AdapterRequiredConfig,
+        mp_context: SpawnContext,
+        adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO,
+    ) -> None:
         adapter_name = config.credentials.type
         adapter_type = self.get_adapter_class_by_name(adapter_name)
         adapter_version = self._adapter_version(adapter_name)
-        fire_event(AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version))
+        fire_event(
+            AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version),
+            level=adapter_registered_log_level,
+        )
         with self.lock:
             if adapter_name in self.adapters:
                 # this shouldn't really happen...
@@ -186,8 +195,12 @@ class AdapterContainer:
 FACTORY: AdapterContainer = AdapterContainer()
 
 
-def register_adapter(config: AdapterRequiredConfig, mp_context: SpawnContext) -> None:
-    FACTORY.register_adapter(config, mp_context)
+def register_adapter(
+    config: AdapterRequiredConfig,
+    mp_context: SpawnContext,
+    adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO,
+) -> None:
+    FACTORY.register_adapter(config, mp_context, adapter_registered_log_level)
 
 
 def get_adapter(config: AdapterRequiredConfig):

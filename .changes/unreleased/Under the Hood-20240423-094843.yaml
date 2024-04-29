@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: remove dbt_version from query comment test fixture
+time: 2024-04-23T09:48:43.208035-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "184"

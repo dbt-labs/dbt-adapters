@@ -163,7 +163,7 @@ Remember to commit and push the file that's created.
 
 ### Signing the CLA
 
-> **_NOTE:_** All contributors to `dbt-adapters` must sign the
+> **_NOTE:_** All contributors to `dbt-adapter` must sign the
 > [Contributor License Agreement](https://docs.getdbt.com/docs/contributor-license-agreements)(CLA).
 
 Maintainers will be unable to merge contributions until the contributor signs the CLA.

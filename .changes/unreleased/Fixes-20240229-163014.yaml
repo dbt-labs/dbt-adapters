@@ -1,6 +1,0 @@
-kind: Fixes
-body: Add "description" and "meta" fields to RelationConfig protocol
-time: 2024-02-29T16:30:14.833301-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "119"

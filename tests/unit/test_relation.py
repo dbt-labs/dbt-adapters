@@ -43,25 +43,38 @@ def test_can_be_replaced_default():
 
 
 @pytest.mark.parametrize(
-    "limit,expected_result",
+    "limit,require_alias,expected_result",
     [
-        (None, '"test_database"."test_schema"."test_identifier"'),
+        (None, False, '"test_database"."test_schema"."test_identifier"'),
         (
             0,
-            '(select * from "test_database"."test_schema"."test_identifier" where false limit 0) _dbt_limit_subq',
+            True,
+            '(select * from "test_database"."test_schema"."test_identifier" where false limit 0) _dbt_limit_subq_test_identifier',
         ),
         (
             1,
-            '(select * from "test_database"."test_schema"."test_identifier" limit 1) _dbt_limit_subq',
+            True,
+            '(select * from "test_database"."test_schema"."test_identifier" limit 1) _dbt_limit_subq_test_identifier',
+        ),
+        (
+            0,
+            False,
+            '(select * from "test_database"."test_schema"."test_identifier" where false limit 0)',
+        ),
+        (
+            1,
+            False,
+            '(select * from "test_database"."test_schema"."test_identifier" limit 1)',
         ),
     ],
 )
-def test_render_limited(limit, expected_result):
+def test_render_limited(limit, require_alias, expected_result):
     my_relation = BaseRelation.create(
         database="test_database",
         schema="test_schema",
         identifier="test_identifier",
         limit=limit,
+        require_alias=require_alias,
     )
     actual_result = my_relation.render_limited()
     assert actual_result == expected_result
