@@ -1,6 +1,0 @@
-kind: Features
-body: Debug log when `type_code` fails to convert to a `data_type`
-time: 2024-03-23T16:02:22.153674-06:00
-custom:
-  Author: dbeatty10
-  Issue: "8912"
