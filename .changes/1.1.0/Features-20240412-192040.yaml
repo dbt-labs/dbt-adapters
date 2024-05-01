@@ -1,6 +1,0 @@
-kind: Features
-body: Cross-database `cast` macro
-time: 2024-04-12T19:20:40.904842-06:00
-custom:
-  Author: MichelleArk dbeatty10
-  Issue: "84"
