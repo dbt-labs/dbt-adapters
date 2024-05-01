@@ -10,6 +10,11 @@ on:
         - prod
         - test
         default: prod
+      ref:
+        description: "The ref (sha or branch name) to use"
+        type: string
+        default: "main"
+        required: true
 
 permissions: read-all
 
@@ -33,6 +38,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: "${{ inputs.ref }}"
 
       - name: Setup `hatch`
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
