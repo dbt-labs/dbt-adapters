@@ -211,6 +211,7 @@ class BaseCloneSameTargetAndState(BaseClone):
 
         clone_args = [
             "clone",
+            "--defer",
             "--state",
             "target",
         ]
