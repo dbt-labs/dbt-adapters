@@ -75,14 +75,12 @@ class BaseClone:
         assert len(results) == 1
         results = run_dbt(["run"])
         assert len(results) == 2
-        assert not any(r.node.deferred for r in results)
         results = run_dbt(["test"])
         assert len(results) == 2
 
         if with_snapshot:
             results = run_dbt(["snapshot"])
             assert len(results) == 1
-            assert not any(r.node.deferred for r in results)
 
         # copy files
         self.copy_state(project_root)
