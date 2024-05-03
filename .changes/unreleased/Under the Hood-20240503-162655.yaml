@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add query recording for adapters which use SQLConnectionManager
+time: 2024-05-03T16:26:55.350916-04:00
+custom:
+  Author: peterallenwebb
+  Issue: "195"
