@@ -1,7 +1,0 @@
-kind: Fixes
-body: Update Clone test to reflect core change removing `deferred` attribute from
-  nodes
-time: 2024-05-02T15:00:38.882727-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "194"
