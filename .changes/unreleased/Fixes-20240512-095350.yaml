@@ -1,0 +1,6 @@
+kind: Fixes
+body: Apply column quoting to unit tests
+time: 2024-05-12T09:53:50.381050004-04:00
+custom:
+  Author: mpatek dbeatty10
+  Issue: "205"
