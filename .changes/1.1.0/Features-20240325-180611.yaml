@@ -1,6 +1,0 @@
-kind: Features
-body: Introduce TableLastModifiedMetadataBatch and implement BaseAdapter.calculate_freshness_from_metadata_batch
-time: 2024-03-25T18:06:11.816163-04:00
-custom:
-  Author: michelleark
-  Issue: "138"
