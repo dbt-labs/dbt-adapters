@@ -25,4 +25,3 @@ Not every interaction with an external system has to be recorded in full detail,
 In addition to adding an appropriate decorator to functions which communicate with external systems, you should check those functions for side-effects. Since the function's calls will be mocked out in replay mode, those side-effects will not be carried out during replay. At present, we are focusing on support for recording and comparing recordings, but this is worth keeping in mind.
 
 The current implementation records which dbt node issues a query, and uses that information to ensure a match during replay. The same node should issue the same query. A better model might be to monitor which connection issued which query, and associate the same connection with open/close operations, transaction starts/stops and so forth.
-
