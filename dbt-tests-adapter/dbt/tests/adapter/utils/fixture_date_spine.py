@@ -39,7 +39,7 @@ with generated_dates as (
         generated_dates.date_day,
         expected_dates.expected
     from generated_dates
-    left join expected_dates on generated_dates.date_day = expected_dates.expected
+    full outer join expected_dates on generated_dates.date_day = expected_dates.expected
 )
 
 SELECT * from joined
