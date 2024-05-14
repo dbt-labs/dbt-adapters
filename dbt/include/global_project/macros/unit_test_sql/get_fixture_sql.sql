@@ -79,7 +79,7 @@ union all
         {%- endif -%}
 
         {%- set column_type = column_name_to_data_types[column_name] %}
-        
+
         {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
         {%- set column_value_clean = column_value -%}
         {%- if column_value is string -%}
