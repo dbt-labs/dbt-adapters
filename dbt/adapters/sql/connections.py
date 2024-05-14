@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
+from dbt_common.record import record_function
 from dbt_common.utils import cast_to_str
 
 from dbt.adapters.base import BaseConnectionManager
@@ -19,6 +20,7 @@ from dbt.adapters.events.types import (
     SQLQuery,
     SQLQueryStatus,
 )
+from dbt.adapters.record import QueryRecord
 
 if TYPE_CHECKING:
     import agate
@@ -143,6 +145,7 @@ class SQLConnectionManager(BaseConnectionManager):
 
         return table_from_data_flat(data, column_names)
 
+    @record_function(QueryRecord, method=True, tuple_result=True)
     def execute(
         self,
         sql: str,
