@@ -20,6 +20,7 @@ class RelationType(StrEnum):
     MaterializedView = "materialized_view"
     External = "external"
     Ephemeral = "ephemeral"
+    ExternalTable = "external_table"
 
 
 class MaterializationContract(Protocol):
