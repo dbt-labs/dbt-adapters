@@ -21,31 +21,32 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   -- build model
-  {% set build_plan = "" %}
+  {# {% set build_plan = "" %} #}
+  {% set build_plan = create_external_table(source_node) %}
 
   {% set create_or_replace = (old_relation is none or full_refresh_mode) %}
+  {{ log('create_or_replace: ' ~ create_or_replace, info=True) }}
 
-  {% if exists_as_view %}
-    {{ exceptions.raise_compiler_error("Cannot seed to '{}', it is a view".format(old_relation)) }}
-  {% elif exists_as_table %}
-    {{ exceptions.raise_compiler_error("Cannot seed to '{}', it is a table".format(old_relation)) }}
+  {# {% if exists_as_view %}
+    {{ exceptions.raise_compiler_error("Cannot make ExTab to '{}', it is already view".format(old_relation)) }}
+   {% elif exists_as_table %}
+    {{ exceptions.raise_compiler_error("Cannot make ExTab '{}', it is a already a table".format(old_relation)) }}
   {% elif exists_as_external_table %}
     {% set build_plan = build_plan + refresh_external_table(source_node) %}
   {% else %}
     {% set build_plan = build_plan + [
-      dbt_external_tables.create_external_schema(source_node),
-      dbt_external_tables.create_external_table(source_node)
+      create_external_schema(source_node),
+      create_external_table(source_node)
     ] %}
-  {% endif %}
+  {% endif %} #}
 
   {% set code = 'CREATE' if create_or_replace else 'REFRESH' %}
-  
-  {% set sql = load_csv_rows(model, agate_table) %}
-  {% call noop_statement('main', code ~ ' ' ~ rows_affected, code, rows_affected) %}
-    {{ build_plan }};
-  {% endcall %}
 
-  {% set target_relation = this.incorporate(type='external_table') %}
+  {{ log('XXX: build_plan: ' ~ build_plan, info=True) }}
+  {% do run_query(build_plan) %}
+
+
+  {% set target_relation = old_relation.incorporate(type='external_table') %}
 
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
