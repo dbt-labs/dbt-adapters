@@ -1,9 +1,13 @@
-{% materialization external_table, default %}
+{% macro mat_external_table(source_node) %}
+    {{ adapter.dispatch('mat_external_table', 'dbt')(source_node) }}
+{% endmacro %}
 
-  {%- set identifier = model['alias'] -%}
+{% macro default__mat_external_table(source_node) %}
+
   {%- set full_refresh_mode = (should_full_refresh()) -%}
 
-  {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
+
+  {%- set old_relation = adapter.get_relation(database=source_node.database, schema=source_node.schema, identifier=source_node.name) -%}
 
   {%- set exists_as_table = (old_relation is not none and old_relation.is_table) -%}
   {%- set exists_as_view = (old_relation is not none and old_relation.is_view) -%}
@@ -56,5 +60,11 @@
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 
   {{ return({'relations': [target_relation]}) }}
+{% endmacro %}
+
+{% materialization external_table, default %}
+
+  {{ mat_external_table(source_node) }}
+
 
 {% endmaterialization %}
