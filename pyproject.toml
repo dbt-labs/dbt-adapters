@@ -65,6 +65,12 @@ dependencies = [
 [tool.hatch.envs.default.scripts]
 dev = "pre-commit install"
 code-quality = "pre-commit run --all-files"
+docker-dev = [
+    "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
+	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
+	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
+]
+docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
 
 [tool.hatch.envs.unit-tests]
 dependencies = [

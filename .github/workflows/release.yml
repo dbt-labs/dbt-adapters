@@ -3,60 +3,111 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      deploy-to:
-        type: choice
-        description: Choose where to publish (test/prod)
-        options:
-        - prod
-        - test
-        default: prod
-      ref:
-        description: "The ref (sha or branch name) to use"
+      branch:
+        description: "The branch to release from"
         type: string
         default: "main"
+      version:
+        description: "The version to release"
         required: true
+        type: string
+      deploy-to:
+        description: "Deploy to test or prod"
+        type: environment
+        default: prod
+      only_docker:
+        description: "Only release Docker image, skip GitHub & PyPI"
+        type: boolean
+        default: false
 
-permissions: read-all
+permissions:
+  contents: write # this is the permission that allows creating a new release
 
 # will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}-${{ inputs.deploy-to }}
+  group: "${{ github.workflow }}-${{ github.event_name }}-${{ inputs.version }}-${{ inputs.deploy-to }}"
   cancel-in-progress: true
 
 jobs:
-  release:
-    name: PyPI - ${{ inputs.deploy-to }}
+  release-prep:
+    name: "Release prep: generate changelog, bump version"
+    uses: dbt-labs/dbt-postgres/.github/workflows/release_prep_hatch.yml@main
+    with:
+      branch: ${{ inputs.branch }}
+      version: ${{ inputs.version }}
+      deploy-to: ${{ inputs.deploy-to }}
+    secrets: inherit
+
+  build-release:
+    name: "Build release"
+    needs: release-prep
     runs-on: ubuntu-latest
+    outputs:
+      archive-name: ${{ steps.archive.outputs.name }}
+    steps:
+      - name: "Checkout ${{ github.event.repository.name }}@${{ needs.release-prep.outputs.release-branch }}"
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-prep.outputs.release-branch }}
+          persist-credentials: false
+
+      - name: "Setup `hatch`"
+        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
+
+      - name: "Set archive name"
+        id: archive
+        run: |
+          archive_name=${{ github.event.repository.name }}-${{ inputs.version }}-${{ inputs.deploy-to }}
+          echo "name=$archive_name" >> $GITHUB_OUTPUT
+
+      - name: "Build ${{ github.event.repository.name }}"
+        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
+        with:
+          archive-name: ${{ steps.archive.outputs.name }}
+
+  pypi-release:
+    name: "PyPI release"
+    if: ${{ !failure() && !cancelled() && !inputs.only_docker }}
+    runs-on: ubuntu-latest
+    needs: build-release
     environment:
       name: ${{ inputs.deploy-to }}
       url: ${{ vars.PYPI_PROJECT_URL }}
     permissions:
-      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
-
+      # this permission is required for trusted publishing
+      # see https://github.com/marketplace/actions/pypi-publish
+      id-token: write
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          ref: "${{ inputs.ref }}"
-
-      - name: Setup `hatch`
-        uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
-
-      - name: Inputs
-        id: release-inputs
-        run: |
-          version=$(hatch version)
-          archive_name=dbt-postgres-$version-${{ inputs.deploy-to }}
-          echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
-
-      - name: Build `dbt-postgres`
-        uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
-        with:
-          archive-name: ${{ steps.release-inputs.outputs.archive-name }}
-
-      - name: Publish to PyPI
+      - name: "Publish to PyPI"
         uses: dbt-labs/dbt-adapters/.github/actions/publish-pypi@main
         with:
-          pypi-repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-          archive-name: ${{ steps.release-inputs.outputs.archive-name }}
+          repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+          archive-name: ${{ needs.build-release.outputs.archive-name }}
+
+  github-release:
+    name: "GitHub release"
+    if: ${{ !failure() && !cancelled() && !inputs.only_docker }}
+    needs:
+      - build-release
+      - release-prep
+    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@main
+    with:
+      sha: ${{ needs.release-prep.outputs.release-sha }}
+      version_number: ${{ inputs.version }}
+      changelog_path: ${{ needs.release-prep.outputs.changelog-path }}
+      test_run: ${{ inputs.deploy-to == 'test' }}
+      archive_name: ${{ needs.build-release.outputs.archive-name }}
+
+  docker-release:
+    name: "Docker release"
+    # We cannot release to docker on a test run because it uses the tag in GitHub as
+    # what we need to release but draft releases don't actually tag the commit so it
+    # finds nothing to release
+    if: ${{ !failure() && !cancelled() && (inputs.deploy-to == 'prod' || inputs.only_docker) }}
+    needs: github-release  # docker relies on the published tag from github-release
+    permissions:
+      packages: write  # this permission is required for publishing to GHCR
+    uses: dbt-labs/dbt-release/.github/workflows/release-docker.yml@main
+    with:
+      version_number: ${{ inputs.version }}
+      test_run: ${{ inputs.deploy-to == 'test' }}
