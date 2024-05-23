@@ -126,7 +126,7 @@ jobs:
           then
             is_current=true
           fi
-          echo "is-current=$is_updated" >> $GITHUB_OUTPUT
+          echo "is-current=$is_current" >> $GITHUB_OUTPUT
 
       - name: "[INFO] Skip version bump"
         if: steps.version.outputs.is-current == 'true'
@@ -202,9 +202,11 @@ jobs:
 
   core-team:
     if: needs.release-inputs.outputs.changelog-exists == 'false'
+    needs: release-inputs
     uses: dbt-labs/actions/.github/workflows/determine-team-membership.yml@main
     with:
       github_team: "core-group"
+    secrets: inherit
 
   generate-changelog:
     runs-on: ubuntu-latest
@@ -445,7 +447,7 @@ jobs:
         # If a release branch was created and not merged, use the release branch
         # Otherwise, use the input branch because either nothing was done, or the changes were merged back in
         run: |
-          if [ ${{ needs.release-branch.result == 'success' }} && ${{ needs.merge-release-branch.result == 'skipped' }} ]; then
+          if [[ ${{ needs.release-branch.result == 'success' }} && ${{ needs.merge-release-branch.result == 'skipped' }} ]]; then
             branch="${{ needs.release-branch.outputs.name }}"
           else
             branch="${{ inputs.branch }}"
