@@ -222,6 +222,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - truncate_relation
         - rename_relation
         - get_columns_in_relation
+        - get_relation_metadata
         - get_column_schema_from_query
         - expand_column_types
         - list_relations_without_caching
@@ -626,6 +627,12 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
+
+    @abc.abstractmethod
+    @available.parse_list
+    def get_relation_metadata(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Get metadata about a relation's materialization (e.g., materialization type, size, number of rows)."""
+        raise NotImplementedError("`get_relation_metadata` is not implemented for this adapter!")
 
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
