@@ -160,7 +160,7 @@ class SQLAdapter(BaseAdapter):
             GET_COLUMNS_IN_RELATION_MACRO_NAME, kwargs={"relation": relation}
         )
 
-    def get_relation_metadata(self, relation):
+    def get_relation_metadata(self, relation) -> Tuple[Any, Any]:
         return self.execute_macro(GET_RELATION_METADATA_NAME, kwargs={"relation": relation})
 
     def create_schema(self, relation: BaseRelation) -> None:

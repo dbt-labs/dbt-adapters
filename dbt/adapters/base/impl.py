@@ -629,8 +629,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
     @abc.abstractmethod
-    @available.parse_list
-    def get_relation_metadata(self, relation: BaseRelation) -> List[BaseColumn]:
+    def get_relation_metadata(self, relation: BaseRelation) -> Tuple[Any, Any]:
         """Get metadata about a relation's materialization (e.g., materialization type, size, number of rows)."""
         raise NotImplementedError("`get_relation_metadata` is not implemented for this adapter!")
 
