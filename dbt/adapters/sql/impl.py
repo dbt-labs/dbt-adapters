@@ -161,9 +161,7 @@ class SQLAdapter(BaseAdapter):
         )
 
     def get_relation_metadata(self, relation):
-        return self.execute_macro(
-            GET_RELATION_METADATA_NAME, kwargs={"relation": relation}
-        )
+        return self.execute_macro(GET_RELATION_METADATA_NAME, kwargs={"relation": relation})
 
     def create_schema(self, relation: BaseRelation) -> None:
         relation = relation.without_identifier()

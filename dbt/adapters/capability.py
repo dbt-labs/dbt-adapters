@@ -14,11 +14,11 @@ class Capability(str, Enum):
     """Indicates support for determining the time of the last table modification by querying database metadata."""
 
     TableLastModifiedMetadataBatch = "TableLastModifiedMetadataBatch"
-    """Indicates support for performantly determining the time of the last table modification by querying database 
+    """Indicates support for performantly determining the time of the last table modification by querying database
     metadata in batch."""
 
     GetRelationMetadata = "GetRelationMetadata"
-    """Indicates support for retrieving metadata for a single relation, such as materialization type, number of rows, 
+    """Indicates support for retrieving metadata for a single relation, such as materialization type, number of rows,
     size, etc."""
 
 
