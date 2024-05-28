@@ -1,0 +1,6 @@
+kind: Features
+body: Add get_relation_metadata capability
+time: 2024-05-28T01:36:23.588295+01:00
+custom:
+    Author: aranke
+    Issue: "231"
