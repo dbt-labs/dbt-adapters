@@ -1,6 +1,6 @@
 from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from dbt_common.artifacts.catalog import TableMetadata, StatsDict
+from dbt_common.contracts.metadata import TableMetadata, StatsDict
 from dbt_common.events.functions import fire_event
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
