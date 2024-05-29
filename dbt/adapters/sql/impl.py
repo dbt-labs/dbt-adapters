@@ -1,5 +1,6 @@
 from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
+from dbt_common.artifacts.schemas.catalog import TableMetadata, StatsDict
 from dbt_common.events.functions import fire_event
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
@@ -160,7 +161,7 @@ class SQLAdapter(BaseAdapter):
             GET_COLUMNS_IN_RELATION_MACRO_NAME, kwargs={"relation": relation}
         )
 
-    def get_relation_metadata(self, relation) -> Tuple[Any, Any]:
+    def get_relation_metadata(self, relation: BaseRelation) -> Tuple[TableMetadata, StatsDict]:
         return self.execute_macro(GET_RELATION_METADATA_NAME, kwargs={"relation": relation})
 
     def create_schema(self, relation: BaseRelation) -> None:

@@ -23,6 +23,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from dbt_common.artifacts.schemas.catalog import TableMetadata, StatsDict
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -629,7 +630,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
     @abc.abstractmethod
-    def get_relation_metadata(self, relation: BaseRelation) -> Tuple[Any, Any]:
+    def get_relation_metadata(self, relation: BaseRelation) -> Tuple[TableMetadata, StatsDict]:
         """Get metadata about a relation's materialization (e.g., materialization type, size, number of rows)."""
         raise NotImplementedError("`get_relation_metadata` is not implemented for this adapter!")
 
