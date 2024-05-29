@@ -23,7 +23,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from dbt_common.artifacts.schemas.catalog import TableMetadata, StatsDict
+from dbt_common.artifacts.catalog import TableMetadata, StatsDict
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
