@@ -18,8 +18,9 @@ class RelationType(StrEnum):
     View = "view"
     CTE = "cte"
     MaterializedView = "materialized_view"
-    External = "external"
     Ephemeral = "ephemeral"
+    # this is a "catch all" that is better than `None` == external to anything dbt is aware of
+    External = "external"
 
 
 class MaterializationContract(Protocol):

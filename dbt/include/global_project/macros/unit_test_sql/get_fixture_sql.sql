@@ -15,7 +15,7 @@
 {%- endif -%}
 
 {%- if not column_name_to_data_types -%}
-    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this) }}
+    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this ~ " because the relation doesn't exist") }}
 {%- endif -%}
 
 {%- for column_name, column_type in column_name_to_data_types.items() -%}
