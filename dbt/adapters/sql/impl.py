@@ -12,7 +12,7 @@ from dbt.adapters.sql.connections import SQLConnectionManager
 
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
 GET_COLUMNS_IN_RELATION_MACRO_NAME = "get_columns_in_relation"
-GET_METADATA_FOR_SINGLE_RELATION_NAME = "get_metadata_for_single_relation"
+GET_CATALOG_FOR_SINGLE_RELATION_NAME = "get_catalog_for_single_relation"
 LIST_SCHEMAS_MACRO_NAME = "list_schemas"
 CHECK_SCHEMA_EXISTS_MACRO_NAME = "check_schema_exists"
 CREATE_SCHEMA_MACRO_NAME = "create_schema"
@@ -162,7 +162,7 @@ class SQLAdapter(BaseAdapter):
 
     def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
         return self.execute_macro(
-            GET_METADATA_FOR_SINGLE_RELATION_NAME, kwargs={"relation": relation}
+            GET_CATALOG_FOR_SINGLE_RELATION_NAME, kwargs={"relation": relation}
         )
 
     def create_schema(self, relation: BaseRelation) -> None:
