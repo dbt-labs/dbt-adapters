@@ -77,13 +77,13 @@
     'list_relations_without_caching macro not implemented for adapter '+adapter.type()) }}
 {% endmacro %}
 
-{% macro get_relation_metadata(relation) %}
-  {{ return(adapter.dispatch('get_relation_metadata', 'dbt')(relation)) }}
+{% macro get_catalog_for_single_relation(relation) %}
+  {{ return(adapter.dispatch('get_catalog_for_single_relation', 'dbt')(relation)) }}
 {% endmacro %}
 
-{% macro default__get_relation_metadata(relation) %}
+{% macro default__get_catalog_for_single_relation(relation) %}
   {{ exceptions.raise_not_implemented(
-    'get_relation_metadata macro not implemented for adapter '+adapter.type()) }}
+    'get_catalog_for_single_relation macro not implemented for adapter '+adapter.type()) }}
 {% endmacro %}
 
 {% macro get_relations() %}

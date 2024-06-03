@@ -17,9 +17,9 @@ class Capability(str, Enum):
     """Indicates support for performantly determining the time of the last table modification by querying database
     metadata in batch."""
 
-    GetRelationMetadata = "GetRelationMetadata"
-    """Indicates support for retrieving metadata for a single relation, such as materialization type, number of rows,
-    size, etc."""
+    GetCatalogForSingleRelation = "GetCatalogForSingleRelation"
+    """Indicates support for getting catalog information including table-level and column-level metadata for a single
+    relation."""
 
 
 class Support(str, Enum):

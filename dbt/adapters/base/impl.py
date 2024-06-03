@@ -1,10 +1,10 @@
 import abc
+import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from multiprocessing.context import SpawnContext
-import time
 from typing import (
     Any,
     Callable,
@@ -23,13 +23,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from dbt_common.contracts.metadata import TableMetadata, StatsDict
+import pytz
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.contracts.metadata import CatalogTable
+from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -39,14 +41,12 @@ from dbt_common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
     executor,
     filter_null_values,
 )
-import pytz
 
 from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.connections import (
@@ -223,7 +223,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - truncate_relation
         - rename_relation
         - get_columns_in_relation
-        - get_relation_metadata
+        - get_catalog_for_single_relation
         - get_column_schema_from_query
         - expand_column_types
         - list_relations_without_caching
@@ -630,11 +630,11 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
     @abc.abstractmethod
-    def get_relation_metadata(
-        self, relation: BaseRelation
-    ) -> Tuple[Optional[TableMetadata], StatsDict]:
-        """Get metadata about a relation's materialization (e.g., materialization type, size, number of rows)."""
-        raise NotImplementedError("`get_relation_metadata` is not implemented for this adapter!")
+    def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
+        """Get catalog information including table-level and column-level metadata for a single relation."""
+        raise NotImplementedError(
+            "`get_catalog_for_single_relation` is not implemented for this adapter!"
+        )
 
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
