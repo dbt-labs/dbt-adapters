@@ -1,9 +1,9 @@
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 
 from dbt.adapters.base import BaseRelation
-from dbt.adapters.contracts.relation import RelationType
+from dbt.adapters.contracts.relation import RelationConfig, RelationType
 
 
 @pytest.mark.parametrize(
@@ -79,3 +79,22 @@ def test_render_limited(limit, require_alias, expected_result):
     actual_result = my_relation.render_limited()
     assert actual_result == expected_result
     assert str(my_relation) == expected_result
+
+
+@pytest.mark.parametrize(
+    "alias,expected_cte_id",
+    [
+        ("table", "table"),
+        ("test.<>*~!@#$%^&*table", "testtable")
+    ]
+)
+def test_create_ephemeral_from_uses_alias(alias, expected_cte_id):
+    @dataclass
+    class Node:
+        """Dummy implementation of RelationConfig protocol"""
+        name: str
+        alias: str
+
+    node = Node(name="name should not be used", alias=alias)
+    ephemeral_relation = BaseRelation.create_ephemeral_from(node)
+    assert str(ephemeral_relation) == f"__dbt__cte__{expected_cte_id}"
