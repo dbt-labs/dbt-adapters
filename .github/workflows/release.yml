@@ -151,7 +151,7 @@ jobs:
 
   github-release:
     name: "GitHub Release"
-    # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapter assets to the same release
+    # ToDo: update GH release to handle adding dbt-tests-adapter and dbt-adapters assets to the same release
     if: ${{ !failure() && !cancelled() && inputs.package == 'dbt-adapters' }}
     needs: [release-inputs, build-and-test, bump-version-generate-changelog]
     uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@main
