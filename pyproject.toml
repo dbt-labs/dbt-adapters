@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "dbt-common@git+https://github.com/dbt-labs/dbt-common.git@main",
+    "dbt-common>=1.3,<2.0",
     "pytz>=2015.7",
     # installed via dbt-common but used directly
     "agate>=1.0,<2.0",
@@ -57,7 +57,7 @@ include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 
 [tool.hatch.envs.default]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@main",
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     'pre-commit==3.7.0;python_version>="3.9"',
     'pre-commit==3.5.0;python_version=="3.8"',
 ]
@@ -67,7 +67,7 @@ code-quality = "pre-commit run --all-files"
 
 [tool.hatch.envs.unit-tests]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@main",
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
