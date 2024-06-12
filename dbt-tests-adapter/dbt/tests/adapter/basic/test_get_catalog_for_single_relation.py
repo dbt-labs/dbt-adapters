@@ -1,6 +1,5 @@
 import pytest
 
-from dbt.adapters.capability import Capability
 from dbt_common.contracts.metadata import (
     TableMetadata,
     StatsItem,
@@ -48,62 +47,61 @@ class BaseGetCatalogForSingleRelation:
         results = run_dbt(["run"])
         assert len(results) == 1
 
-        if project.adapter.supports(Capability.GetCatalogForSingleRelation):
-            expected = CatalogTable(
-                metadata=TableMetadata(
-                    type="VIEW",
-                    schema=project.test_schema.upper(),
-                    name="MY_MODEL",
-                    database=project.database,
-                    comment="",
-                    owner="TESTER",
-                ),
-                columns={
-                    "ID": ColumnMetadata(type="NUMBER", index=1, name="ID", comment=None),
-                    "FIRST_NAME": ColumnMetadata(
-                        type="VARCHAR", index=2, name="FIRST_NAME", comment=None
-                    ),
-                    "EMAIL": ColumnMetadata(type="VARCHAR", index=3, name="EMAIL", comment=None),
-                    "IP_ADDRESS": ColumnMetadata(
-                        type="VARCHAR", index=4, name="IP_ADDRESS", comment=None
-                    ),
-                    "UPDATED_AT": ColumnMetadata(
-                        type="TIMESTAMP_NTZ", index=5, name="UPDATED_AT", comment=None
-                    ),
-                },
-                stats={
-                    "has_stats": StatsItem(
-                        id="has_stats",
-                        label="Has Stats?",
-                        value=True,
-                        include=False,
-                        description="Indicates whether there are statistics for this table",
-                    ),
-                    "row_count": StatsItem(
-                        id="row_count",
-                        label="Row Count",
-                        value=0,
-                        include=True,
-                        description="Number of rows in the table as reported by Snowflake",
-                    ),
-                    "bytes": StatsItem(
-                        id="bytes",
-                        label="Approximate Size",
-                        value=0,
-                        include=True,
-                        description="Size of the table as reported by Snowflake",
-                    ),
-                },
-                unique_id=None,
-            )
-
-            my_model_relation = project.adapter.get_relation(
+        expected = CatalogTable(
+            metadata=TableMetadata(
+                type="VIEW",
+                schema=project.test_schema.upper(),
+                name="MY_MODEL",
                 database=project.database,
-                schema=project.test_schema,
-                identifier="MY_MODEL",
-            )
+                comment="",
+                owner="TESTER",
+            ),
+            columns={
+                "ID": ColumnMetadata(type="NUMBER", index=1, name="ID", comment=None),
+                "FIRST_NAME": ColumnMetadata(
+                    type="VARCHAR", index=2, name="FIRST_NAME", comment=None
+                ),
+                "EMAIL": ColumnMetadata(type="VARCHAR", index=3, name="EMAIL", comment=None),
+                "IP_ADDRESS": ColumnMetadata(
+                    type="VARCHAR", index=4, name="IP_ADDRESS", comment=None
+                ),
+                "UPDATED_AT": ColumnMetadata(
+                    type="TIMESTAMP_NTZ", index=5, name="UPDATED_AT", comment=None
+                ),
+            },
+            stats={
+                "has_stats": StatsItem(
+                    id="has_stats",
+                    label="Has Stats?",
+                    value=True,
+                    include=False,
+                    description="Indicates whether there are statistics for this table",
+                ),
+                "row_count": StatsItem(
+                    id="row_count",
+                    label="Row Count",
+                    value=0,
+                    include=True,
+                    description="Number of rows in the table as reported by Snowflake",
+                ),
+                "bytes": StatsItem(
+                    id="bytes",
+                    label="Approximate Size",
+                    value=0,
+                    include=True,
+                    description="Size of the table as reported by Snowflake",
+                ),
+            },
+            unique_id=None,
+        )
 
-            with get_connection(project.adapter):
-                actual = project.adapter.get_catalog_for_single_relation(my_model_relation)
+        my_model_relation = project.adapter.get_relation(
+            database=project.database,
+            schema=project.test_schema,
+            identifier="MY_MODEL",
+        )
 
-            assert actual == expected
+        with get_connection(project.adapter):
+            actual = project.adapter.get_catalog_for_single_relation(my_model_relation)
+
+        assert actual == expected
