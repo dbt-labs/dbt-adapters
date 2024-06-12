@@ -41,17 +41,6 @@ class BaseGetCatalogForSingleRelation:
             "my_model.sql": models__my_model_sql,
         }
 
-    @pytest.fixture(autouse=True)
-    def clean_up(self, project):
-        yield
-        with project.adapter.connection_named("__test"):
-            relation = project.adapter.Relation.create(
-                database=project.database, schema=project.test_schema
-            )
-            project.adapter.drop_schema(relation)
-
-    pass
-
     def test_get_catalog_for_single_relation(self, project):
         results = run_dbt(["seed"])
         assert len(results) == 1
@@ -108,16 +97,13 @@ class BaseGetCatalogForSingleRelation:
                 unique_id=None,
             )
 
+            my_model_relation = project.adapter.get_relation(
+                database=project.database,
+                schema=project.test_schema,
+                identifier="MY_MODEL",
+            )
+
             with get_connection(project.adapter):
-                my_model_relation = project.adapter.get_relation(
-                    database=project.database,
-                    schema=project.test_schema,
-                    identifier="MY_MODEL",
-                )
                 actual = project.adapter.get_catalog_for_single_relation(my_model_relation)
 
-                assert actual == expected
-
-
-class TestGetCatalogForSingleRelation(BaseGetCatalogForSingleRelation):
-    pass
+            assert actual == expected
