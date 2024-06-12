@@ -7,5 +7,5 @@ contact_links:
     url: mailto:support@getdbt.com
     about: Are you using dbt Cloud? Contact our support team for help!
   - name: Participate in Discussions
-    url: https://github.com/dbt-labs/dbt-adapter/discussions
-    about: Do you have a Big Idea for dbt-adapter? Read open discussions, or start a new one
+    url: https://github.com/dbt-labs/dbt-adapters/discussions
+    about: Do you have a Big Idea for dbt-adapters? Read open discussions, or start a new one

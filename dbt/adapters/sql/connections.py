@@ -1,10 +1,11 @@
 import abc
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtInternalError, NotImplementedError
+from dbt_common.record import record_function
 from dbt_common.utils import cast_to_str
 
 from dbt.adapters.base import BaseConnectionManager
@@ -19,6 +20,7 @@ from dbt.adapters.events.types import (
     SQLQuery,
     SQLQueryStatus,
 )
+from dbt.adapters.record import QueryRecord
 
 if TYPE_CHECKING:
     import agate
@@ -110,27 +112,24 @@ class SQLConnectionManager(BaseConnectionManager):
     @classmethod
     def process_results(
         cls, column_names: Iterable[str], rows: Iterable[Any]
-    ) -> List[Dict[str, Any]]:
-        # TODO CT-211
+    ) -> Iterator[Dict[str, Any]]:
         unique_col_names = dict()  # type: ignore[var-annotated]
-        # TODO CT-211
         for idx in range(len(column_names)):  # type: ignore[arg-type]
-            # TODO CT-211
             col_name = column_names[idx]  # type: ignore[index]
             if col_name in unique_col_names:
                 unique_col_names[col_name] += 1
-                # TODO CT-211
                 column_names[idx] = f"{col_name}_{unique_col_names[col_name]}"  # type: ignore[index] # noqa
             else:
-                # TODO CT-211
                 unique_col_names[column_names[idx]] = 1  # type: ignore[index]
-        return [dict(zip(column_names, row)) for row in rows]
+
+        for row in rows:
+            yield dict(zip(column_names, row))
 
     @classmethod
     def get_result_from_cursor(cls, cursor: Any, limit: Optional[int]) -> "agate.Table":
         from dbt_common.clients.agate_helper import table_from_data_flat
 
-        data: List[Any] = []
+        data: Iterable[Any] = []
         column_names: List[str] = []
 
         if cursor.description is not None:
@@ -143,6 +142,7 @@ class SQLConnectionManager(BaseConnectionManager):
 
         return table_from_data_flat(data, column_names)
 
+    @record_function(QueryRecord, method=True, tuple_result=True)
     def execute(
         self,
         sql: str,

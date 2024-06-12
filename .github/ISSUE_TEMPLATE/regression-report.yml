@@ -1,5 +1,5 @@
 name: ☣️ Regression
-description: Report a regression you've observed in a newer version of dbt-adapter
+description: Report a regression you've observed in a newer version of dbt-adapters
 title: "[Regression] <title>"
 labels: ["regression", "triage"]
 body:
@@ -57,13 +57,13 @@ body:
         examples:
           - **OS**: Ubuntu 20.04
           - **Python**: 3.11.6 (`python3 --version`)
-          - **dbt-adapter (working version)**: 1.1.0
-          - **dbt-adapter (regression version)**: 1.2.0
+          - **dbt-adapters (working version)**: 1.1.0
+          - **dbt-adapters (regression version)**: 1.2.0
       value: |
         - OS:
         - Python:
-        - dbt-adapter (working version):
-        - dbt-adapter (regression version):
+        - dbt-adapters (working version):
+        - dbt-adapters (regression version):
       render: markdown
     validations:
       required: true
