@@ -88,7 +88,8 @@ class SQLConnectionManager(BaseConnectionManager):
                     node_info=get_node_info(),
                 )
             )
-            pre = time.time()
+
+            pre = time.perf_counter()
 
             cursor = connection.handle.cursor()
             cursor.execute(sql, bindings)
@@ -96,7 +97,7 @@ class SQLConnectionManager(BaseConnectionManager):
             fire_event(
                 SQLQueryStatus(
                     status=str(self.get_response(cursor)),
-                    elapsed=round((time.time() - pre)),
+                    elapsed=time.perf_counter() - pre,
                     node_info=get_node_info(),
                 )
             )
