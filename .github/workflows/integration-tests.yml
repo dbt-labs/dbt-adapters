@@ -45,7 +45,7 @@ defaults:
 jobs:
   integration:
     name: Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     strategy:
       fail-fast: false
@@ -102,24 +102,41 @@ jobs:
 
   psycopg2-check:
     name: "Test psycopg2 build version"
-    runs-on: ${{ matrix.scenario.platform }}
+    runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
-        scenario:
-          - {platform: ubuntu-latest, psycopg2-name: psycopg2}
-          - {platform: macos-12, psycopg2-name: psycopg2-binary}
+        platform: [ubuntu-22.04, macos-12]
+        python-version: ["3.8", "3.11"]
     steps:
       - name: "Check out repository"
         uses: actions/checkout@v4
 
-      - name: "Test psycopg2 name"
-        run: |
-          python -m pip install .
-          PSYCOPG2_PIP_ENTRY=$(pip list | grep "psycopg2 " || pip list | grep psycopg2-binary)
-          echo $PSYCOPG2_PIP_ENTRY
-          PSYCOPG2_NAME="${PSYCOPG2_PIP_ENTRY%% *}"
-          echo $PSYCOPG2_NAME
-          if [[ "${PSYCOPG2_NAME}" != "${{ matrix.scenario.psycopg2-name }}" ]]; then
-            exit 1
-          fi
+      - name: "Set up Python ${{ matrix.python-version }}"
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: "Test psycopg2 name - default"
+        run: .github/scripts/psycopg2-check.sh
+        env:
+          PSYCOPG2_EXPECTED_NAME: psycopg2-binary
+
+      - name: "Test psycopg2 name - invalid override"
+        run: .github/scripts/psycopg2-check.sh
+        env:
+          DBT_PSYCOPG2_NAME: rubber-baby-buggy-bumpers
+          PSYCOPG2_EXPECTED_NAME: psycopg2-binary
+
+      - name: "Test psycopg2 name - override"
+        run: .github/scripts/psycopg2-check.sh
+        env:
+          DBT_PSYCOPG2_NAME: psycopg2
+          PSYCOPG2_EXPECTED_NAME: psycopg2-binary  # we have not implemented the hook yet, so this doesn't work
+
+      - name: "Test psycopg2 name - manual override"
+        # verify that the workaround documented in the `README.md` continues to work
+        run: .github/scripts/psycopg2-check.sh
+        env:
+          PSYCOPG2_WORKAROUND: true
+          PSYCOPG2_EXPECTED_NAME: psycopg2

@@ -161,3 +161,9 @@ cython_debug/
 
 # testing artifacts
 /logs
+
+# MacOS
+.DS_Store
+
+# vscode
+.vscode/

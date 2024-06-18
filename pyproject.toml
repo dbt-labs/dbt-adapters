@@ -23,10 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    # install `psycopg2` on linux (assumed production)
-    'psycopg2>=2.9,<3.0; platform_system == "Linux"',
-    # install `psycopg2-binary` on macos/windows (assumed development)
-    'psycopg2-binary>=2.9,<3.0; platform_system != "Linux"',
+    "psycopg2-binary>=2.9,<3.0",
     "dbt-adapters>=0.1.0a1,<2.0",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0a1",
