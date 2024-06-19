@@ -1,6 +1,5 @@
 from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
-from dbt_common.contracts.metadata import CatalogTable
 from dbt_common.events.functions import fire_event
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
@@ -158,11 +157,6 @@ class SQLAdapter(BaseAdapter):
     def get_columns_in_relation(self, relation):
         return self.execute_macro(
             GET_COLUMNS_IN_RELATION_MACRO_NAME, kwargs={"relation": relation}
-        )
-
-    def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
-        return self.execute_macro(
-            GET_CATALOG_FOR_SINGLE_RELATION_NAME, kwargs={"relation": relation}
         )
 
     def create_schema(self, relation: BaseRelation) -> None:
