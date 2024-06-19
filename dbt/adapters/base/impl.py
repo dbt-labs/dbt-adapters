@@ -629,7 +629,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
-    @abc.abstractmethod
     def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
         """Get catalog information including table-level and column-level metadata for a single relation."""
         raise NotImplementedError(
