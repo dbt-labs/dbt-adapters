@@ -9,7 +9,6 @@ from dbt.adapters.events.types import ColTypeChange, SchemaCreation, SchemaDrop
 from dbt.adapters.exceptions import RelationTypeNullError
 from dbt.adapters.sql.connections import SQLConnectionManager
 
-
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
 GET_COLUMNS_IN_RELATION_MACRO_NAME = "get_columns_in_relation"
 LIST_SCHEMAS_MACRO_NAME = "list_schemas"
@@ -41,6 +40,7 @@ class SQLAdapter(BaseAdapter):
         - get_catalog
         - list_relations_without_caching
         - get_columns_in_relation
+        - get_catalog_for_single_relation
     """
 
     ConnectionManager: Type[SQLConnectionManager]
