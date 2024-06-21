@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Fix query timer resolution
+time: 2024-06-21T15:08:37.43527-04:00
+custom:
+  Author: peterallenwebb
+  Issue: "246"
