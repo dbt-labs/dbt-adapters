@@ -320,7 +320,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @contextmanager
     def connection_named(
-        self, name: str, query_header_context: Any = None, release_connection=True
+        self, name: str, query_header_context: Any = None, should_release_connection=True
     ) -> Iterator[None]:
         try:
             if self.connections.query_header is not None:
@@ -328,7 +328,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             self.acquire_connection(name)
             yield
         finally:
-            if release_connection:
+            if should_release_connection:
                 self.release_connection()
 
             if self.connections.query_header is not None:
