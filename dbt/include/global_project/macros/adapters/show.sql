@@ -8,11 +8,11 @@
 {% endmacro %}
 
 {% macro default__get_show_sql(compiled_code, sql_header, limit) %}
-  {%- if sql_header -%}
+  {%- if sql_header is not none -%}
   {{ sql_header }}
   {%- endif -%}
   {{ compiled_code }}
-  {%- if limit is not none -%}
+  {%- if limit is not none %}
   limit {{ limit }}
   {%- endif -%}
 {% endmacro %}

@@ -1,5 +1,6 @@
 import pytest
 
+from dbt_common.exceptions import DbtRuntimeError
 from dbt.tests.adapter.dbt_show import fixtures
 from dbt.tests.util import run_dbt
 
@@ -48,9 +49,15 @@ class BaseShowSqlHeader:
 
 
 class BaseShowDoesNotHandleDoubleLimit:
+    """see issue: https://github.com/dbt-labs/dbt-adapters/issues/207"""
+
+    DATABASE_ERROR_MESSAGE = 'syntax error at or near "limit"'
+
     def test_double_limit_throws_syntax_error(self, project):
-        '''see issue: https://github.com/dbt-labs/dbt-adapters/issues/207'''
-        run_dbt(["show", "--limit", "1", "--inline", "select 1 limit 1"])
+        with pytest.raises(DbtRuntimeError) as e:
+            run_dbt(["show", "--limit", "1", "--inline", "select 1 limit 1"])
+
+        assert self.DATABASE_ERROR_MESSAGE in str(e)
 
 
 class TestPostgresShowSqlHeader(BaseShowSqlHeader):
