@@ -190,7 +190,7 @@ class SQLQueryStatus(DebugLevel):
         return "E017"
 
     def message(self) -> str:
-        return f"SQL status: {self.status} in {self.elapsed} seconds"
+        return f"SQL status: {self.status} in {self.elapsed:.3f} seconds"
 
 
 class SQLCommit(DebugLevel):
