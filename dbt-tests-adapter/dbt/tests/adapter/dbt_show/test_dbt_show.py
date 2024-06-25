@@ -47,9 +47,19 @@ class BaseShowSqlHeader:
         run_dbt(["show", "--select", "sql_header", "--vars", "timezone: Asia/Kolkata"])
 
 
+class BaseShowDoesNotHandleDoubleLimit:
+    def test_double_limit_throws_syntax_error(self, project):
+        '''see issue: https://github.com/dbt-labs/dbt-adapters/issues/207'''
+        run_dbt(["show", "--limit", "1", "--inline", "select 1 limit 1"])
+
+
 class TestPostgresShowSqlHeader(BaseShowSqlHeader):
     pass
 
 
 class TestPostgresShowLimit(BaseShowLimit):
+    pass
+
+
+class TestShowDoesNotHandleDoubleLimit(BaseShowDoesNotHandleDoubleLimit):
     pass

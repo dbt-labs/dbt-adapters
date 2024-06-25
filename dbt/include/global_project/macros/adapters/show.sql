@@ -1,22 +1,18 @@
+{#
+    We expect a syntax error if dbt show is invoked both with a --limit flag to show
+    and with a limit predicate embedded in its inline query. No special handling is
+    provided out-of-box.
+#}
 {% macro get_show_sql(compiled_code, sql_header, limit) -%}
+  {{ adapter.dispatch('get_show_sql', 'dbt')(compiled_code, sql_header, limit) }}
+{% endmacro %}
+
+{% macro default__get_show_sql(compiled_code, sql_header, limit) %}
   {%- if sql_header -%}
   {{ sql_header }}
   {%- endif -%}
-  {%- if limit is not none -%}
-  {{ get_limit_subquery_sql(compiled_code, limit) }}
-  {%- else -%}
   {{ compiled_code }}
+  {%- if limit is not none -%}
+  limit {{ limit }}
   {%- endif -%}
-{% endmacro %}
-
-{% macro get_limit_subquery_sql(sql, limit) %}
-  {{ adapter.dispatch('get_limit_subquery_sql', 'dbt')(sql, limit) }}
-{% endmacro %}
-
-{% macro default__get_limit_subquery_sql(sql, limit) %}
-    select *
-    from (
-        {{ sql }}
-    ) as model_limit_subq
-    limit {{ limit }}
 {% endmacro %}
