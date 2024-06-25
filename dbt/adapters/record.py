@@ -1,5 +1,6 @@
 import dataclasses
-from typing import Any, Optional, Mapping, List, Union, Iterable
+import datetime
+from typing import Any, Dict, Optional, Mapping, List, Union, Iterable
 
 from dbt.adapters.contracts.connection import Connection
 
@@ -78,6 +79,44 @@ class CursorFetchAllParams:
 class CursorFetchAllResult:
     results: List[Any]
 
+    def _to_dict(self) -> Dict[str, Any]:
+        processed_results = []
+        for result in self.results:
+            result = tuple(map(self._process_value, result))
+            processed_results.append(result)
+
+        return {"results": processed_results}
+
+    @classmethod
+    def _from_dict(cls, dct: Mapping) -> "CursorFetchAllResult":
+        unprocessed_results = []
+        for result in dct["results"]:
+            result = tuple(map(cls._unprocess_value, result))
+            unprocessed_results.append(result)
+
+        return CursorFetchAllResult(unprocessed_results)
+
+    @classmethod
+    def _process_value(self, value: Any) -> Any:
+        if type(value) is datetime.date:
+            return {"type": "date", "value": value.isoformat()}
+        elif type(value) is datetime.datetime:
+            return {"type": "datetime", "value": value.isoformat()}
+        else:
+            return value
+
+    @classmethod
+    def _unprocess_value(self, value: Any) -> Any:
+        if type(value) is dict:
+            value_type = value.get("type")
+            if value_type == "date":
+                return datetime.date.fromisoformat(value.get("value"))
+            elif value_type == "datetime":
+                return datetime.datetime.fromisoformat(value.get("value"))
+            return value
+        else:
+            return value
+
 
 class CursorFetchAllRecord(Record):
     params_cls = CursorFetchAllParams
@@ -111,59 +150,22 @@ class CursorGetDescriptionParams:
 
 
 @dataclasses.dataclass
-class RecordReplayColumn:
-    name: str
-    type_code: int
-    display_size: Optional[int]
-    internal_size: int
-    null_ok: Optional[bool]
-    precision: Optional[int]
-    scale: Optional[int]
-    table_column: Optional[int]
-    table_oid: Optional[int]
-
-
-@dataclasses.dataclass
 class CursorGetDescriptionResult:
     columns: Iterable[Any]
 
     def _to_dict(self) -> Any:
         column_dicts = []
-
         for c in self.columns:
-            column_dicts.append(
-                {
-                    "name": c.name,
-                    "type_code": c.type_code,
-                    "display_size": c.display_size,
-                    "internal_size": c.internal_size,
-                    "null_ok": c.null_ok,
-                    "precision": c.precision,
-                    "scale": c.scale,
-                    "table_column": c.table_column,
-                    "table_oid": c.table_oid,
-                }
-            )
+            # This captures the mandatory column information, but we might need
+            # more for some adapters.
+            # See https://peps.python.org/pep-0249/#description
+            column_dicts.append((c[0], c[1]))
 
         return {"columns": column_dicts}
 
     @classmethod
     def _from_dict(cls, dct: Mapping) -> "CursorGetDescriptionResult":
-        columns = iter(
-            RecordReplayColumn(
-                c["name"],
-                c["type_code"],
-                c["display_size"],
-                c["internal_size"],
-                c["null_ok"],
-                c["precision"],
-                c["scale"],
-                c["table_column"],
-                c["table_oid"],
-            )
-            for c in dct["columns"]
-        )
-        return CursorGetDescriptionResult(tuple(columns))
+        return CursorGetDescriptionResult(columns=dct["columns"])
 
 
 class CursorGetDescriptionRecord(Record):
