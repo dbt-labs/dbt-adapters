@@ -123,9 +123,6 @@ class Column:
         else:
             return "{}({},{})".format(dtype, precision, scale)
 
-    def __repr__(self) -> str:
-        return "<Column {} ({})>".format(self.name, self.data_type)
-
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "Column":
         match = re.match(r"([^(]+)(\([^)]+\))?", raw_data_type)
