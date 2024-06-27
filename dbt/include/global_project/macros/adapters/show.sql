@@ -4,13 +4,17 @@
     provided out-of-box.
 #}
 {% macro get_show_sql(compiled_code, sql_header, limit) -%}
-  {{ adapter.dispatch('get_show_sql', 'dbt')(compiled_code, sql_header, limit) }}
-{% endmacro %}
-
-{% macro default__get_show_sql(compiled_code, sql_header, limit) %}
   {%- if sql_header is not none -%}
   {{ sql_header }}
   {%- endif -%}
+  {{ get_limit_subquery_sql(compiled_code, limit) }}
+{% endmacro %}
+
+{% macro get_limit_subquery_sql(sql, limit) %}
+  {{ adapter.dispatch('get_limit_subquery_sql', 'dbt')(sql, limit) }}
+{% endmacro %}
+
+% macro default__get_limit_subquery_sql(sql, limit) %}
   {{ compiled_code }}
   {%- if limit is not none %}
   limit {{ limit }}
