@@ -21,9 +21,6 @@ The following utilities are needed or will be installed in this guide:
 - `git`
 - `changie`
 
-If local functional testing is required, then a database instance
-and appropriate credentials are also required.
-
 In addition to this guide, users are highly encouraged to read the `dbt-core`
 [CONTRIBUTING.md](https://github.com/dbt-labs/dbt-core/blob/main/CONTRIBUTING.md).
 Almost all information there is applicable here.
@@ -102,8 +99,8 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 
 ## Testing
 
-`dbt-adapters` contains [unit](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit)
-and [functional](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/functional) tests.
+`dbt-adapters` only contains [unit](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit) tests for now as functional tests would require a concrete adapter.
+There is an on-going discussion about how to easily test against concrete adapters and embed that in CI workflows, stay tuned.
 
 ### Unit tests
 
