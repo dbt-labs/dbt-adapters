@@ -3,6 +3,10 @@
 {%- endmacro %}
 
 {% macro default__get_test_sql(main_sql, fail_calc, warn_if, error_if, limit) -%}
+    {%- set sql_header = config.get('sql_header', none) -%}
+
+    {{ sql_header if sql_header is not none }}
+
     select
       {{ fail_calc }} as failures,
       {{ fail_calc }} {{ warn_if }} as should_warn,
