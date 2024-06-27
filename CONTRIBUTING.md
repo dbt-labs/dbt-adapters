@@ -76,6 +76,7 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
    ```
 3. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
    ```toml
+   # MacOS: ~/Library/Application Support/hatch/config.toml
    [dirs.env]
    virtual = ".hatch"
    ```
