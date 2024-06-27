@@ -57,7 +57,7 @@ class RelationConfig(Protocol):
     meta: Dict[str, Any]
     tags: List[str]
     quoting_dict: Dict[str, bool]
-    config: Optional[MaterializationConfig]
+    config: MaterializationConfig
 
 
 class ComponentName(StrEnum):
