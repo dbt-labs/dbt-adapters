@@ -11,10 +11,10 @@
 {% endmacro %}
 
 {% macro get_limit_subquery_sql(sql, limit) %}
-  {{ adapter.dispatch('get_limit_subquery_sql', 'dbt')(sql, limit) }}
+  {{ adapter.dispatch('get_limit_sql', 'dbt')(sql, limit) }}
 {% endmacro %}
 
-% macro default__get_limit_subquery_sql(sql, limit) %}
+% macro default__get_limit_sql(sql, limit) %}
   {{ compiled_code }}
   {%- if limit is not none %}
   limit {{ limit }}
