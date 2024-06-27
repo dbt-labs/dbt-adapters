@@ -17,7 +17,7 @@ This guide assumes users are developing on a Linux or MacOS system.
 The following utilities are needed or will be installed in this guide:
 
 - `pip`
-- `virturalenv`
+- `hatch`
 - `git`
 - `changie`
 
@@ -68,17 +68,35 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 
 1. Ensure the latest version of `pip` is installed:
    ```shell
-   pip install --upgrade pip
+   pip install --user --upgrade pip
    ```
-2. Configure and activate a virtual environment using `virtualenv` as described in
-[Setting up an environment](https://github.com/dbt-labs/dbt-core/blob/HEAD/CONTRIBUTING.md#setting-up-an-environment)
-3. Install `dbt-adapters` and development dependencies in the virtual environment
+2. Install `hatch`:
    ```shell
-   pip install -e .[dev]
+   pip install --user hatch
    ```
-
-When `dbt-adapters` is installed this way, any changes made to the `dbt-adapters` source code
-will be reflected in the virtual environment immediately.
+3. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
+   ```toml
+   [dirs.env]
+   virtual = ".hatch"
+   ```
+   This makes `hatch` create all virtual environments in the project root inside of the directory `/.hatch`, similar to `/.tox` for `tox`.
+   It also makes it easier to add this environment as a runner in common IDEs like VSCode and PyCharm.
+4. Setup `pre-commit` hooks:
+   ```shell
+   hatch run dev
+   ```
+5. Run code quality:
+   ```shell
+   hatch run code-quality
+   ```
+6. Run any commands within the virtual environment by prefixing the command with `hatch run`:
+   ```shell
+   hatch run <command>
+   ```
+7. Open a shell in the virtual environment:
+   ```shell
+   hatch shell
+   ```
 
 
 ## Testing
@@ -93,41 +111,34 @@ Unit tests can be run locally without setting up a database connection:
 ```shell
 # Note: replace $strings with valid names
 
+# run all unit tests
+hatch run unit-test:all
 # run all unit tests in a module
-python -m pytest tests/unit/$test_file_name.py
+hatch run unit-test:all tests/unit/$test_file_name.py
 # run a specific unit test
-python -m pytest tests/unit/$test_file_name.py::$test_class_name::$test_method_name
+hatch run unit-test:all tests/unit/$test_file_name.py::$test_class_name::$test_method_name
 ```
 
-### Functional tests
-
-Functional tests require a database to test against. There are two primary ways to run functional tests:
-
-- Tests will run automatically against a dbt Labs owned database during PR checks
-- Tests can be run locally by configuring a `test.env` file with appropriate `ENV` variables:
-   ```shell
-   cp test.env.example test.env
-   $EDITOR test.env
-   ```
-
-> **_WARNING:_** The parameters in `test.env` must link to a valid database.
-> `test.env` is git-ignored, but be _extra_ careful to never check in credentials
-> or other sensitive information when developing.
-
-Functional tests can be run locally with a valid database connection configured in `test.env`:
+You can open a shell in the `unit-test` environment by adding the environment name as an argument:
 
 ```shell
-# Note: replace $strings with valid names
-
-# run all functional tests in a directory
-python -m pytest tests/functional/$test_directory
-# run all functional tests in a module
-python -m pytest tests/functional/$test_dir_and_filename.py
-# run all functional tests in a class
-python -m pytest tests/functional/$test_dir_and_filename.py::$test_class_name
-# run a specific functional test
-python -m pytest tests/functional/$test_dir_and_filename.py::$test_class_name::$test__method_name
+hatch shell unit-test
 ```
+
+### Testing against a development branch
+
+Some changes require a change in both `dbt-common` and `dbt-adapters`.
+In that case, the dependency on `dbt-common` must be updated to point to the development branch. For example:
+
+```toml
+[tool.hatch.envs.default]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@my-dev-branch",
+    'pre-commit==3.7.0;python_version>="3.9"',
+    'pre-commit==3.5.0;python_version=="3.8"',
+]
+```
+This will flow through to the `unit-test` environment since `hatch` layers environments on top of the `default` environment unless otherwise specified.
 
 
 ## Documentation
