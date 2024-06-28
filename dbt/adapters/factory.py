@@ -251,7 +251,7 @@ def get_adapter_type_names(name: Optional[str]) -> List[str]:
     return FACTORY.get_adapter_type_names(name)
 
 
-def get_adapter_constraint_support(name: Optional[str]) -> List[str]:
+def get_adapter_constraint_support(name: Optional[str]) -> Dict[str, str]:
     return FACTORY.get_adapter_constraint_support(name)
 
 
