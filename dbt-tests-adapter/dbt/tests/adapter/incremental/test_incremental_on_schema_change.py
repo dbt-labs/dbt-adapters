@@ -1,7 +1,7 @@
 import pytest
 
 from dbt.tests.adapter.incremental import fixtures
-from dbt.tests.util import check_relations_equal, run_dbt
+from dbt.tests.util import check_relations_equal, run_dbt, run_dbt_and_capture
 
 
 class BaseIncrementalOnSchemaChangeSetup:
@@ -20,6 +20,8 @@ class BaseIncrementalOnSchemaChangeSetup:
             "incremental_append_new_columns.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,
             "incremental_sync_all_columns_target.sql": fixtures._MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
             "incremental_append_new_columns_remove_one_target.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET,
+            "src_artists.sql": fixtures._MODELS__SRC_ARTISTS,
+            "dim_artists.sql": fixtures._MODELS__DIM_ARTISTS,
         }
 
     def run_twice_and_assert(self, include, compare_source, compare_target, project):
@@ -70,6 +72,19 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
     def test_run_incremental_append_new_columns(self, project):
         self.run_incremental_append_new_columns(project)
         self.run_incremental_append_new_columns_remove_one(project)
+
+    def test_run_incremental_check_quoting_on_new_columns(self, project):
+        select = "src_artists dim_artists"
+  
+        run_dbt(["run", "--models", select, "--full-refresh"])
+        run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
+        res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
+        assert "NAME" in logs
+        run_dbt(["run", "--vars", "{'version': 1}"])
+        run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
+        res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
+        assert "Tour" in logs
+
 
     def test_run_incremental_sync_all_columns(self, project):
         self.run_incremental_sync_all_columns(project)

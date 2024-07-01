@@ -303,3 +303,34 @@ select id,
 
 from source_data
 """
+
+_MODELS__SRC_ARTISTS = """
+{{
+    config(
+        materialized='table',
+    )
+}}
+
+{% if var("version", 0) == 0 %}
+
+    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as name
+
+{% else %}
+
+    -- add a non-zero version to the end of the command to get a different version:
+    -- --vars "{'version': 1}"
+    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as Name, 'eras' as "Tour"
+
+{% endif %}
+"""
+
+_MODELS__DIM_ARTISTS = """
+{{
+    config(
+        materialized='incremental',
+        on_schema_change='append_new_columns',
+    )
+}}
+
+select  * from {{ ref("src_artists") }}
+"""
