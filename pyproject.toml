@@ -67,7 +67,6 @@ code-quality = "pre-commit run --all-files"
 
 [tool.hatch.envs.unit-tests]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
