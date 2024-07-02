@@ -16,7 +16,7 @@
         {{ drop_materialized_view(relation) }}
 
     {%- else -%}
-        drop {{ relation.type }} if exists {{ relation }} cascade
+        drop {{ relation.type }} if exists {{ relation.render() }} cascade
 
     {%- endif -%}
 
