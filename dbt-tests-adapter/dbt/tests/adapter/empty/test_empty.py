@@ -1,7 +1,7 @@
 from dbt.tests.util import relation_from_name, run_dbt
 import pytest
 
-from tests.functional.adapter.empty import _models
+from dbt.tests.adapter.empty import _models
 
 
 class BaseTestEmpty:
