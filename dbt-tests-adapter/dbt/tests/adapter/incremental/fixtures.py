@@ -313,13 +313,13 @@ _MODELS__SRC_ARTISTS = """
 
 {% if var("version", 0) == 0 %}
 
-    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as name
+    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as f_name
 
 {% else %}
 
     -- add a non-zero version to the end of the command to get a different version:
     -- --vars "{'version': 1}"
-    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as Name, 'eras' as "Tour"
+    select {{ dbt.current_timestamp() }} as inserted_at, 'taylor' as F_name, 'eras' as "Tour"
 
 {% endif %}
 """

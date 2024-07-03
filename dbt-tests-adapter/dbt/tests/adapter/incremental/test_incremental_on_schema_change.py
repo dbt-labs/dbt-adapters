@@ -79,7 +79,7 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         run_dbt(["run", "--models", select, "--full-refresh"])
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
-        assert "NAME" in logs
+        assert "f_name" in logs
         run_dbt(["run", "--vars", "{'version': 1}"])
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
