@@ -155,5 +155,12 @@ cython_debug/
 # PyCharm
 .idea/
 
+# MacOS
+.DS_Store
+
+# vscode
+.vscode/
+.venv/
+
 # Vim
 *.swp

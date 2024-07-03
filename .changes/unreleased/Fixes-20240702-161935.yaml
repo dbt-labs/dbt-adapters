@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix scenario where using the `--empty` flag causes metadata queries to contain limit clauses
+time: 2024-07-02T16:19:35.457997-04:00
+custom:
+  Author: mikealfare
+  Issue: "213"
