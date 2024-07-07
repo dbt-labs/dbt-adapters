@@ -26,12 +26,11 @@ class CursorExecuteParams:
     parameters: Union[Iterable[Any], Mapping[str, Any]]
 
 
+@Recorder.register_record_type
 class CursorExecuteRecord(Record):
     params_cls = CursorExecuteParams
     result_cls = None
-
-
-Recorder.register_record_type(CursorExecuteRecord)
+    group = "Database"
 
 
 @dataclasses.dataclass
@@ -44,12 +43,11 @@ class CursorFetchOneResult:
     result: Any
 
 
+@Recorder.register_record_type
 class CursorFetchOneRecord(Record):
     params_cls = CursorFetchOneParams
     result_cls = CursorFetchOneResult
-
-
-Recorder.register_record_type(CursorFetchOneRecord)
+    group = "Database"
 
 
 @dataclasses.dataclass
@@ -62,12 +60,11 @@ class CursorFetchManyResult:
     results: List[Any]
 
 
+@Recorder.register_record_type
 class CursorFetchManyRecord(Record):
     params_cls = CursorFetchManyParams
     result_cls = CursorFetchManyResult
-
-
-Recorder.register_record_type(CursorFetchManyRecord)
+    group = "Database"
 
 
 @dataclasses.dataclass
@@ -118,12 +115,11 @@ class CursorFetchAllResult:
             return value
 
 
+@Recorder.register_record_type
 class CursorFetchAllRecord(Record):
     params_cls = CursorFetchAllParams
     result_cls = CursorFetchAllResult
-
-
-Recorder.register_record_type(CursorFetchAllRecord)
+    group = "Database"
 
 
 @dataclasses.dataclass
@@ -136,12 +132,11 @@ class CursorGetRowCountResult:
     rowcount: Optional[int]
 
 
+@Recorder.register_record_type
 class CursorGetRowCountRecord(Record):
     params_cls = CursorGetRowCountParams
     result_cls = CursorGetRowCountResult
-
-
-Recorder.register_record_type(CursorGetRowCountRecord)
+    group = "Database"
 
 
 @dataclasses.dataclass
@@ -168,12 +163,11 @@ class CursorGetDescriptionResult:
         return CursorGetDescriptionResult(columns=dct["columns"])
 
 
+@Recorder.register_record_type
 class CursorGetDescriptionRecord(Record):
     params_cls = CursorGetDescriptionParams
     result_cls = CursorGetDescriptionResult
-
-
-Recorder.register_record_type(CursorGetDescriptionRecord)
+    group = "Database"
 
 
 class RecordReplayCursor:
