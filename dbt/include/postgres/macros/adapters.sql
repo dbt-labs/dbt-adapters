@@ -196,7 +196,12 @@
 
 {% macro postgres__alter_relation_comment(relation, comment) %}
   {% set escaped_comment = postgres_escape_comment(comment) %}
-  comment on {{ relation.type }} {{ relation }} is {{ escaped_comment }};
+  {% if relation.type == 'materialized_view' -%}
+    {% set relation_type = "materialized view" %}
+  {%- else -%}
+    {%- set relation_type = relation.type -%}
+  {%- endif -%}
+  comment on {{ relation_type }} {{ relation }} is {{ escaped_comment }};
 {% endmacro %}
 
 
