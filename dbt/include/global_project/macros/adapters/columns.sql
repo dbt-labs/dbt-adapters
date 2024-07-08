@@ -96,10 +96,10 @@
   {%- set tmp_column = column_name + "__dbt_alter" -%}
 
   {% call statement('alter_column_type') %}
-    alter table {{ relation }} add column {{ adapter.quote(tmp_column) }} {{ new_column_type }};
-    update {{ relation }} set {{ adapter.quote(tmp_column) }} = {{ adapter.quote(column_name) }};
-    alter table {{ relation }} drop column {{ adapter.quote(column_name) }} cascade;
-    alter table {{ relation }} rename column {{ adapter.quote(tmp_column) }} to {{ adapter.quote(column_name) }}
+    alter table {{ relation.render() }} add column {{ adapter.quote(tmp_column) }} {{ new_column_type }};
+    update {{ relation.render() }} set {{ adapter.quote(tmp_column) }} = {{ adapter.quote(column_name) }};
+    alter table {{ relation.render() }} drop column {{ adapter.quote(column_name) }} cascade;
+    alter table {{ relation.render() }} rename column {{ adapter.quote(tmp_column) }} to {{ adapter.quote(column_name) }}
   {% endcall %}
 
 {% endmacro %}
@@ -120,7 +120,7 @@
 
   {% set sql -%}
 
-     alter {{ relation.type }} {{ relation }}
+     alter {{ relation.type }} {{ relation.render() }}
 
             {% for column in add_columns %}
                add column {{ adapter.quote(column.name) }} {{ column.data_type }}{{ ',' if not loop.last }}
