@@ -79,12 +79,11 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         run_dbt(["run", "--models", select, "--full-refresh"])
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
-        breakpoint()
-        assert "name" in logs
+        assert "Job" not in logs
         run_dbt(["run", "--vars", "{'version': 1}"])
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
-        assert "Name" in logs
+        assert "Job" in logs
 
 
     def test_run_incremental_sync_all_columns(self, project):

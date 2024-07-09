@@ -319,7 +319,7 @@ _MODELS__SRC_ARTISTS = """
 
     -- add a non-zero version to the end of the command to get a different version:
     -- --vars "{'version': 1}"
-    select {{ dbt.current_timestamp() }} as inserted_at, 'john' as Name, 'job' as "Engineer"
+    select {{ dbt.current_timestamp() }} as inserted_at, 'john' as Name, 'engineer' as "Job"
 
 {% endif %}
 """
