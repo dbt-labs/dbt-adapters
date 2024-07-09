@@ -75,7 +75,6 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
 
     def test_run_incremental_check_quoting_on_new_columns(self, project):
         select = "src_artists dim_artists"
-  
         run_dbt(["run", "--models", select, "--full-refresh"])
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
@@ -84,7 +83,6 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         assert "Job" in logs
-
 
     def test_run_incremental_sync_all_columns(self, project):
         self.run_incremental_sync_all_columns(project)
