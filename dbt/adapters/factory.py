@@ -1,3 +1,4 @@
+import importlib
 from contextlib import contextmanager
 from importlib import import_module
 from multiprocessing.context import SpawnContext
@@ -97,6 +98,19 @@ class AdapterContainer:
 
         return plugin.credentials
 
+    def get_custom_adapter_class_by_name(self, adapter_class: str):
+        if "." not in adapter_class:
+            raise ValueError(f"Unexpected adapter class name: `{adapter_class}` ,"
+                             f"Expecting something like:`my.sample.library.MyAdapterClass`")
+
+        __module, __class = adapter_class.rsplit('.', 1)
+        try:
+            user_adapter_module = importlib.import_module(__module)
+            user_adapter_class = getattr(user_adapter_module, __class)
+            return user_adapter_class
+        except ModuleNotFoundError as mnfe:
+            raise Exception(f"Module of user provided adapter not found, provided: {adapter_class}") from mnfe
+
     def register_adapter(
         self,
         config: AdapterRequiredConfig,
@@ -104,7 +118,11 @@ class AdapterContainer:
         adapter_registered_log_level: Optional[EventLevel] = EventLevel.INFO,
     ) -> None:
         adapter_name = config.credentials.type
-        adapter_type = self.get_adapter_class_by_name(adapter_name)
+        if hasattr(config.credentials, 'adapter_class') and config.credentials.adapter_class:
+            # load user provided adapter class
+            adapter_type = self.get_custom_adapter_class_by_name(config.credentials.type.adapter_class)
+        else:
+            adapter_type = self.get_adapter_class_by_name(adapter_name)
         adapter_version = self._adapter_version(adapter_name)
         fire_event(
             AdapterRegistered(adapter_name=adapter_name, adapter_version=adapter_version),

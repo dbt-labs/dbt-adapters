@@ -127,6 +127,7 @@ class LazyHandle:
 class Credentials(ExtensibleDbtClassMixin, Replaceable, metaclass=abc.ABCMeta):
     database: str
     schema: str
+    adapter_class: str
     _ALIASES: ClassVar[Dict[str, str]] = field(default={}, init=False)
 
     @abc.abstractproperty
