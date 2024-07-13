@@ -127,6 +127,15 @@ dependencies = [
 ]
 ```
 
+This will install `dbt-common` as a snapshot. In other words, if `my-dev-branch` is updated on GitHub, those updates will not be reflected locally.
+In order to pick up those updates, the `hatch` environment(s) will need to be rebuilt:
+
+```shell
+exit
+hatch env prune
+hatch shell
+```
+
 ## Documentation
 
 ### User documentation
