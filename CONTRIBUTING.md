@@ -63,15 +63,11 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 
 ### Installation
 
-1. Ensure the latest version of `pip` is installed:
+1. Ensure the latest versions of `pip` and `hatch` are installed:
    ```shell
-   pip install --user --upgrade pip
+   pip install --user --upgrade pip hatch
    ```
-2. Install `hatch`:
-   ```shell
-   pip install --user hatch
-   ```
-3. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
+2. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
    ```toml
    # MacOS: ~/Library/Application Support/hatch/config.toml
    [dirs.env]
@@ -79,28 +75,27 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
    ```
    This makes `hatch` create all virtual environments in the project root inside of the directory `/.hatch`, similar to `/.tox` for `tox`.
    It also makes it easier to add this environment as a runner in common IDEs like VSCode and PyCharm.
-4. Setup `pre-commit` hooks:
+3. Create a `hatch` environment with all of the development dependencies and activate it:
    ```shell
-   hatch run dev
+   hatch run setup
+   hatch shell
    ```
-5. Run code quality:
-   ```shell
-   hatch run code-quality
-   ```
-6. Run any commands within the virtual environment by prefixing the command with `hatch run`:
+4. Run any commands within the virtual environment by prefixing the command with `hatch run`:
    ```shell
    hatch run <command>
    ```
-7. Open a shell in the virtual environment:
-   ```shell
-   hatch shell
-   ```
-
 
 ## Testing
 
-`dbt-adapters` only contains [unit](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit) tests for now as functional tests would require a concrete adapter.
-There is an on-going discussion about how to easily test against concrete adapters and embed that in CI workflows, stay tuned.
+`dbt-adapters` contains [code quality checks](https://github.com/dbt-labs/dbt-adapters/tree/main/.pre-commit-config.yaml) and [unit tests](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit).
+While `dbt-tests-adapter` is also hosted in this repo, it requires a concrete adapter to run.
+
+### Code quality
+
+Code quality checks can run with a single command:
+```shell
+hatch run code-quality
+```
 
 ### Unit tests
 
@@ -110,34 +105,27 @@ Unit tests can be run locally without setting up a database connection:
 # Note: replace $strings with valid names
 
 # run all unit tests
-hatch run unit-test:all
+hatch run unit-test
+
 # run all unit tests in a module
-hatch run unit-test:all tests/unit/$test_file_name.py
+hatch run unit-test tests/unit/$test_file_name.py
+
 # run a specific unit test
-hatch run unit-test:all tests/unit/$test_file_name.py::$test_class_name::$test_method_name
-```
-
-You can open a shell in the `unit-test` environment by adding the environment name as an argument:
-
-```shell
-hatch shell unit-test
+hatch run unit-test tests/unit/$test_file_name.py::$test_class_name::$test_method_name
 ```
 
 ### Testing against a development branch
 
-Some changes require a change in both `dbt-common` and `dbt-adapters`.
+Some changes require a change in `dbt-common` and `dbt-adapters`.
 In that case, the dependency on `dbt-common` must be updated to point to the development branch. For example:
 
 ```toml
 [tool.hatch.envs.default]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@my-dev-branch",
-    'pre-commit==3.7.0;python_version>="3.9"',
-    'pre-commit==3.5.0;python_version=="3.8"',
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@my-dev-branch",
+    ...,
 ]
 ```
-This will flow through to the `unit-test` environment since `hatch` layers environments on top of the `default` environment unless otherwise specified.
-
 
 ## Documentation
 
