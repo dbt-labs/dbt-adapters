@@ -1,7 +1,0 @@
-kind: Under the Hood
-body: --limit flag no longer subshells the query. This resolves the dbt Cloud experience
-  issue where limit prevents ordering elements..
-time: 2024-06-24T23:19:55.611142-07:00
-custom:
-  Author: versusfacit
-  Issue: "207"
