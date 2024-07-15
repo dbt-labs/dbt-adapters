@@ -87,3 +87,11 @@
   {% set formatted = column.column.lower() ~ " " ~ data_type %}
   {{ return({'name': column.name, 'data_type': data_type, 'formatted': formatted}) }}
 {%- endmacro -%}
+
+{% macro render_unspecified_column_value(column_type) %}
+  {{ return(adapter.dispatch('render_unspecified_column_value', 'dbt') (column_type)) }}
+{% endmacro %}
+
+{% macro default__render_unspecified_column_value(column_type) %}
+    safe_cast('null', {{column_type}})
+{% endmacro %}
