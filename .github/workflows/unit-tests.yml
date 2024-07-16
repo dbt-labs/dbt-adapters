@@ -37,5 +37,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Run unit tests
-        run: hatch run unit-tests:all
+        run: hatch run unit-tests
         shell: bash

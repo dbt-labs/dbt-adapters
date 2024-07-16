@@ -31,7 +31,6 @@ dependencies = [
     "dbt-common>=0.1.0a1,<2.0",
     "agate>=1.0,<2.0",
 ]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-postgres"
 Documentation = "https://docs.getdbt.com"
@@ -56,44 +55,31 @@ path = "dbt/adapters/postgres/__version__.py"
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     'pre-commit==3.7.0;python_version>="3.9"',
     'pre-commit==3.5.0;python_version=="3.8"',
-]
-[tool.hatch.envs.default.scripts]
-dev = "pre-commit install"
-code-quality = "pre-commit run --all-files"
-docker-dev = [
-    "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
-	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
-	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
-]
-docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
-
-[tool.hatch.envs.unit-tests]
-dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "freezegun",
     "pytest",
     "pytest-dotenv",
     "pytest-mock",
     "pytest-xdist",
 ]
-[tool.hatch.envs.unit-tests.scripts]
-all = "python -m pytest {args:tests/unit}"
-
-[tool.hatch.envs.integration-tests]
-template = "unit-tests"
-extra-dependencies = [
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
-]
-[tool.hatch.envs.integration-tests.env-vars]
+[tool.hatch.envs.default.env-vars]
 DBT_TEST_USER_1 = "dbt_test_user_1"
 DBT_TEST_USER_2 = "dbt_test_user_2"
 DBT_TEST_USER_3 = "dbt_test_user_3"
-[tool.hatch.envs.integration-tests.scripts]
-all = "python -m pytest {args:tests/functional}"
+[tool.hatch.envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
+integration-tests = "python -m pytest {args:tests/functional}"
+docker-dev = [
+    "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
+	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
+	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
+]
+docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
 
 [tool.hatch.envs.build]
 detached = true

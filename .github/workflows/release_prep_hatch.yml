@@ -31,7 +31,7 @@
 #  1. Bump the version if it has not been bumped
 #  2. Generate the changelog (via changie) if there is no markdown file for this version
 name: "Release prep"
-run-name: "Release prep: Generate changelog and bump ${{ inputs.package }} to ${{ inputs.version }} for release to ${{ inputs.deploy-to }}"
+run-name: "Release prep: Generate changelog and bump to ${{ inputs.version }} for release to ${{ inputs.deploy-to }}"
 on:
   workflow_call:
     inputs:
@@ -342,7 +342,7 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
 
       - name: "Run unit tests"
-        run: hatch run unit-tests:all
+        run: hatch run unit-tests
 
   integration-tests:
     runs-on: ubuntu-latest
@@ -387,7 +387,7 @@ jobs:
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
 
       - name: "Run integration tests"
-        run: hatch run integration-tests:all
+        run: hatch run integration-tests
         env:
           POSTGRES_TEST_HOST: localhost
           POSTGRES_TEST_PORT: 5432
@@ -464,6 +464,6 @@ jobs:
         run: echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
       # if this is a real release and a release branch was created, delete it
-      - name: "Delete release branch: ${{ needs.branch.outputs.name }}"
+      - name: "Delete release branch: ${{ needs.release-branch.outputs.name }}"
         if: ${{ inputs.deploy-to == 'prod' && inputs.is-nightly-release == 'false' && needs.release-branch.outputs.name != '' }}
-        run: git push origin -d ${{ needs.branch.outputs.name }}
+        run: git push origin -d ${{ needs.release-branch.outputs.name }}
