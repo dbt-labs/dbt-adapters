@@ -30,7 +30,7 @@ runs:
       working-directory: ${{ inputs.working-dir }}
 
     - name: Upload artifacts
-      if: ${{ inputs.archive-name != "" }}
+      if: ${{ inputs.archive-name != '' }}
       uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.archive-name }}
