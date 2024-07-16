@@ -1,4 +1,3 @@
-import re
 from collections.abc import Hashable
 from dataclasses import dataclass, field
 from typing import (
@@ -233,8 +232,8 @@ class BaseRelation(FakeAPIObject, Hashable):
         )
 
     @staticmethod
-    def add_ephemeral_prefix(alias: str):
-        return re.sub(r"\W+", "", f"__dbt__cte__{alias}")
+    def add_ephemeral_prefix(name: str):
+        return f"__dbt__cte__{name}"
 
     @classmethod
     def create_ephemeral_from(
@@ -242,9 +241,11 @@ class BaseRelation(FakeAPIObject, Hashable):
         relation_config: RelationConfig,
         limit: Optional[int] = None,
     ) -> Self:
-        # Note that ephemeral models are based on the alias to give the user
-        # more control over the way that the CTE name is constructed
-        identifier = cls.add_ephemeral_prefix(relation_config.alias)
+        # Note that ephemeral models are based on the identifier, which will
+        # point to the model's alias if one exists and otherwise fall back to
+        # the filename. This is intended to give the user more control over
+        # the way that the CTE name is constructed
+        identifier = cls.add_ephemeral_prefix(relation_config.identifier)
         return cls.create(
             type=cls.CTE,
             identifier=identifier,

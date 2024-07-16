@@ -49,7 +49,6 @@ class MaterializationConfig(Mapping, ABC):
 class RelationConfig(Protocol):
     resource_type: str
     name: str
-    alias: str
     description: str
     database: str
     schema: str
