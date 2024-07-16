@@ -20,8 +20,6 @@ class BaseIncrementalOnSchemaChangeSetup:
             "incremental_append_new_columns.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS,
             "incremental_sync_all_columns_target.sql": fixtures._MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
             "incremental_append_new_columns_remove_one_target.sql": fixtures._MODELS__INCREMENTAL_APPEND_NEW_COLUMNS_REMOVE_ONE_TARGET,
-            "src_artists.sql": fixtures._MODELS__SRC_ARTISTS,
-            "dim_artists.sql": fixtures._MODELS__DIM_ARTISTS,
         }
 
     def run_twice_and_assert(self, include, compare_source, compare_target, project):
@@ -73,6 +71,29 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         self.run_incremental_append_new_columns(project)
         self.run_incremental_append_new_columns_remove_one(project)
 
+    def test_run_incremental_sync_all_columns(self, project):
+        self.run_incremental_sync_all_columns(project)
+        self.run_incremental_sync_remove_only(project)
+
+    def test_run_incremental_fail_on_schema_change(self, project):
+        select = "model_a incremental_fail"
+        run_dbt(["run", "--models", select, "--full-refresh"])
+        results_two = run_dbt(["run", "--models", select], expect_pass=False)
+        assert "Compilation Error" in results_two[1].message
+
+
+class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
+    pass
+
+
+class BaseIncrementalCaseSenstivityOnSchemaChange:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "src_artists.sql": fixtures._MODELS__SRC_ARTISTS,
+            "dim_artists.sql": fixtures._MODELS__DIM_ARTISTS,
+        }
+
     def test_run_incremental_check_quoting_on_new_columns(self, project):
         select = "src_artists dim_artists"
         run_dbt(["run", "--models", select, "--full-refresh"])
@@ -88,16 +109,6 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         )
         assert "Job" in logs
 
-    def test_run_incremental_sync_all_columns(self, project):
-        self.run_incremental_sync_all_columns(project)
-        self.run_incremental_sync_remove_only(project)
 
-    def test_run_incremental_fail_on_schema_change(self, project):
-        select = "model_a incremental_fail"
-        run_dbt(["run", "--models", select, "--full-refresh"])
-        results_two = run_dbt(["run", "--models", select], expect_pass=False)
-        assert "Compilation Error" in results_two[1].message
-
-
-class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
+class TestIncrementalCaseSenstivityOnSchemaChange(BaseIncrementalCaseSenstivityOnSchemaChange):
     pass
