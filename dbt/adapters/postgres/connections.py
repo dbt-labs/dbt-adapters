@@ -5,10 +5,12 @@ from typing import Optional, Union
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import TypeCodeNotFound
+from dbt.adapters.postgres.record import PostgresRecordReplayHandle
 from dbt.adapters.sql import SQLConnectionManager
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
 from dbt_common.events.functions import warn_or_error
 from dbt_common.helper_types import Port
+from dbt_common.record import get_record_mode_from_env, RecorderMode
 from mashumaro.jsonschema.annotations import Maximum, Minimum
 import psycopg2
 from typing_extensions import Annotated
@@ -132,17 +134,31 @@ class PostgresConnectionManager(SQLConnectionManager):
             kwargs["application_name"] = credentials.application_name
 
         def connect():
-            handle = psycopg2.connect(
-                dbname=credentials.database,
-                user=credentials.user,
-                host=credentials.host,
-                password=credentials.password,
-                port=credentials.port,
-                connect_timeout=credentials.connect_timeout,
-                **kwargs,
-            )
+            handle = None
+
+            # In replay mode, we won't connect to a real database at all, while
+            # in record and diff modes we do, but insert an intermediate handle
+            # object which monitors native connection activity.
+            rec_mode = get_record_mode_from_env()
+            if rec_mode != RecorderMode.REPLAY:
+                handle = psycopg2.connect(
+                    dbname=credentials.database,
+                    user=credentials.user,
+                    host=credentials.host,
+                    password=credentials.password,
+                    port=credentials.port,
+                    connect_timeout=credentials.connect_timeout,
+                    **kwargs,
+                )
+
+            if rec_mode is not None:
+                # If using the record/replay mechanism, regardless of mode, we
+                # use a wrapper.
+                handle = PostgresRecordReplayHandle(handle, connection)
+
             if credentials.role:
                 handle.cursor().execute("set role {}".format(credentials.role))
+
             return handle
 
         retryable_exceptions = [
