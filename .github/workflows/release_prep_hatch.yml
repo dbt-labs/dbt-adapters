@@ -34,7 +34,7 @@
 #
 
 name: Version Bump and Changelog Generation
-run-name: Bump ${{ inputs.package }}==${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
+run-name: Bump to ${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
 on:
   workflow_call:
     inputs:
