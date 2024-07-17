@@ -113,7 +113,7 @@ jobs:
 
       - name: "Parse input version"
         id: semver
-        uses: dbt-labs/actions/parse-semver@v1.1.0
+        uses: dbt-labs/actions/parse-semver@v1.1.1
         with:
           version: ${{ inputs.version }}
 
