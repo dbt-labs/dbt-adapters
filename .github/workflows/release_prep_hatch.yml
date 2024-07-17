@@ -219,7 +219,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.event.repository.name }}@${{ needs.release-branch.outputs.name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-branch.outputs.name }}
 
@@ -292,7 +292,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.event.repository.name }}@${{ needs.release-branch.outputs.name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.release-branch.outputs.name }}
 
@@ -410,7 +410,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.event.repository.name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: "Merge changes into ${{ inputs.branch }}"
         uses: everlytic/branch-merge@1.1.5
@@ -455,7 +455,7 @@ jobs:
           echo "name=$branch" >> $GITHUB_OUTPUT
 
       - name: "Checkout ${{ github.event.repository.name }}@${{ steps.branch.outputs.name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ steps.branch.outputs.name }}
 
