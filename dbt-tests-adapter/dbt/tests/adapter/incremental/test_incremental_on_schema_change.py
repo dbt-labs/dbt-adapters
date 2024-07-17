@@ -108,7 +108,3 @@ class BaseIncrementalCaseSenstivityOnSchemaChange:
             ["show", "--inline", "select * from {{ ref('dim_artists') }}"]
         )
         assert "Job" in logs
-
-
-class TestIncrementalCaseSenstivityOnSchemaChange(BaseIncrementalCaseSenstivityOnSchemaChange):
-    pass
