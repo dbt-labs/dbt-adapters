@@ -1,5 +1,5 @@
 name: 🐞 Bug
-description: Report a bug or an issue you've found with dbt-adapter
+description: Report a bug or an issue you've found with dbt-adapters
 title: "[Bug] <title>"
 labels: ["bug", "triage"]
 body:
@@ -62,11 +62,11 @@ body:
         examples:
           - **OS**: Ubuntu 20.04
           - **Python**: 3.11.6 (`python3 --version`)
-          - **dbt-adapter**: 1.0.0
+          - **dbt-adapters**: 1.0.0
       value: |
         - OS:
         - Python:
-        - dbt-adapter:
+        - dbt-adapters:
       render: markdown
     validations:
       required: false

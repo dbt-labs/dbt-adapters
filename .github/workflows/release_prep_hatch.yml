@@ -34,7 +34,7 @@
 #
 
 name: Version Bump and Changelog Generation
-run-name: Bump ${{ inputs.package }}==${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
+run-name: Bump to ${{ inputs.version_number }} for release to ${{ inputs.deploy_to }} and generate changelog
 on:
   workflow_call:
     inputs:
@@ -398,7 +398,7 @@ jobs:
       - name: "Setup `hatch`"
         uses: ./.github/actions/setup-hatch
       - name: "Run Unit Tests"
-        run: hatch run unit-tests:all
+        run: hatch run unit-tests
 
   run-integration-tests:
     runs-on: ubuntu-20.04
@@ -447,7 +447,7 @@ jobs:
           python-version: ${{ env.PYTHON_TARGET_VERSION }}
 
       - name: Run tests
-        run: hatch run integration-tests:all
+        run: hatch run integration-tests
 
   merge-changes-into-target-branch:
     runs-on: ubuntu-latest
