@@ -38,7 +38,7 @@
 
 {% macro default__truncate_relation(relation) -%}
   {% call statement('truncate_relation') -%}
-    truncate table {{ relation }}
+    truncate table {{ relation.render() }}
   {%- endcall %}
 {% endmacro %}
 

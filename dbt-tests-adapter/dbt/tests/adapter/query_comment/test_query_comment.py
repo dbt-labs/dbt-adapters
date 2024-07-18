@@ -1,5 +1,4 @@
 import json
-from importlib import import_module
 
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
@@ -53,19 +52,15 @@ class BaseMacroQueryComments(BaseDefaultQueryComments):
 
 
 class BaseMacroArgsQueryComments(BaseDefaultQueryComments):
-    @pytest.fixture(scope="class")
-    def get_package_version(self, project):
-        return import_module("." + project.adapter_type, "dbt.adapters").__version__.version
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"query-comment": "{{ return(ordered_to_json(query_header_args(target.name))) }}"}
 
-    def test_matches_comment(self, project, get_package_version):
+    def test_matches_comment(self, project):
         logs = self.run_get_json()
         expected_dct = {
             "app": "dbt++",
-            "dbt_version": get_package_version,
             "macro_version": "0.1.0",
             "message": f"blah: {project.adapter.config.target_name}",
         }

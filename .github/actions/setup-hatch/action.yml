@@ -18,5 +18,13 @@ runs:
         python-version: ${{ inputs.python-version }}
 
     - name: Install dev dependencies
-      run: ${{ inputs.setup-command }}
       shell: bash
+      run: ${{ inputs.setup-command }}
+
+    - name: Add brew to the PATH
+      shell: bash
+      run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+    - name: Install pre-commit
+      shell: bash
+      run: brew install pre-commit

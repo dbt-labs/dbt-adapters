@@ -10,5 +10,5 @@ actually executes the drop, and `get_drop_sql`, which returns the template.
 
 
 {% macro default__drop_table(relation) -%}
-    drop table if exists {{ relation }} cascade
+    drop table if exists {{ relation.render() }} cascade
 {%- endmacro %}
