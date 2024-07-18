@@ -13,6 +13,14 @@ class Capability(str, Enum):
     TableLastModifiedMetadata = "TableLastModifiedMetadata"
     """Indicates support for determining the time of the last table modification by querying database metadata."""
 
+    TableLastModifiedMetadataBatch = "TableLastModifiedMetadataBatch"
+    """Indicates support for performantly determining the time of the last table modification by querying database
+    metadata in batch."""
+
+    GetCatalogForSingleRelation = "GetCatalogForSingleRelation"
+    """Indicates support for getting catalog information including table-level and column-level metadata for a single
+    relation."""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"
