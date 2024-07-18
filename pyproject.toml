@@ -12,7 +12,7 @@ maintainers = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
@@ -43,9 +43,6 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.metadata]
-allow-direct-references = true
-
 [tool.hatch.version]
 path = "dbt/adapters/__about__.py"
 
@@ -60,20 +57,14 @@ dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     'pre-commit==3.7.0;python_version>="3.9"',
     'pre-commit==3.5.0;python_version=="3.8"',
-]
-[tool.hatch.envs.default.scripts]
-dev = "pre-commit install"
-code-quality = "pre-commit run --all-files"
-
-[tool.hatch.envs.unit-tests]
-dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
 ]
-[tool.hatch.envs.unit-tests.scripts]
-all = "python -m pytest {args:tests/unit}"
+[tool.hatch.envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
 
 [tool.hatch.envs.build]
 detached = true
