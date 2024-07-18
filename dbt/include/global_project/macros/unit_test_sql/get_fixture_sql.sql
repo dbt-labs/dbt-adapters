@@ -15,7 +15,7 @@
 {%- endif -%}
 
 {%- if not column_name_to_data_types -%}
-    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this) }}
+    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this ~ " because the relation doesn't exist") }}
 {%- endif -%}
 
 {%- for column_name, column_type in column_name_to_data_types.items() -%}
@@ -79,7 +79,7 @@ union all
         {%- endif -%}
 
         {%- set column_type = column_name_to_data_types[column_name] %}
-        
+
         {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
         {%- set column_value_clean = column_value -%}
         {%- if column_value is string -%}

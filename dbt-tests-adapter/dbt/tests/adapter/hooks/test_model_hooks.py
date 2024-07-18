@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from dbt_common.exceptions import CompilationError
+
 # TODO: does this belong in dbt-tests-adapter?
 from dbt.exceptions import ParsingError
 import pytest

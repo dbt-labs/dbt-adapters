@@ -27,14 +27,14 @@
 
       {%- set target_relation = this.incorporate(type='table') -%}
       {% if existing_relation is not none and not existing_relation.is_table %}
-        {{ log("Dropping relation " ~ existing_relation ~ " because it is of type " ~ existing_relation.type) }}
+        {{ log("Dropping relation " ~ existing_relation.render() ~ " because it is of type " ~ existing_relation.type) }}
         {{ drop_relation_if_exists(existing_relation) }}
       {% endif %}
 
       -- as a general rule, data platforms that can clone tables can also do atomic 'create or replace'
       {% call statement('main') %}
           {% if target_relation and defer_relation and target_relation == defer_relation %}
-              {{ log("Target relation and defer relation are the same, skipping clone for relation: " ~ target_relation) }}
+              {{ log("Target relation and defer relation are the same, skipping clone for relation: " ~ target_relation.render()) }}
           {% else %}
               {{ create_or_replace_clone(target_relation, defer_relation) }}
           {% endif %}
