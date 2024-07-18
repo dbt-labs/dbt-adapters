@@ -21,24 +21,17 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     # TODO: remove `dbt-core` dependency
-    "dbt-core>=1.8.0a1,<1.9.0",
+    "dbt-core>=1.8.0a1",
     # `dbt-tests-adapter` will ultimately depend on the packages below
     # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
     "dbt-adapters",
     "pyyaml",
 ]
-
-[project.optional-dependencies]
-build = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
@@ -61,7 +54,11 @@ include = ["dbt/tests", "dbt/__init__.py"]
 
 [tool.hatch.envs.build]
 detached = true
-features = ["build"]
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
 [tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",

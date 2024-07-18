@@ -61,7 +61,7 @@
 {% endmacro %}
 
 {% macro default__get_show_grant_sql(relation) %}
-    show grants on {{ relation }}
+    show grants on {{ relation.render() }}
 {% endmacro %}
 
 
@@ -70,7 +70,7 @@
 {% endmacro %}
 
 {%- macro default__get_grant_sql(relation, privilege, grantees) -%}
-    grant {{ privilege }} on {{ relation }} to {{ grantees | join(', ') }}
+    grant {{ privilege }} on {{ relation.render() }} to {{ grantees | join(', ') }}
 {%- endmacro -%}
 
 
@@ -79,7 +79,7 @@
 {% endmacro %}
 
 {%- macro default__get_revoke_sql(relation, privilege, grantees) -%}
-    revoke {{ privilege }} on {{ relation }} from {{ grantees | join(', ') }}
+    revoke {{ privilege }} on {{ relation.render() }} from {{ grantees | join(', ') }}
 {%- endmacro -%}
 
 
@@ -147,7 +147,7 @@
             {% set needs_granting = diff_of_two_dicts(grant_config, current_grants_dict) %}
             {% set needs_revoking = diff_of_two_dicts(current_grants_dict, grant_config) %}
             {% if not (needs_granting or needs_revoking) %}
-                {{ log('On ' ~ relation ~': All grants are in place, no revocation or granting needed.')}}
+                {{ log('On ' ~ relation.render() ~': All grants are in place, no revocation or granting needed.')}}
             {% endif %}
         {% else %}
             {#-- We don't think there's any chance of previous grants having carried over. --#}
