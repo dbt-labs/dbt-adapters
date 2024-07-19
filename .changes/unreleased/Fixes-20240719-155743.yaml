@@ -1,0 +1,6 @@
+kind: Fixes
+body: Quotes database users that contain special characters
+time: 2024-07-19T15:57:43.697763+01:00
+custom:
+    Author: qmg-karan ChocoletMousse
+    Issue: "156"
