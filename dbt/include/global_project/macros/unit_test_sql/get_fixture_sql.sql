@@ -22,6 +22,7 @@
     {%- do default_row.update({column_name: (safe_cast("null", column_type) | trim )}) -%}
 {%- endfor -%}
 
+{%- validate_row(rows, 0) -%}
 
 {%- for row in rows -%}
 {%-   set formatted_row = format_row(row, column_name_to_data_types) -%}
@@ -92,4 +93,12 @@ union all
         {%- do formatted_row.update(row_update) -%}
     {%- endfor -%}
     {{ return(formatted_row) }}
+{%- endmacro -%}
+
+
+
+{%- macro validate_row(rows, row_number) -%}
+    {{ log(rows, info=True) }}
+    {%- if rows -%}
+    {%- endif -%}
 {%- endmacro -%}
