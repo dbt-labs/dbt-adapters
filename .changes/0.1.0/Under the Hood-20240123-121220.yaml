@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Allow version to be specified in either __version__.py or __about__.py
-time: 2024-01-23T12:12:20.529147-05:00
-custom:
-  Author: mikealfare
-  Issue: "44"
