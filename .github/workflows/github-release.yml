@@ -156,7 +156,7 @@ jobs:
 
     steps:
       - name: "Check If Release Already Exists For Commit"
-        uses: cardinalby/git-get-release-action@1.2.4
+        uses: cardinalby/git-get-release-action@1.2.5
         id: check_release_commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
