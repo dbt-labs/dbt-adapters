@@ -1606,7 +1606,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             if constraint_expression:
                 rendered_column_constraint = f"references {constraint_expression}"
             elif constraint.to and constraint.to_columns:
-                rendered_column_constraint = f"references {constraint.to}({','.join(constraint.to_columns)})"
+                rendered_column_constraint = f"references {constraint.to} ({','.join(constraint.to_columns)})"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1697,7 +1697,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             if constraint.expression:
                 return f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
             elif constraint.to and constraint.to_columns:
-                return f"{constraint_prefix}foreign key ({column_list}) references {constraint.to}({','.join(constraint.to_columns)})"
+                return f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({','.join(constraint.to_columns)})"
         elif constraint.type == ConstraintType.custom and constraint.expression:
             return f"{constraint_prefix}{constraint.expression}"
         else:
