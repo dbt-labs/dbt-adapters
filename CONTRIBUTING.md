@@ -17,12 +17,9 @@ This guide assumes users are developing on a Linux or MacOS system.
 The following utilities are needed or will be installed in this guide:
 
 - `pip`
-- `virturalenv`
+- `hatch`
 - `git`
 - `changie`
-
-If local functional testing is required, then a database instance
-and appropriate credentials are also required.
 
 In addition to this guide, users are highly encouraged to read the `dbt-core`
 [CONTRIBUTING.md](https://github.com/dbt-labs/dbt-core/blob/main/CONTRIBUTING.md).
@@ -66,25 +63,39 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 
 ### Installation
 
-1. Ensure the latest version of `pip` is installed:
+1. Ensure the latest versions of `pip` and `hatch` are installed:
    ```shell
-   pip install --upgrade pip
+   pip install --user --upgrade pip hatch
    ```
-2. Configure and activate a virtual environment using `virtualenv` as described in
-[Setting up an environment](https://github.com/dbt-labs/dbt-core/blob/HEAD/CONTRIBUTING.md#setting-up-an-environment)
-3. Install `dbt-adapters` and development dependencies in the virtual environment
+2. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
+   ```toml
+   # MacOS: ~/Library/Application Support/hatch/config.toml
+   [dirs.env]
+   virtual = ".hatch"
+   ```
+   This makes `hatch` create all virtual environments in the project root inside of the directory `/.hatch`, similar to `/.tox` for `tox`.
+   It also makes it easier to add this environment as a runner in common IDEs like VSCode and PyCharm.
+3. Create a `hatch` environment with all of the development dependencies and activate it:
    ```shell
-   pip install -e .[dev]
+   hatch run setup
+   hatch shell
    ```
-
-When `dbt-adapters` is installed this way, any changes made to the `dbt-adapters` source code
-will be reflected in the virtual environment immediately.
-
+4. Run any commands within the virtual environment by prefixing the command with `hatch run`:
+   ```shell
+   hatch run <command>
+   ```
 
 ## Testing
 
-`dbt-adapters` contains [unit](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit)
-and [functional](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/functional) tests.
+`dbt-adapters` contains [code quality checks](https://github.com/dbt-labs/dbt-adapters/tree/main/.pre-commit-config.yaml) and [unit tests](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit).
+While `dbt-tests-adapter` is also hosted in this repo, it requires a concrete adapter to run.
+
+### Code quality
+
+Code quality checks can run with a single command:
+```shell
+hatch run code-quality
+```
 
 ### Unit tests
 
@@ -93,42 +104,37 @@ Unit tests can be run locally without setting up a database connection:
 ```shell
 # Note: replace $strings with valid names
 
+# run all unit tests
+hatch run unit-test
+
 # run all unit tests in a module
-python -m pytest tests/unit/$test_file_name.py
+hatch run unit-test tests/unit/$test_file_name.py
+
 # run a specific unit test
-python -m pytest tests/unit/$test_file_name.py::$test_class_name::$test_method_name
+hatch run unit-test tests/unit/$test_file_name.py::$test_class_name::$test_method_name
 ```
 
-### Functional tests
+### Testing against a development branch
 
-Functional tests require a database to test against. There are two primary ways to run functional tests:
+Some changes require a change in `dbt-common` and `dbt-adapters`.
+In that case, the dependency on `dbt-common` must be updated to point to the development branch. For example:
 
-- Tests will run automatically against a dbt Labs owned database during PR checks
-- Tests can be run locally by configuring a `test.env` file with appropriate `ENV` variables:
-   ```shell
-   cp test.env.example test.env
-   $EDITOR test.env
-   ```
+```toml
+[tool.hatch.envs.default]
+dependencies = [
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@my-dev-branch",
+    ...,
+]
+```
 
-> **_WARNING:_** The parameters in `test.env` must link to a valid database.
-> `test.env` is git-ignored, but be _extra_ careful to never check in credentials
-> or other sensitive information when developing.
-
-Functional tests can be run locally with a valid database connection configured in `test.env`:
+This will install `dbt-common` as a snapshot. In other words, if `my-dev-branch` is updated on GitHub, those updates will not be reflected locally.
+In order to pick up those updates, the `hatch` environment(s) will need to be rebuilt:
 
 ```shell
-# Note: replace $strings with valid names
-
-# run all functional tests in a directory
-python -m pytest tests/functional/$test_directory
-# run all functional tests in a module
-python -m pytest tests/functional/$test_dir_and_filename.py
-# run all functional tests in a class
-python -m pytest tests/functional/$test_dir_and_filename.py::$test_class_name
-# run a specific functional test
-python -m pytest tests/functional/$test_dir_and_filename.py::$test_class_name::$test__method_name
+exit
+hatch env prune
+hatch shell
 ```
-
 
 ## Documentation
 
