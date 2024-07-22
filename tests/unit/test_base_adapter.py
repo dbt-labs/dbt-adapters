@@ -43,6 +43,10 @@ class TestBaseAdapterConstraintRendering:
             [{"type": "foreign_key", "to": "other_table", "to_columns": ["c1"]}],
             ["column_name integer references other_table (c1)"],
         ),
+        (
+            [{"type": "foreign_key", "to": "other_table", "to_columns": ["c1", "c2"]}],
+            ["column_name integer references other_table (c1, c2)"],
+        ),
         ([{"type": "check"}, {"type": "unique"}], ["column_name integer unique"]),
         ([{"type": "custom", "expression": "-- noop"}], ["column_name integer -- noop"]),
     ]
