@@ -35,6 +35,11 @@ fi
 
 This ensures the version of `psycopg2` will match that of `psycopg2-binary`.
 
+
+## Contribute
+
+See `CONTRIBUTING.md` for a detailed overview of contributing a code change to this adapter.
+
 ## Join the dbt Community
 
 - Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
