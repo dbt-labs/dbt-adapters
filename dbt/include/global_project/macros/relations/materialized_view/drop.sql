@@ -10,5 +10,5 @@ actually executes the drop, and `get_drop_sql`, which returns the template.
 
 
 {% macro default__drop_materialized_view(relation) -%}
-    drop materialized view if exists {{ relation }} cascade
+    drop materialized view if exists {{ relation.render() }} cascade
 {%- endmacro %}
