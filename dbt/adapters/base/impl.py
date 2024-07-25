@@ -1603,12 +1603,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         elif constraint.type == ConstraintType.primary_key:
             rendered_column_constraint = f"primary key {constraint_expression}"
         elif constraint.type == ConstraintType.foreign_key:
-            if constraint_expression:
-                rendered_column_constraint = f"references {constraint_expression}"
-            elif constraint.to and constraint.to_columns:
+            if constraint.to and constraint.to_columns:
                 rendered_column_constraint = (
                     f"references {constraint.to} ({', '.join(constraint.to_columns)})"
                 )
+            elif constraint_expression:
+                rendered_column_constraint = f"references {constraint_expression}"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1702,10 +1702,10 @@ class BaseAdapter(metaclass=AdapterMeta):
                 f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
             )
         elif constraint.type == ConstraintType.foreign_key:
-            if constraint.expression:
-                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
-            elif constraint.to and constraint.to_columns:
+            if constraint.to and constraint.to_columns:
                 rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({', '.join(constraint.to_columns)})"
+            elif constraint.expression:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
         elif constraint.type == ConstraintType.custom and constraint.expression:
             rendered_model_constraint = f"{constraint_prefix}{constraint.expression}"
 
