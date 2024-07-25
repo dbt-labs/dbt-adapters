@@ -1,5 +1,5 @@
 kind: Features
-body: render 'to' and 'to_columns' fields on foreign key constraints
+body: render 'to' and 'to_columns' fields on foreign key constraints, and bump dbt-common lower bound to 1.6
 time: 2024-07-23T10:42:21.222203-04:00
 custom:
   Author: michelleark
