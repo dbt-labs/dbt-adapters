@@ -30,7 +30,7 @@
   {% if not target_relation_exists %}
 
       {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
-      {% set dbt_updated_at_data_type = get_updated_at_column_data_type(build_sql) %}
+      {% set dbt_updated_at_data_type = get_updated_at_column_data_type(build_sql) or none %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
@@ -38,7 +38,7 @@
       {{ adapter.valid_snapshot_target(target_relation) }}
 
       {% set snapshot_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
-      {% set dbt_updated_at_data_type = get_updated_at_column_data_type(snapshot_select_sql) %}
+      {% set dbt_updated_at_data_type = get_updated_at_column_data_type(snapshot_select_sql) or none %}
       {% set staging_table = build_snapshot_staging_table(snapshot_select_sql, target_relation) %}
 
       -- this may no-op if the database does not require column expansion
