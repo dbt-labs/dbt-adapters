@@ -1602,8 +1602,13 @@ class BaseAdapter(metaclass=AdapterMeta):
             rendered_column_constraint = f"unique {constraint_expression}"
         elif constraint.type == ConstraintType.primary_key:
             rendered_column_constraint = f"primary key {constraint_expression}"
-        elif constraint.type == ConstraintType.foreign_key and constraint_expression:
-            rendered_column_constraint = f"references {constraint_expression}"
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_column_constraint = (
+                    f"references {constraint.to} ({', '.join(constraint.to_columns)})"
+                )
+            elif constraint_expression:
+                rendered_column_constraint = f"references {constraint_expression}"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1682,20 +1687,29 @@ class BaseAdapter(metaclass=AdapterMeta):
         rendering."""
         constraint_prefix = f"constraint {constraint.name} " if constraint.name else ""
         column_list = ", ".join(constraint.columns)
+        rendered_model_constraint = None
+
         if constraint.type == ConstraintType.check and constraint.expression:
-            return f"{constraint_prefix}check ({constraint.expression})"
+            rendered_model_constraint = f"{constraint_prefix}check ({constraint.expression})"
         elif constraint.type == ConstraintType.unique:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            rendered_model_constraint = (
+                f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            )
         elif constraint.type == ConstraintType.primary_key:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
-        elif constraint.type == ConstraintType.foreign_key and constraint.expression:
-            return f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
+            rendered_model_constraint = (
+                f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
+            )
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({', '.join(constraint.to_columns)})"
+            elif constraint.expression:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
         elif constraint.type == ConstraintType.custom and constraint.expression:
-            return f"{constraint_prefix}{constraint.expression}"
-        else:
-            return None
+            rendered_model_constraint = f"{constraint_prefix}{constraint.expression}"
+
+        return rendered_model_constraint
 
     @classmethod
     def capabilities(cls) -> CapabilityDict:
