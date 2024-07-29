@@ -1,0 +1,6 @@
+kind: Fixes
+body: Incremental table varchar column definition changed
+time: 2024-07-28T22:10:30.673107-04:00
+custom:
+  Author: gshank
+  Issue: "276"
