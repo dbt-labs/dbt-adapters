@@ -131,7 +131,7 @@ jobs:
 
       - name: "Audit Version And Parse Into Parts"
         id: semver
-        uses: dbt-labs/actions/parse-semver@v1.1.0
+        uses: dbt-labs/actions/parse-semver@v1.1.1
         with:
           version: ${{ inputs.version_number }}
 
@@ -288,7 +288,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
       - name: Setup `hatch`
@@ -392,7 +392,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
       - name: "Setup `hatch`"
@@ -407,7 +407,7 @@ jobs:
 
     steps:
       - name: "Checkout ${{ github.repository }} Branch ${{ needs.create-temp-branch.outputs.branch_name }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.create-temp-branch.outputs.branch_name }}
 
@@ -467,7 +467,7 @@ jobs:
           echo needs.audit-changelog.outputs.exists: ${{ needs.audit-changelog.outputs.exists }}
           echo needs.audit-version-in-code.outputs.up_to_date: ${{ needs.audit-version-in-code.outputs.up_to_date }}
       - name: "Checkout Repo ${{ github.repository }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: "Merge Changes Into ${{ inputs.target_branch }}"
         uses: everlytic/branch-merge@1.1.5
@@ -524,7 +524,7 @@ jobs:
           message="The ${{ steps.resolve_branch.outputs.target_branch }} branch will be used for release"
           echo "::notice title=${{ env.NOTIFICATION_PREFIX }}: $title::$message"
       - name: "Checkout Resolved Branch - ${{ steps.resolve_branch.outputs.target_branch }}"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ steps.resolve_branch.outputs.target_branch }}
 
