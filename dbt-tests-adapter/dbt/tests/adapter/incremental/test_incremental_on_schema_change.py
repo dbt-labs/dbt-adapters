@@ -100,7 +100,6 @@ class BaseIncrementalCaseSenstivityOnSchemaChange:
         res, logs = run_dbt_and_capture(
             ["show", "--inline", "select * from {{ ref('dim_jobs') }}"]
         )
-        breakpoint()
         run_dbt(["run", "--vars", "{'version': 1}"])
         res, logs = run_dbt_and_capture(
             ["show", "--inline", "select * from {{ ref('dim_jobs') }}"],
