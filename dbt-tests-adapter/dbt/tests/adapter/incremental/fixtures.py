@@ -304,7 +304,7 @@ select id,
 from source_data
 """
 
-_MODELS__SRC_ARTISTS = """
+_MODELS__SRC_JOBS = """
 {{
     config(
         materialized='table',
@@ -324,7 +324,7 @@ _MODELS__SRC_ARTISTS = """
 {% endif %}
 """
 
-_MODELS__DIM_ARTISTS = """
+_MODELS__DIM_JOBS = """
 {{
     config(
         materialized='incremental',
@@ -332,5 +332,5 @@ _MODELS__DIM_ARTISTS = """
     )
 }}
 
-select  * from {{ ref("src_artists") }}
+select  * from {{ ref("src_jobs") }}
 """

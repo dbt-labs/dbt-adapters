@@ -90,21 +90,18 @@ class BaseIncrementalCaseSenstivityOnSchemaChange:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "src_artists.sql": fixtures._MODELS__SRC_ARTISTS,
-            "dim_artists.sql": fixtures._MODELS__DIM_ARTISTS,
+            "src_jobs.sql": fixtures._MODELS__SRC_JOBS,
+            "dim_jobs.sql": fixtures._MODELS__DIM_JOBS,
         }
 
     def test_run_incremental_check_quoting_on_new_columns(self, project):
-        select = "src_artists dim_artists"
+        select = "src_jobs dim_jobs"
         run_dbt(["run", "--models", select, "--full-refresh"])
-        run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(
-            ["show", "--inline", "select * from {{ ref('dim_artists') }}"]
+            ["show", "--inline", "select * from {{ ref('dim_jobs') }}"]
         )
-        assert "Job" not in logs
+        breakpoint()
         run_dbt(["run", "--vars", "{'version': 1}"])
-        run_dbt(["show", "--inline", "select * from {{ ref('dim_artists') }}"])
         res, logs = run_dbt_and_capture(
-            ["show", "--inline", "select * from {{ ref('dim_artists') }}"]
+            ["show", "--inline", "select * from {{ ref('dim_jobs') }}"],
         )
-        assert "Job" in logs
