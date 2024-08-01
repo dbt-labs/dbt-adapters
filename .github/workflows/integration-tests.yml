@@ -1,5 +1,7 @@
 name: Integration Tests
 
+run-name: "${{ (contains(github.event_name, 'workflow_') && inputs.name) || github.event_name }}: ${{ (contains(github.event_name, 'workflow_') &&  inputs.adapter_branch) || github.ref_name }} by @${{ github.actor }}"
+
 on:
   push:
     branches:
@@ -8,25 +10,55 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      name:
+        description: "Name to associate with run (example: 'dbt-adapters-242')"
+        required: false
+        type: string
+        default: "Adapter Integration Tests"
+      adapter_branch:
+        description: "The branch of this adapter repository to use"
+        type: string
+        required: false
+        default: "main"
       dbt_adapters_branch:
         description: "The branch of dbt-adapters to use"
         type: string
         required: false
         default: "main"
-      core_branch:
+      dbt_core_branch:
         description: "The branch of dbt-core to use"
+        type: string
+        required: false
+        default: "main"
+      dbt_common_branch:
+        description: "The branch of dbt-common to use"
         type: string
         required: false
         default: "main"
   workflow_call:
     inputs:
+      name:
+        description: "name to associate with run"
+        required: false
+        type: string
+        default: "Adapter Integration Tests"
+      adapter_branch:
+        description: "The branch of this adapter repository to use"
+        type: string
+        required: false
+        default: "main"
       dbt_adapters_branch:
         description: "The branch of dbt-adapters to use"
         type: string
         required: false
         default: "main"
-      core_branch:
+      dbt_core_branch:
         description: "The branch of dbt-core to use"
+        type: string
+        required: false
+        default: "main"
+      dbt_common_branch:
+        description: "The branch of dbt-common to use"
         type: string
         required: false
         default: "main"
@@ -67,14 +99,23 @@ jobs:
 
     steps:
       - name: Check out repository
+        if: ${{ github.event_name == 'pull_request'|| github.event_name == 'push' }}
         uses: actions/checkout@v4
+
+      - name: Check out the repository (workflow_dispatch)
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.adapter_branch }}
 
       - name: Update Adapters and Core branches
         if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'}}
         run: |
-          ./.github/scripts/update_dev_packages.sh \
+          ./.github/scripts/update_dev_dependency_branches.sh \
             ${{ inputs.dbt_adapters_branch }} \
-            ${{ inputs.core_branch }}
+            ${{ inputs.dbt_core_branch }} \
+            ${{ inputs.dbt_common_branch }}
+          cat pyproject.toml
 
       - name: Setup postgres
         run: psql -f ./scripts/setup_test_database.sql
