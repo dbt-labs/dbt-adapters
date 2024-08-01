@@ -1,0 +1,6 @@
+kind: Features
+body: Adding a check_exclude_cols option to the 'check' snapshots strategy.
+time: 2024-07-26T08:37:35.411334+01:00
+custom:
+    Author: willmaclean
+    Issue: "273"
