@@ -2,7 +2,7 @@
   <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
 </p>
 
-# dbt-tests-adapter
+# dbt-adapters
 
 This package is responsible for:
 
@@ -10,9 +10,11 @@ This package is responsible for:
 - caching information from databases
 - determining how relations are defined
 
-There are two major adapter types: base and sql
+In this repo there is also our testing suite used for tesing adapter functionality
 
-# Directories
+# Adapters
+
+There are two major adapter types: base and sql
 
 ## `base`
 
