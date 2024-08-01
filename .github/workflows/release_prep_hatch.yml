@@ -77,7 +77,7 @@ defaults:
     shell: bash
 
 env:
-  PYTHON_TARGET_VERSION: 3.11
+  PYTHON_TARGET_VERSION: 3.12
   NOTIFICATION_PREFIX: "[Release Prep]"
 
 jobs:

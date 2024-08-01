@@ -19,6 +19,10 @@ on:
         description: "Only release Docker image, skip GitHub & PyPI"
         type: boolean
         default: false
+      python_version:
+        description: "Python version for building and testing the build"
+        type: string
+        default: "3.12"
 
 permissions:
   contents: write # this is the permission that allows creating a new release
@@ -53,6 +57,8 @@ jobs:
 
       - name: "Setup `hatch`"
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
+        with:
+          python-version: ${{ inputs.python_version }}
 
       - name: "Set archive name"
         id: archive
