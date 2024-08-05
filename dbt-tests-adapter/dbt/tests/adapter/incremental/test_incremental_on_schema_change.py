@@ -97,8 +97,8 @@ class BaseIncrementalCaseSenstivityOnSchemaChange:
     def test_run_incremental_check_quoting_on_new_columns(self, project):
         select = "src_jobs dim_jobs"
         run_dbt(["run", "--models", select, "--full-refresh"])
-        res, logs = run_dbt_and_capture(["run", "--inline", "dim_jobs"])
+        res, logs = run_dbt_and_capture(["run", "--select", "dim_jobs"])
         run_dbt(["run", "--vars", "{'version': 1}"])
         res, logs = run_dbt_and_capture(
-            ["run", "--inline", "dim_jobs"],
+            ["run", "--select", "dim_jobs"],
         )
