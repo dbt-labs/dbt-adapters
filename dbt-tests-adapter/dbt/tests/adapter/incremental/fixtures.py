@@ -317,8 +317,6 @@ _MODELS__SRC_JOBS = """
 
 {% else %}
 
-    -- add a non-zero version to the end of the command to get a different version:
-    -- --vars "{'version': 1}"
     select {{ dbt.current_timestamp() }} as inserted_at, 'engineer' as {{ adapter.quote('Job') }}
 
 {% endif %}
