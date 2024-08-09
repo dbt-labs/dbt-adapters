@@ -45,7 +45,14 @@
     snapshotted_data as (
 
         select *,
+        {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% for key in strategy.unique_key %}
+                {{ key }} as dbt_unique_key_{{ loop.index }}
+                {%- if not loop.last %} , {%- endif %}
+            {% endfor %}
+        {% else %}
             {{ strategy.unique_key }} as dbt_unique_key
+        {% endif %}
 
         from {{ target_relation }}
         where dbt_valid_to is null
@@ -56,7 +63,13 @@
 
         select
             *,
-            {{ strategy.unique_key }} as dbt_unique_key,
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    {{ key }} as dbt_unique_key_{{ loop.index }},
+                {% endfor %}
+            {% else %}
+                {{ strategy.unique_key }} as dbt_unique_key,
+            {% endif %}
             {{ strategy.updated_at }} as dbt_updated_at,
             {{ strategy.updated_at }} as dbt_valid_from,
             nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as dbt_valid_to,
@@ -69,7 +82,13 @@
 
         select
             *,
-            {{ strategy.unique_key }} as dbt_unique_key,
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    {{ key }} as dbt_unique_key_{{ loop.index }},
+                {% endfor %}
+            {% else %}
+                {{ strategy.unique_key }} as dbt_unique_key,
+            {% endif %}
             {{ strategy.updated_at }} as dbt_updated_at,
             {{ strategy.updated_at }} as dbt_valid_from,
             {{ strategy.updated_at }} as dbt_valid_to
@@ -83,7 +102,14 @@
 
         select
             *,
-            {{ strategy.unique_key }} as dbt_unique_key
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    {{ key }} as dbt_unique_key_{{ loop.index }}
+                     {%- if not loop.last %} , {%- endif %}
+                {% endfor %}
+            {% else %}
+                {{ strategy.unique_key }} as dbt_unique_key
+            {% endif %}
         from snapshot_query
     ),
     {% endif %}
@@ -95,13 +121,28 @@
             source_data.*
 
         from insertions_source_data as source_data
-        left outer join snapshotted_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
-        where snapshotted_data.dbt_unique_key is null
-           or (
-                snapshotted_data.dbt_unique_key is not null
-            and (
-                {{ strategy.row_changed }}
-            )
+        left outer join snapshotted_data on
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
+                    {%- if not loop.last %} and {%- endif %}
+                {% endfor %}
+                where snapshotted_data.dbt_unique_key_1 is null
+                or (
+                    snapshotted_data.dbt_unique_key_1 is not null
+                and (
+                    {{ strategy.row_changed }}
+                )
+            {% else %}
+                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
+                where snapshotted_data.dbt_unique_key is null
+                or (
+                    snapshotted_data.dbt_unique_key is not null
+                and (
+                    {{ strategy.row_changed }}
+                )
+            {% endif %}
+
         )
 
     ),
@@ -114,7 +155,15 @@
             snapshotted_data.dbt_scd_id
 
         from updates_source_data as source_data
-        join snapshotted_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
+        join snapshotted_data on
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
+                    {%- if not loop.last %} and {%- endif %}
+                {% endfor %}
+            {% else %}
+                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
+            {% endif %}
         where (
             {{ strategy.row_changed }}
         )
@@ -134,8 +183,17 @@
             snapshotted_data.dbt_scd_id
 
         from snapshotted_data
-        left join deletes_source_data as source_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
-        where source_data.dbt_unique_key is null
+        left join deletes_source_data as source_data on
+            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+                {% for key in strategy.unique_key %}
+                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
+                    {%- if not loop.last %} and {%- endif %}
+                {% endfor %}
+                    where source_data.dbt_unique_key_1 is null
+            {% else %}
+                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
+                where source_data.dbt_unique_key is null
+            {% endif %}
     )
     {%- endif %}
 
