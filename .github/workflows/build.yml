@@ -20,11 +20,6 @@ on:
     types: [checks_requested]
   workflow_dispatch:
   workflow_call:
-    inputs:
-      changelog_path:
-        description: "Path to changelog file"
-        required: true
-        type: string
 
 permissions: read-all
 
@@ -51,35 +46,9 @@ jobs:
         uses: ./.github/actions/setup-hatch
 
       - name: Build `dbt-adapters`
-        if: ${{ inputs.package == 'dbt-adapters' }}
         uses: ./.github/actions/build-hatch
 
       - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package == 'dbt-tests-adapter' }}
         uses: ./.github/actions/build-hatch
         with:
           working-dir: "./dbt-tests-adapter/"
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-
-      - name: Build `dbt-adapters`
-        if: ${{ inputs.package == 'dbt-adapters' }}
-        uses: ./.github/actions/build-hatch
-
-      - name: Build `dbt-tests-adapter`
-        if: ${{ inputs.package == 'dbt-tests-adapter' }}
-        uses: ./.github/actions/build-hatch
-        with:
-          working-dir: "./dbt-tests-adapter/"
-
-      # this step is only needed for the release process
-      - name: "Upload Build Artifact"
-        if: ${{ github.event_name == 'workflow_call' }}
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ steps.version.outputs.version_number }}
-          path: |
-            ${{ inputs.changelog_path }}
-            ./dist/
-          retention-days: 3
