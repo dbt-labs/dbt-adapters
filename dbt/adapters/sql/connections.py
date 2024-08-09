@@ -1,6 +1,6 @@
 import abc
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -86,7 +86,8 @@ class SQLConnectionManager(BaseConnectionManager):
                     node_info=get_node_info(),
                 )
             )
-            pre = time.time()
+
+            pre = time.perf_counter()
 
             cursor = connection.handle.cursor()
             cursor.execute(sql, bindings)
@@ -94,7 +95,7 @@ class SQLConnectionManager(BaseConnectionManager):
             fire_event(
                 SQLQueryStatus(
                     status=str(self.get_response(cursor)),
-                    elapsed=round((time.time() - pre)),
+                    elapsed=time.perf_counter() - pre,
                     node_info=get_node_info(),
                 )
             )
@@ -110,27 +111,24 @@ class SQLConnectionManager(BaseConnectionManager):
     @classmethod
     def process_results(
         cls, column_names: Iterable[str], rows: Iterable[Any]
-    ) -> List[Dict[str, Any]]:
-        # TODO CT-211
+    ) -> Iterator[Dict[str, Any]]:
         unique_col_names = dict()  # type: ignore[var-annotated]
-        # TODO CT-211
         for idx in range(len(column_names)):  # type: ignore[arg-type]
-            # TODO CT-211
             col_name = column_names[idx]  # type: ignore[index]
             if col_name in unique_col_names:
                 unique_col_names[col_name] += 1
-                # TODO CT-211
                 column_names[idx] = f"{col_name}_{unique_col_names[col_name]}"  # type: ignore[index] # noqa
             else:
-                # TODO CT-211
                 unique_col_names[column_names[idx]] = 1  # type: ignore[index]
-        return [dict(zip(column_names, row)) for row in rows]
+
+        for row in rows:
+            yield dict(zip(column_names, row))
 
     @classmethod
     def get_result_from_cursor(cls, cursor: Any, limit: Optional[int]) -> "agate.Table":
         from dbt_common.clients.agate_helper import table_from_data_flat
 
-        data: List[Any] = []
+        data: Iterable[Any] = []
         column_names: List[str] = []
 
         if cursor.description is not None:

@@ -41,7 +41,7 @@ body:
       label: Acceptance criteria
       description: |
         What is the definition of done for this feature? Include any relevant edge cases and/or test cases.
-        
+
         Example:
         - [ ] If there are no config changes, don't alter the materialized view
         - [ ] If the materialized view is scheduled to refresh, a manual refresh should not be issued
@@ -58,7 +58,7 @@ body:
       description: |
         Provide scenarios to test. Include both positive and negative tests if possible.
         Link to existing similar tests if appropriate.
-        
+
         Example:
          - [ ] Test with no `materialized` field in the model config. Expect pass.
          - [ ] Test with a `materialized` field in the model config that is not valid. Expect ConfigError.
@@ -68,7 +68,7 @@ body:
         ```
     validations:
       required: true
-      
+
   - type: textarea
     attributes:
       label: Security

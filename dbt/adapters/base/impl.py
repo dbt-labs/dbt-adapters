@@ -1,10 +1,10 @@
 import abc
+import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from multiprocessing.context import SpawnContext
-import time
 from typing import (
     Any,
     Callable,
@@ -23,12 +23,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import pytz
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.contracts.metadata import CatalogTable
+from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -38,14 +41,12 @@ from dbt_common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
     executor,
     filter_null_values,
 )
-import pytz
 
 from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.connections import (
@@ -222,6 +223,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - truncate_relation
         - rename_relation
         - get_columns_in_relation
+        - get_catalog_for_single_relation
         - get_column_schema_from_query
         - expand_column_types
         - list_relations_without_caching
@@ -317,14 +319,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         return conn.name
 
     @contextmanager
-    def connection_named(self, name: str, query_header_context: Any = None) -> Iterator[None]:
+    def connection_named(
+        self, name: str, query_header_context: Any = None, should_release_connection=True
+    ) -> Iterator[None]:
         try:
             if self.connections.query_header is not None:
                 self.connections.query_header.set(name, query_header_context)
             self.acquire_connection(name)
             yield
         finally:
-            self.release_connection()
+            if should_release_connection:
+                self.release_connection()
+
             if self.connections.query_header is not None:
                 self.connections.query_header.reset()
 
@@ -626,6 +632,12 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
+
+    def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
+        """Get catalog information including table-level and column-level metadata for a single relation."""
+        raise NotImplementedError(
+            "`get_catalog_for_single_relation` is not implemented for this adapter!"
+        )
 
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
@@ -1062,6 +1074,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         project: Optional[str] = None,
         context_override: Optional[Dict[str, Any]] = None,
         kwargs: Optional[Dict[str, Any]] = None,
+        needs_conn: bool = False,
     ) -> AttrDict:
         """Look macro_name up in the manifest and execute its results.
 
@@ -1074,6 +1087,10 @@ class BaseAdapter(metaclass=AdapterMeta):
             execution context.
         :param kwargs: An optional dict of keyword args used to pass to the
             macro.
+        : param needs_conn: A boolean that indicates whether the specified macro
+            requires an open connection to execute. If needs_conn is True, a
+            connection is expected and opened if necessary. Otherwise (and by default),
+            no connection is expected prior to executing the macro.
         """
 
         if kwargs is None:
@@ -1105,6 +1122,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context.update(context_override)
 
         macro_function = CallableMacroGenerator(macro, macro_context)
+
+        if needs_conn:
+            connection = self.connections.get_thread_connection()
+            self.connections.open(connection)
 
         with self.connections.exception_handler(f"macro {macro_name}"):
             result = macro_function(**kwargs)
@@ -1297,48 +1318,111 @@ class BaseAdapter(metaclass=AdapterMeta):
         }
         return adapter_response, freshness
 
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        """
+        Given a list of sources (BaseRelations), calculate the metadata-based freshness in batch.
+        This method should _not_ execute a warehouse query per source, but rather batch up
+        the sources into as few requests as possible to minimize the number of roundtrips required
+        to compute metadata-based freshness for each input source.
+
+        :param sources: The list of sources to calculate metadata-based freshness for
+        :param macro_resolver: An optional macro_resolver to use for get_relation_last_modified
+        :return: a tuple where:
+            * the first element is a list of optional AdapterResponses indicating the response
+              for each request the method made to compute the freshness for the provided sources.
+            * the second element is a dictionary mapping an input source BaseRelation to a FreshnessResponse,
+              if it was possible to calculate a FreshnessResponse for the source.
+        """
+        # Track schema, identifiers of sources for lookup from batch query
+        schema_identifier_to_source = {
+            (
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
+            ): source
+            for source in sources
+        }
+
+        # Group metadata sources by information schema -- one query per information schema will be necessary
+        sources_by_info_schema: Dict[InformationSchema, List[BaseRelation]] = (
+            self._get_catalog_relations_by_info_schema(sources)
+        )
+
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        for (
+            information_schema,
+            sources_for_information_schema,
+        ) in sources_by_info_schema.items():
+            result = self.execute_macro(
+                GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+                kwargs={
+                    "information_schema": information_schema,
+                    "relations": sources_for_information_schema,
+                },
+                macro_resolver=macro_resolver,
+                needs_conn=True,
+            )
+            adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+            adapter_responses.append(adapter_response)
+
+            for row in table:
+                raw_relation, freshness_response = self._parse_freshness_row(row, table)
+                source_relation_for_result = schema_identifier_to_source[raw_relation]
+                freshness_responses[source_relation_for_result] = freshness_response
+
+        return adapter_responses, freshness_responses
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
-        kwargs: Dict[str, Any] = {
-            "information_schema": source.information_schema_only(),
-            "relations": [source],
-        }
-        result = self.execute_macro(
-            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
-            kwargs=kwargs,
+        adapter_responses, freshness_responses = self.calculate_freshness_from_metadata_batch(
+            sources=[source],
             macro_resolver=macro_resolver,
         )
-        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+        adapter_response = adapter_responses[0] if adapter_responses else None
+        return adapter_response, freshness_responses[source]
 
-        try:
-            from dbt_common.clients.agate_helper import get_column_value_uncased
-
-            row = table[0]
-            last_modified_val = get_column_value_uncased("last_modified", row)
-            snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
-        except Exception:
-            raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
-
-        if last_modified_val is None:
+    def _create_freshness_response(
+        self, last_modified: Optional[datetime], snapshotted_at: Optional[datetime]
+    ) -> FreshnessResponse:
+        if last_modified is None:
             # Interpret missing value as "infinitely long ago"
             max_loaded_at = datetime(1, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
         else:
-            max_loaded_at = _utc(last_modified_val, None, "last_modified")
+            max_loaded_at = _utc(last_modified, None, "last_modified")
 
-        snapshotted_at = _utc(snapshotted_at_val, None, "snapshotted_at")
-
+        snapshotted_at = _utc(snapshotted_at, None, "snapshotted_at")
         age = (snapshotted_at - max_loaded_at).total_seconds()
-
         freshness: FreshnessResponse = {
             "max_loaded_at": max_loaded_at,
             "snapshotted_at": snapshotted_at,
             "age": age,
         }
 
-        return adapter_response, freshness
+        return freshness
+
+    def _parse_freshness_row(
+        self, row: "agate.Row", table: "agate.Table"
+    ) -> Tuple[Any, FreshnessResponse]:
+        from dbt_common.clients.agate_helper import get_column_value_uncased
+
+        try:
+            last_modified_val = get_column_value_uncased("last_modified", row)
+            snapshotted_at_val = get_column_value_uncased("snapshotted_at", row)
+            identifier = get_column_value_uncased("identifier", row)
+            schema = get_column_value_uncased("schema", row)
+        except Exception:
+            raise MacroResultError(GET_RELATION_LAST_MODIFIED_MACRO_NAME, table)
+
+        freshness_response = self._create_freshness_response(last_modified_val, snapshotted_at_val)
+        raw_relation = schema.lower().strip(), identifier.lower().strip()
+        return raw_relation, freshness_response
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Any:
         """A hook for running some operation before the model materialization
@@ -1518,8 +1602,13 @@ class BaseAdapter(metaclass=AdapterMeta):
             rendered_column_constraint = f"unique {constraint_expression}"
         elif constraint.type == ConstraintType.primary_key:
             rendered_column_constraint = f"primary key {constraint_expression}"
-        elif constraint.type == ConstraintType.foreign_key and constraint_expression:
-            rendered_column_constraint = f"references {constraint_expression}"
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_column_constraint = (
+                    f"references {constraint.to} ({', '.join(constraint.to_columns)})"
+                )
+            elif constraint_expression:
+                rendered_column_constraint = f"references {constraint_expression}"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1598,20 +1687,29 @@ class BaseAdapter(metaclass=AdapterMeta):
         rendering."""
         constraint_prefix = f"constraint {constraint.name} " if constraint.name else ""
         column_list = ", ".join(constraint.columns)
+        rendered_model_constraint = None
+
         if constraint.type == ConstraintType.check and constraint.expression:
-            return f"{constraint_prefix}check ({constraint.expression})"
+            rendered_model_constraint = f"{constraint_prefix}check ({constraint.expression})"
         elif constraint.type == ConstraintType.unique:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            rendered_model_constraint = (
+                f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            )
         elif constraint.type == ConstraintType.primary_key:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
-        elif constraint.type == ConstraintType.foreign_key and constraint.expression:
-            return f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
+            rendered_model_constraint = (
+                f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
+            )
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({', '.join(constraint.to_columns)})"
+            elif constraint.expression:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
         elif constraint.type == ConstraintType.custom and constraint.expression:
-            return f"{constraint_prefix}{constraint.expression}"
-        else:
-            return None
+            rendered_model_constraint = f"{constraint_prefix}{constraint.expression}"
+
+        return rendered_model_constraint
 
     @classmethod
     def capabilities(cls) -> CapabilityDict:

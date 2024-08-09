@@ -363,7 +363,8 @@ models:
           - type: check
             expression: id >= 1
           - type: foreign_key
-            expression: {schema}.foreign_key_model (id)
+            to: ref('foreign_key_model')
+            to_columns: ["id"]
           - type: unique
         data_tests:
           - unique

@@ -190,7 +190,7 @@ class SQLQueryStatus(DebugLevel):
         return "E017"
 
     def message(self) -> str:
-        return f"SQL status: {self.status} in {self.elapsed} seconds"
+        return f"SQL status: {self.status} in {self.elapsed:.3f} seconds"
 
 
 class SQLCommit(DebugLevel):
@@ -420,5 +420,18 @@ class ConstraintNotSupported(WarnLevel):
         msg = (
             f"The constraint type {self.constraint} is not supported by {self.adapter}, and will "
             "be ignored. Set 'warn_unsupported: false' on this constraint to ignore this warning."
+        )
+        return line_wrap_message(warning_tag(msg))
+
+
+class TypeCodeNotFound(DebugLevel):
+    def code(self) -> str:
+        return "E050"
+
+    def message(self) -> str:
+        msg = (
+            f"The `type_code` {self.type_code} was not recognized, which may affect error "
+            "messages for enforced contracts that fail as well as `Column.data_type` values "
+            "returned by `get_column_schema_from_query`"
         )
         return line_wrap_message(warning_tag(msg))

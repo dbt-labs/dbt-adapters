@@ -165,7 +165,9 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             conn.handle = LazyHandle(self.open)
             # Add the connection to thread_connections for this thread
             self.set_thread_connection(conn)
-            fire_event(NewConnection(conn_name=conn_name, conn_type=self.TYPE, node_info=get_node_info()))
+            fire_event(
+                NewConnection(conn_name=conn_name, conn_type=self.TYPE, node_info=get_node_info())
+            )
         else:  # existing connection either wasn't open or didn't have the right name
             if conn.state != "open":
                 conn.handle = LazyHandle(self.open)

@@ -37,7 +37,7 @@
         {% set sql = create_csv_table(model, agate_table) %}
     {% else %}
         {{ adapter.truncate_relation(old_relation) }}
-        {% set sql = "truncate table " ~ old_relation %}
+        {% set sql = "truncate table " ~ old_relation.render() %}
     {% endif %}
 
     {{ return(sql) }}
