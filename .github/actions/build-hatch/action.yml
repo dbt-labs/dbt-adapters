@@ -13,7 +13,7 @@ inputs:
     default: "./"
   archive-name:
     description: Where to upload the artifacts
-    required: true
+    default: ""
 
 runs:
   using: composite
@@ -30,7 +30,8 @@ runs:
       working-directory: ${{ inputs.working-dir }}
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      if: ${{ inputs.archive-name != '' }}
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.archive-name }}
         path: ${{ inputs.working-dir }}dist/

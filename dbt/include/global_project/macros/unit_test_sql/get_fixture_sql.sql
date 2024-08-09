@@ -15,13 +15,14 @@
 {%- endif -%}
 
 {%- if not column_name_to_data_types -%}
-    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this) }}
+    {{ exceptions.raise_compiler_error("Not able to get columns for unit test '" ~ model.name ~ "' from relation " ~ this ~ " because the relation doesn't exist") }}
 {%- endif -%}
 
 {%- for column_name, column_type in column_name_to_data_types.items() -%}
     {%- do default_row.update({column_name: (safe_cast("null", column_type) | trim )}) -%}
 {%- endfor -%}
 
+{{ validate_fixture_rows(rows, row_number) }}
 
 {%- for row in rows -%}
 {%-   set formatted_row = format_row(row, column_name_to_data_types) -%}
@@ -92,4 +93,12 @@ union all
         {%- do formatted_row.update(row_update) -%}
     {%- endfor -%}
     {{ return(formatted_row) }}
+{%- endmacro -%}
+
+{%- macro validate_fixture_rows(rows, row_number) -%}
+  {{ return(adapter.dispatch('validate_fixture_rows', 'dbt')(rows, row_number)) }}
+{%- endmacro -%}
+
+{%- macro default__validate_fixture_rows(rows, row_number) -%}
+  {# This is an abstract method for adapter overrides as needed #}
 {%- endmacro -%}

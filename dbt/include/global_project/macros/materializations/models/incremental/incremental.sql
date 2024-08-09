@@ -39,9 +39,12 @@
       {% set need_swap = true %}
   {% else %}
     {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
-    {% do adapter.expand_target_column_types(
-             from_relation=temp_relation,
-             to_relation=target_relation) %}
+    {% set contract_config = config.get('contract') %}
+    {% if not contract_config or not contract_config.enforced %}
+      {% do adapter.expand_target_column_types(
+               from_relation=temp_relation,
+               to_relation=target_relation) %}
+    {% endif %}
     {#-- Process schema changes. Returns dict of changes if successful. Use source columns for upserting/merging --#}
     {% set dest_columns = process_schema_changes(on_schema_change, temp_relation, existing_relation) %}
     {% if not dest_columns %}
