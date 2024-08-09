@@ -1,4 +1,4 @@
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -79,3 +79,16 @@ def test_render_limited(limit, require_alias, expected_result):
     actual_result = my_relation.render_limited()
     assert actual_result == expected_result
     assert str(my_relation) == expected_result
+
+
+def test_create_ephemeral_from_uses_identifier():
+    @dataclass
+    class Node:
+        """Dummy implementation of RelationConfig protocol"""
+
+        name: str
+        identifier: str
+
+    node = Node(name="name_should_not_be_used", identifier="test")
+    ephemeral_relation = BaseRelation.create_ephemeral_from(node)
+    assert str(ephemeral_relation) == "__dbt__cte__test"

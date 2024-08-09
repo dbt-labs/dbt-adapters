@@ -1,10 +1,10 @@
 import abc
+import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
 from multiprocessing.context import SpawnContext
-import time
 from typing import (
     Any,
     Callable,
@@ -23,12 +23,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import pytz
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.contracts.metadata import CatalogTable
+from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -38,14 +41,12 @@ from dbt_common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
     executor,
     filter_null_values,
 )
-import pytz
 
 from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.connections import (
@@ -222,6 +223,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - truncate_relation
         - rename_relation
         - get_columns_in_relation
+        - get_catalog_for_single_relation
         - get_column_schema_from_query
         - expand_column_types
         - list_relations_without_caching
@@ -317,14 +319,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         return conn.name
 
     @contextmanager
-    def connection_named(self, name: str, query_header_context: Any = None) -> Iterator[None]:
+    def connection_named(
+        self, name: str, query_header_context: Any = None, should_release_connection=True
+    ) -> Iterator[None]:
         try:
             if self.connections.query_header is not None:
                 self.connections.query_header.set(name, query_header_context)
             self.acquire_connection(name)
             yield
         finally:
-            self.release_connection()
+            if should_release_connection:
+                self.release_connection()
+
             if self.connections.query_header is not None:
                 self.connections.query_header.reset()
 
@@ -626,6 +632,12 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
+
+    def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
+        """Get catalog information including table-level and column-level metadata for a single relation."""
+        raise NotImplementedError(
+            "`get_catalog_for_single_relation` is not implemented for this adapter!"
+        )
 
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
@@ -1590,8 +1602,13 @@ class BaseAdapter(metaclass=AdapterMeta):
             rendered_column_constraint = f"unique {constraint_expression}"
         elif constraint.type == ConstraintType.primary_key:
             rendered_column_constraint = f"primary key {constraint_expression}"
-        elif constraint.type == ConstraintType.foreign_key and constraint_expression:
-            rendered_column_constraint = f"references {constraint_expression}"
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_column_constraint = (
+                    f"references {constraint.to} ({', '.join(constraint.to_columns)})"
+                )
+            elif constraint_expression:
+                rendered_column_constraint = f"references {constraint_expression}"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1670,20 +1687,29 @@ class BaseAdapter(metaclass=AdapterMeta):
         rendering."""
         constraint_prefix = f"constraint {constraint.name} " if constraint.name else ""
         column_list = ", ".join(constraint.columns)
+        rendered_model_constraint = None
+
         if constraint.type == ConstraintType.check and constraint.expression:
-            return f"{constraint_prefix}check ({constraint.expression})"
+            rendered_model_constraint = f"{constraint_prefix}check ({constraint.expression})"
         elif constraint.type == ConstraintType.unique:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            rendered_model_constraint = (
+                f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            )
         elif constraint.type == ConstraintType.primary_key:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
-        elif constraint.type == ConstraintType.foreign_key and constraint.expression:
-            return f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
+            rendered_model_constraint = (
+                f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
+            )
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({', '.join(constraint.to_columns)})"
+            elif constraint.expression:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
         elif constraint.type == ConstraintType.custom and constraint.expression:
-            return f"{constraint_prefix}{constraint.expression}"
-        else:
-            return None
+            rendered_model_constraint = f"{constraint_prefix}{constraint.expression}"
+
+        return rendered_model_constraint
 
     @classmethod
     def capabilities(cls) -> CapabilityDict:

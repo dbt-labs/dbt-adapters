@@ -71,9 +71,9 @@
             {% set build_sql = get_alter_materialized_view_as_sql(target_relation, configuration_changes, sql, existing_relation, backup_relation, intermediate_relation) %}
         {% elif on_configuration_change == 'continue' %}
             {% set build_sql = '' %}
-            {{ exceptions.warn("Configuration changes were identified and `on_configuration_change` was set to `continue` for `" ~ target_relation ~ "`") }}
+            {{ exceptions.warn("Configuration changes were identified and `on_configuration_change` was set to `continue` for `" ~ target_relation.render() ~ "`") }}
         {% elif on_configuration_change == 'fail' %}
-            {{ exceptions.raise_fail_fast_error("Configuration changes were identified and `on_configuration_change` was set to `fail` for `" ~ target_relation ~ "`") }}
+            {{ exceptions.raise_fail_fast_error("Configuration changes were identified and `on_configuration_change` was set to `fail` for `" ~ target_relation.render() ~ "`") }}
 
         {% else %}
             -- this only happens if the user provides a value other than `apply`, 'skip', 'fail'
