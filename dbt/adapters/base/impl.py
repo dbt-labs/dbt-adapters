@@ -24,6 +24,7 @@ from typing import (
 )
 
 import pytz
+from dbt_common.behavior_flags import Behavior, RawBehaviorFlag, register
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -61,6 +62,7 @@ from dbt.adapters.base.relation import (
     InformationSchema,
     SchemaSearchMap,
 )
+from dbt.adapters.behavior_flags import flags as base_flags
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
@@ -271,6 +273,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
+        self.behavior = self.register_behavior_flags()
 
     ###
     # Methods to set / access a macro resolver
@@ -290,6 +293,14 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context_generator: MacroContextGeneratorCallable,
     ) -> None:
         self._macro_context_generator = macro_context_generator
+
+    def register_behavior_flags(self) -> Behavior:
+        behavior_flags = base_flags.copy()
+        behavior_flags.extend(self._include_behavior_flags())
+        return register(behavior_flags, self.config.flags)
+
+    def _include_behavior_flags(self) -> List[RawBehaviorFlag]:
+        return []
 
     ###
     # Methods that pass through to the connection manager
