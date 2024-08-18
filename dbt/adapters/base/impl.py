@@ -62,7 +62,6 @@ from dbt.adapters.base.relation import (
     InformationSchema,
     SchemaSearchMap,
 )
-from dbt.adapters.behavior_flags import flags as base_flags
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
@@ -295,11 +294,15 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_context_generator = macro_context_generator
 
     def register_behavior_flags(self) -> Behavior:
-        behavior_flags = base_flags.copy()
-        behavior_flags.extend(self._include_behavior_flags())
-        return register(behavior_flags, self.config.flags)
+        """
+        Collect all raw behavior flags and produce a behavior namespace
+        """
+        return register(self._include_behavior_flags(), self.config.flags)
 
     def _include_behavior_flags(self) -> List[RawBehaviorFlag]:
+        """
+        An optional abstract method that concrete adapters can use to inject platform-specific behavior flags
+        """
         return []
 
     ###
