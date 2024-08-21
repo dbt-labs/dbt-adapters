@@ -39,7 +39,7 @@
 
       {% set snapshot_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
       {% set dbt_updated_at_data_type = get_updated_at_column_data_type(snapshot_select_sql) or none %}
-      {% set staging_table = build_snapshot_staging_table(snapshot_select_sql, target_relation) %}
+      {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
       -- this may no-op if the database does not require column expansion
       {% do adapter.expand_target_column_types(from_relation=staging_table,

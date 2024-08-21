@@ -168,15 +168,18 @@
 {% endmacro %}
 
 
-{% macro build_snapshot_staging_table(snapshot_select_sql, target_relation) %}
+{% macro build_snapshot_staging_table(strategy, sql, target_relation) %}
     {% set temp_relation = make_temp_relation(target_relation) %}
 
+    {% set select = snapshot_staging_table(strategy, sql, target_relation) %}
+
     {% call statement('build_snapshot_staging_relation') %}
-        {{ create_table_as(True, temp_relation, snapshot_select_sql) }}
+        {{ create_table_as(True, temp_relation, select) }}
     {% endcall %}
 
     {% do return(temp_relation) %}
 {% endmacro %}
+
 
 {% macro get_updated_at_column_data_type(snapshot_sql) %}
     {% set snapshot_sql_column_schema = get_column_schema_from_query(snapshot_sql) %}
