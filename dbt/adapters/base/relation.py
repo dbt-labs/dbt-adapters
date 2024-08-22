@@ -1,5 +1,6 @@
 from collections.abc import Hashable
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import (
     Any,
     Dict,
@@ -37,6 +38,30 @@ SerializableIterable = Union[Tuple, FrozenSet]
 
 
 @dataclass(frozen=True, eq=False, repr=False)
+class EventTimeFilter(FakeAPIObject, Hashable):
+    field_name: str
+    start: Optional[datetime] = None
+    end: Optional[datetime] = None
+
+    def render(self) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if self.start and self.end:
+            filter = f"{self.field_name} >= '{self.start}' and {self.field_name} < '{self.end}'"
+        elif self.start:
+            filter = f"{self.field_name} >= '{self.start}'"
+        elif self.end:
+            filter = f"{self.field_name} < '{self.end}'"
+
+        return filter
+
+    def __hash__(self) -> int:
+        return hash(self.render())
+
+
+@dataclass(frozen=True, eq=False, repr=False)
 class BaseRelation(FakeAPIObject, Hashable):
     path: Path
     type: Optional[RelationType] = None
@@ -47,6 +72,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     quote_policy: Policy = field(default_factory=lambda: Policy())
     dbt_created: bool = False
     limit: Optional[int] = None
+    event_time_filter: Optional[EventTimeFilter] = None
     require_alias: bool = (
         True  # used to govern whether to add an alias when render_limited is called
     )
@@ -208,13 +234,18 @@ class BaseRelation(FakeAPIObject, Hashable):
         # if there is nothing set, this will return the empty string.
         return ".".join(part for _, part in self._render_iterator() if part is not None)
 
-    def _render_limited_alias(self) -> str:
+    def _render_subquery_alias(self, namespace: str) -> str:
         """Some databases require an alias for subqueries (postgres, mysql) for all others we want to avoid adding
         an alias as it has the potential to introduce issues with the query if the user also defines an alias.
         """
         if self.require_alias:
-            return f" _dbt_limit_subq_{self.table}"
+            return f" _dbt_{namespace}_subq_{self.table}"
         return ""
+
+    def _render_limited_alias(
+        self,
+    ) -> str:
+        return self._render_subquery_alias(namespace="limit")
 
     def render_limited(self) -> str:
         rendered = self.render()
@@ -224,6 +255,17 @@ class BaseRelation(FakeAPIObject, Hashable):
             return f"(select * from {rendered} where false limit 0){self._render_limited_alias()}"
         else:
             return f"(select * from {rendered} limit {self.limit}){self._render_limited_alias()}"
+
+    def render_event_time_filtered(self, rendered: Optional[str] = None) -> str:
+        rendered = rendered or self.render()
+        if self.event_time_filter is None:
+            return rendered
+
+        filter = self.event_time_filter.render()
+        if not filter:
+            return rendered
+
+        return f"(select * from {rendered} where {filter}){self._render_subquery_alias(namespace='et_filter')}"
 
     def quoted(self, identifier):
         return "{quote_char}{identifier}{quote_char}".format(
@@ -240,6 +282,7 @@ class BaseRelation(FakeAPIObject, Hashable):
         cls: Type[Self],
         relation_config: RelationConfig,
         limit: Optional[int] = None,
+        event_time_filter: Optional[EventTimeFilter] = None,
     ) -> Self:
         # Note that ephemeral models are based on the identifier, which will
         # point to the model's alias if one exists and otherwise fall back to
@@ -250,6 +293,7 @@ class BaseRelation(FakeAPIObject, Hashable):
             type=cls.CTE,
             identifier=identifier,
             limit=limit,
+            event_time_filter=event_time_filter,
         ).quote(identifier=False)
 
     @classmethod
@@ -315,7 +359,12 @@ class BaseRelation(FakeAPIObject, Hashable):
         return hash(self.render())
 
     def __str__(self) -> str:
-        return self.render() if self.limit is None else self.render_limited()
+        rendered = self.render() if self.limit is None else self.render_limited()
+
+        if self.event_time_filter:
+            rendered = self.render_event_time_filtered(rendered)
+
+        return rendered
 
     @property
     def database(self) -> Optional[str]:
