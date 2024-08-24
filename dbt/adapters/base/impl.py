@@ -272,7 +272,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
-        self.behavior = self.register_behavior_flags()
+        self.behavior = []  # this will be updated to include global behavior flags once they exist
 
     ###
     # Methods to set / access a macro resolver
@@ -293,15 +293,19 @@ class BaseAdapter(metaclass=AdapterMeta):
     ) -> None:
         self._macro_context_generator = macro_context_generator
 
-    def register_behavior_flags(self) -> Behavior:
-        """
-        Collect all raw behavior flags and produce a behavior namespace
-        """
-        return register(self._include_behavior_flags(), self.config.flags)
+    @property
+    def behavior(self) -> Behavior:
+        return self._behavior
 
-    def _include_behavior_flags(self) -> List[RawBehaviorFlag]:
+    @behavior.setter
+    def behavior(self, raw_behavior_flags: List[RawBehaviorFlag]) -> None:
+        raw_behavior_flags.extend(self._behavior_extra)
+        self._behavior = register(raw_behavior_flags, self.config.flags)
+
+    @property
+    def _behavior_extra(self) -> List[RawBehaviorFlag]:
         """
-        An optional abstract method that concrete adapters can use to inject platform-specific behavior flags
+        This method should be overwritten by adapter maintainers to provide platform-specific flags
         """
         return []
 
