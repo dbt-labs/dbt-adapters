@@ -30,7 +30,7 @@ def behavior_flags() -> List[RawBehaviorFlag]:
     ]
 
 
-def test_register_behavior_flags(mocker, adapter):
+def test_register_behavior_flags(adapter):
     with pytest.raises(AttributeError):
         assert adapter.behavior.unregistered_flag
     assert not adapter.behavior.default_false_user_false_flag
