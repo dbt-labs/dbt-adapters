@@ -1,6 +1,7 @@
 from typing import Any, Dict, List
 
 from dbt_common.behavior_flags import RawBehaviorFlag
+from dbt_common.exceptions import DbtInternalError
 import pytest
 
 
@@ -31,7 +32,7 @@ def behavior_flags() -> List[RawBehaviorFlag]:
 
 
 def test_register_behavior_flags(adapter):
-    with pytest.raises(AttributeError):
+    with pytest.raises(DbtInternalError):
         assert adapter.behavior.unregistered_flag
     assert not adapter.behavior.default_false_user_false_flag
     assert adapter.behavior.default_false_user_true_flag

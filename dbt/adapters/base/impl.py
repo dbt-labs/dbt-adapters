@@ -24,7 +24,7 @@ from typing import (
 )
 
 import pytz
-from dbt_common.behavior_flags import Behavior, RawBehaviorFlag, register
+from dbt_common.behavior_flags import Behavior, RawBehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -300,7 +300,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     @behavior.setter
     def behavior(self, raw_behavior_flags: List[RawBehaviorFlag]) -> None:
         raw_behavior_flags.extend(self._behavior_extra)
-        self._behavior = register(raw_behavior_flags, self.config.flags)
+        self._behavior = Behavior(raw_behavior_flags, self.config.flags)
 
     @property
     def _behavior_extra(self) -> List[RawBehaviorFlag]:
