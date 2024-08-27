@@ -35,10 +35,10 @@
 {% endmacro %}
 
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
-    dbt_scd_id = config.get('dbt_scd_id_column_name') or "dbt_scd_id"
-    dbt_updated_at = config.get('dbt_updated_at_column_name') or "dbt_updated_at"
-    dbt_valid_from = config.get('dbt_valid_from_column_name') or "dbt_valid_from"
-    dbt_valid_to = config.get('dbt_valid_to_column_name') or "dbt_valid_to"
+    {% set dbt_scd_id = config.get('dbt_scd_id_column_name') or "dbt_scd_id" %}
+    {% set dbt_updated_at = config.get('dbt_updated_at_column_name') or "dbt_updated_at" %}
+    {% set dbt_valid_from = config.get('dbt_valid_from_column_name') or "dbt_valid_from" %}
+    {% set dbt_valid_to = config.get('dbt_valid_to_column_name') or "dbt_valid_to" %}
 
 
     with snapshot_query as (
@@ -160,10 +160,10 @@
 {% endmacro %}
 
 {% macro default__build_snapshot_table(strategy, sql) %}
-    dbt_scd_id = config.get('dbt_scd_id_column_name') or "dbt_scd_id"
-    dbt_updated_at = config.get('dbt_updated_at_column_name') or "dbt_updated_at"
-    dbt_valid_from = config.get('dbt_valid_from_column_name') or "dbt_valid_from"
-    dbt_valid_to = config.get('dbt_valid_to_column_name') or "dbt_valid_to"
+    {% set dbt_scd_id = config.get('dbt_scd_id_column_name') or "dbt_scd_id" %}
+    {% set dbt_updated_at = config.get('dbt_updated_at_column_name') or "dbt_updated_at" %}
+    {% set dbt_valid_from = config.get('dbt_valid_from_column_name') or "dbt_valid_from" %}
+    {% set dbt_valid_to = config.get('dbt_valid_to_column_name') or "dbt_valid_to" %}
 
     select *,
         {{ strategy.scd_id }} as {{ dbt_scd_id }},
