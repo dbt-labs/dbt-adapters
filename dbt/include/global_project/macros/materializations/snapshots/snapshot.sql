@@ -25,7 +25,6 @@
 
   {% set strategy_macro = strategy_dispatch(strategy_name) %}
   {% set strategy = strategy_macro(model, "snapshotted_data", "source_data", config, target_relation_exists) %}
-  {% set dbt_updated_at_data_type = none %}
 
   {% if not target_relation_exists %}
 
