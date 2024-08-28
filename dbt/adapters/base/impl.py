@@ -748,6 +748,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         :raises InvalidMacroArgType: If the columns are
             incorrect.
         """
+        # TODO: Need to figure out to validate snapshot target here, probably
+        # by passing in names of columns.
+        return
         if not isinstance(relation, self.Relation):
             raise MacroArgTypeError(
                 method_name="valid_snapshot_target",

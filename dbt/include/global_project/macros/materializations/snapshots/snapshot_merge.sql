@@ -7,8 +7,8 @@
 {% macro default__snapshot_merge_sql(target, source, insert_cols) -%}
     {%- set insert_cols_csv = insert_cols | join(', ') -%}
 
-    {% set dbt_scd_id = config.get("dbt_scd_id_column_name") or "dbt_scd_id" %}
-    {% set dbt_valid_to = config.get("dbt_valid_to_column_name") or "dbt_valid_to" %}
+    {%- set dbt_scd_id = config.get("dbt_scd_id_column_name") or "dbt_scd_id" -%}
+    {%- set dbt_valid_to = config.get("dbt_valid_to_column_name") or "dbt_valid_to" -%}
 
     merge into {{ target.render() }} as DBT_INTERNAL_DEST
     using {{ source }} as DBT_INTERNAL_SOURCE

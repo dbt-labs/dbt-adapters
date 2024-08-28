@@ -52,6 +52,7 @@
 {% macro snapshot_timestamp_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
     {% set primary_key = config['unique_key'] %}
     {% set updated_at = config['updated_at'] %}
+    {% set dbt_valid_from = config.get("dbt_valid_from_column_name") or "dbt_valid_from" %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
 
     {#/*
@@ -64,7 +65,7 @@
         See https://github.com/dbt-labs/dbt-core/issues/2350
     */ #}
     {% set row_changed_expr -%}
-        ({{ snapshotted_rel }}.dbt_valid_from < {{ current_rel }}.{{ updated_at }})
+        ({{ snapshotted_rel }}.{{ dbt_valid_from }} < {{ current_rel }}.{{ updated_at }})
     {%- endset %}
 
     {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
