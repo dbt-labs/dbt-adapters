@@ -189,7 +189,7 @@ class AdapterContainer:
         return [p.adapter.type() for p in self.get_adapter_plugins(name)]
 
     def get_adapter_constraint_support(self, name: Optional[str]) -> Dict[str, str]:
-        return self.lookup_adapter(name).CONSTRAINT_SUPPORT  # type: ignore
+        return self.lookup_adapter(name).CONSTRAINT_SUPPORT
 
 
 FACTORY: AdapterContainer = AdapterContainer()
