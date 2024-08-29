@@ -82,7 +82,6 @@ from dbt.adapters.exceptions import (
     QuoteConfigTypeError,
     RelationReturnedMultipleResultsError,
     RenameToNoneAttemptedError,
-    SnapshotTargetIncompleteError,
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
@@ -740,7 +739,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         return [col for (col_name, col) in from_columns.items() if col_name in missing_columns]
 
     @available.parse_none
-    def valid_snapshot_target(self, relation: BaseRelation) -> None:
+    def valid_snapshot_target(
+        self, relation: BaseRelation, column_names: Optional[Dict[str, str]] = None
+    ) -> None:
         """Ensure that the target relation is valid, by making sure it has the
         expected columns.
 
@@ -748,9 +749,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         :raises InvalidMacroArgType: If the columns are
             incorrect.
         """
-        # TODO: Need to figure out to validate snapshot target here, probably
-        # by passing in names of columns.
-        return
         if not isinstance(relation, self.Relation):
             raise MacroArgTypeError(
                 method_name="valid_snapshot_target",
@@ -761,21 +759,15 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         columns = self.get_columns_in_relation(relation)
         names = set(c.name.lower() for c in columns)
-        expanded_keys = ("scd_id", "valid_from", "valid_to")
-        extra = []
+        columns = ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to")
         missing = []
-        for legacy in expanded_keys:
-            desired = "dbt_" + legacy
+        for column in columns:
+            desired = column_names[column] if column_names else column
             if desired not in names:
                 missing.append(desired)
-                if legacy in names:
-                    extra.append(legacy)
 
         if missing:
-            if extra:
-                raise SnapshotTargetIncompleteError(extra, missing)
-            else:
-                raise SnapshotTargetNotSnapshotTableError(missing)
+            raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
     def expand_target_column_types(

@@ -33,8 +33,9 @@
   {% else %}
 
       {% set snapshot_table_column_names = config.get("snapshot_table_column_names") %}
+      {{ log("stcn: " ~ snapshot_table_column_names, info=true) }}
 
-      {{ adapter.valid_snapshot_target(target_relation) }}
+      {{ adapter.valid_snapshot_target(target_relation, snapshot_table_column_names) }}
 
       {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
