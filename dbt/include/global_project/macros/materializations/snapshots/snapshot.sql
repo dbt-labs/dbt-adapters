@@ -1,5 +1,4 @@
 {% materialization snapshot, default %}
-  {%- set config = model['config'] -%}
 
   {%- set target_table = model.get('alias', model.get('name')) -%}
 
@@ -32,6 +31,8 @@
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
+
+      {% set snapshot_table_column_names = config.get("snapshot_table_column_names") %}
 
       {{ adapter.valid_snapshot_target(target_relation) }}
 
