@@ -298,9 +298,15 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._behavior
 
     @behavior.setter
-    def behavior(self, raw_behavior_flags: List[BehaviorFlag]) -> None:
-        raw_behavior_flags.extend(self._behavior_extra)
-        self._behavior = Behavior(raw_behavior_flags, self.config.flags)
+    def behavior(self, flags: List[BehaviorFlag]) -> None:
+        flags.extend(self._behavior_extra)
+        try:
+            # we don't always get project flags, for example during `dbt debug`
+            user_overrides = self.config.flags
+        except AttributeError:
+            # in that case, take the defaults
+            user_overrides = {}
+        self._behavior = Behavior(flags, user_overrides)
 
     @property
     def _behavior_extra(self) -> List[BehaviorFlag]:
