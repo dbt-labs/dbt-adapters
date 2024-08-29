@@ -150,7 +150,7 @@ class SnapshotTargetNotSnapshotTableError(CompilationError):
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
-        msg = 'Snapshot target is not a snapshot table (missing "{}")'.format(
+        msg = 'Snapshot target is not a snapshot table or is missing configured columns (missing "{}")'.format(
             '", "'.join(self.missing)
         )
         return msg
