@@ -23,7 +23,7 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% set strategy_macro = strategy_dispatch(strategy_name) %}
-  {% set strategy = strategy_macro(model, "snapshotted_data", "source_data", config, target_relation_exists) %}
+  {% set strategy = strategy_macro(model, "snapshotted_data", "source_data", model['config'], target_relation_exists) %}
 
   {% if not target_relation_exists %}
 

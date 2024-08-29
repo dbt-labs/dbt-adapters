@@ -49,11 +49,12 @@
 {#
     Core strategy definitions
 #}
-{% macro snapshot_timestamp_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
-    {% set primary_key = config['unique_key'] %}
-    {% set updated_at = config['updated_at'] %}
+
+{% macro snapshot_timestamp_strategy(node, snapshotted_rel, current_rel, model_config, target_exists) %}
+    {% set primary_key = config.get('unique_key') %}
+    {% set updated_at = config.get('updated_at') %}
+    {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') or false %}
     {% set dbt_valid_from = config.get("dbt_valid_from_column_name") or "dbt_valid_from" %}
-    {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
 
     {#/*
         The snapshot relation might not have an {{ updated_at }} value if the
@@ -134,11 +135,11 @@
 {%- endmacro %}
 
 
-{% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
-    {% set check_cols_config = config['check_cols'] %}
-    {% set primary_key = config['unique_key'] %}
-    {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
-    {% set updated_at = config.get('updated_at', snapshot_get_time()) %}
+{% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, model_config, target_exists) %}
+    {% set check_cols_config = config.get('check_cols') %}
+    {% set primary_key = config.get('unique_key') %}
+    {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') or false %}
+    {% set updated_at = config.get('updated_at') or snapshot_get_time() %}
 
     {% set column_added = false %}
 
