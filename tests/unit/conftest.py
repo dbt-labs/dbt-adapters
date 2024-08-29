@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from typing import Any, ContextManager, Dict, List, Optional, Tuple
 
 import agate
-from dbt_common.behavior_flags import RawBehaviorFlag
+from dbt_common.behavior_flags import BehaviorFlag
 import pytest
 
 from dbt.adapters.base.column import Column
@@ -62,7 +62,7 @@ def existing_relations() -> List[Dict[str, str]]:
 
 
 @pytest.fixture
-def behavior_flags() -> List[RawBehaviorFlag]:
+def behavior_flags() -> List[BehaviorFlag]:
     return []
 
 
@@ -147,7 +147,7 @@ class BaseAdapterStub(BaseAdapter):
 
     def expand_column_types(self, goal: BaseRelation, current: BaseRelation) -> None:
         # there's no database, so these need to be added as kwargs in the existing_relations fixture
-        current.columns = goal.columns
+        object.__setattr__(current, "columns", goal.columns)
 
     def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
         # there's no database, so use the cache as the database

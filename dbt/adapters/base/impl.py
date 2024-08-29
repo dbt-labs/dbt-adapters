@@ -24,7 +24,7 @@ from typing import (
 )
 
 import pytz
-from dbt_common.behavior_flags import Behavior, RawBehaviorFlag
+from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -262,7 +262,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     MAX_SCHEMA_METADATA_RELATIONS = 100
 
-    # This static member variable can be overriden in concrete adapter
+    # This static member variable can be overridden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
 
@@ -298,12 +298,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._behavior
 
     @behavior.setter
-    def behavior(self, raw_behavior_flags: List[RawBehaviorFlag]) -> None:
+    def behavior(self, raw_behavior_flags: List[BehaviorFlag]) -> None:
         raw_behavior_flags.extend(self._behavior_extra)
         self._behavior = Behavior(raw_behavior_flags, self.config.flags)
 
     @property
-    def _behavior_extra(self) -> List[RawBehaviorFlag]:
+    def _behavior_extra(self) -> List[BehaviorFlag]:
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
         """

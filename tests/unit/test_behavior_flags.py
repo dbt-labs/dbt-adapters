@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 
-from dbt_common.behavior_flags import RawBehaviorFlag
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.exceptions import DbtInternalError
 import pytest
 
@@ -20,7 +20,7 @@ def config_extra() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def behavior_flags() -> List[RawBehaviorFlag]:
+def behavior_flags() -> List[BehaviorFlag]:
     return [
         {"name": "default_false_user_false_flag", "default": False},
         {"name": "default_false_user_true_flag", "default": False},
