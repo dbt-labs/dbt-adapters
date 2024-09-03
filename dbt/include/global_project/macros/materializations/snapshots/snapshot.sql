@@ -36,8 +36,7 @@
 
       {{ adapter.valid_snapshot_target(target_relation) }}
 
-      {% set snapshot_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
-      {% set build_or_select_sql = snapshot_select_sql %}
+      {% set build_or_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
       {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
       -- this may no-op if the database does not require column expansion
