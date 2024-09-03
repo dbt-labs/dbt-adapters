@@ -74,8 +74,8 @@
 
   {% endif %}
 
-  {% set get_time_data_type = snapshot_get_time_data_type() %}
-  {% if get_time_data_type is not none and dbt_updated_at_data_type is not none and get_time_data_type != dbt_updated_at_data_type %}
+  {% set snapshot_get_time_data_type = get_snapshot_get_time_data_type() %}
+  {% if snapshot_get_time_data_type is not none and dbt_updated_at_data_type is not none and snapshot_get_time_data_type != dbt_updated_at_data_type %}
   {{  exceptions.warn_snapshot_timestamp_data_types(get_time_data_type, dbt_updated_at_data_type) }}
   {% endif %}
 
