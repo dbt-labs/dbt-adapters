@@ -188,7 +188,7 @@
     {% set ns = namespace() -%} {#-- handle for-loop scoping with a namespace --#}
     {% set ns.dbt_updated_at_data_type = null -%}
     {% for column in snapshot_sql_column_schema %}
-    {%   if column.column == 'dbt_updated_at' %}
+    {%   if ((column.column == 'dbt_updated_at') or (column.column == 'DBT_UPDATED_AT')) %}
     {%     set ns.dbt_updated_at_data_type = column.dtype %}
     {%   endif %}
     {% endfor %}
