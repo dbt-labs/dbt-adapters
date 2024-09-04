@@ -179,3 +179,26 @@
 
     {% do return(temp_relation) %}
 {% endmacro %}
+
+
+{% macro get_updated_at_column_data_type(snapshot_sql) %}
+    {% set snapshot_sql_column_schema = get_column_schema_from_query(snapshot_sql) %}
+    {% set dbt_updated_at_data_type = null %}
+    {% set ns = namespace() -%} {#-- handle for-loop scoping with a namespace --#}
+    {% set ns.dbt_updated_at_data_type = null -%}
+    {% for column in snapshot_sql_column_schema %}
+    {%   if ((column.column == 'dbt_updated_at') or (column.column == 'DBT_UPDATED_AT')) %}
+    {%     set ns.dbt_updated_at_data_type = column.dtype %}
+    {%   endif %}
+    {% endfor %}
+    {{ return(ns.dbt_updated_at_data_type or none)  }}
+{% endmacro %}
+
+
+{% macro check_time_data_types(sql) %}
+  {% set dbt_updated_at_data_type = get_updated_at_column_data_type(sql) %}
+  {% set snapshot_get_time_data_type = get_snapshot_get_time_data_type() %}
+  {% if snapshot_get_time_data_type is not none and dbt_updated_at_data_type is not none and snapshot_get_time_data_type != dbt_updated_at_data_type %}
+  {{  exceptions.warn_snapshot_timestamp_data_types(snapshot_get_time_data_type, dbt_updated_at_data_type) }}
+  {% endif %}
+{% endmacro %}
