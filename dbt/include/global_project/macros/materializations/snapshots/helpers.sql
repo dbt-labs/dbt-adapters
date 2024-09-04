@@ -199,6 +199,6 @@
   {% set dbt_updated_at_data_type = get_updated_at_column_data_type(sql) or none %}
   {% set snapshot_get_time_data_type = get_snapshot_get_time_data_type() or none %}
   {% if snapshot_get_time_data_type is not none and dbt_updated_at_data_type is not none and snapshot_get_time_data_type != dbt_updated_at_data_type %}
-  {{  exceptions.warn_snapshot_timestamp_data_types(get_time_data_type, dbt_updated_at_data_type) }}
+  {{  exceptions.warn_snapshot_timestamp_data_types(snapshot_get_time_data_type, dbt_updated_at_data_type) }}
   {% endif %}
 {% endmacro %}
