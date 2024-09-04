@@ -29,7 +29,7 @@ def adapter(config, existing_relations, behavior_flags) -> BaseAdapter:
     adapter.behavior = behavior_flags
 
     for relation in existing_relations:
-        adapter.cache_added(BaseRelation.create(relation))
+        adapter.cache_added(BaseRelation.create(**relation))
 
     return adapter
 
@@ -67,6 +67,10 @@ def behavior_flags() -> List[BehaviorFlag]:
 
 
 class CredentialsStub(Credentials):
+    """
+    A stub for a database credentials that does not connect to a database
+    """
+
     def type(self) -> str:
         return "test"
 
@@ -75,18 +79,32 @@ class CredentialsStub(Credentials):
 
 
 class ConnectionManagerStub(BaseConnectionManager):
+    """
+    A stub for a connection manager that does not connect to a database
+    """
+
+    raised_exceptions: List[Exception]
 
     @contextmanager
     def exception_handler(self, sql: str) -> ContextManager:  # type: ignore
+        # catch all exceptions and put them on this class for inspection in tests
         try:
             yield
+        except Exception as exc:
+            self.raised_exceptions.append(exc)
         finally:
             pass
 
     def cancel_open(self) -> Optional[List[str]]:
-        # there's no database, so there are no connections
-        pass
+        names = []
+        for connection in self.thread_connections.values():
+            if connection.state == ConnectionState.OPEN:
+                connection.state = ConnectionState.CLOSED
+                if name := connection.name:
+                    names.append(name)
+        return names
 
+    @classmethod
     def open(cls, connection: Connection) -> Connection:
         # there's no database, so just change the state
         connection.state = ConnectionState.OPEN
@@ -108,10 +126,13 @@ class ConnectionManagerStub(BaseConnectionManager):
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, agate.Table]:
         # there's no database, so just return the sql
-        return AdapterResponse(code=sql), None
+        return AdapterResponse(_message="", code=sql), agate.Table([])
 
 
 class BaseAdapterStub(BaseAdapter):
+    """
+    A stub for an adapter that uses the cache as the database
+    """
 
     ConnectionManager = ConnectionManagerStub
 
