@@ -183,7 +183,6 @@
 
 {% macro get_updated_at_column_data_type(snapshot_sql) %}
     {% set snapshot_sql_column_schema = get_column_schema_from_query(snapshot_sql) %}
-    {{ log("snapshot_sql_column_schema: " ~ snapshot_sql_column_schema, info=true) }}
     {% set dbt_updated_at_data_type = null %}
     {% set ns = namespace() -%} {#-- handle for-loop scoping with a namespace --#}
     {% set ns.dbt_updated_at_data_type = null -%}
@@ -192,7 +191,7 @@
     {%     set ns.dbt_updated_at_data_type = column.dtype %}
     {%   endif %}
     {% endfor %}
-    {{ return(ns.dbt_updated_at_data_type)  }}
+    {{ return(ns.dbt_updated_at_data_type or none)  }}
 {% endmacro %}
 
 
