@@ -361,7 +361,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     def __str__(self) -> str:
         rendered = self.render() if self.limit is None else self.render_limited()
 
-        # Limited subquery is wrapped by the event time filter subquery, and not the other way around. 
+        # Limited subquery is wrapped by the event time filter subquery, and not the other way around.
         # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
         if self.event_time_filter:
             rendered = self.render_event_time_filtered(rendered)
