@@ -241,8 +241,11 @@ class BaseRelation(FakeAPIObject, Hashable):
         relation_config: RelationConfig,
         limit: Optional[int] = None,
     ) -> Self:
-        # Note that ephemeral models are based on the name.
-        identifier = cls.add_ephemeral_prefix(relation_config.name)
+        # Note that ephemeral models are based on the identifier, which will
+        # point to the model's alias if one exists and otherwise fall back to
+        # the filename. This is intended to give the user more control over
+        # the way that the CTE name is constructed
+        identifier = cls.add_ephemeral_prefix(relation_config.identifier)
         return cls.create(
             type=cls.CTE,
             identifier=identifier,
