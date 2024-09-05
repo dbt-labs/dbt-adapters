@@ -299,7 +299,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @behavior.setter
     def behavior(self, flags: List[BehaviorFlag]) -> None:
-        flags.extend(self._behavior_extra)
+        flags.extend(self._behavior_flags)
         try:
             # we don't always get project flags, for example during `dbt debug`
             self._behavior = Behavior(flags, self.config.flags)
@@ -308,7 +308,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             self._behavior = Behavior([], {})
 
     @property
-    def _behavior_extra(self) -> List[BehaviorFlag]:
+    def _behavior_flags(self) -> List[BehaviorFlag]:
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
         """
