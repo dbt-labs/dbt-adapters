@@ -1,0 +1,7 @@
+kind: Features
+body: Add EventTimeFilter to BaseRelation, which renders a filtered relation when
+  start or end is set
+time: 2024-09-05T18:09:56.159385-04:00
+custom:
+  Author: 'michelleark QMalcolm'
+  Issue: "294"
