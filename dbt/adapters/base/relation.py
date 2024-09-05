@@ -43,20 +43,6 @@ class EventTimeFilter(FakeAPIObject, Hashable):
     start: Optional[datetime] = None
     end: Optional[datetime] = None
 
-    def render(self) -> str:
-        """
-        Returns "" if start and end are both None
-        """
-        filter = ""
-        if self.start and self.end:
-            filter = f"{self.field_name} >= '{self.start}' and {self.field_name} < '{self.end}'"
-        elif self.start:
-            filter = f"{self.field_name} >= '{self.start}'"
-        elif self.end:
-            filter = f"{self.field_name} < '{self.end}'"
-
-        return filter
-
     def __hash__(self) -> int:
         return hash(self.render())
 
@@ -261,11 +247,25 @@ class BaseRelation(FakeAPIObject, Hashable):
         if self.event_time_filter is None:
             return rendered
 
-        filter = self.event_time_filter.render()
+        filter = self._render_event_time_filtered(self.event_time_filter)
         if not filter:
             return rendered
 
         return f"(select * from {rendered} where {filter}){self._render_subquery_alias(namespace='et_filter')}"
+
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start}' and {event_time_filter.field_name} < '{event_time_filter.end}'"
+        elif event_time_filter.start:
+            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start}'"
+        elif event_time_filter.end:
+            filter = f"{event_time_filter.field_name} < '{event_time_filter.end}'"
+
+        return filter
 
     def quoted(self, identifier):
         return "{quote_char}{identifier}{quote_char}".format(
@@ -361,6 +361,8 @@ class BaseRelation(FakeAPIObject, Hashable):
     def __str__(self) -> str:
         rendered = self.render() if self.limit is None else self.render_limited()
 
+        # Limited subquery is wrapped by the event time filter subquery, and not the other way around. 
+        # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
         if self.event_time_filter:
             rendered = self.render_event_time_filtered(rendered)
 
