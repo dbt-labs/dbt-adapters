@@ -17,4 +17,4 @@ jobs:
     name: "Run pre-commit autoupdate"
     uses: dbt-labs/actions/.github/workflows/pre-commit-autoupdate.yml@pre-commit-auto-update
     secrets:
-      GITHUB_TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
+      TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
