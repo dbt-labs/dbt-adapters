@@ -24,6 +24,7 @@ from typing import (
 )
 
 import pytz
+from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -261,7 +262,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     MAX_SCHEMA_METADATA_RELATIONS = 100
 
-    # This static member variable can be overriden in concrete adapter
+    # This static member variable can be overridden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
 
@@ -271,6 +272,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
+        self.behavior = []  # this will be updated to include global behavior flags once they exist
 
     ###
     # Methods to set / access a macro resolver
@@ -290,6 +292,27 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context_generator: MacroContextGeneratorCallable,
     ) -> None:
         self._macro_context_generator = macro_context_generator
+
+    @property
+    def behavior(self) -> Behavior:
+        return self._behavior
+
+    @behavior.setter
+    def behavior(self, flags: List[BehaviorFlag]) -> None:
+        flags.extend(self._behavior_flags)
+        try:
+            # we don't always get project flags, for example during `dbt debug`
+            self._behavior = Behavior(flags, self.config.flags)
+        except AttributeError:
+            # in that case, don't load any behavior to avoid unexpected defaults
+            self._behavior = Behavior([], {})
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        """
+        This method should be overwritten by adapter maintainers to provide platform-specific flags
+        """
+        return []
 
     ###
     # Methods that pass through to the connection manager
