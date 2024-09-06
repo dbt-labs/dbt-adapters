@@ -6,17 +6,14 @@ import pytest
 
 
 @pytest.fixture
-def config_extra() -> Dict[str, Any]:
-    config = {
-        "flags": {
-            "unregistered_flag": True,
-            "default_false_user_false_flag": False,
-            "default_false_user_true_flag": True,
-            "default_true_user_false_flag": False,
-            "default_true_user_true_flag": True,
-        }
+def flags() -> Dict[str, Any]:
+    return {
+        "unregistered_flag": True,
+        "default_false_user_false_flag": False,
+        "default_false_user_true_flag": True,
+        "default_true_user_false_flag": False,
+        "default_true_user_true_flag": True,
     }
-    return config
 
 
 @pytest.fixture
