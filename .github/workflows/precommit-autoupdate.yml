@@ -1,7 +1,6 @@
 name: "Run pre-commit autoupdate"
 
 on:
-  pull_request:
   schedule:
     - cron: "30 1 * * *"
   workflow_dispatch:
