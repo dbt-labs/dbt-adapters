@@ -18,3 +18,4 @@ jobs:
     uses: dbt-labs/actions/.github/workflows/pre-commit-autoupdate.yml@pre-commit-auto-update
     secrets:
       TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_PULL_REQUESTS }}
