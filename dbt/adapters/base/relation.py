@@ -43,9 +43,6 @@ class EventTimeFilter(FakeAPIObject, Hashable):
     start: Optional[datetime] = None
     end: Optional[datetime] = None
 
-    def __hash__(self) -> int:
-        return hash(self.render())
-
 
 @dataclass(frozen=True, eq=False, repr=False)
 class BaseRelation(FakeAPIObject, Hashable):
