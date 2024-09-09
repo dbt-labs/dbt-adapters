@@ -1,6 +1,0 @@
-kind: Features
-body: Compare 'snapshot_get_time' and snapshot 'updated_at' data types
-time: 2024-06-21T14:30:24.336219-04:00
-custom:
-  Author: gshank
-  Issue: "242"
