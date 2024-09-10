@@ -1572,7 +1572,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
-        return ["append", "delete+insert", "merge", "insert_overwrite"]
+        return ["append", "delete+insert", "merge", "insert_overwrite", "microbatch"]
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
