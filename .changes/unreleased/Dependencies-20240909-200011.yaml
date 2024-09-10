@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Update dbt-common pin to >=1.8
+time: 2024-09-09T20:00:11.335813-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "299"
