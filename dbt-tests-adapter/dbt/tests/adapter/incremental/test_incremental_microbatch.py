@@ -25,7 +25,7 @@ class BaseMicrobatch:
     @pytest.fixture(scope="class")
     def microbatch_model_sql(self):
         return _microbatch_model_sql
-    
+
     @pytest.fixture(scope="class")
     def input_model_sql(self):
         return _input_model_sql
