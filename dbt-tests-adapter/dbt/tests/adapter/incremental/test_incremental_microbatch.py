@@ -6,7 +6,7 @@ from freezegun import freeze_time
 
 from dbt.tests.util import relation_from_name, run_dbt
 
-input_model_sql = """
+_input_model_sql = """
 {{ config(materialized='table', event_time='event_time') }}
 select 1 as id, TIMESTAMP '2020-01-01 00:00:00-0' as event_time
 union all
@@ -15,7 +15,7 @@ union all
 select 3 as id, TIMESTAMP '2020-01-03 00:00:00-0' as event_time
 """
 
-microbatch_model_sql = """
+_microbatch_model_sql = """
 {{ config(materialized='incremental', incremental_strategy='microbatch', unique_key='id', event_time='event_time', batch_size='day') }}
 select * from {{ ref('input_model') }}
 """
@@ -23,7 +23,15 @@ select * from {{ ref('input_model') }}
 
 class BaseMicrobatch:
     @pytest.fixture(scope="class")
-    def models(self):
+    def microbatch_model_sql(self):
+        return _microbatch_model_sql
+    
+    @pytest.fixture(scope="class")
+    def input_model_sql(self):
+        return _input_model_sql
+
+    @pytest.fixture(scope="class")
+    def models(self, microbatch_model_sql, input_model_sql):
         return {
             "input_model.sql": input_model_sql,
             "microbatch_model.sql": microbatch_model_sql,
