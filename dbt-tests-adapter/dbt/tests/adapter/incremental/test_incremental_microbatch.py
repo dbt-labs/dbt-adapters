@@ -1,4 +1,5 @@
 import os
+from pprint import pformat
 from unittest import mock
 
 import pytest
@@ -23,12 +24,26 @@ select * from {{ ref('input_model') }}
 
 class BaseMicrobatch:
     @pytest.fixture(scope="class")
-    def microbatch_model_sql(self):
+    def microbatch_model_sql(self) -> str:
+        """
+        This is the SQL that defines the microbatch model, including any {{ config(..) }}
+        """
         return _microbatch_model_sql
 
     @pytest.fixture(scope="class")
-    def input_model_sql(self):
+    def input_model_sql(self) -> str:
+        """
+        This is the SQL that defines the input model to the microbatch model, including any {{ config(..) }}.
+        event_time is a required configuration of this input
+        """
         return _input_model_sql
+
+    @pytest.fixture(scope="class")
+    def insert_two_rows_sql(self, project) -> str:
+        test_schema_relation = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema
+        )
+        return f"insert into {test_schema_relation}.input_model (id, event_time) values (4, TIMESTAMP '2020-01-04 00:00:00-0'), (5, TIMESTAMP '2020-01-05 00:00:00-0')"
 
     @pytest.fixture(scope="class")
     def models(self, microbatch_model_sql, input_model_sql):
@@ -39,16 +54,12 @@ class BaseMicrobatch:
 
     def assert_row_count(self, project, relation_name: str, expected_row_count: int):
         relation = relation_from_name(project.adapter, relation_name)
-        result = project.run_sql(f"select count(*) as num_rows from {relation}", fetch="one")
+        result = project.run_sql(f"select * from {relation}", fetch="all")
 
-        if result[0] != expected_row_count:
-            # running show for debugging
-            run_dbt(["show", "--inline", f"select * from {relation}"])
-
-            assert result[0] == expected_row_count
+        assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
 
     @mock.patch.dict(os.environ, {"DBT_EXPERIMENTAL_MICROBATCH": "True"})
-    def test_run_with_event_time(self, project):
+    def test_run_with_event_time(self, project, insert_two_rows_sql):
         # initial run -- backfills all data
         with freeze_time("2020-01-03 13:57:00"):
             run_dbt(["run"])
@@ -60,12 +71,8 @@ class BaseMicrobatch:
         self.assert_row_count(project, "microbatch_model", 3)
 
         # add next two days of data
-        test_schema_relation = project.adapter.Relation.create(
-            database=project.database, schema=project.test_schema
-        )
-        project.run_sql(
-            f"insert into {test_schema_relation}.input_model(id, event_time) values (4, TIMESTAMP '2020-01-04 00:00:00-0'), (5, TIMESTAMP '2020-01-05 00:00:00-0')"
-        )
+        project.run_sql(insert_two_rows_sql)
+
         self.assert_row_count(project, "input_model", 5)
 
         # re-run without changing current time => no insert
