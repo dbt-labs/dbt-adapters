@@ -74,7 +74,7 @@
 
 {% macro default__get_incremental_microbatch_sql(arg_dict) %}
 
-  {% do return(get_microbatch_sql(arg_dict) %}
+  {{ exceptions.raise_not_implemented('microbatch materialization strategy not implemented for adapter ' + adapter.type()) }}
 
 {% endmacro %}
 
