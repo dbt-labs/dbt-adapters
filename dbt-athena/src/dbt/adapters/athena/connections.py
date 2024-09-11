@@ -750,7 +750,7 @@ class AthenaConnectionManager(SQLConnectionManager):
         code = "OK" if cursor.state == AthenaCursor.STATE_SUCCEEDED else "ERROR"
         rowcount, data_scanned_in_bytes = cls.process_query_stats(cursor)
         return AthenaAdapterResponse(
-            _message=f"{code} {rowcount}",
+            _message=f"{code} {rowcount} {data_scanned_in_bytes/1024/1024/1024} Gb",
             rows_affected=rowcount,
             code=code,
             data_scanned_in_bytes=data_scanned_in_bytes,
