@@ -37,8 +37,8 @@ Self = TypeVar("Self", bound="BaseRelation")
 SerializableIterable = Union[Tuple, FrozenSet]
 
 
-@dataclass(frozen=True, eq=False, repr=False)
-class EventTimeFilter(FakeAPIObject, Hashable):
+@dataclass
+class EventTimeFilter(FakeAPIObject):
     field_name: str
     start: Optional[datetime] = None
     end: Optional[datetime] = None
