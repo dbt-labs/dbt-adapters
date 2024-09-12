@@ -300,10 +300,6 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @behavior.setter  # type: ignore
     def behavior(self, flags: List[BehaviorFlag]) -> None:
-        """
-        This can't be set with a setter/getter because we need to make `self.behavior`
-        available in the jinja context.
-        """
         flags.extend(self._behavior_flags)
         try:
             # we don't always get project flags, for example during `dbt debug`
