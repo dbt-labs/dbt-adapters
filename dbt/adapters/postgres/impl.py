@@ -151,7 +151,7 @@ class PostgresAdapter(SQLAdapter):
         """The set of standard builtin strategies which this adapter supports out-of-the-box.
         Not used to validate custom strategies defined by end users.
         """
-        return ["append", "delete+insert", "merge"]
+        return ["append", "delete+insert", "merge", "microbatch"]
 
     def debug_query(self):
         self.execute("select 1 as id")
