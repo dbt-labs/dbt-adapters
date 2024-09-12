@@ -28,6 +28,7 @@
   {% if not target_relation_exists %}
 
       {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
+      {% set build_or_select_sql = build_sql %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
@@ -37,6 +38,7 @@
 
       {{ adapter.valid_snapshot_target(target_relation, snapshot_table_column_names) }}
 
+      {% set build_or_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
       {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
       -- this may no-op if the database does not require column expansion
@@ -72,6 +74,9 @@
       %}
 
   {% endif %}
+
+
+  {{ check_time_data_types(build_or_select_sql) }}
 
   {% call statement('main') %}
       {{ final_sql }}

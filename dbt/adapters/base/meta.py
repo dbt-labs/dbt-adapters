@@ -92,6 +92,25 @@ class _Available:
 available = _Available()
 
 
+class available_property(property):
+    """
+    This supports making dynamic properties (`@property`) available in the jinja context.
+
+    We use `@available` to make methods available in the jinja context, but this mechanism relies on the method being callable.
+    Intuitively, we should be able to use both `@available` and `@property` to create a dynamic property that's available in the jinja context.
+
+    Using the `@property` decorator as the inner decorator supplies `@available` with something that is not callable.
+    Instead of returning the method, `@property` returns the value itself, not the method that is called to create the value.
+
+    Using the `@available` decorator as the inner decorator adds `_is_available_ = True` to the function.
+    However, when the `@property` decorator executes, it returns a `property` object which does not have the `_is_available_` attribute.
+
+    This decorator solves this problem by simply adding `_is_available_ = True` as an attribute on the `property` built-in.
+    """
+
+    _is_available_ = True
+
+
 class AdapterMeta(abc.ABCMeta):
     _available_: FrozenSet[str]
     _parse_replacements_: Dict[str, Callable]
