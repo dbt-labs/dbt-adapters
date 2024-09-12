@@ -15,7 +15,7 @@ class _Available:
         func._is_available_ = True  # type: ignore
         return func
 
-    def __getattr__(self, item) -> Any:
+    def __getattribute__(self, item) -> Any:
         item._is_available_ = True  # type: ignore
         return item
 
