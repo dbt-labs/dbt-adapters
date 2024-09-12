@@ -55,7 +55,7 @@ from dbt.adapters.base.connections import (
     BaseConnectionManager,
     Connection,
 )
-from dbt.adapters.base.meta import AdapterMeta, available
+from dbt.adapters.base.meta import AdapterMeta, available, available_property
 from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
@@ -273,7 +273,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         # this will be updated to include global behavior flags once they exist
-        self.behavior = []
+        self.behavior = []  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
@@ -294,12 +294,11 @@ class BaseAdapter(metaclass=AdapterMeta):
     ) -> None:
         self._macro_context_generator = macro_context_generator
 
-    @property
-    @available
+    @available_property
     def behavior(self) -> Behavior:
         return self._behavior
 
-    @behavior.setter
+    @behavior.setter  # type: ignore
     def behavior(self, flags: List[BehaviorFlag]) -> None:
         """
         This can't be set with a setter/getter because we need to make `self.behavior`

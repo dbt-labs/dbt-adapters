@@ -92,6 +92,10 @@ class _Available:
 available = _Available()
 
 
+class available_property(property):
+    _is_available_ = True
+
+
 class AdapterMeta(abc.ABCMeta):
     _available_: FrozenSet[str]
     _parse_replacements_: Dict[str, Callable]
