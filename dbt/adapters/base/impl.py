@@ -247,7 +247,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
-    behavior: Behavior
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
@@ -274,7 +273,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         # this will be updated to include global behavior flags once they exist
-        self.set_behavior([])
+        self.behavior = []
 
     ###
     # Methods to set / access a macro resolver
@@ -295,7 +294,13 @@ class BaseAdapter(metaclass=AdapterMeta):
     ) -> None:
         self._macro_context_generator = macro_context_generator
 
-    def set_behavior(self, flags: List[BehaviorFlag]) -> None:
+    @property
+    @available
+    def behavior(self) -> Behavior:
+        return self._behavior
+
+    @behavior.setter
+    def behavior(self, flags: List[BehaviorFlag]) -> None:
         """
         This can't be set with a setter/getter because we need to make `self.behavior`
         available in the jinja context.
@@ -303,10 +308,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         flags.extend(self._behavior_flags)
         try:
             # we don't always get project flags, for example during `dbt debug`
-            self.behavior = Behavior(flags, self.config.flags)
+            self._behavior = Behavior(flags, self.config.flags)
         except AttributeError:
             # in that case, don't load any behavior to avoid unexpected defaults
-            self.behavior = Behavior([], {})
+            self._behavior = Behavior([], {})
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
