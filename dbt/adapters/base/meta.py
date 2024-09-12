@@ -15,10 +15,6 @@ class _Available:
         func._is_available_ = True  # type: ignore
         return func
 
-    def __getattribute__(self, item) -> Any:
-        item._is_available_ = True  # type: ignore
-        return item
-
     def parse(self, parse_replacement: Callable) -> Decorator:
         """A decorator factory to indicate that a method on the adapter will be
         exposed to the database wrapper, and will be stubbed out at parse time
