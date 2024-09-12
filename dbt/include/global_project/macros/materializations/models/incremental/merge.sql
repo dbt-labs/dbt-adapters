@@ -89,6 +89,18 @@
             {%- endif -%};
 
         {% endif %}
+    {% else %}
+        {% if not incremental_predicates %}
+            {{ exceptions.raise_compiler_error("incremental_predicates is required when there is no unique_key") }}
+        {% endif %}
+
+        delete from {{ target }}
+        where (
+            {% for predicate in incremental_predicates %}
+                {{ predicate|replace('DBT_INTERNAL_DEST', target)|replace('DBT_INTERNAL_SOURCE', source) }}
+                {{ "and " if not loop.last}}
+            {% endfor %}
+        );
     {% endif %}
 
     insert into {{ target }} ({{ dest_cols_csv }})
