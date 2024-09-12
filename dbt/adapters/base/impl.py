@@ -294,6 +294,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_context_generator = macro_context_generator
 
     @property
+    @available
     def behavior(self) -> Behavior:
         return self._behavior
 
