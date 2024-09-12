@@ -15,9 +15,9 @@ class _Available:
         func._is_available_ = True  # type: ignore
         return func
 
-    def __get__(self, obj, objtype=None) -> Any:
-        obj._is_available_ = True  # type: ignore
-        return obj
+    def __getattr__(self, item) -> Any:
+        item._is_available_ = True  # type: ignore
+        return item
 
     def parse(self, parse_replacement: Callable) -> Decorator:
         """A decorator factory to indicate that a method on the adapter will be
