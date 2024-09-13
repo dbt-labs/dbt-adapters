@@ -34,7 +34,7 @@
   {{ adapter.dispatch('snapshot_staging_table', 'dbt')(strategy, source_sql, target_relation) }}
 {% endmacro %}
 
-{% macro get_snapshot_table_column_names %}
+{% macro get_snapshot_table_column_names() %}
     {{ return {'dbt_valid_to': 'dbt_valid_to', 'dbt_valid_from': 'dbt_valid_from', 'dbt_scd_id': 'dbt_scd_id', 'dbt_updated_at': 'dbt_updated_at'} }}
 {% endmacro %}
 
