@@ -3,9 +3,13 @@ from pprint import pformat
 from unittest import mock
 
 import pytest
-from freezegun import freeze_time
 
-from dbt.tests.util import relation_from_name, run_dbt
+try:
+    # patch_microbatch_end_time introduced in dbt 1.9.0
+    from dbt.tests.util import relation_from_name, run_dbt, patch_microbatch_end_time
+except ImportError:
+    from dbt.tests.util import relation_from_name, run_dbt
+    from freezegun import freeze_time as patch_microbatch_end_time
 
 _input_model_sql = """
 {{ config(materialized='table', event_time='event_time') }}
@@ -61,12 +65,12 @@ class BaseMicrobatch:
     @mock.patch.dict(os.environ, {"DBT_EXPERIMENTAL_MICROBATCH": "True"})
     def test_run_with_event_time(self, project, insert_two_rows_sql):
         # initial run -- backfills all data
-        with freeze_time("2020-01-03 13:57:00"):
+        with patch_microbatch_end_time("2020-01-03 13:57:00"):
             run_dbt(["run"])
         self.assert_row_count(project, "microbatch_model", 3)
 
         # our partition grain is "day" so running the same day without new data should produce the same results
-        with freeze_time("2020-01-03 14:57:00"):
+        with patch_microbatch_end_time("2020-01-03 14:57:00"):
             run_dbt(["run"])
         self.assert_row_count(project, "microbatch_model", 3)
 
@@ -76,16 +80,16 @@ class BaseMicrobatch:
         self.assert_row_count(project, "input_model", 5)
 
         # re-run without changing current time => no insert
-        with freeze_time("2020-01-03 14:57:00"):
+        with patch_microbatch_end_time("2020-01-03 14:57:00"):
             run_dbt(["run", "--select", "microbatch_model"])
         self.assert_row_count(project, "microbatch_model", 3)
 
         # re-run by advancing time by one day changing current time => insert 1 row
-        with freeze_time("2020-01-04 14:57:00"):
+        with patch_microbatch_end_time("2020-01-04 14:57:00"):
             run_dbt(["run", "--select", "microbatch_model"])
         self.assert_row_count(project, "microbatch_model", 4)
 
         # re-run by advancing time by one more day changing current time => insert 1 more row
-        with freeze_time("2020-01-05 14:57:00"):
+        with patch_microbatch_end_time("2020-01-05 14:57:00"):
             run_dbt(["run", "--select", "microbatch_model"])
         self.assert_row_count(project, "microbatch_model", 5)
