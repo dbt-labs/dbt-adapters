@@ -35,7 +35,7 @@
 {% endmacro %}
 
 {% macro get_snapshot_table_column_names() %}
-    {{ return {'dbt_valid_to': 'dbt_valid_to', 'dbt_valid_from': 'dbt_valid_from', 'dbt_scd_id': 'dbt_scd_id', 'dbt_updated_at': 'dbt_updated_at'} }}
+    {{ return({'dbt_valid_to': 'dbt_valid_to', 'dbt_valid_from': 'dbt_valid_from', 'dbt_scd_id': 'dbt_scd_id', 'dbt_updated_at': 'dbt_updated_at'}) }}
 {% endmacro %}
 
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
