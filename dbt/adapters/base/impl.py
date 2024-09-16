@@ -22,7 +22,7 @@ from typing import (
     Union,
     TYPE_CHECKING,
 )
-
+import os
 import pytz
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -1573,7 +1573,11 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
-        return ["append", "delete+insert", "merge", "insert_overwrite", "microbatch"]
+        builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
+        if os.environ.get("DBT_EXPERIMENTAL_MICROBATCH"):
+            builtin_strategies.append("microbatch")
+
+        return builtin_strategies
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
