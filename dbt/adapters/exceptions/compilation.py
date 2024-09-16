@@ -152,7 +152,7 @@ class SnapshotTargetNotSnapshotTableError(CompilationError):
     def get_message(self) -> str:
         missing = '", "'.join(self.missing)
         msg = (
-            f'Snapshot target is missing configured columns (missing "{missing}")'
+            f'Snapshot target is missing configured columns (missing "{missing}"). '
             "See https://docs.getdbt.com/docs/build/snapshots#snapshot-meta-fields for more information."
         )
         return msg
