@@ -39,7 +39,7 @@
 {% endmacro %}
 
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
-    {% set stcn = config.get('snapshot_table_column_names') or get_snapshot_table_columns_names() %}
+    {% set stcn = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
 
     with snapshot_query as (
 
