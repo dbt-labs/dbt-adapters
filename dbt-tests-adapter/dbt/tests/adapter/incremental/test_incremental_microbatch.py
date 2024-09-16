@@ -4,11 +4,11 @@ from unittest import mock
 
 import pytest
 
+from dbt.tests.util import relation_from_name, run_dbt
 try:
     # patch_microbatch_end_time introduced in dbt 1.9.0
-    from dbt.tests.util import relation_from_name, run_dbt, patch_microbatch_end_time
+    from dbt.tests.util import patch_microbatch_end_time
 except ImportError:
-    from dbt.tests.util import relation_from_name, run_dbt
     from freezegun import freeze_time as patch_microbatch_end_time
 
 _input_model_sql = """
