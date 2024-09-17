@@ -99,22 +99,33 @@
     {#-- handle any schema changes --#}
     {%- set target_relation = adapter.get_relation(database=node.database, schema=node.schema, identifier=node.alias) -%}
 
-    {% if check_cols_config == 'all' %}
-        {%- set query_columns = get_columns_in_query(node['compiled_code']) -%}
+    {% if check_cols_config is not null %}
+        {% if check_cols_config == 'all' %}
+            {%- set query_columns = get_columns_in_query(node['compiled_code']) -%}
 
-    {% elif check_cols_config is iterable and (check_cols_config | length) > 0 %}
-        {#-- query for proper casing/quoting, to support comparison below --#}
-        {%- set select_check_cols_from_target -%}
-            {#-- N.B. The whitespace below is necessary to avoid edge case issue with comments --#}
-            {#-- See: https://github.com/dbt-labs/dbt-core/issues/6781 --#}
-            select {{ check_cols_config | join(', ') }} from (
-                {{ node['compiled_code'] }}
-            ) subq
-        {%- endset -%}
-        {% set query_columns = get_columns_in_query(select_check_cols_from_target) %}
+        {% elif check_cols_config is iterable and (check_cols_config | length) > 0 %}
+            {#-- query for proper casing/quoting, to support comparison below --#}
+            {%- set select_check_cols_from_target -%}
+                {#-- N.B. The whitespace below is necessary to avoid edge case issue with comments --#}
+                {#-- See: https://github.com/dbt-labs/dbt-core/issues/6781 --#}
+                select {{ check_cols_config | join(', ') }} from (
+                    {{ node['compiled_code'] }}
+                ) subq
+            {%- endset -%}
+            {% set query_columns = get_columns_in_query(select_check_cols_from_target) %}
+
+        {% else %}
+            {% do exceptions.raise_compiler_error("Invalid value for 'check_cols': " ~ check_cols_config) %}
+        {% endif %}
+    {# check_cols_config and check_exclude_cols_config will not both be non-null #}
+    {% elif check_exclude_cols_config is iterable and (check_exclude_cols_config | length) > 0 %}
+        -- need to get all columns except the excluded ones
+        -- get all query_columns but then remove all of the ones in check_exclude_cols_config
+        {%- set all_columns_in_query = get_columns_in_query(node['compiled_code']) -%}
+        {% set query_columns = check_exclude_cols_config | difference(all_columns_in_query) %}
 
     {% else %}
-        {% do exceptions.raise_compiler_error("Invalid value for 'check_cols': " ~ check_cols_config) %}
+        {% do exceptions.raise_compiler_error("Invalid value for 'check_exclude_cols': " ~ check_exclude_cols_config) %}
     {% endif %}
 
     {%- set existing_cols = adapter.get_columns_in_relation(target_relation) | map(attribute = 'name') | list -%}
@@ -135,6 +146,7 @@
 
 {% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, config, target_exists) %}
     {% set check_cols_config = config['check_cols'] %}
+    {% set check_exclude_cols_config = config['check_exclude_cols'] %}
     {% set primary_key = config['unique_key'] %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes', false) %}
     {% set updated_at = config.get('updated_at', snapshot_get_time()) %}
