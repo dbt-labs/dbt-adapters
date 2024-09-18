@@ -51,6 +51,7 @@
 #}
 
 {% macro snapshot_timestamp_strategy(node, snapshotted_rel, current_rel, model_config, target_exists) %}
+    {# The model_config parameter is no longer used, but is passed in anyway for compatibility. #}
     {% set primary_key = config.get('unique_key') %}
     {% set updated_at = config.get('updated_at') %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') or false %}
@@ -136,6 +137,7 @@
 
 
 {% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, model_config, target_exists) %}
+    {# The model_config parameter is no longer used, but is passed in anyway for compatibility. #}
     {% set check_cols_config = config.get('check_cols') %}
     {% set primary_key = config.get('unique_key') %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') or false %}
