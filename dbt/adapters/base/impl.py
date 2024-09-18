@@ -783,9 +783,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         columns = self.get_columns_in_relation(relation)
         names = set(c.name.lower() for c in columns)
-        columns = ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to")
         missing = []
-        for column in columns:
+        # Note: we're not checking dbt_updated_at here because it's not
+        # always present.
+        for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
             desired = column_names[column] if column_names else column
             if desired not in names:
                 missing.append(desired)

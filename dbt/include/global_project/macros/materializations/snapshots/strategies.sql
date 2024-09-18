@@ -54,7 +54,7 @@
     {% set primary_key = config.get('unique_key') %}
     {% set updated_at = config.get('updated_at') %}
     {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') or false %}
-    {% set stcn = config.get("snapshot_table_column_names") or get_snapshot_table_column_names() %}
+    {% set columns = config.get("snapshot_table_column_names") or get_snapshot_table_column_names() %}
 
     {#/*
         The snapshot relation might not have an {{ updated_at }} value if the
@@ -66,7 +66,7 @@
         See https://github.com/dbt-labs/dbt-core/issues/2350
     */ #}
     {% set row_changed_expr -%}
-        ({{ snapshotted_rel }}.{{ stcn.dbt_valid_from }} < {{ current_rel }}.{{ updated_at }})
+        ({{ snapshotted_rel }}.{{ columns.dbt_valid_from }} < {{ current_rel }}.{{ updated_at }})
     {%- endset %}
 
     {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
