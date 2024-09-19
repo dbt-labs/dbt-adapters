@@ -19,12 +19,36 @@ def flags() -> Dict[str, Any]:
 @pytest.fixture
 def behavior_flags() -> List[BehaviorFlag]:
     return [
-        {"name": "default_false_user_false_flag", "default": False, 'docs_url': 'https://docs.com'},
-        {"name": "default_false_user_true_flag", "default": False, 'description': 'This is a false flag.'},
-        {"name": "default_false_user_skip_flag", "default": False, 'description': 'This is a true flag.'},
-        {"name": "default_true_user_false_flag", "default": True, 'description': 'This is fake news.'},
-        {"name": "default_true_user_true_flag", "default": True, 'docs_url': 'https://moar.docs.com'},
-        {"name": "default_true_user_skip_flag", "default": True, 'description': 'This is a true flag.'},
+        {
+            "name": "default_false_user_false_flag",
+            "default": False,
+            "docs_url": "https://docs.com",
+        },
+        {
+            "name": "default_false_user_true_flag",
+            "default": False,
+            "description": "This is a false flag.",
+        },
+        {
+            "name": "default_false_user_skip_flag",
+            "default": False,
+            "description": "This is a true flag.",
+        },
+        {
+            "name": "default_true_user_false_flag",
+            "default": True,
+            "description": "This is fake news.",
+        },
+        {
+            "name": "default_true_user_true_flag",
+            "default": True,
+            "docs_url": "https://moar.docs.com",
+        },
+        {
+            "name": "default_true_user_skip_flag",
+            "default": True,
+            "description": "This is a true flag.",
+        },
     ]
 
 
