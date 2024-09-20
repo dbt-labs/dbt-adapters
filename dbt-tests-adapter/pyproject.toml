@@ -31,6 +31,7 @@ dependencies = [
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
     "dbt-adapters",
     "pyyaml",
+    "freezegun",
 ]
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters"
