@@ -40,6 +40,11 @@
 
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
     {% set columns = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
+    {% if config.get('dbt_valid_to_current_date') %}
+       {% set valid_to_expr = " = " ~ config.get('dbt_valid_to_current_date') %}
+    {% else %}
+       {% set valid_to_expr = " is null " %}
+    {% endif %}
 
     with snapshot_query as (
 
@@ -53,7 +58,7 @@
             {{ strategy.unique_key }} as dbt_unique_key
 
         from {{ target_relation }}
-        where {{ columns.dbt_valid_to }} is null
+        where {{ columns.dbt_valid_to }} {{ valid_to_expr }}
 
     ),
 
@@ -64,7 +69,7 @@
             {{ strategy.unique_key }} as dbt_unique_key,
             {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
-            nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as {{ columns.dbt_valid_to }},
+            {{ get_dbt_valid_to_current(strategy, columns) }},
             {{ strategy.scd_id }} as {{ columns.dbt_scd_id }}
 
         from snapshot_query
@@ -166,7 +171,7 @@
         {{ strategy.scd_id }} as {{ columns.dbt_scd_id }},
         {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
         {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
-        nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as {{ columns.dbt_valid_to }}
+        {{ get_dbt_valid_to_current(strategy, columns) }}
     from (
         {{ sql }}
     ) sbq
@@ -209,4 +214,11 @@
   {{     exceptions.warn_snapshot_timestamp_data_types(snapshot_get_time_data_type, dbt_updated_at_data_type) }}
   {%   endif %}
   {% endif %}
+{% endmacro %}
+
+{% macro get_dbt_valid_to_current(strategy, columns) %}
+  {% set dbt_valid_to_current = config.get('dbt_valid_to_current_date') or "null" %}
+  {% do log("dbt_valid_to_current = " ~ dbt_valid_to_current, info=true) %}
+  coalesce(nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}), {{dbt_valid_to_current}})
+  as {{ columns.dbt_valid_to }}
 {% endmacro %}
