@@ -22,7 +22,7 @@ select 3 as id, TIMESTAMP '2020-01-03 00:00:00-0' as event_time
 """
 
 _microbatch_model_sql = """
-{{ config(materialized='incremental', incremental_strategy='microbatch', unique_key='id', event_time='event_time', batch_size='day') }}
+{{ config(materialized='incremental', incremental_strategy='microbatch', unique_key='id', event_time='event_time', batch_size='day', begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0)) }}
 select * from {{ ref('input_model') }}
 """
 
