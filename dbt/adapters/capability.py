@@ -46,15 +46,15 @@ class CapabilitySupport:
     support: Support
     first_version: Optional[str] = None
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.support == Support.Versioned or self.support == Support.Full
 
 
 class CapabilityDict(DefaultDict[Capability, CapabilitySupport]):
-    def __init__(self, vals: Mapping[Capability, CapabilitySupport]):
+    def __init__(self, vals: Mapping[Capability, CapabilitySupport]) -> None:
         super().__init__(self._default)
         self.update(vals)
 
     @staticmethod
-    def _default():
+    def _default() -> CapabilitySupport:
         return CapabilitySupport(support=Support.Unknown)

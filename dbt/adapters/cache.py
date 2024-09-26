@@ -17,6 +17,7 @@ from dbt.adapters.reference_keys import (
     _ReferenceKey,
     _make_ref_key,
     _make_ref_key_dict,
+    RelationProtocol,
 )
 
 
@@ -38,7 +39,7 @@ class _CachedRelation:
     :attr BaseRelation inner: The underlying dbt relation.
     """
 
-    def __init__(self, inner) -> None:
+    def __init__(self, inner: "_CachedRelation") -> None:
         self.referenced_by: Dict[_ReferenceKey, _CachedRelation] = {}
         self.inner = inner
 
@@ -99,7 +100,7 @@ class _CachedRelation:
             consequences.update(relation.collect_consequences())
         return consequences
 
-    def release_references(self, keys):
+    def release_references(self, keys) -> None:
         """Non-recursively indicate that an iterable of _ReferenceKey no longer
         exist. Unknown keys are ignored.
 
@@ -109,7 +110,7 @@ class _CachedRelation:
         for key in keys:
             self.referenced_by.pop(key)
 
-    def rename(self, new_relation):
+    def rename(self, new_relation: "_CachedRelation"):
         """Rename this cached relation to new_relation.
         Note that this will change the output of key(), all refs must be
         updated!
@@ -129,7 +130,7 @@ class _CachedRelation:
             },
         )
 
-    def rename_key(self, old_key, new_key):
+    def rename_key(self, old_key: _ReferenceKey, new_key: _ReferenceKey) -> None:
         """Rename a reference that may or may not exist. Only handles the
         reference itself, so this is the other half of what `rename` does.
 
@@ -140,18 +141,14 @@ class _CachedRelation:
         :raises InternalError: If the new key already exists.
         """
         if new_key in self.referenced_by:
-            raise NewNameAlreadyInCacheError(old_key, new_key)
+            raise NewNameAlreadyInCacheError(str(old_key), str(new_key))
 
         if old_key not in self.referenced_by:
             return
         value = self.referenced_by.pop(old_key)
         self.referenced_by[new_key] = value
 
-    def dump_graph_entry(self):
-        """Return a key/value pair representing this key and its referents.
-
-        return List[str]: The dot-separated form of all referent keys.
-        """
+    def dump_graph_entry(self) -> List[str]:
         return [dot_separated(r) for r in self.referenced_by]
 
 
@@ -205,14 +202,14 @@ class RelationsCache:
             # handle a drop_schema race by using discard() over remove()
             self.schemas.discard(key)
 
-    def update_schemas(self, schemas: Iterable[Tuple[Optional[str], str]]):
+    def update_schemas(self, schemas: Iterable[Tuple[Optional[str], str]]) -> None:
         """Add multiple schemas to the set of known schemas (case-insensitive)
 
         :param schemas: An iterable of the schema names to add.
         """
         self.schemas.update((lowercase(d), s.lower()) for (d, s) in schemas)
 
-    def __contains__(self, schema_id: Tuple[Optional[str], str]):
+    def __contains__(self, schema_id: Tuple[Optional[str], str]) -> bool:
         """A schema is 'in' the relations cache if it is in the set of cached
         schemas.
 
@@ -221,7 +218,7 @@ class RelationsCache:
         db, schema = schema_id
         return (lowercase(db), schema.lower()) in self.schemas
 
-    def dump_graph(self):
+    def dump_graph(self) -> Dict[str, str]:
         """Dump a key-only representation of the schema to a dictionary. Every
         known relation is a key with a value of a list of keys it is referenced
         by.
@@ -232,7 +229,7 @@ class RelationsCache:
         with self.lock:
             return {dot_separated(k): str(v.dump_graph_entry()) for k, v in self.relations.items()}
 
-    def _setdefault(self, relation: _CachedRelation):
+    def _setdefault(self, relation: _CachedRelation) -> _CachedRelation:
         """Add a relation to the cache, or return it if it already exists.
 
         :param _CachedRelation relation: The relation to set or get.
@@ -243,7 +240,7 @@ class RelationsCache:
         key = relation.key()
         return self.relations.setdefault(key, relation)
 
-    def _add_link(self, referenced_key, dependent_key):
+    def _add_link(self, referenced_key: _ReferenceKey, dependent_key: _ReferenceKey) -> None:
         """Add a link between two relations to the database. Both the old and
         new entries must alraedy exist in the database.
 
@@ -257,18 +254,18 @@ class RelationsCache:
         if referenced is None:
             return
         if referenced is None:
-            raise ReferencedLinkNotCachedError(referenced_key)
+            raise ReferencedLinkNotCachedError(str(referenced_key))
 
         dependent = self.relations.get(dependent_key)
         if dependent is None:
-            raise DependentLinkNotCachedError(dependent_key)
+            raise DependentLinkNotCachedError(str(dependent_key))
 
         assert dependent is not None  # we just raised!
 
         referenced.add_reference(dependent)
 
     # This is called in plugins/postgres/dbt/adapters/postgres/impl.py
-    def add_link(self, referenced, dependent):
+    def add_link(self, referenced, dependent) -> None:
         """Add a link between two relations to the database. If either relation
         does not exist, it will be added as an "external" relation.
 
@@ -313,7 +310,7 @@ class RelationsCache:
         with self.lock:
             self._add_link(ref_key, dep_key)
 
-    def add(self, relation):
+    def add(self, relation) -> None:
         """Add the relation inner to the cache, under the schema schema and
         identifier identifier
 
@@ -333,7 +330,7 @@ class RelationsCache:
             lambda: CacheDumpGraph(before_after="after", action="adding", dump=self.dump_graph()),
         )
 
-    def _remove_refs(self, keys):
+    def _remove_refs(self, keys) -> None:
         """Removes all references to all entries in keys. This does not
         cascade!
 
@@ -412,7 +409,7 @@ class RelationsCache:
 
         return True
 
-    def _check_rename_constraints(self, old_key, new_key):
+    def _check_rename_constraints(self, old_key: _ReferenceKey, new_key: _ReferenceKey) -> bool:
         """Check the rename constraints, and return whether or not the rename
         can proceed.
 
@@ -435,7 +432,7 @@ class RelationsCache:
             return False
         return True
 
-    def rename(self, old, new):
+    def rename(self, old: RelationProtocol, new: RelationProtocol) -> None:
         """Rename the old schema/identifier to the new schema/identifier and
         update references.
 
@@ -492,7 +489,7 @@ class RelationsCache:
             raise NoneRelationFoundError()
         return results
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear the cache"""
         with self.lock:
             self.relations.clear()
@@ -510,7 +507,7 @@ class RelationsCache:
                 to_remove.append(relation)
         return to_remove
 
-    def _remove_all(self, to_remove: List[_CachedRelation]):
+    def _remove_all(self, to_remove: List[_CachedRelation]) -> None:
         """Remove all the listed relations. Ignore relations that have been
         cascaded out.
         """

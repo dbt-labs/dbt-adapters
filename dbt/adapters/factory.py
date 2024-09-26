@@ -131,14 +131,14 @@ class AdapterContainer:
     def lookup_adapter(self, adapter_name: str) -> Adapter:
         return self.adapters[adapter_name]
 
-    def reset_adapters(self):
+    def reset_adapters(self) -> None:
         """Clear the adapters. This is useful for tests, which change configs."""
         with self.lock:
             for adapter in self.adapters.values():
                 adapter.cleanup_connections()
             self.adapters.clear()
 
-    def cleanup_connections(self):
+    def cleanup_connections(self) -> None:
         """Only clean up the adapter connections list without resetting the
         actual adapters.
         """
@@ -203,20 +203,20 @@ def register_adapter(
     FACTORY.register_adapter(config, mp_context, adapter_registered_log_level)
 
 
-def get_adapter(config: AdapterRequiredConfig):
+def get_adapter(config: AdapterRequiredConfig) -> Adapter:
     return FACTORY.lookup_adapter(config.credentials.type)
 
 
-def get_adapter_by_type(adapter_type):
+def get_adapter_by_type(adapter_type) -> Adapter:
     return FACTORY.lookup_adapter(adapter_type)
 
 
-def reset_adapters():
+def reset_adapters() -> None:
     """Clear the adapters. This is useful for tests, which change configs."""
     FACTORY.reset_adapters()
 
 
-def cleanup_connections():
+def cleanup_connections() -> None:
     """Only clean up the adapter connections list without resetting the actual
     adapters.
     """
