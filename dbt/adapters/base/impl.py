@@ -22,8 +22,9 @@ from typing import (
     Union,
     TYPE_CHECKING,
 )
-
+import os
 import pytz
+from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
@@ -54,7 +55,7 @@ from dbt.adapters.base.connections import (
     BaseConnectionManager,
     Connection,
 )
-from dbt.adapters.base.meta import AdapterMeta, available
+from dbt.adapters.base.meta import AdapterMeta, available, available_property
 from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
@@ -82,7 +83,6 @@ from dbt.adapters.exceptions import (
     QuoteConfigTypeError,
     RelationReturnedMultipleResultsError,
     RenameToNoneAttemptedError,
-    SnapshotTargetIncompleteError,
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
@@ -261,7 +261,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     MAX_SCHEMA_METADATA_RELATIONS = 100
 
-    # This static member variable can be overriden in concrete adapter
+    # This static member variable can be overridden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
 
@@ -271,6 +271,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
+        # this will be updated to include global behavior flags once they exist
+        self.behavior = []  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
@@ -290,6 +292,27 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context_generator: MacroContextGeneratorCallable,
     ) -> None:
         self._macro_context_generator = macro_context_generator
+
+    @available_property
+    def behavior(self) -> Behavior:
+        return self._behavior
+
+    @behavior.setter  # type: ignore
+    def behavior(self, flags: List[BehaviorFlag]) -> None:
+        flags.extend(self._behavior_flags)
+        try:
+            # we don't always get project flags, for example during `dbt debug`
+            self._behavior = Behavior(flags, self.config.flags)
+        except AttributeError:
+            # in that case, don't load any behavior to avoid unexpected defaults
+            self._behavior = Behavior([], {})
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        """
+        This method should be overwritten by adapter maintainers to provide platform-specific flags
+        """
+        return []
 
     ###
     # Methods that pass through to the connection manager
@@ -740,7 +763,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         return [col for (col_name, col) in from_columns.items() if col_name in missing_columns]
 
     @available.parse_none
-    def valid_snapshot_target(self, relation: BaseRelation) -> None:
+    def valid_snapshot_target(
+        self, relation: BaseRelation, column_names: Optional[Dict[str, str]] = None
+    ) -> None:
         """Ensure that the target relation is valid, by making sure it has the
         expected columns.
 
@@ -758,21 +783,16 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         columns = self.get_columns_in_relation(relation)
         names = set(c.name.lower() for c in columns)
-        expanded_keys = ("scd_id", "valid_from", "valid_to")
-        extra = []
         missing = []
-        for legacy in expanded_keys:
-            desired = "dbt_" + legacy
+        # Note: we're not checking dbt_updated_at here because it's not
+        # always present.
+        for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
+            desired = column_names[column] if column_names else column
             if desired not in names:
                 missing.append(desired)
-                if legacy in names:
-                    extra.append(legacy)
 
         if missing:
-            if extra:
-                raise SnapshotTargetIncompleteError(extra, missing)
-            else:
-                raise SnapshotTargetNotSnapshotTableError(missing)
+            raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
     def expand_target_column_types(
@@ -1549,7 +1569,11 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
-        return ["append", "delete+insert", "merge", "insert_overwrite"]
+        builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
+        if os.environ.get("DBT_EXPERIMENTAL_MICROBATCH"):
+            builtin_strategies.append("microbatch")
+
+        return builtin_strategies
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):

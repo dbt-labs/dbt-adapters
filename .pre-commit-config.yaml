@@ -38,7 +38,7 @@ repos:
         -   --max-line-length=99
         -   --select=E,F,W
         -   --ignore=E203,E501,E704,E741,W503,W504
-        -   --per-file-ignores=*/__init__.py:F401
+        -   --per-file-ignores=*/__init__.py:F401,*/conftest.py:F401
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.9.0

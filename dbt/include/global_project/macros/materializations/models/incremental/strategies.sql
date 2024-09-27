@@ -66,6 +66,19 @@
 {% endmacro %}
 
 
+{% macro get_incremental_microbatch_sql(arg_dict) %}
+
+  {{ return(adapter.dispatch('get_incremental_microbatch_sql', 'dbt')(arg_dict)) }}
+
+{% endmacro %}
+
+{% macro default__get_incremental_microbatch_sql(arg_dict) %}
+
+  {{ exceptions.raise_not_implemented('microbatch materialization strategy not implemented for adapter ' + adapter.type()) }}
+
+{% endmacro %}
+
+
 {% macro get_insert_into_sql(target_relation, temp_relation, dest_columns) %}
 
     {%- set dest_cols_csv = get_quoted_csv(dest_columns | map(attribute="name")) -%}
