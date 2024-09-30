@@ -50,7 +50,7 @@
     snapshotted_data as (
 
         select *,
-        {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+        {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
             {% for key in strategy.unique_key %}
                 {{ key }} as dbt_unique_key_{{ loop.index }}
                 {%- if not loop.last %} , {%- endif %}
@@ -68,7 +68,7 @@
 
         select
             *,
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     {{ key }} as dbt_unique_key_{{ loop.index }},
                 {% endfor %}
@@ -87,7 +87,7 @@
 
         select
             *,
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     {{ key }} as dbt_unique_key_{{ loop.index }},
                 {% endfor %}
@@ -107,7 +107,7 @@
 
         select
             *,
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     {{ key }} as dbt_unique_key_{{ loop.index }}
                      {%- if not loop.last %} , {%- endif %}
@@ -127,7 +127,7 @@
 
         from insertions_source_data as source_data
         left outer join snapshotted_data on
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
                     {%- if not loop.last %} and {%- endif %}
@@ -161,7 +161,7 @@
 
         from updates_source_data as source_data
         join snapshotted_data on
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
                     {%- if not loop.last %} and {%- endif %}
@@ -189,7 +189,7 @@
 
         from snapshotted_data
         left join deletes_source_data as source_data on
-            {% if strategy.unique_key is sequence and strategy.unique_key is not mapping and strategy.unique_key is not string %}
+            {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
                 {% for key in strategy.unique_key %}
                     snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
                     {%- if not loop.last %} and {%- endif %}
