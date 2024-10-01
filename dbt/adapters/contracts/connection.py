@@ -19,6 +19,8 @@ from dbt_common.dataclass_schema import (
     ValidatedStringMixin,
     dbtClassMixin,
 )
+from dbt_config.external_config import ExternalCatalogConfig
+
 
 # TODO: this is a very bad dependency - shared global state
 from dbt_common.events.contextvars import get_node_info
@@ -226,3 +228,4 @@ class AdapterRequiredConfig(HasCredentials, Protocol):
     cli_vars: Dict[str, Any]
     target_path: str
     log_cache_events: bool
+    catalogs = Optional[ExternalCatalogConfig]
