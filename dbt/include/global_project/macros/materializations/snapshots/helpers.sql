@@ -51,11 +51,13 @@
 
         select *,
         {% if strategy.unique_key is iterable and strategy.unique_key is not string and strategy.unique_key is not mapping %}
+            {{ log("strategy.unique_key is list...." ~ strategy.unique_key, info=true) }}
             {% for key in strategy.unique_key %}
                 {{ key }} as dbt_unique_key_{{ loop.index }}
                 {%- if not loop.last %} , {%- endif %}
             {% endfor %}
         {% else %}
+            {{ log("strategy.unique_key is NOT list...." ~ strategy.unique_key, info=true) }}
             {{ strategy.unique_key }} as dbt_unique_key
         {% endif %}
 

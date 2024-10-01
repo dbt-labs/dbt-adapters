@@ -175,19 +175,19 @@
     )
     {%- endset %}
 
-    {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+    {% if primary_key is sequence and primary_key is not mapping and primary_key is not string %}
         {% set scd_args = [] %}
-        {% for key in unique_key %}
+        {% for key in primary_key %}
             {{ scd_args.append(key) }}
         {% endfor %}
         {{ scd_args.append(updated_at) }}
         {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
     {% else %}
-        {% set scd_id_expr = snapshot_hash_arguments([unique_key, updated_at]) %}
+        {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
     {% endif %}
 
     {% do return({
-        "unique_key": unique_key,
+        "unique_key": primary_key,
         "updated_at": updated_at,
         "row_changed": row_changed_expr,
         "scd_id": scd_id_expr,
