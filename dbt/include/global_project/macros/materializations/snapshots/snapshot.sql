@@ -47,7 +47,7 @@
                                                to_relation=target_relation) %}
 
       {% set remove_columns = ['dbt_change_type', 'DBT_CHANGE_TYPE', 'dbt_unique_key', 'DBT_UNIQUE_KEY'] %}
-      {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
+      {% if unique_key | is_list %}
           {% for key in strategy.unique_key %}
               {{ remove_columns.append('dbt_unique_key_' + loop.index|string) }}
               {{ remove_columns.append('DBT_UNIQUE_KEY_' + loop.index|string) }}
