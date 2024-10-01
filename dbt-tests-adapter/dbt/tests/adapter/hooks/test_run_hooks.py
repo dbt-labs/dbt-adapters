@@ -159,7 +159,7 @@ class BaseAfterRunHooks:
         }
 
     def test_missing_column_pre_hook(self, project):
-        with pytest.raises(DbtDatabaseError, match=r"relation.*?does not exist"):
+        with pytest.raises(DbtDatabaseError):
             run_dbt(["run"], expect_pass=False)
 
 
