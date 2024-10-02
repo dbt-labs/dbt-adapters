@@ -1,7 +1,0 @@
-kind: Under the Hood
-body: 'dbt-tests-adapters: Add required begin to microbatch model config to BaseMicrobatch
-  test'
-time: 2024-09-23T18:47:19.171618+01:00
-custom:
-  Author: michelleark
-  Issue: "315"
