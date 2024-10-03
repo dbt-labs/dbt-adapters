@@ -19,7 +19,7 @@ from dbt_common.dataclass_schema import (
     ValidatedStringMixin,
     dbtClassMixin,
 )
-from dbt_config.external_config import ExternalCatalogConfig
+from dbt_config.catalog_config import ExternalCatalogConfig
 
 
 # TODO: this is a very bad dependency - shared global state
