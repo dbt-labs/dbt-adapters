@@ -1,5 +1,4 @@
 import datetime
-import os
 
 import pytest
 
@@ -11,6 +10,9 @@ from dbt.tests.util import (
     run_sql_with_adapter,
     update_config_file,
 )
+
+from dbt.tests.adapter.simple_snapshot.seed_cn import seed_cn_sql
+from dbt.tests.adapter.simple_snapshot.seed_dbt_valid_to import seed_dbt_valid_to_sql
 
 snapshot_actual_sql = """
 {% snapshot snapshot_actual %}
@@ -115,8 +117,7 @@ class BaseSnapshotColumnNames:
         }
 
     def test_snapshot_column_names(self, project):
-        path = os.path.join(project.test_data_dir, "seed_cn.sql")
-        project.run_sql_file(path)
+        project.run_sql_file(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -162,8 +163,7 @@ class BaseSnapshotColumnNamesFromDbtProject:
         }
 
     def test_snapshot_column_names_from_project(self, project):
-        path = os.path.join(project.test_data_dir, "seed_cn.sql")
-        project.run_sql_file(path)
+        project.run_sql_file(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -209,8 +209,7 @@ class BaseSnapshotInvalidColumnNames:
         }
 
     def test_snapshot_invalid_column_names(self, project):
-        path = os.path.join(project.test_data_dir, "seed_cn.sql")
-        project.run_sql_file(path)
+        project.run_sql_file(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
         manifest = get_manifest(project.project_root)
@@ -310,8 +309,7 @@ class BaseSnapshotDbtValidToCurrent:
         }
 
     def test_valid_to_current(self, project):
-        path = os.path.join(project.test_data_dir, "seed_dbt_valid_to.sql")
-        project.run_sql_file(path)
+        project.run_sql_file(seed_dbt_valid_to_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
