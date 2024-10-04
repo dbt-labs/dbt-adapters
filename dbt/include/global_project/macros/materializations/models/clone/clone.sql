@@ -1,5 +1,7 @@
 {%- materialization clone, default -%}
 
+  {% set original_query_tag = set_query_tag() %}
+
   {%- set relations = {'relations': []} -%}
 
   {%- if not defer_relation -%}
@@ -63,5 +65,7 @@
       {{ return(relations) }}
 
   {%- endif -%}
+
+  {% do unset_query_tag(original_query_tag) %}
 
 {%- endmaterialization -%}

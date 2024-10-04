@@ -1,4 +1,5 @@
 {% materialization materialized_view, default %}
+    {% set original_query_tag = set_query_tag() %}
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.MaterializedView) %}
     {% set intermediate_relation = make_intermediate_relation(target_relation) %}
@@ -16,6 +17,8 @@
         {% endif %}
 
     {{ materialized_view_teardown(backup_relation, intermediate_relation, post_hooks) }}
+
+    {% do unset_query_tag(original_query_tag) %}
 
     {{ return({'relations': [target_relation]}) }}
 

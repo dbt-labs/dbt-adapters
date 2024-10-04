@@ -1,5 +1,6 @@
 {% materialization seed, default %}
 
+  {% set original_query_tag = set_query_tag() %}
   {%- set identifier = model['alias'] -%}
   {%- set full_refresh_mode = (should_full_refresh()) -%}
 
@@ -54,6 +55,8 @@
   {{ adapter.commit() }}
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
+
+  {% do unset_query_tag(original_query_tag) %}
 
   {{ return({'relations': [target_relation]}) }}
 

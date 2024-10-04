@@ -1,5 +1,7 @@
 {% materialization snapshot, default %}
 
+  {% set original_query_tag = set_query_tag() %}
+
   {%- set target_table = model.get('alias', model.get('name')) -%}
 
   {%- set strategy_name = config.get('strategy') -%}
@@ -101,6 +103,8 @@
   {% endif %}
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
+
+  {% do unset_query_tag(original_query_tag) %}
 
   {{ return({'relations': [target_relation]}) }}
 

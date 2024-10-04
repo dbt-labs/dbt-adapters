@@ -19,3 +19,19 @@
   {% endif %}
   {% do return(config_store_failures) %}
 {% endmacro %}
+
+{% macro set_query_tag() %}
+  {{ return(adapter.dispatch('set_query_tag', 'dbt')()) }}
+{% endmacro %}
+
+{% macro unset_query_tag(original_query_tag) %}
+  {{ return(adapter.dispatch('unset_query_tag', 'dbt')(original_query_tag)) }}
+{% endmacro %}
+
+{% macro default__set_query_tag() %}
+  {{ return("") }}
+{% endmacro%}
+
+{% macro default__unset_query_tag() %}
+  {{ return("") }}
+{% endmacro%}

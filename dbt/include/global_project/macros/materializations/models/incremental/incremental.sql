@@ -1,6 +1,7 @@
 
 {% materialization incremental, default -%}
 
+  {% set original_query_tag = set_query_tag() %}
   -- relations
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') -%}
@@ -89,6 +90,8 @@
   {% endfor %}
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
+
+  {% do unset_query_tag(original_query_tag) %}
 
   {{ return({'relations': [target_relation]}) }}
 
