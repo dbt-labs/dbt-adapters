@@ -117,7 +117,7 @@ class BaseSnapshotColumnNames:
         }
 
     def test_snapshot_column_names(self, project):
-        project.run_sql_file(seed_cn_sql)
+        project.run_sql(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -163,7 +163,7 @@ class BaseSnapshotColumnNamesFromDbtProject:
         }
 
     def test_snapshot_column_names_from_project(self, project):
-        project.run_sql_file(seed_cn_sql)
+        project.run_sql(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -209,7 +209,7 @@ class BaseSnapshotInvalidColumnNames:
         }
 
     def test_snapshot_invalid_column_names(self, project):
-        project.run_sql_file(seed_cn_sql)
+        project.run_sql(seed_cn_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
         manifest = get_manifest(project.project_root)
@@ -309,7 +309,7 @@ class BaseSnapshotDbtValidToCurrent:
         }
 
     def test_valid_to_current(self, project):
-        project.run_sql_file(seed_dbt_valid_to_sql)
+        project.run_sql(seed_dbt_valid_to_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
