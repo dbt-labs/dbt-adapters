@@ -312,12 +312,15 @@ class BaseSnapshotDbtValidToCurrent:
         project.run_sql(seed_dbt_valid_to_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
+        manifest = get_manifest(project.project_root)
+        print(f"--- nodes keys: {manifest.nodes.keys()}")
 
         original_snapshot = run_sql_with_adapter(
             project.adapter,
             "select id, test_scd_id, test_valid_to from {database}.{schema}.snapshot_actual",
             "all",
         )
+        print(f"\n\n--- original_snapshot: {original_snapshot}")
         assert original_snapshot[0][2] == datetime.datetime(2099, 12, 31, 0, 0)
         assert original_snapshot[9][2] == datetime.datetime(2099, 12, 31, 0, 0)
 
