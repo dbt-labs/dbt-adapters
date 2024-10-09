@@ -1,30 +1,35 @@
+create_seed_sql = """
 create table {database}.{schema}.seed (
-	id INTEGER,
-	first_name VARCHAR(50),
-	last_name VARCHAR(50),
-	email VARCHAR(50),
-	gender VARCHAR(50),
-	ip_address VARCHAR(20),
-	updated_at TIMESTAMP WITHOUT TIME ZONE
+    id INTEGER,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(50),
+    gender VARCHAR(50),
+    ip_address VARCHAR(20),
+    updated_at TIMESTAMP WITHOUT TIME ZONE
 );
+"""
 
+create_snapshot_expected_sql = """
 create table {database}.{schema}.snapshot_expected (
-	id INTEGER,
-	first_name VARCHAR(50),
-	last_name VARCHAR(50),
-	email VARCHAR(50),
-	gender VARCHAR(50),
-	ip_address VARCHAR(20),
+    id INTEGER,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(50),
+    gender VARCHAR(50),
+    ip_address VARCHAR(20),
 
-	-- snapshotting fields
-	updated_at TIMESTAMP WITHOUT TIME ZONE,
-	test_valid_from TIMESTAMP WITHOUT TIME ZONE,
-	test_valid_to   TIMESTAMP WITHOUT TIME ZONE,
-	test_scd_id     TEXT,
-	test_updated_at TIMESTAMP WITHOUT TIME ZONE
+    -- snapshotting fields
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    test_valid_from TIMESTAMP WITHOUT TIME ZONE,
+    test_valid_to   TIMESTAMP WITHOUT TIME ZONE,
+    test_scd_id     TEXT,
+    test_updated_at TIMESTAMP WITHOUT TIME ZONE
 );
+"""
 
 
+seed_insert_sql = """
 -- seed inserts
 --  use the same email for two users to verify that duplicated check_cols values
 --  are handled appropriately
@@ -49,8 +54,10 @@ insert into {database}.{schema}.seed (id, first_name, last_name, email, gender, 
 (18, 'Anna', 'Riley', 'arileyh@nasa.gov', 'Female', '253.31.108.22', '2015-12-11 04:34:27'),
 (19, 'Sarah', 'Knight', 'sknighti@foxnews.com', 'Female', '222.220.3.177', '2016-09-26 00:49:06'),
 (20, 'Phyllis', 'Fox', null, 'Female', '163.191.232.95', '2016-08-21 10:35:19');
+"""
 
 
+populate_snapshot_expected_sql = """
 -- populate snapshot table
 insert into {database}.{schema}.snapshot_expected (
     id,
@@ -80,3 +87,36 @@ select
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
 from {database}.{schema}.seed;
+"""
+
+populate_snapshot_expected_valid_to_current_sql = """
+-- populate snapshot table
+insert into {database}.{schema}.snapshot_expected (
+    id,
+    first_name,
+    last_name,
+    email,
+    gender,
+    ip_address,
+    updated_at,
+    test_valid_from,
+    test_valid_to,
+    test_updated_at,
+    test_scd_id
+)
+
+select
+    id,
+    first_name,
+    last_name,
+    email,
+    gender,
+    ip_address,
+    updated_at,
+    -- fields added by snapshotting
+    updated_at as test_valid_from,
+    date('2099-12-31') as test_valid_to,
+    updated_at as test_updated_at,
+    md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
+from {database}.{schema}.seed;
+"""

@@ -11,8 +11,13 @@ from dbt.tests.util import (
     update_config_file,
 )
 
-from dbt.tests.adapter.simple_snapshot.seed_cn import seed_cn_sql
-from dbt.tests.adapter.simple_snapshot.seed_dbt_valid_to import seed_dbt_valid_to_sql
+from dbt.tests.adapter.simple_snapshot.fixtures import (
+    create_seed_sql,
+    create_snapshot_expected_sql,
+    seed_insert_sql,
+    populate_snapshot_expected_sql,
+    populate_snapshot_expected_valid_to_current_sql,
+)
 
 snapshot_actual_sql = """
 {% snapshot snapshot_actual %}
@@ -117,7 +122,11 @@ class BaseSnapshotColumnNames:
         }
 
     def test_snapshot_column_names(self, project):
-        project.run_sql(seed_cn_sql)
+        project.run_sql(create_seed_sql)
+        project.run_sql(create_snapshot_expected_sql)
+        project.run_sql(seed_insert_sql)
+        project.run_sql(populate_snapshot_expected_sql)
+
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -163,7 +172,11 @@ class BaseSnapshotColumnNamesFromDbtProject:
         }
 
     def test_snapshot_column_names_from_project(self, project):
-        project.run_sql(seed_cn_sql)
+        project.run_sql(create_seed_sql)
+        project.run_sql(create_snapshot_expected_sql)
+        project.run_sql(seed_insert_sql)
+        project.run_sql(populate_snapshot_expected_sql)
+
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
@@ -209,7 +222,11 @@ class BaseSnapshotInvalidColumnNames:
         }
 
     def test_snapshot_invalid_column_names(self, project):
-        project.run_sql(seed_cn_sql)
+        project.run_sql(create_seed_sql)
+        project.run_sql(create_snapshot_expected_sql)
+        project.run_sql(seed_insert_sql)
+        project.run_sql(populate_snapshot_expected_sql)
+
         results = run_dbt(["snapshot"])
         assert len(results) == 1
         manifest = get_manifest(project.project_root)
@@ -309,18 +326,20 @@ class BaseSnapshotDbtValidToCurrent:
         }
 
     def test_valid_to_current(self, project):
-        project.run_sql(seed_dbt_valid_to_sql)
+        project.run_sql(create_seed_sql)
+        project.run_sql(create_snapshot_expected_sql)
+        project.run_sql(seed_insert_sql)
+        project.run_sql(populate_snapshot_expected_valid_to_current_sql)
+
         results = run_dbt(["snapshot"])
         assert len(results) == 1
         manifest = get_manifest(project.project_root)
-        print(f"--- nodes keys: {manifest.nodes.keys()}")
 
         original_snapshot = run_sql_with_adapter(
             project.adapter,
             "select id, test_scd_id, test_valid_to from {database}.{schema}.snapshot_actual",
             "all",
         )
-        print(f"\n\n--- original_snapshot: {original_snapshot}")
         assert original_snapshot[0][2] == datetime.datetime(2099, 12, 31, 0, 0)
         assert original_snapshot[9][2] == datetime.datetime(2099, 12, 31, 0, 0)
 
