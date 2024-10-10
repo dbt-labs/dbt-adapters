@@ -20,9 +20,9 @@ create table {database}.{schema}.snapshot_expected (
     ip_address VARCHAR(20),
 
     -- snapshotting fields
-    updated_at TIMESTAMP
-    test_valid_from TIMESTAMP
-    test_valid_to   TIMESTAMP
+    updated_at TIMESTAMP,
+    test_valid_from TIMESTAMP,
+    test_valid_to   TIMESTAMP,
     test_scd_id     TEXT,
     test_updated_at TIMESTAMP
 );
