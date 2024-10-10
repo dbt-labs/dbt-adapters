@@ -6,7 +6,7 @@ create table {database}.{schema}.seed (
     email VARCHAR(50),
     gender VARCHAR(50),
     ip_address VARCHAR(20),
-    updated_at TIMESTAMP WITHOUT TIME ZONE
+    updated_at TIMESTAMP
 );
 """
 
@@ -20,11 +20,11 @@ create table {database}.{schema}.snapshot_expected (
     ip_address VARCHAR(20),
 
     -- snapshotting fields
-    updated_at TIMESTAMP WITHOUT TIME ZONE,
-    test_valid_from TIMESTAMP WITHOUT TIME ZONE,
-    test_valid_to   TIMESTAMP WITHOUT TIME ZONE,
+    updated_at TIMESTAMP
+    test_valid_from TIMESTAMP
+    test_valid_to   TIMESTAMP
     test_scd_id     TEXT,
-    test_updated_at TIMESTAMP WITHOUT TIME ZONE
+    test_updated_at TIMESTAMP
 );
 """
 
