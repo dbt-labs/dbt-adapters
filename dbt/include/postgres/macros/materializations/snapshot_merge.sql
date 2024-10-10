@@ -9,7 +9,12 @@
     from {{ source }} as DBT_INTERNAL_SOURCE
     where DBT_INTERNAL_SOURCE.{{ columns.dbt_scd_id }}::text = {{ target }}.{{ columns.dbt_scd_id }}::text
       and DBT_INTERNAL_SOURCE.dbt_change_type::text in ('update'::text, 'delete'::text)
-      and {{ target }}.{{ columns.dbt_valid_to }} is null;
+      {% if config.get("dbt_valid_to_current") %}
+        and ({{ target }}.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }} or {{ target }}.{{ columns.dbt_valid_to }} is null);
+      {% else %}
+        and {{ target }}.{{ columns.dbt_valid_to }} is null;
+      {% endif %}
+
 
     insert into {{ target }} ({{ insert_cols_csv }})
     select {% for column in insert_cols -%}
