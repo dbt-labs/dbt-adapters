@@ -1,5 +1,5 @@
 create_seed_sql = """
-create table {database}.{schema}.seed (
+create table {schema}.seed (
     id INTEGER,
     first_name VARCHAR(50),
     last_name VARCHAR(50),
@@ -11,7 +11,7 @@ create table {database}.{schema}.seed (
 """
 
 create_snapshot_expected_sql = """
-create table {database}.{schema}.snapshot_expected (
+create table {schema}.snapshot_expected (
     id INTEGER,
     first_name VARCHAR(50),
     last_name VARCHAR(50),
@@ -33,7 +33,7 @@ seed_insert_sql = """
 -- seed inserts
 --  use the same email for two users to verify that duplicated check_cols values
 --  are handled appropriately
-insert into {database}.{schema}.seed (id, first_name, last_name, email, gender, ip_address, updated_at) values
+insert into {schema}.seed (id, first_name, last_name, email, gender, ip_address, updated_at) values
 (1, 'Judith', 'Kennedy', '(not provided)', 'Female', '54.60.24.128', '2015-12-24 12:19:28'),
 (2, 'Arthur', 'Kelly', '(not provided)', 'Male', '62.56.24.215', '2015-10-28 16:22:15'),
 (3, 'Rachel', 'Moreno', 'rmoreno2@msu.edu', 'Female', '31.222.249.23', '2016-04-05 02:05:30'),
@@ -59,7 +59,7 @@ insert into {database}.{schema}.seed (id, first_name, last_name, email, gender, 
 
 populate_snapshot_expected_sql = """
 -- populate snapshot table
-insert into {database}.{schema}.snapshot_expected (
+insert into {schema}.snapshot_expected (
     id,
     first_name,
     last_name,
@@ -86,12 +86,12 @@ select
     null::timestamp as test_valid_to,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
-from {database}.{schema}.seed;
+from {schema}.seed;
 """
 
 populate_snapshot_expected_valid_to_current_sql = """
 -- populate snapshot table
-insert into {database}.{schema}.snapshot_expected (
+insert into {schema}.snapshot_expected (
     id,
     first_name,
     last_name,
@@ -118,5 +118,5 @@ select
     date('2099-12-31') as test_valid_to,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
-from {database}.{schema}.seed;
+from {schema}.seed;
 """

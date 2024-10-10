@@ -77,7 +77,7 @@ where id >= 10 and id <= 20;
 update_sql = """
 -- insert v2 of the 11 - 21 records
 
-insert into {database}.{schema}.snapshot_expected (
+insert into {schema}.snapshot_expected (
     id,
     first_name,
     last_name,
@@ -104,7 +104,7 @@ select
     null::timestamp as test_valid_to,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
-from {database}.{schema}.seed
+from {schema}.seed
 where id >= 10 and id <= 20;
 """
 
@@ -281,7 +281,7 @@ snapshots:
 update_with_current_sql = """
 -- insert v2 of the 11 - 21 records
 
-insert into {database}.{schema}.snapshot_expected (
+insert into {schema}.snapshot_expected (
     id,
     first_name,
     last_name,
@@ -308,7 +308,7 @@ select
     date('2099-12-31') as test_valid_to,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
-from {database}.{schema}.seed
+from {schema}.seed
 where id >= 10 and id <= 20;
 """
 
@@ -337,7 +337,7 @@ class BaseSnapshotDbtValidToCurrent:
 
         original_snapshot = run_sql_with_adapter(
             project.adapter,
-            "select id, test_scd_id, test_valid_to from {database}.{schema}.snapshot_actual",
+            "select id, test_scd_id, test_valid_to from {schema}.snapshot_actual",
             "all",
         )
         assert original_snapshot[0][2] == datetime.datetime(2099, 12, 31, 0, 0)
@@ -351,7 +351,7 @@ class BaseSnapshotDbtValidToCurrent:
 
         updated_snapshot = run_sql_with_adapter(
             project.adapter,
-            "select id, test_scd_id, test_valid_to from {database}.{schema}.snapshot_actual",
+            "select id, test_scd_id, test_valid_to from {schema}.snapshot_actual",
             "all",
         )
         assert updated_snapshot[0][2] == datetime.datetime(2099, 12, 31, 0, 0)
