@@ -1,0 +1,7 @@
+kind: Features
+body: Use a behavior flag to gate microbatch functionality (instead of an environment
+  variable)
+time: 2024-10-01T16:54:06.121016-05:00
+custom:
+  Author: QMalcolm
+  Issue: "327"
