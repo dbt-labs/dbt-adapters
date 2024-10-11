@@ -53,7 +53,13 @@
             {{ strategy.unique_key }} as dbt_unique_key
 
         from {{ target_relation }}
-        where {{ columns.dbt_valid_to }} is null
+        where
+            {% if config.get('dbt_valid_to_current') %}
+               {# Check for either dbt_valid_to_current OR null, in order to correctly update records with nulls #}
+               ( {{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }} or {{ columns.dbt_valid_to }} is null)
+            {% else %}
+                {{ columns.dbt_valid_to }} is null
+            {% endif %}
 
     ),
 
@@ -64,7 +70,7 @@
             {{ strategy.unique_key }} as dbt_unique_key,
             {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
-            nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as {{ columns.dbt_valid_to }},
+            {{ get_dbt_valid_to_current(strategy, columns) }},
             {{ strategy.scd_id }} as {{ columns.dbt_scd_id }}
 
         from snapshot_query
@@ -166,7 +172,7 @@
         {{ strategy.scd_id }} as {{ columns.dbt_scd_id }},
         {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
         {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
-        nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as {{ columns.dbt_valid_to }}
+        {{ get_dbt_valid_to_current(strategy, columns) }}
     from (
         {{ sql }}
     ) sbq
@@ -209,4 +215,10 @@
   {{     exceptions.warn_snapshot_timestamp_data_types(snapshot_get_time_data_type, dbt_updated_at_data_type) }}
   {%   endif %}
   {% endif %}
+{% endmacro %}
+
+{% macro get_dbt_valid_to_current(strategy, columns) %}
+  {% set dbt_valid_to_current = config.get('dbt_valid_to_current') or "null" %}
+  coalesce(nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}), {{dbt_valid_to_current}})
+  as {{ columns.dbt_valid_to }}
 {% endmacro %}
