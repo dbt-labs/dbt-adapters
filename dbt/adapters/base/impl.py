@@ -315,7 +315,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             {
                 "name": "require_builtin_microbatch_strategy",
                 "default": False,
-                "description": "If True, then a builtin `microbatch` materialization strategy can be expected to exist.",
+                "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
             }
         ]
 
