@@ -41,6 +41,9 @@ class ConnectionManagerProtocol(Protocol):
 class ColumnProtocol(Protocol):
     pass
 
+class ExternalCatalogIntegrationProtocol(Protocol):
+    pass
+
 
 Self = TypeVar("Self", bound="RelationProtocol")
 
@@ -62,6 +65,7 @@ AdapterConfig_T = TypeVar("AdapterConfig_T", bound=AdapterConfig)
 ConnectionManager_T = TypeVar("ConnectionManager_T", bound=ConnectionManagerProtocol)
 Relation_T = TypeVar("Relation_T", bound=RelationProtocol)
 Column_T = TypeVar("Column_T", bound=ColumnProtocol)
+ExtCatInteg_T = TypeVar("ExtCatInteg_T", bound=ExternalCatalogIntegrationProtocol)
 
 
 class MacroContextGeneratorCallable(Protocol):
@@ -82,6 +86,7 @@ class AdapterProtocol(  # type: ignore[misc]
         ConnectionManager_T,
         Relation_T,
         Column_T,
+        ExtCatInteg_T,
     ],
 ):
     # N.B. Technically these are ClassVars, but mypy doesn't support putting type vars in a
@@ -92,6 +97,7 @@ class AdapterProtocol(  # type: ignore[misc]
     Relation: Type[Relation_T]
     ConnectionManager: Type[ConnectionManager_T]
     connections: ConnectionManager_T
+    ExternalCatalogIntegration: Type[ExtCatInteg_T]
 
     def __init__(self, config: AdapterRequiredConfig) -> None: ...
 

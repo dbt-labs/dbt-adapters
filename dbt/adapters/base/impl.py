@@ -50,6 +50,7 @@ from dbt_common.utils import (
 )
 
 from dbt.adapters.base.column import Column as BaseColumn
+from dbt.adapters.base.catalog import ExternalCatalogIntegration
 from dbt.adapters.base.connections import (
     AdapterResponse,
     BaseConnectionManager,
@@ -228,6 +229,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - expand_column_types
         - list_relations_without_caching
         - is_cancelable
+        - execute
         - create_schema
         - drop_schema
         - quote
@@ -241,11 +243,14 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     Macros:
         - get_catalog
+
+    External Catalog support: Attach an implementation of ExternalCatalogIntegration
     """
 
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
+    ExternalCatalogIntegration: Type[ExternalCatalogIntegration]
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
