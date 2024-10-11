@@ -34,7 +34,12 @@
   {{ adapter.dispatch('snapshot_staging_table', 'dbt')(strategy, source_sql, target_relation) }}
 {% endmacro %}
 
+{% macro get_snapshot_table_column_names() %}
+    {{ return({'dbt_valid_to': 'dbt_valid_to', 'dbt_valid_from': 'dbt_valid_from', 'dbt_scd_id': 'dbt_scd_id', 'dbt_updated_at': 'dbt_updated_at'}) }}
+{% endmacro %}
+
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
+    {% set columns = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
 
     with snapshot_query as (
 
@@ -48,7 +53,13 @@
             {{ strategy.unique_key }} as dbt_unique_key
 
         from {{ target_relation }}
-        where dbt_valid_to is null
+        where
+            {% if config.get('dbt_valid_to_current') %}
+               {# Check for either dbt_valid_to_current OR null, in order to correctly update records with nulls #}
+               ( {{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }} or {{ columns.dbt_valid_to }} is null)
+            {% else %}
+                {{ columns.dbt_valid_to }} is null
+            {% endif %}
 
     ),
 
@@ -57,10 +68,10 @@
         select
             *,
             {{ strategy.unique_key }} as dbt_unique_key,
-            {{ strategy.updated_at }} as dbt_updated_at,
-            {{ strategy.updated_at }} as dbt_valid_from,
-            nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as dbt_valid_to,
-            {{ strategy.scd_id }} as dbt_scd_id
+            {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
+            {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
+            {{ get_dbt_valid_to_current(strategy, columns) }},
+            {{ strategy.scd_id }} as {{ columns.dbt_scd_id }}
 
         from snapshot_query
     ),
@@ -70,9 +81,9 @@
         select
             *,
             {{ strategy.unique_key }} as dbt_unique_key,
-            {{ strategy.updated_at }} as dbt_updated_at,
-            {{ strategy.updated_at }} as dbt_valid_from,
-            {{ strategy.updated_at }} as dbt_valid_to
+            {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
+            {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
+            {{ strategy.updated_at }} as {{ columns.dbt_valid_to }}
 
         from snapshot_query
     ),
@@ -111,7 +122,7 @@
         select
             'update' as dbt_change_type,
             source_data.*,
-            snapshotted_data.dbt_scd_id
+            snapshotted_data.{{ columns.dbt_scd_id }}
 
         from updates_source_data as source_data
         join snapshotted_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
@@ -128,10 +139,10 @@
         select
             'delete' as dbt_change_type,
             source_data.*,
-            {{ snapshot_get_time() }} as dbt_valid_from,
-            {{ snapshot_get_time() }} as dbt_updated_at,
-            {{ snapshot_get_time() }} as dbt_valid_to,
-            snapshotted_data.dbt_scd_id
+            {{ snapshot_get_time() }} as {{ columns.dbt_valid_from }},
+            {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
+            {{ snapshot_get_time() }} as {{ columns.dbt_valid_to }},
+            snapshotted_data.{{ columns.dbt_scd_id }}
 
         from snapshotted_data
         left join deletes_source_data as source_data on snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
@@ -155,12 +166,13 @@
 {% endmacro %}
 
 {% macro default__build_snapshot_table(strategy, sql) %}
+    {% set columns = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
 
     select *,
-        {{ strategy.scd_id }} as dbt_scd_id,
-        {{ strategy.updated_at }} as dbt_updated_at,
-        {{ strategy.updated_at }} as dbt_valid_from,
-        nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}) as dbt_valid_to
+        {{ strategy.scd_id }} as {{ columns.dbt_scd_id }},
+        {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
+        {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
+        {{ get_dbt_valid_to_current(strategy, columns) }}
     from (
         {{ sql }}
     ) sbq
@@ -203,4 +215,10 @@
   {{     exceptions.warn_snapshot_timestamp_data_types(snapshot_get_time_data_type, dbt_updated_at_data_type) }}
   {%   endif %}
   {% endif %}
+{% endmacro %}
+
+{% macro get_dbt_valid_to_current(strategy, columns) %}
+  {% set dbt_valid_to_current = config.get('dbt_valid_to_current') or "null" %}
+  coalesce(nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}), {{dbt_valid_to_current}})
+  as {{ columns.dbt_valid_to }}
 {% endmacro %}
