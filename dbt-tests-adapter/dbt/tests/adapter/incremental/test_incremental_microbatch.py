@@ -61,7 +61,7 @@ class BaseMicrobatch:
 
         assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
 
-class TestMicrobatchOn(BaseMicrobatch):
+class BaseTestMicrobatchOn(BaseMicrobatch):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -101,7 +101,7 @@ class TestMicrobatchOn(BaseMicrobatch):
             run_dbt(["run", "--select", "microbatch_model"])
         self.assert_row_count(project, "microbatch_model", 5)
 
-class TestMicrobatchOff(BaseMicrobatch):
+class BaseTestMicrobatchOff(BaseMicrobatch):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
