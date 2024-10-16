@@ -1751,7 +1751,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
         return AdapterTrackingRelationInfo(
             adapter_name="base_adapter",
-            version=import_module(f"dbt.adapters.__about__").version,
+            version=import_module("dbt.adapters.__about__").version,
             adapter_details={},
         )
 
