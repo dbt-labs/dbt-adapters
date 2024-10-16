@@ -531,3 +531,10 @@ class SchemaSearchMap(Dict[InformationSchema, Set[Optional[str]]]):
             )
 
         return new
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class AdapterTrackingRelationInfo(FakeAPIObject, Hashable):
+    adapter_name: str
+    version: str
+    adapter_details: Any

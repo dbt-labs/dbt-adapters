@@ -4,6 +4,7 @@ from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
+from importlib import import_module
 from multiprocessing.context import SpawnContext
 from typing import (
     Any,
@@ -61,12 +62,14 @@ from dbt.adapters.base.relation import (
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
+    AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
+
 from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
@@ -1742,6 +1745,15 @@ class BaseAdapter(metaclass=AdapterMeta):
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
+
+    @available
+    @classmethod
+    def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
+        return AdapterTrackingRelationInfo(
+            adapter_name="base_adapter",
+            version=import_module(f"dbt.adapters.__about__").version,
+            adapter_details={},
+        )
 
 
 COLUMNS_EQUAL_SQL = """
