@@ -85,6 +85,7 @@ class BaseIncrementalNotSchemaChange:
 
         assert run_result == RunStatus.Success
 
+
 class BaseIncrementalBadStrategy:
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -92,12 +93,14 @@ class BaseIncrementalBadStrategy:
 
     @pytest.fixture(scope="class")
     def models(self):
-        return {"incremental.sql": files.incremental_invalid_strategy_sql,}
+        return {
+            "incremental.sql": files.incremental_invalid_strategy_sql,
+        }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"base.csv": files.seeds_base_csv, "added.csv": files.seeds_added_csv}
-    
+
     def test_incremental_invalid_strategy(self, project):
         # seed command
         results = run_dbt(["seed"])
