@@ -85,10 +85,35 @@ class BaseIncrementalNotSchemaChange:
 
         assert run_result == RunStatus.Success
 
+class BaseIncrementalBadStrategy:
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "incremental"}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"incremental.sql": files.incremental_invalid_strategy_sql,}
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"base.csv": files.seeds_base_csv, "added.csv": files.seeds_added_csv}
+    
+    def test_incremental_invalid_strategy(self, project):
+        # seed command
+        results = run_dbt(["seed"])
+        assert len(results) == 2
+
+        # try to run the incremental model, it should fail on the first attempt
+        results = run_dbt(["run"], expect_pass=False)
+
 
 class Testincremental(BaseIncremental):
     pass
 
 
 class TestBaseIncrementalNotSchemaChange(BaseIncrementalNotSchemaChange):
+    pass
+
+
+class TestBaseIncrementalBadStrategy(BaseIncrementalBadStrategy):
     pass
