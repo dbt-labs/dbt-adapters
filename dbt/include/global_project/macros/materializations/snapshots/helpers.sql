@@ -49,16 +49,7 @@
 
     snapshotted_data as (
 
-        select *,
-        {% if strategy.unique_key | is_list %}
-            {% for key in strategy.unique_key %}
-                {{ key }} as dbt_unique_key_{{ loop.index }}
-                {%- if not loop.last %} , {%- endif %}
-            {% endfor %}
-        {% else %}
-            {{ strategy.unique_key }} as dbt_unique_key
-        {% endif %}
-
+        select *, {% unique_key_fields(strategy.unique_key) %}
         from {{ target_relation }}
         where
             {% if config.get('dbt_valid_to_current') %}
@@ -72,15 +63,7 @@
 
     insertions_source_data as (
 
-        select
-            *,
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    {{ key }} as dbt_unique_key_{{ loop.index }},
-                {% endfor %}
-            {% else %}
-                {{ strategy.unique_key }} as dbt_unique_key,
-            {% endif %}
+        select *, {% unique_key_fields(strategy.unique_key) %},
             {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
             {{ get_dbt_valid_to_current(strategy, columns) }},
@@ -91,15 +74,7 @@
 
     updates_source_data as (
 
-        select
-            *,
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    {{ key }} as dbt_unique_key_{{ loop.index }},
-                {% endfor %}
-            {% else %}
-                {{ strategy.unique_key }} as dbt_unique_key,
-            {% endif %}
+        select *, {% unique_key_fields(strategy.unique_key %},
             {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_to }}
@@ -111,16 +86,7 @@
 
     deletes_source_data as (
 
-        select
-            *,
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    {{ key }} as dbt_unique_key_{{ loop.index }}
-                     {%- if not loop.last %} , {%- endif %}
-                {% endfor %}
-            {% else %}
-                {{ strategy.unique_key }} as dbt_unique_key
-            {% endif %}
+        select *, {% unique_key_fields(strategy.unique_key) %}
         from snapshot_query
     ),
     {% endif %}
@@ -275,8 +241,21 @@
   {% endif %}
 {% endmacro %}
 
+
 {% macro get_dbt_valid_to_current(strategy, columns) %}
   {% set dbt_valid_to_current = config.get('dbt_valid_to_current') or "null" %}
   coalesce(nullif({{ strategy.updated_at }}, {{ strategy.updated_at }}), {{dbt_valid_to_current}})
   as {{ columns.dbt_valid_to }}
+{% endmacro %}
+
+
+{% macro unique_key_fields(unique_key) %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
+            {{ key }} as dbt_unique_key_{{ loop.index }}
+            {%- if not loop.last %} , {%- endif %}
+        {% endfor %}
+    {% else %}
+        {{ unique_key }} as dbt_unique_key
+    {% endif %}
 {% endmacro %}

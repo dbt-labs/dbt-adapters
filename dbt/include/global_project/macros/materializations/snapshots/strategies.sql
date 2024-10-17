@@ -70,7 +70,7 @@
         ({{ snapshotted_rel }}.{{ columns.dbt_valid_from }} < {{ current_rel }}.{{ updated_at }})
     {%- endset %}
 
-    {% if primary_key is iterable and primary_key is not string and primary_key is not mapping %}
+    {% if primary_key | is_list %}
         {% set scd_args = [] %}
         {% for key in primary_key %}
             {{ scd_args.append(key) }}
@@ -175,7 +175,7 @@
     )
     {%- endset %}
 
-    {% if primary_key is sequence and primary_key is not mapping and primary_key is not string %}
+    {% if primary_key | is_list %}
         {% set scd_args = [] %}
         {% for key in primary_key %}
             {{ scd_args.append(key) }}
