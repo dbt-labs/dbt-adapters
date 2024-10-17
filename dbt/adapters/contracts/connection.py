@@ -41,6 +41,7 @@ class AdapterResponse(dbtClassMixin):
     _message: str
     code: Optional[str] = None
     rows_affected: Optional[int] = None
+    query_id: Optional[str] = None
 
     def __str__(self):
         return self._message
