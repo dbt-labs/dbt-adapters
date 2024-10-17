@@ -20,6 +20,7 @@ from dbt_common.dataclass_schema import (
     dbtClassMixin,
 )
 
+
 # TODO: this is a very bad dependency - shared global state
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -41,6 +42,7 @@ class AdapterResponse(dbtClassMixin):
     _message: str
     code: Optional[str] = None
     rows_affected: Optional[int] = None
+    query_id: Optional[str] = None
 
     def __str__(self):
         return self._message
