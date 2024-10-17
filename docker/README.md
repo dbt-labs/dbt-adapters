@@ -24,20 +24,19 @@ docker build --tag <your_image_name> \
 ```
 
 ### Examples:
-To build an image named "my-dbt" that supports Snowflake using the latest releases:
+To build an image named "my-dbt" that supports Postgres using the latest releases:
 ```shell
-cd dbt-core/docker
 docker build --tag my-dbt --target dbt-postgres .
 ```
 
-To build an image named "my-other-dbt" that supports Snowflake using the adapter version 1.0.0b1:
+To build an image named "my-other-dbt" that supports Postgres using the adapter version 1.8.0:
 ```shell
 cd dbt-core/docker
 docker build \
   --tag my-other-dbt \
   --target dbt-postgres \
-  --build-arg commit_ref=v1.0.0b1 \
- .
+  --build-arg commit_ref=v1.8.0 \
+  .
 ```
 
 ## Running an image in a container:
