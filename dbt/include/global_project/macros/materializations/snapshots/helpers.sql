@@ -74,7 +74,7 @@
 
     updates_source_data as (
 
-        select *, {{ unique_key_fields(strategy.unique_key }},
+        select *, {{ unique_key_fields(strategy.unique_key) }},
             {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
             {{ strategy.updated_at }} as {{ columns.dbt_valid_to }}
