@@ -95,11 +95,21 @@ class BaseIncrementalBadStrategy:
     def models(self):
         return {
             "incremental.sql": files.incremental_invalid_strategy_sql,
+            "schema.yml": files.schema_base_yml,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {"base.csv": files.seeds_base_csv, "added.csv": files.seeds_added_csv}
+
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=project.test_schema
+            )
+            project.adapter.drop_schema(relation)
 
     def test_incremental_invalid_strategy(self, project):
         # seed command
@@ -108,6 +118,11 @@ class BaseIncrementalBadStrategy:
 
         # try to run the incremental model, it should fail on the first attempt
         results = run_dbt(["run"], expect_pass=False)
+        assert len(results.results) == 1
+        assert (
+            'dbt could not find an incremental strategy macro with the name "get_incremental_bad_strategy_sql"'
+            in results.results[0].message
+        )
 
 
 class Testincremental(BaseIncremental):
@@ -115,8 +130,4 @@ class Testincremental(BaseIncremental):
 
 
 class TestBaseIncrementalNotSchemaChange(BaseIncrementalNotSchemaChange):
-    pass
-
-
-class TestBaseIncrementalBadStrategy(BaseIncrementalBadStrategy):
     pass
