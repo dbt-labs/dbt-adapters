@@ -115,15 +115,8 @@
             snapshotted_data.{{ columns.dbt_scd_id }}
 
         from updates_source_data as source_data
-        join snapshotted_data on
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
-                    {%- if not loop.last %} and {%- endif %}
-                {% endfor %}
-            {% else %}
-                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
-            {% endif %}
+        join snapshotted_data
+            on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
         where (
             {{ strategy.row_changed }}
         )
@@ -143,17 +136,9 @@
             snapshotted_data.{{ columns.dbt_scd_id }}
 
         from snapshotted_data
-        left join deletes_source_data as source_data on
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
-                    {%- if not loop.last %} and {%- endif %}
-                {% endfor %}
-                    where source_data.dbt_unique_key_1 is null
-            {% else %}
-                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
-                where source_data.dbt_unique_key is null
-            {% endif %}
+        left join deletes_source_data as source_data
+            on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
+            where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
     )
     {%- endif %}
 
