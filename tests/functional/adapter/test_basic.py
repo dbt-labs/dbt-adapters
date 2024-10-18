@@ -10,6 +10,7 @@ from dbt.tests.adapter.basic.test_generic_tests import BaseGenericTests
 from dbt.tests.adapter.basic.test_incremental import (
     BaseIncremental,
     BaseIncrementalNotSchemaChange,
+    BaseIncrementalBadStrategy,
 )
 from dbt.tests.adapter.basic.test_singular_tests import BaseSingularTests
 from dbt.tests.adapter.basic.test_singular_tests_ephemeral import BaseSingularTestsEphemeral
@@ -52,6 +53,10 @@ class TestIncremental(BaseIncremental):
 
 
 class TestBaseIncrementalNotSchemaChange(BaseIncrementalNotSchemaChange):
+    pass
+
+
+class TestBaseIncrementalBadStrategy(BaseIncrementalBadStrategy):
     pass
 
 
