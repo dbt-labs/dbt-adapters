@@ -98,27 +98,10 @@
             source_data.*
 
         from insertions_source_data as source_data
-        left outer join snapshotted_data on
-            {% if strategy.unique_key | is_list %}
-                {% for key in strategy.unique_key %}
-                    snapshotted_data.dbt_unique_key_{{ loop.index }} = source_data.dbt_unique_key_{{ loop.index }}
-                    {%- if not loop.last %} and {%- endif %}
-                {% endfor %}
-                where snapshotted_data.dbt_unique_key_1 is null
-                or (
-                    snapshotted_data.dbt_unique_key_1 is not null
-                and (
-                    {{ strategy.row_changed }}
-                )
-            {% else %}
-                snapshotted_data.dbt_unique_key = source_data.dbt_unique_key
-                where snapshotted_data.dbt_unique_key is null
-                or (
-                    snapshotted_data.dbt_unique_key is not null
-                and (
-                    {{ strategy.row_changed }}
-                )
-            {% endif %}
+        left outer join snapshotted_data
+            on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
+            where {{ unique_key_is_null(strategy.unique_key, "snapshotted_data") }}
+            or ({{ unique_key_is_not_null(strategy.unique_key, "snapshotted_data") }} and {{ strategy.row_changed }})
 
         )
 
@@ -257,5 +240,35 @@
         {% endfor %}
     {% else %}
         {{ unique_key }} as dbt_unique_key
+    {% endif %}
+{% endmacro %}
+
+
+{% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
+    {% if strategy.unique_key | is_list %}
+        {% for key in strategy.unique_key %}
+            {{ identifier }}.dbt_unique_key_{{ loop.index }} = {{ from_identifier }}.dbt_unique_key_{{ loop.index }}
+            {%- if not loop.last %} and {%- endif %}
+        {% endfor %}
+    {% else %}
+        {{ identifier }}.dbt_unique_key = {{ from_identifier }}.dbt_unique_key
+    {% endif %}
+{% endmacro %}
+
+
+{% macro unique_key_is_null(unique_key, identifier) %}
+    {% if unique_key | is_list %}
+        {{ identifier }}.dbt_unique_key_1 is null
+    {% else %}
+        {{ identifer }}.dbt_unique_key is null
+    {% endif %}
+{% endmacro %}
+
+
+{% macro unique_key_is_not_null(unique_key, identifier) %}
+    {% if unique_key | is_list %}
+        {{ identifier }}.dbt_unique_key_1 is not null
+    {% else %}
+        {{ identifer }}.dbt_unique_key is not null
     {% endif %}
 {% endmacro %}
