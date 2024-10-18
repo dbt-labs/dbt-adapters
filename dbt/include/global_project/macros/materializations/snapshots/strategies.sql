@@ -71,7 +71,7 @@
     {%- endset %}
 
     {% set scd_args = api.Relation.scd_args(primary_key, updated_at) %}
-    {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
+    {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
 
     {% do return({
         "unique_key": primary_key,
@@ -167,16 +167,8 @@
     )
     {%- endset %}
 
-    {% if primary_key | is_list %}
-        {% set scd_args = [] %}
-        {% for key in primary_key %}
-            {{ scd_args.append(key) }}
-        {% endfor %}
-        {{ scd_args.append(updated_at) }}
-        {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
-    {% else %}
-        {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
-    {% endif %}
+    {% set scd_args = api.Relation.scd_args(primary_key, updated_at) %}
+    {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
 
     {% do return({
         "unique_key": primary_key,
