@@ -21,6 +21,8 @@ class Capability(str, Enum):
     """Indicates support for getting catalog information including table-level and column-level metadata for a single
     relation."""
 
+    CreateExternalCatalog = "CreateExternalCatalog"
+
 
 class Support(str, Enum):
     Unknown = "Unknown"
