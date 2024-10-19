@@ -6,6 +6,7 @@ from typing import (
     Dict,
     FrozenSet,
     Iterator,
+    List,
     Optional,
     Set,
     Tuple,
@@ -340,6 +341,16 @@ class BaseRelation(FakeAPIObject, Hashable):
             }
         )
         return cls.from_dict(kwargs)
+
+    @classmethod
+    def scd_args(cls: Type[Self], primary_key: Union[str, List[str]], updated_at) -> List[str]:
+        scd_args = []
+        if isinstance(primary_key, list):
+            scd_args.extend(primary_key)
+        else:
+            scd_args.append(primary_key)
+        scd_args.append(updated_at)
+        return scd_args
 
     @property
     def can_be_renamed(self) -> bool:
