@@ -1,6 +1,0 @@
-kind: Fixes
-body: Always validate an incremental model's `incremental_strategy`
-time: 2024-10-16T16:04:12.58581-05:00
-custom:
-  Author: QMalcolm
-  Issue: "330"
