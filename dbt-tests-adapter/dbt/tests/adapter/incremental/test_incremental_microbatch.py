@@ -61,6 +61,7 @@ class BaseMicrobatch:
 
         assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
 
+
 class BaseTestMicrobatchOn(BaseMicrobatch):
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -101,6 +102,7 @@ class BaseTestMicrobatchOn(BaseMicrobatch):
             run_dbt(["run", "--select", "microbatch_model"])
         self.assert_row_count(project, "microbatch_model", 5)
 
+
 class BaseTestMicrobatchOff(BaseMicrobatch):
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -109,8 +111,7 @@ class BaseTestMicrobatchOff(BaseMicrobatch):
                 "require_builtin_microbatch_strategy": False,
             }
         }
-    
+
     def test_run_with_event_time(self, project):
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
             run_dbt(["run"], expect_pass=False)
-    
