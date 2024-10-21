@@ -101,7 +101,7 @@
         left outer join snapshotted_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
             where {{ unique_key_is_null(strategy.unique_key, "snapshotted_data") }}
-            or ({{ unique_key_is_not_null(strategy.unique_key, "snapshotted_data") }} and {{ strategy.row_changed }})
+            or ({{ unique_key_is_not_null(strategy.unique_key, "snapshotted_data") }} and ({{ strategy.row_changed }})
 
         )
 
@@ -230,8 +230,8 @@
 
 
 {% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
-    {% if strategy.unique_key | is_list %}
-        {% for key in strategy.unique_key %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
             {{ identifier }}.dbt_unique_key_{{ loop.index }} = {{ from_identifier }}.dbt_unique_key_{{ loop.index }}
             {%- if not loop.last %} and {%- endif %}
         {% endfor %}
@@ -245,7 +245,7 @@
     {% if unique_key | is_list %}
         {{ identifier }}.dbt_unique_key_1 is null
     {% else %}
-        {{ identifer }}.dbt_unique_key is null
+        {{ identifier }}.dbt_unique_key is null
     {% endif %}
 {% endmacro %}
 
@@ -254,6 +254,6 @@
     {% if unique_key | is_list %}
         {{ identifier }}.dbt_unique_key_1 is not null
     {% else %}
-        {{ identifer }}.dbt_unique_key is not null
+        {{ identifier }}.dbt_unique_key is not null
     {% endif %}
 {% endmacro %}
