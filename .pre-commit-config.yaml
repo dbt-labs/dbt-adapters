@@ -18,19 +18,19 @@ repos:
     -   id: dbt-core-in-adapters-check
 
 -   repo: https://github.com/psf/black
-    rev: 24.4.0
+    rev: 24.8.0
     hooks:
     -   id: black
         args:
         -   --line-length=99
-        -   --target-version=py38
         -   --target-version=py39
         -   --target-version=py310
         -   --target-version=py311
+        -   --target-version=py312
         -   --force-exclude=dbt/adapters/events/adapter_types_pb2.py
 
 -   repo: https://github.com/pycqa/flake8
-    rev: 7.0.0
+    rev: 7.1.1
     hooks:
     -   id: flake8
         exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/
@@ -41,7 +41,7 @@ repos:
         -   --per-file-ignores=*/__init__.py:F401,*/conftest.py:F401
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.9.0
+    rev: v1.11.2
     hooks:
     -   id: mypy
         exclude: dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/dbt/__init__.py
