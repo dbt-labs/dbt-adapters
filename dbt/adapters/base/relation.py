@@ -536,5 +536,6 @@ class SchemaSearchMap(Dict[InformationSchema, Set[Optional[str]]]):
 @dataclass(frozen=True, eq=False, repr=False)
 class AdapterTrackingRelationInfo(FakeAPIObject, Hashable):
     adapter_name: str
-    version: str
+    base_adapter_version: str
+    adapter_version: str
     adapter_details: Any

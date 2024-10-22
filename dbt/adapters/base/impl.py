@@ -1746,14 +1746,29 @@ class BaseAdapter(metaclass=AdapterMeta):
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
 
-    @available
     @classmethod
     def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
+        adapter_class_name, *_ = cls.__name__.split("Adapter")
+        adapter_name = adapter_class_name.lower()
+
+        if adapter_class_name == "Base":
+            adapter_version = ""
+        else:
+            adapter_version = import_module(f"dbt.adapters.dbt_{adapter_name}.__version__").version
+
         return AdapterTrackingRelationInfo(
-            adapter_name="base_adapter",
-            version=import_module("dbt.adapters.__about__").version,
-            adapter_details={},
+            adapter_name=adapter_name,
+            base_adapter_version=import_module("dbt.adapters.__about__").version,
+            adapter_version=adapter_version,
+            adapter_details=cls._get_adapter_specific_run_info(config),
         )
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config) -> Dict[str, Any]:
+        """
+        Adapter maintainers should overwrite this method to return any run metadata that should be captured during a run.
+        """
+        return {}
 
 
 COLUMNS_EQUAL_SQL = """
