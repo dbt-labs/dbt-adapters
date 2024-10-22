@@ -12,4 +12,4 @@ def test_telemetry_returns():
     assert res.adapter_version == ""
     assert res.adapter_details == {}
 
-    assert type(res).__name__ == "AdapterTrackingRelationInfo"
+    assert type(res) is AdapterTrackingRelationInfo
