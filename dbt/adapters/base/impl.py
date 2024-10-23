@@ -1751,7 +1751,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         adapter_class_name, *_ = cls.__name__.split("Adapter")
         adapter_name = adapter_class_name.lower()
 
-        if adapter_class_name == "Base":
+        if adapter_name == "base":
             adapter_version = ""
         else:
             adapter_version = import_module(f"dbt.adapters.{adapter_name}.__version__").version
