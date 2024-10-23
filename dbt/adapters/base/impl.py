@@ -1754,7 +1754,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         if adapter_class_name == "Base":
             adapter_version = ""
         else:
-            adapter_version = import_module(f"dbt.adapters.dbt_{adapter_name}.__version__").version
+            adapter_version = import_module(f"dbt.adapters.{adapter_name}.__version__").version
 
         return AdapterTrackingRelationInfo(
             adapter_name=adapter_name,
