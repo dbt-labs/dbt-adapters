@@ -304,8 +304,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             # we don't always get project flags, for example during `dbt debug`
             self._behavior = Behavior(flags, self.config.flags)
         except AttributeError:
-            # in that case, don't load any behavior to avoid unexpected defaults
-            self._behavior = Behavior([], {})
+            # in that case, load behavior flags with their default values to avoid compilation errors
+            # this mimics not loading a project file, or not specifying flags in a project file
+            self._behavior = Behavior(flags, {})
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
