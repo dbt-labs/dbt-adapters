@@ -1,0 +1,6 @@
+kind: Fixes
+body: Always make behavior flags available for evaluation
+time: 2024-10-24T15:45:18.114936-04:00
+custom:
+  Author: mikealfare
+  Issue: "338"
