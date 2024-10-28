@@ -4,6 +4,7 @@ from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
+from importlib import import_module
 from multiprocessing.context import SpawnContext
 from typing import (
     Any,
@@ -61,12 +62,14 @@ from dbt.adapters.base.relation import (
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
+    AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
+
 from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
@@ -1743,6 +1746,30 @@ class BaseAdapter(metaclass=AdapterMeta):
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
+
+    @classmethod
+    def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
+        adapter_class_name, *_ = cls.__name__.split("Adapter")
+        adapter_name = adapter_class_name.lower()
+
+        if adapter_name == "base":
+            adapter_version = ""
+        else:
+            adapter_version = import_module(f"dbt.adapters.{adapter_name}.__version__").version
+
+        return AdapterTrackingRelationInfo(
+            adapter_name=adapter_name,
+            base_adapter_version=import_module("dbt.adapters.__about__").version,
+            adapter_version=adapter_version,
+            model_adapter_details=cls._get_adapter_specific_run_info(config),
+        )
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config) -> Dict[str, Any]:
+        """
+        Adapter maintainers should overwrite this method to return any run metadata that should be captured during a run.
+        """
+        return {}
 
 
 COLUMNS_EQUAL_SQL = """
