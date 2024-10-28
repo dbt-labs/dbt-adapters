@@ -10,6 +10,6 @@ def test_telemetry_returns():
     assert res.adapter_name == "base"
     assert res.base_adapter_version == dbt.adapters.__about__.version
     assert res.adapter_version == ""
-    assert res.adapter_details == {}
+    assert res.model_adapter_details == {}
 
     assert type(res) is AdapterTrackingRelationInfo

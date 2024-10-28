@@ -549,4 +549,4 @@ class AdapterTrackingRelationInfo(FakeAPIObject, Hashable):
     adapter_name: str
     base_adapter_version: str
     adapter_version: str
-    adapter_details: Any
+    model_adapter_details: Any

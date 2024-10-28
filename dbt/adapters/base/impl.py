@@ -1760,7 +1760,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             adapter_name=adapter_name,
             base_adapter_version=import_module("dbt.adapters.__about__").version,
             adapter_version=adapter_version,
-            adapter_details=cls._get_adapter_specific_run_info(config),
+            model_adapter_details=cls._get_adapter_specific_run_info(config),
         )
 
     @classmethod
