@@ -71,7 +71,8 @@
         ({{ snapshotted_rel }}.{{ columns.dbt_valid_from }} < {{ current_rel }}.{{ updated_at }})
     {%- endset %}
 
-    {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
+    {% set scd_args = api.Relation.scd_args(primary_key, updated_at) %}
+    {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
 
     {% do return({
         "unique_key": primary_key,
@@ -169,7 +170,8 @@
     )
     {%- endset %}
 
-    {% set scd_id_expr = snapshot_hash_arguments([primary_key, updated_at]) %}
+    {% set scd_args = api.Relation.scd_args(primary_key, updated_at) %}
+    {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
 
     {% do return({
         "unique_key": primary_key,
