@@ -266,7 +266,7 @@ message SQLQueryStatus {
     AdapterNodeInfo node_info = 1;
     string status = 2;
     float elapsed = 3;
-    optional string query_id = 4;
+    string query_id = 4;
 }
 
 message SQLQueryStatusMsg {

@@ -124,6 +124,7 @@ sample_values = [
     types.ConnectionUsed(conn_type="", conn_name=""),
     types.SQLQuery(conn_name="", sql=""),
     types.SQLQueryStatus(status="", elapsed=0.1),
+    types.SQLQueryStatus(status="", elapsed=0.1, query_id=""),
     types.SQLCommit(conn_name=""),
     types.ColTypeChange(
         orig_type="",
