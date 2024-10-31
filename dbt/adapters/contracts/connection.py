@@ -226,3 +226,4 @@ class AdapterRequiredConfig(HasCredentials, Protocol):
     cli_vars: Dict[str, Any]
     target_path: str
     log_cache_events: bool
+    catalogs = Optional[ExternalCatalogConfig]
