@@ -104,7 +104,7 @@
         from snapshot_query
     ),
 
-    {%- if strategy.hard_deletes == 'invalidate' %}
+    {%- if strategy.hard_deletes == 'invalidate' or strategy.hard_deletes == 'new_record' %}
 
     deletes_source_data as (
 
@@ -118,6 +118,9 @@
         select
             'insert' as dbt_change_type,
             source_data.*
+          {%- if strategy.hard_deletes == 'new_record' -%},
+            'False' as {{ columns.dbt_is_deleted }} {# Implies I, II, or III #}
+          {%- endif %}
 
         from insertions_source_data as source_data
         left outer join snapshotted_data
@@ -135,6 +138,9 @@
             'update' as dbt_change_type,
             source_data.*,
             snapshotted_data.{{ columns.dbt_scd_id }}
+          {%- if strategy.hard_deletes == 'new_record' -%},
+            snapshotted_data.{{ columns.dbt_is_deleted }}
+          {%- endif %}
 
         from updates_source_data as source_data
         join snapshotted_data
@@ -144,9 +150,8 @@
         )
     )
 
-    {%- if strategy.hard_deletes == 'invalidate' %}
+    {%- if strategy.hard_deletes == 'invalidate' or strategy.hard_deletes == 'new_record' %}
     ,
-
     deletes as (
 
         select
@@ -156,7 +161,28 @@
             {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
             {{ snapshot_get_time() }} as {{ columns.dbt_valid_to }},
             snapshotted_data.{{ columns.dbt_scd_id }}
+          {%- if strategy.hard_deletes == 'new_record' -%},
+            snapshotted_data.{{ columns.dbt_is_deleted }}
+          {%- endif %}
+        from snapshotted_data
+        left join deletes_source_data as source_data
+            on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
+            where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+    )
+    {%- endif %}
 
+    {%- if strategy.hard_deletes == 'new_record' %}
+    ,
+    deletion_records as (
+
+        select
+            'insert' as dbt_change_type,
+            source_data.*,
+            {{ snapshot_get_time() }} as {{ columns.dbt_valid_from }},
+            {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
+            snapshotted_data.{{ columns.dbt_valid_to }} as {{ columns.dbt_valid_to }},
+            snapshotted_data.{{ columns.dbt_scd_id }},
+            'True' as {{ columns.dbt_is_deleted }}
         from snapshotted_data
         left join deletes_source_data as source_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
@@ -167,10 +193,15 @@
     select * from insertions
     union all
     select * from updates
-    {%- if strategy.hard_deletes == 'invalidate' %}
+    {%- if strategy.hard_deletes == 'invalidate' or strategy.hard_deletes == 'new_record' %}
     union all
     select * from deletes
     {%- endif %}
+    {%- if strategy.hard_deletes == 'new_record' %}
+    union all
+    select * from deletion_records
+    {%- endif %}
+
 
 {%- endmacro %}
 
@@ -187,10 +218,9 @@
         {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
         {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
         {{ get_dbt_valid_to_current(strategy, columns) }}
-        {% if strategy.hard_deletes == 'new_record' -%}
-        ,
-        {{ strategy.dbt_is_deleted }} as {{ columns.dbt_is_deleted }}
-        {%- endif -%}
+      {%- if strategy.hard_deletes == 'new_record' -%},
+        'False' as {{ columns.dbt_is_deleted }}
+      {% endif -%}
     from (
         {{ sql }}
     ) sbq
