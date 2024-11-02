@@ -172,12 +172,22 @@
     {%- endif %}
 
     {%- if strategy.hard_deletes == 'new_record' %}
+        {% set source_sql_cols = get_column_schema_from_query(source_sql) %}
     ,
     deletion_records as (
 
         select
             'insert' as dbt_change_type,
-            source_data.*,
+            {%- for col in source_sql_cols -%}
+            snapshotted_data.{{ adapter.quote(col.column) }},
+            {% endfor -%}
+            {%- if strategy.unique_key | is_list -%}
+                {%- for key in strategy.unique_key -%}
+            snapshotted_data.{{ key }} as dbt_unique_key_{{ loop.index }},
+                {% endfor -%}
+            {%- else -%}
+            snapshotted_data.{{ strategy.unique_key }} as dbt_unique_key,
+            {% endif -%}
             {{ snapshot_get_time() }} as {{ columns.dbt_valid_from }},
             {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
             snapshotted_data.{{ columns.dbt_valid_to }} as {{ columns.dbt_valid_to }},
