@@ -30,8 +30,10 @@
   {% if not target_relation_exists %}
 
       {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
+      {{ log("--- build_sql: " ~ build_sql, info=true) }}
       {% set build_or_select_sql = build_sql %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
+      {{ log("--- final_sql: " ~ final_sql, info=true) }}
 
   {% else %}
 
