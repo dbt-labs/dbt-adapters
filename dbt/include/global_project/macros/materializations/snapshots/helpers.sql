@@ -119,7 +119,7 @@
             'insert' as dbt_change_type,
             source_data.*
           {%- if strategy.hard_deletes == 'new_record' -%},
-            'False' as {{ columns.dbt_is_deleted }} {# Implies I, II, or III #}
+            'False' as {{ columns.dbt_is_deleted }}
           {%- endif %}
 
         from insertions_source_data as source_data
