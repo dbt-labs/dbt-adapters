@@ -1586,6 +1586,17 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
+        """Gets the macro for the given incremental strategy.
+
+        Additionally some validations are done:
+        1. Assert that if the given strategy is a "builtin" strategy, then it must
+           also be defined as a "valid" strategy for the associated adapter
+        2. Assert that the incremental strategy exists in the model context
+
+        Notably, something be defined by the adapter as "valid" without it being
+        a "builtin", and nothing will break (and that is desirable).
+        """
+
         # Construct macro_name from strategy name
         if strategy is None:
             strategy = "default"
