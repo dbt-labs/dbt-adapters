@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add `query_id` to SQLQueryStatus
+time: 2024-11-05T12:14:40.181931-05:00
+custom:
+    Author: cmcarthur
+    Issue: "342"
