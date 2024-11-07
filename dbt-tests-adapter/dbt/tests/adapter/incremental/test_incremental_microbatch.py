@@ -61,14 +61,6 @@ class BaseMicrobatch:
 
         assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
 
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "flags": {
-                "require_batched_execution_for_custom_microbatch_strategy": True,
-            }
-        }
-
     def test_run_with_event_time(self, project, insert_two_rows_sql):
         # initial run -- backfills all data
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
