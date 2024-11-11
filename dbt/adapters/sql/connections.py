@@ -92,11 +92,14 @@ class SQLConnectionManager(BaseConnectionManager):
             cursor = connection.handle.cursor()
             cursor.execute(sql, bindings)
 
+            result = self.get_response(cursor)
+
             fire_event(
                 SQLQueryStatus(
-                    status=str(self.get_response(cursor)),
+                    status=str(result),
                     elapsed=time.perf_counter() - pre,
                     node_info=get_node_info(),
+                    query_id=result.query_id,
                 )
             )
 

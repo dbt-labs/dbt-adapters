@@ -23,7 +23,6 @@ from typing import (
     Union,
     TYPE_CHECKING,
 )
-import os
 import pytz
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -316,7 +315,13 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
         """
-        return []
+        return [
+            {
+                "name": "require_batched_execution_for_custom_microbatch_strategy",
+                "default": False,
+                "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
+            }
+        ]
 
     ###
     # Methods that pass through to the connection manager
@@ -1574,13 +1579,24 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     def builtin_incremental_strategies(self):
         builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
-        if os.environ.get("DBT_EXPERIMENTAL_MICROBATCH"):
+        if self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
             builtin_strategies.append("microbatch")
 
         return builtin_strategies
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
+        """Gets the macro for the given incremental strategy.
+
+        Additionally some validations are done:
+        1. Assert that if the given strategy is a "builtin" strategy, then it must
+           also be defined as a "valid" strategy for the associated adapter
+        2. Assert that the incremental strategy exists in the model context
+
+        Notably, something be defined by the adapter as "valid" without it being
+        a "builtin", and nothing will break (and that is desirable).
+        """
+
         # Construct macro_name from strategy name
         if strategy is None:
             strategy = "default"
