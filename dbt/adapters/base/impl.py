@@ -1579,7 +1579,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     def builtin_incremental_strategies(self):
         builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
-        if self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
+        if not self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
             builtin_strategies.append("microbatch")
 
         return builtin_strategies
