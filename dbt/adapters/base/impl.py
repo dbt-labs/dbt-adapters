@@ -322,13 +322,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
         """
-        return [
-            {
-                "name": "require_batched_execution_for_custom_microbatch_strategy",
-                "default": False,
-                "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
-            }
-        ]
+        return []
 
     ###
     # Methods that pass through to the connection manager
