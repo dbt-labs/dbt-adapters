@@ -56,9 +56,7 @@ class BaseAdapterStub(BaseAdapter):
         # there's no database, so these need to be added as kwargs in the existing_relations fixture
         object.__setattr__(current, "columns", goal.columns)
 
-    def list_relations_without_caching(
-        self, schema_relation: BaseRelation
-    ) -> List[BaseRelation]:
+    def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
         # there's no database, so use the cache as the database
         return self.cache.get_relations(schema_relation.database, schema_relation.schema)
 
