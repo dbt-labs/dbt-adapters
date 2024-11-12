@@ -321,6 +321,8 @@ class BaseAdapter(metaclass=AdapterMeta):
     def _behavior_flags(self) -> List[BehaviorFlag]:
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
+
+        The BaseAdapter should NOT include any global flags here as should be defined in BaseAdapter.GLOBAL_BEHAVIOR_FLAGS
         """
         return []
 

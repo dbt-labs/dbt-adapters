@@ -64,3 +64,7 @@ def test_register_behavior_flags(adapter):
     assert not adapter.behavior.default_true_user_false_flag
     assert adapter.behavior.default_true_user_true_flag
     assert adapter.behavior.default_true_user_skip_flag
+
+
+def test_behaviour_flags_property_empty(adapter_default_behaviour_flags):
+    assert adapter_default_behaviour_flags._behavior_flags == []
