@@ -262,6 +262,13 @@ class BaseAdapter(metaclass=AdapterMeta):
     }
 
     MAX_SCHEMA_METADATA_RELATIONS = 100
+    GLOBAL_BEHAVIOR_FLAGS = [
+        {
+            "name": "require_batched_execution_for_custom_microbatch_strategy",
+            "default": False,
+            "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
+        }
+    ]
 
     # This static member variable can be overridden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
@@ -274,7 +281,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         # this will be updated to include global behavior flags once they exist
-        self.behavior = []  # type: ignore
+        self.behavior = self.GLOBAL_BEHAVIOR_FLAGS  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
