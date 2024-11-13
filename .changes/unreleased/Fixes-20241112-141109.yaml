@@ -1,6 +1,0 @@
-kind: Fixes
-body: Negate the check for microbatch behavior flag in determining builtins
-time: 2024-11-12T14:11:09.341634-06:00
-custom:
-  Author: QMalcolm
-  Issue: 349

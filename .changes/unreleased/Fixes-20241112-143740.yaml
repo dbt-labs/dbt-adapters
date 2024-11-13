@@ -1,6 +1,0 @@
-kind: Fixes
-body: Move require_batched_execution_for_custom_microbatch_strategy flag to global
-time: 2024-11-12T14:37:40.681284-06:00
-custom:
-  Author: QMalcolm MichelleArk
-  Issue: 351
