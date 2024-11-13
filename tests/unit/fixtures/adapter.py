@@ -15,105 +15,110 @@ from tests.unit.fixtures.connection_manager import ConnectionManagerStub
 from tests.unit.fixtures.credentials import CredentialsStub
 
 
+class BaseAdapterStub(BaseAdapter):
+    """
+    A stub for an adapter that uses the cache as the database
+    """
+
+    ConnectionManager = ConnectionManagerStub
+
+    ###
+    # Abstract methods for database-specific values, attributes, and types
+    ###
+    @classmethod
+    def date_function(cls) -> str:
+        return "date_function"
+
+    @classmethod
+    def is_cancelable(cls) -> bool:
+        return False
+
+    def list_schemas(self, database: str) -> List[str]:
+        return list(self.cache.schemas)
+
+    ###
+    # Abstract methods about relations
+    ###
+    def drop_relation(self, relation: BaseRelation) -> None:
+        self.cache_dropped(relation)
+
+    def truncate_relation(self, relation: BaseRelation) -> None:
+        self.cache_dropped(relation)
+
+    def rename_relation(self, from_relation: BaseRelation, to_relation: BaseRelation) -> None:
+        self.cache_renamed(from_relation, to_relation)
+
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[Column]:
+        # there's no database, so these need to be added as kwargs in the existing_relations fixture
+        return relation.columns
+
+    def expand_column_types(self, goal: BaseRelation, current: BaseRelation) -> None:
+        # there's no database, so these need to be added as kwargs in the existing_relations fixture
+        object.__setattr__(current, "columns", goal.columns)
+
+    def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
+        # there's no database, so use the cache as the database
+        return self.cache.get_relations(schema_relation.database, schema_relation.schema)
+
+    ###
+    # ODBC FUNCTIONS -- these should not need to change for every adapter,
+    #                   although some adapters may override them
+    ###
+    def create_schema(self, relation: BaseRelation):
+        # there's no database, this happens implicitly by adding a relation to the cache
+        pass
+
+    def drop_schema(self, relation: BaseRelation):
+        for each_relation in self.cache.get_relations(relation.database, relation.schema):
+            self.cache_dropped(each_relation)
+
+    @classmethod
+    def quote(cls, identifier: str) -> str:
+        quote_char = ""
+        return f"{quote_char}{identifier}{quote_char}"
+
+    ###
+    # Conversions: These must be implemented by concrete implementations, for
+    # converting agate types into their sql equivalents.
+    ###
+    @classmethod
+    def convert_text_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+        return "str"
+
+    @classmethod
+    def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+        return "float"
+
+    @classmethod
+    def convert_boolean_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+        return "bool"
+
+    @classmethod
+    def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
+        return "datetime"
+
+    @classmethod
+    def convert_date_type(cls, *args, **kwargs):
+        return "date"
+
+    @classmethod
+    def convert_time_type(cls, *args, **kwargs):
+        return "time"
+
+
 @pytest.fixture
 def adapter(config, behavior_flags) -> BaseAdapter:
 
-    class BaseAdapterStub(BaseAdapter):
-        """
-        A stub for an adapter that uses the cache as the database
-        """
-
-        ConnectionManager = ConnectionManagerStub
-
+    class BaseAdapterBehaviourFlagStub(BaseAdapterStub):
         @property
         def _behavior_flags(self) -> List[BehaviorFlag]:
             return behavior_flags
 
-        ###
-        # Abstract methods for database-specific values, attributes, and types
-        ###
-        @classmethod
-        def date_function(cls) -> str:
-            return "date_function"
+    return BaseAdapterBehaviourFlagStub(config, get_context("spawn"))
 
-        @classmethod
-        def is_cancelable(cls) -> bool:
-            return False
 
-        def list_schemas(self, database: str) -> List[str]:
-            return list(self.cache.schemas)
-
-        ###
-        # Abstract methods about relations
-        ###
-        def drop_relation(self, relation: BaseRelation) -> None:
-            self.cache_dropped(relation)
-
-        def truncate_relation(self, relation: BaseRelation) -> None:
-            self.cache_dropped(relation)
-
-        def rename_relation(self, from_relation: BaseRelation, to_relation: BaseRelation) -> None:
-            self.cache_renamed(from_relation, to_relation)
-
-        def get_columns_in_relation(self, relation: BaseRelation) -> List[Column]:
-            # there's no database, so these need to be added as kwargs in the existing_relations fixture
-            return relation.columns
-
-        def expand_column_types(self, goal: BaseRelation, current: BaseRelation) -> None:
-            # there's no database, so these need to be added as kwargs in the existing_relations fixture
-            object.__setattr__(current, "columns", goal.columns)
-
-        def list_relations_without_caching(
-            self, schema_relation: BaseRelation
-        ) -> List[BaseRelation]:
-            # there's no database, so use the cache as the database
-            return self.cache.get_relations(schema_relation.database, schema_relation.schema)
-
-        ###
-        # ODBC FUNCTIONS -- these should not need to change for every adapter,
-        #                   although some adapters may override them
-        ###
-        def create_schema(self, relation: BaseRelation):
-            # there's no database, this happens implicitly by adding a relation to the cache
-            pass
-
-        def drop_schema(self, relation: BaseRelation):
-            for each_relation in self.cache.get_relations(relation.database, relation.schema):
-                self.cache_dropped(each_relation)
-
-        @classmethod
-        def quote(cls, identifier: str) -> str:
-            quote_char = ""
-            return f"{quote_char}{identifier}{quote_char}"
-
-        ###
-        # Conversions: These must be implemented by concrete implementations, for
-        # converting agate types into their sql equivalents.
-        ###
-        @classmethod
-        def convert_text_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-            return "str"
-
-        @classmethod
-        def convert_number_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-            return "float"
-
-        @classmethod
-        def convert_boolean_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-            return "bool"
-
-        @classmethod
-        def convert_datetime_type(cls, agate_table: agate.Table, col_idx: int) -> str:
-            return "datetime"
-
-        @classmethod
-        def convert_date_type(cls, *args, **kwargs):
-            return "date"
-
-        @classmethod
-        def convert_time_type(cls, *args, **kwargs):
-            return "time"
-
+@pytest.fixture
+def adapter_default_behaviour_flags(config) -> BaseAdapter:
     return BaseAdapterStub(config, get_context("spawn"))
 
 
