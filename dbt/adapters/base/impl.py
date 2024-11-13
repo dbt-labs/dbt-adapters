@@ -1580,8 +1580,14 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
+        """
+        List of possible builtin strategies for adapters
+
+        Microbatch is added by _default_. It is only not added when the behavior flag
+        `require_batched_execution_for_custom_microbatch_strategy` is True.
+        """
         builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
-        if self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
+        if not self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
             builtin_strategies.append("microbatch")
 
         return builtin_strategies
