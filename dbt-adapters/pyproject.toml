@@ -43,63 +43,21 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "dbt/adapters/__version__.py"
+path = "src/dbt/adapters/__version__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
+include = ["src"]
 
 [tool.hatch.build.targets.wheel]
-include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
-
-[tool.hatch.envs.default]
-dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    'pre-commit==3.7.0;python_version>="3.9"',
-    'pre-commit==3.5.0;python_version=="3.8"',
-    "pytest",
-    "pytest-dotenv",
-    "pytest-xdist",
-]
-[tool.hatch.envs.default.scripts]
-setup = "pre-commit install"
-code-quality = "pre-commit run --all-files"
-unit-tests = "python -m pytest {args:tests/unit}"
-
-[tool.hatch.envs.build]
-detached = true
-dependencies = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-[tool.hatch.envs.build.scripts]
-check-all = [
-    "- check-wheel",
-    "- check-sdist",
-]
-check-wheel = [
-    "twine check dist/*",
-    "find ./dist/dbt_adapters-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-adapters",
-]
-check-sdist = [
-    "check-wheel-contents dist/*.whl --ignore W007,W008",
-    "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-adapters",
-]
-protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
+include = ["src"]
 
 [tool.mypy]
-mypy_path = "third-party-stubs/"
+mypy_path = "../third-party-stubs/"
 [[tool.mypy.overrides]]
 module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
 
 [tool.pytest]
-env_files = ["test.env"]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
+testpaths = ["tests/functional", "tests/unit"]
 color = true
 csv = "results.csv"

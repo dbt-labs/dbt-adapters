@@ -1,0 +1,36 @@
+[envs.default]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "pre-commit==3.7.0",
+    "pytest",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
+
+[envs.build]
+detached = true
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
+[envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_adapters-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+protobuf = "protoc -I=./src/dbt/adapters/events --python_out=./src/dbt/adapters/events ./src/dbt/adapters/events/adapter_types.proto"
