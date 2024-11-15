@@ -38,28 +38,6 @@
     {{ return({'dbt_valid_to': 'dbt_valid_to', 'dbt_valid_from': 'dbt_valid_from', 'dbt_scd_id': 'dbt_scd_id', 'dbt_updated_at': 'dbt_updated_at', 'dbt_is_deleted': 'dbt_is_deleted'}) }}
 {% endmacro %}
 
-{# Check the hard_deletes config enum, and the legacy invalidate_hard_deletes
-   config flag in order to determine which behavior should be used for deleted
-   records in the current snapshot. The default is to ignore them. #}
-{% macro get_hard_delete_behavior() %}
-    {% set invalidate_hard_deletes = config.get('invalidate_hard_deletes') %}
-    {% set hard_deletes = config.get('hard_deletes') %}
-
-    {%  if invalidate_hard_deletes is not none and hard_deletes is not none %}
-        {% do exceptions.raise_compiler_error("You cannot set both the invalidate_hard_deletes and hard_deletes config properties on the same snapshot.") %}
-    {% endif %}
-
-    {%  if invalidate_hard_deletes or hard_deletes == 'invalidate' %}
-        {{ return('invalidate') }}
-    {% elif hard_deletes == 'new_record' %}
-        {{ return('new_record') }}
-    {% elif hard_deletes is none or hard_deletes == 'ignore' %}
-        {{ return('ignore') }}
-    {% else %}
-        {% do exceptions.raise_compiler_error("Invalid setting for property hard_deletes.") %}
-    {% endif %}
-{% endmacro %}
-
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
     {% set columns = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
 

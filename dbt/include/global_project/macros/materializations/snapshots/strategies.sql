@@ -54,7 +54,7 @@
     {# The model_config parameter is no longer used, but is passed in anyway for compatibility. #}
     {% set primary_key = config.get('unique_key') %}
     {% set updated_at = config.get('updated_at') %}
-    {% set hard_deletes = get_hard_delete_behavior() %}
+    {% set hard_deletes = adapter.get_hard_deletes_behavior(config) %}
     {% set invalidate_hard_deletes = hard_deletes == 'invalidate' %}
     {% set columns = config.get("snapshot_table_column_names") or get_snapshot_table_column_names() %}
 
@@ -143,7 +143,7 @@
     {# The model_config parameter is no longer used, but is passed in anyway for compatibility. #}
     {% set check_cols_config = config.get('check_cols') %}
     {% set primary_key = config.get('unique_key') %}
-    {% set hard_deletes = get_hard_delete_behavior() %}
+    {% set hard_deletes = adapter.get_hard_deletes_behavior(config) %}
     {% set invalidate_hard_deletes = hard_deletes == 'invalidate' %}
     {% set updated_at = config.get('updated_at') or snapshot_get_time() %}
 
