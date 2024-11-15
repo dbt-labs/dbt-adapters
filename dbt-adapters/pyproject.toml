@@ -46,10 +46,12 @@ build-backend = "hatchling.build"
 path = "src/dbt/adapters/__version__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
-include = ["src"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [tool.mypy]
 mypy_path = "../third-party-stubs/"
