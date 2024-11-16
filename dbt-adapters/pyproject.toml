@@ -46,11 +46,11 @@ build-backend = "hatchling.build"
 path = "src/dbt/adapters/__version__.py"
 
 [tool.hatch.build.targets.sdist]
-packages = ["src/dbt/adapters"]
+packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dbt/adapters"]
+packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
 
 [tool.mypy]
@@ -60,6 +60,6 @@ module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
 
 [tool.pytest]
-testpaths = ["tests/functional", "tests/unit"]
+testpaths = ["tests/unit"]
 color = true
 csv = "results.csv"

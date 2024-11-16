@@ -12,7 +12,7 @@ permissions:
     issues: write # comments on issues
 
 jobs:
-    open_issues:
+    user-docs-issue:
         # we only want to run this when the issue is closed as completed and the label `user docs` has been assigned.
         # If this logic does not exist in this workflow, it runs the
         # risk of duplication of issues being created due to merge and label both triggering this workflow to run and neither having

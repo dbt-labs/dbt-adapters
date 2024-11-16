@@ -2,14 +2,19 @@
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pre-commit==3.7.0",
-    "pytest",
-    "pytest-dotenv",
-    "pytest-xdist",
 ]
 [envs.default.scripts]
 setup = "pre-commit install"
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
+unit-tests = 'echo "dbt-adapters does not have any integration tests"'
+
+[envs.hatch-test]
+randomize = true
+parallel = true
+extra-dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+]
 
 [envs.build]
 detached = true

@@ -53,6 +53,7 @@ permissions:
 jobs:
     integration-tests:
         runs-on: ${{ inputs.os }}
+        environment: ${{ inputs.package }}
         steps:
         -   uses: actions/checkout@v4
             with:
