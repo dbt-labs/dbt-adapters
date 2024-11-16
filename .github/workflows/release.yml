@@ -76,31 +76,26 @@ jobs:
     name: "Release inputs"
     runs-on: ubuntu-latest
     outputs:
-      working-dir: ${{ steps.release-inputs.outputs.working-dir }}
       run-unit-tests: ${{ steps.release-inputs.outputs.run-unit-tests }}
       archive-name: ${{ steps.release-inputs.outputs.archive-name }}
     steps:
       - name: "Inputs"
         id: release-inputs
         run: |
-          working_dir="./"
           run_unit_tests=true
           archive_name=${{ inputs.package }}-${{ inputs.version_number }}-${{ inputs.deploy-to }}
 
           if test "${{ inputs.package }}" = "dbt-tests-adapter"
           then
-            working_dir="./dbt-tests-adapter/"
             run_unit_tests=false
           fi
 
-          echo "working-dir=$working_dir" >> $GITHUB_OUTPUT
           echo "run-unit-tests=$run_unit_tests" >> $GITHUB_OUTPUT
           echo "archive-name=$archive_name" >> $GITHUB_OUTPUT
 
       - name: "[DEBUG]"
         run: |
           echo package        : ${{ inputs.package }}
-          echo working-dir    : ${{ steps.release-inputs.outputs.working-dir }}
           echo run-unit-tests : ${{ steps.release-inputs.outputs.run-unit-tests }}
           echo archive-name   : ${{ steps.release-inputs.outputs.archive-name }}
 
@@ -113,7 +108,7 @@ jobs:
       deploy_to: ${{ inputs.deploy-to }}
       nightly_release: ${{ inputs.nightly_release }}
       target_branch: ${{ inputs.target_branch }}
-      working-dir: ${{ needs.release-inputs.outputs.working-dir }}
+      working-dir: ./${{ inputs.package }}/
       run-unit-tests: ${{ fromJSON(needs.release-inputs.outputs.run-unit-tests) }}
     secrets: inherit
 
@@ -146,7 +141,7 @@ jobs:
       - name: "Build ${{ inputs.package }}"
         uses: dbt-labs/dbt-adapters/.github/actions/build-hatch@main
         with:
-          working-dir: ${{ needs.release-inputs.outputs.working-dir }}
+          working-dir: ./${{ inputs.package }}/
           archive-name: ${{ needs.release-inputs.outputs.archive-name }}
 
   github-release:

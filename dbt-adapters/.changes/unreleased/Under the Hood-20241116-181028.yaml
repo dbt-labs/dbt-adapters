@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Migrate dbt-adapters to be a subpackage within the dbt-adapters repo
+time: 2024-11-16T18:10:28.184962-05:00
+custom:
+  Author: mikealfare
+  Issue: "357"

@@ -1,4 +1,4 @@
-# Contributing to `dbt-adapters`
+# Contributing
 
 - [About this document](#about-this-document)
 - [Getting the code](#getting-the-code)
@@ -7,11 +7,15 @@
 - [Documentation](#documentation)
 - [Submitting a pull request](#submitting-a-pull-request)
 
-
 ## About this document
 
-This document is a guide for anyone interested in contributing to `dbt-adapters`.
-It outlines how to install `dbt-adapters` for development,
+This document is a guide for anyone interested in contributing to this repository.
+This repository is a collection of packages, each with their own nuances;
+however, all package share significant overlap, which is covered here.
+For more information on how to contribute to a specific package,
+please refer to that package's `CONTRIBUTING.md`.
+
+This document outlines how to install a package for development,
 run tests locally, update documentation, and submit pull requests.
 This guide assumes users are developing on a Linux or MacOS system.
 The following utilities are needed or will be installed in this guide:
@@ -25,10 +29,9 @@ In addition to this guide, users are highly encouraged to read the `dbt-core`
 [CONTRIBUTING.md](https://github.com/dbt-labs/dbt-core/blob/main/CONTRIBUTING.md).
 Almost all information there is applicable here.
 
-
 ## Getting the code
 
-`git` is required to download, modify, and sync the `dbt-adapters` code.
+`git` is required to download, modify, and sync code.
 There are several ways to install Git. For MacOS:
 
 - Install [Xcode](https://developer.apple.com/support/xcode/)
@@ -36,7 +39,7 @@ There are several ways to install Git. For MacOS:
 
 ### External contributors
 
-Contributors external to the `dbt-labs` GitHub organization can contribute to `dbt-adapters`
+Contributors external to the `dbt-labs` GitHub organization can contribute to this repository
 by forking the `dbt-adapters` repository. For more on forking, check out the
 [GitHub docs on forking](https://help.github.com/en/articles/fork-a-repo). To contribute:
 
@@ -58,7 +61,6 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 4. Push the new branch to `dbt-labs/dbt-adapters`
 5. Open a pull request in `dbt-labs/dbt-adapters` to merge `{new-branch}` into `main`
 
-
 ## Developing
 
 ### Installation
@@ -67,7 +69,8 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
    ```shell
    pip install --user --upgrade pip hatch
    ```
-2. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project. Add this block to your `hatch` `config.toml` file:
+2. This step is optional, but it's recommended. Configure `hatch` to create its virtual environments in the project.
+Add this block to your `hatch` `config.toml` file:
    ```toml
    # MacOS: ~/Library/Application Support/hatch/config.toml
    [dirs.env]
@@ -75,7 +78,18 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
    ```
    This makes `hatch` create all virtual environments in the project root inside of the directory `/.hatch`, similar to `/.tox` for `tox`.
    It also makes it easier to add this environment as a runner in common IDEs like VSCode and PyCharm.
-3. Create a `hatch` environment with all of the development dependencies and activate it:
+3. Navigate to the package that you are working on. Note that because this repository is a monorepo,
+you will have multiple packages, each with their own set of virtual environments.
+   ```shell
+   ls
+   > .github dbt-adapters dbt-tests-adapter docs third-party-stubs .changie.yml .gitignore ...
+
+   cd dbt-adapters
+
+   ls
+   > .changes src tests CHANGELOG.md CONTRIBUTING.md pyproject.toml README.md
+   ```
+4. Create a `hatch` environment with all of the development dependencies and activate it:
    ```shell
    hatch run setup
    hatch shell
@@ -87,8 +101,11 @@ Rather than forking `dbt-labs/dbt-adapters`, use `dbt-labs/dbt-adapters` directl
 
 ## Testing
 
-`dbt-adapters` contains [code quality checks](https://github.com/dbt-labs/dbt-adapters/tree/main/.pre-commit-config.yaml) and [unit tests](https://github.com/dbt-labs/dbt-adapters/tree/main/tests/unit).
-While `dbt-tests-adapter` is also hosted in this repo, it requires a concrete adapter to run.
+The `dbt-adapters` repo contains
+[code quality checks](https://github.com/dbt-labs/dbt-adapters/tree/main/.pre-commit-config.yaml)
+that will run across the entire repo.
+Additionally, each package has their own unit tests and functional tests. See your particular
+package's `CONTRIBUTING.md` for more information regarding these tests.
 
 ### Code quality
 
@@ -102,7 +119,9 @@ hatch run code-quality
 Unit tests can be run locally without setting up a database connection:
 
 ```shell
-# Note: replace $strings with valid names
+# Note:
+#   - replace $strings with valid names
+#   - ensure that you are in the project directory, and not the repo root
 
 # run all unit tests
 hatch run unit-test

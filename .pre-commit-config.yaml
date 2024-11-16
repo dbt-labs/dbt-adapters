@@ -27,13 +27,13 @@ repos:
         -   --target-version=py310
         -   --target-version=py311
         -   --target-version=py312
-        -   --force-exclude=dbt/adapters/events/adapter_types_pb2.py
+        -   --force-exclude=dbt-adapters/src/dbt/adapters/events/adapter_types_pb2.py
 
 -   repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
     -   id: flake8
-        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/
+        exclude: dbt-adapters/src/dbt/adapters/events/adapter_types_pb2.py|tests/functional/
         args:
         -   --max-line-length=99
         -   --select=E,F,W
@@ -44,7 +44,7 @@ repos:
     rev: v1.11.2
     hooks:
     -   id: mypy
-        exclude: dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/dbt/__init__.py
+        exclude: dbt-adapters/src/dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/dbt/__init__.py
         args:
         -   --explicit-package-bases
         -   --ignore-missing-imports

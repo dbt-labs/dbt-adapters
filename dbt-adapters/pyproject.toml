@@ -32,24 +32,26 @@ dependencies = [
     "typing-extensions>=4.0,<5.0",
 ]
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-adapters"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-adapters.git"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
-Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "dbt/adapters/__about__.py"
+path = "src/dbt/adapters/__version__.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
+packages = ["src/dbt/adapters", "src/dbt/include", "dbt/__init__.py"]
+sources = ["src"]
 
 [tool.hatch.build.targets.wheel]
-include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
+packages = ["src/dbt/adapters", "src/dbt/include", "dbt/__init__.py"]
+sources = ["src"]
 
 [tool.hatch.envs.default]
 dependencies = [
