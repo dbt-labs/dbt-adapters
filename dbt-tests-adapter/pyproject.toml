@@ -44,7 +44,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.version]
-path = "dbt/tests/__version__.py"
+path = "src/dbt/tests/__version__.py"
 
 [tool.hatch.build.targets.sdist]
 packages = ["src/dbt/tests"]
