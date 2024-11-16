@@ -39,6 +39,7 @@ jobs:
       - name: Run unit tests
         run: hatch run unit-tests
         shell: bash
+        working-directory: ./dbt-adapters/
 
       - name: Publish results
         uses: ./.github/actions/publish-results
