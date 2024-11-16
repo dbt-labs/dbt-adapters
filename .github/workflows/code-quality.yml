@@ -32,11 +32,9 @@ jobs:
       - name: Run code quality for dbt-adapters
         shell: bash
         run: hatch run code-quality
-        with:
-          working-dir: "./dbt-adapters/"
+        working-directory: "./dbt-adapters/"
 
       - name: Run code quality for dbt-tests-adapter
         shell: bash
         run: hatch run code-quality
-        with:
-          working-dir: "./dbt-tests-adapter/"
+        working-directory: "./dbt-tests-adapter/"
