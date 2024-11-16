@@ -1783,7 +1783,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return AdapterTrackingRelationInfo(
             adapter_name=adapter_name,
-            base_adapter_version=import_module("dbt.adapters.__about__").version,
+            base_adapter_version=import_module("dbt.adapters.__version__").version,
             adapter_version=adapter_version,
             model_adapter_details=cls._get_adapter_specific_run_info(config),
         )
