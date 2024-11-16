@@ -29,6 +29,14 @@ jobs:
       - name: Setup `hatch`
         uses: ./.github/actions/setup-hatch
 
-      - name: Run code quality
+      - name: Run code quality for dbt-adapters
         shell: bash
         run: hatch run code-quality
+        with:
+          working-dir: "./dbt-adapters/"
+
+      - name: Run code quality for dbt-tests-adapter
+        shell: bash
+        run: hatch run code-quality
+        with:
+          working-dir: "./dbt-tests-adapter/"

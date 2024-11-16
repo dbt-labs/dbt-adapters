@@ -47,6 +47,8 @@ jobs:
 
       - name: Build `dbt-adapters`
         uses: ./.github/actions/build-hatch
+        with:
+          working-dir: "./dbt-adapters/"
 
       - name: Build `dbt-tests-adapter`
         uses: ./.github/actions/build-hatch
