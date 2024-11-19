@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 
+from dbt.adapters.base.impl import DEFAULT_BASE_BEHAVIOR_FLAGS
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.exceptions import DbtBaseException
 import pytest
@@ -64,3 +65,12 @@ def test_register_behavior_flags(adapter):
     assert not adapter.behavior.default_true_user_false_flag
     assert adapter.behavior.default_true_user_true_flag
     assert adapter.behavior.default_true_user_skip_flag
+
+
+def test_behaviour_flags_property_empty(adapter_default_behaviour_flags):
+    assert adapter_default_behaviour_flags._behavior_flags == []
+
+
+def test_behavior_property_has_defaults(adapter_default_behaviour_flags):
+    for flag in DEFAULT_BASE_BEHAVIOR_FLAGS:
+        assert hasattr(adapter_default_behaviour_flags.behavior, flag["name"])
