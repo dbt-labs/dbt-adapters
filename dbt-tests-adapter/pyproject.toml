@@ -4,7 +4,7 @@ name = "dbt-tests-adapter"
 description = "The set of reusable tests and test fixtures used to test common functionality"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
-requires-python = ">=3.8.0"
+requires-python = ">=3.9.0"
 authors = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
 ]
@@ -17,7 +17,6 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -31,15 +30,8 @@ dependencies = [
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
     "dbt-adapters",
     "pyyaml",
+    "freezegun",
 ]
-
-[project.optional-dependencies]
-build = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
@@ -62,7 +54,11 @@ include = ["dbt/tests", "dbt/__init__.py"]
 
 [tool.hatch.envs.build]
 detached = true
-features = ["build"]
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
 [tool.hatch.envs.build.scripts]
 check-all = [
     "- check-wheel",

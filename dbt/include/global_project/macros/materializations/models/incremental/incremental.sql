@@ -32,6 +32,9 @@
 
   {% set to_drop = [] %}
 
+  {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
+  {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
+
   {% if existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
   {% elif full_refresh_mode %}
@@ -39,9 +42,12 @@
       {% set need_swap = true %}
   {% else %}
     {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
-    {% do adapter.expand_target_column_types(
-             from_relation=temp_relation,
-             to_relation=target_relation) %}
+    {% set contract_config = config.get('contract') %}
+    {% if not contract_config or not contract_config.enforced %}
+      {% do adapter.expand_target_column_types(
+               from_relation=temp_relation,
+               to_relation=target_relation) %}
+    {% endif %}
     {#-- Process schema changes. Returns dict of changes if successful. Use source columns for upserting/merging --#}
     {% set dest_columns = process_schema_changes(on_schema_change, temp_relation, existing_relation) %}
     {% if not dest_columns %}
@@ -49,9 +55,7 @@
     {% endif %}
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
-    {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
-    {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
     {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': temp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
     {% set build_sql = strategy_sql_macro_func(strategy_arg_dict) %}
 
