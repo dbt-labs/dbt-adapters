@@ -1,5 +1,4 @@
 {% materialization snapshot, default %}
-  {%- set config = model['config'] -%}
 
   {%- set target_table = model.get('alias', model.get('name')) -%}
 
@@ -24,37 +23,45 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% set strategy_macro = strategy_dispatch(strategy_name) %}
-  {% set strategy = strategy_macro(model, "snapshotted_data", "source_data", config, target_relation_exists) %}
+  {# The model['config'] parameter below is no longer used, but passing anyway for compatibility #}
+  {# It was a dictionary of config, instead of the config object from the context #}
+  {% set strategy = strategy_macro(model, "snapshotted_data", "source_data", model['config'], target_relation_exists) %}
 
   {% if not target_relation_exists %}
 
       {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
+      {% set build_or_select_sql = build_sql %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
 
-      {{ adapter.valid_snapshot_target(target_relation) }}
+      {% set columns = config.get("snapshot_table_column_names") or get_snapshot_table_column_names() %}
 
+      {{ adapter.valid_snapshot_target(target_relation, columns) }}
+
+      {% set build_or_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
       {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
       -- this may no-op if the database does not require column expansion
       {% do adapter.expand_target_column_types(from_relation=staging_table,
                                                to_relation=target_relation) %}
 
+      {% set remove_columns = ['dbt_change_type', 'DBT_CHANGE_TYPE', 'dbt_unique_key', 'DBT_UNIQUE_KEY'] %}
+      {% if unique_key | is_list %}
+          {% for key in strategy.unique_key %}
+              {{ remove_columns.append('dbt_unique_key_' + loop.index|string) }}
+              {{ remove_columns.append('DBT_UNIQUE_KEY_' + loop.index|string) }}
+          {% endfor %}
+      {% endif %}
+
       {% set missing_columns = adapter.get_missing_columns(staging_table, target_relation)
-                                   | rejectattr('name', 'equalto', 'dbt_change_type')
-                                   | rejectattr('name', 'equalto', 'DBT_CHANGE_TYPE')
-                                   | rejectattr('name', 'equalto', 'dbt_unique_key')
-                                   | rejectattr('name', 'equalto', 'DBT_UNIQUE_KEY')
+                                   | rejectattr('name', 'in', remove_columns)
                                    | list %}
 
       {% do create_columns(target_relation, missing_columns) %}
 
       {% set source_columns = adapter.get_columns_in_relation(staging_table)
-                                   | rejectattr('name', 'equalto', 'dbt_change_type')
-                                   | rejectattr('name', 'equalto', 'DBT_CHANGE_TYPE')
-                                   | rejectattr('name', 'equalto', 'dbt_unique_key')
-                                   | rejectattr('name', 'equalto', 'DBT_UNIQUE_KEY')
+                                   | rejectattr('name', 'in', remove_columns)
                                    | list %}
 
       {% set quoted_source_columns = [] %}
@@ -70,6 +77,9 @@
       %}
 
   {% endif %}
+
+
+  {{ check_time_data_types(build_or_select_sql) }}
 
   {% call statement('main') %}
       {{ final_sql }}

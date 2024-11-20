@@ -1,10 +1,11 @@
 import abc
+import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
+from importlib import import_module
 from multiprocessing.context import SpawnContext
-import time
 from typing import (
     Any,
     Callable,
@@ -22,13 +23,16 @@ from typing import (
     Union,
     TYPE_CHECKING,
 )
-
+import pytz
+from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
     ModelLevelConstraint,
 )
+from dbt_common.contracts.metadata import CatalogTable
+from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -38,14 +42,12 @@ from dbt_common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
     executor,
     filter_null_values,
 )
-import pytz
 
 from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.connections import (
@@ -53,18 +55,20 @@ from dbt.adapters.base.connections import (
     BaseConnectionManager,
     Connection,
 )
-from dbt.adapters.base.meta import AdapterMeta, available
+from dbt.adapters.base.meta import AdapterMeta, available, available_property
 from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
+    AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
+
 from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
@@ -81,7 +85,6 @@ from dbt.adapters.exceptions import (
     QuoteConfigTypeError,
     RelationReturnedMultipleResultsError,
     RenameToNoneAttemptedError,
-    SnapshotTargetIncompleteError,
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
@@ -95,6 +98,13 @@ GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
 GET_RELATION_LAST_MODIFIED_MACRO_NAME = "get_relation_last_modified"
+DEFAULT_BASE_BEHAVIOR_FLAGS = [
+    {
+        "name": "require_batched_execution_for_custom_microbatch_strategy",
+        "default": False,
+        "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
+    }
+]
 
 
 class ConstraintSupport(str, Enum):
@@ -222,6 +232,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - truncate_relation
         - rename_relation
         - get_columns_in_relation
+        - get_catalog_for_single_relation
         - get_column_schema_from_query
         - expand_column_types
         - list_relations_without_caching
@@ -259,7 +270,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     MAX_SCHEMA_METADATA_RELATIONS = 100
 
-    # This static member variable can be overriden in concrete adapter
+    # This static member variable can be overridden in concrete adapter
     # implementations to indicate adapter support for optional capabilities.
     _capabilities = CapabilityDict({})
 
@@ -269,6 +280,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
+        self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
@@ -288,6 +300,30 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context_generator: MacroContextGeneratorCallable,
     ) -> None:
         self._macro_context_generator = macro_context_generator
+
+    @available_property
+    def behavior(self) -> Behavior:
+        return self._behavior
+
+    @behavior.setter  # type: ignore
+    def behavior(self, flags: List[BehaviorFlag]) -> None:
+        flags.extend(self._behavior_flags)
+
+        # we don't always get project flags, for example, the project file is not loaded during `dbt debug`
+        # in that case, load the default values for behavior flags to avoid compilation errors
+        # this mimics not loading a project file, or not specifying flags in a project file
+        user_overrides = getattr(self.config, "flags", {})
+
+        self._behavior = Behavior(flags, user_overrides)
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        """
+        This method should be overwritten by adapter maintainers to provide platform-specific flags
+
+        The BaseAdapter should NOT include any global flags here as those should be defined via DEFAULT_BASE_BEHAVIOR_FLAGS
+        """
+        return []
 
     ###
     # Methods that pass through to the connection manager
@@ -317,14 +353,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         return conn.name
 
     @contextmanager
-    def connection_named(self, name: str, query_header_context: Any = None) -> Iterator[None]:
+    def connection_named(
+        self, name: str, query_header_context: Any = None, should_release_connection=True
+    ) -> Iterator[None]:
         try:
             if self.connections.query_header is not None:
                 self.connections.query_header.set(name, query_header_context)
             self.acquire_connection(name)
             yield
         finally:
-            self.release_connection()
+            if should_release_connection:
+                self.release_connection()
+
             if self.connections.query_header is not None:
                 self.connections.query_header.reset()
 
@@ -627,6 +667,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
+    def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
+        """Get catalog information including table-level and column-level metadata for a single relation."""
+        raise NotImplementedError(
+            "`get_catalog_for_single_relation` is not implemented for this adapter!"
+        )
+
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
         """DEPRECATED: Get a list of the columns in the given table."""
@@ -728,7 +774,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         return [col for (col_name, col) in from_columns.items() if col_name in missing_columns]
 
     @available.parse_none
-    def valid_snapshot_target(self, relation: BaseRelation) -> None:
+    def valid_snapshot_target(
+        self, relation: BaseRelation, column_names: Optional[Dict[str, str]] = None
+    ) -> None:
         """Ensure that the target relation is valid, by making sure it has the
         expected columns.
 
@@ -746,21 +794,16 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         columns = self.get_columns_in_relation(relation)
         names = set(c.name.lower() for c in columns)
-        expanded_keys = ("scd_id", "valid_from", "valid_to")
-        extra = []
         missing = []
-        for legacy in expanded_keys:
-            desired = "dbt_" + legacy
+        # Note: we're not checking dbt_updated_at here because it's not
+        # always present.
+        for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
+            desired = column_names[column] if column_names else column
             if desired not in names:
                 missing.append(desired)
-                if legacy in names:
-                    extra.append(legacy)
 
         if missing:
-            if extra:
-                raise SnapshotTargetIncompleteError(extra, missing)
-            else:
-                raise SnapshotTargetNotSnapshotTableError(missing)
+            raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
     def expand_target_column_types(
@@ -1537,10 +1580,31 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
-        return ["append", "delete+insert", "merge", "insert_overwrite"]
+        """
+        List of possible builtin strategies for adapters
+
+        Microbatch is added by _default_. It is only not added when the behavior flag
+        `require_batched_execution_for_custom_microbatch_strategy` is True.
+        """
+        builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
+        if not self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
+            builtin_strategies.append("microbatch")
+
+        return builtin_strategies
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
+        """Gets the macro for the given incremental strategy.
+
+        Additionally some validations are done:
+        1. Assert that if the given strategy is a "builtin" strategy, then it must
+           also be defined as a "valid" strategy for the associated adapter
+        2. Assert that the incremental strategy exists in the model context
+
+        Notably, something be defined by the adapter as "valid" without it being
+        a "builtin", and nothing will break (and that is desirable).
+        """
+
         # Construct macro_name from strategy name
         if strategy is None:
             strategy = "default"
@@ -1590,8 +1654,13 @@ class BaseAdapter(metaclass=AdapterMeta):
             rendered_column_constraint = f"unique {constraint_expression}"
         elif constraint.type == ConstraintType.primary_key:
             rendered_column_constraint = f"primary key {constraint_expression}"
-        elif constraint.type == ConstraintType.foreign_key and constraint_expression:
-            rendered_column_constraint = f"references {constraint_expression}"
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_column_constraint = (
+                    f"references {constraint.to} ({', '.join(constraint.to_columns)})"
+                )
+            elif constraint_expression:
+                rendered_column_constraint = f"references {constraint_expression}"
         elif constraint.type == ConstraintType.custom and constraint_expression:
             rendered_column_constraint = constraint_expression
 
@@ -1670,20 +1739,29 @@ class BaseAdapter(metaclass=AdapterMeta):
         rendering."""
         constraint_prefix = f"constraint {constraint.name} " if constraint.name else ""
         column_list = ", ".join(constraint.columns)
+        rendered_model_constraint = None
+
         if constraint.type == ConstraintType.check and constraint.expression:
-            return f"{constraint_prefix}check ({constraint.expression})"
+            rendered_model_constraint = f"{constraint_prefix}check ({constraint.expression})"
         elif constraint.type == ConstraintType.unique:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            rendered_model_constraint = (
+                f"{constraint_prefix}unique{constraint_expression} ({column_list})"
+            )
         elif constraint.type == ConstraintType.primary_key:
             constraint_expression = f" {constraint.expression}" if constraint.expression else ""
-            return f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
-        elif constraint.type == ConstraintType.foreign_key and constraint.expression:
-            return f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
+            rendered_model_constraint = (
+                f"{constraint_prefix}primary key{constraint_expression} ({column_list})"
+            )
+        elif constraint.type == ConstraintType.foreign_key:
+            if constraint.to and constraint.to_columns:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.to} ({', '.join(constraint.to_columns)})"
+            elif constraint.expression:
+                rendered_model_constraint = f"{constraint_prefix}foreign key ({column_list}) references {constraint.expression}"
         elif constraint.type == ConstraintType.custom and constraint.expression:
-            return f"{constraint_prefix}{constraint.expression}"
-        else:
-            return None
+            rendered_model_constraint = f"{constraint_prefix}{constraint.expression}"
+
+        return rendered_model_constraint
 
     @classmethod
     def capabilities(cls) -> CapabilityDict:
@@ -1692,6 +1770,30 @@ class BaseAdapter(metaclass=AdapterMeta):
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
+
+    @classmethod
+    def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
+        adapter_class_name, *_ = cls.__name__.split("Adapter")
+        adapter_name = adapter_class_name.lower()
+
+        if adapter_name == "base":
+            adapter_version = ""
+        else:
+            adapter_version = import_module(f"dbt.adapters.{adapter_name}.__version__").version
+
+        return AdapterTrackingRelationInfo(
+            adapter_name=adapter_name,
+            base_adapter_version=import_module("dbt.adapters.__about__").version,
+            adapter_version=adapter_version,
+            model_adapter_details=cls._get_adapter_specific_run_info(config),
+        )
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config) -> Dict[str, Any]:
+        """
+        Adapter maintainers should overwrite this method to return any run metadata that should be captured during a run.
+        """
+        return {}
 
 
 COLUMNS_EQUAL_SQL = """

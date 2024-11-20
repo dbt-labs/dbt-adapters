@@ -4,7 +4,7 @@ name = "dbt-adapters"
 description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
-requires-python = ">=3.8.0"
+requires-python = ">=3.9.0"
 authors = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
 ]
@@ -12,24 +12,23 @@ maintainers = [
     { name = "dbt Labs", email = "info@dbtlabs.com" },
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "dbt-common<2.0",
+    "dbt-common>=1.13,<2.0",
     "pytz>=2015.7",
     # installed via dbt-common but used directly
     "agate>=1.0,<2.0",
     "mashumaro[msgpack]>=3.0,<4.0",
-    "protobuf>=3.0,<5.0",
+    "protobuf>=5.0,<6.0",
     "typing-extensions>=4.0,<5.0",
 ]
 [project.urls]
@@ -57,20 +56,14 @@ dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     'pre-commit==3.7.0;python_version>="3.9"',
     'pre-commit==3.5.0;python_version=="3.8"',
-]
-[tool.hatch.envs.default.scripts]
-dev = "pre-commit install"
-code-quality = "pre-commit run --all-files"
-
-[tool.hatch.envs.unit-tests]
-dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
 ]
-[tool.hatch.envs.unit-tests.scripts]
-all = "python -m pytest {args:tests/unit}"
+[tool.hatch.envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
 
 [tool.hatch.envs.build]
 detached = true
