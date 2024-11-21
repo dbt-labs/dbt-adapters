@@ -96,8 +96,8 @@
         select
             'insert' as dbt_change_type,
             source_data.*
-          {%- if strategy.hard_deletes == 'new_record' -%},
-            'False' as {{ columns.dbt_is_deleted }}
+          {%- if strategy.hard_deletes == 'new_record' -%}
+            ,'False' as {{ columns.dbt_is_deleted }}
           {%- endif %}
 
         from insertions_source_data as source_data
@@ -116,8 +116,8 @@
             'update' as dbt_change_type,
             source_data.*,
             snapshotted_data.{{ columns.dbt_scd_id }}
-          {%- if strategy.hard_deletes == 'new_record' -%},
-            snapshotted_data.{{ columns.dbt_is_deleted }}
+          {%- if strategy.hard_deletes == 'new_record' -%}
+            , snapshotted_data.{{ columns.dbt_is_deleted }}
           {%- endif %}
 
         from updates_source_data as source_data
@@ -139,8 +139,8 @@
             {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
             {{ snapshot_get_time() }} as {{ columns.dbt_valid_to }},
             snapshotted_data.{{ columns.dbt_scd_id }}
-          {%- if strategy.hard_deletes == 'new_record' -%},
-            snapshotted_data.{{ columns.dbt_is_deleted }}
+          {%- if strategy.hard_deletes == 'new_record' -%}
+            , snapshotted_data.{{ columns.dbt_is_deleted }}
           {%- endif %}
         from snapshotted_data
         left join deletes_source_data as source_data
@@ -206,8 +206,8 @@
         {{ strategy.updated_at }} as {{ columns.dbt_updated_at }},
         {{ strategy.updated_at }} as {{ columns.dbt_valid_from }},
         {{ get_dbt_valid_to_current(strategy, columns) }}
-      {%- if strategy.hard_deletes == 'new_record' -%},
-        'False' as {{ columns.dbt_is_deleted }}
+      {%- if strategy.hard_deletes == 'new_record' -%}
+        , 'False' as {{ columns.dbt_is_deleted }}
       {% endif -%}
     from (
         {{ sql }}

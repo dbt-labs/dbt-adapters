@@ -37,7 +37,7 @@
 
       {% set columns = config.get("snapshot_table_column_names") or get_snapshot_table_column_names() %}
 
-      {{ adapter.valid_snapshot_target(target_relation, columns) }}
+      {{ adapter.assert_valid_snapshot_target_given_strategy(target_relation, columns, strategy) }}
 
       {# Raise an exception if the user has selected the new_record mode for
          hard deletes, but there is no dbt_is_deleted column in the target,
