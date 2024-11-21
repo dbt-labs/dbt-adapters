@@ -39,22 +39,6 @@
 
       {{ adapter.assert_valid_snapshot_target_given_strategy(target_relation, columns, strategy) }}
 
-      {# Raise an exception if the user has selected the new_record mode for
-         hard deletes, but there is no dbt_is_deleted column in the target,
-         which would indicate it was created in a different mode. #}
-      {% if strategy.hard_deletes == 'new_record' %}
-          {% set target_cols = adapter.get_columns_in_relation(target_relation) %}
-          {% set ns = namespace(found_is_deleted_col = false) %}
-          {% for col in target_cols %}
-              {% if col.column == columns['dbt_is_deleted'] %}
-                {% set ns.found_is_deleted_col = true %}
-              {% endif %}
-          {% endfor %}
-          {% if not ns.found_is_deleted_col %}
-             {% do exceptions.raise_compiler_error('Did not find a dbt_is_deleted column in snapshot target. Changing the snapshot hard_deletes mode is not supported after a snapshot has been created.') %}
-         {% endif %}
-      {% endif %}
-
       {% set build_or_select_sql = snapshot_staging_table(strategy, sql, target_relation) %}
       {% set staging_table = build_snapshot_staging_table(strategy, sql, target_relation) %}
 
