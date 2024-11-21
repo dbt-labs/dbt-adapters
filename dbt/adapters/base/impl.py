@@ -98,6 +98,13 @@ GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
 GET_RELATION_LAST_MODIFIED_MACRO_NAME = "get_relation_last_modified"
+DEFAULT_BASE_BEHAVIOR_FLAGS = [
+    {
+        "name": "require_batched_execution_for_custom_microbatch_strategy",
+        "default": False,
+        "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
+    }
+]
 
 
 class ConstraintSupport(str, Enum):
@@ -273,8 +280,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
-        # this will be updated to include global behavior flags once they exist
-        self.behavior = []  # type: ignore
+        self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
@@ -314,14 +320,10 @@ class BaseAdapter(metaclass=AdapterMeta):
     def _behavior_flags(self) -> List[BehaviorFlag]:
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
+
+        The BaseAdapter should NOT include any global flags here as those should be defined via DEFAULT_BASE_BEHAVIOR_FLAGS
         """
-        return [
-            {
-                "name": "require_batched_execution_for_custom_microbatch_strategy",
-                "default": False,
-                "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
-            }
-        ]
+        return []
 
     ###
     # Methods that pass through to the connection manager
@@ -1578,8 +1580,14 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
+        """
+        List of possible builtin strategies for adapters
+
+        Microbatch is added by _default_. It is only not added when the behavior flag
+        `require_batched_execution_for_custom_microbatch_strategy` is True.
+        """
         builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
-        if self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
+        if not self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
             builtin_strategies.append("microbatch")
 
         return builtin_strategies
