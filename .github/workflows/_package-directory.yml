@@ -16,7 +16,7 @@ jobs:
         steps:
         -   id: package
             shell: bash
-            runs: |
+            run: |
                 if [[ package == 'dbt-adapters' ]]
                 then
                     directory=""
