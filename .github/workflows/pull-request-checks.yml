@@ -16,21 +16,33 @@ jobs:
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
-    unit-tests:
-        uses: ./.github/workflows/_unit-tests.yml
+    verify-builds:
+        uses: ./.github/workflows/_verify-build.yml
+        strategy:
+            matrix:
+                package: ["dbt-adapters", "dbt-tests-adapter"]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
+            python-version: ${{ matrix.python-version }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
         strategy:
             matrix:
                 package: ["dbt-adapters"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
 
     # This job does nothing and is only used for branch protection
     results:
-        name: "Pull request checks"
+        name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [code-quality, unit-tests]
+        needs: [code-quality, verify-builds, unit-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
