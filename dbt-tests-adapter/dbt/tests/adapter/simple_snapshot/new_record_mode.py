@@ -1,10 +1,8 @@
-import os
-
 import pytest
 
 from dbt.tests.util import check_relations_equal, run_dbt
 
-seed_new_record_mode = """
+_seed_new_record_mode = """
 create table {database}.{schema}.seed (
 	id INTEGER,
 	first_name VARCHAR(50),
@@ -92,7 +90,7 @@ select
 from {database}.{schema}.seed;
 """
 
-snapshot_actual_sql = """
+_snapshot_actual_sql = """
 {% snapshot snapshot_actual %}
 
     {{
@@ -106,7 +104,7 @@ snapshot_actual_sql = """
 {% endsnapshot %}
 """
 
-snapshots_yml = """
+_snapshots_yml = """
 snapshots:
   - name: snapshot_actual
     config:
@@ -115,12 +113,12 @@ snapshots:
       hard_deletes: new_record
 """
 
-ref_snapshot_sql = """
+_ref_snapshot_sql = """
 select * from {{ ref('snapshot_actual') }}
 """
 
 
-invalidate_sql = """
+_invalidate_sql = """
 -- update records 11 - 21. Change email and updated_at field
 update {schema}.seed set
     updated_at = updated_at + interval '1 hour',
@@ -135,7 +133,7 @@ where id >= 10 and id <= 20;
 
 """
 
-update_sql = """
+_update_sql = """
 -- insert v2 of the 11 - 21 records
 
 insert into {database}.{schema}.snapshot_expected (
@@ -171,7 +169,7 @@ from {database}.{schema}.seed
 where id >= 10 and id <= 20;
 """
 
-delete_sql = """
+_delete_sql = """
 delete from {schema}.seed where id = 1
 """
 
@@ -179,17 +177,32 @@ delete from {schema}.seed where id = 1
 class SnapshotNewRecordMode:
     @pytest.fixture(scope="class")
     def snapshots(self):
-        return {"snapshot.sql": snapshot_actual_sql}
+        return {"snapshot.sql": _snapshot_actual_sql}
 
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "snapshots.yml": snapshots_yml,
-            "ref_snapshot.sql": ref_snapshot_sql,
+            "snapshots.yml": _snapshots_yml,
+            "ref_snapshot.sql": _ref_snapshot_sql,
         }
 
-    def test_snapshot_new_record_mode(self, project):
-        path = os.path.join(project.test_data_dir, "seed_new_record_mode.sql")
+    @pytest.fixture(scope="class")
+    def seed_new_record_mode(self):
+        return _seed_new_record_mode
+
+    @pytest.fixture(scope="class")
+    def invalidate_sql(self):
+        return _invalidate_sql
+
+    @pytest.fixture(scope="class")
+    def update_sql(self):
+        return _update_sql
+
+    @pytest.fixture(scope="class")
+    def delete_sql(self):
+        return _delete_sql
+
+    def test_snapshot_new_record_mode(self, project, seed_new_record_mode, invalidate_sql, update_sql):
         project.run_sql(seed_new_record_mode)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
@@ -202,7 +215,7 @@ class SnapshotNewRecordMode:
 
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
-        project.run_sql(delete_sql)
+        project.run_sql(_delete_sql)
 
         results = run_dbt(["snapshot"])
         assert len(results) == 1
