@@ -38,14 +38,22 @@ jobs:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
 
-    publish-internal:
-        if: ${{ inputs.pypi-internal == true }}
-        needs: unit-tests
-        uses: ./.github/workflows/_publish-internal.yml
+    generate-changelog:
+        uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
             branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    publish-internal:
+        if: ${{ inputs.pypi-internal == true }}
+        needs: [unit-tests, generate-changelog]
+        uses: ./.github/workflows/_publish-internal.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ needs.generate-changelog.outputs.branch-name }}
         secrets: inherit
 
     publish-pypi:
@@ -55,4 +63,4 @@ jobs:
         with:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
-            branch: ${{ inputs.branch }}
+            branch: ${{ needs.generate-changelog.outputs.branch-name }}

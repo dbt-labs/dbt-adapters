@@ -1,0 +1,26 @@
+name: "Package directory"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package whose directory you need"
+                type: string
+                default: "dbt-adapters"
+
+jobs:
+    package:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            directory: ${{ steps.package.outputs.directory }}
+        steps:
+        -   id: package
+            shell: bash
+            runs: |
+                if [[ package == 'dbt-adapters' ]]
+                then
+                    directory=""
+                else
+                    directory="${{ inputs.package }}"
+                fi
+                echo "directory=$directory" >> $GITHUB_OUTPUT
