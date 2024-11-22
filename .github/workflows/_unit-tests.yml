@@ -1,49 +1,66 @@
-name: Unit Tests
+name: "Unit tests"
 
 on:
-  push:
-    branches:
-      - "main"
-      - "*.latest"
-  pull_request:
-  workflow_dispatch:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to test"
+                type: string
+                default: "dbt-adapters"
+            branch:
+                description: "Choose the branch to test"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to test, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: ${{ vars.DEFAULT_RUNNER }}
+            python-version:
+                description: "Choose the Python version to test against"
+                type: string
+                default: ${{ vars.DEFAULT_PYTHON_VERSION }}
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to test"
+                type: choice
+                options: ["dbt-adapters"]
+            branch:
+                description: "Choose the branch to test"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to test, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: ${{ vars.DEFAULT_RUNNER }}
+            python-version:
+                description: "Choose the Python version to test against"
+                type: choice
+                options: ["3.9", "3.10", "3.11", "3.12"]
 
-permissions: read-all
-
-# will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
-  cancel-in-progress: true
+permissions:
+    contents: read
 
 jobs:
-  unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Run unit tests
-        run: hatch run unit-tests
-        shell: bash
-
-      - name: Publish results
-        uses: ./.github/actions/publish-results
-        if: always()
-        with:
-          source-file: "results.csv"
-          file-name: "unit_results"
-          python-version: ${{ matrix.python-version }}
+    unit-tests:
+        runs-on: ${{ inputs.os }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run unit-tests
+            shell: bash
+            working-directory: ./${{ inputs.package }}

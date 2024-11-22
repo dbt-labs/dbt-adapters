@@ -1,0 +1,38 @@
+name: "Pull request checks"
+
+on:
+    pull_request_target:
+        types: [opened, reopened, synchronize]
+
+# only run this once per PR at a time
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.number }}
+    cancel-in-progress: true
+
+jobs:
+    code-quality:
+        uses: ./.github/workflows/_code-quality.yml
+        with:
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+        strategy:
+            matrix:
+                package: ["dbt-adapters"]
+
+    # This job does nothing and is only used for branch protection
+    results:
+        name: "Pull request checks"
+        if: always()
+        needs: [code-quality, unit-tests]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: re-actors/alls-green@release/v1
+            with:
+                jobs: ${{ toJSON(needs) }}

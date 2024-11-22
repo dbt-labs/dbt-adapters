@@ -1,34 +1,40 @@
-name: Code Quality
+name: "Code quality"
 
 on:
-  push:
-    branches:
-      - "main"
-      - "*.latest"
-  pull_request:
   workflow_dispatch:
+    workflow_call:
+        inputs:
+            branch:
+                description: "Choose the branch to check"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to check, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+    workflow_dispatch:
+        inputs:
+            branch:
+                description: "Choose the branch to check"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to check, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
 
-permissions: read-all
-
-# will cancel previous workflows triggered by the same event and for the same ref for PRs or same SHA otherwise
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ contains(github.event_name, 'pull_request') && github.event.pull_request.head.ref || github.sha }}
-  cancel-in-progress: true
+permissions:
+    contents: read
 
 jobs:
-  code-quality:
-    name: Code Quality
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Setup `hatch`
-        uses: ./.github/actions/setup-hatch
-
-      - name: Run code quality
-        shell: bash
-        run: hatch run code-quality
+    code-quality:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+        -   uses: pre-commit/action@v3.0.1
