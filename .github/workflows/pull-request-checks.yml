@@ -35,6 +35,7 @@ jobs:
         strategy:
             matrix:
                 package: ["dbt-adapters"]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
