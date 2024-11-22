@@ -164,7 +164,7 @@
             snapshotted_data.{{ key }} as dbt_unique_key_{{ loop.index }},
                 {% endfor -%}
             {%- else -%}
-            snapshotted_data.{{ strategy.unique_key }} as dbt_unique_key,
+            snapshotted_data.dbt_unique_key as dbt_unique_key,
             {% endif -%}
             {{ snapshot_get_time() }} as {{ columns.dbt_valid_from }},
             {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
