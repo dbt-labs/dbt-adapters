@@ -4,29 +4,29 @@ from dbt.tests.util import check_relations_equal, run_dbt
 
 _seed_new_record_mode = """
 create table {database}.{schema}.seed (
-	id INTEGER,
-	first_name VARCHAR(50),
-	last_name VARCHAR(50),
-	email VARCHAR(50),
-	gender VARCHAR(50),
-	ip_address VARCHAR(20),
-	updated_at TIMESTAMP WITHOUT TIME ZONE
+    id INTEGER,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(50),
+    gender VARCHAR(50),
+    ip_address VARCHAR(20),
+    updated_at TIMESTAMP WITHOUT TIME ZONE
 );
 
 create table {database}.{schema}.snapshot_expected (
-	id INTEGER,
-	first_name VARCHAR(50),
-	last_name VARCHAR(50),
-	email VARCHAR(50),
-	gender VARCHAR(50),
-	ip_address VARCHAR(20),
+    id INTEGER,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    email VARCHAR(50),
+    gender VARCHAR(50),
+    ip_address VARCHAR(20),
 
-	-- snapshotting fields
-	updated_at TIMESTAMP WITHOUT TIME ZONE,
-	dbt_valid_from TIMESTAMP WITHOUT TIME ZONE,
-	dbt_valid_to   TIMESTAMP WITHOUT TIME ZONE,
-	dbt_scd_id     TEXT,
-	dbt_updated_at TIMESTAMP WITHOUT TIME ZONE,
+    -- snapshotting fields
+    updated_at TIMESTAMP WITHOUT TIME ZONE,
+    dbt_valid_from TIMESTAMP WITHOUT TIME ZONE,
+    dbt_valid_to   TIMESTAMP WITHOUT TIME ZONE,
+    dbt_scd_id     TEXT,
+    dbt_updated_at TIMESTAMP WITHOUT TIME ZONE,
     dbt_is_deleted TEXT
 );
 
@@ -202,7 +202,9 @@ class SnapshotNewRecordMode:
     def delete_sql(self):
         return _delete_sql
 
-    def test_snapshot_new_record_mode(self, project, seed_new_record_mode, invalidate_sql, update_sql):
+    def test_snapshot_new_record_mode(
+        self, project, seed_new_record_mode, invalidate_sql, update_sql
+    ):
         project.run_sql(seed_new_record_mode)
         results = run_dbt(["snapshot"])
         assert len(results) == 1
