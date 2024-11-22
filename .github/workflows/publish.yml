@@ -1,7 +1,6 @@
 name: "Publish"
 
 on:
-    pull_request:
     workflow_dispatch:
         inputs:
             package:
@@ -13,19 +12,19 @@ on:
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment
-                default: "test"
+                default: "prod"
             branch:
                 description: "Choose the branch to publish from"
                 type: string
-                default: "monorepo/shared-workflows"
+                default: "main"
             pypi-internal:
                 description: "Publish Internally"
                 type: boolean
-                default: false
+                default: true
             pypi-public:
                 description: "Publish to PyPI"
                 type: boolean
-                default: true
+                default: false
 
 # don't attempt to release the same target in parallel
 concurrency:
