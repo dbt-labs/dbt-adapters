@@ -4,6 +4,7 @@ from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
 from datetime import datetime
 from enum import Enum
+from importlib import import_module
 from multiprocessing.context import SpawnContext
 from typing import (
     Any,
@@ -22,7 +23,6 @@ from typing import (
     Union,
     TYPE_CHECKING,
 )
-import os
 import pytz
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -61,12 +61,14 @@ from dbt.adapters.base.relation import (
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
+    AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
+
 from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
@@ -96,6 +98,13 @@ GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
 GET_RELATION_LAST_MODIFIED_MACRO_NAME = "get_relation_last_modified"
+DEFAULT_BASE_BEHAVIOR_FLAGS = [
+    {
+        "name": "require_batched_execution_for_custom_microbatch_strategy",
+        "default": False,
+        "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
+    }
+]
 
 
 class ConstraintSupport(str, Enum):
@@ -197,6 +206,14 @@ class FreshnessResponse(TypedDict):
     age: float  # age in seconds
 
 
+class SnapshotStrategy(TypedDict):
+    unique_key: Optional[str]
+    updated_at: Optional[str]
+    row_changed: Optional[str]
+    scd_id: Optional[str]
+    hard_deletes: Optional[str]
+
+
 class BaseAdapter(metaclass=AdapterMeta):
     """The BaseAdapter provides an abstract base class for adapters.
 
@@ -271,8 +288,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
-        # this will be updated to include global behavior flags once they exist
-        self.behavior = []  # type: ignore
+        self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
     ###
     # Methods to set / access a macro resolver
@@ -300,17 +316,20 @@ class BaseAdapter(metaclass=AdapterMeta):
     @behavior.setter  # type: ignore
     def behavior(self, flags: List[BehaviorFlag]) -> None:
         flags.extend(self._behavior_flags)
-        try:
-            # we don't always get project flags, for example during `dbt debug`
-            self._behavior = Behavior(flags, self.config.flags)
-        except AttributeError:
-            # in that case, don't load any behavior to avoid unexpected defaults
-            self._behavior = Behavior([], {})
+
+        # we don't always get project flags, for example, the project file is not loaded during `dbt debug`
+        # in that case, load the default values for behavior flags to avoid compilation errors
+        # this mimics not loading a project file, or not specifying flags in a project file
+        user_overrides = getattr(self.config, "flags", {})
+
+        self._behavior = Behavior(flags, user_overrides)
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         """
         This method should be overwritten by adapter maintainers to provide platform-specific flags
+
+        The BaseAdapter should NOT include any global flags here as those should be defined via DEFAULT_BASE_BEHAVIOR_FLAGS
         """
         return []
 
@@ -784,8 +803,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         columns = self.get_columns_in_relation(relation)
         names = set(c.name.lower() for c in columns)
         missing = []
-        # Note: we're not checking dbt_updated_at here because it's not
-        # always present.
+        # Note: we're not checking dbt_updated_at or dbt_is_deleted here because they
+        # aren't always present.
         for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
             desired = column_names[column] if column_names else column
             if desired not in names:
@@ -793,6 +812,28 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         if missing:
             raise SnapshotTargetNotSnapshotTableError(missing)
+
+    @available.parse_none
+    def assert_valid_snapshot_target_given_strategy(
+        self, relation: BaseRelation, column_names: Dict[str, str], strategy: SnapshotStrategy
+    ) -> None:
+        # Assert everything we can with the legacy function.
+        self.valid_snapshot_target(relation, column_names)
+
+        # Now do strategy-specific checks.
+        # TODO: Make these checks more comprehensive.
+        if strategy.get("hard_deletes", None) == "new_record":
+            columns = self.get_columns_in_relation(relation)
+            names = set(c.name.lower() for c in columns)
+            missing = []
+
+            for column in ("dbt_is_deleted",):
+                desired = column_names[column] if column_names else column
+                if desired not in names:
+                    missing.append(desired)
+
+            if missing:
+                raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
     def expand_target_column_types(
@@ -1569,14 +1610,31 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ["append"]
 
     def builtin_incremental_strategies(self):
+        """
+        List of possible builtin strategies for adapters
+
+        Microbatch is added by _default_. It is only not added when the behavior flag
+        `require_batched_execution_for_custom_microbatch_strategy` is True.
+        """
         builtin_strategies = ["append", "delete+insert", "merge", "insert_overwrite"]
-        if os.environ.get("DBT_EXPERIMENTAL_MICROBATCH"):
+        if not self.behavior.require_batched_execution_for_custom_microbatch_strategy.no_warn:
             builtin_strategies.append("microbatch")
 
         return builtin_strategies
 
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
+        """Gets the macro for the given incremental strategy.
+
+        Additionally some validations are done:
+        1. Assert that if the given strategy is a "builtin" strategy, then it must
+           also be defined as a "valid" strategy for the associated adapter
+        2. Assert that the incremental strategy exists in the model context
+
+        Notably, something be defined by the adapter as "valid" without it being
+        a "builtin", and nothing will break (and that is desirable).
+        """
+
         # Construct macro_name from strategy name
         if strategy is None:
             strategy = "default"
@@ -1742,6 +1800,53 @@ class BaseAdapter(metaclass=AdapterMeta):
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
+
+    @classmethod
+    def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
+        adapter_class_name, *_ = cls.__name__.split("Adapter")
+        adapter_name = adapter_class_name.lower()
+
+        if adapter_name == "base":
+            adapter_version = ""
+        else:
+            adapter_version = import_module(f"dbt.adapters.{adapter_name}.__version__").version
+
+        return AdapterTrackingRelationInfo(
+            adapter_name=adapter_name,
+            base_adapter_version=import_module("dbt.adapters.__about__").version,
+            adapter_version=adapter_version,
+            model_adapter_details=cls._get_adapter_specific_run_info(config),
+        )
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config) -> Dict[str, Any]:
+        """
+        Adapter maintainers should overwrite this method to return any run metadata that should be captured during a run.
+        """
+        return {}
+
+    @available.parse_none
+    @classmethod
+    def get_hard_deletes_behavior(cls, config):
+        """Check the hard_deletes config enum, and the legacy invalidate_hard_deletes
+        config flag in order to determine which behavior should be used for deleted
+        records in a snapshot. The default is to ignore them."""
+        invalidate_hard_deletes = config.get("invalidate_hard_deletes", None)
+        hard_deletes = config.get("hard_deletes", None)
+
+        if invalidate_hard_deletes is not None and hard_deletes is not None:
+            raise DbtValidationError(
+                "You cannot set both the invalidate_hard_deletes and hard_deletes config properties on the same snapshot."
+            )
+
+        if invalidate_hard_deletes or hard_deletes == "invalidate":
+            return "invalidate"
+        elif hard_deletes == "new_record":
+            return "new_record"
+        elif hard_deletes is None or hard_deletes == "ignore":
+            return "ignore"
+
+        raise DbtValidationError("Invalid setting for property hard_deletes.")
 
 
 COLUMNS_EQUAL_SQL = """

@@ -24,6 +24,6 @@ runs:
       shell: bash
 
     - name: Publish artifacts to PyPI
-      uses: pypa/gh-action-pypi-publish@release/v1
+      uses: pypa/gh-action-pypi-publish@release/v1.11
       with:
         repository-url: ${{ inputs.repository-url }}
