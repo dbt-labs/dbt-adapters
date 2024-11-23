@@ -39,6 +39,7 @@ jobs:
             branch: ${{ inputs.branch }}
 
     generate-changelog:
+        needs: unit-tests
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -48,7 +49,7 @@ jobs:
 
     publish-internal:
         if: ${{ inputs.pypi-internal == true }}
-        needs: [unit-tests, generate-changelog]
+        needs: generate-changelog
         uses: ./.github/workflows/_publish-internal.yml
         with:
             package: ${{ inputs.package }}
@@ -58,7 +59,7 @@ jobs:
 
     publish-pypi:
         if: ${{ inputs.pypi-public == true }}
-        needs: unit-tests
+        needs: generate-changelog
         uses: ./.github/workflows/_publish-pypi.yml
         with:
             package: ${{ inputs.package }}
