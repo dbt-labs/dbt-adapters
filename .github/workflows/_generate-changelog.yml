@@ -126,7 +126,7 @@ jobs:
                 ref: ${{ inputs.branch }}
         -   id: branch
             run: |
-                name="prep-release/${{ inputs.package }}/${{ inputs.deploy_to }}/${{ needs.version.outputs.raw }}_$GITHUB_RUN_ID"
+                name="prep-release/${{ inputs.package }}/$GITHUB_RUN_ID"
                 echo "name=$name" >> $GITHUB_OUTPUT
         -   run: |
               git checkout -b ${{ steps.branch.outputs.name }}
