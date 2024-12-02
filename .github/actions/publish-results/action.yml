@@ -5,7 +5,7 @@ inputs:
     description: File type for file name stub (e.g. "unit-tests")
     required: true
   python-version:
-    description: Python version for the file name stub (e.g. "3.8")
+    description: Python version for the file name stub (e.g. "3.9")
     required: true
   source-file:
     description: File to be uploaded
