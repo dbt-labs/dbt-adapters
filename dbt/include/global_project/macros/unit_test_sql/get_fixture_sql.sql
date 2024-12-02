@@ -19,7 +19,7 @@
 {%- endif -%}
 
 {%- for column_name, column_type in column_name_to_data_types.items() -%}
-    {%- do default_row.update({column_name: (render_unspecified_column_value(column_type) | trim )}) -%}
+    {%- do default_row.update({column_name: (render_column_type(column_type) | trim )}) -%}
 {%- endfor -%}
 
 {{ validate_fixture_rows(rows, row_number) }}
