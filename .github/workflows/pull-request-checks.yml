@@ -2,7 +2,7 @@ name: "Pull request checks"
 
 on:
     pull_request_target:
-        types: [opened, reopened, synchronize]
+        types: [opened, reopened, synchronize, labeled, unlabeled]
 
 # only run this once per PR at a time
 concurrency:
@@ -10,6 +10,11 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
+    changelog-entry:
+        uses: ./.github/workflows/_changelog-entry-check.yml
+        with:
+            issue: ${{ github.event.pull_request.number }}
+
     code-quality:
         uses: ./.github/workflows/_code-quality.yml
         with:
