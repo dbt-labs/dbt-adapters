@@ -7,6 +7,11 @@
 {% endmacro %}
 
 {% macro make_temp_relation(base_relation, suffix='__dbt_tmp') %}
+  {#-- This ensures microbatch batches get unique temp relations to avoid clobbering --#}
+  {% if suffix == '__dbt_tmp' and model.batch %}
+    {% set suffix = suffix ~ '_' ~ model.batch.id %}
+  {% endif %}
+
   {{ return(adapter.dispatch('make_temp_relation', 'dbt')(base_relation, suffix)) }}
 {% endmacro %}
 
