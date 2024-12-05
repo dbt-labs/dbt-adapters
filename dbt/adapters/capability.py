@@ -23,6 +23,9 @@ class Capability(str, Enum):
 
     CreateExternalCatalog = "CreateExternalCatalog"
 
+    MicrobatchConcurrency = "MicrobatchConcurrency"
+    """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"

@@ -13,4 +13,5 @@ from dbt.adapters.base.relation import (
     BaseRelation,
     RelationType,
     SchemaSearchMap,
+    AdapterTrackingRelationInfo,
 )
