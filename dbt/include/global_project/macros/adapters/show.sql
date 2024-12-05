@@ -19,7 +19,7 @@
 {%- endmacro -%}
 
 {% macro default__get_limit_sql(sql, limit) %}
-  {{ compiled_code }}
+  {{ sql }}
   {% if limit is not none %}
   limit {{ limit }}
   {%- endif -%}
