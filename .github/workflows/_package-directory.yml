@@ -7,6 +7,11 @@ on:
                 description: "Choose the package whose directory you need"
                 type: string
                 default: "dbt-adapters"
+        outputs:
+            directory:
+                description: "The root directory of the package"
+                type: string
+                value: ${{ jobs.package.outputs.directory }}
 
 jobs:
     package:
@@ -19,7 +24,7 @@ jobs:
             run: |
                 if [[ package == 'dbt-adapters' ]]
                 then
-                    directory=""
+                    directory="."
                 else
                     directory="${{ inputs.package }}"
                 fi

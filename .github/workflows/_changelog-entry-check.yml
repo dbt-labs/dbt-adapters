@@ -7,8 +7,8 @@ on:
                 description: "Choose the package to test"
                 type: string
                 default: "dbt-adapters"
-            issue:
-                description: "The issue/PR number"
+            pull-request:
+                description: "The PR number"
                 type: string
                 required: true
 
@@ -17,7 +17,13 @@ permissions:
     pull-requests: write
 
 jobs:
+    package:
+        uses: ./.github/workflows/_package-directory.yml
+        with:
+            package: ${{ inputs.package }}
+
     changelog-check:
+        needs: package
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'Skip Changelog') }}
         outputs:
             exists: ${{ steps.changelog.outputs.exists }}
@@ -29,26 +35,26 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: |
                     exists:
-                    -   added|modified: '${{ inputs.package }}/.changes/unreleased/**.yaml'
+                    -   added|modified: '${{ needs.package.outputs.directory }}/.changes/unreleased/**.yaml'
 
     comment:
         needs: changelog-check
         if: needs.changelog-check.outputs.exists == false
         runs-on: ubuntu-latest
         env:
+            AUTHOR: "github-actions[bot]"
             COMMENT: >-
-                Thank you for your pull request! We could not find a changelog entry for this change.
-                For details on how to document a change, see the
-                [Contributing Guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md).
+                Thank you for your pull request! We could not find a changelog entry for this change in the ${{ inputs.package }} package.
+                For details on how to document a change, see the [Contributing Guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md).
         steps:
         -   id: comment
             uses: peter-evans/find-comment@v3
             with:
-                issue-number: ${{ inputs.issue }}
-                comment-author: "github-actions[bot]"
+                issue-number: ${{ inputs.pull-request }}
+                comment-author: ${{ env.AUTHOR }}
                 body-includes: ${{ env.COMMENT }}
         -   if: steps.comment.outputs.comment-body == ''
-            run: gh issue comment ${{ inputs.issue }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
+            run: gh issue comment ${{ inputs.pull-request }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
             shell: bash
             env:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
