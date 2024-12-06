@@ -3,7 +3,7 @@
   {% set relations = [] %}
   {% set limit = config.get('limit') %}
 
-  {% set limited_sql %}
+  {% set main_sql %}
     {{ sql }}
     {{ "limit " ~ limit if limit != none }}
   {% endset %}
@@ -32,7 +32,7 @@
     {% endif %}
 
     {% call statement(auto_begin=True) %}
-        {{ get_create_sql(target_relation, limited_sql) }}
+        {{ get_create_sql(target_relation, main_sql) }}
     {% endcall %}
 
     {% do relations.append(target_relation) %}
@@ -46,7 +46,7 @@
 
   {% else %}
 
-      {% set main_sql = limited_sql %}
+      {% set main_sql = main_sql %}
 
   {% endif %}
 
