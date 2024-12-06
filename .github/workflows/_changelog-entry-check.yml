@@ -11,6 +11,16 @@ on:
                 description: "The PR number"
                 type: string
                 required: true
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to test"
+                type: string
+                default: "dbt-adapters"
+            pull-request:
+                description: "The PR number"
+                type: string
+                required: true
 
 permissions:
     contents: read
