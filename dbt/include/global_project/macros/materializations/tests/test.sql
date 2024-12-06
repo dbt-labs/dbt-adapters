@@ -37,13 +37,13 @@
 
     {% do relations.append(target_relation) %}
 
+    {{ adapter.commit() }}
+
     {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
     {% set main_sql %}
         select *
         from {{ target_relation }}
     {% endset %}
-
-    {{ adapter.commit() }}
 
   {% endif %}
 
