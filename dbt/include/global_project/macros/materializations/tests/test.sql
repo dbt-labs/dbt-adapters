@@ -1,6 +1,12 @@
 {%- materialization test, default -%}
 
   {% set relations = [] %}
+  {% set limit = config.get('limit') %}
+
+  {% set limited_sql %}
+    {{ sql }}
+    {{ "limit " ~ limit if limit != none }}
+  {% endset %}
 
   {% if should_store_failures() %}
 
@@ -26,7 +32,7 @@
     {% endif %}
 
     {% call statement(auto_begin=True) %}
-        {{ get_create_sql(target_relation, sql) }}
+        {{ get_create_sql(target_relation, limited_sql) }}
     {% endcall %}
 
     {% do relations.append(target_relation) %}
@@ -40,18 +46,18 @@
 
   {% else %}
 
-      {% set main_sql = sql %}
+      {% set main_sql = limited_sql %}
 
   {% endif %}
 
-  {% set limit = config.get('limit') %}
   {% set fail_calc = config.get('fail_calc') %}
   {% set warn_if = config.get('warn_if') %}
   {% set error_if = config.get('error_if') %}
 
   {% call statement('main', fetch_result=True) -%}
 
-    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit)}}
+    {# Since the limit has already been applied above, no need to apply it again! #}
+    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
 
   {%- endcall %}
 
