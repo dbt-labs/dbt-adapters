@@ -44,10 +44,6 @@
 
     {{ adapter.commit() }}
 
-  {% else %}
-
-      {% set main_sql = main_sql %}
-
   {% endif %}
 
   {% set fail_calc = config.get('fail_calc') %}
