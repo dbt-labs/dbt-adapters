@@ -10,7 +10,6 @@ from dbt_common.contracts.util import Replaceable
 from dbt_common.dataclass_schema import StrEnum, dbtClassMixin
 from dbt_common.exceptions import CompilationError, DataclassNotDictError
 from dbt_common.utils import deep_merge
-from dbt_config.catalog_config import ExternalCatalog
 from typing_extensions import Protocol
 
 

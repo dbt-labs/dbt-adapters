@@ -21,8 +21,6 @@ class Capability(str, Enum):
     """Indicates support for getting catalog information including table-level and column-level metadata for a single
     relation."""
 
-    CreateExternalCatalog = "CreateExternalCatalog"
-
     MicrobatchConcurrency = "MicrobatchConcurrency"
     """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
 
