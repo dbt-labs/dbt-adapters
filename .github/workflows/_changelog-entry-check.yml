@@ -37,7 +37,7 @@ jobs:
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'Skip Changelog') }}
         outputs:
             exists: ${{ steps.changelog.outputs.exists }}
-        runs-on: ubuntu-latest
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   id: changelog
             uses: dorny/paths-filter@v3
@@ -50,7 +50,7 @@ jobs:
     comment:
         needs: changelog-check
         if: needs.changelog-check.outputs.exists == false
-        runs-on: ubuntu-latest
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
         env:
             AUTHOR: "github-actions[bot]"
             COMMENT: >-
