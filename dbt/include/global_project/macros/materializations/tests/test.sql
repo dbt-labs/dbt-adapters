@@ -1,6 +1,10 @@
 {%- materialization test, default -%}
 
   {% set relations = [] %}
+
+  {% set fail_calc = config.get('fail_calc') %}
+  {% set warn_if = config.get('warn_if') %}
+  {% set error_if = config.get('error_if') %}
   {% set limit = config.get('limit') %}
 
   {% set main_sql %}
@@ -45,10 +49,6 @@
     {% endset %}
 
   {% endif %}
-
-  {% set fail_calc = config.get('fail_calc') %}
-  {% set warn_if = config.get('warn_if') %}
-  {% set error_if = config.get('error_if') %}
 
   {% call statement('main', fetch_result=True) -%}
 
