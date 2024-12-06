@@ -28,6 +28,7 @@ from dbt_common.utils import md5
 from mashumaro.jsonschema.annotations import Pattern
 from typing_extensions import Protocol, Annotated
 
+from dbt.adapters.contracts.catalog_integration import CatalogIntegration
 from dbt.adapters.events.types import NewConnectionOpening
 from dbt.adapters.utils import translate_aliases
 
@@ -227,3 +228,4 @@ class AdapterRequiredConfig(HasCredentials, Protocol):
     cli_vars: Dict[str, Any]
     target_path: str
     log_cache_events: bool
+    catalog_integrations: Optional[List[CatalogIntegration]]
