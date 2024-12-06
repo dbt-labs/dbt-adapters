@@ -20,6 +20,7 @@ from dbt_common.dataclass_schema import (
     dbtClassMixin,
 )
 
+
 # TODO: this is a very bad dependency - shared global state
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -28,6 +29,7 @@ from dbt_common.utils import md5
 from mashumaro.jsonschema.annotations import Pattern
 from typing_extensions import Protocol, Annotated
 
+from dbt.adapters.contracts.catalog import CatalogIntegrations
 from dbt.adapters.events.types import NewConnectionOpening
 from dbt.adapters.utils import translate_aliases
 
@@ -227,3 +229,4 @@ class AdapterRequiredConfig(HasCredentials, Protocol):
     cli_vars: Dict[str, Any]
     target_path: str
     log_cache_events: bool
+    catalog_integrations: Optional[CatalogIntegrations]
