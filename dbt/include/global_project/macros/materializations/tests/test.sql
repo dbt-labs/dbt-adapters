@@ -14,6 +14,36 @@
 
   {% if should_store_failures() %}
 
+    {% set target_relation = store_failures(main_sql) %}
+
+    {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
+    {% set main_sql %}
+        select *
+        from {{ target_relation }}
+    {% endset %}
+
+  {% endif %}
+
+  {% call statement('main', fetch_result=True) -%}
+
+    {# Since the limit has already been applied above, no need to apply it again! #}
+    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
+
+  {%- endcall %}
+
+  {{ return({'relations': relations}) }}
+
+{%- endmaterialization -%}
+
+
+{# TODO: move this to helpers.sql #}
+
+{% macro store_failures(main_sql) -%}
+  {{ adapter.dispatch('store_failures', 'dbt')(main_sql) }}
+{%- endmacro %}
+
+{% macro default__store_failures(main_sql) -%}
+
     {% set identifier = model['alias'] %}
     {% set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) %}
 
@@ -38,25 +68,8 @@
         {{ get_create_sql(target_relation, main_sql) }}
     {% endcall %}
 
-    {% do relations.append(target_relation) %}
-
     {{ adapter.commit() }}
 
-    {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
-    {% set main_sql %}
-        select *
-        from {{ target_relation }}
-    {% endset %}
+  {{ return(target_relation) }}
 
-  {% endif %}
-
-  {% call statement('main', fetch_result=True) -%}
-
-    {# Since the limit has already been applied above, no need to apply it again! #}
-    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
-
-  {%- endcall %}
-
-  {{ return({'relations': relations}) }}
-
-{%- endmaterialization -%}
+{%- endmacro %}
