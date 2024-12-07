@@ -1,6 +1,7 @@
 name: "Changelog entry check"
 
 on:
+    pull_request:
     workflow_call:
         inputs:
             package:

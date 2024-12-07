@@ -1,6 +1,7 @@
 name: "Verify build"
 
 on:
+    pull_request:
     workflow_call:
         inputs:
             package:
