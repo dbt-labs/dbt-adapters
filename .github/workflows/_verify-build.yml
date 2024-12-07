@@ -48,10 +48,6 @@ on:
 
 permissions: read-all
 
-defaults:
-    run:
-        shell: bash
-
 jobs:
     package:
         uses: ./.github/workflows/_package-directory.yml
@@ -65,9 +61,11 @@ jobs:
         -   uses: actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch build && hatch run build:check-all
+            shell: bash
             working-directory: ./${{ needs.package.outputs.directory }}
