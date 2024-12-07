@@ -11,9 +11,6 @@ on:
             directory:
                 description: "The root directory of the package"
                 value: ${{ jobs.package.outputs.directory }}
-            version-file:
-                description: "The path to the version file of the package"
-                value: ${{ jobs.package.outputs.version-file }}
 
 defaults:
     run:
@@ -24,17 +21,13 @@ jobs:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
             directory: ${{ steps.package.outputs.directory }}
-            version-file: ${{ steps.package.outputs.version-file }}
         steps:
         -   id: package
             run: |
                 if [[ ${{ inputs.package }} == "dbt-adapters" ]]
                 then
                     directory=""
-                    version_file="./dbt/adapters/__about__.py"
                 else
                     directory="${{ inputs.package }}/"
-                    version_file="./src/dbt/adapters/$(cut -c 5- ${{ inputs.package }})/__version__.py"
                 fi
                 echo "directory=$directory" >> $GITHUB_OUTPUT
-                echo "version-file=version_file" >> $GITHUB_OUTPUT
