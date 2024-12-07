@@ -1,7 +1,6 @@
 name: "Unit tests"
 
 on:
-    pull_request:
     workflow_call:
         inputs:
             package:
