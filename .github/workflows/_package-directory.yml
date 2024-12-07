@@ -13,6 +13,10 @@ on:
                 description: "The root directory of the package"
                 value: ${{ jobs.package.outputs.directory }}
 
+defaults:
+    run:
+        shell: bash
+
 jobs:
     package:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -20,12 +24,15 @@ jobs:
             directory: ${{ steps.package.outputs.directory }}
         steps:
         -   id: package
-            shell: bash
             run: |
-                if [ package == 'dbt-adapters' ]
+                if [[ package == "dbt-adapters" ]]
                 then
                     directory="."
                 else
                     directory="${{ inputs.package }}"
                 fi
                 echo "directory=$directory" >> $GITHUB_OUTPUT
+        -   run: echo "::notice title=$TITLE::$MESSAGE"
+            env:
+                TITLE: "Package directory"
+                MESSAGE: "${{ steps.pacakge.outputs.directory }}"
