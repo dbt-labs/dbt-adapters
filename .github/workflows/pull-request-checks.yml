@@ -2,6 +2,7 @@ name: "Pull request checks"
 run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
+    pull_request:
     pull_request_target:
         types: [opened, reopened, synchronize, labeled, unlabeled]
 
