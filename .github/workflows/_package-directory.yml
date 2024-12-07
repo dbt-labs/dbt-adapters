@@ -22,7 +22,7 @@ jobs:
         -   id: package
             shell: bash
             run: |
-                if [[ package == 'dbt-adapters' ]]
+                if [ package == 'dbt-adapters' ]
                 then
                     directory="."
                 else
