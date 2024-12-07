@@ -1,4 +1,5 @@
 name: "Pull request checks"
+run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
     pull_request_target:

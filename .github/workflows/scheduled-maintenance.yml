@@ -3,13 +3,13 @@ name: "Scheduled maintenance"
 on:
     schedule:
     -   cron: "30 1 * * SAT"
-    workflow_dispatch:
 
 permissions:
     contents: write
 
+# don't run this in parallel
 concurrency:
-    group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.sha }}
+    group: ${{ github.workflow }}
     cancel-in-progress: true
 
 jobs:

@@ -1,4 +1,5 @@
 name: "Publish"
+run-name: "Publish - ${{ inputs.package }} - ${{ inputs.deploy-to }} - ${{ github.actor }}"
 
 on:
     workflow_dispatch:
@@ -26,7 +27,7 @@ on:
                 type: boolean
                 default: false
 
-# don't attempt to release the same target in parallel
+# don't publish to the same target in parallel
 concurrency:
     group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
