@@ -1,7 +1,6 @@
 name: "Publish internally"
 
 on:
-    pull_request:
     workflow_call:
         inputs:
             package:
@@ -82,7 +81,7 @@ jobs:
                 versions_published: ${{ steps.published.outputs.versions }}
         -   run: |
                 VERSION=${{ steps.next.outputs.internal_release_version }}+$(git rev-parse HEAD)
-                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/athena/__version__.py
+                tee <<< "version = \"$VERSION\"" ${{ needs.package.outputs.version-file }}
             working-directory: ./${{ needs.package.outputs.directory }}
         -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
             working-directory: ./${{ needs.package.outputs.directory }}

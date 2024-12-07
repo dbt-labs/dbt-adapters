@@ -1,7 +1,6 @@
 name: "Publish to PyPI"
 
 on:
-    pull_request:
     workflow_call:
         inputs:
             package:
@@ -69,7 +68,7 @@ jobs:
         -   uses: pypa/gh-action-pypi-publish@release/v1
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-                packages-dir: ${{ inputs.package }}/dist/
+                packages-dir: ./${{ needs.package.outputs.directory }}dist/
 
     verify:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
