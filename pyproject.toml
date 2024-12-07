@@ -64,8 +64,6 @@ dependencies = [
 setup = "pre-commit install"
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
-
-test-changelog-entry-check = "gh workflow run _changelog-entry-check.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f pull-request={args}"
 test-publish = "gh workflow run publish.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD) -f deploy-to=test -f pypi-internal=false -f pypi-public=true"
 
 [tool.hatch.envs.build]

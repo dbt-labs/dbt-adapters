@@ -1,18 +1,9 @@
 name: "Changelog entry check"
 
+# this cannot be tested via workflow_dispatch
+# dorny/paths-filter inspects the current trigger to determine how to compare branches
 on:
-    pull_request:
     workflow_call:
-        inputs:
-            package:
-                description: "Choose the package to test"
-                type: string
-                default: "dbt-adapters"
-            pull-request:
-                description: "The PR number"
-                type: string
-                required: true
-    workflow_dispatch:
         inputs:
             package:
                 description: "Choose the package to test"
