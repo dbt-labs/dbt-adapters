@@ -43,7 +43,7 @@ jobs:
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
-            deploy-to: ${{ inputs.deploy-to }}
+            merge: ${{ inputs.deploy-to == 'prod' }}
             branch: ${{ inputs.branch }}
         secrets: inherit
 

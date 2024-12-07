@@ -7,10 +7,10 @@ on:
                 description: "Choose the package getting published"
                 type: string
                 default: "dbt-adapters"
-            deploy-to:
-                description: "Choose whether we're publishing to test or prod"
-                type: string
-                default: "prod"
+            merge:
+                description: "Choose whether to merge the changelog branch"
+                type: boolean
+                default: true
             branch:
                 description: "Choose the branch to use"
                 type: string
@@ -32,10 +32,10 @@ on:
                 description: "Choose the package getting published"
                 type: string
                 default: "dbt-adapters"
-            deploy-to:
-                description: "Choose whether we're publishing to test or prod"
-                type: environment
-                default: "prod"
+            merge:
+                description: "Choose whether to merge the changelog branch"
+                type: boolean
+                default: false
             branch:
                 description: "Choose the branch to use"
                 type: string
@@ -86,8 +86,8 @@ jobs:
                 version: ${{ steps.version.outputs.raw }}
 
     changelog:
-        runs-on: ${{ vars.DEFAULT_RUNNER }}
         needs: [package, version]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
             path: ${{ steps.changelog.outputs.path }}
             exists: ${{ steps.changelog.outputs.exists }}
@@ -194,9 +194,9 @@ jobs:
             working-directory: ./${{ needs.package.outputs.directory }}
 
     merge-changes:
-        runs-on: ${{ vars.DEFAULT_RUNNER }}
         needs: [temp-branch, generate-changelog]
-        if: ${{ needs.temp-branch.outputs.name != '' && inputs.deploy-to == 'prod' }}
+        if: ${{ needs.temp-branch.outputs.name != '' && inputs.merge }}
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: everlytic/branch-merge@1.1.5
             with:
@@ -220,7 +220,7 @@ jobs:
         -   id: branch
             run: |
                 branch=""
-                if [ ${{ needs.temp-branch.outputs.name == '' || inputs.deploy-to == 'prod' }}]
+                if [ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }}]
                 then
                     branch="${{ inputs.branch }}"
                 else
