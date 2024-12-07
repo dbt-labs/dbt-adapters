@@ -28,7 +28,9 @@ on:
             package:
                 description: "Choose the package to build"
                 type: choice
-                options: ["dbt-adapters", "dbt-tests-adapter"]
+                options:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
             branch:
                 description: "Choose the branch to build"
                 type: string
