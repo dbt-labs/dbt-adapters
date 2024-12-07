@@ -25,7 +25,7 @@ jobs:
         steps:
         -   id: package
             run: |
-                if [[ package == "dbt-adapters" ]]
+                if [[ ${{ inputs.package }} == "dbt-adapters" ]]
                 then
                     directory="."
                 else
