@@ -27,12 +27,13 @@ jobs:
             run: |
                 if [[ ${{ inputs.package }} == "dbt-adapters" ]]
                 then
-                    directory="."
+                    directory=""
                 else
-                    directory="${{ inputs.package }}"
+                    directory="${{ inputs.package }}/"
                 fi
                 echo "directory=$directory" >> $GITHUB_OUTPUT
-        -   run: echo "::notice title=$TITLE::$MESSAGE"
+        -   run: |
+                echo "::notice $TITLE::$MESSAGE"
             env:
                 TITLE: "Package directory"
                 MESSAGE: "${{ steps.pacakge.outputs.directory }}"

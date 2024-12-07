@@ -46,7 +46,7 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: |
                     exists:
-                    -   added|modified: '${{ needs.package.outputs.directory }}/.changes/unreleased/**.yaml'
+                    -   added|modified: '${{ needs.package.outputs.directory }}.changes/unreleased/**.yaml'
 
     comment:
         needs: changelog-check
