@@ -64,6 +64,12 @@ dependencies = [
 setup = "pre-commit install"
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
+workflow-code-quality = "gh workflow run _code-quality.yml --ref $(git rev-parse --abbrev-ref HEAD) -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-generate-changelog = "gh workflow run _generate-changelog.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f merge=false -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-publish-pypi = "gh workflow run _publish-pypi.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f deploy-to=test -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-unit-tests = "gh workflow run _unit-tests.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-verify-build = "gh workflow run _verify-build.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-publish = "gh workflow run publish.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD) -f deploy-to=test -f pypi-internal=false -f pypi-public=true"
 
 [tool.hatch.envs.build]
 detached = true

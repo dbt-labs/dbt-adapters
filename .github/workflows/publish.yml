@@ -1,0 +1,68 @@
+name: "Publish"
+run-name: "Publish - ${{ inputs.package }} - ${{ inputs.deploy-to }} - ${{ github.actor }}"
+
+on:
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+            deploy-to:
+                description: "Choose whether to publish to test or prod"
+                type: environment
+                default: "prod"
+            branch:
+                description: "Choose the branch to publish from"
+                type: string
+                default: "main"
+            pypi-internal:
+                description: "Publish Internally"
+                type: boolean
+                default: true
+            pypi-public:
+                description: "Publish to PyPI"
+                type: boolean
+                default: false
+
+# don't publish to the same target in parallel
+concurrency:
+    group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+    cancel-in-progress: true
+
+jobs:
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+
+    generate-changelog:
+        needs: unit-tests
+        uses: ./.github/workflows/_generate-changelog.yml
+        with:
+            package: ${{ inputs.package }}
+            merge: ${{ inputs.deploy-to == 'prod' }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    publish-internal:
+        if: ${{ inputs.pypi-internal == true }}
+        needs: generate-changelog
+        uses: ./.github/workflows/_publish-internal.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ needs.generate-changelog.outputs.branch-name }}
+        secrets: inherit
+
+    publish-pypi:
+        if: ${{ inputs.pypi-public == true }}
+        needs: generate-changelog
+        uses: ./.github/workflows/_publish-pypi.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ needs.generate-changelog.outputs.branch-name }}
