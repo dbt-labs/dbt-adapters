@@ -1,7 +1,6 @@
 name: "Code quality"
 
 on:
-    pull_request:
     workflow_call:
         inputs:
             branch:
