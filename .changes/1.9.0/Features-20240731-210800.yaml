@@ -1,6 +1,0 @@
-kind: Features
-body: Add support for Python 3.12
-time: 2024-07-31T21:08:00.170999-04:00
-custom:
-  Author: mikealfare
-  Issue: "17"

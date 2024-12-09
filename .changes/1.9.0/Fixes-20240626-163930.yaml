@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix `persist_docs` for `materialized_view` materializations. Previously, using this configuration with materialized view models would lead to an error.
-time: 2024-06-26T16:39:30.455995+02:00
-custom:
-    Author: morsapaes
-    Issue: "120"

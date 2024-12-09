@@ -1,6 +1,0 @@
-kind: Features
-body: 'Microbatch incremental strategy implementation: merge'
-time: 2024-09-11T14:14:16.538536-04:00
-custom:
-  Author: michelleark
-  Issue: "149"
