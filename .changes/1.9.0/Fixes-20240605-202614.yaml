@@ -1,7 +1,0 @@
-kind: Fixes
-body: Default to psycopg2-binary and allow overriding to psycopg2 via DBT_PSYCOPG2_NAME
-  (restores previous behavior)
-time: 2024-06-05T20:26:14.801254-04:00
-custom:
-  Author: mikealfare
-  Issue: "96"
