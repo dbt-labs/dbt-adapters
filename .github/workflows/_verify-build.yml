@@ -1,0 +1,73 @@
+name: "Verify build"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to build"
+                type: string
+                default: "dbt-adapters"
+            branch:
+                description: "Choose the branch to build"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to build, (used primarily when testing a fork)"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: "ubuntu-22.04"
+            python-version:
+                description: "Choose the Python version to test against"
+                type: string
+                default: "3.9"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to build"
+                type: choice
+                options:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+            branch:
+                description: "Choose the branch to build"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to build, (used primarily when testing a fork)"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: "ubuntu-22.04"
+            python-version:
+                description: "Choose the Python version to test against"
+                type: choice
+                options: ["3.9", "3.10", "3.11", "3.12"]
+
+permissions: read-all
+
+jobs:
+    package:
+        uses: ./.github/workflows/_package-directory.yml
+        with:
+            package: ${{ inputs.package }}
+
+    build:
+        needs: package
+        runs-on: ${{ inputs.os }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch build && hatch run build:check-all
+            shell: bash
+            working-directory: ./${{ needs.package.outputs.directory }}
