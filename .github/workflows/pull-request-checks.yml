@@ -1,0 +1,58 @@
+name: "Pull request checks"
+run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
+
+on:
+    pull_request_target:
+        types: [opened, reopened, synchronize, labeled, unlabeled]
+
+# only run this once per PR at a time
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.number }}
+    cancel-in-progress: true
+
+jobs:
+    changelog-entry:
+        uses: ./.github/workflows/_changelog-entry-check.yml
+        with:
+            pull-request: ${{ github.event.pull_request.number }}
+
+    code-quality:
+        uses: ./.github/workflows/_code-quality.yml
+        with:
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+    verify-builds:
+        uses: ./.github/workflows/_verify-build.yml
+        strategy:
+            matrix:
+                package: ["dbt-adapters", "dbt-tests-adapter"]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            python-version: ${{ matrix.python-version }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        strategy:
+            matrix:
+                package: ["dbt-adapters"]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+    # This job does nothing and is only used for branch protection
+    results:
+        name: "Pull request checks"  # keep this name, branch protection references it
+        if: always()
+        needs: [changelog-entry, code-quality, verify-builds, unit-tests]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: re-actors/alls-green@release/v1
+            with:
+                jobs: ${{ toJSON(needs) }}
+                allowed-skips: 'changelog-entry'
