@@ -1,0 +1,41 @@
+name: "Scheduled maintenance"
+
+on:
+    schedule:
+    -   cron: "30 1 * * SAT"
+
+permissions:
+    contents: write
+
+# don't run this in parallel
+concurrency:
+    group: ${{ github.workflow }}
+    cancel-in-progress: true
+
+jobs:
+    pre-commit-autoupdate:
+        uses: dbt-labs/actions/.github/workflows/pre-commit-autoupdate.yml
+        secrets:
+            TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
+            SLACK_WEBHOOK_PR_URL: ${{ secrets.SLACK_DEV_ADAPTER_PULL_REQUESTS }}
+            SLACK_WEBHOOK_ALERTS_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
+
+    stale:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        strategy:
+            matrix:
+                include:
+                -   threshold: 90
+                    labels: 'triage:awaiting-response,triage:more-information-needed'
+                -   threshold: 360
+                    labels: 'misc:good-first-issue,misc:help-wanted,type:tech-debt'
+        steps:
+        -   uses: actions/stale@v9
+            with:
+                stale-issue-message: "This issue has been marked as Stale because it has been open for 180 days with no activity. If you would like the issue to remain open, please comment on the issue or else it will be closed in 7 days."
+                stale-pr-message: "This PR has been marked as Stale because it has been open with no activity as of late. If you would like the PR to remain open, please comment on the PR or else it will be closed in 7 days."
+                close-issue-message: "Although we are closing this issue as stale, it's not gone forever. Issues can be reopened if there is renewed community interest. Just add a comment to notify the maintainers."
+                close-pr-message: "Although we are closing this PR as stale, it can still be reopened to continue development. Just add a comment to notify the maintainers."
+                close-issue-reason: "not_planned"
+                days-before-stale: ${{ matrix.threshold }}
+                any-of-labels: ${{ matrix.labels }}
