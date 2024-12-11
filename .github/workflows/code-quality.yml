@@ -40,7 +40,8 @@ jobs:
       - name: Update Adapters and Core branches
         if: ${{ contains(github.event_name, 'workflow_') }}
         shell: bash
-        run: ./.github/scripts/update_dev_packages.sh ${{ inputs.dbt_adapters_branch }} "main"
+        run: scripts/update_dev_packages.sh ${{ inputs.dbt_adapters_branch }} "main"
+        working-directory: ./dbt-postgres
 
       - name: Setup `hatch`
         uses: dbt-labs/dbt-adapters/.github/actions/setup-hatch@main
@@ -48,3 +49,4 @@ jobs:
       - name: Run code quality
         shell: bash
         run: hatch run code-quality
+        working-directory: ./dbt-postgres

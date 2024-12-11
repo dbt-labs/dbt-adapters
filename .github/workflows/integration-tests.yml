@@ -111,14 +111,16 @@ jobs:
       - name: Update Adapters and Core branches
         if: ${{ github.event_name == 'workflow_call' || github.event_name == 'workflow_dispatch'}}
         run: |
-          ./.github/scripts/update_dev_dependency_branches.sh \
+          scripts/update_dev_dependency_branches.sh \
             ${{ inputs.dbt_adapters_branch }} \
             ${{ inputs.dbt_core_branch }} \
             ${{ inputs.dbt_common_branch }}
           cat pyproject.toml
+        working-directory: ./dbt-postgres
 
       - name: Setup postgres
         run: psql -f ./scripts/setup_test_database.sql
+        working-directory: ./dbt-postgres
         env:
           PGHOST: localhost
           PGPORT: 5432
@@ -133,6 +135,7 @@ jobs:
 
       - name: Run integration tests
         run: hatch run integration-tests
+        working-directory: ./dbt-postgres
         env:
           POSTGRES_TEST_HOST: localhost
           POSTGRES_TEST_PORT: 5432
@@ -164,25 +167,29 @@ jobs:
           brew install postgresql
 
       - name: "Test psycopg2 name - default"
-        run: .github/scripts/psycopg2-check.sh
+        run: scripts/psycopg2-check.sh
+        working-directory: ./dbt-postgres
         env:
           PSYCOPG2_EXPECTED_NAME: psycopg2-binary
 
       - name: "Test psycopg2 name - invalid override"
-        run: .github/scripts/psycopg2-check.sh
+        run: scripts/psycopg2-check.sh
+        working-directory: ./dbt-postgres
         env:
           DBT_PSYCOPG2_NAME: rubber-baby-buggy-bumpers
           PSYCOPG2_EXPECTED_NAME: psycopg2-binary
 
       - name: "Test psycopg2 name - override"
-        run: .github/scripts/psycopg2-check.sh
+        run: scripts/psycopg2-check.sh
+        working-directory: ./dbt-postgres
         env:
           DBT_PSYCOPG2_NAME: psycopg2
           PSYCOPG2_EXPECTED_NAME: psycopg2-binary  # we have not implemented the hook yet, so this doesn't work
 
       - name: "Test psycopg2 name - manual override"
         # verify that the workaround documented in the `README.md` continues to work
-        run: .github/scripts/psycopg2-check.sh
+        run: scripts/psycopg2-check.sh
+        working-directory: ./dbt-postgres
         env:
           PSYCOPG2_WORKAROUND: true
           PSYCOPG2_EXPECTED_NAME: psycopg2
