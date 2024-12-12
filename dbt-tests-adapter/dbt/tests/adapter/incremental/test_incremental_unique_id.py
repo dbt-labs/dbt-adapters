@@ -444,7 +444,7 @@ class BaseIncrementalUniqueKey:
     def test__no_unique_keys(self, project):
         """with no unique keys, seed and model should match"""
 
-        expected_fields = self.get_expected_fields(relation="seed", seed_rows=8)
+        expected_fields = self.get_expected_fields(relation="seed", seed_rows=9)
         test_case_fields = self.get_test_fields(
             project, seed="seed", incremental_model="no_unique_key", update_sql_file="add_new_rows"
         )
@@ -454,7 +454,7 @@ class BaseIncrementalUniqueKey:
     def test__empty_str_unique_key(self, project):
         """with empty string for unique key, seed and model should match"""
 
-        expected_fields = self.get_expected_fields(relation="seed", seed_rows=8)
+        expected_fields = self.get_expected_fields(relation="seed", seed_rows=9)
         test_case_fields = self.get_test_fields(
             project,
             seed="seed",
@@ -467,7 +467,7 @@ class BaseIncrementalUniqueKey:
         """with one unique key, model will overwrite existing row"""
 
         expected_fields = self.get_expected_fields(
-            relation="one_str__overwrite", seed_rows=7, opt_model_count=1
+            relation="one_str__overwrite", seed_rows=8, opt_model_count=1
         )
         test_case_fields = self.get_test_fields(
             project,
@@ -492,7 +492,7 @@ class BaseIncrementalUniqueKey:
     def test__empty_unique_key_list(self, project):
         """with no unique keys, seed and model should match"""
 
-        expected_fields = self.get_expected_fields(relation="seed", seed_rows=8)
+        expected_fields = self.get_expected_fields(relation="seed", seed_rows=9)
         test_case_fields = self.get_test_fields(
             project,
             seed="seed",
@@ -505,7 +505,7 @@ class BaseIncrementalUniqueKey:
         """with one unique key, model will overwrite existing row"""
 
         expected_fields = self.get_expected_fields(
-            relation="unique_key_list__inplace_overwrite", seed_rows=7, opt_model_count=1
+            relation="unique_key_list__inplace_overwrite", seed_rows=8, opt_model_count=1
         )
         test_case_fields = self.get_test_fields(
             project,
@@ -520,7 +520,7 @@ class BaseIncrementalUniqueKey:
         """with two of the same unique key, model will overwrite existing row"""
 
         expected_fields = self.get_expected_fields(
-            relation="unique_key_list__inplace_overwrite", seed_rows=7, opt_model_count=1
+            relation="unique_key_list__inplace_overwrite", seed_rows=8, opt_model_count=1
         )
         test_case_fields = self.get_test_fields(
             project,
@@ -535,7 +535,7 @@ class BaseIncrementalUniqueKey:
         """with three unique keys, model will overwrite existing row"""
 
         expected_fields = self.get_expected_fields(
-            relation="unique_key_list__inplace_overwrite", seed_rows=7, opt_model_count=1
+            relation="unique_key_list__inplace_overwrite", seed_rows=8, opt_model_count=1
         )
         test_case_fields = self.get_test_fields(
             project,
@@ -550,7 +550,7 @@ class BaseIncrementalUniqueKey:
         """even with three unique keys, adding distinct rows to seed does not
         cause seed and model to diverge"""
 
-        expected_fields = self.get_expected_fields(relation="seed", seed_rows=8)
+        expected_fields = self.get_expected_fields(relation="seed", seed_rows=9)
         test_case_fields = self.get_test_fields(
             project,
             seed="seed",
