@@ -77,7 +77,6 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         self.thread_connections: Dict[Hashable, Connection] = {}
         self.lock: RLock = mp_context.RLock()
         self.query_header: Optional[MacroQueryStringSetter] = None
-        self.catalog_integrations = catalog_integrations or []
 
     def set_query_header(self, query_header_context: Dict[str, Any]) -> None:
         self.query_header = MacroQueryStringSetter(self.profile, query_header_context)

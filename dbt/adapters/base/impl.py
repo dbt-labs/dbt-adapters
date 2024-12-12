@@ -65,6 +65,7 @@ from dbt.adapters.base.relation import (
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.contracts.catalog_integration import CatalogIntegration
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
@@ -288,6 +289,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.connections = self.ConnectionManager(config, mp_context)
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
+        self._catalog_integrations: Dict[str, CatalogIntegration] = {}
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
     ###
@@ -308,6 +310,15 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_context_generator: MacroContextGeneratorCallable,
     ) -> None:
         self._macro_context_generator = macro_context_generator
+    
+    ###
+    # Methods to set / access catalog integrations
+    ###
+    def set_catalog_integration(self, catalog_name: str, catalog_integration: CatalogIntegration):
+        self._catalog_integrations[catalog_name] = catalog_integration
+    
+    def get_catalog_integration(self, catalog_name: str) -> Optional[CatalogIntegration]:
+        return self._catalog_integrations.get(catalog_name)
 
     @available_property
     def behavior(self) -> Behavior:
