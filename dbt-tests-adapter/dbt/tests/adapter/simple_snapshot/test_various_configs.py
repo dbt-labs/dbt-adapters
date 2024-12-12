@@ -62,7 +62,6 @@ class BaseSnapshotColumnNames:
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
-        # run_dbt(["test"])
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
 
@@ -112,7 +111,6 @@ class BaseSnapshotColumnNamesFromDbtProject:
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
-        # run_dbt(["test"])
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
 
@@ -269,7 +267,6 @@ class BaseSnapshotMultiUniqueKey:
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
-        # run_dbt(["test"])
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
 
