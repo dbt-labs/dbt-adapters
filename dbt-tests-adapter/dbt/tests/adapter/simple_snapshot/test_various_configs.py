@@ -65,10 +65,6 @@ class BaseSnapshotColumnNames:
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
 
-class TestSnapshotColumnNames(BaseSnapshotColumnNames):
-    pass
-
-
 class BaseSnapshotColumnNamesFromDbtProject:
     @pytest.fixture(scope="class")
     def snapshots(self):
@@ -112,10 +108,6 @@ class BaseSnapshotColumnNamesFromDbtProject:
         assert len(results) == 1
 
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
-
-
-class TestSnapshotColumnNamesFromDbtProject(BaseSnapshotColumnNamesFromDbtProject):
-    pass
 
 
 class BaseSnapshotInvalidColumnNames:
@@ -184,10 +176,6 @@ class BaseSnapshotInvalidColumnNames:
         assert "Snapshot target is missing configured columns" in log_output
 
 
-class TestSnapshotInvalidColumnNames(BaseSnapshotInvalidColumnNames):
-    pass
-
-
 class BaseSnapshotDbtValidToCurrent:
     @pytest.fixture(scope="class")
     def snapshots(self):
@@ -237,10 +225,6 @@ class BaseSnapshotDbtValidToCurrent:
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
 
 
-class TestSnapshotDbtValidToCurrent(BaseSnapshotDbtValidToCurrent):
-    pass
-
-
 # This uses snapshot_meta_column_names, yaml-only snapshot def,
 # and multiple keys
 class BaseSnapshotMultiUniqueKey:
@@ -268,7 +252,3 @@ class BaseSnapshotMultiUniqueKey:
         assert len(results) == 1
 
         check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
-
-
-class TestSnapshotMultiUniqueKey(BaseSnapshotMultiUniqueKey):
-    pass
