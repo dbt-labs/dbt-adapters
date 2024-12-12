@@ -23,10 +23,10 @@ repos:
     -   id: black
         args:
         -   --line-length=99
-        -   --target-version=py38
         -   --target-version=py39
         -   --target-version=py310
         -   --target-version=py311
+        -   --target-version=py312
         -   --force-exclude=dbt/adapters/events/adapter_types_pb2.py
 
 -   repo: https://github.com/pycqa/flake8
