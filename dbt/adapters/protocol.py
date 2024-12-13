@@ -47,11 +47,12 @@ class CatalogIntegrationProtocol(Protocol):
 
 
 class CatalogIntegrationConfig(Protocol):
-    name: str
+    integration_name: str
     table_format: str
-    type: str
+    catalog_type: str
     external_volume: Optional[str]
     namespace: Optional[str]
+    adapter_configs: Optional[Dict]
 
 
 Self = TypeVar("Self", bound="RelationProtocol")

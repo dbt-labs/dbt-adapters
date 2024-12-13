@@ -1,6 +1,6 @@
 import abc
 from enum import Enum
-from typing import Optional
+from typing import Optional, Tuple, List, Dict
 
 from dbt.adapters.protocol import CatalogIntegrationConfig
 from dbt.adapters.relation_configs.formats import TableFormat
@@ -33,4 +33,8 @@ class CatalogIntegration(abc.ABC):
         self.type = CatalogIntegrationType(integration_config.type)
         self.external_volume = integration_config.external_volume
         self.namespace = integration_config.namespace
+        self._handle_adapter_configs(integration_config.adapter_configs)
+
+    def _handle_adapter_configs(self, adapter_configs: Dict) -> None:
+        ...
 
