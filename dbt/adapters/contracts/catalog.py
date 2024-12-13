@@ -19,9 +19,9 @@ class CatalogIntegration(abc.ABC):
     specific integrations in the adapters.
 
     """
-    name: str
+    integration_name: str
     table_format: TableFormat
-    type: CatalogIntegrationType
+    integration_type: CatalogIntegrationType
     external_volume: Optional[str] = None
     namespace: Optional[str] = None
 

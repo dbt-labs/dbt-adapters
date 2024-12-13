@@ -299,8 +299,15 @@ class BaseAdapter(metaclass=AdapterMeta):
     def add_catalog_integrations(self, catalog_integrations: Optional[List[CatalogIntegrationConfig]]) -> None:
         if catalog_integrations:
             for integration_config in catalog_integrations:
-                integration = self.CatalogIntegrations[integration_config.type](integration_config)
-                catalogs_client.add_catalog(integration)
+                catalog_type = integration_config.catalog_type
+                if catalog_type not in self.CatalogIntegrations:
+                    raise DbtValidationError(f"{catalog_type} is not supported!!! - <3 Colin")
+                integration = self.CatalogIntegrations[catalog_type](integration_config)
+                catalogs_client.add_catalog(integration, integration_config.catalog_name)
+
+    @available
+    def get_catalog_integration(self, integration_name) -> CatalogIntegration:
+        return catalogs_client.get_catalog(integration_name)
     ###
     # Methods to set / access a macro resolver
     ###

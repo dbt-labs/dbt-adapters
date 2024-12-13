@@ -47,6 +47,7 @@ class CatalogIntegrationProtocol(Protocol):
 
 
 class CatalogIntegrationConfig(Protocol):
+    catalog_name: str
     integration_name: str
     table_format: str
     catalog_type: str
