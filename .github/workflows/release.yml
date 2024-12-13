@@ -96,7 +96,7 @@ jobs:
     needs:
       - build-release
       - release-prep
-    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@main
+    uses: dbt-labs/dbt-adapters/.github/workflows/github-release.yml@v1.10.3
     with:
       sha: ${{ needs.release-prep.outputs.release-sha }}
       version_number: ${{ inputs.version }}
