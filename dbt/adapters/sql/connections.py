@@ -113,7 +113,7 @@ class SQLConnectionManager(BaseConnectionManager):
                     bindings=bindings,
                     retryable_exceptions=retryable_exceptions,
                     retry_limit=retry_limit,
-                    attempt=1,
+                    attempt=attempt+1,
                 )
 
         connection = self.get_thread_connection()
