@@ -82,7 +82,7 @@ class SQLConnectionManager(BaseConnectionManager):
         user-facing interface. Right now, Redshift commits to a 1 second
         retry timeout so this serves as a default.
         """
-        def __execute_query_with_retry(
+        def _execute_query_with_retry(
             cursor: Any,
             sql: str,
             bindings: Optional[Any],
@@ -108,7 +108,7 @@ class SQLConnectionManager(BaseConnectionManager):
                 )
                 time.sleep(1)
 
-                return self.__execute_query_with_retry(
+                return self._execute_query_with_retry(
                     cursor=cursor,
                     sql=sql,
                     bindings=bindings,
@@ -145,7 +145,7 @@ class SQLConnectionManager(BaseConnectionManager):
             pre = time.perf_counter()
 
             cursor = connection.handle.cursor()
-            self.__execute_query_with_retry(
+            self._execute_query_with_retry(
                 cursor=cursor,
                 sql=sql,
                 bindings=bindings,
