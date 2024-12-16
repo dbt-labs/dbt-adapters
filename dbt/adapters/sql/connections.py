@@ -9,9 +9,7 @@ from typing import (
     Optional,
     Tuple,
     TYPE_CHECKING,
-    Callable,
     Type,
-    Union,
 )
 
 from dbt_common.events.contextvars import get_node_info
@@ -75,7 +73,7 @@ class SQLConnectionManager(BaseConnectionManager):
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
-        retryable_exceptions: Iterable[Type[Exception]] = [],
+        retryable_exceptions: Tuple[Type[Exception], ...] = [],
         retry_limit: int = 1,
     ) -> Tuple[Connection, Any]:
 
