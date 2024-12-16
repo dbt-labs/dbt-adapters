@@ -14,11 +14,10 @@ from typing import (
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
-from dbt_common.exceptions import DbtInternalError, NotImplementedError, DbtRuntimeError
+from dbt_common.exceptions import DbtInternalError, NotImplementedError
 from dbt_common.utils import cast_to_str
 
 from dbt.adapters.base import BaseConnectionManager
-from dbt.adapters.base.connections import SleepTime
 from dbt.adapters.contracts.connection import (
     AdapterResponse,
     Connection,
@@ -73,15 +72,15 @@ class SQLConnectionManager(BaseConnectionManager):
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
-        retryable_exceptions: Tuple[Type[Exception], ...] = [],
+        retryable_exceptions: Tuple[Type[Exception], ...] = tuple(),
         retry_limit: int = 1,
     ) -> Tuple[Connection, Any]:
-
         """
         Retry function encapsulated here to avoid commitment to some
         user-facing interface. Right now, Redshift commits to a 1 second
         retry timeout so this serves as a default.
         """
+
         def _execute_query_with_retry(
             cursor: Any,
             sql: str,
