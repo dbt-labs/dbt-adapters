@@ -108,7 +108,7 @@ class SQLConnectionManager(BaseConnectionManager):
                 )
                 time.sleep(1)
 
-                return self._execute_query_with_retry(
+                return _execute_query_with_retry(
                     cursor=cursor,
                     sql=sql,
                     bindings=bindings,
@@ -145,7 +145,7 @@ class SQLConnectionManager(BaseConnectionManager):
             pre = time.perf_counter()
 
             cursor = connection.handle.cursor()
-            self._execute_query_with_retry(
+            _execute_query_with_retry(
                 cursor=cursor,
                 sql=sql,
                 bindings=bindings,
