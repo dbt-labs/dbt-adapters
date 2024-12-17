@@ -11,7 +11,7 @@
 
     merge into {{ target.render() }} as DBT_INTERNAL_DEST
     using {{ source }} as DBT_INTERNAL_SOURCE
-    on DBT_INTERNAL_SOURCE.{{ columns.dbt_scd_id }} = DBT_INTERNAL_DEST.{{ columns.dbt_scd_id }}
+    on DBT_INTERNAL_SOURCE.{{ columns.dbt_scd_id }} = DBT_INTERNAL_DEST.{{ columns.dbt_scd_id }} and DBT_INTERNAL_SOURCE.dbt_change_type != 'insert'
 
     when matched
      {% if config.get("dbt_valid_to_current") %}
