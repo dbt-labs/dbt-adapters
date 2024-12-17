@@ -15,7 +15,13 @@
 
     when matched
      {% if config.get("dbt_valid_to_current") %}
-       and {{ equals(DBT_INTERNAL_DEST.{{ columns.dbt_valid_to }}, {{ config.get('dbt_valid_to_current') }}) }}
+        {% set source_unique_key %}
+            DBT_INTERNAL_DEST.{{ columns.dbt_valid_to }}
+        {% endset %}
+        {% set target_unique_key %}
+            {{ config.get('dbt_valid_to_current') }}
+        {% endset %}
+       and {{ equals(source_unique_key, target_unique_key) }}
 
      {% else %}
        and DBT_INTERNAL_DEST.{{ columns.dbt_valid_to }} is null
