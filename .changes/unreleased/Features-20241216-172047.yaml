@@ -1,0 +1,6 @@
+kind: Features
+body: Add function to run custom sql for getting freshness info
+time: 2024-12-16T17:20:47.065611-08:00
+custom:
+  Author: ChenyuLInx
+  Issue: "8797"
