@@ -23,7 +23,6 @@ class BaseUtils:
     @pytest.fixture(scope="class")
     def macros(self):
         return {
-            "equals.sql": macros__equals_sql,
             "test_assert_equal.sql": macros__test_assert_equal_sql,
             "replace_empty.sql": macros__replace_empty_sql,
         }
