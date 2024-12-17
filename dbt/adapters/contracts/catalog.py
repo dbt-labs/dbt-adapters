@@ -2,11 +2,13 @@ import abc
 from enum import Enum
 from typing import Optional, Tuple, List, Dict
 
+from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.protocol import CatalogIntegrationConfig
 from dbt.adapters.relation_configs.formats import TableFormat
 
 
 class CatalogIntegrationType(Enum):
+    managed = 'managed'
     iceberg_rest = 'iceberg_rest'
     glue = 'glue'
     unity = 'unity'
@@ -19,6 +21,7 @@ class CatalogIntegration(abc.ABC):
     specific integrations in the adapters.
 
     """
+    catalog_name: str
     integration_name: str
     table_format: TableFormat
     integration_type: CatalogIntegrationType
@@ -26,11 +29,12 @@ class CatalogIntegration(abc.ABC):
     namespace: Optional[str] = None
 
     def __init__(
-        self, integration_config: CatalogIntegrationConfig
+            self, integration_config: CatalogIntegrationConfig
     ):
-        self.name = integration_config.name
+        self.catalog_name = integration_config.catalog_name
+        self.integration_name = integration_config.integration_name
         self.table_format = TableFormat(integration_config.table_format)
-        self.type = CatalogIntegrationType(integration_config.type)
+        self.type = CatalogIntegrationType(integration_config.catalog_type)
         self.external_volume = integration_config.external_volume
         self.namespace = integration_config.namespace
         self._handle_adapter_configs(integration_config.adapter_configs)
@@ -38,3 +42,5 @@ class CatalogIntegration(abc.ABC):
     def _handle_adapter_configs(self, adapter_configs: Dict) -> None:
         ...
 
+    def render_ddl_predicates(self, relation_config: RelationConfig) -> str:
+        ...
