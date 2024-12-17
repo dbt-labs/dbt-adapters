@@ -1,6 +1,0 @@
-kind: Features
-body: Introduce new Capability for MicrobatchConcurrency support
-time: 2024-11-20T11:28:06.258507-05:00
-custom:
-  Author: michelleark
-  Issue: "359"
