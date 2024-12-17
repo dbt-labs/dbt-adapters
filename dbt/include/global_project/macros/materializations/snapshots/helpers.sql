@@ -53,7 +53,7 @@
         from {{ target_relation }}
         where
             {% if config.get('dbt_valid_to_current') %}
-               {{ adapter.dispatch('equals', 'dbt')({{ columns.dbt_valid_to }}, {{ config.get('dbt_valid_to_current') }}) }}
+               {{ equals({{ columns.dbt_valid_to }}, {{ config.get('dbt_valid_to_current') }}) }}
             {% else %}
                 {{ columns.dbt_valid_to }} is null
             {% endif %}
@@ -275,7 +275,7 @@
 {% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
     {% if unique_key | is_list %}
         {% for key in unique_key %}
-            {{ adapter.dispatch('equals', 'dbt')({{ identifier }}.dbt_unique_key_{{ loop.index }}, {{ from_identifier }}.dbt_unique_key_{{ loop.index }}) }}
+            {{ equals({{ identifier }}.dbt_unique_key_{{ loop.index }}, {{ from_identifier }}.dbt_unique_key_{{ loop.index }}) }}
             {%- if not loop.last %} and {%- endif %}
         {% endfor %}
     {% else %}

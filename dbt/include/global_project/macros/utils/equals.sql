@@ -1,4 +1,4 @@
-{% macro equals(first_date, second_date, datepart) %}
+{% macro equals(expr1, expr2) %}
     {{ return(adapter.dispatch('equals', 'dbt') (expr1, expr2)) }}
 {%- endmacro %}
 

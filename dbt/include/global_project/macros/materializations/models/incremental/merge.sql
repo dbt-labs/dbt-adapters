@@ -22,7 +22,7 @@
             {% endfor %}
         {% else %}
             {% set unique_key_match %}
-                {{ adapter.dispatch('equals', 'dbt')(DBT_INTERNAL_SOURCE.{{ unique_key }}, DBT_INTERNAL_DEST.{{ unique_key }}) }}
+                {{ equals(DBT_INTERNAL_SOURCE.{{ unique_key }}, DBT_INTERNAL_DEST.{{ unique_key }}) }}
             {% endset %}
             {% do predicates.append(unique_key_match) %}
         {% endif %}
@@ -66,7 +66,7 @@
             using {{ source }}
             where (
                 {% for key in unique_key %}
-                    {{ adapter.dispatch('equals', 'dbt')({{ source }}.{{ key }}, {{ target }}.{{ key }}) }}
+                    {{ equals({{ source }}.{{ key }}, {{ target }}.{{ key }}) }}
                     {{ "and " if not loop.last}}
                 {% endfor %}
                 {% if incremental_predicates %}
