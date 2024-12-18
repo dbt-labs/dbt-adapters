@@ -56,7 +56,11 @@ jobs:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
             branch: ${{ needs.generate-changelog.outputs.branch-name }}
-        secrets: inherit
+        secrets: inherit        
+        permissions:
+            # this permission is required for trusted publishing
+            # see https://github.com/marketplace/actions/pypi-publish
+            id-token: write
 
     publish-pypi:
         if: ${{ inputs.pypi-public == true }}
