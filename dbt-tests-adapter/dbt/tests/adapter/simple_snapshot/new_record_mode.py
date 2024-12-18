@@ -3,6 +3,8 @@ import pytest
 from dbt.tests.util import check_relations_equal, run_dbt
 
 _seed_new_record_mode = """
+BEGIN
+
 create table {database}.{schema}.seed (
     id INTEGER,
     first_name VARCHAR(50),
@@ -88,6 +90,8 @@ select
     md5(id || '-' || first_name || '|' || updated_at::text) as dbt_scd_id,
     'False' as dbt_is_deleted
 from {database}.{schema}.seed;
+
+END;
 """
 
 _snapshot_actual_sql = """
@@ -119,6 +123,8 @@ select * from {{ ref('snapshot_actual') }}
 
 
 _invalidate_sql = """
+BEGIN
+
 -- update records 11 - 21. Change email and updated_at field
 update {schema}.seed set
     updated_at = updated_at + interval '1 hour',
@@ -131,6 +137,7 @@ update {schema}.snapshot_expected set
     dbt_valid_to   = updated_at + interval '1 hour'
 where id >= 10 and id <= 20;
 
+END;
 """
 
 _update_sql = """
