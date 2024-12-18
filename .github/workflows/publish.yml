@@ -27,9 +27,6 @@ on:
                 type: boolean
                 default: false
 
-permissions:
-    contents: write
-
 # don't publish to the same target in parallel
 concurrency:
     group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
