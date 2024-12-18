@@ -65,6 +65,8 @@ from dbt.adapters.base.relation import (
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.clients import catalogs as catalogs_client
+from dbt.adapters.contracts.catalog import CatalogIntegration
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
@@ -88,7 +90,7 @@ from dbt.adapters.exceptions import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
+from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable, CatalogIntegrationConfig
 
 if TYPE_CHECKING:
     import agate
@@ -245,6 +247,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         - expand_column_types
         - list_relations_without_caching
         - is_cancelable
+        - execute
         - create_schema
         - drop_schema
         - quote
@@ -258,11 +261,13 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     Macros:
         - get_catalog
+
     """
 
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
+    CatalogIntegrations: Dict[str, Type[CatalogIntegration]]
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
@@ -290,6 +295,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
+    def add_catalog_integrations(self, catalog_integrations: Optional[List[CatalogIntegrationConfig]]) -> None:
+        if catalog_integrations:
+            for integration_config in catalog_integrations:
+                catalog_type = integration_config.catalog_type
+                if catalog_type not in self.CatalogIntegrations:
+                    raise DbtValidationError(f"{catalog_type} is not supported!!! - <3 Colin")
+                integration = self.CatalogIntegrations[catalog_type](integration_config)
+                catalogs_client.add_catalog(integration, integration_config.catalog_name)
+
+    @available
+    def get_catalog_integration(self, integration_name) -> CatalogIntegration:
+        return catalogs_client.get_catalog(integration_name)
     ###
     # Methods to set / access a macro resolver
     ###

@@ -20,6 +20,7 @@ from dbt_common.dataclass_schema import (
     dbtClassMixin,
 )
 
+
 # TODO: this is a very bad dependency - shared global state
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event

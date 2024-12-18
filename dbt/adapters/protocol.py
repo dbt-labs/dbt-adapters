@@ -42,6 +42,20 @@ class ColumnProtocol(Protocol):
     pass
 
 
+class CatalogIntegrationProtocol(Protocol):
+    pass
+
+
+class CatalogIntegrationConfig(Protocol):
+    catalog_name: str
+    integration_name: str
+    table_format: str
+    catalog_type: str
+    external_volume: Optional[str]
+    namespace: Optional[str]
+    adapter_configs: Optional[Dict]
+
+
 Self = TypeVar("Self", bound="RelationProtocol")
 
 
@@ -51,10 +65,10 @@ class RelationProtocol(Protocol):
 
     @classmethod
     def create_from(
-        cls: Type[Self],
-        quoting: HasQuoting,
-        relation_config: RelationConfig,
-        **kwargs: Any,
+            cls: Type[Self],
+            quoting: HasQuoting,
+            relation_config: RelationConfig,
+            **kwargs: Any,
     ) -> Self: ...
 
 
@@ -62,15 +76,16 @@ AdapterConfig_T = TypeVar("AdapterConfig_T", bound=AdapterConfig)
 ConnectionManager_T = TypeVar("ConnectionManager_T", bound=ConnectionManagerProtocol)
 Relation_T = TypeVar("Relation_T", bound=RelationProtocol)
 Column_T = TypeVar("Column_T", bound=ColumnProtocol)
+ExtCatInteg_T = TypeVar("ExtCatInteg_T", bound=CatalogIntegrationProtocol)
 
 
 class MacroContextGeneratorCallable(Protocol):
     def __call__(
-        self,
-        macro_protocol: MacroProtocol,
-        config: AdapterRequiredConfig,
-        macro_resolver: MacroResolverProtocol,
-        package_name: Optional[str],
+            self,
+            macro_protocol: MacroProtocol,
+            config: AdapterRequiredConfig,
+            macro_resolver: MacroResolverProtocol,
+            package_name: Optional[str],
     ) -> Dict[str, Any]: ...
 
 
@@ -82,6 +97,7 @@ class AdapterProtocol(  # type: ignore[misc]
         ConnectionManager_T,
         Relation_T,
         Column_T,
+        ExtCatInteg_T,
     ],
 ):
     # N.B. Technically these are ClassVars, but mypy doesn't support putting type vars in a
@@ -92,6 +108,7 @@ class AdapterProtocol(  # type: ignore[misc]
     Relation: Type[Relation_T]
     ConnectionManager: Type[ConnectionManager_T]
     connections: ConnectionManager_T
+    CatalogIntegration: Type[ExtCatInteg_T]
 
     def __init__(self, config: AdapterRequiredConfig) -> None: ...
 
@@ -102,8 +119,8 @@ class AdapterProtocol(  # type: ignore[misc]
     def clear_macro_resolver(self) -> None: ...
 
     def set_macro_context_generator(
-        self,
-        macro_context_generator: MacroContextGeneratorCallable,
+            self,
+            macro_context_generator: MacroContextGeneratorCallable,
     ) -> None: ...
 
     @classmethod
@@ -146,5 +163,5 @@ class AdapterProtocol(  # type: ignore[misc]
     def commit_if_has_connection(self) -> None: ...
 
     def execute(
-        self, sql: str, auto_begin: bool = False, fetch: bool = False
+            self, sql: str, auto_begin: bool = False, fetch: bool = False
     ) -> Tuple[AdapterResponse, "agate.Table"]: ...
