@@ -294,7 +294,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
-        self.add_catalog_integrations(config.catalog_integrations)
 
     def add_catalog_integrations(self, catalog_integrations: Optional[List[CatalogIntegrationConfig]]) -> None:
         if catalog_integrations:
