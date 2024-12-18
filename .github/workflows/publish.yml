@@ -65,7 +65,7 @@ jobs:
             package: ${{ inputs.package }}
 
     publish:
-        needs: package
+        needs: [package, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -90,17 +90,6 @@ jobs:
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
                 packages-dir: ./${{ needs.package.outputs.directory }}dist/
-
-    verify:
-        runs-on: ${{ vars.DEFAULT_RUNNER }}
-        needs: [package, publish]
-        # check the correct index
-        environment:
-            name: ${{ inputs.deploy-to }}
-        steps:
-        -   uses: actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
         -   id: version
             run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
             working-directory: ./${{ needs.package.outputs.directory }}
