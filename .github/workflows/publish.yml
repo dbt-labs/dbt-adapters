@@ -64,7 +64,8 @@ jobs:
         with:
             package: ${{ inputs.package }}
 
-    publish:
+    publish-pypi:
+        if: ${{ inputs.pypi-public == true }}
         needs: [package, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
