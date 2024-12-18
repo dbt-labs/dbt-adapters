@@ -78,7 +78,7 @@ jobs:
         steps:
         -   uses: actions/checkout@v4
             with:
-                ref: ${{ inputs.branch }}
+                ref: ${{ needs.generate-changelog.outputs.branch-name }}
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
