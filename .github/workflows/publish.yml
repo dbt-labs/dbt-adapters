@@ -66,3 +66,4 @@ jobs:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
             branch: ${{ needs.generate-changelog.outputs.branch-name }}
+        secrets: inherit
