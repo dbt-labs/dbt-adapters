@@ -18,7 +18,6 @@ from typing import (
 from dbt_common.exceptions import CompilationError, DbtRuntimeError
 from dbt_common.utils import deep_merge, filter_null_values
 
-from dbt.adapters.base import CatalogIntegration
 from dbt.adapters.contracts.relation import (
     ComponentName,
     HasQuoting,
@@ -73,7 +72,6 @@ class BaseRelation(FakeAPIObject, Hashable):
     # e.g. adding RelationType.View in dbt-postgres requires that you define:
     # include/postgres/macros/relations/view/replace.sql::postgres__get_replace_view_sql()
     replaceable_relations: SerializableIterable = field(default_factory=frozenset)
-    catalog: Optional[CatalogIntegration] = None
 
     def _is_exactish_match(self, field: ComponentName, value: str) -> bool:
         if self.dbt_created and self.quote_policy.get_part(field) is False:
