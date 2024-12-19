@@ -14,3 +14,19 @@
   {% endcall %}
   {{ return(load_result('collect_freshness')) }}
 {% endmacro %}
+
+{% macro collect_freshness_custom_sql(source, loaded_at_query) %}
+  {{ return(adapter.dispatch('collect_freshness_custom_sql', 'dbt')(source, loaded_at_query))}}
+{% endmacro %}
+
+{% macro default__collect_freshness_custom_sql(source, loaded_at_query) %}
+  {% call statement('collect_freshness_custom_sql', fetch_result=True, auto_begin=False) -%}
+  with source_query as (
+    {{ loaded_at_query }}
+  )
+  select
+    (select * from source_query) as max_loaded_at,
+    {{ current_timestamp() }} as snapshotted_at
+  {% endcall %}
+  {{ return(load_result('collect_freshness_custom_sql')) }}
+{% endmacro %}
