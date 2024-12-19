@@ -17,12 +17,22 @@ end
 {% endmacro %}
 """
 
+macros__equals_sql = """
+{% macro equals(expr1, expr2) -%}
+case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
+    then 0
+    else 1
+end = 0
+{% endmacro %}
+"""
+
 
 class BaseUtils:
     # setup
     @pytest.fixture(scope="class")
     def macros(self):
         return {
+            "equals.sql": macros__equals_sql,
             "test_assert_equal.sql": macros__test_assert_equal_sql,
             "replace_empty.sql": macros__replace_empty_sql,
         }
