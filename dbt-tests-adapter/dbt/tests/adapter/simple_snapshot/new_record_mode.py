@@ -2,6 +2,7 @@ import pytest
 
 from dbt.tests.util import check_relations_equal, run_dbt
 
+# Snapshot source data for the tests in this file
 _seed_new_record_mode = """
 BEGIN
 
@@ -176,8 +177,14 @@ from {database}.{schema}.seed
 where id >= 10 and id <= 20;
 """
 
+# SQL to delete a record from the snapshot source data
 _delete_sql = """
-delete from {schema}.seed where id = 1
+delete from {database}.{schema}.seed where id = 1
+"""
+
+# If the deletion worked correctly, this should return two rows, with one of them representing the deletion.
+_delete_check_sql = """
+select dbt_valid_to, dbt_scd_id, dbt_is_deleted from {schema}.snapshot_actual where id = 1
 """
 
 
@@ -229,4 +236,15 @@ class SnapshotNewRecordMode:
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
-        # TODO: Further validate results.
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        valid_to = 0
+        scd_id = 1
+        is_deleted = 2
+        assert len(check_result) == 2
+        assert sum(
+            [1 for c in check_result if c[valid_to] is None and c[scd_id] is not None and c[is_deleted] == "True"]
+        ) == 1
+        assert sum(
+            [1 for c in check_result if c[valid_to] is not None and c[scd_id] is not None and c[is_deleted] == "False"]
+        ) == 1
+        assert check_result[0][scd_id] != check_result[1][scd_id]
