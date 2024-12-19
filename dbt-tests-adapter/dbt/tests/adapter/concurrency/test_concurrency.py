@@ -1,11 +1,13 @@
+from collections import Counter
+
 import pytest
 
+from dbt.artifacts.schemas.results import RunStatus
 from dbt.tests.util import (
     check_relations_equal,
     check_table_does_not_exist,
     rm_file,
     run_dbt,
-    run_dbt_and_capture,
     write_file,
 )
 
@@ -317,8 +319,8 @@ class BaseConcurrency:
         rm_file(project.project_root, "seeds", "seed.csv")
         write_file(seeds__update_csv, project.project_root, "seeds", "seed.csv")
 
-        results, output = run_dbt_and_capture(["run"], expect_pass=False)
-        assert len(results) == 7
+        results = run_dbt(["run"], expect_pass=False)
+
         check_relations_equal(project.adapter, ["seed", "view_model"])
         check_relations_equal(project.adapter, ["seed", "dep"])
         check_relations_equal(project.adapter, ["seed", "table_a"])
@@ -326,7 +328,13 @@ class BaseConcurrency:
         check_table_does_not_exist(project.adapter, "invalid")
         check_table_does_not_exist(project.adapter, "skip")
 
-        assert "PASS=5 WARN=0 ERROR=1 SKIP=1 TOTAL=7" in output
+        result_statuses = Counter([result.status for result in results])
+        expected_statuses = {
+            RunStatus.Success: 5,
+            RunStatus.Error: 1,
+            RunStatus.Skipped: 1,
+        }
+        assert result_statuses == expected_statuses
 
 
 class TestConcurenncy(BaseConcurrency):
