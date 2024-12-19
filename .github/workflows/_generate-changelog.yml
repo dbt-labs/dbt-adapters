@@ -198,6 +198,9 @@ jobs:
         if: ${{ needs.temp-branch.outputs.name != '' && inputs.merge }}
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ needs.temp-branch.outputs.name }}
         -   uses: everlytic/branch-merge@1.1.5
             with:
                 source_ref: ${{ needs.temp-branch.outputs.name }}
@@ -219,8 +222,7 @@ jobs:
         steps:
         -   id: branch
             run: |
-                branch=""
-                if [ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }}]
+                if [[ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }} ]]
                 then
                     branch="${{ inputs.branch }}"
                 else
