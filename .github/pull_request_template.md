@@ -27,6 +27,17 @@ resolves #
   tradeoffs you considered.
 -->
 
+### Concrete Adapter Testing
+
+Before marking your pull request `Ready for Review`, please use an integration test workflow in each of the following repos to confirm that your feature ad or bug (1) achieves the desired behavior (2) does not disrupt other concrete adapters:
+* [ ] Postgres
+* [ ] Snowflake
+* [ ] Spark
+* [ ] Redshift
+* [ ] Bigquery
+
+Please link each CI workflow in this checklist here or in a separate PR comment.
+
 ### Checklist
 
 - [ ] I have read [the contributing guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md) and understand what's expected of me
