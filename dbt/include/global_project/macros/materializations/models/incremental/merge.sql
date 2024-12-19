@@ -16,13 +16,13 @@
         {% if unique_key is sequence and unique_key is not mapping and unique_key is not string %}
             {% for key in unique_key %}
                 {% set this_key_match %}
-                    DBT_INTERNAL_SOURCE.{{ key }} = DBT_INTERNAL_DEST.{{ key }}
+                    DBT_INTERNAL_SOURCE.{{ key }} = DBT_INTERNAL_DEST.{{ key }} or (DBT_INTERNAL_SOURCE.{{ key }} is null and DBT_INTERNAL_DEST.{{ key }} is null)
                 {% endset %}
                 {% do predicates.append(this_key_match) %}
             {% endfor %}
         {% else %}
             {% set unique_key_match %}
-                DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }}
+                DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }} or (DBT_INTERNAL_SOURCE.{{ unique_key }} is null and DBT_INTERNAL_DEST.{{ unique_key }} is null)
             {% endset %}
             {% do predicates.append(unique_key_match) %}
         {% endif %}
@@ -62,12 +62,12 @@
 
     {% if unique_key %}
         {% if unique_key is sequence and unique_key is not string %}
-            delete from {{target }}
+            delete from {{ target }}
             using {{ source }}
             where (
                 {% for key in unique_key %}
-                    {{ source }}.{{ key }} = {{ target }}.{{ key }}
-                    {{ "and " if not loop.last}}
+                    ({{ source }}.{{ key }} = {{ target }}.{{ key }} or ({{ source }}.{{ key }} is null and {{ target }}.{{ key }} is null))
+                    {{ "and " if not loop.last }}
                 {% endfor %}
                 {% if incremental_predicates %}
                     {% for predicate in incremental_predicates %}
