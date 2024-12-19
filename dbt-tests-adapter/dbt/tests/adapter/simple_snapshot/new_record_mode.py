@@ -241,10 +241,26 @@ class SnapshotNewRecordMode:
         scd_id = 1
         is_deleted = 2
         assert len(check_result) == 2
-        assert sum(
-            [1 for c in check_result if c[valid_to] is None and c[scd_id] is not None and c[is_deleted] == "True"]
-        ) == 1
-        assert sum(
-            [1 for c in check_result if c[valid_to] is not None and c[scd_id] is not None and c[is_deleted] == "False"]
-        ) == 1
+        assert (
+            sum(
+                [
+                    1
+                    for c in check_result
+                    if c[valid_to] is None and c[scd_id] is not None and c[is_deleted] == "True"
+                ]
+            )
+            == 1
+        )
+        assert (
+            sum(
+                [
+                    1
+                    for c in check_result
+                    if c[valid_to] is not None
+                    and c[scd_id] is not None
+                    and c[is_deleted] == "False"
+                ]
+            )
+            == 1
+        )
         assert check_result[0][scd_id] != check_result[1][scd_id]
