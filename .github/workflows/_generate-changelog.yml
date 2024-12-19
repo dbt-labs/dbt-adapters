@@ -222,8 +222,7 @@ jobs:
         steps:
         -   id: branch
             run: |
-                branch=""
-                if [ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }}]
+                if [[ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }} ]]
                 then
                     branch="${{ inputs.branch }}"
                 else
