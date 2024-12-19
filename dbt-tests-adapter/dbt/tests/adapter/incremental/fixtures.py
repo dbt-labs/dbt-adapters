@@ -303,3 +303,32 @@ select id,
 
 from source_data
 """
+
+_MODELS__SRC_JOBS = """
+{{
+    config(
+        materialized='table',
+    )
+}}
+
+{% if var("version", 0) == 0 %}
+
+    select {{ dbt.current_timestamp() }} as inserted_at, 'john' as name
+
+{% else %}
+
+    select {{ dbt.current_timestamp() }} as inserted_at, 'engineer' as {{ adapter.quote('Job') }}
+
+{% endif %}
+"""
+
+_MODELS__DIM_JOBS = """
+{{
+    config(
+        materialized='incremental',
+        on_schema_change='append_new_columns',
+    )
+}}
+
+select  * from {{ ref("src_jobs") }}
+"""
