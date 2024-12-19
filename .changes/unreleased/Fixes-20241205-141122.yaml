@@ -1,6 +1,0 @@
-kind: Fixes
-body: Use `sql` instead of `compiled_code` within the default `get_limit_sql` macro
-time: 2024-12-05T14:11:22.10765-07:00
-custom:
-  Author: dbeatty10
-  Issue: "372"
