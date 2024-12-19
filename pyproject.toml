@@ -52,6 +52,7 @@ include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 include = ["dbt/adapters", "dbt/include", "dbt/__init__.py"]
 
 [tool.hatch.envs.default]
+python = "3.9"
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     'pre-commit==3.7.0;python_version>="3.9"',
