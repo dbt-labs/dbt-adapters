@@ -1,6 +1,16 @@
 import pytest
 from dbt.tests.util import run_dbt
 
+
+macros__equals_sql = """
+{% macro equals(expr1, expr2) -%}
+case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
+    then 0
+    else 1
+end = 0
+{% endmacro %}
+"""
+
 macros__test_assert_equal_sql = """
 {% test assert_equal(model, actual, expected) %}
 select * from {{ model }}
@@ -14,15 +24,6 @@ case
     when {{ expr }} = 'EMPTY' then ''
     else {{ expr }}
 end
-{% endmacro %}
-"""
-
-macros__equals_sql = """
-{% macro equals(expr1, expr2) -%}
-case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
-    then 0
-    else 1
-end = 0
 {% endmacro %}
 """
 
