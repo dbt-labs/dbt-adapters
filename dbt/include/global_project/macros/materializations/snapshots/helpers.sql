@@ -53,8 +53,14 @@
         from {{ target_relation }}
         where
             {% if config.get('dbt_valid_to_current') %}
-               {# Check for either dbt_valid_to_current OR null, in order to correctly update records with nulls #}
-               ( {{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }} or {{ columns.dbt_valid_to }} is null)
+                {% set source_unique_key %}
+                    columns.dbt_valid_to
+                {% endset %}
+                {% set target_unique_key %}
+                    config.get('dbt_valid_to_current')
+                {% endset %}
+
+               {{ equals(source_unique_key, target_unique_key) }}
             {% else %}
                 {{ columns.dbt_valid_to }} is null
             {% endif %}
@@ -276,7 +282,14 @@
 {% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
     {% if unique_key | is_list %}
         {% for key in unique_key %}
-            {{ identifier }}.dbt_unique_key_{{ loop.index }} = {{ from_identifier }}.dbt_unique_key_{{ loop.index }}
+            {% set source_unique_key %}
+                {{ identifier }}.dbt_unique_key_{{ loop.index }}
+            {% endset %}
+            {% set target_unique_key %}
+                {{ from_identifier }}.dbt_unique_key_{{ loop.index }}
+            {% endset %}
+
+            {{ equals(source_unique_key, target_unique_key) }}
             {%- if not loop.last %} and {%- endif %}
         {% endfor %}
     {% else %}
