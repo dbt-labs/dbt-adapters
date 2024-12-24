@@ -64,9 +64,21 @@
     show grants on {{ relation.render() }}
 {% endmacro %}
 
+{% macro quote_grantees(grantees) %}
+    {%- set quoted_grantees = [] -%}
+    {%- for grantee in grantees -%}
+        {%- if (('@' in grantee) or ('-' in grantee) or ('.' in grantee))  -%}
+            {%- do quoted_grantees.append(adapter.quote(grantee)) -%}
+        {%- else -%}
+            {%- do quoted_grantees.append(grantee) -%}
+        {%- endif -%}
+    {%- endfor -%}
+    {%- do return quoted_grantees -%}
+{% endmacro %}
 
 {% macro get_grant_sql(relation, privilege, grantees) %}
-    {{ return(adapter.dispatch('get_grant_sql', 'dbt')(relation, privilege, grantees)) }}
+    {%- set updated_grantees = quote_grantees(grantees) -%}
+    {{ return(adapter.dispatch('get_grant_sql', 'dbt')(relation, privilege, updated_grantees)) }}
 {% endmacro %}
 
 {%- macro default__get_grant_sql(relation, privilege, grantees) -%}
@@ -75,7 +87,8 @@
 
 
 {% macro get_revoke_sql(relation, privilege, grantees) %}
-    {{ return(adapter.dispatch('get_revoke_sql', 'dbt')(relation, privilege, grantees)) }}
+    {%- set updated_grantees = quote_grantees(grantees) -%}
+    {{ return(adapter.dispatch('get_revoke_sql', 'dbt')(relation, privilege, updated_grantees)) }}
 {% endmacro %}
 
 {%- macro default__get_revoke_sql(relation, privilege, grantees) -%}
