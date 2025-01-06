@@ -42,11 +42,7 @@ class ColumnProtocol(Protocol):
     pass
 
 
-class CatalogIntegrationProtocol(Protocol):
-    pass
-
-
-class CatalogIntegrationConfig(Protocol):
+class CatalogIntegrationConfigProtocol(Protocol):
     catalog_name: str
     integration_name: str
     table_format: str
@@ -108,7 +104,6 @@ class AdapterProtocol(  # type: ignore[misc]
     Relation: Type[Relation_T]
     ConnectionManager: Type[ConnectionManager_T]
     connections: ConnectionManager_T
-    CatalogIntegration: Type[ExtCatInteg_T]
 
     def __init__(self, config: AdapterRequiredConfig) -> None: ...
 

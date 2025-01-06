@@ -1,9 +1,9 @@
 import abc
+from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple, List, Dict
+from typing import Optional, Dict
 
 from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.protocol import CatalogIntegrationConfig
 from dbt.adapters.relation_configs.formats import TableFormat
 
 
@@ -12,6 +12,17 @@ class CatalogIntegrationType(Enum):
     iceberg_rest = 'iceberg_rest'
     glue = 'glue'
     unity = 'unity'
+
+
+@dataclass
+class CatalogIntegrationConfig:
+    catalog_name: str
+    integration_name: str
+    table_format: str
+    catalog_type: str
+    external_volume: Optional[str]
+    namespace: Optional[str]
+    adapter_configs: Optional[Dict]
 
 
 class CatalogIntegration(abc.ABC):
