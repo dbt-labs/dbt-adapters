@@ -40,7 +40,9 @@
 
 {% macro default__snapshot_staging_table(strategy, source_sql, target_relation) -%}
     {% set columns = config.get('snapshot_table_column_names') or get_snapshot_table_column_names() %}
-
+    {% if strategy.hard_deletes == 'new_record' %}
+        {% set new_scd_id = snapshot_hash_arguments([columns.dbt_scd_id, snapshot_get_time()]) %}
+    {% endif %}
     with snapshot_query as (
 
         {{ source_sql }}
@@ -169,12 +171,13 @@
             {{ snapshot_get_time() }} as {{ columns.dbt_valid_from }},
             {{ snapshot_get_time() }} as {{ columns.dbt_updated_at }},
             snapshotted_data.{{ columns.dbt_valid_to }} as {{ columns.dbt_valid_to }},
-            snapshotted_data.{{ columns.dbt_scd_id }},
+            {{ new_scd_id }} as {{ columns.dbt_scd_id }},
             'True' as {{ columns.dbt_is_deleted }}
         from snapshotted_data
         left join deletes_source_data as source_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
-            where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+        where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+
     )
     {%- endif %}
 
