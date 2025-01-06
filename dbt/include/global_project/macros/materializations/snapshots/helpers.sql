@@ -275,17 +275,6 @@
     {% endif %}
 {% endmacro %}
 
-{% macro unique_key_reverse(unique_key) %}
-    {% if unique_key | is_list %}
-        {% for key in unique_key %}
-            dbt_unique_key_{{ loop.index }} as {{ key }}
-            {%- if not loop.last %} , {%- endif %}
-        {% endfor %}
-    {% else %}
-        dbt_unique_key as {{ unique_key }}
-    {% endif %}
-{% endmacro %}
-
 
 {% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
     {% if unique_key | is_list %}
