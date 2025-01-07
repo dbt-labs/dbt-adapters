@@ -135,29 +135,31 @@ class Column:
         if size_info is not None:
             # strip out the parentheses
             size_info = size_info[1:-1]
-            parts = size_info.split(",")
-            if len(parts) == 1:
-                try:
-                    char_size = int(parts[0])
-                except ValueError:
-                    raise DbtRuntimeError(
-                        f'Could not interpret data_type "{raw_data_type}": '
-                        f'could not convert "{parts[0]}" to an integer'
-                    )
-            elif len(parts) == 2:
-                try:
-                    numeric_precision = int(parts[0])
-                except ValueError:
-                    raise DbtRuntimeError(
-                        f'Could not interpret data_type "{raw_data_type}": '
-                        f'could not convert "{parts[0]}" to an integer'
-                    )
-                try:
-                    numeric_scale = int(parts[1])
-                except ValueError:
-                    raise DbtRuntimeError(
-                        f'Could not interpret data_type "{raw_data_type}": '
-                        f'could not convert "{parts[1]}" to an integer'
-                    )
+            # If it contains a nested type structure, ignore further size processing
+            if not re.search(r"[A-Z]+\(", size_info):
+                parts = size_info.split(",")
+                if len(parts) == 1:
+                    try:
+                        char_size = int(parts[0])
+                    except ValueError:
+                        raise DbtRuntimeError(
+                            f'Could not interpret data_type "{raw_data_type}": '
+                            f'could not convert "{parts[0]}" to an integer'
+                        )
+                elif len(parts) == 2:
+                    try:
+                        numeric_precision = int(parts[0])
+                    except ValueError:
+                        raise DbtRuntimeError(
+                            f'Could not interpret data_type "{raw_data_type}": '
+                            f'could not convert "{parts[0]}" to an integer'
+                        )
+                    try:
+                        numeric_scale = int(parts[1])
+                    except ValueError:
+                        raise DbtRuntimeError(
+                            f'Could not interpret data_type "{raw_data_type}": '
+                            f'could not convert "{parts[1]}" to an integer'
+                        )
 
         return cls(name, data_type, char_size, numeric_precision, numeric_scale)
