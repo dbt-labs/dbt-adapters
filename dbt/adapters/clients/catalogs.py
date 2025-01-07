@@ -2,15 +2,18 @@ from dbt.adapters.contracts.catalog import CatalogIntegration
 
 
 class CatalogIntegrations:
+    def __init__(self):
+        self._integrations = None
+
     def get(self, name: str) -> CatalogIntegration:
         return self.integrations[name]
 
     @property
     def integrations(self) -> dict[str, CatalogIntegration]:
-        return self.integrations
+        return self._integrations
 
     def add_integration(self, integration: CatalogIntegration, catalog_name: str):
-        self.integrations[catalog_name] = integration
+        self._integrations[catalog_name] = integration
 
 
 _CATALOG_CLIENT = CatalogIntegrations()

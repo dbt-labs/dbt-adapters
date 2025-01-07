@@ -20,9 +20,9 @@ class CatalogIntegrationConfig:
     integration_name: str
     table_format: str
     catalog_type: str
-    external_volume: Optional[str]
-    namespace: Optional[str]
-    adapter_configs: Optional[Dict]
+    external_volume: Optional[str] = None
+    namespace: Optional[str] = None
+    adapter_configs: Optional[Dict] = None
 
 
 class CatalogIntegration(abc.ABC):
@@ -30,6 +30,8 @@ class CatalogIntegration(abc.ABC):
     An external catalog integration is a connection to an external catalog that can be used to
     interact with the catalog. This class is an abstract base class that should be subclassed by
     specific integrations in the adapters.
+
+    Implements the CatalogIntegrationProtocol.
 
     """
     catalog_name: str

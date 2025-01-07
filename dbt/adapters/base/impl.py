@@ -90,7 +90,7 @@ from dbt.adapters.exceptions import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable, CatalogIntegrationConfig
+from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable, CatalogIntegrationConfigProtocol
 
 if TYPE_CHECKING:
     import agate
@@ -268,7 +268,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
-    CatalogIntegrations: Dict[str, Type[CatalogIntegration]]
+    CatalogIntegrations: Dict[str, Type[CatalogIntegrationConfigProtocol]]
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
@@ -296,7 +296,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
 
-    def add_catalog_integrations(self, catalog_integrations: Optional[List[CatalogIntegrationConfig]]) -> None:
+    def add_catalog_integrations(self, catalog_integrations: Optional[List[CatalogIntegrationConfigProtocol]]) -> None:
         if catalog_integrations:
             for integration_config in catalog_integrations:
                 catalog_type = integration_config.catalog_type
@@ -306,8 +306,9 @@ class BaseAdapter(metaclass=AdapterMeta):
                 catalogs_client.add_catalog(integration, integration_config.catalog_name)
 
     @available
-    def get_catalog_integration(self, integration_name) -> CatalogIntegration:
+    def get_catalog_integration(self, integration_name: str) -> CatalogIntegration:
         return catalogs_client.get_catalog(integration_name)
+
     ###
     # Methods to set / access a macro resolver
     ###
