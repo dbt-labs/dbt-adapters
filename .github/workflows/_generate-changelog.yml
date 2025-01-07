@@ -1,0 +1,231 @@
+name: "Changelog generation"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package getting published"
+                type: string
+                default: "dbt-adapters"
+            merge:
+                description: "Choose whether to merge the changelog branch"
+                type: boolean
+                default: true
+            branch:
+                description: "Choose the branch to use"
+                type: string
+                default: "main"
+        outputs:
+            branch-name:
+                description: "The SHA to release"
+                value: ${{ jobs.branch.outputs.name }}
+        secrets:
+            FISHTOWN_BOT_PAT:
+                description: "Token to commit/merge changes into branches"
+                required: true
+            IT_TEAM_MEMBERSHIP:
+                description: "Token that can view org level teams"
+                required: true
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package getting published"
+                type: string
+                default: "dbt-adapters"
+            merge:
+                description: "Choose whether to merge the changelog branch"
+                type: boolean
+                default: false
+            branch:
+                description: "Choose the branch to use"
+                type: string
+                default: "main"
+        secrets:
+            FISHTOWN_BOT_PAT:
+                description: "Token to commit/merge changes into branches"
+                required: true
+            IT_TEAM_MEMBERSHIP:
+                description: "Token that can view org level teams"
+                required: true
+
+permissions:
+    contents: write
+
+defaults:
+    run:
+        shell: bash
+
+jobs:
+    package:
+        uses: ./.github/workflows/_package-directory.yml
+        with:
+            package: ${{ inputs.package }}
+
+    version:
+        needs: package
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            raw: ${{ steps.version.outputs.raw }}
+            base: ${{ steps.semver.outputs.base-version }}
+            prerelease: ${{ steps.semver.outputs.pre-release }}
+            is-prerelease: ${{ steps.semver.outputs.is-pre-release }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+        -   uses: pypa/hatch@install
+        -   id: version
+            run: echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
+            working-directory: ./${{ needs.package.outputs.directory }}
+        -   id: semver
+            uses: dbt-labs/actions/parse-semver@v1.1.1
+            with:
+                version: ${{ steps.version.outputs.raw }}
+
+    changelog:
+        needs: [package, version]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            path: ${{ steps.changelog.outputs.path }}
+            exists: ${{ steps.changelog.outputs.exists }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   id: changelog
+            run: |
+                path=".changes/${{ needs.version.outputs.base }}"
+                if [[ ${{ needs.version.outputs.is-prerelease }} -eq 1 ]]
+                then
+                    path+="-${{ needs.version.outputs.prerelease }}"
+                fi
+                path+=".md"
+
+                echo "path=$path" >> $GITHUB_OUTPUT
+
+                exists=false
+                if test -f $path
+                then
+                    exists=true
+                fi
+                echo "exists=$exists">> $GITHUB_OUTPUT
+            working-directory: ./${{ needs.package.outputs.directory }}
+
+    temp-branch:
+        needs: [version, changelog]
+        if: needs.changelog.outputs.exists == 'false'
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            name: ${{ steps.branch.outputs.name }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   id: branch
+            run: |
+                name="prep-release/${{ inputs.package }}/$GITHUB_RUN_ID"
+                echo "name=$name" >> $GITHUB_OUTPUT
+        -   run: |
+              git checkout -b ${{ steps.branch.outputs.name }}
+              git push -u origin ${{ steps.branch.outputs.name }}
+
+    dbt-membership:
+        needs: [version, changelog]
+        if: needs.changelog.outputs.exists == 'false'
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+           team: ${{ steps.team.outputs.team }}
+        steps:
+        -   id: temp-file
+            run: echo "name=output_$GITHUB_RUN_ID.json" >> $GITHUB_OUTPUT
+        -   run: |
+                gh api -H "Accept: application/vnd.github+json" orgs/dbt-labs/teams/core-group/members > ${{ steps.temp-file.outputs.name }}
+            env:
+                GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
+        -   id: team
+            run: |
+                team_list=$(jq -r '.[].login' ${{ steps.temp-file.outputs.name }})
+                team_list_single=$(echo $team_list | tr '\n' ' ')
+                echo "team=$team_list_single" >> $GITHUB_OUTPUT
+        -   run: rm ${{ steps.temp-file.outputs.name }}
+
+    generate-changelog:
+        needs: [package, version, changelog, temp-branch, dbt-membership]
+        if: needs.changelog.outputs.exists == 'false'
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ needs.temp-branch.outputs.name }}
+        -   run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+        -   run: |
+                brew install pre-commit
+                brew tap miniscruff/changie https://github.com/miniscruff/changie
+                brew install changie
+        -   run: |
+                if [[ ${{ needs.version.outputs.is-prerelease }} -eq 1 ]]
+                then
+                    changie batch ${{ needs.version.outputs.base }} --move-dir '${{ needs.version.outputs.base }}' --prerelease ${{ needs.version.outputs.prerelease }}
+                elif [[ -d ".changes/${{ needs.version.outputs.base }}" ]]
+                then
+                    changie batch ${{ needs.version.outputs.base }} --include '${{ needs.version.outputs.base }}' --remove-prereleases
+                else # releasing a final patch with no prereleases
+                    changie batch ${{ needs.version.outputs.base }}
+                fi
+                changie merge
+            working-directory: ./${{ needs.package.outputs.directory }}
+            env:
+                CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
+        -   run: |
+                pre-commit run trailing-whitespace --files __version__.py CHANGELOG.md .changes/*
+                pre-commit run end-of-file-fixer --files __version__.py CHANGELOG.md .changes/*
+            working-directory: ./${{ needs.package.outputs.directory }}
+            continue-on-error: true
+        -   run: |
+                git config user.name "Github Build Bot"
+                git config user.email "buildbot@fishtownanalytics.com"
+                git pull
+                git add .
+                git commit -m "generate changelog"
+                git push
+            working-directory: ./${{ needs.package.outputs.directory }}
+
+    merge-changes:
+        needs: [temp-branch, generate-changelog]
+        if: ${{ needs.temp-branch.outputs.name != '' && inputs.merge }}
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ needs.temp-branch.outputs.name }}
+        -   uses: everlytic/branch-merge@1.1.5
+            with:
+                source_ref: ${{ needs.temp-branch.outputs.name }}
+                target_branch: ${{ inputs.branch }}
+                github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
+                commit_message_template: "[Automated] Merged {source_ref} into target {target_branch} during release process"
+        -   run: git push origin -d ${{ needs.temp-branch.outputs.name }}
+
+    branch:
+        needs: [temp-branch, merge-changes]
+        if: ${{ !failure() && !cancelled() }}
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        # always run this job, regardless of whether changelog generation was skipped
+        # Get the sha that will be released.  If the changelog already exists on the input sha and the version has already been bumped,
+        # then it is what we will release. Otherwise, we generated a changelog and did the version bump in this workflow and there is a
+        # new sha to use from the merge we just did.  Grab that here instead.
+        outputs:
+            name: ${{ steps.branch.outputs.name }}
+        steps:
+        -   id: branch
+            run: |
+                if [[ ${{ needs.temp-branch.outputs.name == '' || inputs.merge }} ]]
+                then
+                    branch="${{ inputs.branch }}"
+                else
+                    branch=${{ needs.temp-branch.outputs.name }}
+                fi
+                echo "name=$branch" >> $GITHUB_OUTPUT
