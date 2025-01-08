@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix is_replaceable check with wrong variable
+time: 2024-04-25T13:36:10.684598+08:00
+custom:
+  Author: rongfengliang
+  Issue: "187"
