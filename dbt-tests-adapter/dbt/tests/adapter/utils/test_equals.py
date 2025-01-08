@@ -1,11 +1,9 @@
 import pytest
 
-from dbt.tests.adapter.utils import fixture_equals
+from dbt.tests.adapter.utils import base_utils, fixture_equals
 from dbt.tests.util import relation_from_name, run_dbt
-from dbt.include.global_project.macros.utils import equals
 
-
-class BaseEquals:
+class BaseEquals(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
