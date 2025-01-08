@@ -27,6 +27,21 @@ resolves #
   tradeoffs you considered.
 -->
 
+### Concrete Adapter Testing
+
+At the appropriate stage of development or review, please use an integration test workflow in each of the following repos against your branch.
+
+Use these to confirm that your feature add or bug fix (1) achieves the desired behavior (2) does not disrupt other concrete adapters:
+* [ ] Postgres
+* [ ] Snowflake
+* [ ] Spark
+* [ ] Redshift
+* [ ] Bigquery
+
+Please link to each CI invocation workflow in this checklist here or in a separate PR comment.
+
+*Note*: Before hitting merge, best practice is to test against your PR's latest SHA.
+
 ### Checklist
 
 - [ ] I have read [the contributing guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md) and understand what's expected of me
