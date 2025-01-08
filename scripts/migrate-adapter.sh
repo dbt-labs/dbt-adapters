@@ -8,7 +8,7 @@ git remote add old https://github.com/dbt-labs/$repo.git
 git fetch old
 
 # merge the updated branch from the legacy repo into the dbt-adapters repo
-git checkout -b $target_branch
+git checkout $target_branch
 git merge old/$source_branch --allow-unrelated-histories
 
 # remove the remote that was created by this process

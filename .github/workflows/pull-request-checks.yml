@@ -14,7 +14,9 @@ jobs:
     changelog-entry:
         uses: ./.github/workflows/_changelog-entry-check.yml
         with:
+            package: "dbt-athena"
             pull-request: ${{ github.event.pull_request.number }}
+        secrets: inherit
 
     code-quality:
         uses: ./.github/workflows/_code-quality.yml
@@ -25,31 +27,54 @@ jobs:
     verify-builds:
         uses: ./.github/workflows/_verify-build.yml
         strategy:
+            fail-fast: false
             matrix:
-                package: ["dbt-adapters", "dbt-tests-adapter"]
+                package: ["dbt-adapters", "dbt-tests-adapter", "dbt-athena", "dbt-athena-community"]
+                os: [ubuntu-22.04]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
         strategy:
+            fail-fast: false
             matrix:
-                package: ["dbt-adapters"]
+                package: ["dbt-adapters", "dbt-athena", "dbt-athena-community"]
+                os: [ ubuntu-22.04 ]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    integration-tests:
+        uses: ./.github/workflows/_integration-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ["dbt-athena", "dbt-athena-community"]
+                os: [ubuntu-22.04]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+        secrets: inherit
 
     # This job does nothing and is only used for branch protection
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry, code-quality, verify-builds, unit-tests]
+        needs: [changelog-entry, code-quality, verify-builds, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
