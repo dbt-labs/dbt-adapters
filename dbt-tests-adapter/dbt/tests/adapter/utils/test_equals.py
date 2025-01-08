@@ -2,6 +2,7 @@ import pytest
 
 from dbt.tests.adapter.utils import fixture_equals
 from dbt.tests.util import relation_from_name, run_dbt
+from dbt.include.global_project.macros.utils import equals
 
 
 class BaseEquals:
