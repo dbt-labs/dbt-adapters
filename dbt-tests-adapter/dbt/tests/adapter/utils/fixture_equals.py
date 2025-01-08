@@ -1,3 +1,5 @@
+from dbt.include.global_project.macros.utils import equals
+
 # equals
 
 SEEDS__DATA_EQUALS_CSV = """key_name,x,y,expected
