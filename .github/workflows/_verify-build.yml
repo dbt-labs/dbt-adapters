@@ -31,6 +31,8 @@ on:
                 options:
                 -   "dbt-adapters"
                 -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
             branch:
                 description: "Choose the branch to build"
                 type: string

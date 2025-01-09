@@ -1,34 +1,11 @@
 version: 2
 updates:
 -   package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-        interval: "daily"
-    rebase-strategy: "disabled"
-    ignore:
-    -   dependency-name: "*"
-        update-types:
-        -   version-update:semver-patch
--   package-ecosystem: "pip"
-    directory: "/dbt-tests-adapter"
-    schedule:
-        interval: "daily"
-    rebase-strategy: "disabled"
-    ignore:
-    -   dependency-name: "*"
-        update-types:
-        -   version-update:semver-patch
--   package-ecosystem: "pip"
-    directory: "/dbt-athena"
-    schedule:
-        interval: "daily"
-    rebase-strategy: "disabled"
-    ignore:
-    -   dependency-name: "*"
-        update-types:
-        -   version-update:semver-patch
--   package-ecosystem: "pip"
-    directory: "/dbt-athena-community"
+    directories:
+    -   "/"
+    -   "/dbt-tests-adapter"
+    -   "/dbt-athena"
+    -   "/dbt-athena-community"
     schedule:
         interval: "daily"
     rebase-strategy: "disabled"

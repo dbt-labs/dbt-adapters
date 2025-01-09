@@ -10,6 +10,8 @@ on:
                 options:
                 -   "dbt-adapters"
                 -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment
@@ -57,7 +59,7 @@ jobs:
         secrets: inherit
 
     publish-internal:
-        if: ${{ inputs.pypi-internal == true }}
+        if: ${{ inputs.pypi-internal == true && inputs.package != 'dbt-athena-community' }}
         needs: generate-changelog
         uses: ./.github/workflows/_publish-internal.yml
         with:
