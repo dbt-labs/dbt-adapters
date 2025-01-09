@@ -1,4 +1,5 @@
 """Test parallel insert into iceberg table."""
+
 import copy
 import os
 
@@ -132,5 +133,7 @@ class TestIcebergRetriesEnabled:
         run_dbt(["seed", "--select", expected__post_seed_name, "--full-refresh"])
 
         run = run_dbt(["run", "--select", "tag:src"])
-        assert all([model_run_result.status == RunStatus.Success for model_run_result in run.results])
+        assert all(
+            [model_run_result.status == RunStatus.Success for model_run_result in run.results]
+        )
         check_relations_equal(project.adapter, [relation_name, expected__post_seed_name])

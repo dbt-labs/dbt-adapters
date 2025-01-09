@@ -1,6 +1,7 @@
 """
 Run the basic dbt test suite on hive tables when applicable.
 """
+
 import pytest
 
 from dbt.tests.adapter.basic.test_adapter_methods import BaseAdapterMethod
@@ -45,12 +46,16 @@ class TestGenericTestsHive(BaseGenericTests):
     pass
 
 
-@pytest.mark.skip(reason="The in-place update is not supported for seeds. We need our own implementation instead.")
+@pytest.mark.skip(
+    reason="The in-place update is not supported for seeds. We need our own implementation instead."
+)
 class TestSnapshotCheckColsHive(BaseSnapshotCheckCols):
     pass
 
 
-@pytest.mark.skip(reason="The in-place update is not supported for seeds. We need our own implementation instead.")
+@pytest.mark.skip(
+    reason="The in-place update is not supported for seeds. We need our own implementation instead."
+)
 class TestSnapshotTimestampHive(BaseSnapshotTimestamp):
     pass
 

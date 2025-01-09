@@ -22,9 +22,14 @@ class TestSession:
         self, monkeypatch, credentials_profile_name, boto_profile_name
     ):
         def mock___build_profile_map(_):
-            return {**{"default": {}}, **({} if not credentials_profile_name else {credentials_profile_name: {}})}
+            return {
+                **{"default": {}},
+                **({} if not credentials_profile_name else {credentials_profile_name: {}}),
+            }
 
-        monkeypatch.setattr(botocore.session.Session, "_build_profile_map", mock___build_profile_map)
+        monkeypatch.setattr(
+            botocore.session.Session, "_build_profile_map", mock___build_profile_map
+        )
         connection = Connection(
             type="test",
             name="test_session",
@@ -70,7 +75,11 @@ class TestAthenaSparkSessionManager:
             athena_credentials,
             timeout=10,
             polling_interval=5,
-            engine_config={"CoordinatorDpuSize": 1, "MaxConcurrentDpus": 2, "DefaultExecutorDpuSize": 1},
+            engine_config={
+                "CoordinatorDpuSize": 1,
+                "MaxConcurrentDpus": 2,
+                "DefaultExecutorDpuSize": 1,
+            },
         )
         monkeypatch.setattr(mock_session_manager, "athena_client", athena_client)
         return mock_session_manager
@@ -92,7 +101,9 @@ class TestAthenaSparkSessionManager:
             ),
             pytest.param(
                 {"Status": {"SessionId": "test_session_id", "State": "TERMINATED"}},
-                DbtRuntimeError("Unable to create session: test_session_id. Got status: TERMINATED."),
+                DbtRuntimeError(
+                    "Unable to create session: test_session_id. Got status: TERMINATED."
+                ),
                 marks=pytest.mark.xfail,
             ),
         ],
@@ -116,13 +127,14 @@ class TestAthenaSparkSessionManager:
         with patch.multiple(
             spark_session_manager,
             poll_until_session_creation=Mock(return_value=session_status_response),
-        ), patch.multiple(
-            athena_client,
-            get_session_status=Mock(return_value=session_status_response),
-            start_session=Mock(return_value=session_status_response.get("Status")),
         ):
-            response = spark_session_manager.start_session()
-            assert response == expected_response
+            with patch.multiple(
+                athena_client,
+                get_session_status=Mock(return_value=session_status_response),
+                start_session=Mock(return_value=session_status_response.get("Status")),
+            ):
+                response = spark_session_manager.start_session()
+                assert response == expected_response
 
     @pytest.mark.parametrize(
         "session_status_response, expected_status",
@@ -151,7 +163,9 @@ class TestAthenaSparkSessionManager:
             ),
         ],
     )
-    def test_get_session_status(self, session_status_response, expected_status, spark_session_manager, athena_client):
+    def test_get_session_status(
+        self, session_status_response, expected_status, spark_session_manager, athena_client
+    ):
         """
         Test the get_session_status function.
 
@@ -168,7 +182,9 @@ class TestAthenaSparkSessionManager:
         Raises:
             AssertionError: If the retrieved session status is not correct.
         """
-        with patch.multiple(athena_client, get_session_status=Mock(return_value=session_status_response)):
+        with patch.multiple(
+            athena_client, get_session_status=Mock(return_value=session_status_response)
+        ):
             response = spark_session_manager.get_session_status("test_session_id")
             assert response == expected_status
 

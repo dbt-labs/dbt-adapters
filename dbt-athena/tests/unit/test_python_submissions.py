@@ -27,7 +27,8 @@ class TestAthenaPythonJobHelper:
                 "timeout": config["timeout"],
                 "polling_interval": config["polling_interval"],
                 "engine_config": request.param.get(
-                    "engine_config", {"CoordinatorDpuSize": 1, "MaxConcurrentDpus": 2, "DefaultExecutorDpuSize": 1}
+                    "engine_config",
+                    {"CoordinatorDpuSize": 1, "MaxConcurrentDpus": 2, "DefaultExecutorDpuSize": 1},
                 ),
             },
         }
@@ -43,7 +44,12 @@ class TestAthenaPythonJobHelper:
 
     @pytest.fixture
     def athena_job_helper(
-        self, athena_credentials, athena_client, athena_spark_session_manager, parsed_model, monkeypatch
+        self,
+        athena_credentials,
+        athena_client,
+        athena_spark_session_manager,
+        parsed_model,
+        monkeypatch,
     ):
         mock_job_helper = AthenaPythonJobHelper(parsed_model, athena_credentials)
         monkeypatch.setattr(mock_job_helper, "athena_client", athena_client)
@@ -88,7 +94,12 @@ class TestAthenaPythonJobHelper:
         indirect=["parsed_model"],
     )
     def test_poll_session_idle(
-        self, session_status_response, expected_response, athena_job_helper, athena_spark_session_manager, monkeypatch
+        self,
+        session_status_response,
+        expected_response,
+        athena_job_helper,
+        athena_spark_session_manager,
+        monkeypatch,
     ):
         with patch.multiple(
             athena_spark_session_manager,
@@ -150,17 +161,20 @@ class TestAthenaPythonJobHelper:
         with patch.multiple(
             athena_spark_session_manager,
             get_session_id=Mock(return_value=uuid.uuid4()),
-        ), patch.multiple(
-            athena_client,
-            get_calculation_execution=Mock(return_value=execution_status),
         ):
+            with patch.multiple(
+                athena_client,
+                get_calculation_execution=Mock(return_value=execution_status),
+            ):
 
-            def mock_sleep(_):
-                pass
+                def mock_sleep(_):
+                    pass
 
-            monkeypatch.setattr(time, "sleep", mock_sleep)
-            poll_response = athena_job_helper.poll_until_execution_completion("test_calculation_id")
-            assert poll_response == expected_response
+                monkeypatch.setattr(time, "sleep", mock_sleep)
+                poll_response = athena_job_helper.poll_until_execution_completion(
+                    "test_calculation_id"
+                )
+                assert poll_response == expected_response
 
     @pytest.mark.parametrize(
         "parsed_model, test_calculation_execution_id, test_calculation_execution",
@@ -198,12 +212,14 @@ class TestAthenaPythonJobHelper:
     ):
         with patch.multiple(
             athena_spark_session_manager, get_session_id=Mock(return_value=uuid.uuid4())
-        ), patch.multiple(
-            athena_client,
-            start_calculation_execution=Mock(return_value=test_calculation_execution_id),
-            get_calculation_execution=Mock(return_value=test_calculation_execution),
-        ), patch.multiple(
-            athena_job_helper, poll_until_session_idle=Mock(return_value="IDLE")
         ):
-            result = athena_job_helper.submit("hello world")
-            assert result == test_calculation_execution["Result"]
+            with patch.multiple(
+                athena_client,
+                start_calculation_execution=Mock(return_value=test_calculation_execution_id),
+                get_calculation_execution=Mock(return_value=test_calculation_execution),
+            ):
+                with patch.multiple(
+                    athena_job_helper, poll_until_session_idle=Mock(return_value="IDLE")
+                ):
+                    result = athena_job_helper.submit("hello world")
+                    assert result == test_calculation_execution["Result"]

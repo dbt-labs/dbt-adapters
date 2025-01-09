@@ -2,6 +2,7 @@
 Run optional dbt functional tests for Iceberg incremental merge, including delete and incremental predicates.
 
 """
+
 import re
 
 import pytest
@@ -180,7 +181,9 @@ class TestIcebergIncrementalUniqueKey(BaseIncrementalUniqueKey):
             "duplicated_unary_unique_key_list.sql": models__duplicated_unary_unique_key_list_sql,
             "not_found_unique_key_list.sql": models__not_found_unique_key_list_sql,
             "expected": {
-                "one_str__overwrite.sql": replace_cast_date(models__expected__one_str__overwrite_sql),
+                "one_str__overwrite.sql": replace_cast_date(
+                    models__expected__one_str__overwrite_sql
+                ),
                 "unique_key_list__inplace_overwrite.sql": replace_cast_date(
                     models__expected__unique_key_list__inplace_overwrite_sql
                 ),
@@ -231,7 +234,9 @@ class TestIcebergIncrementalPredicates(BaseIncrementalPredicates):
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"expected_delete_insert_incremental_predicates.csv": seeds__expected_incremental_predicates_csv}
+        return {
+            "expected_delete_insert_incremental_predicates.csv": seeds__expected_incremental_predicates_csv
+        }
 
 
 class TestIcebergDeleteCondition(BaseIncrementalPredicates):
@@ -247,7 +252,9 @@ class TestIcebergDeleteCondition(BaseIncrementalPredicates):
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"expected_delete_insert_incremental_predicates.csv": seeds__expected_delete_condition_csv}
+        return {
+            "expected_delete_insert_incremental_predicates.csv": seeds__expected_delete_condition_csv
+        }
 
     # Modifying the seed_rows number from the base class method
     def test__incremental_predicates(self, project):
@@ -326,7 +333,9 @@ class TestIcebergMergeExcludeAllColumns(BaseMergeExcludeColumns):
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"expected_merge_exclude_columns.csv": seeds__expected_merge_exclude_all_columns_csv}
+        return {
+            "expected_merge_exclude_columns.csv": seeds__expected_merge_exclude_all_columns_csv
+        }
 
 
 class TestIcebergUpdateCondition:
