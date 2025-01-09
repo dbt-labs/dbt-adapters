@@ -42,8 +42,10 @@ jobs:
             branch: ${{ inputs.branch }}
 
     integration-tests:
+        if: ${{ inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter' }}
         uses: ./.github/workflows/_integration-tests.yml
         with:
+            package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
             repository: ${{ github.repository }}
         secrets: inherit
