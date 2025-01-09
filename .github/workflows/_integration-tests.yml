@@ -58,6 +58,16 @@ jobs:
         runs-on: ${{ inputs.os }}
         environment:
             name: "dbt-athena"
+        env:
+            DBT_TEST_ATHENA_DATABASE: ${{ vars.DBT_TEST_ATHENA_DATABASE }}
+            DBT_TEST_ATHENA_NUM_RETRIES: ${{ vars.DBT_TEST_ATHENA_NUM_RETRIES }}
+            DBT_TEST_ATHENA_POLL_INTERVAL: ${{ vars.DBT_TEST_ATHENA_POLL_INTERVAL }}
+            DBT_TEST_ATHENA_REGION_NAME: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
+            DBT_TEST_ATHENA_S3_STAGING_DIR: ${{ vars.DBT_TEST_ATHENA_S3_STAGING_DIR }}
+            DBT_TEST_ATHENA_S3_TMP_TABLE_DIR: ${{ vars.DBT_TEST_ATHENA_S3_TMP_TABLE_DIR }}
+            DBT_TEST_ATHENA_SCHEMA: ${{ vars.DBT_TEST_ATHENA_SCHEMA }}
+            DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
+            DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
         steps:
         -   uses: actions/checkout@v4
             with:
