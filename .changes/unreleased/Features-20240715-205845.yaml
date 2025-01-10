@@ -1,0 +1,6 @@
+kind: Features
+body: Added macro to allow adapter-specific choice of unspecified value in unit tests
+time: 2024-07-15T20:58:45.587529+02:00
+custom:
+    Author: steffen030
+    Issue: "10447"
