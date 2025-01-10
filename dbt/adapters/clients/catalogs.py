@@ -3,7 +3,7 @@ from dbt.adapters.contracts.catalog import CatalogIntegration
 
 class CatalogIntegrations:
     def __init__(self):
-        self._integrations = None
+        self._integrations = {}
 
     def get(self, name: str) -> CatalogIntegration:
         return self.integrations[name]

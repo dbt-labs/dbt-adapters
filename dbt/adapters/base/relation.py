@@ -60,6 +60,7 @@ class BaseRelation(FakeAPIObject, Hashable):
     require_alias: bool = (
         True  # used to govern whether to add an alias when render_limited is called
     )
+    catalog_name: Optional[str] = None
 
     # register relation types that can be renamed for the purpose of replacing relations using stages and backups
     # adding a relation type here also requires defining the associated rename macro
@@ -318,6 +319,7 @@ class BaseRelation(FakeAPIObject, Hashable):
             schema=relation_config.schema,
             identifier=relation_config.identifier,
             quote_policy=quote_policy,
+            catalog_name=relation_config.catalog_name,
             **kwargs,
         )
 

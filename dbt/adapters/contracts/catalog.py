@@ -55,5 +55,5 @@ class CatalogIntegration(abc.ABC):
     def _handle_adapter_configs(self, adapter_configs: Dict) -> None:
         ...
 
-    def render_ddl_predicates(self, relation_config: RelationConfig) -> str:
+    def render_ddl_predicates(self, relation, config: RelationConfig) -> str:
         ...
