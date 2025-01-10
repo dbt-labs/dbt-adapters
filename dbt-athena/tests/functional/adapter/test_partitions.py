@@ -245,6 +245,7 @@ class TestHiveNullValuedPartitions:
             "test_nullable_partitions_model.sql": test_nullable_partitions_model_sql,
         }
 
+    @pytest.mark.skip(reason="This test cannot be run in parallel.")
     def test__check_run_with_partitions(self, project):
         relation_name = "test_nullable_partitions_model"
         model_run_result_row_count_query = (
