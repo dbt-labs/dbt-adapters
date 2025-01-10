@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix the snapshot merge query for several adapters in new_record mode.
-time: 2024-12-17T16:31:26.970526-05:00
-custom:
-  Author: peterallenwebb
-  Issue: "385"
