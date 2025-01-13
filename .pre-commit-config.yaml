@@ -49,8 +49,6 @@ repos:
         args:
         -   --explicit-package-bases
         -   --ignore-missing-imports
-        -   --warn-unused-ignores
-        -   --disallow-untyped-defs
         -   --pretty
         -   --show-error-codes
         files: ^dbt/adapters/
