@@ -1458,9 +1458,9 @@ class AthenaAdapter(SQLAdapter):
         table_format: Optional[str] = None
         print("AM RULAAAT")
         if (
-                config
-                and hasattr(config, "_extra")
-                and (table_type := config._extra.get("table_type"))
+            config
+            and hasattr(config, "_extra")
+            and (table_type := config._extra.get("table_type"))
         ):
             table_format = table_type
             print("SUNT IN _get_adapter_specific_run_info")
