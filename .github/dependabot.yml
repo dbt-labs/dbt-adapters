@@ -6,8 +6,18 @@ updates:
     -   "/dbt-tests-adapter"
     -   "/dbt-athena"
     -   "/dbt-athena-community"
+    -   "/dbt-spark"
     schedule:
         interval: "daily"
+    rebase-strategy: "disabled"
+    ignore:
+    -   dependency-name: "*"
+        update-types:
+        -   version-update:semver-patch
+-   package-ecosystem: "docker"
+    directory: "dbt-spark/docker"
+    schedule:
+        interval: "weekly"
     rebase-strategy: "disabled"
     ignore:
     -   dependency-name: "*"
