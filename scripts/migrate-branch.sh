@@ -1,10 +1,10 @@
 # 1. Run this script to migrate your feature branch from an adapter repo/fork to the dbt-adapters repo/fork, e.g.:
-#    $> source ./scripts/migrate-branch.sh dbt-labs dbt-postgres my-cool-feature-branch
+#    > source ./scripts/migrate-branch.sh dbt-labs dbt-postgres my-cool-feature-branch
 # 2. Resolve any conflicts resulting from the rebase and re-run.
 # 3. Push the resulting branch back up to the dbt-adapters repo/fork, e.g.:
-#    $> git push origin dbt-postgres/my-cool-feature-branch
+#    > git push origin dbt-postgres/my-cool-feature-branch
 # 4. Once everything migrates successfully, remove the remote, e.g.:
-#    $> git remote remove adapter
+#    > git remote remove adapter
 
 user=$1    # your github user (e.g. dbt-labs)
 repo=$2    # the repo name (e.g. dbt-postgres)

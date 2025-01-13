@@ -185,4 +185,19 @@ The same process is followed whether the contributor is external or another `dbt
 Once all tests are passing and the PR has been approved by the appropriate code owners,
 a `dbt-adapters` maintainer will merge the changes into `main`.
 
+### Migrating an existing pull request into the monorepo
+
+You may have opened your pull request against an adapter prior to its migration into the monorepo.
+In that case, you'll need to migrate that pull request into this repo.
+Unfortunately, GitHub does not allow you to migrate a pull request; however, you can migrate your branch.
+Here are the steps to do that:
+
+1. Fork this repository if you haven't already and pull it down locally
+2. Run the script `./scripts/migrate-branch.sh` (replacing the args with your versions):
+   ```shell
+   source ./scripts/migrate-branch.sh dbt-labs dbt-postgres my-cool-feature-branch
+   ```
+3. Push your new feature branch back up to your fork of this repository
+4. Open up a new pull request into `dbt-adapters` from your fork
+
 And that's it! Happy developing :tada:
