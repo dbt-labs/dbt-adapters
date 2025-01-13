@@ -15,7 +15,7 @@ git remote add adapter https://github.com/$user/$repo.git || true  # this may al
 
 # update your feature branch against dbt-adapters@main and potentially resolve conflicts
 git fetch adapter
-git rebase main adapter/$branch --strategy=ours
+git rebase main adapter/$branch
 
 # create a branch in the dbt-adapters repo for your feature branch from the adapter repo
 git checkout -b $repo/$branch  # prefixing <adapter>/ namespaces your feature branch in the new repo
