@@ -28,12 +28,13 @@ repos:
         -   --target-version=py311
         -   --target-version=py312
         -   --force-exclude=dbt/adapters/events/adapter_types_pb2.py
+        additional_dependencies: [flaky]
 
 -   repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
     -   id: flake8
-        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/
+        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/|dbt-spark/tests/
         args:
         -   --max-line-length=99
         -   --select=E,F,W
@@ -54,4 +55,6 @@ repos:
         additional_dependencies:
         -   types-PyYAML
         -   types-protobuf
+        -   types-python-dateutil
         -   types-pytz
+        -   types-requests

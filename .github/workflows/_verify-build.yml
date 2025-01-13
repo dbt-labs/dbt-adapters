@@ -33,6 +33,7 @@ on:
                 -   "dbt-tests-adapter"
                 -   "dbt-athena"
                 -   "dbt-athena-community"
+                -   "dbt-spark"
             branch:
                 description: "Choose the branch to build"
                 type: string
