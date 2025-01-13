@@ -1452,3 +1452,21 @@ class AthenaAdapter(SQLAdapter):
             LOGGER.debug(f"CAUGHT EXCEPTION: {e}")
             raise e
         return cursor
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
+        table_format: Optional[str] = None
+        print("AM RULAAAT")
+        if (
+                config
+                and hasattr(config, "_extra")
+                and (table_type := config._extra.get("table_type"))
+        ):
+            table_format = table_type
+            print("SUNT IN _get_adapter_specific_run_info")
+            print(table_format)
+        print("AM IESIT DIN _get_adapter_specific_run_info")
+        return {
+            "adapter_type": "athena",
+            "table_format": table_format,
+        }
