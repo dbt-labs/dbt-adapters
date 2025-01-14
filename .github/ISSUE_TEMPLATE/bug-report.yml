@@ -35,6 +35,10 @@ body:
             required: false
         -   label: dbt-athena-community
             required: false
+        -   label: dbt-bigquery
+            required: false
+        -   label: dbt-spark
+            required: false
 -   type: textarea
     attributes:
         label: Current Behavior
