@@ -11,8 +11,45 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    changelog-entry:
+    affected-packages:
+        runs-on: ubuntu-latest
+        outputs:
+            changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
+            verify-build: ${{ steps.verify-build.outputs.changes }}
+            unit-tests: ${{ steps.unit-tests.outputs.changes }}
+            integration-tests: ${{ steps.integration-tests.outputs.changes }}
+        steps:
+        -   id: changelog-entry-check
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/changelog-entry-check.yml
+        -   id: verify-build
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/verify-build.yml
+        -   id: unit-tests
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/unit-tests.yml
+        -   id: integration-tests
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/integration-tests.yml
+
+    changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
+                os: [ubuntu-22.04]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: "dbt-athena"
             pull-request: ${{ github.event.pull_request.number }}
@@ -24,18 +61,14 @@ jobs:
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
-    verify-builds:
+    verify-build:
         uses: ./.github/workflows/_verify-build.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.verify-build)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-spark"
+                package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
                 os: [ubuntu-22.04]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
@@ -47,15 +80,12 @@ jobs:
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.unit-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-spark"
+                package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
                 os: [ ubuntu-22.04 ]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
@@ -67,14 +97,12 @@ jobs:
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-spark"
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
                 os: [ubuntu-22.04]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
@@ -89,7 +117,7 @@ jobs:
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry, code-quality, verify-builds, unit-tests, integration-tests]
+        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1

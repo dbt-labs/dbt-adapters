@@ -1,0 +1,16 @@
+dbt-adapters:
+-   'dbt/**'
+dbt-tests-adapter:
+-   'dbt-tests-adapter/**'
+dbt-athena:
+-   'dbt-athena/**'
+dbt-bigquery:
+-   'dbt-bigquery/**'
+dbt-postgres:
+-   'dbt-postgres/**'
+dbt-redshift:
+-   'dbt-redshift/**'
+dbt-snowflake:
+-   'dbt-snowflake/**'
+dbt-spark:
+-   'dbt-spark/**'

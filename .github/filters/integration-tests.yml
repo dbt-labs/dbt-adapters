@@ -1,0 +1,30 @@
+dbt-athena:
+-   'dbt-athena/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-athena-community:
+-   'dbt-athena/**'
+-   'dbt-athena-community/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-bigquery:
+-   'dbt-bigquery/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-postgres:
+-   'dbt-postgres/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-redshift:
+-   'dbt-redshift/**'
+-   'dbt-postgres/src/dbt/include/postgres/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-snowflake:
+-   'dbt-snowflake/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
+dbt-spark:
+-   'dbt-spark/**'
+-   'dbt/**'
+-   'dbt-tests-adapter/**'
