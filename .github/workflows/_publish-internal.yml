@@ -23,6 +23,7 @@ on:
                 options:
                 -   "dbt-adapters"
                 -   "dbt-athena"
+                -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment

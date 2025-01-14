@@ -31,6 +31,7 @@ on:
                 options:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
+                -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
                 type: string
@@ -51,6 +52,17 @@ on:
 permissions:
     id-token: write
     contents: read
+
+env:
+    DBT_INVOCATION_ENV: ${{ vars.DBT_INVOCATION_ENV }}
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ vars.DD_CIVISIBILITY_AGENTLESS_ENABLED }}
+    DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    DD_SITE: ${{ vars.DD_SITE }}
+    DD_ENV: ${{ vars.DD_ENV }}
+    DD_SERVICE: ${{ github.event.repository.name }}  # this can change per run because of forks
+    DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+    DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+    DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
 
 jobs:
     integration-tests-athena:
@@ -82,4 +94,39 @@ jobs:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
         -   run: hatch run integration-tests
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-spark:
+        if: ${{ inputs.package == 'dbt-spark' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-spark"
+        env:
+            DBT_DATABRICKS_CLUSTER_NAME: ${{ secrets.DBT_DATABRICKS_CLUSTER_NAME }}
+            DBT_DATABRICKS_HOST_NAME: ${{ secrets.DBT_DATABRICKS_HOST_NAME }}
+            DBT_DATABRICKS_ENDPOINT: ${{ secrets.DBT_DATABRICKS_ENDPOINT }}
+            DBT_DATABRICKS_TOKEN: ${{ secrets.DBT_DATABRICKS_TOKEN }}
+            DBT_DATABRICKS_USER: ${{ secrets.DBT_DATABRICKS_USER }}
+        strategy:
+            fail-fast: false
+            matrix:
+                profile:
+                -   "apache_spark"
+                -   "spark_session"
+                -   "spark_http_odbc"
+                -   "databricks_sql_endpoint"
+                -   "databricks_cluster"
+                -   "databricks_http_cluster"
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run pip install -r dagger/requirements.txt
+            working-directory: ./${{ inputs.package }}
+        -   run: hatch run integration-tests --profile ${{ matrix.profile }}
             working-directory: ./${{ inputs.package }}
