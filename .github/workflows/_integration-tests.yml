@@ -31,6 +31,7 @@ on:
                 options:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
+                -   "dbt-bigquery"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
@@ -94,6 +95,36 @@ jobs:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
         -   run: hatch run integration-tests
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-bigquery:
+        if: ${{ inputs.package == 'dbt-bigquery' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-bigquery"
+        env:
+            BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
+            BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
+            BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
+            DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
+            GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run integration-tests tests/functional -k "not TestPython"
+            working-directory: ./${{ inputs.package }}
+        -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
+            if: ${{ inputs.python-version == '3.9' }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
     integration-tests-spark:

@@ -6,6 +6,7 @@ updates:
     -   "/dbt-tests-adapter"
     -   "/dbt-athena"
     -   "/dbt-athena-community"
+    -   "/dbt-bigquery"
     -   "/dbt-spark"
     schedule:
         interval: "daily"
@@ -15,7 +16,9 @@ updates:
         update-types:
         -   version-update:semver-patch
 -   package-ecosystem: "docker"
-    directory: "dbt-spark/docker"
+    directories:
+    -   "/dbt-bigquery/docker"
+    -   "/dbt-spark/docker"
     schedule:
         interval: "weekly"
     rebase-strategy: "disabled"
