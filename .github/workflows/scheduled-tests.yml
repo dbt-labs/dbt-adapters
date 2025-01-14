@@ -3,7 +3,6 @@ name: "Scheduled tests"
 on:
     schedule:
     -   cron: '0 3 * * *'
-    pull_reqeust:
     workflow_dispatch:
 
 jobs:
