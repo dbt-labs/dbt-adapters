@@ -1,0 +1,90 @@
+name: "Scheduled tests"
+
+on:
+    schedule:
+    -   cron: '0 3 * * *'
+
+jobs:
+    verify-builds:
+        uses: ./.github/workflows/_verify-build.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-spark"
+                os: [ubuntu-22.04]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-spark"
+                os: [ ubuntu-22.04 ]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    integration-tests:
+        uses: ./.github/workflows/_integration-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-spark"
+                os: [ubuntu-22.04]
+                python-version: ["3.9", "3.10", "3.11", "3.12"]
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+        secrets: inherit
+
+    notification:
+        if: always()
+        needs: [verify-builds, unit-tests, integration-tests]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
+        -   id: results
+            uses: re-actors/alls-green@release/v1
+            with:
+                jobs: ${{ toJSON(needs) }}
+        -   uses: ravsamhq/notify-slack-action@v2
+            if: ${{ always() }}
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                status: ${{ job.status }}
+                notification_title: "{workflow} has {status_message}"
+                message_format: "{emoji} *{workflow}* {status_message} in <{repo_url}|{repo}>"
+                footer: "View run: {workflow_url}"
+                mention_users: "S066LNHS2N6"
+                mention_users_when: "failure,warnings"
+            env:
+                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
