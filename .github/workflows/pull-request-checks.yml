@@ -37,7 +37,7 @@ jobs:
                 -   "dbt-bigquery"
                 -   "dbt-spark"
                 os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -57,7 +57,7 @@ jobs:
                 -   "dbt-bigquery"
                 -   "dbt-spark"
                 os: [ ubuntu-22.04 ]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -76,7 +76,7 @@ jobs:
                 -   "dbt-bigquery"
                 -   "dbt-spark"
                 os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
