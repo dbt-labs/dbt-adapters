@@ -158,6 +158,9 @@ cython_debug/
 # PyCharm
 .idea/
 
+# AWS credentials
+.aws/
+
 # MacOS
 .DS_Store
 
