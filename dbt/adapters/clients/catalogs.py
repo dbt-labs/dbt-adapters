@@ -1,3 +1,5 @@
+from dbt_common.exceptions import DbtValidationError
+
 from dbt.adapters.contracts.catalog import CatalogIntegration
 
 
@@ -20,7 +22,12 @@ _CATALOG_CLIENT = CatalogIntegrations()
 
 
 def get_catalog(integration_name: str) -> CatalogIntegration:
-    return _CATALOG_CLIENT.get(integration_name)
+    try:
+        return _CATALOG_CLIENT.get(integration_name)
+    except KeyError:
+        raise DbtValidationError(
+            f"Catalog integration '{integration_name}' not found in the catalog client"
+        )
 
 
 def add_catalog(integration: CatalogIntegration, catalog_name: str):

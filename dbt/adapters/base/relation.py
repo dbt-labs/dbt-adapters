@@ -306,6 +306,11 @@ class BaseRelation(FakeAPIObject, Hashable):
 
         config_quoting = relation_config.quoting_dict
         config_quoting.pop("column", None)
+
+        catalog_name = relation_config.catalog_name \
+            if hasattr(relation_config, "catalog_name") \
+            else relation_config.config.get("catalog", None)
+
         # precedence: kwargs quoting > relation config quoting > base quoting > default quoting
         quote_policy = deep_merge(
             cls.get_default_quote_policy().to_dict(omit_none=True),
@@ -319,7 +324,7 @@ class BaseRelation(FakeAPIObject, Hashable):
             schema=relation_config.schema,
             identifier=relation_config.identifier,
             quote_policy=quote_policy,
-            catalog_name=relation_config.catalog_name,
+            catalog_name=catalog_name,
             **kwargs,
         )
 
