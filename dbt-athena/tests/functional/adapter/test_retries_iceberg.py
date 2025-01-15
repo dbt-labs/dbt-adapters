@@ -2,6 +2,7 @@
 
 import copy
 import os
+import time
 
 import pytest
 
@@ -40,21 +41,28 @@ limit 0
 
 """
 
-models__source = {
-    f"model_{i}.sql": f"""
-{{{{
-    config(
-        table_type='iceberg',
-        materialized='table',
-        tags=['src'],
-        pre_hook='insert into target values ({i}, {i})'
-    )
-}}}}
-
-select 1 as col
 """
-    for i in range(PARALLELISM)
-}
+    Using an unique tag here to avoid some issues that pop up when running tests in parallel.
+"""
+
+
+def get_models__source(unique_tag: str):
+    return {
+        f"model_{i}.sql": f"""
+    {{{{
+        config(
+            table_type='iceberg',
+            materialized='table',
+            tags=['{unique_tag}'],
+            pre_hook='insert into target values ({i}, {i})'
+        )
+    }}}}
+
+    select 1 as col
+    """
+        for i in range(PARALLELISM)
+    }
+
 
 seeds__expected_target_init = "id,status"
 seeds__expected_target_post = "id,status\n" + "\n".join([f"{i},{i}" for i in range(PARALLELISM)])
@@ -62,14 +70,18 @@ seeds__expected_target_post = "id,status\n" + "\n".join([f"{i},{i}" for i in ran
 
 class TestIcebergRetriesDisabled:
     @pytest.fixture(scope="class")
+    def unique_tag(self):
+        return str(time.time())
+
+    @pytest.fixture(scope="class")
     def dbt_profile_target(self):
         profile = copy.deepcopy(base_dbt_profile)
         profile["num_iceberg_retries"] = 0
         return profile
 
     @pytest.fixture(scope="class")
-    def models(self):
-        return {**{"target.sql": models__target}, **models__source}
+    def models(self, unique_tag):
+        return {**{"target.sql": models__target}, **get_models__source(unique_tag)}
 
     @pytest.fixture(scope="class")
     def seeds(self):
@@ -78,7 +90,7 @@ class TestIcebergRetriesDisabled:
             "expected_target_post.csv": seeds__expected_target_post,
         }
 
-    def test__retries_iceberg(self, project):
+    def test__retries_iceberg(self, project, unique_tag):
         """Seed should match the model after run"""
 
         expected__init_seed_name = "expected_target_init"
@@ -93,12 +105,16 @@ class TestIcebergRetriesDisabled:
         expected__post_seed_name = "expected_target_post"
         run_dbt(["seed", "--select", expected__post_seed_name, "--full-refresh"])
 
-        run, log = run_dbt_and_capture(["run", "--select", "tag:src"], expect_pass=False)
+        run, log = run_dbt_and_capture(["run", "--select", f"tag:{unique_tag}"], expect_pass=False)
         assert any(model_run_result.status == RunStatus.Error for model_run_result in run.results)
         assert "ICEBERG_COMMIT_ERROR" in log
 
 
 class TestIcebergRetriesEnabled:
+    @pytest.fixture(scope="class")
+    def unique_tag(self):
+        return str(time.time())
+
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
         profile = copy.deepcopy(base_dbt_profile)
@@ -107,8 +123,8 @@ class TestIcebergRetriesEnabled:
         return profile
 
     @pytest.fixture(scope="class")
-    def models(self):
-        return {**{"target.sql": models__target}, **models__source}
+    def models(self, unique_tag):
+        return {**{"target.sql": models__target}, **get_models__source(unique_tag)}
 
     @pytest.fixture(scope="class")
     def seeds(self):
@@ -117,7 +133,7 @@ class TestIcebergRetriesEnabled:
             "expected_target_post.csv": seeds__expected_target_post,
         }
 
-    def test__retries_iceberg(self, project):
+    def test__retries_iceberg(self, project, unique_tag):
         """Seed should match the model after run"""
 
         expected__init_seed_name = "expected_target_init"
@@ -132,7 +148,7 @@ class TestIcebergRetriesEnabled:
         expected__post_seed_name = "expected_target_post"
         run_dbt(["seed", "--select", expected__post_seed_name, "--full-refresh"])
 
-        run = run_dbt(["run", "--select", "tag:src"])
+        run = run_dbt(["run", "--select", f"tag:{unique_tag}"])
         assert all(
             [model_run_result.status == RunStatus.Success for model_run_result in run.results]
         )
