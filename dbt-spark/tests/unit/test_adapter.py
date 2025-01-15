@@ -23,8 +23,6 @@ class TestSparkAdapter(unittest.TestCase):
         target_use_ssl_thrift,
         base_project_cfg,
     ):
-        my_var = "something nice"
-        breakpoint()
         self.base_project_cfg = base_project_cfg
         self.target_http = target_http
         self.target_odbc_with_extra_conn = target_odbc_with_extra_conn
