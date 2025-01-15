@@ -62,6 +62,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    catalog_name: Optional[str] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
