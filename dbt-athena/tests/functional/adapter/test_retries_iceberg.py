@@ -9,7 +9,7 @@ import pytest
 from dbt.artifacts.schemas.results import RunStatus
 from dbt.tests.util import check_relations_equal, run_dbt, run_dbt_and_capture
 
-PARALLELISM = 10
+PARALLELISM = 2
 
 base_dbt_profile = {
     "type": "athena",
