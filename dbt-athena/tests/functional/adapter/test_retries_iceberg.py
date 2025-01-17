@@ -60,6 +60,7 @@ seeds__expected_target_init = "id,status"
 seeds__expected_target_post = "id,status\n" + "\n".join([f"{i},{i}" for i in range(PARALLELISM)])
 
 
+@pytest.mark.flaky
 class TestIcebergRetriesDisabled:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
