@@ -104,7 +104,7 @@ jobs:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
         # run flaky tests command if is-flaky-test-run flag is true. Otherwise, run the other tests
-        -   run: ${{ inputs.is-flaky-test-run && 'hatch run integration-tests -m flaky -n1 --ddtrace' ||  'hatch run integration-tests -m "not flaky"' }}
+        -   run: ${{ inputs.is-flaky-test-run && 'hatch run integration-tests -m flaky -n1' ||  'hatch run integration-tests -m "not flaky"' }}
             working-directory: ./${{ inputs.package }}
 
     integration-tests-bigquery:
