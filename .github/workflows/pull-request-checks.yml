@@ -83,7 +83,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
-            run-flaky-tests: false
+            is-flaky-test-run: false
         secrets: inherit
     # Special case here for Athena, since we have two identical packages -- dbt-athena and dbt-athena-community
     # We don't want certain tests within this adapter to run in parallel
@@ -104,7 +104,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
-            run-flaky-tests: true
+            is-flaky-test-run: true
         secrets: inherit
     # This job does nothing and is only used for branch protection
     results:
