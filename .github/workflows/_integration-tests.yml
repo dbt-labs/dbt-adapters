@@ -75,6 +75,7 @@ env:
 
 jobs:
     integration-tests-athena:
+        name: integration-tests-athena-${{ inputs.is-flaky-test-run && "flaky" || "not-flaky" }}
         if: ${{ inputs.package == 'dbt-athena' || inputs.package == 'dbt-athena-community' }}
         runs-on: ${{ inputs.os }}
         environment:
