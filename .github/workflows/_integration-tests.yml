@@ -32,6 +32,7 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
