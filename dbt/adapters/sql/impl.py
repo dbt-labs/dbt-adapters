@@ -1,5 +1,6 @@
 from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
+from dbt.adapters.base.meta import record_function
 from dbt_common.events.functions import fire_event
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
@@ -46,6 +47,7 @@ class SQLAdapter(BaseAdapter):
     ConnectionManager: Type[SQLConnectionManager]
     connections: SQLConnectionManager
 
+    @record_function
     @available.parse(lambda *a, **k: (None, None))
     def add_query(
         self,

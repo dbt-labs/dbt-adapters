@@ -55,7 +55,7 @@ from dbt.adapters.base.connections import (
     BaseConnectionManager,
     Connection,
 )
-from dbt.adapters.base.meta import AdapterMeta, available, available_property
+from dbt.adapters.base.meta import AdapterMeta, available, available_property, record_function
 from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
@@ -378,6 +378,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 self.connections.query_header.reset()
 
     @available.parse(_parse_callback_empty_table)
+    @record_function
     def execute(
         self,
         sql: str,
@@ -410,6 +411,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`validate_sql` is not implemented for this adapter!")
 
     @available.parse(lambda *a, **k: [])
+    @record_function
     def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
         """Get a list of the Columns with names and data types from the given sql."""
         _, cursor = self.connections.add_select_query(sql)
@@ -423,6 +425,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return columns
 
     @available.parse(_parse_callback_empty_table)
+    @record_function
     def get_partitions_metadata(self, table: str) -> Tuple["agate.Table"]:
         """
         TODO: Can we move this to dbt-bigquery?
@@ -572,6 +575,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             self._relations_cache_for_schemas(relation_configs, required_schemas)
 
     @available
+    @record_function
     def cache_added(self, relation: Optional[BaseRelation]) -> str:
         """Cache a new relation in dbt. It will show up in `list relations`."""
         if relation is None:
@@ -582,6 +586,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ""
 
     @available
+    @record_function
     def cache_dropped(self, relation: Optional[BaseRelation]) -> str:
         """Drop a relation in dbt. It will no longer show up in
         `list relations`, and any bound views will be dropped from the cache
@@ -593,6 +598,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return ""
 
     @available
+    @record_function
     def cache_renamed(
         self,
         from_relation: Optional[BaseRelation],
@@ -633,6 +639,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`list_schemas` is not implemented for this adapter!")
 
     @available.parse(lambda *a, **k: False)
+    @record_function
     def check_schema_exists(self, database: str, schema: str) -> bool:
         """Check if a schema exists.
 
@@ -640,6 +647,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         and adapters should implement it if there is an optimized path (and
         there probably is)
         """
+        breakpoint()
         search = (s.lower() for s in self.list_schemas(database=database))
         return schema.lower() in search
 
@@ -648,6 +656,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     ###
     @abc.abstractmethod
     @available.parse_none
+    @record_function
     def drop_relation(self, relation: BaseRelation) -> None:
         """Drop the given relation.
 
@@ -657,12 +666,14 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @abc.abstractmethod
     @available.parse_none
+    @record_function
     def truncate_relation(self, relation: BaseRelation) -> None:
         """Truncate the given relation."""
         raise NotImplementedError("`truncate_relation` is not implemented for this adapter!")
 
     @abc.abstractmethod
     @available.parse_none
+    @record_function
     def rename_relation(self, from_relation: BaseRelation, to_relation: BaseRelation) -> None:
         """Rename the relation from from_relation to to_relation.
 
@@ -672,6 +683,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @abc.abstractmethod
     @available.parse_list
+    @record_function
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
@@ -683,6 +695,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         )
 
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
+    @record_function
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
         """DEPRECATED: Get a list of the columns in the given table."""
         relation = self.Relation.create(
@@ -725,6 +738,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     # Methods about grants
     ###
     @available
+    @record_function
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of `show grants` (or equivalent) to match the
         grants which a user would configure in their project.
@@ -752,6 +766,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     # Provided methods about relations
     ###
     @available.parse_list
+    @record_function
     def get_missing_columns(
         self, from_relation: BaseRelation, to_relation: BaseRelation
     ) -> List[BaseColumn]:
@@ -783,6 +798,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return [col for (col_name, col) in from_columns.items() if col_name in missing_columns]
 
     @available.parse_none
+    @record_function
     def valid_snapshot_target(
         self, relation: BaseRelation, column_names: Optional[Dict[str, str]] = None
     ) -> None:
@@ -815,6 +831,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
+    @record_function
     def assert_valid_snapshot_target_given_strategy(
         self, relation: BaseRelation, column_names: Dict[str, str], strategy: SnapshotStrategy
     ) -> None:
@@ -837,6 +854,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 raise SnapshotTargetNotSnapshotTableError(missing)
 
     @available.parse_none
+    @record_function
     def expand_target_column_types(
         self, from_relation: BaseRelation, to_relation: BaseRelation
     ) -> None:
@@ -931,6 +949,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return matches
 
     @available.parse_none
+    @record_function
     def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
         relations_list = self.list_relations(database, schema)
 
@@ -950,6 +969,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return None
 
     @available.deprecated("get_relation", lambda *a, **k: False)
+    @record_function
     def already_exists(self, schema: str, name: str) -> bool:
         """DEPRECATED: Return if a model already exists in the database"""
         database = self.config.credentials.database
@@ -962,17 +982,20 @@ class BaseAdapter(metaclass=AdapterMeta):
     ###
     @abc.abstractmethod
     @available.parse_none
+    @record_function
     def create_schema(self, relation: BaseRelation):
         """Create the given schema if it does not exist."""
         raise NotImplementedError("`create_schema` is not implemented for this adapter!")
 
     @abc.abstractmethod
     @available.parse_none
+    @record_function
     def drop_schema(self, relation: BaseRelation):
         """Drop the given schema (and everything in it) if it exists."""
         raise NotImplementedError("`drop_schema` is not implemented for this adapter!")
 
     @available
+    @record_function
     @classmethod
     @abc.abstractmethod
     def quote(cls, identifier: str) -> str:
@@ -980,6 +1003,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("`quote` is not implemented for this adapter!")
 
     @available
+    @record_function
     def quote_as_configured(self, identifier: str, quote_key: str) -> str:
         """Quote or do not quote the given identifer as configured in the
         project config for the quote key.
@@ -998,6 +1022,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         else:
             return identifier
 
+    @record_function
     @available
     def quote_seed_column(self, column: str, quote_config: Optional[bool]) -> str:
         quote_columns: bool = True
@@ -1100,6 +1125,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         raise NotImplementedError("`convert_time_type` is not implemented for this adapter!")
 
+    @record_function
     @available
     @classmethod
     def convert_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
@@ -1625,6 +1651,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return builtin_strategies
 
+    @record_function
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
         """Gets the macro for the given incremental strategy.
@@ -1702,6 +1729,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return rendered_column_constraint
 
+    @record_function
     @available
     @classmethod
     def render_raw_columns_constraints(cls, raw_columns: Dict[str, Dict[str, Any]]) -> List:
@@ -1756,6 +1784,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         except Exception:
             raise DbtValidationError(f"Could not parse constraint: {raw_constraint}")
 
+    @record_function
     @available
     @classmethod
     def render_raw_model_constraints(cls, raw_constraints: List[Dict[str, Any]]) -> List[str]:
@@ -1828,6 +1857,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         return {}
 
+    @record_function
     @available.parse_none
     @classmethod
     def get_hard_deletes_behavior(cls, config):

@@ -1,6 +1,12 @@
 import abc
+from collections import defaultdict
+import contextvars
+import json
+import os
 from functools import wraps
 from typing import Any, Callable, Dict, FrozenSet, Optional, Set
+import os.path
+import uuid
 
 from dbt_common.events.functions import warn_or_error
 
@@ -8,6 +14,121 @@ from dbt.adapters.events.types import AdapterDeprecationWarning
 
 
 Decorator = Callable[[Any], Callable]
+
+
+# start a context var to store the thread name
+thread_name = contextvars.ContextVar("thread_name", default="master")
+
+# define functions to set and get the thread name
+def set_thread_name(name: str):
+    thread_name.set(name)
+
+def get_thread_name():
+    return thread_name.get()
+
+# start a recorder to record the function calls, it takes a folder path
+# as input, it will record function calls for each thread in a folder named after the thread name
+# the folder will be created if it does not exist
+# the recorder will record the function name, args, kwargs, and return value
+# each function will be a single json file in the folder with schema  {operation:[{input_args:xxxx, output: xxx, error: xxx}]}
+# the recorder will also record the thread name in the folder
+class Recorder:
+    def __init__(self, folder_path: str):
+        self.folder_path = folder_path
+        os.makedirs(self.folder_path, exist_ok=True)
+        self.operations: Dict[str, Dict[str, list]] = defaultdict(lambda: defaultdict(list))
+
+    def call_and_record(self, func: Callable, *args, **kwargs):
+        # get the thread name
+        thread_name = get_thread_name()
+        # create a folder for the thread if it does not exist
+        # record the function call
+        err = None
+        try:
+            ret = func(*args, **kwargs)
+            operation = {
+                "function_name": func.__name__,
+                "input_args": args,
+                "input_kwargs": kwargs,
+                "output": ret,
+                "error": None
+            }
+        except Exception as e:
+            operation = {
+                "function_name": func.__name__,
+                "input_args": args,
+                "input_kwargs": kwargs,
+                "output": None,
+                "error": str(e)
+            }
+            err = e
+        finally:
+            self.operations[thread_name][func.__name__].append(operation)
+            if err:
+                raise err
+        return ret
+
+    def save(self):
+        from dbt.adapters.contracts.connection import AdapterResponse
+        from dbt.adapters.postgres import PostgresRelation
+
+        import agate
+
+        def handle_result(result, thread_folder):
+            if isinstance(result, AdapterResponse):
+                return {"type": "adapter_response", "data": result.to_dict()}
+            elif isinstance(result, agate.table.Table):
+                id = uuid.uuid4()
+                result.to_json(os.path.join(thread_folder, f"{id}.csv"))
+                return {"data": f"{id}", "type": "agate_table"}
+            elif isinstance(result, PostgresRelation):
+                return {"data": result.to_dict(), "type": "postgres_relation"}
+            elif result is None:
+                return {"data": None, "type": "none"}
+            elif isinstance(result, str):
+                return {"data": result, "type": "string"}
+            elif isinstance(result, bool):
+                return {"data": result, "type": "boolean"}
+            else:
+                raise ValueError(f"Unknown result type: {type(result)}")
+        for thread_name, operations in self.operations.items():
+            thread_folder = os.path.join(self.folder_path, thread_name)
+            os.makedirs(thread_folder, exist_ok=True)
+            for operation_name, operations in operations.items():
+                with open(os.path.join(thread_folder, f"{operation_name}.json"), "w") as f:
+                    try:
+                        for operation in operations:
+                            operation["input_args"] = operation["input_args"][1:]
+                            operation["input_args"] = [
+                                handle_result(result, thread_folder) for result in operation["input_args"]
+                            ]
+                            operation["input_kwargs"] = {
+                                k: handle_result(v, thread_folder) for k, v in operation["input_kwargs"].items()
+                            }
+                            if isinstance(operation["output"], list):
+                                operation["output"] = [
+                                    handle_result(result, thread_folder) for result in operation["output"]
+                                ]
+                            elif  isinstance(operation["output"], tuple):
+                                operation["output"] = [
+                                    handle_result(result, thread_folder)
+                                    for result in operation["output"]
+                                ]
+                            else:
+                                operation["output"] = handle_result(operation["output"], thread_folder)
+                    except Exception as e:
+                        breakpoint()
+                    try:
+                        json.dump({"operation": operations}, f)
+                    except Exception as e:
+                        raise ValueError(f"Error dumping operation {operation_name}: {e}")
+
+recorder = Recorder("/Users/chenyuli/git/recording_test_simple")
+
+def record_function(func: Callable):
+    def wrapper(*args, **kwargs):
+        return recorder.call_and_record(func, *args, **kwargs)
+    return wrapper
 
 
 class _Available:
@@ -61,7 +182,6 @@ class _Available:
         The optional parse_replacement, if provided, will provide a parse-time
         replacement for the actual method (see `available.parse`).
         """
-
         def wrapper(func):
             func_name = func.__name__
 
