@@ -55,12 +55,15 @@ jobs:
 
     generate-changelog:
         needs: [unit-tests, integration-tests]
+        if: |
+          always() && 
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success')
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
             merge: ${{ inputs.deploy-to == 'prod' }}
             branch: ${{ inputs.branch }}
-            repository: ${{ github.repository }}
         secrets: inherit
 
     publish-internal:
