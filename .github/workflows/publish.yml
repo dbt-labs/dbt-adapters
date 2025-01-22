@@ -53,8 +53,11 @@ jobs:
         secrets: inherit
 
     generate-changelog:
-        needs: [unit-tests]
-        if: ${{ (inputs.package == 'dbt-adapters' || inputs.package == 'dbt-tests-adapter') || steps.integration-tests.outcome == 'success' }}
+        needs: [unit-tests, integration-tests]
+        if: |
+          always() && 
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success')
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
