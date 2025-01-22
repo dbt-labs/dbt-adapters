@@ -59,7 +59,6 @@ jobs:
             package: ${{ inputs.package }}
             merge: ${{ inputs.deploy-to == 'prod' }}
             branch: ${{ inputs.branch }}
-            repository: ${{ github.repository }}
         secrets: inherit
 
     publish-internal:
