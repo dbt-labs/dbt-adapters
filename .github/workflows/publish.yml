@@ -55,7 +55,7 @@ jobs:
     generate-changelog:
         needs: [unit-tests, integration-tests]
         if: |
-          always() && 
+          always() &&
           (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
           (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
           inputs.pypi-public == true
@@ -68,10 +68,10 @@ jobs:
 
     publish-internal:
         if: |
-          always() && 
+          always() &&
           (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
           (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
-          inputs.pypi-internal == true && 
+          inputs.pypi-internal == true &&
           inputs.package != 'dbt-athena-community'
         needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
@@ -89,8 +89,8 @@ jobs:
 
     publish-pypi:
         if: |
-          always() && 
-          needs.generate-changelog.result == 'success' && 
+          always() &&
+          needs.generate-changelog.result == 'success' &&
           inputs.pypi-public == true
         needs: [package, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
