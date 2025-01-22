@@ -45,7 +45,7 @@ repos:
     rev: v1.11.2
     hooks:
     -   id: mypy
-        exclude: dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/dbt/__init__.py
+        exclude: dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/dbt/__init__.py|dbt/adapters/base/adapter_function_recording_pb2.py
         args:
         -   --explicit-package-bases
         -   --ignore-missing-imports

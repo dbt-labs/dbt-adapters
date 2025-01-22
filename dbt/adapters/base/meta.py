@@ -11,6 +11,19 @@ import uuid
 from dbt_common.events.functions import warn_or_error
 
 from dbt.adapters.events.types import AdapterDeprecationWarning
+from dbt.adapters.contracts.connection import AdapterResponse
+import agate
+from dbt.adapters.base.adapter_function_recording_pb2 import (
+    Object,
+    AdapterResponse as PbAdapterResponse,
+    AgateTable as PbAgateTable,
+    PostgresRelation as PbPostgresRelation,
+    NullValue,
+    RecordingData,
+    ThreadOperations,
+    OperationList,
+    Operation,
+)
 
 
 Decorator = Callable[[Any], Callable]
@@ -19,12 +32,15 @@ Decorator = Callable[[Any], Callable]
 # start a context var to store the thread name
 thread_name = contextvars.ContextVar("thread_name", default="master")
 
+
 # define functions to set and get the thread name
 def set_thread_name(name: str):
     thread_name.set(name)
 
+
 def get_thread_name():
     return thread_name.get()
+
 
 # start a recorder to record the function calls, it takes a folder path
 # as input, it will record function calls for each thread in a folder named after the thread name
@@ -51,7 +67,7 @@ class Recorder:
                 "input_args": args,
                 "input_kwargs": kwargs,
                 "output": ret,
-                "error": None
+                "error": None,
             }
         except Exception as e:
             operation = {
@@ -59,7 +75,7 @@ class Recorder:
                 "input_args": args,
                 "input_kwargs": kwargs,
                 "output": None,
-                "error": str(e)
+                "error": str(e),
             }
             err = e
         finally:
@@ -69,65 +85,99 @@ class Recorder:
         return ret
 
     def save(self):
-        from dbt.adapters.contracts.connection import AdapterResponse
-        from dbt.adapters.postgres import PostgresRelation
 
-        import agate
+        def to_write_obj(value, thread_folder) -> Object:
+            from dbt.adapters.postgres import PostgresRelation
 
-        def handle_result(result, thread_folder):
-            if isinstance(result, AdapterResponse):
-                return {"type": "adapter_response", "data": result.to_dict()}
-            elif isinstance(result, agate.table.Table):
-                id = uuid.uuid4()
-                result.to_json(os.path.join(thread_folder, f"{id}.csv"))
-                return {"data": f"{id}", "type": "agate_table"}
-            elif isinstance(result, PostgresRelation):
-                return {"data": result.to_dict(), "type": "postgres_relation"}
-            elif result is None:
-                return {"data": None, "type": "none"}
-            elif isinstance(result, str):
-                return {"data": result, "type": "string"}
-            elif isinstance(result, bool):
-                return {"data": result, "type": "boolean"}
+            result = Object()
+            if isinstance(value, AdapterResponse):
+                adapter_response = PbAdapterResponse(
+                    message=str(getattr(value, "message", "")),
+                    code=str(getattr(value, "code", "")),
+                    rows_affected=getattr(value, "rows_affected", 0),
+                    query_id=getattr(value, "query_id", None),
+                )
+                result.adapter_response.CopyFrom(adapter_response)
+            elif isinstance(value, agate.Table):
+                id = str(uuid.uuid4())
+                # Convert table rows to list of dicts
+                rows = [dict(zip(value.column_names, row)) for row in value.rows]
+                with open(os.path.join(thread_folder, f"{id}.json"), "w") as f:
+                    json.dump(rows, f)
+                agate_table = PbAgateTable(table_id=id)
+                result.agate_table.CopyFrom(agate_table)
+            elif isinstance(value, PostgresRelation):
+                postgres_relation = PbPostgresRelation()
+                postgres_relation.data.update(value.to_dict())
+                result.postgres_relation.CopyFrom(postgres_relation)
+            elif value is None:
+                result.null_value = NullValue.NULL_VALUE
+            elif isinstance(value, str):
+                result.string_value = value
+            elif isinstance(value, bool):
+                result.boolean_value = value
             else:
-                raise ValueError(f"Unknown result type: {type(result)}")
+                raise ValueError(f"Unknown result type: {type(value)}")
+            return result
+
+        recording_data = RecordingData()
+
         for thread_name, operations in self.operations.items():
             thread_folder = os.path.join(self.folder_path, thread_name)
             os.makedirs(thread_folder, exist_ok=True)
-            for operation_name, operations in operations.items():
-                with open(os.path.join(thread_folder, f"{operation_name}.json"), "w") as f:
-                    try:
-                        for operation in operations:
-                            operation["input_args"] = operation["input_args"][1:]
-                            operation["input_args"] = [
-                                handle_result(result, thread_folder) for result in operation["input_args"]
-                            ]
-                            operation["input_kwargs"] = {
-                                k: handle_result(v, thread_folder) for k, v in operation["input_kwargs"].items()
-                            }
-                            if isinstance(operation["output"], list):
-                                operation["output"] = [
-                                    handle_result(result, thread_folder) for result in operation["output"]
-                                ]
-                            elif  isinstance(operation["output"], tuple):
-                                operation["output"] = [
-                                    handle_result(result, thread_folder)
-                                    for result in operation["output"]
-                                ]
-                            else:
-                                operation["output"] = handle_result(operation["output"], thread_folder)
-                    except Exception as e:
-                        breakpoint()
-                    try:
-                        json.dump({"operation": operations}, f)
-                    except Exception as e:
-                        raise ValueError(f"Error dumping operation {operation_name}: {e}")
+
+            for operation_name, operation_list in operations.items():
+                # Create a new recording data object for each operation type
+                recording_data = RecordingData()
+                thread_ops = ThreadOperations()
+                op_list = OperationList()
+
+                # Process all operations of this type
+                for op in operation_list:
+                    operation = Operation()
+                    operation.function_name = op["function_name"]
+
+                    # Convert input args (skip self)
+                    for arg in op["input_args"][1:]:
+                        result = operation.input_args.add()
+                        result.CopyFrom(to_write_obj(arg, thread_folder))
+
+                    # Convert input kwargs
+                    for k, v in op["input_kwargs"].items():
+                        operation.input_kwargs[k].CopyFrom(to_write_obj(v, thread_folder))
+
+                    # Convert outputs
+                    if isinstance(op["output"], (list, tuple)):
+                        for out in op["output"]:
+                            result = operation.outputs.add()
+                            result.CopyFrom(to_write_obj(out, thread_folder))
+                    elif op["output"] is not None:
+                        result = operation.outputs.add()
+                        result.CopyFrom(to_write_obj(op["output"], thread_folder))
+
+                    # Add error if present
+                    if op["error"]:
+                        operation.error = op["error"]
+
+                    op_list.operations.append(operation)
+
+                thread_ops.operations[operation_name].CopyFrom(op_list)
+                recording_data.thread_operations[thread_name].CopyFrom(thread_ops)
+
+                # Write all operations of same type to a single pb file
+                print(f"Writing {operation_name} to {thread_folder}")
+                pb_filename = f"{operation_name}.pb"
+                with open(os.path.join(thread_folder, pb_filename), "wb") as f:
+                    f.write(recording_data.SerializeToString())
+
 
 recorder = Recorder("/Users/chenyuli/git/recording_test_simple")
+
 
 def record_function(func: Callable):
     def wrapper(*args, **kwargs):
         return recorder.call_and_record(func, *args, **kwargs)
+
     return wrapper
 
 
@@ -182,6 +232,7 @@ class _Available:
         The optional parse_replacement, if provided, will provide a parse-time
         replacement for the actual method (see `available.parse`).
         """
+
         def wrapper(func):
             func_name = func.__name__
 

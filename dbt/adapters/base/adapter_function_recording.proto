@@ -1,0 +1,56 @@
+syntax = "proto3";
+
+package dbt.adapters.recording;
+
+message RecordingData {
+  // Map of thread_name to Operations
+  map<string, ThreadOperations> thread_operations = 1;
+}
+
+message ThreadOperations {
+  // Map of operation_name to list of Operation
+  map<string, OperationList> operations = 1;
+}
+
+message OperationList {
+  repeated Operation operations = 1;
+}
+
+message Operation {
+  string function_name = 1;
+  repeated Object input_args = 2;
+  map<string, Object> input_kwargs = 3;
+  repeated Object outputs = 4;
+  optional string error = 5;
+}
+
+message Object {
+  oneof value {
+    AdapterResponse adapter_response = 1;
+    AgateTable agate_table = 2;
+    PostgresRelation postgres_relation = 3;
+    NullValue null_value = 4;
+    string string_value = 5;
+    bool boolean_value = 6;
+  }
+}
+
+message AdapterResponse {
+  string message = 1;
+  string code = 2;
+  int64 rows_affected = 3;
+  optional string query_id = 4;
+}
+
+message AgateTable {
+  string table_id = 1;  // UUID of the saved JSON file
+}
+
+message PostgresRelation {
+  // Placeholder for PostgresRelation fields
+  map<string, string> data = 1;
+}
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
