@@ -62,7 +62,7 @@ jobs:
         secrets: inherit
 
     publish-internal:
-        if: ${{ inputs.pypi-internal == true && inputs.package != 'dbt-athena-community' }}
+        if: ${{ inputs.pypi-internal == 'true' && inputs.package != 'dbt-athena-community' }}
         needs: generate-changelog
         uses: ./.github/workflows/_publish-internal.yml
         with:
@@ -72,13 +72,13 @@ jobs:
         secrets: inherit
 
     package:
-        if: ${{ inputs.pypi-public == true }}
+        if: ${{ inputs.pypi-public == 'true' }}
         uses: ./.github/workflows/_package-directory.yml
         with:
             package: ${{ inputs.package }}
 
     publish-pypi:
-        if: ${{ inputs.pypi-public == true }}
+        if: ${{ inputs.pypi-public == 'true' }}
         needs: [package, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
