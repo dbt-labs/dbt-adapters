@@ -177,6 +177,7 @@
         left join deletes_source_data as source_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
         where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+        and not snapshotted_data.{{ columns.dbt_is_deleted }}  --avoid inserting a new record if there is one marked as deleted already
 
     )
     {%- endif %}
