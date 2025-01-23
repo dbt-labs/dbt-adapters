@@ -57,11 +57,15 @@ jobs:
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         -   uses: pypa/hatch@install
-        -   uses: aws-actions/configure-aws-credentials@v4
-            with:
-                aws-region: ${{ vars.AWS_REGION }}
-                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        -   name: "Configure AWS profile for upload"
+            run: |
+              aws configure set aws_access_key_id ${{ secrets.AWS_ARCHIVE_ACCESS_KEY_ID }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set aws_secret_access_key ${{ secrets.AWS_ARCHIVE_SECRET_ACCESS_KEY }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set region ${{ secrets.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set output text --profile "temp_aws_profile"
+              aws codeartifact login --tool twine --repository ${{ secrets.AWS_REPOSITORY }} \
+              --domain ${{ secrets.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_DOMAIN_OWNER }} \
+              --region ${{ secrets.AWS_REGION }} --profile "temp_aws_profile"
         -   id: package
             run: |
                 # strip the pre-release off to find all iterations of this patch
