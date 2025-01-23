@@ -35,6 +35,7 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
                 os: [ubuntu-22.04]
                 python-version: ["3.9", "3.12"]
@@ -55,6 +56,7 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
                 os: [ ubuntu-22.04 ]
                 python-version: ["3.9", "3.12"]
@@ -74,6 +76,7 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
                 os: [ubuntu-22.04]
                 python-version: ["3.9", "3.12"]

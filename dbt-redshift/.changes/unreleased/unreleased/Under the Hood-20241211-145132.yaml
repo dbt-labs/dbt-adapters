@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Refactor to use new batch context varaibles
+time: 2024-12-11T14:51:32.239224-06:00
+custom:
+  Author: QMalcolm
+  Issue: "966"
