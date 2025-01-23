@@ -25,6 +25,7 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
