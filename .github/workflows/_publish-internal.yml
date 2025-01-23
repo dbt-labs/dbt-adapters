@@ -66,7 +66,7 @@ jobs:
               aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }} --profile ${{ env.TEMP_PROFILE_NAME }}
               aws configure set region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
               aws configure set output text --profile ${{ env.TEMP_PROFILE_NAME }}
-              aws codeartifact login --tool twine --repository ${{ secrets.AWS_REPOSITORY }} \
+              aws codeartifact login --tool twine --repository ${{ vars.AWS_REPOSITORY }} \
               --domain ${{ vars.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_DOMAIN_OWNER }} \
               --region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
         -   id: package
