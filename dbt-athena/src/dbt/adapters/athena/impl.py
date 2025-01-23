@@ -1455,13 +1455,10 @@ class AthenaAdapter(SQLAdapter):
 
     @classmethod
     def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
-        table_format: Optional[str] = None
-        if (
-            config
-            and hasattr(config, "_extra")
-            and (table_type := config._extra.get("table_type"))
-        ):
-            table_format = table_type
+        try:
+            table_format = config._extra.get("table_type")
+        except AttributeError:
+            table_format = None
         return {
             "adapter_type": "athena",
             "table_format": table_format,

@@ -23,10 +23,6 @@ on:
                 description: "Choose the Python version to test against"
                 type: string
                 default: "3.9"
-            is-flaky-test-run:
-                description: "What kind of tests to execute in this run (true for flaky tests, false for the rest)"
-                type: boolean
-                default: false
     workflow_dispatch:
         inputs:
             package:
@@ -54,10 +50,6 @@ on:
                 description: "Choose the Python version to test against"
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
-            is-flaky-test-run:
-                description: "What kind of tests to execute in this run (true for flaky tests, false for the rest)"
-                type: boolean
-                default: false
 
 permissions:
     id-token: write
@@ -76,7 +68,6 @@ env:
 
 jobs:
     integration-tests-athena:
-        name: integration-tests-athena-${{ inputs.is-flaky-test-run && 'flaky' || 'not-flaky' }}
         if: ${{ inputs.package == 'dbt-athena' || inputs.package == 'dbt-athena-community' }}
         runs-on: ${{ inputs.os }}
         environment:
@@ -104,8 +95,7 @@ jobs:
             with:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
-        # run flaky tests command if is-flaky-test-run flag is true. Otherwise, run the other tests
-        -   run: ${{ inputs.is-flaky-test-run && 'hatch run integration-tests -m flaky -n1' ||  'hatch run integration-tests -m "not flaky"' }}
+        -   run: hatch run integration-tests
             working-directory: ./${{ inputs.package }}
 
     integration-tests-bigquery:

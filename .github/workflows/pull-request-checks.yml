@@ -67,7 +67,7 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
-    integration-tests-not-flaky:
+    integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         strategy:
             fail-fast: false
@@ -86,29 +86,8 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
-            is-flaky-test-run: false
         secrets: inherit
-    # Special case here for Athena, since we have two identical packages -- dbt-athena and dbt-athena-community
-    # We don't want certain tests within this adapter to run in parallel
-    integration-tests-flaky-athena:
-        uses: ./.github/workflows/_integration-tests.yml
-        strategy:
-            fail-fast: false
-            max-parallel: 1
-            matrix:
-                package:
-                    - "dbt-athena"
-                    - "dbt-athena-community"
-                os: [ ubuntu-22.04 ]
-                python-version: [ "3.9", "3.10", "3.11", "3.12" ]
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
-            is-flaky-test-run: true
-        secrets: inherit
+
     # This job does nothing and is only used for branch protection
     results:
         name: "Pull request checks"  # keep this name, branch protection references it

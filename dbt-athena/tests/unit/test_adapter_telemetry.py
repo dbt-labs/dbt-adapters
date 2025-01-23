@@ -25,4 +25,4 @@ def test_telemetry_with_athena_details():
         "table_format": "iceberg",
     }
 
-    assert type(res) is AdapterTrackingRelationInfo
+    assert isinstance(res, AdapterTrackingRelationInfo)
