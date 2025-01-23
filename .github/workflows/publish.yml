@@ -13,6 +13,7 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
                 -   "dbt-spark"
             deploy-to:
@@ -56,7 +57,7 @@ jobs:
     generate-changelog:
         needs: [unit-tests, integration-tests]
         if: |
-          always() && 
+          always() &&
           (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
           (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success')
         uses: ./.github/workflows/_generate-changelog.yml

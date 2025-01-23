@@ -33,6 +33,7 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
                 -   "dbt-spark"
             branch:

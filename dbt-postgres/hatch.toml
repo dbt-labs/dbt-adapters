@@ -1,0 +1,62 @@
+[version]
+path = "src/dbt/adapters/postgres/__version__.py"
+
+[build.targets.sdist]
+packages = ["src/dbt/adapters", "src/dbt/include"]
+sources = ["src"]
+
+[build.targets.wheel]
+packages = ["src/dbt/adapters", "src/dbt/include"]
+sources = ["src"]
+
+[envs.default]
+dependencies = [
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "pre-commit==3.7.0",
+    "freezegun",
+    "pytest",
+    "pytest-dotenv",
+    "pytest-mock",
+    "pytest-xdist",
+]
+[envs.default.env-vars]
+DBT_TEST_USER_1 = "dbt_test_user_1"
+DBT_TEST_USER_2 = "dbt_test_user_2"
+DBT_TEST_USER_3 = "dbt_test_user_3"
+[envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
+integration-tests = "python -m pytest {args:tests/functional}"
+docker-dev = [
+    "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
+	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
+	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
+]
+docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
+
+[envs.build]
+detached = true
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
+[envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_postgres-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-postgres",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_postgres-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-postgres",
+]
