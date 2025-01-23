@@ -18,7 +18,7 @@ dependencies = [
     "ddtrace==2.3.0",
     "pre-commit==3.7.0",
     "freezegun",
-    "pytest",
+    "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-mock",
     "pytest-xdist",
