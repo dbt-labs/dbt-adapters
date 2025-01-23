@@ -1,7 +1,6 @@
 import abc
 from collections import defaultdict
 import contextvars
-import json
 import os
 from functools import wraps
 from typing import Any, Callable, Dict, FrozenSet, Optional, Set
@@ -12,6 +11,7 @@ from dbt_common.events.functions import warn_or_error
 
 from dbt.adapters.events.types import AdapterDeprecationWarning
 from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.base.agate_handle import save_agate_table
 import agate
 from dbt.adapters.base.adapter_function_recording_pb2 import (
     Object,
@@ -19,8 +19,6 @@ from dbt.adapters.base.adapter_function_recording_pb2 import (
     AgateTable as PbAgateTable,
     PostgresRelation as PbPostgresRelation,
     NullValue,
-    RecordingData,
-    ThreadOperations,
     OperationList,
     Operation,
 )
@@ -101,9 +99,7 @@ class Recorder:
             elif isinstance(value, agate.Table):
                 id = str(uuid.uuid4())
                 # Convert table rows to list of dicts
-                rows = [dict(zip(value.column_names, row)) for row in value.rows]
-                with open(os.path.join(thread_folder, f"{id}.json"), "w") as f:
-                    json.dump(rows, f)
+                save_agate_table(value, os.path.join(thread_folder, f"{id}"))
                 agate_table = PbAgateTable(table_id=id)
                 result.agate_table.CopyFrom(agate_table)
             elif isinstance(value, PostgresRelation):
@@ -120,16 +116,12 @@ class Recorder:
                 raise ValueError(f"Unknown result type: {type(value)}")
             return result
 
-        recording_data = RecordingData()
-
         for thread_name, operations in self.operations.items():
             thread_folder = os.path.join(self.folder_path, thread_name)
             os.makedirs(thread_folder, exist_ok=True)
 
             for operation_name, operation_list in operations.items():
                 # Create a new recording data object for each operation type
-                recording_data = RecordingData()
-                thread_ops = ThreadOperations()
                 op_list = OperationList()
 
                 # Process all operations of this type
@@ -161,14 +153,10 @@ class Recorder:
 
                     op_list.operations.append(operation)
 
-                thread_ops.operations[operation_name].CopyFrom(op_list)
-                recording_data.thread_operations[thread_name].CopyFrom(thread_ops)
-
                 # Write all operations of same type to a single pb file
-                print(f"Writing {operation_name} to {thread_folder}")
                 pb_filename = f"{operation_name}.pb"
                 with open(os.path.join(thread_folder, pb_filename), "wb") as f:
-                    f.write(recording_data.SerializeToString())
+                    f.write(op_list.SerializeToString())
 
 
 recorder = Recorder("/Users/chenyuli/git/recording_test_simple")

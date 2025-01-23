@@ -2,15 +2,6 @@ syntax = "proto3";
 
 package dbt.adapters.recording;
 
-message RecordingData {
-  // Map of thread_name to Operations
-  map<string, ThreadOperations> thread_operations = 1;
-}
-
-message ThreadOperations {
-  // Map of operation_name to list of Operation
-  map<string, OperationList> operations = 1;
-}
 
 message OperationList {
   repeated Operation operations = 1;

@@ -14,7 +14,7 @@ _sym_db = _symbol_database.Default()
 
 
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n adapter_function_recording.proto\x12\x16\x64\x62t.adapters.recording"\xca\x01\n\rRecordingData\x12V\n\x11thread_operations\x18\x01 \x03(\x0b\x32;.dbt.adapters.recording.RecordingData.ThreadOperationsEntry\x1a\x61\n\x15ThreadOperationsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x37\n\x05value\x18\x02 \x01(\x0b\x32(.dbt.adapters.recording.ThreadOperations:\x02\x38\x01"\xba\x01\n\x10ThreadOperations\x12L\n\noperations\x18\x01 \x03(\x0b\x32\x38.dbt.adapters.recording.ThreadOperations.OperationsEntry\x1aX\n\x0fOperationsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\x34\n\x05value\x18\x02 \x01(\x0b\x32%.dbt.adapters.recording.OperationList:\x02\x38\x01"F\n\rOperationList\x12\x35\n\noperations\x18\x01 \x03(\x0b\x32!.dbt.adapters.recording.Operation"\xc3\x02\n\tOperation\x12\x15\n\rfunction_name\x18\x01 \x01(\t\x12\x32\n\ninput_args\x18\x02 \x03(\x0b\x32\x1e.dbt.adapters.recording.Object\x12H\n\x0cinput_kwargs\x18\x03 \x03(\x0b\x32\x32.dbt.adapters.recording.Operation.InputKwargsEntry\x12/\n\x07outputs\x18\x04 \x03(\x0b\x32\x1e.dbt.adapters.recording.Object\x12\x12\n\x05\x65rror\x18\x05 \x01(\tH\x00\x88\x01\x01\x1aR\n\x10InputKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12-\n\x05value\x18\x02 \x01(\x0b\x32\x1e.dbt.adapters.recording.Object:\x02\x38\x01\x42\x08\n\x06_error"\xc2\x02\n\x06Object\x12\x43\n\x10\x61\x64\x61pter_response\x18\x01 \x01(\x0b\x32\'.dbt.adapters.recording.AdapterResponseH\x00\x12\x39\n\x0b\x61gate_table\x18\x02 \x01(\x0b\x32".dbt.adapters.recording.AgateTableH\x00\x12\x45\n\x11postgres_relation\x18\x03 \x01(\x0b\x32(.dbt.adapters.recording.PostgresRelationH\x00\x12\x37\n\nnull_value\x18\x04 \x01(\x0e\x32!.dbt.adapters.recording.NullValueH\x00\x12\x16\n\x0cstring_value\x18\x05 \x01(\tH\x00\x12\x17\n\rboolean_value\x18\x06 \x01(\x08H\x00\x42\x07\n\x05value"k\n\x0f\x41\x64\x61pterResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12\x15\n\rrows_affected\x18\x03 \x01(\x03\x12\x15\n\x08query_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_query_id"\x1e\n\nAgateTable\x12\x10\n\x08table_id\x18\x01 \x01(\t"\x81\x01\n\x10PostgresRelation\x12@\n\x04\x64\x61ta\x18\x01 \x03(\x0b\x32\x32.dbt.adapters.recording.PostgresRelation.DataEntry\x1a+\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*\x1b\n\tNullValue\x12\x0e\n\nNULL_VALUE\x10\x00\x62\x06proto3'
+    b'\n adapter_function_recording.proto\x12\x16\x64\x62t.adapters.recording"F\n\rOperationList\x12\x35\n\noperations\x18\x01 \x03(\x0b\x32!.dbt.adapters.recording.Operation"\xc3\x02\n\tOperation\x12\x15\n\rfunction_name\x18\x01 \x01(\t\x12\x32\n\ninput_args\x18\x02 \x03(\x0b\x32\x1e.dbt.adapters.recording.Object\x12H\n\x0cinput_kwargs\x18\x03 \x03(\x0b\x32\x32.dbt.adapters.recording.Operation.InputKwargsEntry\x12/\n\x07outputs\x18\x04 \x03(\x0b\x32\x1e.dbt.adapters.recording.Object\x12\x12\n\x05\x65rror\x18\x05 \x01(\tH\x00\x88\x01\x01\x1aR\n\x10InputKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12-\n\x05value\x18\x02 \x01(\x0b\x32\x1e.dbt.adapters.recording.Object:\x02\x38\x01\x42\x08\n\x06_error"\xc2\x02\n\x06Object\x12\x43\n\x10\x61\x64\x61pter_response\x18\x01 \x01(\x0b\x32\'.dbt.adapters.recording.AdapterResponseH\x00\x12\x39\n\x0b\x61gate_table\x18\x02 \x01(\x0b\x32".dbt.adapters.recording.AgateTableH\x00\x12\x45\n\x11postgres_relation\x18\x03 \x01(\x0b\x32(.dbt.adapters.recording.PostgresRelationH\x00\x12\x37\n\nnull_value\x18\x04 \x01(\x0e\x32!.dbt.adapters.recording.NullValueH\x00\x12\x16\n\x0cstring_value\x18\x05 \x01(\tH\x00\x12\x17\n\rboolean_value\x18\x06 \x01(\x08H\x00\x42\x07\n\x05value"k\n\x0f\x41\x64\x61pterResponse\x12\x0f\n\x07message\x18\x01 \x01(\t\x12\x0c\n\x04\x63ode\x18\x02 \x01(\t\x12\x15\n\rrows_affected\x18\x03 \x01(\x03\x12\x15\n\x08query_id\x18\x04 \x01(\tH\x00\x88\x01\x01\x42\x0b\n\t_query_id"\x1e\n\nAgateTable\x12\x10\n\x08table_id\x18\x01 \x01(\t"\x81\x01\n\x10PostgresRelation\x12@\n\x04\x64\x61ta\x18\x01 \x03(\x0b\x32\x32.dbt.adapters.recording.PostgresRelation.DataEntry\x1a+\n\tDataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*\x1b\n\tNullValue\x12\x0e\n\nNULL_VALUE\x10\x00\x62\x06proto3'
 )
 
 _globals = globals()
@@ -22,38 +22,26 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "adapter_function_recording_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
     DESCRIPTOR._loaded_options = None
-    _globals["_RECORDINGDATA_THREADOPERATIONSENTRY"]._loaded_options = None
-    _globals["_RECORDINGDATA_THREADOPERATIONSENTRY"]._serialized_options = b"8\001"
-    _globals["_THREADOPERATIONS_OPERATIONSENTRY"]._loaded_options = None
-    _globals["_THREADOPERATIONS_OPERATIONSENTRY"]._serialized_options = b"8\001"
     _globals["_OPERATION_INPUTKWARGSENTRY"]._loaded_options = None
     _globals["_OPERATION_INPUTKWARGSENTRY"]._serialized_options = b"8\001"
     _globals["_POSTGRESRELATION_DATAENTRY"]._loaded_options = None
     _globals["_POSTGRESRELATION_DATAENTRY"]._serialized_options = b"8\001"
-    _globals["_NULLVALUE"]._serialized_start = 1450
-    _globals["_NULLVALUE"]._serialized_end = 1477
-    _globals["_RECORDINGDATA"]._serialized_start = 61
-    _globals["_RECORDINGDATA"]._serialized_end = 263
-    _globals["_RECORDINGDATA_THREADOPERATIONSENTRY"]._serialized_start = 166
-    _globals["_RECORDINGDATA_THREADOPERATIONSENTRY"]._serialized_end = 263
-    _globals["_THREADOPERATIONS"]._serialized_start = 266
-    _globals["_THREADOPERATIONS"]._serialized_end = 452
-    _globals["_THREADOPERATIONS_OPERATIONSENTRY"]._serialized_start = 364
-    _globals["_THREADOPERATIONS_OPERATIONSENTRY"]._serialized_end = 452
-    _globals["_OPERATIONLIST"]._serialized_start = 454
-    _globals["_OPERATIONLIST"]._serialized_end = 524
-    _globals["_OPERATION"]._serialized_start = 527
-    _globals["_OPERATION"]._serialized_end = 850
-    _globals["_OPERATION_INPUTKWARGSENTRY"]._serialized_start = 758
-    _globals["_OPERATION_INPUTKWARGSENTRY"]._serialized_end = 840
-    _globals["_OBJECT"]._serialized_start = 853
-    _globals["_OBJECT"]._serialized_end = 1175
-    _globals["_ADAPTERRESPONSE"]._serialized_start = 1177
-    _globals["_ADAPTERRESPONSE"]._serialized_end = 1284
-    _globals["_AGATETABLE"]._serialized_start = 1286
-    _globals["_AGATETABLE"]._serialized_end = 1316
-    _globals["_POSTGRESRELATION"]._serialized_start = 1319
-    _globals["_POSTGRESRELATION"]._serialized_end = 1448
-    _globals["_POSTGRESRELATION_DATAENTRY"]._serialized_start = 1405
-    _globals["_POSTGRESRELATION_DATAENTRY"]._serialized_end = 1448
+    _globals["_NULLVALUE"]._serialized_start = 1056
+    _globals["_NULLVALUE"]._serialized_end = 1083
+    _globals["_OPERATIONLIST"]._serialized_start = 60
+    _globals["_OPERATIONLIST"]._serialized_end = 130
+    _globals["_OPERATION"]._serialized_start = 133
+    _globals["_OPERATION"]._serialized_end = 456
+    _globals["_OPERATION_INPUTKWARGSENTRY"]._serialized_start = 364
+    _globals["_OPERATION_INPUTKWARGSENTRY"]._serialized_end = 446
+    _globals["_OBJECT"]._serialized_start = 459
+    _globals["_OBJECT"]._serialized_end = 781
+    _globals["_ADAPTERRESPONSE"]._serialized_start = 783
+    _globals["_ADAPTERRESPONSE"]._serialized_end = 890
+    _globals["_AGATETABLE"]._serialized_start = 892
+    _globals["_AGATETABLE"]._serialized_end = 922
+    _globals["_POSTGRESRELATION"]._serialized_start = 925
+    _globals["_POSTGRESRELATION"]._serialized_end = 1054
+    _globals["_POSTGRESRELATION_DATAENTRY"]._serialized_start = 1011
+    _globals["_POSTGRESRELATION_DATAENTRY"]._serialized_end = 1054
 # @@protoc_insertion_point(module_scope)
