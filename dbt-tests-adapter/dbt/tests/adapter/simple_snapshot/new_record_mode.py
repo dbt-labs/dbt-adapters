@@ -264,3 +264,8 @@ class SnapshotNewRecordMode:
             == 1
         )
         assert check_result[0][scd_id] != check_result[1][scd_id]
+
+        # subsequent snapshot runs should not insert new records
+        run_dbt(["snapshot"])
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        assert len(check_result) == 2
