@@ -45,8 +45,9 @@ Repository = "https://github.com/dbt-labs/dbt-athena.git#subdirectory=dbt-athena
 Issues = "https://github.com/dbt-labs/dbt-athena/issues"
 Changelog = "https://github.com/dbt-labs/dbt-athena/blob/main/dbt-athena/CHANGELOG.md"
 
-[tool.pytest.ini_options]
+[tool.pytest]
 testpaths = ["tests/unit", "tests/functional"]
+color = true
 csv = "results.csv"
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
