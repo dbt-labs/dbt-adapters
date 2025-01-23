@@ -24,6 +24,7 @@ on:
                 -   "dbt-adapters"
                 -   "dbt-athena"
                 -   "dbt-bigquery"
+                -   "dbt-redshift"
                 -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
