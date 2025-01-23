@@ -1,0 +1,6 @@
+kind: Features
+body: allows to use prj. vars in python models
+time: 2024-10-31T16:06:41.214334214-03:00
+custom:
+    Author: devmessias
+    Issue: 5617 10914
