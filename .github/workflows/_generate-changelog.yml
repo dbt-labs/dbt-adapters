@@ -30,8 +30,16 @@ on:
         inputs:
             package:
                 description: "Choose the package getting published"
-                type: string
-                default: "dbt-adapters"
+                type: choice
+                options:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
             merge:
                 description: "Choose whether to merge the changelog branch"
                 type: boolean

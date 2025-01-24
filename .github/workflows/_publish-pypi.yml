@@ -20,7 +20,15 @@ on:
             package:
                 description: "Choose the package to publish"
                 type: choice
-                options: ["dbt-adapters"]
+                options:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment

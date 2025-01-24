@@ -28,17 +28,19 @@ repos:
         -   --target-version=py311
         -   --target-version=py312
         -   --force-exclude=dbt/adapters/events/adapter_types_pb2.py
+        additional_dependencies: [flaky]
 
 -   repo: https://github.com/pycqa/flake8
     rev: 7.1.1
     hooks:
     -   id: flake8
-        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/
+        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/|dbt-spark/tests/|dbt-bigquery/tests/|dbt-redshift/tests|dbt-postgres/tests|dbt-snowflake/tests
         args:
         -   --max-line-length=99
         -   --select=E,F,W
         -   --ignore=E203,E501,E704,E741,W503,W504
         -   --per-file-ignores=*/__init__.py:F401,*/conftest.py:F401
+        additional_dependencies: [flaky]
 
 -   repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.11.2
@@ -54,4 +56,6 @@ repos:
         additional_dependencies:
         -   types-PyYAML
         -   types-protobuf
+        -   types-python-dateutil
         -   types-pytz
+        -   types-requests

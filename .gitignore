@@ -149,11 +149,17 @@ dmypy.json
 # pytype static type analyzer
 .pytype/
 
+# Pyenv
+.python-version
+
 # Cython debug symbols
 cython_debug/
 
 # PyCharm
 .idea/
+
+# AWS credentials
+.aws/
 
 # MacOS
 .DS_Store
@@ -164,3 +170,10 @@ cython_debug/
 
 # Vim
 *.swp
+
+# other
+.hive-metastore/
+.spark-warehouse/
+dbt-integration-tests
+/.tool-versions
+/.hypothesis/*

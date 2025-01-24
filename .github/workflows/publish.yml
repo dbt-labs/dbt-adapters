@@ -10,6 +10,13 @@ on:
                 options:
                 -   "dbt-adapters"
                 -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment
@@ -26,6 +33,10 @@ on:
                 description: "Publish to PyPI"
                 type: boolean
                 default: false
+            skip-integration-tests:
+                description: "Skip Running Integration Tests"
+                type: boolean
+                default: false
 
 # don't publish to the same target in parallel
 concurrency:
@@ -39,8 +50,24 @@ jobs:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
 
+    integration-tests:
+        if: |
+            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
+            inputs.skip-integration-tests == false
+        uses: ./.github/workflows/_integration-tests.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+            repository: ${{ github.repository }}
+        secrets: inherit
+
     generate-changelog:
-        needs: unit-tests
+        needs: [unit-tests, integration-tests]
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
+          inputs.pypi-public == true
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -49,8 +76,13 @@ jobs:
         secrets: inherit
 
     publish-internal:
-        if: ${{ inputs.pypi-internal == true }}
-        needs: generate-changelog
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
+          inputs.pypi-internal == true &&
+          inputs.package != 'dbt-athena-community'
+        needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:
             package: ${{ inputs.package }}
@@ -65,7 +97,11 @@ jobs:
             package: ${{ inputs.package }}
 
     publish-pypi:
-        if: ${{ inputs.pypi-public == true }}
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          needs.generate-changelog.result == 'success' &&
+          inputs.pypi-public == true
         needs: [package, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:

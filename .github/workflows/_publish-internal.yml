@@ -20,7 +20,14 @@ on:
             package:
                 description: "Choose the package to publish"
                 type: choice
-                options: ["dbt-adapters"]
+                options:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment
@@ -33,6 +40,9 @@ on:
 defaults:
     run:
         shell: bash
+
+env:
+  TEMP_PROFILE_NAME: "temp_aws_profile"
 
 jobs:
     package:
@@ -53,11 +63,15 @@ jobs:
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         -   uses: pypa/hatch@install
-        -   uses: aws-actions/configure-aws-credentials@v4
-            with:
-                aws-region: ${{ vars.AWS_REGION }}
-                aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        -   name: "Configure AWS profile for upload"
+            run: |
+              aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set output text --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws codeartifact login --tool twine --repository ${{ vars.AWS_REPOSITORY }} \
+              --domain ${{ vars.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_DOMAIN_OWNER }} \
+              --region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
         -   id: package
             run: |
                 # strip the pre-release off to find all iterations of this patch
@@ -86,21 +100,8 @@ jobs:
         -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
             working-directory: ./${{ needs.package.outputs.directory }}
         -   run: |
-                export HATCH_INDEX_USER=${{ secrets.AWS_USER }}
-
-                export HATCH_INDEX_AUTH=$(aws codeartifact get-authorization-token \
-                    --domain ${{ vars.AWS_DOMAIN }} \
-                    --output text \
-                    --query authorizationToken)
-
-                export HATCH_INDEX_REPO=$(aws codeartifact get-repository-endpoint \
-                    --domain ${{ vars.AWS_DOMAIN }} \
-                    --repository ${{ vars.AWS_REPOSITORY }} \
-                    --format pypi \
-                    --output text \
-                    --query repositoryEndpoint)
-
+                pip install twine
                 hatch build --clean
                 hatch run build:check-all
-                hatch publish
+                twine upload --repository codeartifact dist/*
             working-directory: ./${{ needs.package.outputs.directory }}

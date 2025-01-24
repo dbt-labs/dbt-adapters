@@ -1,29 +1,43 @@
 version: 2
 updates:
-  - package-ecosystem: "pip"
+-   package-ecosystem: "pip"
+    directories:
+    -   "/"
+    -   "/dbt-tests-adapter"
+    -   "/dbt-athena"
+    -   "/dbt-athena-community"
+    -   "/dbt-bigquery"
+    -   "/dbt-postgres"
+    -   "/dbt-redshift"
+    -   "/dbt-snowflake"
+    -   "/dbt-spark"
+    schedule:
+        interval: "daily"
+    rebase-strategy: "disabled"
+    ignore:
+    -   dependency-name: "*"
+        update-types:
+        -   version-update:semver-patch
+-   package-ecosystem: "docker"
+    directories:
+    -   "/dbt-bigquery/docker"
+    -   "/dbt-postgres/docker"
+    -   "/dbt-redshift/docker"
+    -   "/dbt-snowflake/docker"
+    -   "/dbt-spark/docker"
+    schedule:
+        interval: "weekly"
+    rebase-strategy: "disabled"
+    ignore:
+    -   dependency-name: "*"
+        update-types:
+        -   version-update:semver-patch
+-   package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+        interval: "weekly"
     rebase-strategy: "disabled"
     ignore:
-      - dependency-name: "*"
+    -   dependency-name: "*"
         update-types:
-          - version-update:semver-patch
-  - package-ecosystem: "pip"
-    directory: "/dbt-tests-adapter"
-    schedule:
-      interval: "daily"
-    rebase-strategy: "disabled"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-patch
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    rebase-strategy: "disabled"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - version-update:semver-patch
+        -   version-update:semver-patch
