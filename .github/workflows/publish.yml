@@ -31,6 +31,10 @@ on:
                 description: "Publish to PyPI"
                 type: boolean
                 default: false
+            skip-integration-tests:
+                description: "Skip Running Integration Tests"
+                type: boolean
+                default: false
 
 # don't publish to the same target in parallel
 concurrency:
@@ -45,7 +49,9 @@ jobs:
             branch: ${{ inputs.branch }}
 
     integration-tests:
-        if: ${{ inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter' }}
+        if: |
+            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') ||
+            inputs.skip-integration-tests == true
         uses: ./.github/workflows/_integration-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -91,6 +97,7 @@ jobs:
     publish-pypi:
         if: |
           always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
           needs.generate-changelog.result == 'success' &&
           inputs.pypi-public == true
         needs: [package, generate-changelog]
