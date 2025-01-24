@@ -99,22 +99,7 @@ jobs:
             working-directory: ./${{ needs.package.outputs.directory }}
         -   run: |
                 pip install twine
-                export HATCH_INDEX_USER=${{ secrets.AWS_USER }}
-
-                export HATCH_INDEX_AUTH=$(aws codeartifact get-authorization-token \
-                    --domain ${{ vars.AWS_DOMAIN }} \
-                    --output text \
-                    --query authorizationToken)
-
-                export HATCH_INDEX_REPO=$(aws codeartifact get-repository-endpoint \
-                    --domain ${{ vars.AWS_DOMAIN }} \
-                    --repository ${{ vars.AWS_REPOSITORY }} \
-                    --format pypi \
-                    --output text \
-                    --query repositoryEndpoint)
-
                 hatch build --clean
                 hatch run build:check-all
-                # hatch publish -u $HATCH_INDEX_USER -a codeartifact
                 twine upload --repository codeartifact dist/*
             working-directory: ./${{ needs.package.outputs.directory }}
