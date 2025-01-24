@@ -281,14 +281,14 @@ class SnapshotNewRecordMode:
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 2
 
-        # insert the record back and run the snapshot again; update and insert expected 
+        # insert the record back and run the snapshot again; update and insert expected
         project.run_sql(_insert_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 2
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 3
 
-        # delete it once again and run the snapshot; update and insert expected 
+        # delete it once again and run the snapshot; update and insert expected
         project.run_sql(_delete_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 2
