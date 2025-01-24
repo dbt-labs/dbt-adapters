@@ -9,6 +9,7 @@ updates:
     -   "/dbt-bigquery"
     -   "/dbt-postgres"
     -   "/dbt-redshift"
+    -   "/dbt-snowflake"
     -   "/dbt-spark"
     schedule:
         interval: "daily"
@@ -22,6 +23,7 @@ updates:
     -   "/dbt-bigquery/docker"
     -   "/dbt-postgres/docker"
     -   "/dbt-redshift/docker"
+    -   "/dbt-snowflake/docker"
     -   "/dbt-spark/docker"
     schedule:
         interval: "weekly"
