@@ -36,7 +36,7 @@ jobs:
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
                 -   "dbt-spark"
-                os: [ubuntu-22.04]
+                os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
@@ -56,7 +56,7 @@ jobs:
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
                 -   "dbt-spark"
-                os: [ ubuntu-22.04 ]
+                os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
