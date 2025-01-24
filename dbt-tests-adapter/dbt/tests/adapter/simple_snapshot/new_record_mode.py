@@ -275,27 +275,27 @@ class SnapshotNewRecordMode:
         )
         assert check_result[0][scd_id] != check_result[1][scd_id]
 
-        # run snapshot on top of the same source data; no new records should be inserted
+        # run snapshot with the same source data; neither insert or update should happen
         run_dbt(["snapshot"])
         assert len(results) == 0
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 2
 
-        # insert the record back and run the snapshot again
+        # insert the record back and run the snapshot again; update and insert expected 
         project.run_sql(_insert_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 2
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 3
 
-        # delete it once again and run the snapshot
+        # delete it once again and run the snapshot; update and insert expected 
         project.run_sql(_delete_sql)
         results = run_dbt(["snapshot"])
         assert len(results) == 2
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 4
 
-        # run snapshot again and it should not insert or update any records
+        # run snapshot with the same source data; neither insert or update should happen
         results = run_dbt(["snapshot"])
         assert len(results) == 0
         check_result = project.run_sql(_delete_check_sql, fetch="all")
