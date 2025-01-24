@@ -114,5 +114,5 @@ jobs:
 
                 hatch build --clean
                 hatch run build:check-all
-                hatch publish
+                hatch publish -u $HATCH_INDEX_USER -a $HATCH_INDEX_REPO
             working-directory: ./${{ needs.package.outputs.directory }}
