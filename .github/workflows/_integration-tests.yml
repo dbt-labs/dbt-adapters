@@ -34,6 +34,7 @@ on:
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
@@ -265,6 +266,38 @@ jobs:
         -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
             working-directory: ./${{ inputs.package }}
         -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-snowflake:
+        if: ${{ inputs.package == 'dbt-snowflake' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: ${{ inputs.package }}
+        env:
+            SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
+            SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
+            SNOWFLAKE_TEST_PASSWORD: ${{ secrets.SNOWFLAKE_TEST_PASSWORD }}
+            SNOWFLAKE_TEST_ROLE: ${{ vars.SNOWFLAKE_TEST_ROLE }}
+            SNOWFLAKE_TEST_DATABASE: ${{ vars.SNOWFLAKE_TEST_DATABASE }}
+            SNOWFLAKE_TEST_WAREHOUSE: ${{ vars.SNOWFLAKE_TEST_WAREHOUSE }}
+            SNOWFLAKE_TEST_ALT_DATABASE: ${{ vars.SNOWFLAKE_TEST_ALT_DATABASE }}
+            SNOWFLAKE_TEST_ALT_WAREHOUSE: ${{ vars.SNOWFLAKE_TEST_ALT_WAREHOUSE }}
+            SNOWFLAKE_TEST_QUOTED_DATABASE: ${{ vars.SNOWFLAKE_TEST_QUOTED_DATABASE }}
+            SNOWFLAKE_TEST_OAUTH_CLIENT_ID: ${{ vars.SNOWFLAKE_TEST_OAUTH_CLIENT_ID }}
+            SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET }}
+            SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN: ${{ secrets.SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN }}
+            SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
+            SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run integration-tests tests/functional --ddtrace
             working-directory: ./${{ inputs.package }}
 
     integration-tests-spark:

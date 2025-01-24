@@ -15,6 +15,7 @@ on:
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"

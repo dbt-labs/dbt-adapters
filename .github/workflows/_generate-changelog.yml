@@ -38,6 +38,7 @@ on:
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             merge:
                 description: "Choose whether to merge the changelog branch"
