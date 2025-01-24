@@ -50,7 +50,7 @@ jobs:
 
     integration-tests:
         if: |
-            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') ||
+            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
             inputs.skip-integration-tests == false
         uses: ./.github/workflows/_integration-tests.yml
         with:
