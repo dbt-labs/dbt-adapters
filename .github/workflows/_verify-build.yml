@@ -36,6 +36,7 @@ on:
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to build"
