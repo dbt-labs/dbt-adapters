@@ -1,0 +1,6 @@
+kind: Features
+body: Add IdpTokenAuthPlugin authentication method.
+time: 2024-12-17T18:13:40.281494-08:00
+custom:
+    Author: versusfacit
+    Issue: "898"

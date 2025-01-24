@@ -7,6 +7,7 @@ updates:
     -   "/dbt-athena"
     -   "/dbt-athena-community"
     -   "/dbt-bigquery"
+    -   "/dbt-redshift"
     -   "/dbt-spark"
     schedule:
         interval: "daily"
@@ -18,6 +19,7 @@ updates:
 -   package-ecosystem: "docker"
     directories:
     -   "/dbt-bigquery/docker"
+    -   "/dbt-redshift/docker"
     -   "/dbt-spark/docker"
     schedule:
         interval: "weekly"
