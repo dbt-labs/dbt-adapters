@@ -24,6 +24,7 @@ on:
                 -   "dbt-adapters"
                 -   "dbt-athena"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
                 -   "dbt-spark"
             deploy-to:
