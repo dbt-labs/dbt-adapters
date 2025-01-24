@@ -114,5 +114,6 @@ jobs:
 
                 hatch build --clean
                 hatch run build:check-all
-                hatch publish -u $HATCH_INDEX_USER -a $HATCH_INDEX_REPO
+                # hatch publish -u $HATCH_INDEX_USER -a codeartifact
+                twine upload --repository codeartifact dist/*
             working-directory: ./${{ needs.package.outputs.directory }}
