@@ -7,6 +7,7 @@ updates:
     -   "/dbt-athena"
     -   "/dbt-athena-community"
     -   "/dbt-bigquery"
+    -   "/dbt-postgres"
     -   "/dbt-redshift"
     -   "/dbt-spark"
     schedule:
@@ -19,6 +20,7 @@ updates:
 -   package-ecosystem: "docker"
     directories:
     -   "/dbt-bigquery/docker"
+    -   "/dbt-postgres/docker"
     -   "/dbt-redshift/docker"
     -   "/dbt-spark/docker"
     schedule:

@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Migrate to a monorepo in dbt-adapters
+time: 2024-12-01T12:22:44.407931-05:00
+custom:
+  Author: mikealfare
+  Issue: "176"
