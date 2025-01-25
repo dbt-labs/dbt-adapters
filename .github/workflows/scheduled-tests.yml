@@ -17,7 +17,9 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
@@ -38,7 +40,9 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
@@ -58,7 +62,9 @@ jobs:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04]
                 python-version: ["3.9", "3.10", "3.11", "3.12"]
