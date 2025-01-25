@@ -33,7 +33,9 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
                 -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
