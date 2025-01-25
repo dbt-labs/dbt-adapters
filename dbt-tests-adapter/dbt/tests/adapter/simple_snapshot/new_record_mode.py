@@ -182,7 +182,13 @@ _delete_sql = """
 delete from {database}.{schema}.seed where id = 1
 """
 
-# If the deletion worked correctly, this should return two rows, with one of them representing the deletion.
+# SQL to insert a record back into the snapshot source data with a new updated_at value
+_insert_sql = """
+insert into {database}.{schema}.seed (id, first_name, last_name, email, gender, ip_address, updated_at) values
+(1, 'Judith', 'Kennedy', '(not provided)', 'Female', '54.60.24.128', '2016-01-01 12:19:28');
+"""
+
+# SQL to fetch the snapshotted entries of the record being used in deletion tests
 _delete_check_sql = """
 select dbt_valid_to, dbt_scd_id, dbt_is_deleted from {schema}.snapshot_actual where id = 1
 """
@@ -216,6 +222,10 @@ class SnapshotNewRecordMode:
     def delete_sql(self):
         return _delete_sql
 
+    @pytest.fixture(scope="class")
+    def insert_sql(self):
+        return _insert_sql
+
     def test_snapshot_new_record_mode(
         self, project, seed_new_record_mode, invalidate_sql, update_sql
     ):
@@ -234,7 +244,7 @@ class SnapshotNewRecordMode:
         project.run_sql(_delete_sql)
 
         results = run_dbt(["snapshot"])
-        assert len(results) == 1
+        assert len(results) == 2
 
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         valid_to = 0
@@ -264,3 +274,29 @@ class SnapshotNewRecordMode:
             == 1
         )
         assert check_result[0][scd_id] != check_result[1][scd_id]
+
+        # run snapshot with the same source data; neither insert or update should happen
+        run_dbt(["snapshot"])
+        assert len(results) == 0
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        assert len(check_result) == 2
+
+        # insert the record back and run the snapshot again; update and insert expected
+        project.run_sql(_insert_sql)
+        results = run_dbt(["snapshot"])
+        assert len(results) == 2
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        assert len(check_result) == 3
+
+        # delete it once again and run the snapshot; update and insert expected
+        project.run_sql(_delete_sql)
+        results = run_dbt(["snapshot"])
+        assert len(results) == 2
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        assert len(check_result) == 4
+
+        # run snapshot with the same source data; neither insert or update should happen
+        results = run_dbt(["snapshot"])
+        assert len(results) == 0
+        check_result = project.run_sql(_delete_check_sql, fetch="all")
+        assert len(check_result) == 4
