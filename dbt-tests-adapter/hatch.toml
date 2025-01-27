@@ -12,8 +12,8 @@ sources = ["src"]
 [envs.default]
 python = "3.9"
 dependencies = [
+    "dbt-adapters @ {root:uri}/../dbt-adapters",
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-adapters @ {root:uri}/..",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pre-commit==3.7.0",
     "pytest"

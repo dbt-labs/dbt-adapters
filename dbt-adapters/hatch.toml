@@ -13,8 +13,7 @@ sources = ["src"]
 python = "3.9"
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    'pre-commit==3.7.0;python_version>="3.9"',
-    'pre-commit==3.5.0;python_version=="3.8"',
+    'pre-commit==3.7.0',
     "pytest",
     "pytest-dotenv",
     "pytest-xdist",
