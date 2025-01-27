@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.7,<2.0",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
     # 3.20 introduced pyarrow>=3.0 under the `pandas` extra
     "google-cloud-bigquery[pandas]>=3.0,<4.0",
     "google-cloud-storage~=2.4",
@@ -55,3 +55,6 @@ filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.11,<2.0",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
     "dbt-postgres>=1.8,<1.10",
     # dbt-redshift depends deeply on this package. it does not follow SemVer, therefore there have been breaking changes in previous patch releases
     # Pin to the patch or minor version, and bump in each new minor version of dbt-redshift.
@@ -55,3 +55,6 @@ filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
