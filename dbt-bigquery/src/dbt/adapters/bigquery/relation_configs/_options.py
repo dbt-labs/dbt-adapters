@@ -25,6 +25,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
+    tags: Optional[Dict[str, str]] = None
 
     def as_ddl_dict(self) -> Dict[str, Any]:
         """
