@@ -52,7 +52,7 @@ repos:
         -   --ignore-missing-imports
         -   --pretty
         -   --show-error-codes
-        files: ^dbt/adapters/
+        files: ^dbt-adapters/src/dbt/adapters/
         additional_dependencies:
         -   types-PyYAML
         -   types-protobuf
