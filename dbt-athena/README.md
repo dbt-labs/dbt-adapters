@@ -867,16 +867,6 @@ The adapter partly supports contract definitions:
   defined in Athena are ok (pre-flight check).
 - The adapter does not support the constraints since there is no constraint concept in Athena.
 
-## Contributing
+## Contribute
 
-See [CONTRIBUTING](CONTRIBUTING.md) for more information on how to contribute to this project.
-
-## Contributors ✨
-
-Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
-
-<a href="https://github.com/dbt-athena/dbt-athena/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=dbt-athena/dbt-athena" />
-</a>
-
-Contributions of any kind welcome!
+- Want to help us build `dbt-athena`? Check out the [Contributing Guide](CONTRIBUTING.md).
