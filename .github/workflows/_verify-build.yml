@@ -57,14 +57,13 @@ on:
 
 permissions: read-all
 
-jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
+defaults:
+    run:
+        shell: bash
+        working-directory: ./${{ inputs.package }}
 
+jobs:
     build:
-        needs: package
         runs-on: ${{ inputs.os }}
         steps:
         -   uses: actions/checkout@v4
@@ -76,5 +75,3 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch build && hatch run build:check-all
-            shell: bash
-            working-directory: ./${{ needs.package.outputs.directory }}

@@ -40,18 +40,13 @@ on:
 defaults:
     run:
         shell: bash
+        working-directory: ./${{ inputs.package }}
 
 env:
   TEMP_PROFILE_NAME: "temp_aws_profile"
 
 jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     publish:
-        needs: package
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -77,7 +72,6 @@ jobs:
                 # strip the pre-release off to find all iterations of this patch
                 hatch version release
                 echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   id: published
             run: |
                 versions_published="$(aws codeartifact list-package-versions \
@@ -96,12 +90,9 @@ jobs:
         -   run: |
                 VERSION=${{ steps.next.outputs.internal_release_version }}+$(git rev-parse HEAD)
                 tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$(cut -c 5- ${{ inputs.package }})/__version__.py
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   run: |
                 pip install twine
                 hatch build --clean
                 hatch run build:check-all
                 twine upload --repository codeartifact dist/*
-            working-directory: ./${{ needs.package.outputs.directory }}

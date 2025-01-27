@@ -18,14 +18,13 @@ permissions:
     contents: read
     pull-requests: write
 
-jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
+defaults:
+    run:
+        shell: bash
+        working-directory: ./${{ inputs.package }}
 
+jobs:
     changelog-check:
-        needs: package
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'Skip Changelog') }}
         outputs:
             exists: ${{ steps.changelog.outputs.exists }}
@@ -37,7 +36,7 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: |
                     exists:
-                    -   added|modified: '${{ needs.package.outputs.directory }}.changes/unreleased/**.yaml'
+                    -   added|modified: '${{ inputs.package }}/.changes/unreleased/**.yaml'
 
     comment:
         needs: changelog-check
@@ -57,7 +56,6 @@ jobs:
                 body-includes: ${{ env.COMMENT }}
         -   if: steps.comment.outputs.comment-body == ''
             run: gh issue comment ${{ inputs.pull-request }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
-            shell: bash
             env:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         -   uses: actions/github-script@v7

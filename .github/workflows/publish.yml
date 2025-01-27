@@ -43,6 +43,11 @@ concurrency:
     group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
 
+defaults:
+    run:
+        shell: bash
+        working-directory: ./${{ inputs.package }}
+
 jobs:
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
@@ -90,19 +95,13 @@ jobs:
             branch: ${{ needs.generate-changelog.outputs.branch-name }}
         secrets: inherit
 
-    package:
-        if: ${{ inputs.pypi-public == true }}
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     publish-pypi:
         if: |
           always() &&
           (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
           needs.generate-changelog.result == 'success' &&
           inputs.pypi-public == true
-        needs: [package, generate-changelog]
+        needs: generate-changelog
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -122,14 +121,12 @@ jobs:
             # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
             # this is done via environment variables in the test environment in GitHub
         -   run: hatch build && hatch run build:check-all
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   uses: pypa/gh-action-pypi-publish@release/v1
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-                packages-dir: ./${{ needs.package.outputs.directory }}dist/
+                packages-dir: ./${{ inputs.package }}/dist/
         -   id: version
             run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   uses: nick-fields/retry@v3
             with:
                 timeout_seconds: 10

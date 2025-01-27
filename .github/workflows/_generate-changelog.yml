@@ -62,15 +62,10 @@ permissions:
 defaults:
     run:
         shell: bash
+        working-directory: ./${{ inputs.package }}
 
 jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     version:
-        needs: package
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
             raw: ${{ steps.version.outputs.raw }}
@@ -87,14 +82,13 @@ jobs:
         -   uses: pypa/hatch@install
         -   id: version
             run: echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
         -   id: semver
             uses: dbt-labs/actions/parse-semver@v1.1.1
             with:
                 version: ${{ steps.version.outputs.raw }}
 
     changelog:
-        needs: [package, version]
+        needs: version
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
             path: ${{ steps.changelog.outputs.path }}
@@ -120,7 +114,6 @@ jobs:
                     exists=true
                 fi
                 echo "exists=$exists">> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
 
     temp-branch:
         needs: [version, changelog]
@@ -161,7 +154,7 @@ jobs:
         -   run: rm ${{ steps.temp-file.outputs.name }}
 
     generate-changelog:
-        needs: [package, version, changelog, temp-branch, dbt-membership]
+        needs: [version, changelog, temp-branch, dbt-membership]
         if: needs.changelog.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
@@ -184,13 +177,11 @@ jobs:
                     changie batch ${{ needs.version.outputs.base }}
                 fi
                 changie merge
-            working-directory: ./${{ needs.package.outputs.directory }}
             env:
                 CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
         -   run: |
                 pre-commit run trailing-whitespace --files __version__.py CHANGELOG.md .changes/*
                 pre-commit run end-of-file-fixer --files __version__.py CHANGELOG.md .changes/*
-            working-directory: ./${{ needs.package.outputs.directory }}
             continue-on-error: true
         -   run: |
                 git config user.name "Github Build Bot"
@@ -199,7 +190,6 @@ jobs:
                 git add .
                 git commit -m "generate changelog"
                 git push
-            working-directory: ./${{ needs.package.outputs.directory }}
 
     merge-changes:
         needs: [temp-branch, generate-changelog]
