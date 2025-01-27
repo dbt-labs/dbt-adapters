@@ -75,10 +75,12 @@ class TestRedshiftMaterializedViewsBasic(MaterializedViewBasic):
         )
         assert self.query_relation_type(project, my_materialized_view) == "materialized_view"
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_table_replaces_materialized_view(self, project, my_materialized_view):
         super().test_table_replaces_materialized_view(project, my_materialized_view)
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_view_replaces_materialized_view(self, project, my_materialized_view):
         super().test_view_replaces_materialized_view(project, my_materialized_view)
@@ -208,6 +210,7 @@ class TestRedshiftMaterializedViewChangesContinue(
         assert_message_in_logs(f"Applying ALTER to: {my_materialized_view}", logs, False)
         assert_message_in_logs(f"Applying REPLACE to: {my_materialized_view}", logs, False)
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_change_is_not_applied_via_replace(self, project, my_materialized_view):
         self.check_start_state(project, my_materialized_view)
@@ -234,6 +237,7 @@ class TestRedshiftMaterializedViewChangesFail(
 ):
     # Note: using retries doesn't work when we expect `dbt_run` to fail
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_change_is_not_applied_via_replace(self, project, my_materialized_view):
         super().test_change_is_not_applied_via_replace(project, my_materialized_view)
@@ -271,6 +275,7 @@ class TestRedshiftMaterializedViewWithBackupConfig:
     def test_running_mv_with_backup_false_succeeds(self, dbt_run_results):
         assert dbt_run_results[0].node.config_call_dict["backup"] is False
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_running_mv_with_backup_false_is_idempotent(self, project, dbt_run_results):
         """

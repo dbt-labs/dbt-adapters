@@ -34,7 +34,7 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-athena.git#subdirectory=dbt-athena"
 Issues = "https://github.com/dbt-labs/dbt-athena/issues"
 
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = [
     "../dbt-athena/tests/unit",
     "../dbt-athena/tests/functional",
@@ -42,4 +42,8 @@ testpaths = [
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
+]
+color = true
+markers = [
+    "serial: marks tests to be run one at a time (de-select with `-m 'not serial'`)"
 ]

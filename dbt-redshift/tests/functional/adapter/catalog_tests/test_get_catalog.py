@@ -97,6 +97,7 @@ class TestGetCatalog:
             identifier="INFORMATION_SCHEMA",
         ).information_schema()
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_get_one_catalog_by_relations(
         self,
@@ -121,6 +122,7 @@ class TestGetCatalog:
         # note the underlying table is missing as it's not in `my_relations`
         assert len(catalog) == 12
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_get_one_catalog_by_schemas(
         self,

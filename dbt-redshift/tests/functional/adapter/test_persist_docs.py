@@ -28,18 +28,21 @@ models:
 
 
 class TestPersistDocs(BasePersistDocs):
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_has_comments_pglike(self, project):
         super().test_has_comments_pglike(project)
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_missing_column(self, project):
         super().test_missing_column(project)
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_quoted_column_comments(self, run_has_comments):
         super().test_quoted_column_comments(run_has_comments)
@@ -62,6 +65,7 @@ class TestPersistDocsLateBinding(BasePersistDocsBase):
             }
         }
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_comment_on_late_binding_view(self, project):
         run_dbt()
@@ -97,6 +101,7 @@ class TestPersistDocsWithMaterializedView(BasePersistDocs):
             "schema.yml": _MATERIALIZED_VIEW_PROPERTIES__SCHEMA_YML,
         }
 
+    @pytest.mark.serial
     @pytest.mark.flaky
     def test_has_comments_pglike(self, project):
         run_dbt(["docs", "generate"])

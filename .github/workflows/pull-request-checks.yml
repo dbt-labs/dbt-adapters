@@ -71,27 +71,47 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
+    parallel-integration-tests:
+        uses: ./.github/workflows/_serial-parallel-integration-tests-trigger.yml
         strategy:
             fail-fast: false
             matrix:
                 package:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            is-serial-test-run: false
+        secrets: inherit
+
+    # Serial tests are scoped per package. We want serial tests for different packages to execute in parallel.
+    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
+    # we'll have a maximum of one test in athena (or BQ) running at any given time.
+    serial-integration-tests:
+        # We don't want this to run concurrently with parallel-integration-tests
+        needs: parallel-integration-tests
+        uses: ./.github/workflows/_serial-parallel-integration-tests-trigger.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
+        with:
+            package: ${{ matrix.package }}
+            is-serial-test-run: true
+        concurrency:
+            group: ${{ github.workflow }}-${{ matrix.package }}
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
