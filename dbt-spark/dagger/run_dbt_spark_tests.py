@@ -96,33 +96,21 @@ async def test_spark(test_args):
             .with_mounted_cache("/root/.cache/pip", client.cache_volume("pip"))
         )
 
-        # install system dependencies first so any local changes don't invalidate the cache
-        tst_container = (
-            tst_container.with_workdir("/")
-            .with_directory("/scripts", client.host().directory("./dagger/scripts"))
-            .with_exec(["./scripts/install_os_reqs.sh"])
-            .with_exec(["pip", "install", "-U", "pip", "hatch"])
-            .with_(env_variables(TESTING_ENV_VARS))
-        )
-
         # copy project files into image
         tst_container = (
             tst_container.with_workdir("/")
-            .with_directory("/src/src/dbt", client.host().directory("./src/dbt"))
-            .with_directory("/src/tests", client.host().directory("./tests"))
-            .with_directory(
-                "/src",
-                client.host().directory(
-                    "./",
-                    include=[
-                        "pyproject.toml",
-                        "hatch.toml",
-                        "License.md",  # referenced in build metadata
-                        "README.md",  # referenced in build metadata
-                        "test.env",  # may not exist locally, does not exist in ci
-                    ],
-                ),
-            )
+            # this script is executed from the dbt-spark package directory
+            .with_directory("/dbt-spark", client.host().directory("./"))
+            .with_directory("/dbt-adapters", client.host().directory("../dbt-adapters"))
+            .with_directory("/dbt-tests-adapter", client.host().directory("../dbt-tests-adapter"))
+        )
+
+        # install system dependencies first so any local changes don't invalidate the cache
+        tst_container = (
+            tst_container.with_workdir("/dbt-spark")
+            .with_exec(["./dagger/scripts/install_os_reqs.sh"])
+            .with_exec(["pip", "install", "-U", "pip", "hatch"])
+            .with_(env_variables(TESTING_ENV_VARS))
         )
 
         # install profile-specific system dependencies last since tests usually rotate through profiles
@@ -135,8 +123,8 @@ async def test_spark(test_args):
             "databricks_sql_endpoint",
             "spark_http_odbc",
         ]:
-            tst_container = tst_container.with_workdir("/").with_exec(
-                ["./scripts/configure_odbc.sh"]
+            tst_container = tst_container.with_workdir("/dbt-spark").with_exec(
+                ["./dagger/scripts/configure_odbc.sh"]
             )
 
         elif test_args.profile == "spark_session":
@@ -144,7 +132,7 @@ async def test_spark(test_args):
 
         # run the tests
         result = (
-            await tst_container.with_workdir("/src")
+            await tst_container.with_workdir("/dbt-spark")
             .with_exec(
                 ["hatch", "run", "pytest", "--profile", test_args.profile, test_args.test_path]
             )
