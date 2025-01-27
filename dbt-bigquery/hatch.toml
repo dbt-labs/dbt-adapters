@@ -64,4 +64,4 @@ check-sdist = [
 docker-prod = "docker build -f docker/Dockerfile -t dbt-bigquery ."
 
 [metadata]
-allow-ambiguous-features = true
+allow-direct-references = true
