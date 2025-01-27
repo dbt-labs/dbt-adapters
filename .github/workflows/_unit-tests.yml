@@ -60,7 +60,6 @@ permissions:
 defaults:
     run:
         shell: bash
-        working-directory: ./${{ inputs.package }}
 
 jobs:
     unit-tests:
@@ -75,3 +74,4 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch run unit-tests
+            working-directory: ./${{ inputs.package }}

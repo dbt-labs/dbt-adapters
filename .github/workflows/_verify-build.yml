@@ -60,7 +60,6 @@ permissions: read-all
 defaults:
     run:
         shell: bash
-        working-directory: ./${{ inputs.package }}
 
 jobs:
     build:
@@ -75,3 +74,4 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch build && hatch run build:check-all
+            working-directory: ./${{ inputs.package }}

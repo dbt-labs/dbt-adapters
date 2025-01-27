@@ -44,7 +44,6 @@ permissions:
 defaults:
     run:
         shell: bash
-        working-directory: ./${{ inputs.package }}
 
 jobs:
     publish:
@@ -67,6 +66,7 @@ jobs:
             # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
             # this is done via environment variables in the test environment in GitHub
         -   run: hatch build && hatch run build:check-all
+            working-directory: ./${{ inputs.package }}
         -   uses: pypa/gh-action-pypi-publish@release/v1
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
@@ -84,6 +84,7 @@ jobs:
                 ref: ${{ inputs.branch }}
         -   id: version
             run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
+            working-directory: ./${{ inputs.package }}
         -   uses: nick-fields/retry@v3
             with:
                 timeout_seconds: 10

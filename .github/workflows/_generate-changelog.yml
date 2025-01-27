@@ -62,7 +62,6 @@ permissions:
 defaults:
     run:
         shell: bash
-        working-directory: ./${{ inputs.package }}
 
 jobs:
     version:
@@ -82,6 +81,7 @@ jobs:
         -   uses: pypa/hatch@install
         -   id: version
             run: echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
+            working-directory: ./${{ inputs.package }}
         -   id: semver
             uses: dbt-labs/actions/parse-semver@v1.1.1
             with:
@@ -114,6 +114,7 @@ jobs:
                     exists=true
                 fi
                 echo "exists=$exists">> $GITHUB_OUTPUT
+            working-directory: ./${{ inputs.package }}
 
     temp-branch:
         needs: [version, changelog]
@@ -177,6 +178,7 @@ jobs:
                     changie batch ${{ needs.version.outputs.base }}
                 fi
                 changie merge
+            working-directory: ./${{ inputs.package }}
             env:
                 CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
         -   run: |
