@@ -11,7 +11,7 @@ sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
@@ -62,3 +62,6 @@ check-sdist = [
     "pip freeze | grep dbt-redshift",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-redshift ."
+
+[metadata]
+allow-direct-references = true

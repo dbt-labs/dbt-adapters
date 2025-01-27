@@ -12,7 +12,7 @@ sources = ["src"]
 [envs.default]
 python = "3.9"
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
@@ -62,3 +62,6 @@ check-sdist = [
     "pip freeze | grep dbt-bigquery",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-bigquery ."
+
+[metadata]
+allow-ambiguous-features = true
