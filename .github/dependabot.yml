@@ -2,7 +2,7 @@ version: 2
 updates:
 -   package-ecosystem: "pip"
     directories:
-    -   "/"
+    -   "/dbt-adapters"
     -   "/dbt-tests-adapter"
     -   "/dbt-athena"
     -   "/dbt-athena-community"
