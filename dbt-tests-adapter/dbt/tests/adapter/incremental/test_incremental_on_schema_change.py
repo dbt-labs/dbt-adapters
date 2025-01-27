@@ -1,7 +1,7 @@
 import pytest
 
 from dbt.tests.adapter.incremental import fixtures
-from dbt.tests.util import check_relations_equal, run_dbt
+from dbt.tests.util import check_relations_equal, run_dbt, run_dbt_and_capture
 
 
 class BaseIncrementalOnSchemaChangeSetup:
@@ -84,3 +84,21 @@ class BaseIncrementalOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
 
 class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
     pass
+
+
+class BaseIncrementalCaseSenstivityOnSchemaChange:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "src_jobs.sql": fixtures._MODELS__SRC_JOBS,
+            "dim_jobs.sql": fixtures._MODELS__DIM_JOBS,
+        }
+
+    def test_run_incremental_check_quoting_on_new_columns(self, project):
+        run_dbt(["run", "--models", "src_jobs dim_jobs", "--full-refresh"])
+
+        res, logs = run_dbt_and_capture(["run", "--select", "dim_jobs"])
+
+        run_dbt(["run", "--vars", "{'version': 1}"])
+
+        res, logs = run_dbt_and_capture(["run", "--select", "dim_jobs"])
