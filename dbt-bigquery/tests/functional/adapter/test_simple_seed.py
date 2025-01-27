@@ -66,6 +66,10 @@ seeds:
     labels:
       contains_pii: 'yes'
       contains_pie: 'no'
+    tags:
+      environment: 'prod'
+      component: 'batch'
+      project: 'atlas'
 """.lstrip()
 
 
@@ -150,6 +154,22 @@ class TestSimpleSeedConfigs(SeedConfigBase):
 
             assert bq_table.labels
             assert bq_table.labels == self.table_labels()
+            assert bq_table.expires
+
+    @staticmethod
+    def table_tags():
+        return {"environment": "prod", "component": "batch", "project": "atlas"}
+
+    def test__bigquery_seed_table_with_tags_config_bigquery(self, project):
+        seed_results = run_dbt(["seed"])
+        assert len(seed_results) == 3
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            table_id = "{}.{}.{}".format(project.database, project.test_schema, "seed_configs")
+            bq_table = client.get_table(table_id)
+
+            assert bq_table.tags
+            assert bq_table.tags == self.table_tags()
             assert bq_table.expires
 
 
