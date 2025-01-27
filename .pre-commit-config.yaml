@@ -34,7 +34,7 @@ repos:
     rev: 7.1.1
     hooks:
     -   id: flake8
-        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/|dbt-spark/tests/|dbt-bigquery/tests/|dbt-redshift/tests
+        exclude: dbt/adapters/events/adapter_types_pb2.py|tests/functional/|dbt-spark/tests/|dbt-bigquery/tests/|dbt-redshift/tests|dbt-postgres/tests|dbt-snowflake/tests
         args:
         -   --max-line-length=99
         -   --select=E,F,W
