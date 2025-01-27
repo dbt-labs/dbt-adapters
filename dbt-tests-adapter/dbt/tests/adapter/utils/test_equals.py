@@ -3,6 +3,7 @@ import pytest
 from dbt.tests.adapter.utils import base_utils, fixture_equals
 from dbt.tests.util import relation_from_name, run_dbt
 
+
 class BaseEquals(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
