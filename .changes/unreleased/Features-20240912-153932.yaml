@@ -1,0 +1,6 @@
+kind: Features
+body: delete+insert requires incremental_predicates if there's no unique_key
+time: 2024-09-12T15:39:32.654501+08:00
+custom:
+    Author: dlord
+    Issue: https://github.com/dbt-labs/dbt-core/issues/10655
