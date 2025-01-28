@@ -4,9 +4,10 @@ run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
 on:
     pull_request_target:
         types: [opened, reopened, synchronize, labeled, unlabeled]
-    push:
-        branches:
-            - "ADAP-1185/separate-serial-integration-tests"
+#    push:
+#        branches:
+#            - "ADAP-1185/separate-serial-integration-tests"
+    workflow_dispatch:
 
 
 # only run this once per PR at a time
