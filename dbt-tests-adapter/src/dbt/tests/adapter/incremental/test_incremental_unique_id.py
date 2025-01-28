@@ -325,13 +325,32 @@ ResultHolder = namedtuple(
 )
 
 
-class BaseIncrementalUniqueKey:
+class SubBaseIncrementalUniqueKey:
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
             "duplicate_insert.sql": seeds__duplicate_insert_sql,
             "seed.csv": seeds__seed_csv,
             "add_new_rows.sql": seeds__add_new_rows_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "trinary_unique_key_list.sql": models__trinary_unique_key_list_sql,
+            "nontyped_trinary_unique_key_list.sql": models__nontyped_trinary_unique_key_list_sql,
+            "unary_unique_key_list.sql": models__unary_unique_key_list_sql,
+            "not_found_unique_key.sql": models__not_found_unique_key_sql,
+            "empty_unique_key_list.sql": models__empty_unique_key_list_sql,
+            "no_unique_key.sql": models__no_unique_key_sql,
+            "empty_str_unique_key.sql": models__empty_str_unique_key_sql,
+            "str_unique_key.sql": models__str_unique_key_sql,
+            "duplicated_unary_unique_key_list.sql": models__duplicated_unary_unique_key_list_sql,
+            "not_found_unique_key_list.sql": models__not_found_unique_key_list_sql,
+            "expected": {
+                "one_str__overwrite.sql": models__expected__one_str__overwrite_sql,
+                "unique_key_list__inplace_overwrite.sql": models__expected__unique_key_list__inplace_overwrite_sql,
+            },
         }
 
     @pytest.fixture(autouse=True)
@@ -342,8 +361,6 @@ class BaseIncrementalUniqueKey:
                 database=project.database, schema=project.test_schema
             )
             project.adapter.drop_schema(relation)
-
-    pass
 
     def update_incremental_model(self, incremental_model):
         """update incremental model after the seed table has been updated"""
@@ -422,26 +439,7 @@ class BaseIncrementalUniqueKey:
         return run_result.status, run_result.message
 
 
-class IncrementalUniqueKeyFalseyNullsEquals(BaseIncrementalUniqueKey):
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "trinary_unique_key_list.sql": models__trinary_unique_key_list_sql,
-            "nontyped_trinary_unique_key_list.sql": models__nontyped_trinary_unique_key_list_sql,
-            "unary_unique_key_list.sql": models__unary_unique_key_list_sql,
-            "not_found_unique_key.sql": models__not_found_unique_key_sql,
-            "empty_unique_key_list.sql": models__empty_unique_key_list_sql,
-            "no_unique_key.sql": models__no_unique_key_sql,
-            "empty_str_unique_key.sql": models__empty_str_unique_key_sql,
-            "str_unique_key.sql": models__str_unique_key_sql,
-            "duplicated_unary_unique_key_list.sql": models__duplicated_unary_unique_key_list_sql,
-            "not_found_unique_key_list.sql": models__not_found_unique_key_list_sql,
-            "expected": {
-                "one_str__overwrite.sql": models__expected__one_str__overwrite_sql,
-                "unique_key_list__inplace_overwrite.sql": models__expected__unique_key_list__inplace_overwrite_sql,
-            },
-        }
-
+class BaseIncrementalUniqueKey(SubBaseIncrementalUniqueKey):
     def test__bad_unique_key(self, project):
         """expect compilation error from unique key not being a column"""
 
@@ -489,31 +487,6 @@ class IncrementalUniqueKeyFalseyNullsEquals(BaseIncrementalUniqueKey):
 
         assert status == RunStatus.Error
         assert "thisisnotacolumn" in exc.lower()
-
-
-class IncrementalUniqueKeyTruthyNullsEquals(BaseIncrementalUniqueKey):
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "trinary_unique_key_list.sql": models__trinary_unique_key_list_sql,
-            "nontyped_trinary_unique_key_list.sql": models__nontyped_trinary_unique_key_list_sql,
-            "unary_unique_key_list.sql": models__unary_unique_key_list_sql,
-            "not_found_unique_key.sql": models__not_found_unique_key_sql,
-            "empty_unique_key_list.sql": models__empty_unique_key_list_sql,
-            "no_unique_key.sql": models__no_unique_key_sql,
-            "empty_str_unique_key.sql": models__empty_str_unique_key_sql,
-            "str_unique_key.sql": models__str_unique_key_sql,
-            "duplicated_unary_unique_key_list.sql": models__duplicated_unary_unique_key_list_sql,
-            "not_found_unique_key_list.sql": models__not_found_unique_key_list_sql,
-            "expected": {
-                "one_str__overwrite.sql": models__expected__one_str__overwrite_sql,
-                "unique_key_list__inplace_overwrite.sql": models__expected__unique_key_list__inplace_overwrite_sql,
-            },
-        }
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
 
     # no unique_key test
     def test__no_unique_keys(self, project):
@@ -597,9 +570,5 @@ class IncrementalUniqueKeyTruthyNullsEquals(BaseIncrementalUniqueKey):
         self.check_scenario_correctness(expected_fields, test_case_fields, project)
 
 
-class TestIncrementalUniqueKeyFalseyNullsEquals(IncrementalUniqueKeyFalseyNullsEquals):
-    pass
-
-
-class TestIncrementalUniqueKeyTruthyNullsEquals(IncrementalUniqueKeyTruthyNullsEquals):
+class TestIncrementalUniqueKey(BaseIncrementalUniqueKey):
     pass
