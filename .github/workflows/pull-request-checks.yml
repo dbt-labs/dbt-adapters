@@ -2,8 +2,8 @@ name: "Pull request checks"
 run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
-    pull_request_target:
-        types: [opened, reopened, synchronize, labeled, unlabeled]
+#    pull_request_target:
+#        types: [opened, reopened, synchronize, labeled, unlabeled]
 #    push:
 #        branches:
 #            - "ADAP-1185/separate-serial-integration-tests"
