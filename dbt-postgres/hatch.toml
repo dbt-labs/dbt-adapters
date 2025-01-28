@@ -11,9 +11,9 @@ sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
+    "dbt-adapters @ {root:uri}/../dbt-adapters",
+    "dbt-tests-adapter @ {root:uri}/../dbt-tests-adapter",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "pre-commit==3.7.0",
@@ -61,6 +61,3 @@ check-sdist = [
     "find ./dist/dbt_postgres-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-postgres",
 ]
-
-[metadata]
-allow-direct-references = true
