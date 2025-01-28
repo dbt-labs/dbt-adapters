@@ -57,6 +57,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
+            is-serial-tests-run:
+                description: "True if we'll run only serial tests. False for parallel"
+                type: boolean
+                required: true
 
 permissions:
     id-token: write
