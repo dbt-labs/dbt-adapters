@@ -10,7 +10,8 @@ packages = ["src/dbt"]
 detached = true
 dependencies = [
     "dbt-athena @ {root:uri}/../dbt-athena",
-    "dbt-tests-adapter~=1.9.2",
+    "dbt-adapters @ {root:uri}/../dbt-adapters",
+    "dbt-tests-adapter @ {root:uri}/../dbt-tests-adapter",
     "isort~=5.13",
     "moto~=5.0.13",
     "pre-commit~=3.5",
