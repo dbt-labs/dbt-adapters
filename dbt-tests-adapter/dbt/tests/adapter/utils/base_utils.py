@@ -3,12 +3,14 @@ from dbt.tests.util import run_dbt
 
 
 macros__equals_sql = """
-{% macro equals(expr1, expr2) -%}
-case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
-    then 0
-    else 1
-end = 0
-{% endmacro %}
+{%- if adapter.behavior.enable_truthy_nulls_equals_macro.no_warn %}
+    case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
+{%- else -%}
+    case when (({{ expr1 }} = {{ expr2 }})
+{%- endif %}
+        then 0
+        else 1
+    end = 0
 """
 
 macros__test_assert_equal_sql = """

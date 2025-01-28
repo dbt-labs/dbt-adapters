@@ -104,7 +104,14 @@ DEFAULT_BASE_BEHAVIOR_FLAGS = [
         "name": "require_batched_execution_for_custom_microbatch_strategy",
         "default": False,
         "docs_url": "https://docs.getdbt.com/docs/build/incremental-microbatch",
-    }
+    },
+    {
+        {
+            "name": "enable_truthy_nulls_equals_macro",
+            "default": False,
+            "docs_url": "",
+        },
+    },
 ]
 
 
