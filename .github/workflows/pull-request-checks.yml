@@ -138,7 +138,7 @@ jobs:
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry, code-quality, verify-builds, unit-tests, integration-tests]
+        needs: [changelog-entry, code-quality, verify-builds, unit-tests, parallel-integration-tests, serial-integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
