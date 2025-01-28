@@ -1,5 +1,5 @@
 name: "Integration tests"
-run-name: ${{ (inputs.is-serial-tests-run && "Serial") || "Parallel" }} integration tests
+run-name: ${{ (inputs.is-serial-tests-run && 'Serial') || 'Parallel' }} integration tests
 
 on:
     workflow_call:

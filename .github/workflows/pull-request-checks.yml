@@ -131,7 +131,7 @@ jobs:
             # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
             # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
             # We want to avoid running these two in parallel as well
-            group: ${{ github.workflow }}-${{ (matrix.package == "dbt-athena-community" && "dbt-athena") || matrix.package }}
+            group: ${{ github.workflow }}-${{ (matrix.package == 'dbt-athena-community' && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
