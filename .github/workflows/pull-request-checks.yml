@@ -97,7 +97,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
-            is-serial-test-run: false
+            is-serial-tests-run: false
         secrets: inherit
 
     # Serial tests are scoped per package. We want serial tests for different packages to execute in parallel.
@@ -126,7 +126,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
-            is-serial-test-run: true
+            is-serial-tests-run: true
         concurrency:
             # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
             # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
