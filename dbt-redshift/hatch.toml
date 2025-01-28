@@ -62,6 +62,3 @@ check-sdist = [
     "pip freeze | grep dbt-redshift",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-redshift ."
-
-[metadata]
-allow-direct-references = true
