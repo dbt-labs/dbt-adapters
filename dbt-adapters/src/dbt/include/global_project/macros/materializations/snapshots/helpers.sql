@@ -62,7 +62,7 @@
                     config.get('dbt_valid_to_current')
                 {% endset %}
 
-               {{ equals(source_unique_key, target_unique_key) }}
+               {{ equals(source_unique_key, target_unique_key) or source_unique_key is none }}
             {% else %}
                 {{ columns.dbt_valid_to }} is null
             {% endif %}
