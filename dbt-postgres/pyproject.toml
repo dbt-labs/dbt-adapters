@@ -28,7 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "psycopg2-binary>=2.9,<3.0",
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@add_null_equality_condition_to_equals_macro",
+    "dbt-adapters>=1.7.0,<2.0",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0",
     # installed via dbt-adapters but used directly
@@ -47,6 +47,3 @@ testpaths = [
     "tests/functional",
     "tests/unit",
 ]
-
-[tool.hatch.metadata]
-allow-direct-references = true
