@@ -123,4 +123,4 @@ jobs:
         -   uses: re-actors/alls-green@release/v1
             with:
                 jobs: ${{ toJSON(needs) }}
-                allowed-skips: [unit-tests, integration-tests, changelog-entry-check]
+                allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"
