@@ -1,8 +1,10 @@
 [build.targets.sdist]
-include = ["src/dbt"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [build.targets.wheel]
-packages = ["src/dbt"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [envs.default]
 # the only build dependency is dbt-athena, which will never be published when running this
