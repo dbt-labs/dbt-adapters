@@ -35,6 +35,7 @@ class PostgresCredentials(Credentials):
     sslkey: Optional[str] = None
     sslrootcert: Optional[str] = None
     application_name: Optional[str] = "dbt"
+    target_session_attrs: Optional[str] = None
     retries: int = 1
 
     _ALIASES = {"dbname": "database", "pass": "password"}
@@ -63,6 +64,7 @@ class PostgresCredentials(Credentials):
             "sslkey",
             "sslrootcert",
             "application_name",
+            "target_session_attrs",
             "retries",
         )
 
@@ -132,6 +134,9 @@ class PostgresConnectionManager(SQLConnectionManager):
 
         if credentials.application_name:
             kwargs["application_name"] = credentials.application_name
+
+        if credentials.target_session_attrs:
+            kwargs["target_session_attrs"] = credentials.target_session_attrs
 
         def connect():
             handle = None
