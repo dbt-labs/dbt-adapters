@@ -32,6 +32,9 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to test"
@@ -123,8 +126,253 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional -k "not TestPython"
             working-directory: ./${{ inputs.package }}
+
+    integration-tests-bigquery-flaky:
+        # we only run this for one python version to avoid running in parallel
+        if: ${{ inputs.package == 'dbt-bigquery' && inputs.python-version == '3.9' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-bigquery"
+        env:
+            BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
+            BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
+            BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
+            DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
+            GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
-            if: ${{ inputs.python-version == '3.9' }}  # we only run this for one version to run in series
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-postgres:
+        if: inputs.package == 'dbt-postgres'
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: ${{ inputs.package }}
+        env:
+            POSTGRES_TEST_HOST: ${{ vars.POSTGRES_TEST_HOST }}
+            POSTGRES_TEST_PORT: ${{ vars.POSTGRES_TEST_PORT }}
+            POSTGRES_TEST_USER: ${{ vars.POSTGRES_TEST_USER }}
+            POSTGRES_TEST_PASS: ${{ secrets.POSTGRES_TEST_PASS }}
+            POSTGRES_TEST_DATABASE: ${{ vars.POSTGRES_TEST_DATABASE }}
+            POSTGRES_TEST_THREADS: ${{ vars.POSTGRES_TEST_THREADS }}
+        services:
+            postgres:
+                image: postgres
+                env:
+                    POSTGRES_PASSWORD: postgres
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                ports:
+                -   ${{ vars.POSTGRES_TEST_PORT }}:5432
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   run: psql -f ./scripts/setup_test_database.sql
+            working-directory: ./dbt-postgres
+            env:
+                PGHOST: ${{ vars.POSTGRES_TEST_HOST }}
+                PGPORT: ${{ vars.POSTGRES_TEST_PORT }}
+                PGUSER: postgres
+                PGPASSWORD: postgres
+                PGDATABASE: postgres
+        -   uses: pypa/hatch@install
+        -   run: hatch run integration-tests tests/functional --ddtrace
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-postgres-psycopg2-check:
+        if: inputs.package == 'dbt-postgres'
+        runs-on: ${{ inputs.os }}
+        steps:
+        -   uses: actions/checkout@v4
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   if: startsWith(inputs.os, 'macos')
+            run: brew install postgresql
+        -   name: "Test psycopg2 - default"
+            run: scripts/psycopg2-check.sh
+            working-directory: ./${{ inputs.package }}
+            env:
+                PSYCOPG2_EXPECTED_NAME: psycopg2-binary
+        -   name: "Test psycopg2 - invalid override"
+            run: scripts/psycopg2-check.sh
+            working-directory: ./${{ inputs.package }}
+            env:
+                DBT_PSYCOPG2_NAME: rubber-baby-buggy-bumpers
+                PSYCOPG2_EXPECTED_NAME: psycopg2-binary
+        -   name: "Test psycopg2 - override"
+            run: scripts/psycopg2-check.sh
+            working-directory: ./${{ inputs.package }}
+            env:
+                DBT_PSYCOPG2_NAME: psycopg2
+                PSYCOPG2_EXPECTED_NAME: psycopg2-binary  # we have not implemented the hook yet, so this doesn't work
+        -   name: "Test psycopg2 - manual override"
+            # verify that the workaround documented in the `README.md` continues to work
+            run: scripts/psycopg2-check.sh
+            working-directory: ./${{ inputs.package }}
+            env:
+                PSYCOPG2_WORKAROUND: true
+                PSYCOPG2_EXPECTED_NAME: psycopg2
+
+    integration-tests-redshift:
+        if: ${{ inputs.package == 'dbt-redshift' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-redshift"
+        env:
+            AWS_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            AWS_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            AWS_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            AWS_SOURCE_PROFILE: ${{ vars.AWS_SOURCE_PROFILE }}
+            AWS_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            AWS_ROLE_ACCESS_KEY_ID: ${{ vars.AWS_ROLE_ACCESS_KEY_ID }}
+            AWS_ROLE_SECRET_ACCESS_KEY: ${{ secrets.AWS_ROLE_SECRET_ACCESS_KEY }}
+            AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+            AWS_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
+            REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
+            REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
+            REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}
+            REDSHIFT_TEST_HOST: ${{ secrets.REDSHIFT_TEST_HOST }}
+            REDSHIFT_TEST_CLUSTER_ID: ${{ vars.REDSHIFT_TEST_CLUSTER_ID }}
+            REDSHIFT_TEST_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_IAM_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   name: Create AWS IAM profiles
+            run: |
+              aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
+              aws configure --profile $AWS_USER_PROFILE set aws_secret_access_key $AWS_USER_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_USER_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_USER_PROFILE set output json
+
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_access_key_id $AWS_ROLE_ACCESS_KEY_ID
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_secret_access_key $AWS_ROLE_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_SOURCE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_SOURCE_PROFILE set output json
+
+              aws configure --profile $AWS_ROLE_PROFILE set source_profile $AWS_SOURCE_PROFILE
+              aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
+              aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_ROLE_PROFILE set output json
+        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-redshift-flaky:
+        # we only run this for one python version to avoid running in parallel
+        if: ${{ inputs.package == 'dbt-redshift' && inputs.python-version == '3.9' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-redshift"
+        env:
+            AWS_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            AWS_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            AWS_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            AWS_SOURCE_PROFILE: ${{ vars.AWS_SOURCE_PROFILE }}
+            AWS_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            AWS_ROLE_ACCESS_KEY_ID: ${{ vars.AWS_ROLE_ACCESS_KEY_ID }}
+            AWS_ROLE_SECRET_ACCESS_KEY: ${{ secrets.AWS_ROLE_SECRET_ACCESS_KEY }}
+            AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+            AWS_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
+            REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
+            REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
+            REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}
+            REDSHIFT_TEST_HOST: ${{ secrets.REDSHIFT_TEST_HOST }}
+            REDSHIFT_TEST_CLUSTER_ID: ${{ vars.REDSHIFT_TEST_CLUSTER_ID }}
+            REDSHIFT_TEST_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_IAM_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   name: Create AWS IAM profiles
+            run: |
+              aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
+              aws configure --profile $AWS_USER_PROFILE set aws_secret_access_key $AWS_USER_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_USER_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_USER_PROFILE set output json
+
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_access_key_id $AWS_ROLE_ACCESS_KEY_ID
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_secret_access_key $AWS_ROLE_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_SOURCE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_SOURCE_PROFILE set output json
+
+              aws configure --profile $AWS_ROLE_PROFILE set source_profile $AWS_SOURCE_PROFILE
+              aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
+              aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_ROLE_PROFILE set output json
+        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
+            working-directory: ./${{ inputs.package }}
+
+    integration-tests-snowflake:
+        if: ${{ inputs.package == 'dbt-snowflake' }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: ${{ inputs.package }}
+        env:
+            SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
+            SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
+            SNOWFLAKE_TEST_PASSWORD: ${{ secrets.SNOWFLAKE_TEST_PASSWORD }}
+            SNOWFLAKE_TEST_ROLE: ${{ vars.SNOWFLAKE_TEST_ROLE }}
+            SNOWFLAKE_TEST_DATABASE: ${{ vars.SNOWFLAKE_TEST_DATABASE }}
+            SNOWFLAKE_TEST_WAREHOUSE: ${{ vars.SNOWFLAKE_TEST_WAREHOUSE }}
+            SNOWFLAKE_TEST_ALT_DATABASE: ${{ vars.SNOWFLAKE_TEST_ALT_DATABASE }}
+            SNOWFLAKE_TEST_ALT_WAREHOUSE: ${{ vars.SNOWFLAKE_TEST_ALT_WAREHOUSE }}
+            SNOWFLAKE_TEST_QUOTED_DATABASE: ${{ vars.SNOWFLAKE_TEST_QUOTED_DATABASE }}
+            SNOWFLAKE_TEST_OAUTH_CLIENT_ID: ${{ vars.SNOWFLAKE_TEST_OAUTH_CLIENT_ID }}
+            SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET }}
+            SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN: ${{ secrets.SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN }}
+            SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
+            SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run integration-tests tests/functional --ddtrace
             working-directory: ./${{ inputs.package }}
 
     integration-tests-spark:

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 dynamic = ["version"]
 name = "dbt-tests-adapter"
@@ -38,49 +42,3 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.hatch.version]
-path = "dbt/tests/__about__.py"
-
-[tool.hatch.build.targets.sdist]
-include = ["dbt/tests", "dbt/__init__.py"]
-
-[tool.hatch.build.targets.wheel]
-include = ["dbt/tests", "dbt/__init__.py"]
-
-[tool.hatch.envs.default]
-python = "3.9"
-dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-adapters @ {root:uri}/..",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "pre-commit==3.7.0",
-    "pytest"
-]
-
-[tool.hatch.envs.build]
-detached = true
-dependencies = [
-    "wheel",
-    "twine",
-    "check-wheel-contents",
-]
-[tool.hatch.envs.build.scripts]
-check-all = [
-    "- check-wheel",
-    "- check-sdist",
-]
-check-wheel = [
-    "twine check dist/*",
-    "find ./dist/dbt_tests_adapter-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-tests-adapter",
-]
-check-sdist = [
-    "check-wheel-contents dist/*.whl --ignore W007,W008",
-    "find ./dist/dbt_tests_adapter-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
-    "pip freeze | grep dbt-tests-adapter",
-]

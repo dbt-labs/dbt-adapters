@@ -34,6 +34,9 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             branch:
                 description: "Choose the branch to build"
@@ -54,14 +57,12 @@ on:
 
 permissions: read-all
 
-jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
+defaults:
+    run:
+        shell: bash
 
+jobs:
     build:
-        needs: package
         runs-on: ${{ inputs.os }}
         steps:
         -   uses: actions/checkout@v4
@@ -73,5 +74,4 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch build && hatch run build:check-all
-            shell: bash
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}

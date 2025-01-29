@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add retry logic for retryable exceptions
+time: 2024-12-04T18:57:29.925299-08:00
+custom:
+    Author: versusfacit colin-rogers-dbt
+    Issue: "960"

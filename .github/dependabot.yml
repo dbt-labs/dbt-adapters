@@ -2,11 +2,14 @@ version: 2
 updates:
 -   package-ecosystem: "pip"
     directories:
-    -   "/"
+    -   "/dbt-adapters"
     -   "/dbt-tests-adapter"
     -   "/dbt-athena"
     -   "/dbt-athena-community"
     -   "/dbt-bigquery"
+    -   "/dbt-postgres"
+    -   "/dbt-redshift"
+    -   "/dbt-snowflake"
     -   "/dbt-spark"
     schedule:
         interval: "daily"
@@ -18,6 +21,9 @@ updates:
 -   package-ecosystem: "docker"
     directories:
     -   "/dbt-bigquery/docker"
+    -   "/dbt-postgres/docker"
+    -   "/dbt-redshift/docker"
+    -   "/dbt-snowflake/docker"
     -   "/dbt-spark/docker"
     schedule:
         interval: "weekly"

@@ -13,6 +13,9 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
@@ -30,11 +33,19 @@ on:
                 description: "Publish to PyPI"
                 type: boolean
                 default: false
+            skip-integration-tests:
+                description: "Skip Running Integration Tests"
+                type: boolean
+                default: false
 
 # don't publish to the same target in parallel
 concurrency:
     group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
+
+defaults:
+    run:
+        shell: bash
 
 jobs:
     unit-tests:
@@ -44,7 +55,9 @@ jobs:
             branch: ${{ inputs.branch }}
 
     integration-tests:
-        if: ${{ inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter' }}
+        if: |
+            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
+            inputs.skip-integration-tests == false
         uses: ./.github/workflows/_integration-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -54,17 +67,26 @@ jobs:
 
     generate-changelog:
         needs: [unit-tests, integration-tests]
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
+          inputs.pypi-public == true
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
             merge: ${{ inputs.deploy-to == 'prod' }}
             branch: ${{ inputs.branch }}
-            repository: ${{ github.repository }}
         secrets: inherit
 
     publish-internal:
-        if: ${{ inputs.pypi-internal == true && inputs.package != 'dbt-athena-community' }}
-        needs: generate-changelog
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
+          inputs.pypi-internal == true &&
+          inputs.package != 'dbt-athena-community'
+        needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:
             package: ${{ inputs.package }}
@@ -72,15 +94,13 @@ jobs:
             branch: ${{ needs.generate-changelog.outputs.branch-name }}
         secrets: inherit
 
-    package:
-        if: ${{ inputs.pypi-public == true }}
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     publish-pypi:
-        if: ${{ inputs.pypi-public == true }}
-        needs: [package, generate-changelog]
+        if: |
+          always() &&
+          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
+          needs.generate-changelog.result == 'success' &&
+          inputs.pypi-public == true
+        needs: generate-changelog
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -100,14 +120,14 @@ jobs:
             # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
             # this is done via environment variables in the test environment in GitHub
         -   run: hatch build && hatch run build:check-all
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   uses: pypa/gh-action-pypi-publish@release/v1
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-                packages-dir: ./${{ needs.package.outputs.directory }}dist/
+                packages-dir: ./${{ inputs.package }}/dist/
         -   id: version
             run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   uses: nick-fields/retry@v3
             with:
                 timeout_seconds: 10

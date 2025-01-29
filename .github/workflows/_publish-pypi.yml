@@ -25,6 +25,9 @@ on:
                 -   "dbt-athena"
                 -   "dbt-athena-community"
                 -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
                 -   "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
@@ -43,13 +46,7 @@ defaults:
         shell: bash
 
 jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     publish:
-        needs: package
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -69,15 +66,15 @@ jobs:
             # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
             # this is done via environment variables in the test environment in GitHub
         -   run: hatch build && hatch run build:check-all
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   uses: pypa/gh-action-pypi-publish@release/v1
             with:
                 repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-                packages-dir: ./${{ needs.package.outputs.directory }}dist/
+                packages-dir: ./${{ inputs.package }}/dist/
 
     verify:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
-        needs: [package, publish]
+        needs: publish
         # check the correct index
         environment:
             name: ${{ inputs.deploy-to }}
@@ -87,7 +84,7 @@ jobs:
                 ref: ${{ inputs.branch }}
         -   id: version
             run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   uses: nick-fields/retry@v3
             with:
                 timeout_seconds: 10

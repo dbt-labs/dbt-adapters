@@ -37,6 +37,12 @@ body:
             required: false
         -   label: dbt-bigquery
             required: false
+        -   label: dbt-postgres
+            required: false
+        -   label: dbt-redshift
+            required: false
+        -   label: dbt-snowflake
+            required: false
         -   label: dbt-spark
             required: false
 -   type: textarea
