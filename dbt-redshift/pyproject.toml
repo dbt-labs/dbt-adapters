@@ -55,3 +55,6 @@ filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
 ]
+markers = [
+    'flaky: marks tests as flaky so they run one at a time (de-select with `-m "not flaky"`)'
+]
