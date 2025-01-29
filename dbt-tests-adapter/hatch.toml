@@ -10,9 +10,10 @@ packages = ["src/dbt/tests"]
 sources = ["src"]
 
 [envs.default]
-python = "3.9"
+pre-install-commands = [
+  "pip install -e ../dbt-adapters",
+]
 dependencies = [
-    "dbt-adapters @ {root:uri}/../dbt-adapters",
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pre-commit==3.7.0",
