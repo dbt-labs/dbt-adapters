@@ -1,5 +1,5 @@
 dbt-adapters:
--   'dbt/**'
+-   'dbt-adapters/**'
 dbt-tests-adapter:
 -   'dbt-tests-adapter/**'
 dbt-athena:
