@@ -89,7 +89,8 @@ jobs:
                 versions_published: ${{ steps.published.outputs.versions }}
         -   run: |
                 VERSION=${{ steps.next.outputs.internal_release_version }}+$(git rev-parse HEAD)
-                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$(cut -c 5- ${{ inputs.package }})/__version__.py
+                PKG_DIR=$(echo ${{ inputs.package }} | cut -c 5-)
+                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$PKG_DIR/__version__.py
             working-directory: ./${{ inputs.package }}
         -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
             working-directory: ./${{ inputs.package }}
