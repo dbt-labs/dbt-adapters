@@ -104,7 +104,7 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
-    integration-tests:
+    parallel-integration-tests:
         uses: ./.github/workflows/_integration-tests2.yml
         needs: affected-packages
         if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
