@@ -129,7 +129,7 @@ jobs:
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
-        if: ${{ inputs.package == 'dbt-bigquery' && inputs.python-version == '3.9' }}
+        if: ${{ inputs.package == 'dbt-bigquery' && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}
         runs-on: ${{ inputs.os }}
         environment:
             name: "dbt-bigquery"
@@ -290,7 +290,7 @@ jobs:
 
     integration-tests-redshift-flaky:
         # we only run this for one python version to avoid running in parallel
-        if: ${{ inputs.package == 'dbt-redshift' && inputs.python-version == '3.9' }}
+        if: ${{ inputs.package == 'dbt-redshift' && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}
         runs-on: ${{ inputs.os }}
         environment:
             name: "dbt-redshift"
