@@ -22,7 +22,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -45,7 +45,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -66,14 +66,12 @@ jobs:
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         secrets: inherit
 
     notification:

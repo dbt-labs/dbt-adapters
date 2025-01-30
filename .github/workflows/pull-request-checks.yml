@@ -52,10 +52,8 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
-            package: "dbt-athena"
+            package: ${{ matrix.package }}
             pull-request: ${{ github.event.pull_request.number }}
         secrets: inherit
 
@@ -73,14 +71,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
@@ -90,14 +86,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
@@ -107,14 +101,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
