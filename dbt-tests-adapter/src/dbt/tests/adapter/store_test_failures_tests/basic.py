@@ -303,3 +303,27 @@ class StoreTestFailuresAsExceptions(StoreTestFailuresAsBase):
         assert "Compilation Error" in result.message
         assert "'error' is not a valid value" in result.message
         assert "Accepted values are: ['ephemeral', 'table', 'view']" in result.message
+
+class StoreTestFailuresAs_FileLevelTable_ProjectLevelView(StoreTestFailuresAsBase):
+    """
+    Test Scenario:
+
+    - If store_failures_as = "view" in the project  and store_failures_as = "table" in the file,
+    then do not store the failures.
+    """
+
+    @pytest.fixture(scope="class")
+    def tests(self):
+        return {
+            "results_table.sql": _files.TEST__TABLE_UNSET,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"tests": {"+store_failures_as": "view"}}
+
+    def test_tests_run_successfully_and_are_stored_as_expected(self, project):
+        expected_results = {
+            TestResult("results_table", TestStatus.Fail, "table"),
+        }
+        self.run_and_assert(project, expected_results)

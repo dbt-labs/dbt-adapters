@@ -30,3 +30,6 @@ class TestStoreTestFailuresAsProjectLevelEphemeral(basic.StoreTestFailuresAsProj
 
 class TestStoreTestFailuresAsExceptions(basic.StoreTestFailuresAsExceptions):
     pass
+
+class TestStoreTestFailuresAs_FileLevelTable_ProjectLevelView(basic.StoreTestFailuresAs_FileLevelTable_ProjectLevelView):
+    pass
