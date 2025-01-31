@@ -7,13 +7,10 @@ packages = ["src/dbt/adapters"]
 sources = ["src"]
 
 [envs.default]
-# the only build dependency is dbt-athena, which will never be published when running this
-# because the versions need to be identical
-detached = true
 pre-install-commands = [
-  "pip install -e ../dbt-adapters",
-  "pip install -e ../dbt-tests-adapter",
-  "pip install -e ../dbt-athena",
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-athena",
 ]
 dependencies = [
     "isort~=5.13",
