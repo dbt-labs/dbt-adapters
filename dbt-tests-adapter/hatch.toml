@@ -11,7 +11,7 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
-  "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-adapters",
 ]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",

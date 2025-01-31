@@ -11,9 +11,9 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
-  "pip install -e ../dbt-adapters",
-  "pip install -e ../dbt-tests-adapter",
-  "pip install -e ../dbt-postgres",
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-postgres",
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
