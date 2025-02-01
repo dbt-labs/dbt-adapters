@@ -39,6 +39,8 @@ testpaths = [
     "../dbt-athena/tests/unit",
     "../dbt-athena/tests/functional",
 ]
+addopts = "-v --color=yes -n auto"
+env_files = ["../dbt-athena/.env"]
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
