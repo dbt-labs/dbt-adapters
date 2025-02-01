@@ -9,7 +9,6 @@ import google.cloud.bigquery
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
-from dbt.adapters.bigquery.retry import RetryFactory
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):

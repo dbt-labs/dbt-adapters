@@ -1,6 +1,4 @@
-import os
 import pytest
-from unittest import mock
 
 from dbt.tests.util import run_dbt_and_capture
 from dbt.tests.adapter.incremental.test_incremental_microbatch import (
