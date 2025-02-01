@@ -9,12 +9,8 @@ description = "The set of reusable tests and test fixtures used to test common f
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
 requires-python = ">=3.9.0"
-authors = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
-maintainers = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
+authors = [ { name = "dbt Labs", email = "info@dbtlabs.com" } ]
+maintainers = [ { name = "dbt Labs", email = "info@dbtlabs.com" } ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
@@ -27,9 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    # TODO: remove `dbt-core` dependency
     "dbt-core>=1.8.0a1",
-    # `dbt-tests-adapter` will ultimately depend on the packages below
     # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
     "dbt-adapters",

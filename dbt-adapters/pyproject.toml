@@ -9,12 +9,8 @@ description = "The set of adapter protocols and base functionality that supports
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
 requires-python = ">=3.9.0"
-authors = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
-maintainers = [
-    { name = "dbt Labs", email = "info@dbtlabs.com" },
-]
+authors = [ { name = "dbt Labs", email = "info@dbtlabs.com" } ]
+maintainers = [ { name = "dbt Labs", email = "info@dbtlabs.com" } ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
@@ -43,7 +39,7 @@ Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
 [tool.mypy]
-mypy_path = "third-party-stubs/"
+mypy_path = "../third-party-stubs/"
 [[tool.mypy.overrides]]
 module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
