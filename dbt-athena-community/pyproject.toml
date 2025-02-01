@@ -29,10 +29,11 @@ classifiers = [
 dependencies = ["dbt-athena==1.9.0"]
 version = "1.9.0"
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-athena/dbt-athena"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-athena.git#subdirectory=dbt-athena"
-Issues = "https://github.com/dbt-labs/dbt-athena/issues"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-athena"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
 
 [tool.pytest]
 testpaths = [
