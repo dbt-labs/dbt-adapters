@@ -27,7 +27,7 @@ jobs:
             uses: dorny/paths-filter@v3
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
-                filters: .github/filters/changelog-check.yml
+                filters: .github/filters/changelog-entry-check.yml
         -   id: verify-build
             uses: dorny/paths-filter@v3
             with:
