@@ -1473,3 +1473,14 @@ class AthenaAdapter(SQLAdapter):
             LOGGER.debug(f"CAUGHT EXCEPTION: {e}")
             raise e
         return cursor
+
+    @classmethod
+    def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
+        try:
+            table_format = config._extra.get("table_type")
+        except AttributeError:
+            table_format = None
+        return {
+            "adapter_type": "athena",
+            "table_format": table_format,
+        }
