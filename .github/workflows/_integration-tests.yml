@@ -126,8 +126,33 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional -k "not TestPython"
             working-directory: ./${{ inputs.package }}
+
+    integration-tests-bigquery-flaky:
+        # we only run this for one python version to avoid running in parallel
+        if: ${{ inputs.package == 'dbt-bigquery' && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-bigquery"
+        env:
+            BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
+            BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
+            BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
+            DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
+            GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
-            if: ${{ inputs.python-version == '3.9' }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
     integration-tests-postgres:
@@ -235,9 +260,6 @@ jobs:
             REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
-            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
-            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
-            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -265,6 +287,59 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set output json
         -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
             working-directory: ./${{ inputs.package }}
+
+    integration-tests-redshift-flaky:
+        # we only run this for one python version to avoid running in parallel
+        if: ${{ inputs.package == 'dbt-redshift' && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}
+        runs-on: ${{ inputs.os }}
+        environment:
+            name: "dbt-redshift"
+        env:
+            AWS_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            AWS_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            AWS_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            AWS_SOURCE_PROFILE: ${{ vars.AWS_SOURCE_PROFILE }}
+            AWS_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            AWS_ROLE_ACCESS_KEY_ID: ${{ vars.AWS_ROLE_ACCESS_KEY_ID }}
+            AWS_ROLE_SECRET_ACCESS_KEY: ${{ secrets.AWS_ROLE_SECRET_ACCESS_KEY }}
+            AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+            AWS_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
+            REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
+            REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
+            REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}
+            REDSHIFT_TEST_HOST: ${{ secrets.REDSHIFT_TEST_HOST }}
+            REDSHIFT_TEST_CLUSTER_ID: ${{ vars.REDSHIFT_TEST_CLUSTER_ID }}
+            REDSHIFT_TEST_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_IAM_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   name: Create AWS IAM profiles
+            run: |
+              aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
+              aws configure --profile $AWS_USER_PROFILE set aws_secret_access_key $AWS_USER_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_USER_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_USER_PROFILE set output json
+
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_access_key_id $AWS_ROLE_ACCESS_KEY_ID
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_secret_access_key $AWS_ROLE_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_SOURCE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_SOURCE_PROFILE set output json
+
+              aws configure --profile $AWS_ROLE_PROFILE set source_profile $AWS_SOURCE_PROFILE
+              aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
+              aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_ROLE_PROFILE set output json
         -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
             working-directory: ./${{ inputs.package }}
 
