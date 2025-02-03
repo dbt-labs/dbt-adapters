@@ -282,14 +282,9 @@
 {% macro unique_key_join_on(unique_key, identifier, from_identifier) %}
     {% if unique_key | is_list %}
         {% for key in unique_key %}
-            {% set source_unique_key %}
-                {{ identifier }}.dbt_unique_key_{{ loop.index }}
-            {% endset %}
-            {% set target_unique_key %}
-                {{ from_identifier }}.dbt_unique_key_{{ loop.index }}
-            {% endset %}
-
-            {{ equals(source_unique_key, target_unique_key) }}
+	    {% set source_unique_key = (identifier ~ ".dbt_unique_key_" ~ loop.index) | trim %}
+	    {% set target_unique_key = (from_identifier ~ ".dbt_unique_key_" ~ loop.index) | trim %}
+	    {{ equals(source_unique_key, target_unique_key) }}
             {%- if not loop.last %} and {%- endif %}
         {% endfor %}
     {% else %}
