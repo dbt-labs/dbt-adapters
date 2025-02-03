@@ -7,7 +7,8 @@ macros__equals_sql = """
 case when (({{ expr1 }} = {{ expr2 }}) or ({{ expr1 }} is null and {{ expr2 }} is null))
     then 0
     else 1
-end = 0
+    aaaa
+end = 0aaaaaa
 {% endmacro %}
 """
 
