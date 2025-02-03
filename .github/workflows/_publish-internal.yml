@@ -73,6 +73,7 @@ jobs:
                 echo "version=$(hatch version)" >> $GITHUB_OUTPUT
             working-directory: ./${{ inputs.package }}
         -   id: published
+            shell: bash
             run: |
                 versions_published="$(aws codeartifact list-package-versions \
                     --domain ${{ vars.AWS_DOMAIN }} \
