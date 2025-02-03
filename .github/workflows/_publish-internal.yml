@@ -80,6 +80,7 @@ jobs:
                     --format pypi \
                     --package ${{ inputs.package }} \
                     --output json \
+                    --region ${{ vars.AWS_REGION }} \
                     --query 'versions[*].version' | jq -r '.[]' | grep "^${{ steps.package.outputs.version }}" || true )"  # suppress pipefail only here
                 echo "versions=$(echo "${versions_published[*]}"| tr '\n' ',')" >> $GITHUB_OUTPUT
         -   id: next
