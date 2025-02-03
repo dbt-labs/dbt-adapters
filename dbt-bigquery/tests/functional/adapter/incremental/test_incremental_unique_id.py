@@ -1,3 +1,7 @@
+import pytest
+
+from dbt.contracts.results import RunStatus
+
 from dbt.tests.adapter.incremental.test_incremental_unique_id import SubBaseIncrementalUniqueKey
 
 
