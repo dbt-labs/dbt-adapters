@@ -75,6 +75,7 @@ jobs:
         -   id: published
             run: |
                 versions_published="$(aws codeartifact list-package-versions \
+                    --profile ${{ env.TEMP_PROFILE_NAME }} \
                     --domain ${{ vars.AWS_DOMAIN }} \
                     --repository ${{ vars.AWS_REPOSITORY }} \
                     --format pypi \
