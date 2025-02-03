@@ -85,6 +85,11 @@ class PostgresAdapter(SQLAdapter):
         {Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full)}
     )
 
+    def drop_relation(self, relation):
+        conn = self.connections.get_thread_connection().handle
+        conn.drop_relation(relation)
+
+
     @classmethod
     def date_function(cls):
         return "now()"

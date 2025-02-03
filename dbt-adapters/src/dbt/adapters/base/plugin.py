@@ -15,7 +15,9 @@ class AdapterPlugin:
 
     def __init__(
         self,
-        adapter: Type[AdapterProtocol],
+        dialect: Type[DialectProtocol],
+        connection_manager: Type[ConnectionManagerProtocol],
+        execution_manager: Type[ExecutionManagerProtocol],
         credentials: Type[Credentials],
         include_path: str,
         dependencies: Optional[List[str]] = None,

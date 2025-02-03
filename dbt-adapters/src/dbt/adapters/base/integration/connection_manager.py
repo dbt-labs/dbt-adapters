@@ -78,6 +78,11 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
         self.lock: RLock = mp_context.RLock()
         self.query_header: Optional[MacroQueryStringSetter] = None
 
+    @classmethod
+    @abc.abstractmethod
+    def is_cancelable(cls) -> bool:
+        raise NotImplementedError("`is_cancelable` is not implemented for this adapter!")
+
     def set_query_header(self, query_header_context: Dict[str, Any]) -> None:
         self.query_header = MacroQueryStringSetter(self.profile, query_header_context)
 
