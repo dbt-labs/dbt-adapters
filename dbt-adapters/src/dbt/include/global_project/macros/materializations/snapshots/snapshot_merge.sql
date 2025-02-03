@@ -21,7 +21,7 @@
         {% set target_unique_key %}
             {{ config.get('dbt_valid_to_current') }}
         {% endset %}
-       and {{ equals(source_unique_key, target_unique_key) }}
+       and {{ equals(source_unique_key, target_unique_key) or source_unique_key is none }}
 
      {% else %}
        and DBT_INTERNAL_DEST.{{ columns.dbt_valid_to }} is null

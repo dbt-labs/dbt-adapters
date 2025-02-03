@@ -56,13 +56,15 @@
         where
             {% if config.get('dbt_valid_to_current') %}
                 {% set source_unique_key %}
-                    columns.dbt_valid_to
+                    {{ columns.dbt_valid_to }}
                 {% endset %}
                 {% set target_unique_key %}
-                    config.get('dbt_valid_to_current')
+                    {{ config.get('dbt_valid_to_current') }}
                 {% endset %}
 
-               {{ equals(source_unique_key, target_unique_key) or source_unique_key is none }}
+		{# The exact equals semantics between NULL values depends on the current behavior flag set. Also, update
+		records if the source field is null #}
+                {{ equals(source_unique_key, target_unique_key) or source_unique_key is none }}
             {% else %}
                 {{ columns.dbt_valid_to }} is null
             {% endif %}
