@@ -1,5 +1,5 @@
 name: "Pull request checks"
-run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
+run-name: "Pull request checks - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
     pull_request_target:
@@ -11,10 +11,49 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    changelog-entry:
+    affected-packages:
+        runs-on: ubuntu-latest
+        outputs:
+            changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
+            verify-build: ${{ steps.verify-build.outputs.changes }}
+            unit-tests: ${{ steps.unit-tests.outputs.changes }}
+            integration-tests: ${{ steps.integration-tests.outputs.changes }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ github.event.pull_request.head.ref }}
+                repository: ${{ github.event.pull_request.head.repo.full_name }}
+        -   id: changelog-entry-check
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/changelog-entry-check.yml
+        -   id: verify-build
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/verify-build.yml
+        -   id: unit-tests
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/unit-tests.yml
+        -   id: integration-tests
+            uses: dorny/paths-filter@v3
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                filters: .github/filters/integration-tests.yml
+
+    changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
         with:
-            package: "dbt-athena"
+            package: ${{ matrix.package }}
             pull-request: ${{ github.event.pull_request.number }}
         secrets: inherit
 
@@ -24,84 +63,60 @@ jobs:
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
-    verify-builds:
+    verify-build:
         uses: ./.github/workflows/_verify-build.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.verify-build)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.unit-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ ubuntu-22.04 ]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry, code-quality, verify-builds, unit-tests, integration-tests]
+        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
             with:
                 jobs: ${{ toJSON(needs) }}
-                allowed-skips: 'changelog-entry'
+                allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"

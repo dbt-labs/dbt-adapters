@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Added new equals macro that handles null value checks in sql
+time: 2024-12-17T11:05:36.363421+02:00
+custom:
+    Author: adrianburusdbt,versusfacit
+    Issue: "159"
