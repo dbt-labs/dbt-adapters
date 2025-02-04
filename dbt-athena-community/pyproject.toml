@@ -34,11 +34,10 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-athena.git#subdirectory=dbt-athena"
 Issues = "https://github.com/dbt-labs/dbt-athena/issues"
 
-[tool.pytest]
-testpaths = [
-    "../dbt-athena/tests/unit",
-    "../dbt-athena/tests/functional",
-]
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+env_files = ["../dbt-athena/.env"]
+addopts = "-v --color=yes -n auto"
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",

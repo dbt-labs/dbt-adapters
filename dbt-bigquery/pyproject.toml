@@ -47,10 +47,8 @@ Changelog = "https://github.com/dbt-labs/dbt-bigquery/blob/main/CHANGELOG.md"
 mypy_path = "third-party-stubs/"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/functional", "tests/unit"]
-env_files = ["test.env"]
-addopts = "-v -n auto"
-color = true
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
