@@ -50,6 +50,7 @@ mypy_path = "third-party-stubs/"
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
 markers = [
     'flaky: marks tests as flaky so they run one at a time (de-select with `-m "not flaky"`)'
 ]

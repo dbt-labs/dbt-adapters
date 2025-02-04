@@ -45,3 +45,4 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-postgres/CHA
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
