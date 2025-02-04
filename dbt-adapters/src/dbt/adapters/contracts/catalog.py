@@ -8,10 +8,10 @@ from dbt.adapters.relation_configs.formats import TableFormat
 
 
 class CatalogIntegrationType(Enum):
-    managed = 'managed'
-    iceberg_rest = 'iceberg_rest'
-    glue = 'glue'
-    unity = 'unity'
+    managed = "managed"
+    iceberg_rest = "iceberg_rest"
+    glue = "glue"
+    unity = "unity"
 
 
 @dataclass
@@ -34,6 +34,7 @@ class CatalogIntegration(abc.ABC):
     Implements the CatalogIntegrationProtocol.
 
     """
+
     catalog_name: str
     integration_name: str
     table_format: TableFormat
@@ -41,19 +42,18 @@ class CatalogIntegration(abc.ABC):
     external_volume: Optional[str] = None
     namespace: Optional[str] = None
 
-    def __init__(
-            self, integration_config: CatalogIntegrationConfig
-    ):
+    def __init__(self, integration_config: CatalogIntegrationConfig):
         self.catalog_name = integration_config.catalog_name
         self.integration_name = integration_config.integration_name
         self.table_format = TableFormat(integration_config.table_format)
         self.type = CatalogIntegrationType(integration_config.catalog_type)
         self.external_volume = integration_config.external_volume
         self.namespace = integration_config.namespace
-        self._handle_adapter_properties(integration_config.adapter_properties)
+        if integration_config.adapter_properties:
+            self._handle_adapter_properties(integration_config.adapter_properties)
 
-    def _handle_adapter_properties(self, adapter_properties: Dict) -> None:
-        ...
+    @abc.abstractmethod
+    def _handle_adapter_properties(self, adapter_properties: Dict) -> None: ...
 
-    def render_ddl_predicates(self, relation, config: RelationConfig) -> str:
-        ...
+    @abc.abstractmethod
+    def render_ddl_predicates(self, relation, config: RelationConfig) -> str: ...

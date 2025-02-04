@@ -22,9 +22,10 @@ def test_adapter_can_add_catalog_integration(adapter):
         integration_name="test_integration",
         table_format=TableFormat.ICEBERG,
         external_volume="test_volume",
-        adapter_properties={'extra_fake_property': 42}
+        adapter_properties={"extra_fake_property": 42},
     )
     adapter.add_catalog_integrations([catalog_config])
+
 
 def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
     catalog_config = CatalogIntegrationConfig(
@@ -33,7 +34,7 @@ def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
         integration_name="test_integration",
         table_format=TableFormat.ICEBERG,
         external_volume="test_volume",
-        adapter_properties={'extra_fake_property': 42}
+        adapter_properties={"extra_fake_property": 42},
     )
     with pytest.raises(DbtValidationError):
         adapter.add_catalog_integrations([catalog_config])

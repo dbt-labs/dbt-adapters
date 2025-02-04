@@ -60,9 +60,7 @@ class CatalogIntegrationProtocol(Protocol):
     external_volume: Optional[str]
     namespace: Optional[str]
 
-    def __init__(
-            self, integration_config: CatalogIntegrationConfigProtocol
-    ) -> None: ...
+    def __init__(self, integration_config: CatalogIntegrationConfigProtocol) -> None: ...
 
 
 Self = TypeVar("Self", bound="RelationProtocol")
@@ -74,10 +72,10 @@ class RelationProtocol(Protocol):
 
     @classmethod
     def create_from(
-            cls: Type[Self],
-            quoting: HasQuoting,
-            relation_config: RelationConfig,
-            **kwargs: Any,
+        cls: Type[Self],
+        quoting: HasQuoting,
+        relation_config: RelationConfig,
+        **kwargs: Any,
     ) -> Self: ...
 
 
@@ -90,23 +88,18 @@ CatalogIntegration_T = TypeVar("CatalogIntegration_T", bound=CatalogIntegrationP
 
 class MacroContextGeneratorCallable(Protocol):
     def __call__(
-            self,
-            macro_protocol: MacroProtocol,
-            config: AdapterRequiredConfig,
-            macro_resolver: MacroResolverProtocol,
-            package_name: Optional[str],
+        self,
+        macro_protocol: MacroProtocol,
+        config: AdapterRequiredConfig,
+        macro_resolver: MacroResolverProtocol,
+        package_name: Optional[str],
     ) -> Dict[str, Any]: ...
 
 
 # TODO CT-211
 class AdapterProtocol(  # type: ignore[misc]
     Protocol,
-    Generic[
-        AdapterConfig_T,
-        ConnectionManager_T,
-        Relation_T,
-        Column_T,
-    ],
+    Generic[AdapterConfig_T, ConnectionManager_T, Relation_T, Column_T, CatalogIntegration_T],
 ):
     # N.B. Technically these are ClassVars, but mypy doesn't support putting type vars in a
     # ClassVar due to the restrictiveness of PEP-526
@@ -127,8 +120,8 @@ class AdapterProtocol(  # type: ignore[misc]
     def clear_macro_resolver(self) -> None: ...
 
     def set_macro_context_generator(
-            self,
-            macro_context_generator: MacroContextGeneratorCallable,
+        self,
+        macro_context_generator: MacroContextGeneratorCallable,
     ) -> None: ...
 
     @classmethod
@@ -171,5 +164,5 @@ class AdapterProtocol(  # type: ignore[misc]
     def commit_if_has_connection(self) -> None: ...
 
     def execute(
-            self, sql: str, auto_begin: bool = False, fetch: bool = False
+        self, sql: str, auto_begin: bool = False, fetch: bool = False
     ) -> Tuple[AdapterResponse, "agate.Table"]: ...
