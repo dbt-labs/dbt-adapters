@@ -9,10 +9,12 @@ import pytest
 from dbt.adapters.base.column import Column
 from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.contracts.catalog import CatalogIntegrationType
 from dbt.adapters.contracts.connection import AdapterRequiredConfig, QueryComment
 
 from tests.unit.fixtures.connection_manager import ConnectionManagerStub
 from tests.unit.fixtures.credentials import CredentialsStub
+from tests.unit.fixtures.catalog_integration import FakeCatalogIntegration
 
 
 class BaseAdapterStub(BaseAdapter):
@@ -21,6 +23,7 @@ class BaseAdapterStub(BaseAdapter):
     """
 
     ConnectionManager = ConnectionManagerStub
+    CatalogIntegrations = {CatalogIntegrationType.managed.value: FakeCatalogIntegration}
 
     ###
     # Abstract methods for database-specific values, attributes, and types

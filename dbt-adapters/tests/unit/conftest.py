@@ -4,4 +4,5 @@ from tests.unit.fixtures import (
     behavior_flags,
     config,
     flags,
+    fake_catalog_integration
 )

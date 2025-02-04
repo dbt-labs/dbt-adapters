@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from dbt_common.exceptions.base import DbtValidationError
 
 from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
 
@@ -8,7 +9,34 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 import agate
 import pytz
+
+from dbt.adapters.contracts.catalog import CatalogIntegrationConfig, CatalogIntegrationType
 from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.relation_configs.formats import TableFormat
+
+
+def test_adapter_can_add_catalog_integration(adapter):
+    catalog_config = CatalogIntegrationConfig(
+        catalog_type="managed",
+        catalog_name="some_catalog",
+        integration_name="test_integration",
+        table_format=TableFormat.ICEBERG,
+        external_volume="test_volume",
+        adapter_properties={'extra_fake_property': 42}
+    )
+    adapter.add_catalog_integrations([catalog_config])
+
+def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
+    catalog_config = CatalogIntegrationConfig(
+        catalog_type="not_supported_type",
+        catalog_name="some_catalog",
+        integration_name="test_integration",
+        table_format=TableFormat.ICEBERG,
+        external_volume="test_volume",
+        adapter_properties={'extra_fake_property': 42}
+    )
+    with pytest.raises(DbtValidationError):
+        adapter.add_catalog_integrations([catalog_config])
 
 
 class TestBaseAdapterConstraintRendering:

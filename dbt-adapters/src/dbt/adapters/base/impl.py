@@ -301,7 +301,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             for integration_config in catalog_integrations:
                 catalog_type = integration_config.catalog_type
                 if catalog_type not in self.CatalogIntegrations:
-                    raise DbtValidationError(f"{catalog_type} is not supported!!! - <3 Colin")
+                    raise DbtValidationError(f"requested catalog type, {catalog_type}, is not supported.")
                 integration = self.CatalogIntegrations[catalog_type](integration_config)
                 catalogs_client.add_catalog(integration, integration_config.catalog_name)
 

@@ -22,7 +22,7 @@ class CatalogIntegrationConfig:
     catalog_type: str
     external_volume: Optional[str] = None
     namespace: Optional[str] = None
-    adapter_configs: Optional[Dict] = None
+    adapter_properties: Optional[Dict] = None
 
 
 class CatalogIntegration(abc.ABC):
@@ -50,9 +50,9 @@ class CatalogIntegration(abc.ABC):
         self.type = CatalogIntegrationType(integration_config.catalog_type)
         self.external_volume = integration_config.external_volume
         self.namespace = integration_config.namespace
-        self._handle_adapter_configs(integration_config.adapter_configs)
+        self._handle_adapter_properties(integration_config.adapter_properties)
 
-    def _handle_adapter_configs(self, adapter_configs: Dict) -> None:
+    def _handle_adapter_properties(self, adapter_properties: Dict) -> None:
         ...
 
     def render_ddl_predicates(self, relation, config: RelationConfig) -> str:

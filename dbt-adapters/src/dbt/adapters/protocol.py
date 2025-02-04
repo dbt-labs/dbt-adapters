@@ -49,7 +49,7 @@ class CatalogIntegrationConfigProtocol(Protocol):
     catalog_type: str
     external_volume: Optional[str]
     namespace: Optional[str]
-    adapter_configs: Optional[Dict]
+    adapter_properties: Optional[Dict]
 
 
 class CatalogIntegrationProtocol(Protocol):
