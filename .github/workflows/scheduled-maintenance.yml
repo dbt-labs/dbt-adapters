@@ -26,9 +26,9 @@ jobs:
             matrix:
                 include:
                 -   threshold: 90
-                    labels: 'triage:awaiting-response,triage:more-information-needed'
+                    labels: 'triage:awaiting-response'
                 -   threshold: 360
-                    labels: 'misc:good-first-issue,misc:help-wanted,type:tech-debt'
+                    labels: 'good-first-issue,help-wanted,type:task'
         steps:
         -   uses: actions/stale@v9
             with:
