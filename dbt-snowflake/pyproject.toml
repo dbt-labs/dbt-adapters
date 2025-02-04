@@ -33,11 +33,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-snowflake"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-snowflake"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-snowflake.git"
-Issues = "https://github.com/dbt-labs/dbt-snowflake/issues"
-Changelog = "https://github.com/dbt-labs/dbt-snowflake/blob/main/CHANGELOG.md"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-snowflake"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CHANGELOG.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
