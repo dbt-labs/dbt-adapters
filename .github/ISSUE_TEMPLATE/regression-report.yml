@@ -1,7 +1,7 @@
 name: ☣️ Regression
 description: Report a regression you've observed in a newer version
 title: "[Regression] <title>"
-labels: ["regression", "triage"]
+labels: ["type:regression", "triage:product"]
 body:
 -   type: markdown
     attributes:
