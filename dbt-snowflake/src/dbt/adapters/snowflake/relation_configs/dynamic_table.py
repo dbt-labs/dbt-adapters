@@ -69,6 +69,7 @@ def _setup_catalog_integration(catalog_info: Union[Dict, RelationConfig]) -> str
         return TableFormat.default().value
 
 
+
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     """
@@ -131,7 +132,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "catalog": catalog,
+             "catalog": catalog,
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore

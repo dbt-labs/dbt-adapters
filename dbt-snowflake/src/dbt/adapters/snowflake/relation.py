@@ -178,6 +178,12 @@ class SnowflakeRelation(BaseRelation):
             if catalog.table_format == TableFormat.ICEBERG:
                 return "iceberg"
 
+        catalog_name = config.get("catalog_name", None)
+        if catalog_name:
+            catalog = catalogs_client.get_catalog(catalog_name)
+            if catalog.table_format == TableFormat.ICEBERG:
+                return "iceberg"
+
         # Temporary tables are a Snowflake feature that do not exist in the
         # Iceberg framework. We ignore the Iceberg status of the model.
         if temporary:
