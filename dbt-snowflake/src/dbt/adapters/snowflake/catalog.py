@@ -11,9 +11,10 @@ from dbt_common.exceptions import DbtValidationError
 
 _SNOWFLAKE_BOOLEAN_VALUES = ["TRUE", "FALSE"]
 
-from dbt.exceptions import DbtValidationError
-_AUTO_REFRESH_VALUES = ["TRUE", "FALSE"]
-_REPLACE_INVALID_CHARACTERS_VALUES = ["TRUE", "FALSE"]
+from dbt_common.exceptions import DbtValidationError
+
+
+_SNOWFLAKE_BOOLEAN_VALUES = ["TRUE", "FALSE"]
 
 class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
     catalog_type = CatalogIntegrationType.managed
@@ -33,11 +34,11 @@ class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
                     )
                 self.replace_invalid_characters = replace_invalid_characters
             if auto_refresh := adapter_properties.get("auto_refresh"):
-                if auto_refresh not in _AUTO_REFRESH_VALUES:
+                if auto_refresh not in _SNOWFLAKE_BOOLEAN_VALUES:
                     raise DbtValidationError(f"Invalid auto_refresh value: {auto_refresh}")
                 self.auto_refresh = auto_refresh
             if replace_invalid_characters := adapter_properties.get("replace_invalid_characters"):
-                if replace_invalid_characters not in _REPLACE_INVALID_CHARACTERS_VALUES:
+                if replace_invalid_characters not in _SNOWFLAKE_BOOLEAN_VALUES:
                     raise DbtValidationError(f"Invalid replace_invalid_characters value: {replace_invalid_characters}")
                 self.replace_invalid_characters = replace_invalid_characters
 
