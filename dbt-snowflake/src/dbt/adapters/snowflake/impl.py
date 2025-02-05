@@ -4,7 +4,7 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.base.catalog import CatalogIntegrationType
+from dbt.adapters.catalogs import CatalogIntegrationType
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.snowflake.catalog import (
     SnowflakeManagedIcebergCatalogIntegration,
