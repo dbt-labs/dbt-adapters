@@ -60,6 +60,7 @@ class RelationConfig(Protocol):
     config: Optional[MaterializationConfig]
     catalog_name: Optional[str]
 
+
 class ComponentName(StrEnum):
     Database = "database"
     Schema = "schema"

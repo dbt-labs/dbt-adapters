@@ -320,6 +320,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     @available
     def get_catalog_integration(self, integration_name: str) -> CatalogIntegrationProtocol:
         return catalogs_client.get_catalog(integration_name)
+
     ###
     # Methods to set / access a macro resolver
     ###

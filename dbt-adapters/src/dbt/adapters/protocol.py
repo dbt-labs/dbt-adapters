@@ -63,7 +63,6 @@ class CatalogIntegrationProtocol(Protocol):
     def __init__(self, integration_config: CatalogIntegrationConfigProtocol) -> None: ...
 
 
-
 Self = TypeVar("Self", bound="RelationProtocol")
 
 

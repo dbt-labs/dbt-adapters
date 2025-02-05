@@ -55,4 +55,3 @@ class CatalogIntegration(abc.ABC):
 
     @abc.abstractmethod
     def render_ddl_predicates(self, relation, config: RelationConfig) -> str: ...
-    
