@@ -1,5 +1,5 @@
 name: "Pull request checks"
-run-name: "Publish - #${{ github.event.number }} - ${{ github.actor }}"
+run-name: "Pull request checks - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
 #    pull_request_target:
@@ -57,10 +57,8 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
-            package: "dbt-athena"
+            package: ${{ matrix.package }}
             pull-request: ${{ github.event.pull_request.number }}
         secrets: inherit
 
@@ -78,14 +76,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
@@ -95,14 +91,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
-                os: [ ubuntu-22.04 ]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     parallel-integration-tests:
         uses: ./.github/workflows/_integration-tests2.yml
@@ -112,14 +106,12 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-                os: [ubuntu-22.04]
-                python-version: ["3.9", "3.10", "3.11", "3.12"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
             is-serial-tests-run: false
         secrets: inherit
 
@@ -134,20 +126,18 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-                os: [ ubuntu-22.04 ]
-                python-version: [ "3.9", "3.10", "3.11", "3.12" ]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
             is-serial-tests-run: true
         concurrency:
             # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
             # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
             # We want to avoid running these two in parallel as well
-            group: ${{ github.workflow }}-${{ (matrix.package == 'dbt-athena-community' && 'dbt-athena') || matrix.package }}
+            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
