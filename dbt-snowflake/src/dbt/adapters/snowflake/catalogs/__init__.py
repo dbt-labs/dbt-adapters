@@ -5,13 +5,21 @@ from dbt.adapters.snowflake.catalogs._iceberg_managed import (
     IcebergManagedCatalogIntegration,
     IcebergManagedCatalogRelation,
 )
+from dbt.adapters.snowflake.catalogs._iceberg_rest import (
+    IcebergAWSGlueCatalogIntegration,
+    IcebergRESTCatalogIntegration,
+)
 
 
 SnowflakeCatalogRelation = Union[IcebergManagedCatalogRelation]
 SnowflakeCatalogIntegration = Union[IcebergManagedCatalogIntegration]
 
 
-CATALOG_INTEGRATIONS = [IcebergManagedCatalogIntegration]
+CATALOG_INTEGRATIONS = [
+    IcebergAWSGlueCatalogIntegration,
+    IcebergManagedCatalogIntegration,
+    IcebergRESTCatalogIntegration,
+]
 
 
 DEFAULT_ICEBERG_CATALOG_INTEGRATION = SimpleNamespace(

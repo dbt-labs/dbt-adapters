@@ -17,6 +17,8 @@
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}
         {%- elif catalog_integration.catalog_type == 'iceberg_managed' -%}
             {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
+        {%- elif catalog_integration.catalog_type in ['iceberg_rest', 'aws_glue'] -%}
+            {{ snowflake__create_table_iceberg_rest_sql(relation) }}
         {%- else -%}
             {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
         {%- endif -%}
