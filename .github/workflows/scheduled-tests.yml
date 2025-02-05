@@ -108,7 +108,7 @@ jobs:
 
     notification:
         if: always()
-        needs: [verify-builds, unit-tests, integration-tests]
+        needs: [verify-builds, unit-tests, parallel-integration-tests, serial-integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
