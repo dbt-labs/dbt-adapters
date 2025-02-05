@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 
-from dbt.adapters.base.catalog import CatalogIntegrationConfig, CatalogIntegrationType
+from dbt.adapters.catalogs import CatalogIntegrationConfig, CatalogIntegrationType
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.clients import catalogs as catalogs_client
 from dbt.adapters.contracts.relation import RelationConfig
@@ -131,7 +131,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "catalog": catalog,
+             "catalog": catalog,
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore

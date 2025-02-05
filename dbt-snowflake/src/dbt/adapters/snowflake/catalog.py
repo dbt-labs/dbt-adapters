@@ -3,7 +3,7 @@ from typing import Dict, Optional, Any
 import textwrap
 
 from dbt.adapters.base import BaseRelation
-from dbt.adapters.base.catalog import CatalogIntegration, CatalogIntegrationType
+from dbt.adapters.catalog import CatalogIntegration, CatalogIntegrationType
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
 from dbt_common.exceptions import DbtValidationError
@@ -90,12 +90,12 @@ class SnowflakeGlueCatalogIntegration(CatalogIntegration):
     auto_refresh: Optional[str] = None  # "TRUE" | "FALSE"
     replace_invalid_characters: Optional[str] = None  # "TRUE" | "FALSE"
 
-    def _handle_adapter_properties(self, adapter_properties: Optional[Dict]) -> None:
-        if adapter_properties:
-            if "auto_refresh" in adapter_properties:
-                self.auto_refresh = adapter_properties["auto_refresh"]
-            if "replace_invalid_characters" in adapter_properties:
-                self.replace_invalid_characters = adapter_properties["replace_invalid_characters"]
+    def _handle_adapter_configs(self, adapter_configs: Optional[Dict]) -> None:
+        if adapter_configs:
+            if "auto_refresh" in adapter_configs:
+                self.auto_refresh = adapter_configs["auto_refresh"]
+            if "replace_invalid_characters" in adapter_configs:
+                self.replace_invalid_characters = adapter_configs["replace_invalid_characters"]
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         ddl_predicate = f"""
