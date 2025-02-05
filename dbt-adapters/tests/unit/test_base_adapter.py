@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import agate
 import pytz
 
-from dbt.adapters.contracts.catalog import CatalogIntegrationConfig, CatalogIntegrationType
+from dbt.adapters.base.catalog import CatalogIntegrationConfig, CatalogIntegrationType
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.relation_configs.formats import TableFormat
 

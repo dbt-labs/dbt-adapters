@@ -9,7 +9,7 @@ import pytest
 from dbt.adapters.base.column import Column
 from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.base.relation import BaseRelation
-from dbt.adapters.contracts.catalog import CatalogIntegrationType
+from dbt.adapters.base.catalog import CatalogIntegrationType
 from dbt.adapters.contracts.connection import AdapterRequiredConfig, QueryComment
 
 from tests.unit.fixtures.connection_manager import ConnectionManagerStub

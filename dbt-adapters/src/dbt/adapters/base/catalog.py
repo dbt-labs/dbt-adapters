@@ -5,7 +5,7 @@ from typing import Optional, Dict
 
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs.formats import TableFormat
-
+from dbt.adapters.protocol import CatalogIntegrationProtocol
 
 class CatalogIntegrationType(Enum):
     managed = "managed"
@@ -25,7 +25,7 @@ class CatalogIntegrationConfig:
     adapter_properties: Optional[Dict] = None
 
 
-class CatalogIntegration(abc.ABC):
+class CatalogIntegration(abc.ABC, CatalogIntegrationProtocol):
     """
     An external catalog integration is a connection to an external catalog that can be used to
     interact with the catalog. This class is an abstract base class that should be subclassed by

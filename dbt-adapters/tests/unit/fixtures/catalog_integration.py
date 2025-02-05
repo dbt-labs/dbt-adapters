@@ -2,7 +2,7 @@ from typing import Dict
 
 import pytest
 
-from dbt.adapters.contracts.catalog import (
+from dbt.adapters.base.catalog import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogIntegrationType,
