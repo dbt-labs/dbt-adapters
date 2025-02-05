@@ -54,15 +54,63 @@ jobs:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
 
-    integration-tests:
+    parallel-integration-tests:
         if: |
             (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
             inputs.skip-integration-tests == false
         uses: ./.github/workflows/_integration-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - "dbt-adapters"
+                    - "dbt-tests-adapter"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
             repository: ${{ github.repository }}
+            is-serial-tests-run: false
+        secrets: inherit
+
+    serial-integration-tests:
+        if:
+            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
+            inputs.skip-integration-tests == false
+        # We don't want this to run concurrently with parallel-integration-tests
+        needs: parallel-integration-tests
+        uses: ./.github/workflows/_integration-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - "dbt-adapters"
+                    - "dbt-tests-adapter"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+            repository: ${{ github.repository }}
+            is-serial-tests-run: true
+        concurrency:
+            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
+            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
+            # We want to avoid running these two in parallel as well
+            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     generate-changelog:
