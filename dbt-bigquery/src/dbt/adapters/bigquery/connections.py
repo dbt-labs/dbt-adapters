@@ -221,6 +221,12 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         return {}
 
+    def get_job_labels(self):
+        labels = self.get_labels_from_query_comment()
+        labels["dbt_invocation_id"] = get_invocation_id()
+
+        return labels
+
     def generate_job_id(self) -> str:
         # Generating a fresh job_id for every _query_and_results call to avoid job_id reuse.
         # Generating a job id instead of persisting a BigQuery-generated one after client.query is called.
@@ -244,9 +250,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         fire_event(SQLQuery(conn_name=conn.name, sql=sql, node_info=get_node_info()))
 
-        labels = self.get_labels_from_query_comment()
-
-        labels["dbt_invocation_id"] = get_invocation_id()
+        labels = self.get_job_labels()
 
         job_params = {
             "use_legacy_sql": use_legacy_sql,
@@ -424,6 +428,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         destination_ref = self.table_ref(
             destination.database, destination.schema, destination.table
         )
+        labels = self.get_job_labels()
 
         logger.debug(
             'Copying table(s) "{}" to "{}" with disposition: "{}"',
@@ -440,7 +445,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             copy_job = client.copy_table(
                 source_ref_array,
                 destination_ref,
-                job_config=CopyJobConfig(write_disposition=write_disposition),
+                job_config=CopyJobConfig(write_disposition=write_disposition, labels=labels),
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
             copy_job.result(timeout=self._retry.create_job_execution_timeout(fallback=300))
@@ -456,10 +461,12 @@ class BigQueryConnectionManager(BaseConnectionManager):
         field_delimiter: str,
         fallback_timeout: Optional[float] = None,
     ) -> None:
+        labels = self.get_job_labels()
         load_config = LoadJobConfig(
             skip_leading_rows=1,
             schema=table_schema,
             field_delimiter=field_delimiter,
+            labels=labels,
         )
         table = self.table_ref(database, schema, identifier)
         self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
@@ -477,6 +484,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         config = kwargs["kwargs"]
         if "schema" in config:
             config["schema"] = json.load(config["schema"])
+        if "labels" not in config:
+            config["labels"] = self.get_job_labels()
+
         load_config = LoadJobConfig(**config)
         table = self.table_ref(database, schema, identifier)
         self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
