@@ -105,7 +105,7 @@ jobs:
         -   run: hatch run integration-tests -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests -m serial -n1
+        -   run: hatch run integration-tests -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
@@ -136,7 +136,7 @@ jobs:
         -   run: hatch run integration-tests tests/functional -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional -m serial -n1
+        -   run: hatch run integration-tests tests/functional -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
@@ -184,7 +184,7 @@ jobs:
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -277,7 +277,7 @@ jobs:
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -313,7 +313,7 @@ jobs:
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -349,9 +349,10 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional -m "not serial" --profile ${{ matrix.profile }}
+#        -   run: hatch run integration-tests -m "not serial"
+        -   run: hatch run integration-tests -m "not serial" -n auto --profile ${{ matrix.profile }}
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional -m serial -n1 --profile ${{ matrix.profile }}
+        -   run: hatch run integration-tests -m serial -n 1 --profile ${{ matrix.profile }}
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}

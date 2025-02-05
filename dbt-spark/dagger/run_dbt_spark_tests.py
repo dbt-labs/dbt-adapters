@@ -146,7 +146,18 @@ async def test_spark(test_args):
         result = (
             await tst_container.with_workdir("/src")
             .with_exec(
-                ["hatch", "run", "pytest", "--profile", test_args.profile, test_args.test_path]
+                [
+                    "hatch",
+                    "run",
+                    "pytest",
+                    "-m",
+                    test_args.m,
+                    "-n",
+                    test_args.n,
+                    "--profile",
+                    test_args.profile,
+                    test_args.test_path,
+                ]
             )
             .stdout()
         )
@@ -157,6 +168,8 @@ async def test_spark(test_args):
 parser = argparse.ArgumentParser()
 parser.add_argument("--profile", required=True, type=str)
 parser.add_argument("--test-path", required=False, type=str, default="tests/functional/adapter")
+parser.add_argument("-m", required=True, type=str)
+parser.add_argument("-n", required=True, type=str)  # "auto" or int
 args = parser.parse_args()
 
 anyio.run(test_spark, args)
