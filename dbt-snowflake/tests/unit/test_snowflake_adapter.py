@@ -718,6 +718,34 @@ class TestSnowflakeAdapter(unittest.TestCase):
             ]
         )
 
+    def test_set_ocsp_fail_open(self):
+        self.config.credentials = self.config.credentials.replace(ocsp_fail_open=False)
+        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        self.snowflake.assert_not_called()
+        conn.handle
+        self.snowflake.assert_has_calls(
+            [
+                mock.call(
+                    account="test-account",
+                    autocommit=True,
+                    client_session_keep_alive=False,
+                    database="test_database",
+                    role=None,
+                    schema="public",
+                    user="test_user",
+                    warehouse="test_warehouse",
+                    private_key=None,
+                    application="dbt",
+                    insecure_mode=False,
+                    session_parameters={},
+                    reuse_connections=True,
+                    ocsp_fail_open=False,
+                )
+            ]
+        )
+
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):
