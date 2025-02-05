@@ -5,3 +5,4 @@ from tests.unit.fixtures.adapter import (
     config,
     flags,
 )
+from tests.unit.fixtures.catalog_integration import fake_catalog_integration
