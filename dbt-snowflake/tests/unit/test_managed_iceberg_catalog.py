@@ -2,6 +2,7 @@ from dbt.adapters.base.catalog import CatalogIntegrationConfig
 import pytest
 from dbt.adapters.snowflake.relation import SnowflakeRelation
 from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+
 @pytest.fixture
 def catalog_integration():
     return SnowflakeManagedIcebergCatalogIntegration(
@@ -12,6 +13,23 @@ def catalog_integration():
             catalog_type="managed",
             external_volume="s3_iceberg_snow",
             namespace="my_namespace",
+        )
+    )
+
+@pytest.fixture
+def catalog_integration_with_properties():
+    return SnowflakeManagedIcebergCatalogIntegration(
+        CatalogIntegrationConfig(
+            catalog_name="my_catalog",
+            integration_name="my_integration",
+            table_format="iceberg",
+            catalog_type="managed",
+            external_volume="s3_iceberg_snow",
+            namespace="my_namespace",
+            adapter_properties={
+                "auto_refresh": "TRUE",
+                "replace_invalid_characters": "TRUE",
+            }
         )
     )
 
@@ -89,3 +107,17 @@ def test_iceberg_no_path(iceberg_config: dict[str, str], catalog_integration):
     ).strip()
 
     assert get_actual_base_location(iceberg_config, catalog_integration) == expected_base_location
+
+
+def test_managed_iceberg_catalog_with_properties(iceberg_config, catalog_integration_with_properties):
+    """Test when properties are provided"""
+    assert catalog_integration_with_properties.auto_refresh == "TRUE"
+    assert catalog_integration_with_properties.replace_invalid_characters == "TRUE"
+
+    relation = SnowflakeRelation.create(
+        schema=iceberg_config["schema"],
+        identifier=iceberg_config["identifier"],
+    )
+    actual_ddl_predicates = catalog_integration_with_properties.render_ddl_predicates(relation, iceberg_config).strip()
+    assert "auto_refresh = TRUE" in actual_ddl_predicates
+    assert "replace_invalid_characters = TRUE" in actual_ddl_predicates
