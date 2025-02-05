@@ -10,7 +10,6 @@ packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
 
 [envs.default]
-python = "3.9"
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     'pre-commit==3.7.0',
