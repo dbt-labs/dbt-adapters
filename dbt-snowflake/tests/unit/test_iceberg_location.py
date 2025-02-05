@@ -1,6 +1,19 @@
+from dbt.adapters.base.catalog import CatalogIntegrationConfig
 import pytest
 from dbt.adapters.snowflake.relation import SnowflakeRelation
-
+from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+@pytest.fixture
+def catalog_integration():
+    return SnowflakeManagedIcebergCatalogIntegration(
+        CatalogIntegrationConfig(
+            catalog_name="my_catalog",
+            integration_name="my_integration",
+            table_format="iceberg",
+            catalog_type="managed",
+            external_volume="s3_iceberg_snow",
+            namespace="my_namespace",
+        )
+    )
 
 @pytest.fixture
 def iceberg_config() -> dict:
@@ -14,21 +27,20 @@ def iceberg_config() -> dict:
     }
 
 
-def get_actual_base_location(config: dict[str, str]) -> str:
+def get_actual_base_location(config: dict[str, str], catalog_integration: SnowflakeManagedIcebergCatalogIntegration) -> str:
     """Get the actual base location from the configuration by parsing the DDL predicates."""
 
     relation = SnowflakeRelation.create(
         schema=config["schema"],
         identifier=config["identifier"],
     )
-
-    actual_ddl_predicates = relation.get_iceberg_ddl_options(config).strip()
+    actual_ddl_predicates = catalog_integration.render_ddl_predicates(relation, config).strip()
     actual_base_location = actual_ddl_predicates.split("base_location = ")[1]
 
     return actual_base_location
 
 
-def test_iceberg_path_and_subpath(iceberg_config: dict[str, str]):
+def test_iceberg_path_and_subpath(iceberg_config: dict[str, str], catalog_integration):
     """Test when base_location_root and base_location_subpath are provided"""
     expected_base_location = (
         f"'{iceberg_config['base_location_root']}/"
@@ -37,10 +49,10 @@ def test_iceberg_path_and_subpath(iceberg_config: dict[str, str]):
         f"{iceberg_config['base_location_subpath']}'"
     ).strip()
 
-    assert get_actual_base_location(iceberg_config) == expected_base_location
+    assert get_actual_base_location(iceberg_config, catalog_integration) == expected_base_location
 
 
-def test_iceberg_only_subpath(iceberg_config: dict[str, str]):
+def test_iceberg_only_subpath(iceberg_config: dict[str, str], catalog_integration):
     """Test when only base_location_subpath is provided"""
     del iceberg_config["base_location_root"]
 
@@ -51,10 +63,10 @@ def test_iceberg_only_subpath(iceberg_config: dict[str, str]):
         f"{iceberg_config['base_location_subpath']}'"
     ).strip()
 
-    assert get_actual_base_location(iceberg_config) == expected_base_location
+    assert get_actual_base_location(iceberg_config, catalog_integration) == expected_base_location
 
 
-def test_iceberg_only_path(iceberg_config: dict[str, str]):
+def test_iceberg_only_path(iceberg_config: dict[str, str], catalog_integration):
     """Test when only base_location_root is provided"""
     del iceberg_config["base_location_subpath"]
 
@@ -64,10 +76,10 @@ def test_iceberg_only_path(iceberg_config: dict[str, str]):
         f"{iceberg_config['identifier']}'"
     ).strip()
 
-    assert get_actual_base_location(iceberg_config) == expected_base_location
+    assert get_actual_base_location(iceberg_config, catalog_integration) == expected_base_location
 
 
-def test_iceberg_no_path(iceberg_config: dict[str, str]):
+def test_iceberg_no_path(iceberg_config: dict[str, str], catalog_integration):
     """Test when no base_location_root or is base_location_subpath provided"""
     del iceberg_config["base_location_root"]
     del iceberg_config["base_location_subpath"]
@@ -76,4 +88,4 @@ def test_iceberg_no_path(iceberg_config: dict[str, str]):
         f"'_dbt/" f"{iceberg_config['schema']}/" f"{iceberg_config['identifier']}'"
     ).strip()
 
-    assert get_actual_base_location(iceberg_config) == expected_base_location
+    assert get_actual_base_location(iceberg_config, catalog_integration) == expected_base_location

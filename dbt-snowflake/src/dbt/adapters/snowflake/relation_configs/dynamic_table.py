@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 
-from dbt.adapters.contracts.catalog import CatalogIntegrationConfig, CatalogIntegrationType
+from dbt.adapters.base.catalog import CatalogIntegrationConfig, CatalogIntegrationType
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.clients import catalogs as catalogs_client
 from dbt.adapters.contracts.relation import RelationConfig

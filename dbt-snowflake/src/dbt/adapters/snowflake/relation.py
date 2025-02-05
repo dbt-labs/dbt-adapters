@@ -5,7 +5,7 @@ from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 from dbt.adapters.clients import catalogs as catalogs_client
 from dbt.adapters.base.relation import BaseRelation
-from dbt.adapters.contracts.catalog import CatalogIntegrationConfig, CatalogIntegrationType
+from dbt.adapters.base.catalog import CatalogIntegrationConfig, CatalogIntegrationType
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
 from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
 from dbt.adapters.relation_configs import (
