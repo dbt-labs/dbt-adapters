@@ -53,25 +53,57 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
+    parallel-integration-tests:
+        uses: ./.github/workflows/_integration-tests2.yml
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
                 package:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            is-serial-tests-run: false
+        secrets: inherit
+
+    serial-integration-tests:
+        uses: ./.github/workflows/_integration-tests2.yml
+        # We don't want this to run concurrently with parallel-integration-tests
+        needs: parallel-integration-tests
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            is-serial-tests-run: true
+        concurrency:
+            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
+            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing,
+            # and we want to avoid running these two in parallel as well
+            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     notification:
