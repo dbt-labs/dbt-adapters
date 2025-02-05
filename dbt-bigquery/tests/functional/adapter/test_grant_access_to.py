@@ -96,7 +96,9 @@ class TestAccessGrantSucceeds:
             "select_1_materialized_view.sql": select_1_materialized_view(dataset=dataset),
         }
 
-    def test_grant_access_succeeds(self, project, setup_grant_schema, teardown_grant_schema, unique_schema):
+    def test_grant_access_succeeds(
+            self, project, setup_grant_schema, teardown_grant_schema, unique_schema
+    ):
         # Need to run twice to validate idempotency
         results = run_dbt(["run"])
         assert len(results) == 3
