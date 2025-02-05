@@ -97,7 +97,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
+             "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore

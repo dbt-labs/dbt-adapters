@@ -42,10 +42,9 @@ docker-dev = [
 # pre-install commands here and post-install commands in the matrix can be moved
 # to the dependencies section
 pre-install-commands = [
-  "pip install -e ../dbt-adapters",
-  "pip install -e ../dbt-tests-adapter",
-  "pip install -e ../../dbt-core/core",
-]
+  "pip install -e ../dbt-adapter",
+  "pip install -e ../dbt-core/core",
+    ]
 
 [envs.build]
 detached = true
