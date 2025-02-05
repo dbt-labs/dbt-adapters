@@ -3,13 +3,22 @@ from typing import Dict, Optional, Any
 import textwrap
 
 from dbt.adapters.base import BaseRelation
-from dbt.adapters.contracts.catalog import CatalogIntegration, CatalogIntegrationType
+from dbt.adapters.base.catalog import CatalogIntegration, CatalogIntegrationType
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
 
 
 class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
     catalog_type = CatalogIntegrationType.managed
+    auto_refresh: Optional[str] = None  # "TRUE" | "FALSE"
+    replace_invalid_characters: Optional[str] = None  # "TRUE" | "FALSE"
+
+    def _handle_adapter_properties(self, adapter_properties: Optional[Dict]) -> None:
+        if adapter_properties:
+            if "auto_refresh" in adapter_properties:
+                self.auto_refresh = adapter_properties["auto_refresh"]
+            if "replace_invalid_characters" in adapter_properties:
+                self.replace_invalid_characters = adapter_properties["replace_invalid_characters"]
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         """
@@ -20,17 +29,22 @@ class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
         :param relation:
         :return:
         """
-        base_location: str = f"_dbt/{relation.schema}/{relation.name}"
+        base_location: str = f"{config.get('base_location_root', '_dbt')}"
+        base_location += f"/{relation.schema}/{relation.name}"
 
         if sub_path := config.get("base_location_subpath"):
             base_location += f"/{sub_path}"
 
-        iceberg_ddl_predicates: str = f"""
+        ddl_predicate = f"""
                 external_volume = '{self.external_volume}'
                 catalog = 'snowflake'
                 base_location = '{base_location}'
                 """
-        return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
+        if self.auto_refresh:
+            ddl_predicate += f"auto_refresh = {self.auto_refresh}\n"
+        if self.replace_invalid_characters:
+            ddl_predicate += f"replace_invalid_characters = {self.replace_invalid_characters}\n"
+        return textwrap.indent(textwrap.dedent(ddl_predicate), " " * 10)
 
     @classmethod
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
@@ -66,12 +80,12 @@ class SnowflakeGlueCatalogIntegration(CatalogIntegration):
     auto_refresh: Optional[str] = None  # "TRUE" | "FALSE"
     replace_invalid_characters: Optional[str] = None  # "TRUE" | "FALSE"
 
-    def _handle_adapter_configs(self, adapter_configs: Optional[Dict]) -> None:
-        if adapter_configs:
-            if "auto_refresh" in adapter_configs:
-                self.auto_refresh = adapter_configs["auto_refresh"]
-            if "replace_invalid_characters" in adapter_configs:
-                self.replace_invalid_characters = adapter_configs["replace_invalid_characters"]
+    def _handle_adapter_properties(self, adapter_properties: Optional[Dict]) -> None:
+        if adapter_properties:
+            if "auto_refresh" in adapter_properties:
+                self.auto_refresh = adapter_properties["auto_refresh"]
+            if "replace_invalid_characters" in adapter_properties:
+                self.replace_invalid_characters = adapter_properties["replace_invalid_characters"]
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         ddl_predicate = f"""
