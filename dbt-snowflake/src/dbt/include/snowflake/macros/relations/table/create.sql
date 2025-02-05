@@ -14,6 +14,8 @@
 {%- if language == 'sql' -%}
     {%- if catalog_integration is none -%}
         {{ snowflake__create_table_standard_sql(temporary, relation, compiled_code) }}
+    {%- elif catalog_integration.catalog_type in ['iceberg_rest', 'aws_glue'] -%}
+        {{ snowflake__create_table_iceberg_rest_sql(relation) }}
     {%- else -%}
         {%- do exceptions.raise_compiler_error("Unsupported catalog integration: " ~ catalog_name ~ " of type: " ~ catalog_integration.catalog_type) -%}
     {%- endif -%}

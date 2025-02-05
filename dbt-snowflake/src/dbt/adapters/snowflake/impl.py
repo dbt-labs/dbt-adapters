@@ -5,6 +5,7 @@ from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
 from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -56,6 +57,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    catalog_name: Optional[str] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
@@ -64,7 +66,7 @@ class SnowflakeAdapter(SQLAdapter):
     ConnectionManager = SnowflakeConnectionManager
 
     AdapterSpecificConfigs = SnowflakeConfig
-
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
