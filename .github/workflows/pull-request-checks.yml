@@ -2,11 +2,8 @@ name: "Pull request checks"
 run-name: "Pull request checks - #${{ github.event.number }} - ${{ github.actor }}"
 
 on:
-#    pull_request_target:
-#        types: [opened, reopened, synchronize, labeled, unlabeled]
-#    push:
-#        branches:
-#            - "ADAP-1185/separate-serial-integration-tests"
+    pull_request_target:
+        types: [opened, reopened, synchronize, labeled, unlabeled]
     workflow_dispatch:
 
 
@@ -22,7 +19,8 @@ jobs:
             changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
             verify-build: ${{ steps.verify-build.outputs.changes }}
             unit-tests: ${{ steps.unit-tests.outputs.changes }}
-            integration-tests: ${{ steps.integration-tests.outputs.changes }}
+            serial-integration-tests: ${{ steps.integration-tests.outputs.changes }}
+            parallel-integration-tests: ${{ steps.integration-tests.outputs.changes }}
         steps:
         -   uses: actions/checkout@v4
             with:
