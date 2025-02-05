@@ -6,7 +6,9 @@ from dbt.adapters.base import BaseRelation
 from dbt.adapters.base.catalog import CatalogIntegration, CatalogIntegrationType
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
-
+from dbt.exceptions import DbtValidationError
+_AUTO_REFRESH_VALUES = ["TRUE", "FALSE"]
+_REPLACE_INVALID_CHARACTERS_VALUES = ["TRUE", "FALSE"]
 
 class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
     catalog_type = CatalogIntegrationType.managed
@@ -15,10 +17,14 @@ class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
 
     def _handle_adapter_properties(self, adapter_properties: Optional[Dict]) -> None:
         if adapter_properties:
-            if "auto_refresh" in adapter_properties:
-                self.auto_refresh = adapter_properties["auto_refresh"]
-            if "replace_invalid_characters" in adapter_properties:
-                self.replace_invalid_characters = adapter_properties["replace_invalid_characters"]
+            if auto_refresh := adapter_properties.get("auto_refresh"):
+                if auto_refresh not in _AUTO_REFRESH_VALUES:
+                    raise DbtValidationError(f"Invalid auto_refresh value: {auto_refresh}")
+                self.auto_refresh = auto_refresh
+            if replace_invalid_characters := adapter_properties.get("replace_invalid_characters"):
+                if replace_invalid_characters not in _REPLACE_INVALID_CHARACTERS_VALUES:
+                    raise DbtValidationError(f"Invalid replace_invalid_characters value: {replace_invalid_characters}")
+                self.replace_invalid_characters = replace_invalid_characters
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         """
