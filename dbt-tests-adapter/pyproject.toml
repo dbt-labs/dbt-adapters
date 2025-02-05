@@ -41,4 +41,4 @@ Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-tests-adapter
 Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
-Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-tests-adapter/CHANGELOG.md"
