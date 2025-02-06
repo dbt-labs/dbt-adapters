@@ -65,7 +65,7 @@ jobs:
 
     # Serial tests are scoped per package.
     # Serial tests for *different packages* execute in parallel
-    # erial tests for different python/os versions, but same package, will execute in series.
+    # Serial tests for different python/os versions, but same package, will execute in series.
     # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
     # we'll have a maximum of one test in athena (or BQ) running at any given time.
     serial-integration-tests:

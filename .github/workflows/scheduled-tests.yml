@@ -75,10 +75,18 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
 
+    # Serial tests are scoped per package.
+    # Serial tests for *different packages* will still execute in parallel.
+    # Serial tests for different python/os versions, but same package, will execute in series.
+    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
+    # we'll have a maximum of one test in athena (or BQ) running at any given time.
     serial-integration-tests:
-        uses: ./.github/workflows/_integration-tests2.yml
+        # always() is used to run this job even if the previous job fails
+        # See https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#example-not-requiring-successful-dependent-jobs
+        if: $ {{ always() }}
         # We don't want this to run concurrently with parallel-integration-tests
         needs: parallel-integration-tests
+        uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
             matrix:
