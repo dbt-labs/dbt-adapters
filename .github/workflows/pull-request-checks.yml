@@ -47,6 +47,48 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: .github/filters/integration-tests.yml
 
+    parallel-integration-tests:
+        uses: ./.github/workflows/_integration-tests2.yml
+        needs: affected-packages
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            is-serial-tests-run: false
+        secrets: inherit
+
+    # Serial tests are scoped per package. We want serial tests for different packages to execute in parallel.
+    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
+    # we'll have a maximum of one test in athena (or BQ) running at any given time.
+    serial-integration-tests:
+        # We don't want this to run concurrently with parallel-integration-tests
+        needs: parallel-integration-tests
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            is-serial-tests-run: true
+        concurrency:
+            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
+            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
+            # We want to avoid running these two in parallel as well
+            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
+        secrets: inherit
+
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
@@ -95,48 +137,6 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-
-    parallel-integration-tests:
-        uses: ./.github/workflows/_integration-tests2.yml
-        needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: false
-        secrets: inherit
-
-    # Serial tests are scoped per package. We want serial tests for different packages to execute in parallel.
-    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
-    # we'll have a maximum of one test in athena (or BQ) running at any given time.
-    serial-integration-tests:
-        # We don't want this to run concurrently with parallel-integration-tests
-        needs: parallel-integration-tests
-        uses: ./.github/workflows/_integration-tests2.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: true
-        concurrency:
-            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
-            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
-            # We want to avoid running these two in parallel as well
-            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
-        secrets: inherit
 
     # This job does nothing and is only used for branch protection
     results:
