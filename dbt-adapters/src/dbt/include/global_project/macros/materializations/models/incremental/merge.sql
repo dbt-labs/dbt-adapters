@@ -21,9 +21,9 @@
                 {% do predicates.append(this_key_match) %}
             {% endfor %}
         {% else %}
-            {% set unique_key_match %}
-                DBT_INTERNAL_SOURCE.{{ unique_key }} = DBT_INTERNAL_DEST.{{ unique_key }}
-            {% endset %}
+            {% set source_unique_key = ("DBT_INTERNAL_SOURCE." ~ unique_key) | trim %}
+	    {% set target_unique_key = ("DBT_INTERNAL_DEST." ~ unique_key) | trim %}
+	    {% set unique_key_match = equals(source_unique_key, target_unique_key) | trim %}
             {% do predicates.append(unique_key_match) %}
         {% endif %}
     {% else %}
@@ -62,11 +62,13 @@
 
     {% if unique_key %}
         {% if unique_key is sequence and unique_key is not string %}
-            delete from {{target }}
+            delete from {{ target }}
             using {{ source }}
             where (
                 {% for key in unique_key %}
-                    {{ source }}.{{ key }} = {{ target }}.{{ key }}
+		    {% set source_unique_key = (source ~ "." ~ key) | trim %}
+		    {% set target_unique_key = (target ~ "." ~ key) | trim %}
+                    {{ equals(source_unique_key, target_unique_key) }}
                     {{ "and " if not loop.last}}
                 {% endfor %}
                 {% if incremental_predicates %}
