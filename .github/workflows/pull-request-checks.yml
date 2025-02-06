@@ -19,8 +19,7 @@ jobs:
             changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
             verify-build: ${{ steps.verify-build.outputs.changes }}
             unit-tests: ${{ steps.unit-tests.outputs.changes }}
-            serial-integration-tests: ${{ steps.integration-tests.outputs.changes }}
-            parallel-integration-tests: ${{ steps.integration-tests.outputs.changes }}
+            integration-tests: ${{ steps.integration-tests.outputs.changes }}
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -54,7 +53,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.parallel-integration-tests) }}
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -71,10 +70,11 @@ jobs:
         # We don't want this to run concurrently with parallel-integration-tests
         needs: parallel-integration-tests
         uses: ./.github/workflows/_integration-tests2.yml
+        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.serial-integration-tests) }}
+                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
