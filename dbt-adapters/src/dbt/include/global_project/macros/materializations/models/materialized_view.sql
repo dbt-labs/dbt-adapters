@@ -17,6 +17,12 @@
 
     {{ materialized_view_teardown(backup_relation, intermediate_relation, post_hooks) }}
 
+    {% if config.get('grant_access_to') %}
+      {% for grant_target_dict in config.get('grant_access_to') %}
+        {% do adapter.grant_access_to(this, 'view', None, grant_target_dict) %}
+      {% endfor %}
+    {% endif %}
+
     {{ return({'relations': [target_relation]}) }}
 
 {% endmaterialization %}
