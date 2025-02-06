@@ -27,10 +27,10 @@ class CatalogIntegrationConfig:
 
 class CatalogIntegration(abc.ABC, CatalogIntegrationProtocol):
     """
-    An external catalog integration is a connection to an external catalog that can be used to
-    interact with the catalog. This class is an abstract base class that should be subclassed by
+    Implements the CatalogIntegrationProtocol as an abstract class should be subclassed by
     specific integrations in the adapters.
-    Implements the CatalogIntegrationProtocol.
+
+    A catalog integration is a platform's way of interacting with an external catalog. 
     """
 
     catalog_name: str
