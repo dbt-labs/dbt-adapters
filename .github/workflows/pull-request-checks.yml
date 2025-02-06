@@ -54,7 +54,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
+                package: ${{ fromJSON(needs.affected-packages.outputs.parallel-integration-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -74,7 +74,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
+                package: ${{ fromJSON(needs.affected-packages.outputs.serial-integration-tests) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
