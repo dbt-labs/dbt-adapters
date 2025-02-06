@@ -97,7 +97,7 @@ class TestAccessGrantSucceeds:
         }
 
     def test_grant_access_succeeds(
-            self, project, setup_grant_schema, teardown_grant_schema, unique_schema
+        self, project, setup_grant_schema, teardown_grant_schema, unique_schema
     ):
         # Need to run twice to validate idempotency
         results = run_dbt(["run"])
