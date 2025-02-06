@@ -496,11 +496,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
         response = job.result(retry=self._retry.create_retry(fallback=fallback_timeout))
 
         if response.state != "DONE":
-            raise DbtRuntimeError("BigQuery Timeout Exceeded")
+            raise DbtDatabaseError("BigQuery Timeout Exceeded")
 
         elif response.error_result:
             message = "\n".join(error["message"].strip() for error in response.errors)
-            raise DbtRuntimeError(message)
+            raise DbtDatabaseError(message)
 
     @staticmethod
     def dataset_ref(database, schema):
