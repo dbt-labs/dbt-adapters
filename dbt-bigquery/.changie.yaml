@@ -5,13 +5,13 @@ versionHeaderPath: ""
 changelogPath: CHANGELOG.md
 versionExt: md
 envPrefix: "CHANGIE_"
-versionFormat: '## dbt-athena {{.Version}} - {{.Time.Format "January 02, 2006"}}'
+versionFormat: '## dbt-bigquery {{.Version}} - {{.Time.Format "January 02, 2006"}}'
 kindFormat: '### {{.Kind}}'
 changeFormat: |-
     {{- $IssueList := list }}
     {{- $changes := splitList " " $.Custom.Issue }}
     {{- range $issueNbr := $changes }}
-        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-athena/issues/nbr)" | replace "nbr" $issueNbr }}
+        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-adapters/issues/nbr)" | replace "nbr" $issueNbr }}
         {{- $IssueList = append $IssueList $changeLink  }}
     {{- end -}}
     - {{.Body}} ({{ range $index, $element := $IssueList }}{{if $index}}, {{end}}{{$element}}{{end}})
@@ -25,7 +25,7 @@ kinds:
         {{- $PRList := list }}
         {{- $changes := splitList " " $.Custom.PR }}
         {{- range $pullrequest := $changes }}
-            {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-athena/pull/nbr)" | replace "nbr" $pullrequest }}
+            {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-adapters/pull/nbr)" | replace "nbr" $pullrequest }}
             {{- $PRList = append $PRList $changeLink  }}
         {{- end -}}
         - {{.Body}} ({{ range $index, $element := $PRList }}{{if $index}}, {{end}}{{$element}}{{end}})
@@ -44,7 +44,7 @@ kinds:
         {{- $PRList := list }}
         {{- $changes := splitList " " $.Custom.PR }}
         {{- range $pullrequest := $changes }}
-            {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-athena/pull/nbr)" | replace "nbr" $pullrequest }}
+            {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-adapters/pull/nbr)" | replace "nbr" $pullrequest }}
             {{- $PRList = append $PRList $changeLink  }}
         {{- end -}}
         - {{.Body}} ({{ range $index, $element := $PRList }}{{if $index}}, {{end}}{{$element}}{{end}})
@@ -105,14 +105,14 @@ footerFormat: |
                 {{- if or (eq $change.Kind "Dependencies") (eq $change.Kind "Security") -}}
                     {{- $changes := splitList " " $change.Custom.PR -}}
                     {{- range $issueNbr := $changes -}}
-                        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-athena/pull/nbr)" | replace "nbr" $issueNbr -}}
+                        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-adapters/pull/nbr)" | replace "nbr" $issueNbr -}}
                         {{- $IssueList = append $IssueList $changeLink -}}
                     {{- end -}}
 
                 {{- else -}}
                     {{- $changes := splitList " " $change.Custom.Issue -}}
                     {{- range $issueNbr := $changes -}}
-                        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-athena/issues/nbr)" | replace "nbr" $issueNbr -}}
+                        {{- $changeLink := "[#nbr](https://github.com/dbt-labs/dbt-adapters/issues/nbr)" | replace "nbr" $issueNbr -}}
                         {{- $IssueList = append $IssueList $changeLink -}}
                     {{- end -}}
 

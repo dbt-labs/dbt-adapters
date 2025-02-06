@@ -10,9 +10,11 @@ packages = ["src/dbt"]
 sources = ["src"]
 
 [envs.default]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
 dependencies = [
-    "dbt-adapters @ {root:uri}/../dbt-adapters",
-    "dbt-tests-adapter @ {root:uri}/../dbt-tests-adapter",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
@@ -30,7 +32,7 @@ dependencies = [
 setup = "pre-commit install"
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
-integration-tests = "- python -m pytest {args:tests/functional}"
+integration-tests = "python -m pytest {args:tests/functional}"
 docker-dev = [
     "docker build -f docker/dev.Dockerfile -t dbt-snowflake-dev .",
 	"docker run --rm -it --name dbt-snowflake-dev -v $(pwd):/opt/code dbt-snowflake-dev",

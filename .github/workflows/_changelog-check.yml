@@ -24,6 +24,7 @@ defaults:
 
 jobs:
     changelog-check:
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:changelog-check') }}
         outputs:
             exists: ${{ steps.changelog.outputs.exists }}
         runs-on: ${{ vars.DEFAULT_RUNNER }}
