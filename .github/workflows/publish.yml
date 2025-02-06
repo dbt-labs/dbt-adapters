@@ -33,8 +33,12 @@ on:
                 description: "Publish to PyPI"
                 type: boolean
                 default: false
+            skip-unit-tests:
+                description: "Skip running unit tests"
+                type: boolean
+                default: false
             skip-integration-tests:
-                description: "Skip Running Integration Tests"
+                description: "Skip running integration tests"
                 type: boolean
                 default: false
 
@@ -49,6 +53,9 @@ defaults:
 
 jobs:
     unit-tests:
+        if: |
+            !contains(fromJson(vars.SKIP_UNIT_TESTS), inputs.package) &&
+            inputs.skip-unit-tests == false
         uses: ./.github/workflows/_unit-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -56,70 +63,64 @@ jobs:
 
     parallel-integration-tests:
         if: |
-            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
+            !contains(fromJson(vars.SKIP_INTEGRATION_TESTS), inputs.package) &&
             inputs.skip-integration-tests == false
         uses: ./.github/workflows/_integration-tests.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                    - "dbt-adapters"
-                    - "dbt-tests-adapter"
-                    - "dbt-athena"
-                    - "dbt-athena-community"
-                    - "dbt-bigquery"
-                    - "dbt-postgres"
-                    - "dbt-redshift"
-                    - "dbt-snowflake"
-                    - "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
         with:
-            package: ${{ inputs.package }}
-            branch: ${{ inputs.branch }}
-            repository: ${{ github.repository }}
-            is-serial-tests-run: false
+          package: ${{ inputs.package }}
+          branch: ${{ inputs.branch }}
+          is-serial-tests-run: false
         secrets: inherit
 
     serial-integration-tests:
-        if:
-            (inputs.package != 'dbt-adapters' && inputs.package != 'dbt-tests-adapter') &&
+        if: |
+            !contains(fromJson(vars.SKIP_INTEGRATION_TESTS), inputs.package) &&
             inputs.skip-integration-tests == false
         # We don't want this to run concurrently with parallel-integration-tests
         needs: parallel-integration-tests
         uses: ./.github/workflows/_integration-tests.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                    - "dbt-adapters"
-                    - "dbt-tests-adapter"
-                    - "dbt-athena"
-                    - "dbt-athena-community"
-                    - "dbt-bigquery"
-                    - "dbt-postgres"
-                    - "dbt-redshift"
-                    - "dbt-snowflake"
-                    - "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
         with:
-            package: ${{ inputs.package }}
-            branch: ${{ inputs.branch }}
-            repository: ${{ github.repository }}
-            is-serial-tests-run: true
+          package: ${{ inputs.package }}
+          branch: ${{ inputs.branch }}
+          is-serial-tests-run: true
         concurrency:
             # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
-            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
+          # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
             # We want to avoid running these two in parallel as well
             group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
-    generate-changelog:
+    publish-prep-checks:
+        name: "Publish prep checks"
+        if: always()
         needs: [unit-tests, integration-tests]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: re-actors/alls-green@release/v1
+            with:
+                jobs: ${{ toJSON(needs) }}
+                allowed-skips: ${{ toJSON(needs) }}
+
+    publish-internal:
         if: |
-          always() &&
-          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
-          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
-          inputs.pypi-public == true
+            always() &&
+            needs.publish-prep-checks.result == 'success' &&
+            !contains(fromJson(vars.SKIP_PUBLISH_INTERNAL), inputs.package) &&
+            inputs.pypi-internal == true
+        needs: publish-prep-checks
+        uses: ./.github/workflows/_publish-internal.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    generate-changelog:
+        needs: publish-prep-checks
+        if: |
+            always() &&
+            needs.publish-prep-checks.result == 'success' &&
+            inputs.pypi-public == true
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -127,28 +128,13 @@ jobs:
             branch: ${{ inputs.branch }}
         secrets: inherit
 
-    publish-internal:
-        if: |
-          always() &&
-          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
-          (needs.unit-tests.result == 'skipped' || needs.unit-tests.result == 'success') &&
-          inputs.pypi-internal == true &&
-          inputs.package != 'dbt-athena-community'
-        needs: [unit-tests, integration-tests]
-        uses: ./.github/workflows/_publish-internal.yml
-        with:
-            package: ${{ inputs.package }}
-            deploy-to: ${{ inputs.deploy-to }}
-            branch: ${{ needs.generate-changelog.outputs.branch-name }}
-        secrets: inherit
-
     publish-pypi:
         if: |
-          always() &&
-          (needs.integration-tests.result == 'skipped' || needs.integration-tests.result == 'success') &&
-          needs.generate-changelog.result == 'success' &&
-          inputs.pypi-public == true
-        needs: generate-changelog
+            always() &&
+            needs.publish-prep-checks.result == 'success' &&
+            needs.generate-changelog.result == 'success' &&
+            inputs.pypi-public == true
+        needs: [publish-prep-checks, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
