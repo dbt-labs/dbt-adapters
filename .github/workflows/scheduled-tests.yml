@@ -89,10 +89,10 @@ jobs:
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}
-                notification_title: "{workflow} has {status_message}"
-                message_format: "{emoji} *{workflow}* {status_message} in <{repo_url}|{repo}>"
-                footer: "View run: {workflow_url}"
-                mention_users: "S066LNHS2N6"
-                mention_users_when: "failure,warnings"
+                notification_title: "{workflow} {status_message}"
+                message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
+                footer: "View run: {run_url}"
+                mention_groups: ${{ vars.SLACK_ON_CALL }}
+                mention_groups_when: "failure"
             env:
                 SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
