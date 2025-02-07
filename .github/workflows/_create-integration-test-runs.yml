@@ -57,13 +57,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-athena"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     parallel-integration-tests-athena-community:
@@ -73,13 +73,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-athena-community"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-athena:
@@ -91,13 +91,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-athena"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
     serial-integration-tests-athena-community:
         if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-athena-community') }}
@@ -108,13 +108,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-athena-community"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
 
@@ -125,13 +125,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-bigquery"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-bigquery:
@@ -143,13 +143,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-bigquery"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
 
@@ -160,13 +160,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-postgres:
@@ -178,13 +178,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
     integration-tests-postgres-psycopg2-check:
@@ -194,13 +194,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
 
@@ -211,13 +211,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-redshift"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-redshift:
@@ -229,13 +229,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-redshift"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
 
@@ -246,13 +246,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-snowflake"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-snowflake:
@@ -264,13 +264,13 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-snowflake"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
 
@@ -281,13 +281,13 @@ jobs:
             fail-fast: false
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-spark"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-spark:
@@ -299,12 +299,12 @@ jobs:
             max-parallel: 1
             matrix:
                 os: ${{ fromJSON(inputs.os) }}
-                python-version: ${{ fromJSON(inputs.python_version) }}
+                python-version: ${{ fromJSON(inputs.python-version) }}
         with:
             package: "dbt-spark"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
-            python-version: ${{ matrix.python_version }}
+            python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
         secrets: inherit
