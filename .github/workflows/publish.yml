@@ -25,6 +25,10 @@ on:
                 description: "Choose the branch to publish from"
                 type: string
                 default: "main"
+            version:
+                description: "Does the version need to be bumped?"
+                type: string
+                default: ""
             pypi-internal:
                 description: "Publish Internally"
                 type: boolean
@@ -52,10 +56,20 @@ defaults:
         shell: bash
 
 jobs:
+    bump-version:
+        if: inputs.version != ''
+        uses: ./.github/workflows/_bump-version.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+            version: ${{ inputs.version }}
+
     unit-tests:
         if: |
+            always() && !failure() &&
             inputs.skip-unit-tests == false &&
             !contains(fromJSON('["dbt-tests-adapter"]'), inputs.package)
+        needs: bump-version  # bump-version can be skipped and is not directly used
         uses: ./.github/workflows/_unit-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -63,32 +77,22 @@ jobs:
 
     integration-tests:
         if: |
+            always() && !failure() &&
             inputs.skip-integration-tests == false &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
+        needs: bump-version  # bump-version can be skipped and is not directly used
         uses: ./.github/workflows/_integration-tests.yml
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
         secrets: inherit
 
-    publish-prep-checks:
-        name: "Publish prep checks"
-        if: always()
-        needs: [unit-tests, integration-tests]
-        runs-on: ${{ vars.DEFAULT_RUNNER }}
-        steps:
-        -   uses: re-actors/alls-green@release/v1
-            with:
-                jobs: ${{ toJSON(needs) }}
-                allowed-skips: ${{ toJSON(needs) }}
-
     publish-internal:
         if: |
-            always() &&
+            always() && !failure() &&
             inputs.pypi-internal == true &&
-            needs.publish-prep-checks.result == 'success' &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter", "dbt-athena-community"]'), inputs.package)
-        needs: publish-prep-checks
+        needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:
             package: ${{ inputs.package }}
@@ -97,11 +101,11 @@ jobs:
         secrets: inherit
 
     generate-changelog:
-        needs: publish-prep-checks
         if: |
-            always() &&
+            always() && !failure() &&
             inputs.pypi-public == true &&
-            needs.publish-prep-checks.result == 'success'
+            !contains(fromJSON('["dbt-athena-community"]'), inputs.package)
+        needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -111,11 +115,9 @@ jobs:
 
     publish-pypi:
         if: |
-            always() &&
-            inputs.pypi-public == true &&
-            needs.publish-prep-checks.result == 'success' &&
-            needs.generate-changelog.result == 'success'
-        needs: [publish-prep-checks, generate-changelog]
+            always() && !failure() &&
+            inputs.pypi-public == true
+        needs: generate-changelog
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -127,7 +129,7 @@ jobs:
         steps:
         -   uses: actions/checkout@v4
             with:
-                ref: ${{ needs.generate-changelog.outputs.branch-name }}
+                ref: ${{ needs.generate-changelog.outputs.branch-name || inputs.branch }}
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
