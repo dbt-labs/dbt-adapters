@@ -50,7 +50,7 @@ on:
 
 jobs:
     parallel-integration-tests-athena:
-        if: ${{ contains(fromJSON(inputs.package), 'dbt-athena') }}
+        if: ${{ contains(fromJSON('["dbt-athena"]'), 'dbt-athena') }}
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
