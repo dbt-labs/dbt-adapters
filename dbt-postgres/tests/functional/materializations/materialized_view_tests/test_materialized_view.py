@@ -12,7 +12,7 @@ from dbt.tests.adapter.materialized_view.files import MY_TABLE, MY_VIEW
 from dbt.tests.util import get_model_file, set_model_file
 import pytest
 
-from .utils import query_indexes, query_relation_type
+from utils import query_indexes, query_relation_type
 
 
 MY_MATERIALIZED_VIEW = """
