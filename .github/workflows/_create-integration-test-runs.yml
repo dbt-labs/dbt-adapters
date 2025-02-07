@@ -8,7 +8,7 @@ on:
     workflow_call:
         inputs:
             package:
-                description: "Array of packages to test. E.g. ['dbt-athena', 'dbt-snowflake']"
+                description: 'Array of packages to test. E.g. ["dbt-athena", "dbt-snowflake"]'
                 type: string
                 required: true
             branch:

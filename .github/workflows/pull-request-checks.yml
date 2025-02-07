@@ -52,8 +52,8 @@ jobs:
         if: ${{ toJSON(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             package: ${{ toJSON(needs.affected-packages.outputs.integration-tests) }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: "ADAP-1185/separate-serial-integration-tests" # ${{ github.event.pull_request.head.ref }}
+            repository: "dbt-labs/dbt-adapters"
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
             os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
         secrets: inherit
