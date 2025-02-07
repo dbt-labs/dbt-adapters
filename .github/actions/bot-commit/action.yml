@@ -10,8 +10,8 @@ runs:
     using: composite
     steps:
     -   run: |
-            git config user.name $USERNAME
-            git config user.email $EMAIL
+            git config user.name "$USERNAME"
+            git config user.email "$EMAIL"
             git pull
             git add .
             git commit -m "$MESSAGE"
