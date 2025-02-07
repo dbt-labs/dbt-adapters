@@ -54,8 +54,8 @@ defaults:
 jobs:
     unit-tests:
         if: |
-            !contains(fromJSON(vars.SKIP_UNIT_TESTS), inputs.package) &&
-            inputs.skip-unit-tests == false
+            inputs.skip-unit-tests == false &&
+            !contains(fromJSON('["dbt-tests-adapter"]'), inputs.package)
         uses: ./.github/workflows/_unit-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -63,8 +63,8 @@ jobs:
 
     integration-tests:
         if: |
-            !contains(fromJSON(vars.SKIP_INTEGRATION_TESTS), inputs.package) &&
-            inputs.skip-integration-tests == false
+            inputs.skip-integration-tests == false &&
+            !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
         uses: ./.github/workflows/_integration-tests.yml
         with:
             package: ${{ inputs.package }}
@@ -85,9 +85,9 @@ jobs:
     publish-internal:
         if: |
             always() &&
+            inputs.pypi-internal == true &&
             needs.publish-prep-checks.result == 'success' &&
-            !contains(fromJSON(vars.SKIP_PUBLISH_INTERNAL), inputs.package) &&
-            inputs.pypi-internal == true
+            !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter", "dbt-athena-community"]'), inputs.package)
         needs: publish-prep-checks
         uses: ./.github/workflows/_publish-internal.yml
         with:
@@ -100,8 +100,8 @@ jobs:
         needs: publish-prep-checks
         if: |
             always() &&
-            needs.publish-prep-checks.result == 'success' &&
-            inputs.pypi-public == true
+            inputs.pypi-public == true &&
+            needs.publish-prep-checks.result == 'success'
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -112,9 +112,9 @@ jobs:
     publish-pypi:
         if: |
             always() &&
+            inputs.pypi-public == true &&
             needs.publish-prep-checks.result == 'success' &&
-            needs.generate-changelog.result == 'success' &&
-            inputs.pypi-public == true
+            needs.generate-changelog.result == 'success'
         needs: [publish-prep-checks, generate-changelog]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
