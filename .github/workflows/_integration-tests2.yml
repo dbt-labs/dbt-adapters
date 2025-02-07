@@ -102,10 +102,11 @@ jobs:
             with:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests -m serial -n1
+        -   run: hatch run integration-tests -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
@@ -133,10 +134,11 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests tests/functional -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional -m serial -n1
+        -   run: hatch run integration-tests tests/functional -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true && inputs.python-version == vars.DEFAULT_PYTHON_VERSION }}  # we only run this for one version to run in series
             working-directory: ./${{ inputs.package }}
 
@@ -181,10 +183,11 @@ jobs:
                 PGPASSWORD: postgres
                 PGDATABASE: postgres
         -   uses: pypa/hatch@install
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -274,10 +277,11 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
               aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
               aws configure --profile $AWS_ROLE_PROFILE set output json
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -310,10 +314,11 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests tests/functional --ddtrace -m "not serial"
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n1
+        -   run: hatch run integration-tests tests/functional --ddtrace -m serial -n 1
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
 
@@ -349,18 +354,10 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
             working-directory: ./${{ inputs.package }}
-#        -   run: hatch run integration-tests -m "not serial"
+        # decide between serial or parallel tests below
         -   run: hatch run integration-tests -m "not serial" -n auto --profile ${{ matrix.profile }}
             if: ${{ inputs.is-serial-tests-run == false }}
             working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests -m serial -n1 --profile ${{ matrix.profile }}
+        -   run: hatch run integration-tests -m serial -n 1 --profile ${{ matrix.profile }}
             if: ${{ inputs.is-serial-tests-run == true }}
             working-directory: ./${{ inputs.package }}
-
-# athena, for reference
-#        -   run: hatch run integration-tests -m "not serial"
-#            if: ${{ inputs.is-serial-tests-run == false }}  # we only run this for one version to run in series
-#            working-directory: ./${{ inputs.package }}
-#        -   run: hatch run integration-tests -m serial -n1
-#            if: ${{ inputs.is-serial-tests-run == true }}  # we only run this for one version to run in series
-#            working-directory: ./${{ inputs.package }}

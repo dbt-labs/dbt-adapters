@@ -86,11 +86,11 @@ jobs:
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
             is-serial-tests-run: true
-        concurrency:
-            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
-            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
-            # We want to avoid running these two in parallel as well
-            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
+#        concurrency:
+#            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
+#            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
+#            # We want to avoid running these two in parallel as well
+#            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     changelog-entry-check:

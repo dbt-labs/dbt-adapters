@@ -47,8 +47,7 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANG
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
-color = true
-csv = "results.csv"
+addopts = "-v --color=yes -n auto"
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
