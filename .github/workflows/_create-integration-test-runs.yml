@@ -57,7 +57,7 @@ on:
 
 jobs:
     parallel-integration-tests-athena:
-        if: ${{ inputs.package == 'dbt-athena' }}
+        if: contains(fromJson(inputs.package), 'dbt-athena')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -73,7 +73,7 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     parallel-integration-tests-athena-community:
-        if: ${{ inputs.package == 'dbt-athena-community' }}
+        if: contains(fromJson(inputs.package), 'dbt-athena-community')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -89,7 +89,7 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-athena:
-        if: ${{ always() && inputs.package == 'dbt-athena' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-athena')
         uses: ./.github/workflows/_integration-tests2.yml
         needs: [parallel-integration-tests-athena, parallel-integration-tests-athena-community]
         strategy:
@@ -106,7 +106,7 @@ jobs:
             python-version: ${{ matrix.python_version }}
             is-serial-tests-run: true
     serial-integration-tests-athena-community:
-        if: ${{ always() && inputs.package == 'dbt-athena-community' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-athena-community')
         uses: ./.github/workflows/_integration-tests2.yml
         needs: [ parallel-integration-tests-athena, parallel-integration-tests-athena-community, serial-integration-tests-athena ]
         strategy:
@@ -125,7 +125,7 @@ jobs:
         secrets: inherit
 
     parallel-integration-tests-bigquery:
-        if: ${{ inputs.package == 'dbt-bigquery' }}
+        if: contains(fromJson(inputs.package), 'dbt-bigquery')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -141,7 +141,8 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-bigquery:
-        if: ${{ inputs.package == 'dbt-bigquery' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-bigquery')
+        needs: [parallel-integration-tests-bigquery]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -159,7 +160,7 @@ jobs:
         secrets: inherit
 
     parallel-integration-tests-postgres:
-        if: ${{ inputs.package == 'dbt-postgres' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-postgres')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -175,7 +176,8 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-postgres:
-        if: ${{ inputs.package == 'dbt-postgres' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-postgres')
+        needs: [ parallel-integration-tests-postgres ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -192,7 +194,7 @@ jobs:
             is-serial-tests-run: true
         secrets: inherit
     integration-tests-postgres-psycopg2-check:
-        if: (inputs.package == 'dbt-postgres')
+        if: contains(fromJson(inputs.package), 'dbt-postgres')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -209,7 +211,7 @@ jobs:
         secrets: inherit
 
     parallel-integration-tests-redshift:
-        if: ${{ inputs.package == 'dbt-redshift' }}
+        if: contains(fromJson(inputs.package), 'dbt-redshift')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -225,7 +227,8 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-redshift:
-        if: ${{ inputs.package == 'dbt-redshift' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-redshift')
+        needs: [ parallel-integration-tests-redshift ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -243,7 +246,7 @@ jobs:
         secrets: inherit
 
     parallel-integration-tests-snowflake:
-        if: ${{ inputs.package == 'dbt-snowflake' }}
+        if: contains(fromJson(inputs.package), 'dbt-snowflake')
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -259,7 +262,8 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-snowflake:
-        if: ${{ inputs.package == 'dbt-snowflake' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-snowflake')
+        needs: [ parallel-integration-tests-snowflake ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -277,7 +281,8 @@ jobs:
         secrets: inherit
 
     parallel-integration-tests-spark:
-        if: ${{ inputs.package == 'dbt-spark' }}
+        if: contains(fromJson(inputs.package), 'dbt-spark')
+        needs: [ parallel-integration-tests-spark ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
@@ -293,7 +298,8 @@ jobs:
             is-serial-tests-run: false
         secrets: inherit
     serial-integration-tests-spark:
-        if: ${{ inputs.package == 'dbt-spark' }}
+        if: always() && contains(fromJson(inputs.package), 'dbt-spark')
+        needs: [ parallel-integration-tests-spark ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
