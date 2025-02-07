@@ -49,6 +49,10 @@ on:
                 type: string
                 default: "['3.9']"
 
+permissions:
+    id-token: write
+    contents: read
+
 jobs:
     parallel-integration-tests-athena:
         if: ${{ contains(fromJSON(inputs.package), 'dbt-athena') }}
@@ -99,6 +103,7 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
             is-serial-tests-run: true
+        secrets: inherit
     serial-integration-tests-athena-community:
         if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-athena-community') }}
         uses: ./.github/workflows/_integration-tests2.yml
