@@ -70,7 +70,7 @@
 {% endmacro %}
 
 
-{% macro set_partitions(strategy, granularity) %}
+{% macro set_partitions(config, strategy, granularity) %}
   {#-- We override the partitions to force a static insert overwrite on microbatch, significantly more performant --#}
   {% if strategy == "microbatch" %}
     {{ return(bq_generate_static_partitions(config, granularity)) }}
@@ -94,7 +94,7 @@
 
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set partition_by = adapter.parse_partition_by(raw_partition_by) -%}
-  {%- set partitions = set_partitions(strategy, partition_by.granularity) -%}
+  {%- set partitions = set_partitions(config, strategy, partition_by.granularity) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
 
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
