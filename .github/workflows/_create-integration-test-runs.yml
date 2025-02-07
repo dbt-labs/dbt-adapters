@@ -26,10 +26,6 @@ on:
                 description: "Array of OS' to test against. E.g. ['3.9', '3.10']"
                 type: string
                 default: "['3.9']"
-            is-serial-tests-run:
-                description: "True if we'll run only serial tests. False for parallel"
-                type: boolean
-                required: true
     workflow_dispatch:
         inputs:
             package:
