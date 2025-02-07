@@ -49,10 +49,6 @@ on:
 permissions:
     contents: write
 
-defaults:
-    run:
-        shell: bash
-
 jobs:
     main:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -69,6 +65,7 @@ jobs:
                 echo "initial=$(hatch version)" >> $GITHUB_OUTPUT
                 hatch version ${{ inputs.version }}
                 echo "final=$(hatch version)" >> $GITHUB_OUTPUT
+            shell: bash
             working-directory: ./${{ inputs.package }}
         -   uses: ./.github/actions/bot-commit
             with:

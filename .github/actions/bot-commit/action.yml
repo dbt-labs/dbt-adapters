@@ -16,6 +16,7 @@ runs:
             git add .
             git commit -m "$MESSAGE"
             git push
+        shell: bash
         env:
             USERNAME: "Github Build Bot"
             EMAIL: "buildbot@fishtownanalytics.com"
