@@ -54,8 +54,8 @@ jobs:
             package: ${{ needs.affected-packages.outputs.integration-tests }}
             branch: "ADAP-1185/separate-serial-integration-tests" # ${{ github.event.pull_request.head.ref }}
             repository: "dbt-labs/dbt-adapters"
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
+            python-version: ${{ toJSON(vars.DEFAULT_PYTHON_VERSION) }}
+            os: ${{ toJSON(vars.DEFAULT_RUNNER) }}
         secrets: inherit
 
     changelog-entry-check:
