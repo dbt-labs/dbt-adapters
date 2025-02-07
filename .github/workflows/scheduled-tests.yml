@@ -21,7 +21,7 @@ jobs:
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
-                os: [ubuntu-22.04]
+                os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
@@ -44,7 +44,7 @@ jobs:
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
-                os: [ubuntu-22.04]
+                os: [ubuntu-22.04, macos-14, windows-2022]
                 python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
@@ -53,68 +53,20 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
-    parallel-integration-tests:
-        uses: ./.github/workflows/_integration-tests2.yml
+    integration-tests:
+        uses: ./.github/workflows/_create-integration-test-runs.yml
         strategy:
             fail-fast: false
-            matrix:
-                package:
-                    - "dbt-athena"
-                    - "dbt-athena-community"
-                    - "dbt-bigquery"
-                    - "dbt-postgres"
-                    - "dbt-redshift"
-                    - "dbt-snowflake"
-                    - "dbt-spark"
         with:
-            package: ${{ matrix.package }}
+            package: '["dbt-athena", "dbt-athena-community", "dbt-bigquery", "dbt-postgres", "dbt-redshift", "dbt-snowflake", "dbt-spark"]'
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: false
-        secrets: inherit
-
-    # Serial tests are scoped per package.
-    # Serial tests for *different packages* will still execute in parallel.
-    # Serial tests for different python/os versions, but same package, will execute in series.
-    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
-    # we'll have a maximum of one test in athena (or BQ) running at any given time.
-    serial-integration-tests:
-        # always() is used to run this job even if the previous job fails
-        # See https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#example-not-requiring-successful-dependent-jobs
-        if: $ {{ always() }}
-        # We don't want this to run concurrently with parallel-integration-tests
-        needs: parallel-integration-tests
-        uses: ./.github/workflows/_integration-tests2.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                    - "dbt-athena"
-                    - "dbt-athena-community"
-                    - "dbt-bigquery"
-                    - "dbt-postgres"
-                    - "dbt-redshift"
-                    - "dbt-snowflake"
-                    - "dbt-spark"
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: true
-        concurrency:
-            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
-            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing,
-            # and we want to avoid running these two in parallel as well
-            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     notification:
         if: always()
-        needs: [verify-builds, unit-tests, parallel-integration-tests, serial-integration-tests]
+        needs: [verify-builds, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification

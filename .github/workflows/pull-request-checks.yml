@@ -46,8 +46,8 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: .github/filters/integration-tests.yml
 
-    parallel-integration-tests:
-        uses: ./.github/workflows/_integration-tests2.yml
+    integration-tests:
+        uses: ./.github/workflows/_create-integration-test-runs.yml
         needs: affected-packages
         if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         strategy:
@@ -55,42 +55,11 @@ jobs:
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
         with:
-            package: ${{ matrix.package }}
+            package: toJson(${{ matrix.package }})
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
+            os: [${{ vars.DEFAULT_RUNNER }}]
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: false
-        secrets: inherit
-
-    # Serial tests are scoped per package.
-    # Serial tests for *different packages* execute in parallel
-    # Serial tests for different python/os versions, but same package, will execute in series.
-    # For example, serial tests under dbt-athena will run in the same time with those in dbt-bigquery, but
-    # we'll have a maximum of one test in athena (or BQ) running at any given time.
-    serial-integration-tests:
-        # always() is used to run this job even if the previous job fails
-        # See https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#example-not-requiring-successful-dependent-jobs
-        if: ${{ always() && (toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]') }}
-        # We don't want this to run concurrently with parallel-integration-tests
-        needs: [parallel-integration-tests, affected-packages]
-        uses: ./.github/workflows/_integration-tests2.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            is-serial-tests-run: true
-#        concurrency:
-#            # The second part of the group string to overwrites dbt-athena-community to dbt-athena, otherwise defaults
-#            # to whatever package should run. This is because dbt-athena and dbt-athena-community are the same thing.
-#            # We want to avoid running these two in parallel as well
-#            group: ${{ github.workflow }}-${{ ((matrix.package == 'dbt-athena-community') && 'dbt-athena') || matrix.package }}
         secrets: inherit
 
     changelog-entry-check:
@@ -146,7 +115,7 @@ jobs:
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, parallel-integration-tests, serial-integration-tests]
+        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
