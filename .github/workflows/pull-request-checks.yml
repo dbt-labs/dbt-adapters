@@ -4,6 +4,8 @@ run-name: "Pull request checks - #${{ github.event.number }} - ${{ github.actor 
 on:
     pull_request_target:
         types: [opened, reopened, synchronize, labeled, unlabeled]
+    workflow_dispatch:
+
 
 # only run this once per PR at a time
 concurrency:
@@ -44,10 +46,22 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: .github/filters/integration-tests.yml
 
+    integration-tests:
+        uses: ./.github/workflows/_create-integration-test-runs.yml
+        needs: affected-packages
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
+        with:
+            package: ${{ toJSON(needs.affected-packages.outputs.integration-tests) }}
+            branch: "ADAP-1185/separate-serial-integration-tests" # ${{ github.event.pull_request.head.ref }}
+            repository: "dbt-labs/dbt-adapters"
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
+        secrets: inherit
+
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -66,7 +80,7 @@ jobs:
     verify-build:
         uses: ./.github/workflows/_verify-build.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.verify-build)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -81,7 +95,7 @@ jobs:
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.unit-tests)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -92,22 +106,6 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
-        needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-        secrets: inherit
 
     # This job does nothing and is only used for branch protection
     results:

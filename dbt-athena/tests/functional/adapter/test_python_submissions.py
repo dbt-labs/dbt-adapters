@@ -94,6 +94,7 @@
 #         assert len(results) == 2
 
 
+# @pytest.mark.serial
 # class TestPythonClonePossible:
 #     """Test that basic clone operations are possible on Python models. This
 #     class has been adapted from the BaseClone and BaseClonePossible classes in

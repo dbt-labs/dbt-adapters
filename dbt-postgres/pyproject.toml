@@ -42,8 +42,12 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-post
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-postgres/CHANGELOG.md"
 
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = [
     "tests/functional",
     "tests/unit",
+]
+color = true
+markers = [
+    "serial: marks tests to be run one at a time (de-select with `-m 'not serial'`)"
 ]

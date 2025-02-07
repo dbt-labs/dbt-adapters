@@ -1,0 +1,309 @@
+# This file fine grains the way integration tests run in parallel and serial
+# It's here as a workaround for GitHub's limitations on group and concurrency options, as these cancel runs,
+# instead of queueing them.
+
+name: "Create integration tests runs"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: 'Array of packages to test. E.g. ["dbt-athena", "dbt-snowflake"]'
+                type: string
+                required: true
+            branch:
+                description: "Choose the branch to test"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to test, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Array of OS' to test against. E.g. ['ubuntu-22.04', 'macos-15']"
+                type: string
+            python-version:
+                description: "Array of OS' to test against. E.g. ['3.9', '3.10']"
+                type: string
+                default: "['3.9']"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Array of packages to test. E.g. ['dbt-athena', 'dbt-snowflake']"
+                type: string
+                required: true
+            branch:
+                description: "Choose the branch to test"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to test, when using a fork"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+            python-version:
+                description: "Array of OS' to test against. E.g. ['3.9', '3.10']. Valid picks: 3.9, 3.10, 3.11, 3.12"
+                type: string
+                default: "['3.9']"
+
+jobs:
+    parallel-integration-tests-athena:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-athena') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-athena"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    parallel-integration-tests-athena-community:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-athena-community') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-athena-community"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-athena:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-athena') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        needs: [parallel-integration-tests-athena, parallel-integration-tests-athena-community]
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-athena"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+    serial-integration-tests-athena-community:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-athena-community') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        needs: [ parallel-integration-tests-athena, parallel-integration-tests-athena-community, serial-integration-tests-athena ]
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-athena-community"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit
+
+    parallel-integration-tests-bigquery:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-bigquery') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-bigquery"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-bigquery:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-bigquery') }}
+        needs: [parallel-integration-tests-bigquery]
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-bigquery"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit
+
+    parallel-integration-tests-postgres:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-postgres') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-postgres"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-postgres:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-postgres') }}
+        needs: [ parallel-integration-tests-postgres ]
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-postgres"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit
+    integration-tests-postgres-psycopg2-check:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-postgres') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-postgres"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+
+    parallel-integration-tests-redshift:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-redshift') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-redshift"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-redshift:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-redshift') }}
+        needs: [ parallel-integration-tests-redshift ]
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-redshift"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit
+
+    parallel-integration-tests-snowflake:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-snowflake') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-snowflake"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-snowflake:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-snowflake') }}
+        needs: [ parallel-integration-tests-snowflake ]
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-snowflake"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit
+
+    parallel-integration-tests-spark:
+        if: ${{ contains(fromJSON(inputs.package), 'dbt-spark') }}
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-spark"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: false
+        secrets: inherit
+    serial-integration-tests-spark:
+        if: ${{ always() && contains(fromJSON(inputs.package), 'dbt-spark') }}
+        needs: [ parallel-integration-tests-spark ]
+        uses: ./.github/workflows/_integration-tests2.yml
+        strategy:
+            fail-fast: false
+            max-parallel: 1
+            matrix:
+                os: ${{ fromJSON(inputs.os) }}
+                python-version: ${{ fromJSON(inputs.python_version) }}
+        with:
+            package: "dbt-spark"
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python_version }}
+            is-serial-tests-run: true
+        secrets: inherit

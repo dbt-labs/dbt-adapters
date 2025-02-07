@@ -23,6 +23,7 @@ def model(dbt, _):
 """
 
 
+@pytest.mark.serial
 class TestPythonModelDataprocTimeoutTest:
     @pytest.fixture(scope="class")
     def models(self):
@@ -34,6 +35,7 @@ class TestPythonModelDataprocTimeoutTest:
         assert "Operation did not complete within the designated timeout of 5 seconds." in output
 
 
+@pytest.mark.serial
 class TestPythonModelDataproc(dbt_tests.BasePythonModelTests):
     pass
 
@@ -126,6 +128,7 @@ models:
 """
 
 
+@pytest.mark.serial
 class TestPythonPartitionedModels:
     @pytest.fixture(scope="class")
     def macros(self):
@@ -214,6 +217,7 @@ models:
 """
 
 
+@pytest.mark.serial
 class TestPythonBatchIdModels:
     @pytest.fixture(scope="class")
     def models(self):
@@ -230,6 +234,7 @@ class TestPythonBatchIdModels:
         assert len(result_two) == 1
 
 
+@pytest.mark.serial
 class TestPythonDuplicateBatchIdModels:
     @pytest.fixture(scope="class")
     def models(self):

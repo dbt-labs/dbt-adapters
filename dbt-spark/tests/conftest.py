@@ -125,3 +125,14 @@ def skip_by_profile_type(request):
         for skip_profile_type in request.node.get_closest_marker("skip_profile").args:
             if skip_profile_type == profile_type:
                 pytest.skip(f"skipped on '{profile_type}' profile")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Configures pytest to treat a scenario with no tests as passing
+
+    pytest returns a code 5 when it collects no tests in an effort to warn when tests are expected but not collected
+    We don't want this when running tox because some combinations of markers and test segments return nothing
+    """
+    if exitstatus == 5:
+        session.exitstatus = 0
