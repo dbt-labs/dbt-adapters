@@ -8,7 +8,7 @@ on:
     workflow_call:
         inputs:
             package:
-                description: "Choose the package to test"
+                description: "Array of packages to test. E.g. ['dbt-athena', 'dbt-snowflake']"
                 type: string
                 required: true
             branch:
@@ -29,16 +29,9 @@ on:
     workflow_dispatch:
         inputs:
             package:
-                description: "Choose the package to test"
-                type: choice
-                options:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+                description: "Array of packages to test. E.g. ['dbt-athena', 'dbt-snowflake']"
+                type: string
+                required: true
             branch:
                 description: "Choose the branch to test"
                 type: string
@@ -65,7 +58,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-athena"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -81,7 +74,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-athena-community"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -99,7 +92,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-athena"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -116,7 +109,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-athena-community"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -133,7 +126,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-bigquery"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -151,7 +144,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-bigquery"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -168,7 +161,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -186,7 +179,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -202,7 +195,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-postgres"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -219,7 +212,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-redshift"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -237,7 +230,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-redshift"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -254,7 +247,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-snowflake"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -272,7 +265,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-snowflake"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -289,7 +282,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-spark"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
@@ -307,7 +300,7 @@ jobs:
                 os: ${{ fromJson(inputs.os) }}
                 python-version: ${{ fromJson(inputs.python_version) }}
         with:
-            package: ${{ inputs.package }}
+            package: "dbt-spark"
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
