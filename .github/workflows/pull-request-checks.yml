@@ -49,7 +49,7 @@ jobs:
     integration-tests:
         uses: ./.github/workflows/_create-integration-test-runs.yml
         needs: affected-packages
-        if: ${{ toJSON(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             package: ${{ toJSON(needs.affected-packages.outputs.integration-tests) }}
             branch: "ADAP-1185/separate-serial-integration-tests" # ${{ github.event.pull_request.head.ref }}
@@ -61,7 +61,7 @@ jobs:
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
-        if: ${{ toJSON(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -80,7 +80,7 @@ jobs:
     verify-build:
         uses: ./.github/workflows/_verify-build.yml
         needs: affected-packages
-        if: ${{ toJSON(fromJson(needs.affected-packages.outputs.verify-build)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -95,7 +95,7 @@ jobs:
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
         needs: affected-packages
-        if: ${{ toJSON(fromJson(needs.affected-packages.outputs.unit-tests)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:

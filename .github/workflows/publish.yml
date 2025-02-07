@@ -54,7 +54,7 @@ defaults:
 jobs:
     unit-tests:
         if: |
-            !contains(fromJson(vars.SKIP_UNIT_TESTS), inputs.package) &&
+            !contains(fromJSON(vars.SKIP_UNIT_TESTS), inputs.package) &&
             inputs.skip-unit-tests == false
         uses: ./.github/workflows/_unit-tests.yml
         with:
@@ -63,7 +63,7 @@ jobs:
 
     integration-tests:
         if: |
-            !contains(fromJson(vars.SKIP_INTEGRATION_TESTS), inputs.package) &&
+            !contains(fromJSON(vars.SKIP_INTEGRATION_TESTS), inputs.package) &&
             inputs.skip-integration-tests == false
         uses: ./.github/workflows/_create-integration-test-runs.yml
         with:
@@ -87,7 +87,7 @@ jobs:
         if: |
             always() &&
             needs.publish-prep-checks.result == 'success' &&
-            !contains(fromJson(vars.SKIP_PUBLISH_INTERNAL), inputs.package) &&
+            !contains(fromJSON(vars.SKIP_PUBLISH_INTERNAL), inputs.package) &&
             inputs.pypi-internal == true
         needs: publish-prep-checks
         uses: ./.github/workflows/_publish-internal.yml
