@@ -1,5 +1,6 @@
 from unittest import mock
 
+import dbt.adapters.__about__
 import dbt.adapters.spark.__version__
 
 from dbt.adapters.spark.impl import SparkAdapter
