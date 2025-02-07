@@ -22,11 +22,11 @@ on:
             os:
                 description: "Array of OS' to test against. E.g. ['ubuntu-22.04', 'macos-15']"
                 type: string
-                default: "ubuntu-22.04"
+                default: toJson([${{vars.DEFAULT_RUNNER}}])
             python-version:
                 description: "Array of OS' to test against. E.g. ['3.9', '3.10']"
                 type: string
-                default: "3.9"
+                default: "['3.9']"
             is-serial-tests-run:
                 description: "True if we'll run only serial tests. False for parallel"
                 type: boolean
@@ -55,11 +55,11 @@ on:
             os:
                 description: "Choose the OS to test against"
                 type: string
-                default: "ubuntu-22.04"
+                default: toJson([${{vars.DEFAULT_RUNNER}}])
             python-version:
-                description: "Choose the Python version to test against"
-                type: choice
-                options: ["3.9", "3.10", "3.11", "3.12"]
+                description: "Array of OS' to test against. E.g. ['3.9', '3.10']. Valid picks: 3.9, 3.10, 3.11, 3.12"
+                type: string
+                default: "['3.9']"
 
 jobs:
     parallel-integration-tests-athena:

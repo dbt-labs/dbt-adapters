@@ -58,7 +58,6 @@ jobs:
             package: toJson(${{ matrix.package }})
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: [${{ vars.DEFAULT_RUNNER }}]
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         secrets: inherit
 
