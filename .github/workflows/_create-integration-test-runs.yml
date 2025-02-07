@@ -282,7 +282,6 @@ jobs:
 
     parallel-integration-tests-spark:
         if: contains(fromJson(inputs.package), 'dbt-spark')
-        needs: [ parallel-integration-tests-spark ]
         uses: ./.github/workflows/_integration-tests2.yml
         strategy:
             fail-fast: false
