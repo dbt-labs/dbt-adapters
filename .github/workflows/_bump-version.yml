@@ -1,6 +1,7 @@
 name: "Bump version"
 
 on:
+    pull_request:
     workflow_call:
         inputs:
             package:
@@ -10,7 +11,7 @@ on:
             branch:
                 description: "Choose the branch to use"
                 type: string
-                default: "main"
+                default: "f"
             version:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
                 type: string
@@ -36,7 +37,7 @@ on:
             branch:
                 description: "Choose the branch to use"
                 type: string
-                default: "main"
+                default: "f"
             version:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
                 type: string
