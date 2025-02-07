@@ -22,7 +22,6 @@ on:
             os:
                 description: "Array of OS' to test against. E.g. ['ubuntu-22.04', 'macos-15']"
                 type: string
-                default: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
             python-version:
                 description: "Array of OS' to test against. E.g. ['3.9', '3.10']"
                 type: string
@@ -55,7 +54,6 @@ on:
             os:
                 description: "Choose the OS to test against"
                 type: string
-                default: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
             python-version:
                 description: "Array of OS' to test against. E.g. ['3.9', '3.10']. Valid picks: 3.9, 3.10, 3.11, 3.12"
                 type: string

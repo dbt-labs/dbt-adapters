@@ -69,6 +69,7 @@ jobs:
         with:
           package: ${{ inputs.package }}
           branch: ${{ inputs.branch }}
+          os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
         secrets: inherit
 
     publish-prep-checks:
