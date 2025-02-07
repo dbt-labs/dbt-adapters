@@ -68,8 +68,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -84,8 +84,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -102,8 +102,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: {{ fromJson(inputs.os) }}
-                python-version: {{ fromJson(inputs.python_version) }}
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -119,8 +119,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -136,8 +136,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -153,8 +153,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -170,8 +170,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -187,8 +187,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -203,8 +203,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -220,8 +220,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -237,8 +237,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -254,8 +254,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -271,8 +271,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -288,8 +288,8 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
@@ -305,8 +305,8 @@ jobs:
             fail-fast: false
             max-parallel: 1
             matrix:
-                os: { { fromJson(inputs.os) } }
-                python-version: { { fromJson(inputs.python_version) } }
+                os: ${{ fromJson(inputs.os) }}
+                python-version: ${{ fromJson(inputs.python_version) }}
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
