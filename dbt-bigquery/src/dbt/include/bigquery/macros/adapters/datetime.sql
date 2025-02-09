@@ -22,6 +22,5 @@
     {% set this_date = start_date_datetime + delta %}
     {% set _ = date_list.append(this_date.strftime(fmt_out)) %}
   {% endfor -%}
-    {{ log("date_list: " ~ date_list,info=true) }}
   {{ return(date_list) }}
 {% endmacro %}

@@ -72,7 +72,7 @@
 
 {% macro set_partitions(config, strategy, partition_by) %}
   {#-- We override the partitions to force a static insert overwrite on microbatch, significantly more performant --#}
-  {% if strategy == "microbatch" and partition_by.copy_partitions is False%}
+  {% if strategy == "microbatch" and partition_by.copy_partitions is false %}
     {{ return(bq_generate_static_partitions(config, partition_by.granularity)) }}
   {% else %}
     {{ return(config.get('partitions', none)) }}
