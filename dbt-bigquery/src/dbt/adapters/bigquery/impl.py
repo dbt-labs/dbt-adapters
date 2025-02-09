@@ -144,6 +144,7 @@ class BigQueryAdapter(BaseAdapter):
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
+        self.job_execution_timeout_seconds = self.config.credentials.job_execution_timeout_seconds or 60 * 60 * 12
 
     ###
     # Implementations of abstract methods
@@ -774,7 +775,7 @@ class BigQueryAdapter(BaseAdapter):
             opts["kms_key_name"] = f"'{config.get('kms_key_name')}'"
 
         if temporary:
-            opts["expiration_timestamp"] = "TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)"
+            opts["expiration_timestamp"] = f"TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {self.job_execution_timeout_seconds} second)"
         else:
             # It doesn't apply the `require_partition_filter` option for a temporary table
             # so that we avoid the error by not specifying a partition with a temporary table
