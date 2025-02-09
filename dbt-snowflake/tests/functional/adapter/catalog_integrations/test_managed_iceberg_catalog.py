@@ -11,6 +11,7 @@ BASIC_ICEBERG_TABLE_MODEL = """
 select * from 1 as id
 """
 
+
 class TestManagedIcebergCatalogIntegration:
     @pytest.fixture
     def catalogs(self):
@@ -39,5 +40,6 @@ class TestManagedIcebergCatalogIntegration:
         return {
             "basic_table.sql": BASIC_ICEBERG_TABLE_MODEL,
         }
-    def test_managed_iceberg_catalog_integration(self, project):
+
+    def test_managed_iceberg_catalog_integration(self, project, catalogs):
         run_dbt(["run"])
