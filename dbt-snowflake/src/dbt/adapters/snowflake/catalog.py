@@ -16,6 +16,7 @@ from dbt_common.exceptions import DbtValidationError
 
 _SNOWFLAKE_BOOLEAN_VALUES = ["TRUE", "FALSE"]
 
+
 class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
     catalog_type = CatalogIntegrationType.managed
     auto_refresh: Optional[str] = None
@@ -39,7 +40,9 @@ class SnowflakeManagedIcebergCatalogIntegration(CatalogIntegration):
                 self.auto_refresh = auto_refresh
             if replace_invalid_characters := adapter_properties.get("replace_invalid_characters"):
                 if replace_invalid_characters not in _SNOWFLAKE_BOOLEAN_VALUES:
-                    raise DbtValidationError(f"Invalid replace_invalid_characters value: {replace_invalid_characters}")
+                    raise DbtValidationError(
+                        f"Invalid replace_invalid_characters value: {replace_invalid_characters}"
+                    )
                 self.replace_invalid_characters = replace_invalid_characters
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
