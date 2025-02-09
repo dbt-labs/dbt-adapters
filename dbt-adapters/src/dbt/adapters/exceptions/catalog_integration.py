@@ -1,4 +1,3 @@
-
 from dbt_common.exceptions import DbtRuntimeError
 
 

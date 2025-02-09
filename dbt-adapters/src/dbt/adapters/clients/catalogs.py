@@ -3,6 +3,7 @@ from dbt.adapters.exceptions import DbtCatalogIntegrationAlreadyExistsError
 
 from typing import Optional
 
+
 class CatalogIntegrations:
     def __init__(self):
         self._integrations = {}
@@ -21,11 +22,13 @@ class CatalogIntegrations:
             raise DbtCatalogIntegrationAlreadyExistsError(catalog_name)
         self._integrations[catalog_name] = integration
 
+
 _CATALOG_CLIENT = CatalogIntegrations()
 
 
 def get_catalog(integration_name: str) -> Optional[CatalogIntegrationProtocol]:
     return _CATALOG_CLIENT.get(integration_name)
+
 
 def add_catalog(integration: CatalogIntegrationProtocol, catalog_name: str):
     _CATALOG_CLIENT.add_integration(integration, catalog_name)

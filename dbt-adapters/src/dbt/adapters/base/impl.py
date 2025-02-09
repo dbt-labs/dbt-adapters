@@ -318,7 +318,9 @@ class BaseAdapter(metaclass=AdapterMeta):
                 catalogs_client.add_catalog(integration, integration_config.catalog_name)
 
     @available
-    def get_catalog_integration(self, integration_name: str) -> CatalogIntegrationProtocol:
+    def get_catalog_integration(
+        self, integration_name: str
+    ) -> Optional[CatalogIntegrationProtocol]:
         return catalogs_client.get_catalog(integration_name)
 
     ###

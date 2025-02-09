@@ -1,13 +1,14 @@
 import abc
 from dataclasses import dataclass
-from enum import Enum
 from typing import Optional, Dict
 
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs.formats import TableFormat
 from dbt.adapters.protocol import CatalogIntegrationProtocol
+from dbt_common.dataclass_schema import StrEnum
 
-class CatalogIntegrationType(Enum):
+
+class CatalogIntegrationType(StrEnum):
     managed = "managed"
     iceberg_rest = "iceberg_rest"
     glue = "glue"
@@ -30,7 +31,7 @@ class CatalogIntegration(abc.ABC, CatalogIntegrationProtocol):
     Implements the CatalogIntegrationProtocol as an abstract class should be subclassed by
     specific integrations in the adapters.
 
-    A catalog integration is a platform's way of interacting with an external catalog. 
+    A catalog integration is a platform's way of interacting with an external catalog.
     """
 
     catalog_name: str
