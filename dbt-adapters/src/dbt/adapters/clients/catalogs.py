@@ -1,5 +1,6 @@
 from dbt.adapters.protocol import CatalogIntegrationProtocol
 from dbt.adapters.exceptions import DbtCatalogIntegrationAlreadyExistsError
+from dbt.adapters.exceptions.catalog_integration import DbtCatalogIntegrationNotFoundError
 
 from typing import Optional
 
@@ -27,7 +28,12 @@ _CATALOG_CLIENT = CatalogIntegrations()
 
 
 def get_catalog(integration_name: str) -> Optional[CatalogIntegrationProtocol]:
-    return _CATALOG_CLIENT.get(integration_name)
+    catalog = _CATALOG_CLIENT.get(integration_name)
+    if catalog is None:
+        raise DbtCatalogIntegrationNotFoundError(
+            integration_name, list(_CATALOG_CLIENT.integrations.keys())
+        )
+    return catalog
 
 
 def add_catalog(integration: CatalogIntegrationProtocol, catalog_name: str):
