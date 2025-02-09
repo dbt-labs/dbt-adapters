@@ -137,11 +137,12 @@ def test_managed_iceberg_catalog_with_invalid_properties():
     with pytest.raises(DbtValidationError):
         SnowflakeManagedIcebergCatalogIntegration(
             CatalogIntegrationConfig(
-            catalog_name="my_catalog",
-            integration_name="my_integration",
-            table_format="iceberg",
-            catalog_type="managed",
-            external_volume="s3_iceberg_snow",
-            namespace="my_namespace",
-            adapter_properties={"auto_refresh": "INVALID"})
+                catalog_name="my_catalog",
+                integration_name="my_integration",
+                table_format="iceberg",
+                catalog_type="managed",
+                external_volume="s3_iceberg_snow",
+                namespace="my_namespace",
+                adapter_properties={"auto_refresh": "INVALID"},
+            )
         )
