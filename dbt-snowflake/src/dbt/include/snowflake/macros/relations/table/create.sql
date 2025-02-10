@@ -24,6 +24,8 @@
     {%- endif -%}
     {%- if catalog_name is not none %}
       {%- set catalog_integration = adapter.get_catalog_integration(catalog_name) -%}
+    {% else %}
+      {%- set catalog_integration = none -%}
     {%- endif -%}
     {%- set sql_header = config.get('sql_header', none) -%}
 
