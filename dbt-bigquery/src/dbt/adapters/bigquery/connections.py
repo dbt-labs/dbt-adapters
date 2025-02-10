@@ -36,7 +36,6 @@ from dbt.adapters.contracts.connection import (
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SQLQuery
 from dbt.adapters.exceptions.connection import FailedToConnectError
-
 from dbt.adapters.bigquery.clients import create_bigquery_client
 from dbt.adapters.bigquery.credentials import Priority
 from dbt.adapters.bigquery.retry import RetryFactory
@@ -111,7 +110,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 "account you are trying to impersonate.\n\n"
                 f"{str(e)}"
             )
-            raise DbtRuntimeError(message)
+            raise DbtDatabaseError(message)
 
         except Exception as e:
             logger.debug("Unhandled error while running:\n{}".format(sql))
@@ -126,7 +125,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             # don't want to log. Hopefully they never change this!
             if BQ_QUERY_JOB_SPLIT in exc_message:
                 exc_message = exc_message.split(BQ_QUERY_JOB_SPLIT)[0].strip()
-            raise DbtRuntimeError(exc_message)
+            raise DbtDatabaseError(exc_message)
 
     def cancel_open(self):
         names = []
@@ -497,11 +496,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
         response = job.result(retry=self._retry.create_retry(fallback=fallback_timeout))
 
         if response.state != "DONE":
-            raise DbtRuntimeError("BigQuery Timeout Exceeded")
+            raise DbtDatabaseError("BigQuery Timeout Exceeded")
 
         elif response.error_result:
             message = "\n".join(error["message"].strip() for error in response.errors)
-            raise DbtRuntimeError(message)
+            raise DbtDatabaseError(message)
 
     @staticmethod
     def dataset_ref(database, schema):
