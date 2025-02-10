@@ -144,7 +144,7 @@ class BigQueryAdapter(BaseAdapter):
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
-        self.job_execution_timeout_seconds = (
+        self.job_execution_timeout_seconds: int = int(
             self.config.credentials.job_execution_timeout_seconds or 60 * 60 * 12
         )
 
