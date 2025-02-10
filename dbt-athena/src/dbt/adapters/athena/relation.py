@@ -85,7 +85,7 @@ class AthenaSchemaSearchMap(Dict[InformationSchema, Dict[str, Set[Optional[str]]
             self[key] = {}
         if relation.schema is not None:
             schema = relation.schema.lower()
-            relation_name = relation.name.lower()
+            relation_name = relation.name.lower()  # type:ignore
             if schema not in self[key]:
                 self[key][schema] = set()
             self[key][schema].add(relation_name)

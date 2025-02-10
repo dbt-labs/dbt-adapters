@@ -128,7 +128,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 exc_message = exc_message.split(BQ_QUERY_JOB_SPLIT)[0].strip()
             raise DbtRuntimeError(exc_message)
 
-    def cancel_open(self):
+    def cancel_open(self) -> List[str]:
         names = []
         this_connection = self.get_if_exists()
         with self.lock:

@@ -23,16 +23,16 @@ class PostgresRelation(BaseRelation):
     renameable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.View,
-                RelationType.Table,
+                RelationType.View,  # type:ignore
+                RelationType.Table,  # type:ignore
             }
         )
     )
     replaceable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.View,
-                RelationType.Table,
+                RelationType.View,  # type:ignore
+                RelationType.Table,  # type:ignore
             }
         )
     )
@@ -108,4 +108,4 @@ class PostgresRelation(BaseRelation):
             )
             for index in new_indexes.difference(existing_indexes)
         ]
-        return drop_changes + create_changes
+        return drop_changes + create_changes  # type:ignore

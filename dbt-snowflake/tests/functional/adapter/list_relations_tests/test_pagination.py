@@ -33,7 +33,7 @@ DYNAMIC_TABLE = (
     materialized='dynamic_table',
     target_lag='1 hour',
     snowflake_warehouse='"""
-    + os.getenv("SNOWFLAKE_TEST_WAREHOUSE")
+    + os.getenv("SNOWFLAKE_TEST_WAREHOUSE", "")
     + """',
 ) }}
 

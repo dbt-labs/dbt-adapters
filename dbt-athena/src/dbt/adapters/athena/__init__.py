@@ -4,7 +4,9 @@ from dbt.adapters.base import AdapterPlugin
 from dbt.include import athena
 
 Plugin: AdapterPlugin = AdapterPlugin(
-    adapter=AthenaAdapter, credentials=AthenaCredentials, include_path=athena.PACKAGE_PATH
+    adapter=AthenaAdapter,  # type:ignore
+    credentials=AthenaCredentials,
+    include_path=athena.PACKAGE_PATH,
 )
 
 __all__ = [

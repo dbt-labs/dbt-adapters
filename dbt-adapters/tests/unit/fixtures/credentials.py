@@ -6,6 +6,7 @@ class CredentialsStub(Credentials):
     A stub for a database credentials that does not connect to a database
     """
 
+    @property
     def type(self) -> str:
         return "test"
 

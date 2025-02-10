@@ -44,9 +44,6 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-reds
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-redshift/CHANGELOG.md"
 
-[tool.mypy]
-mypy_path = "third-party-stubs/"
-
 [tool.pytest.ini_options]
 testpaths = ["tests/functional", "tests/unit"]
 env_files = ["test.env"]

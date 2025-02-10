@@ -1,8 +1,10 @@
+from typing import Generator
+
 import pytest
 
 
 @pytest.fixture
-def schema(connection, schema_name) -> str:
+def schema(connection, schema_name) -> Generator[str, None, None]:
     with connection.cursor() as cursor:
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
     yield schema_name
