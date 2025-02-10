@@ -43,6 +43,8 @@ docker-dev = [
 # to the dependencies section
 pre-install-commands = [
   "pip install -e ../dbt-adapter",
+]
+post-install-commands = [
   "pip install -e ../dbt-core/core",
     ]
 
