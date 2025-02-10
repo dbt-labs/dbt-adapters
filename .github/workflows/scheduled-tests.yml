@@ -1,0 +1,98 @@
+name: "Scheduled tests"
+
+on:
+    schedule:
+    -   cron: '0 3 * * *'
+    workflow_dispatch:
+
+jobs:
+    verify-builds:
+        uses: ./.github/workflows/_verify-build.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
+                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
+                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    integration-tests:
+        uses: ./.github/workflows/_integration-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ github.event.pull_request.head.ref }}
+            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+        secrets: inherit
+
+    notification:
+        if: always()
+        needs: [verify-builds, unit-tests, integration-tests]
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
+        -   id: results
+            uses: re-actors/alls-green@release/v1
+            with:
+                jobs: ${{ toJSON(needs) }}
+        -   uses: ravsamhq/notify-slack-action@v2
+            if: ${{ always() }}
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                status: ${{ job.status }}
+                notification_title: "{workflow} {status_message}"
+                message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
+                footer: "View run: {run_url}"
+                mention_groups: ${{ vars.SLACK_ON_CALL }}
+                mention_groups_when: "failure"
+            env:
+                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}

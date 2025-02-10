@@ -1,16 +1,18 @@
 [build.targets.sdist]
-include = ["src/dbt"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [build.targets.wheel]
-packages = ["src/dbt"]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
 
 [envs.default]
-# the only build dependency is dbt-athena, which will never be published when running this
-# because the versions need to be identical
-detached = true
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-athena",
+]
 dependencies = [
-    "dbt-athena @ {root:uri}/../dbt-athena",
-    "dbt-tests-adapter~=1.9.2",
     "isort~=5.13",
     "moto~=5.0.13",
     "pre-commit~=3.5",

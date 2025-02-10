@@ -60,6 +60,9 @@ seeds__expected_target_init = "id,status"
 seeds__expected_target_post = "id,status\n" + "\n".join([f"{i},{i}" for i in range(PARALLELISM)])
 
 
+@pytest.mark.skip(
+    reason="Unreliable test in practice. No apparent reliable way to trigger a retry, which causes the test to fail. Disabled until we get a resolution here https://github.com/dbt-labs/dbt-athena/pull/657/files#r1922043351"
+)
 class TestIcebergRetriesDisabled:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self):
