@@ -38,3 +38,6 @@ from dbt.adapters.exceptions.database import (
     IndexConfigNotDictError,
     UnexpectedDbReferenceError,
 )
+from dbt.adapters.exceptions.catalog_integration import (
+    DbtCatalogIntegrationAlreadyExistsError,
+)
