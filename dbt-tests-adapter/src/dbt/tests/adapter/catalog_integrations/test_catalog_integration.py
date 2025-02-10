@@ -31,9 +31,7 @@ class BaseCatalogIntegration:
             "catalogs": [
                 {
                     "name": CATALOG_NAME,
-                    "write_integrations": [
-                        write_catalog_integration
-                    ],
+                    "write_integrations": [write_catalog_integration],
                 }
             ]
         }
