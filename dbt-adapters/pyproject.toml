@@ -43,16 +43,11 @@ Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
 [tool.mypy]
-mypy_path = "third-party-stubs/"
+mypy_path = "../third-party-stubs/"
 [[tool.mypy.overrides]]
 module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
 
-[tool.pytest]
-env_files = ["test.env"]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
-color = true
-csv = "results.csv"
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+addopts = "-v --color=yes -n auto"

@@ -14,7 +14,7 @@ jobs:
     affected-packages:
         runs-on: ubuntu-latest
         outputs:
-            changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
+            changelog-check: ${{ steps.changelog-check.outputs.changes }}
             verify-build: ${{ steps.verify-build.outputs.changes }}
             unit-tests: ${{ steps.unit-tests.outputs.changes }}
             integration-tests: ${{ steps.integration-tests.outputs.changes }}
@@ -23,7 +23,7 @@ jobs:
             with:
                 ref: ${{ github.event.pull_request.head.ref }}
                 repository: ${{ github.event.pull_request.head.repo.full_name }}
-        -   id: changelog-entry-check
+        -   id: changelog-check
             uses: dorny/paths-filter@v3
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
@@ -44,14 +44,16 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: .github/filters/integration-tests.yml
 
-    changelog-entry-check:
-        uses: ./.github/workflows/_changelog-entry-check.yml
+    changelog-check:
+        uses: ./.github/workflows/_changelog-check.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        if: |
+            toJson(fromJson(needs.affected-packages.outputs.changelog-check)) != '[]' &&
+            !contains(github.event.pull_request.labels.*.name, 'skip:changelog-check')
         strategy:
             fail-fast: false
             matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
+                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-check) }}
         with:
             package: ${{ matrix.package }}
             pull-request: ${{ github.event.pull_request.number }}
@@ -113,10 +115,10 @@ jobs:
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: always()
-        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
+        needs: [changelog-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
             with:
                 jobs: ${{ toJSON(needs) }}
-                allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"
+                allowed-skips: "changelog-check,verify-build,unit-tests,integration-tests"

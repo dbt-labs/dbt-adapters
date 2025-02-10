@@ -134,7 +134,7 @@ class TestConnection(TestCase):
             )
 
     def test_retry_able_exceptions_trigger_retry(self):
-        with mock.patch.object(self.adapter.connections, "add_query") as add_query:
+        with mock.patch.object(self.adapter.connections, "add_query"):
             connection_mock = mock_connection("model", state="closed")
             connection_mock.credentials = RedshiftCredentials.from_dict(
                 {
@@ -158,6 +158,6 @@ class TestConnection(TestCase):
 
             with mock.patch("redshift_connector.connect", connect_mock):
                 with pytest.raises(FailedToConnectError) as e:
-                    connection = self.adapter.connections.open(connection_mock)
+                    self.adapter.connections.open(connection_mock)
             assert str(e.value) == "Database Error\n  retryable interface error<3>"
             assert connect_mock.call_count == 3

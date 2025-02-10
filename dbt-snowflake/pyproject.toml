@@ -9,8 +9,12 @@ description = "The Snowflake adapter plugin for dbt"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "snowflake"]
 requires-python = ">=3.9.0"
-authors = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
-maintainers = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
+authors = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+maintainers = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "License :: OSI Approved :: Apache Software License",
@@ -40,8 +44,7 @@ Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CHANGELOG.md"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/functional", "tests/unit"]
-env_files = ["test.env"]
+testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
 filterwarnings = [
     "ignore:datetime.datetime.utcnow:DeprecationWarning",

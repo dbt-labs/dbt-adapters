@@ -11,7 +11,7 @@ class TestNoQuotaProject:
     def test_no_quota_project(self, project):
         results = run_dbt()
         for result in results:
-            assert None == result.adapter_response["quota_project"]
+            assert result.adapter_response["quota_project"] is None
 
 
 class TestQuotaProjectOption:

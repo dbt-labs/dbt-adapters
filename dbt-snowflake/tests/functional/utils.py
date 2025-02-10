@@ -27,7 +27,7 @@ def query_relation_type(project, name: str) -> Optional[str]:
     results = project.run_sql(sql, fetch="all")
 
     assert len(results) > 0, f"Relation {relation} not found"
-    assert len(results) == 1, f"Multiple relations found"
+    assert len(results) == 1, "Multiple relations found"
 
     return results[0][0].lower()
 

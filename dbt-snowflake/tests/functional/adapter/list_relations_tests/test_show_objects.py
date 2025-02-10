@@ -3,8 +3,6 @@ from typing import List
 
 import pytest
 
-from pathlib import Path
-
 from dbt.adapters.factory import get_adapter_by_type
 from dbt.adapters.snowflake import SnowflakeRelation
 

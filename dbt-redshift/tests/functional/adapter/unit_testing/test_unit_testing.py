@@ -1,7 +1,6 @@
 import pytest
 
 from dbt.artifacts.schemas.results import RunStatus
-from dbt.tests.fixtures.project import write_project_files
 from dbt.tests.util import run_dbt
 
 from dbt.tests.adapter.unit_testing.test_types import BaseUnitTestingTypes
@@ -14,8 +13,6 @@ from tests.functional.adapter.unit_testing.fixtures import (
     test_none_column_value_doesnt_throw_error_dct,
     test_none_column_value_will_throw_error,
 )
-
-from dbt_common.exceptions import CompilationError
 
 
 class TestRedshiftUnitTestingTypes(BaseUnitTestingTypes):
