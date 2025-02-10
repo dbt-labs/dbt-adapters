@@ -99,6 +99,7 @@ class BigqueryConfig(AdapterConfig):
     partition_by: Optional[Dict[str, Any]] = None
     kms_key_name: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
+    tags: Optional[Dict[str, str]] = None
     partitions: Optional[List[str]] = None
     grant_access_to: Optional[List[Dict[str, str]]] = None
     hours_to_expiration: Optional[int] = None
@@ -761,6 +762,10 @@ class BigQueryAdapter(BaseAdapter):
         if config.get("labels"):
             labels = config.get("labels", {})
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
+
+        if config.get("tags"):
+            tags = config.get("tags", {})
+            opts["tags"] = list(tags.items())
 
         return opts
 

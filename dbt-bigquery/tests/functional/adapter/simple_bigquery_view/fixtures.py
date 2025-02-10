@@ -29,6 +29,17 @@ labeled_model_sql = """
 select * from {{ ref('view_model') }}
 """.lstrip()
 
+tagged_model_sql = """
+{{
+    config(
+        materialized = "table",
+        tags = {'environment': 'prod', 'component': 'batch', 'project': 'atlas'}
+    )
+}}
+
+select * from {{ ref('view_model') }}
+""".lstrip()
+
 multi_clustered_model_sql = """
 {{
     config(
