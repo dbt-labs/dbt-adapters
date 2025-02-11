@@ -1,17 +1,19 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
+    <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
 </p>
 <p align="center">
-  <a href="https://github.com/dbt-labs/dbt-adapters/actions/workflows/scheduled-tests.yml">
-    <img src="https://github.com/dbt-labs/dbt-adapters/actions/workflows/scheduled-tests.yml/badge.svg?event=schedule" alt="Unit Tests Badge"/>
-  </a>
+    <a href="https://github.com/dbt-labs/dbt-adapters/actions/workflows/scheduled-tests.yml">
+        <img src="https://github.com/dbt-labs/dbt-adapters/actions/workflows/scheduled-tests.yml/badge.svg?event=schedule" alt="Scheduled tests badge"/>
+    </a>
 </p>
+
+# dbt
 
 **[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
 dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-aggregate the raw data in your warehouse so that it's ready for analysis.
 
-# Adapters
+## Adapters
 
 This repository is a monorepo containing the following packages:
 
@@ -29,30 +31,31 @@ This repository is a monorepo containing the following packages:
 
 Please refer to each of these packages for more specific information.
 
-## Get started
+# Getting started
 
-### Install dbt
+## Install dbt
 
 - [Install dbt](https://docs.getdbt.com/docs/installation)
-- Read the [introduction](https://docs.getdbt.com/docs/introduction/) and [viewpoint](https://docs.getdbt.com/docs/about/viewpoint/)
+- Read the [introduction](https://docs.getdbt.com/docs/introduction/)
+- Read the [viewpoint](https://docs.getdbt.com/docs/about/viewpoint/)
 
-### Join the dbt Community
+## Join the dbt Community
 
 - Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
 - Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
 
-### Suggest a feature or report a bug
+## Suggest a feature or report a bug
 
 - Submit a bug or a feature as a GitHub [issue](https://github.com/dbt-labs/dbt-adapters/issues/new/choose)
 
-### Contribute
+## Contribute
 
 - Want to help us build dbt? Check out the [Contributing Guide](CONTRIBUTING.md)
 
-## Contributors ✨
+# Contributors ✨
 
-Thanks goes to these wonderful people:
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
 
 <a href="https://github.com/dbt-labs/dbt-adapters/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=dbt-labs/dbt-adapters" />
+    <img src="https://contrib.rocks/image?repo=dbt-labs/dbt-adapters" />
 </a>
