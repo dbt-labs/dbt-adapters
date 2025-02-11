@@ -222,4 +222,11 @@ The same process is followed whether the contributor is external or a maintainer
 Once all tests are passing and the pull request has been approved by the appropriate code owners,
 a maintainer will merge the changes into `main`.
 
+> [!NOTE]
+> We appreciate all contributions from the community.
+> We do ask that you do not tag any dbt Labs engineers to request a feature or report a bug, PR review, etc.
+> Our community rules of the road also apply in our repositories.
+> We have a triage process and will respond when we are able.
+> If you are a dbt Cloud user - we do request that you open issues directly with our Support Team so they can be tracked and followed up accordingly.
+
 And that's it! Happy developing :tada:
