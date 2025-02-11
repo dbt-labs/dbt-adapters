@@ -42,8 +42,7 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-post
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-postgres/CHANGELOG.md"
 
-[tool.pytest]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]

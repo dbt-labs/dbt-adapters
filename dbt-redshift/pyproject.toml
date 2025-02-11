@@ -48,13 +48,13 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-redshift/CHA
 mypy_path = "third-party-stubs/"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/functional", "tests/unit"]
-env_files = ["test.env"]
+testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
+markers = [
+    'flaky: marks tests as flaky so they run one at a time (de-select with `-m "not flaky"`)'
+]
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
-]
-markers = [
-    'flaky: marks tests as flaky so they run one at a time (de-select with `-m "not flaky"`)'
 ]

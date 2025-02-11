@@ -48,11 +48,6 @@ mypy_path = "third-party-stubs/"
 module = ["dbt.adapters.events.adapter_types_pb2"]
 follow_imports = "skip"
 
-[tool.pytest]
-env_files = ["test.env"]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
-color = true
-csv = "results.csv"
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
