@@ -6,10 +6,6 @@ dbt-athena:
 -   'dbt-adapters/pyproject.toml'
 -   'dbt-athena/tests/functional/**'
 -   'dbt-athena/tests/__init__.py'
-dbt-athena-community:
--   'dbt-athena-community/src/**'
--   'dbt-athena-community/hatch.toml'
--   'dbt-athena-community/pyproject.toml'
 dbt-bigquery:
 -   'dbt-bigquery/src/**'
 -   'dbt-bigquery/hatch.toml'
