@@ -3,19 +3,23 @@
 This document covers the following topics:
 
 - [How to install a package for development](#install-a-package-for-development)
-- How to run code quality tests
-- [How to run unit tests](#run-unit-tests)
-- How to run integration tests
-- How to submit pull requests
-- How to update user documentation
+- [How to run code quality tests](#code-quality-checks)
+- [How to run unit tests](#unit-tests)
+- [How to run integration tests](#integration-tests)
+- [How to submit a pull request](#submitting-a-pull-request)
+- [How to update documentation](#documentation)
 
-The following utilities are needed or will be installed in this guide:
+The following utilities are needed for developing the packages in this repository:
 
 - `pip`
 - `hatch`
 - `git`
 - `changie`
 - `pre-commit`
+
+> [!NOTE]
+> External contributors can contribute to this repository by forking the `dbt-labs/dbt-adapters` repository.
+> For more on forking, check out the [GitHub docs on forking](https://help.github.com/en/articles/fork-a-repo).
 
 # Developing
 
@@ -27,14 +31,17 @@ This differs from a more traditional approach where each repository contains a s
 In particular, everything is moved "one level down".
 Make sure to take this into account when working with a specific package.
 
-> [!IMPORTANT]
-> Ensure that you're in a package directory prior to running any commands for a specific package, e.g.: `cd dbt-postgres`
-
 ## Install a package for development
 
-> [!NOTE]
-> External contributors can contribute to this repository by forking the `dbt-labs/dbt-adapters` repository.
-> For more on forking, check out the [GitHub docs on forking](https://help.github.com/en/articles/fork-a-repo).
+### Create a `hatch` environment
+
+```shell
+$ hatch run setup
+```
+- Installs the package in editable mode
+- Installs development dependencies
+- Installs all repository packages in editable mode (e.g. `dbt-adapters` and `dbt-tests-adapter`)
+- Installs `pre-commit` hooks
 
 > [!TIP]
 > Configure `hatch` to create virtual environments in the package directory:
@@ -45,38 +52,35 @@ Make sure to take this into account when working with a specific package.
 > 1. It's easier to find the virtual environment to add it as a runner in common IDEs like VSCode and PyCharm
 > 2. It names the environment predictable (e.g. `default`, `build`) instead of using a hash
 
-### Create a `hatch` environment
-   ```shell
-   $ hatch run setup
-   ```
-   - Installs the package in editable mode
-   - Installs development dependencies
-   - Installs all repository packages in editable mode (e.g. `dbt-adapters` and `dbt-tests-adapter`)
-   - Installs `pre-commit` hooks
-
 ### Activate a `hatch` environment
-   ```shell
-   $ hatch shell
-   (default) $
-   ```
+
+> [!IMPORTANT]
+> Ensure that you're in a package directory prior to running any commands for a specific package, e.g.: `cd dbt-postgres`
+
+```shell
+$ hatch shell
+(default) $
+```
 
 ### Run a command in a `hatch` environment
-   ```shell
-   $ hatch run <command>
-   ```
-   This is effectively short-hand for:
-   ```shell
-   $ hatch shell
-   (default) $ <command>
-   ```
+
+```shell
+$ hatch run <command>
+```
+This is effectively shorthand for:
+```shell
+$ hatch shell
+(default) $ <command>
+```
 
 ### Rebuild a `hatch` environment
-   ```shell
-   # exit if you've activated it
-   (default) $ exit
-   $ hatch env prune
-   $ hatch shell
-   ```
+
+```shell
+# exit first if you're still in the hatch environment
+(default) $ exit
+$ hatch env prune
+$ hatch shell
+```
 
 ### Developing against feature branches
 
@@ -88,9 +92,11 @@ However, this does not work with packages outside of the repository as there is 
 Some changes require a change in `dbt-common` and/or `dbt-core`.
 In that case, `dbt-common` (or `dbt-core`) must be installed from that a version of branch.
 The best way to do this is to re-install `dbt-common` into your `hatch` environment in editable mode:
+
 ```shell
 $ hatch run pip install -e ../../dbt-common
 ```
+
 > [!NOTE]
 > Note that there are two `../` above.
 > The first corresponds to this repository's root, and the second to your development space, e.g. `~/Source`.
@@ -101,6 +107,7 @@ $ hatch run pip install -e ../../dbt-common
 
 You will also need to point CI to this feature branch if you are using this to test your changes.
 The only way to do this is to update `hatch.toml` to point the dependency at your feature branch:
+
 ```toml
 # {adapter}/hatch.toml
 [envs.default]
@@ -124,6 +131,7 @@ Tests in this repository can be broken up into three categories:
 
 Code quality checks are [configured](.pre-commit-config.yaml) at the repo level.
 These checks can run from a virtual environment or by invoking `pre-commit` directly:
+
 ```shell
 $ hatch run code-quality
 ```
@@ -158,6 +166,7 @@ This will vary by package; please refer to the package's `CONTRIBUTING.md` for m
 Each adapter requires certain environment variables to connect to its platform.
 The template is contained in the respective `test.env.exmaple` file.
 Create your version by copying the file over and filling out each secret in you favorite text editor:
+
 ```shell
 $ cp test.env.example test.env
 ```
@@ -171,9 +180,11 @@ These entries get collated and injected into `CHANGELOG.md` at release, so there
 Follow the steps to [install `changie`](https://changie.dev/guide/installation/).
 
 Once `changie` is installed and the PR is created, run:
+
 ```shell
 $ changie new
 ```
+
 `changie` will walk through the process of creating a changelog entry.
 Remember to commit and push the file that's created.
 
