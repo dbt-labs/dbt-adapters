@@ -223,10 +223,10 @@ Once all tests are passing and the pull request has been approved by the appropr
 a maintainer will merge the changes into `main`.
 
 > [!NOTE]
-> We appreciate all contributions from the community.
-> We do ask that you do not tag any dbt Labs engineers to request a feature or report a bug, PR review, etc.
-> Our community rules of the road also apply in our repositories.
-> We have a triage process and will respond when we are able.
-> If you are a dbt Cloud user - we do request that you open issues directly with our Support Team so they can be tracked and followed up accordingly.
+> We value and appreciate all contributions from our community.
+> To ensure an organized and efficient process, we kindly ask that you refrain from tagging dbt Labs employees to request features, report bugs, or seek PR reviews.
+> Our [community guidelines](https://docs.getdbt.com/community/resources/community-rules-of-the-road) also extend to all of our repositories.
+> Please note that we have an established triage process and will respond to issues as soon as possible.
+> If you are a dbt Cloud user, we request that you submit issues directly to our Support Team to ensure proper tracking and timely follow-up.
 
 And that's it! Happy developing :tada:
