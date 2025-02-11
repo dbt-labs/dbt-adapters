@@ -42,6 +42,7 @@ $ hatch run setup
 - Installs development dependencies
 - Installs all repository packages in editable mode (e.g. `dbt-adapters` and `dbt-tests-adapter`)
 - Installs `pre-commit` hooks
+- Creates a templated `test.env` from `test.env.example` (if `test.env` doesn't already exist)
 
 > [!TIP]
 > Configure `hatch` to create virtual environments in the package directory:
@@ -165,11 +166,8 @@ This will vary by package; please refer to the package's `CONTRIBUTING.md` for m
 
 Each adapter requires certain environment variables to connect to its platform.
 The template is contained in the respective `test.env.exmaple` file.
-Create your version by copying the file over and filling out each secret in you favorite text editor:
-
-```shell
-$ cp test.env.example test.env
-```
+If you already ran `hatch run setup` you should have a `test.env` file in the package root.
+Update the environment variables in this file with your instance's connection credentials.
 
 # Documentation
 

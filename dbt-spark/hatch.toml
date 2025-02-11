@@ -31,6 +31,7 @@ features=["all"]
 [envs.default.scripts]
 setup = [
     "pre-commit install",
+    "cp -n test.env.example test.env",
     "pip install -r dagger/requirements.txt",
 ]
 code-quality = "pre-commit run --all-files"
