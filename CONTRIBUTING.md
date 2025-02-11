@@ -9,6 +9,9 @@ This document covers the following topics:
 - [How to submit a pull request](#submitting-a-pull-request)
 - [How to update documentation](#documentation)
 
+> [!TIP]
+> Visit [Become a contributor](https://docs.getdbt.com/community/contribute) to learn more about contributing at dbt!
+
 The following utilities are needed for developing the packages in this repository:
 
 - `pip`
@@ -203,6 +206,10 @@ Here are some relevant links when considering what to update:
 
 # Submitting a pull request
 
+## Communication
+
+Please refer to our [Code of Conduct](/CODE_OF_CONDUCT.md) when opening issues and pull requests.
+
 ## Signing the CLA
 
 > [!IMPORTANT]
@@ -221,12 +228,5 @@ These are good things! dbt Labs believes that contributing high-quality code is 
 The same process is followed whether the contributor is external or a maintainer.
 Once all tests are passing and the pull request has been approved by the appropriate code owners,
 a maintainer will merge the changes into `main`.
-
-> [!NOTE]
-> We value and appreciate all contributions from our community.
-> To ensure an organized and efficient process, we kindly ask that you refrain from tagging dbt Labs employees to request features, report bugs, or seek PR reviews.
-> Our [community guidelines](https://docs.getdbt.com/community/resources/community-rules-of-the-road) also extend to all of our repositories.
-> Please note that we have an established triage process and will respond to issues as soon as possible.
-> If you are a dbt Cloud user, we request that you submit issues directly to our Support Team to ensure proper tracking and timely follow-up.
 
 And that's it! Happy developing :tada:
