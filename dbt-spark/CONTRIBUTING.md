@@ -31,5 +31,12 @@ _options_:
 To test against Apache Spark:
 
 ```shell
+# run all tests for the apache_spark profile
 $ hatch run integration-tests --profile "apache_spark"
+
+# run tests for the apache_spark profile for a specific module
+$ hatch --profile "apache_spark" --test-path tests/functional/adapter/test_basic.py
+
+# run a specific test for the apache_spark profile
+$ hatch --profile "apache_spark" --test-path tests/functional/adapter/test_basic.py::TestSimpleMaterializationsSpark::test_base
 ```
