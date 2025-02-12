@@ -154,6 +154,7 @@ async def test_spark(test_args):
         return result
 
 
+# TODO: update this to align more closely with the pytest api, e.g. --test-path should be an arg instead of a kwarg
 parser = argparse.ArgumentParser()
 parser.add_argument("--profile", required=True, type=str)
 parser.add_argument("--test-path", required=False, type=str, default="tests/functional/adapter")

@@ -1,11 +1,30 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
+    <img
+        src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg"
+        alt="dbt logo"
+        width="500"
+    />
 </p>
+
 <p align="center">
-  <a href="https://github.com/dbt-labs/dbt-spark/actions/workflows/main.yml">
-    <img src="https://github.com/dbt-labs/dbt-spark/actions/workflows/main.yml/badge.svg?event=push" alt="Unit Tests Badge"/>
-  </a>
+    <a href="https://pypi.org/project/dbt-spark/">
+        <img src="https://badge.fury.io/py/dbt-spark.svg" />
+    </a>
+    <a target="_blank" href="https://pypi.org/project/dbt-spark/" style="background:none">
+        <img src="https://img.shields.io/pypi/pyversions/dbt-spark">
+    </a>
+    <a href="https://github.com/psf/black">
+        <img src="https://img.shields.io/badge/code%20style-black-000000.svg" />
+    </a>
+    <a href="https://github.com/python/mypy">
+        <img src="https://www.mypy-lang.org/static/mypy_badge.svg" />
+    </a>
+    <a href="https://pepy.tech/project/dbt-spark">
+        <img src="https://static.pepy.tech/badge/dbt-spark/month" />
+    </a>
 </p>
+
+# dbt
 
 **[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
@@ -13,15 +32,15 @@ dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-agg
 
 ## dbt-spark
 
-The `dbt-spark` package contains all of the code enabling dbt to work with Apache Spark and Databricks. For
-more information, consult [the docs](https://docs.getdbt.com/docs/profile-spark).
+`dbt-spark` enables dbt to work with Apache Spark.
+For more information on using dbt with Spark, consult [the docs](https://docs.getdbt.com/docs/profile-spark).
 
-## Getting started
+# Getting started
 
-- [Install dbt](https://docs.getdbt.com/docs/installation)
-- Read the [introduction](https://docs.getdbt.com/docs/introduction/) and [viewpoint](https://docs.getdbt.com/docs/about/viewpoint/)
+Review the repository [README.md](../README.md) as most of that information pertains to `dbt-spark`.
 
 ## Running locally
+
 A `docker-compose` environment starts a Spark Thrift server and a Postgres database as a Hive Metastore backend.
 Note: dbt-spark now supports Spark 3.3.2.
 
@@ -65,31 +84,13 @@ rm -rf ./.hive-metastore/
 rm -rf ./.spark-warehouse/
 ```
 
-#### Additional Configuration for MacOS
+## Additional Configuration for MacOS
 
 If installing on MacOS, use `homebrew` to install required dependencies.
    ```sh
    brew install unixodbc
    ```
 
-### Reporting bugs and contributing code
+## Contribute
 
--   Want to report a bug or request a feature? Let us know on [Slack](http://slack.getdbt.com/), or open [an issue](https://github.com/fishtown-analytics/dbt-spark/issues/new).
-
-## Code of Conduct
-
-Everyone interacting in the dbt project's codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [PyPA Code of Conduct](https://www.pypa.io/en/latest/code-of-conduct/).
-
-## Join the dbt Community
-
-- Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
-- Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
-
-## Reporting bugs and contributing code
-
-- Want to report a bug or request a feature? Let us know on [Slack](http://community.getdbt.com/), or open [an issue](https://github.com/dbt-labs/dbt-spark/issues/new)
-- Want to help us build dbt? Check out the [Contributing Guide](https://github.com/dbt-labs/dbt/blob/HEAD/CONTRIBUTING.md)
-
-## Code of Conduct
-
-Everyone interacting in the dbt project's codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [dbt Code of Conduct](https://community.getdbt.com/code-of-conduct).
+- Want to help us build `dbt-spark`? Check out the [Contributing Guide](CONTRIBUTING.md).

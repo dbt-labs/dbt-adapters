@@ -1,5 +1,27 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
+    <img
+        src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg"
+        alt="dbt logo"
+        width="500"
+    />
+</p>
+
+<p align="center">
+    <a href="https://pypi.org/project/dbt-tests-adapter/">
+        <img src="https://badge.fury.io/py/dbt-tests-adapter.svg" />
+    </a>
+    <a target="_blank" href="https://pypi.org/project/dbt-tests-adapter/" style="background:none">
+        <img src="https://img.shields.io/pypi/pyversions/dbt-tests-adapter">
+    </a>
+    <a href="https://github.com/psf/black">
+        <img src="https://img.shields.io/badge/code%20style-black-000000.svg" />
+    </a>
+    <a href="https://github.com/python/mypy">
+        <img src="https://www.mypy-lang.org/static/mypy_badge.svg" />
+    </a>
+    <a href="https://pepy.tech/project/dbt-tests-adapter">
+        <img src="https://static.pepy.tech/badge/dbt-tests-adapter/month" />
+    </a>
 </p>
 
 # dbt-tests-adapter
