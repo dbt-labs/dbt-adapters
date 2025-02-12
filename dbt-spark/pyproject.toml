@@ -30,14 +30,14 @@ dependencies = [
     "sqlparams>=3.0.0",
 ]
 [project.optional-dependencies]
-ODBC = ["pyodbc~=5.1.0"]
+ODBC = ["pyodbc>=5.1,<5.3"]
 PyHive = [
     "PyHive[hive_pure_sasl]~=0.7.0",
     "thrift>=0.11.0,<0.17.0",
 ]
 session = ["pyspark>=3.0.0,<4.0.0"]
 all = [
-    "pyodbc~=5.1.0",
+    "pyodbc>=5.1,<5.3",
     "PyHive[hive_pure_sasl]~=0.7.0",
     "thrift>=0.11.0,<0.17.0",
     "pyspark>=3.0.0,<4.0.0",
