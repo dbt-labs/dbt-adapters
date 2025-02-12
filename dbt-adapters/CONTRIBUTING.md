@@ -105,13 +105,13 @@ Unit tests can be run locally without setting up a database connection:
 # Note: replace $strings with valid names
 
 # run all unit tests
-hatch run unit-test
+hatch run unit-tests
 
 # run all unit tests in a module
-hatch run unit-test tests/unit/$test_file_name.py
+hatch run unit-tests tests/unit/$test_file_name.py
 
 # run a specific unit test
-hatch run unit-test tests/unit/$test_file_name.py::$test_class_name::$test_method_name
+hatch run unit-tests tests/unit/$test_file_name.py::$test_class_name::$test_method_name
 ```
 
 ### Testing against a development branch
