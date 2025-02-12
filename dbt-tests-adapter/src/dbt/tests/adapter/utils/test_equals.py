@@ -4,13 +4,7 @@ from dbt.tests.adapter.utils import base_utils, fixture_equals
 from dbt.tests.util import relation_from_name, run_dbt
 
 
-class BaseEquals:
-    @pytest.fixture(scope="class")
-    def macros(self):
-        return {
-            "equals.sql": base_utils.macros__equals_sql,
-        }
-
+class BaseEquals(base_utils.BaseUtils):
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
