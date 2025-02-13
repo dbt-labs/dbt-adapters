@@ -29,7 +29,7 @@ dbt-redshift:
 -   'dbt-redshift/pyproject.toml'
 -   'dbt-adapters/src/**'
 -   'dbt-adapters/pyproject.toml'
--   'dbt-postgres/src/include/**'
+-   'dbt-postgres/src/dbt/include/**'
 -   'dbt-redshift/tests/functional/**'
 -   'dbt-redshift/tests/__init__.py'
 -   'dbt-redshift/tests/conftest.py'
