@@ -156,6 +156,7 @@ class RedshiftCredentials(Credentials):
     #   access tokens from an external identity provider integrated with a redshift
     #   and aws org or account Iam Idc instance
     token_endpoint: Optional[Dict[str, str]] = None
+    is_serverless: Optional[bool] = None
 
     _ALIASES = {"dbname": "database", "pass": "password"}
 
@@ -192,6 +193,10 @@ class RedshiftCredentials(Credentials):
         return self.host
 
 
+def is_serverless(credentials: RedshiftCredentials) -> bool:
+    return "serverless" in credentials.host or credentials.is_serverless
+
+
 def get_connection_method(
     credentials: RedshiftCredentials,
 ) -> Callable[[], redshift_connector.Connection]:
@@ -220,6 +225,7 @@ def get_connection_method(
             "auto_create": credentials.autocreate,
             "db_groups": credentials.db_groups,
             "timeout": credentials.connect_timeout,
+            "is_serverless": is_serverless(credentials),
             **redshift_ssl_config,
         }
 
@@ -227,9 +233,8 @@ def get_connection_method(
 
         # iam True except for identity center methods
         iam: bool = RedshiftConnectionMethod.is_iam(credentials.method)
-
         cluster_identifier: Optional[str]
-        if "serverless" in credentials.host or RedshiftConnectionMethod.uses_identity_center(
+        if is_serverless(credentials) or RedshiftConnectionMethod.uses_identity_center(
             credentials.method
         ):
             cluster_identifier = None
@@ -288,7 +293,7 @@ def get_connection_method(
         logger.debug("Connecting to Redshift with 'iam_role' credentials method")
         role_kwargs = {
             "db_user": None,
-            "group_federation": "serverless" not in credentials.host,
+            "group_federation": not is_serverless(credentials),
         }
 
         if credentials.iam_profile:
