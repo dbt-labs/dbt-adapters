@@ -94,11 +94,18 @@ from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 # if TYPE_CHECKING:
 import agate
 
-from dbt.adapters.record.serialization import AdapterExecuteSerializer
+from dbt.adapters.record.serialization import AdapterExecuteSerializer, PartitionsMetadataSerializer, \
+    AgateTableSerializer
 
 ExecuteReturn = Tuple[AdapterResponse, agate.Table]
 
 Recorder.register_serialization_strategy(ExecuteReturn, AdapterExecuteSerializer())
+
+PartitionsMetadata = Tuple[agate.Table]
+
+Recorder.register_serialization_strategy(PartitionsMetadata, PartitionsMetadataSerializer())
+Recorder.register_serialization_strategy(agate.Table, AgateTableSerializer())
+
 
 
 GET_CATALOG_MACRO_NAME = "get_catalog"
@@ -222,7 +229,6 @@ class SnapshotStrategy(TypedDict):
     hard_deletes: Optional[str]
 
 
-@supports_replay
 class BaseAdapter(metaclass=AdapterMeta):
     """The BaseAdapter provides an abstract base class for adapters.
 
@@ -436,7 +442,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @auto_record_function("AdapterGetPartitionsMetadata", group="Available")
     @available.parse(_parse_callback_empty_table)
-    def get_partitions_metadata(self, table: str) -> Tuple["agate.Table"]:
+    def get_partitions_metadata(self, table: str) -> PartitionsMetadata:
 
         """
         TODO: Can we move this to dbt-bigquery?
@@ -753,7 +759,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     ###
     @auto_record_function("AdapterStandardizeGrantsDict", group="Available")
     @available
-    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
+    def standardize_grants_dict(self, grants_table: agate.Table) -> dict:
         """Translate the result of `show grants` (or equivalent) to match the
         grants which a user would configure in their project.
 
@@ -957,15 +963,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         schema: str,
         identifier: str,
     ) -> List[BaseRelation]:
-        matches = []
+        try:
+            matches = []
 
-        search = self._make_match_kwargs(database, schema, identifier)
+            search = self._make_match_kwargs(database, schema, identifier)
 
-        for relation in relations_list:
-            if relation.matches(**search):
-                matches.append(relation)
+            for relation in relations_list:
+                if relation.matches(**search):
+                    matches.append(relation)
 
-        return matches
+            return matches
+        except Exception as e:
+            pass
 
     @auto_record_function("AdapterGetRelation", group="Available")
     @available.parse_none
@@ -1017,8 +1026,8 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     @classmethod
-    @auto_record_function("AdapterQuote", group="Available")
     @abc.abstractmethod
+    @auto_record_function("AdapterQuote", group="Available")
     def quote(cls, identifier: str) -> str:
         """Quote the given identifier, as appropriate for the database."""
         raise NotImplementedError("`quote` is not implemented for this adapter!")
@@ -1151,7 +1160,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     @available
     @classmethod
     @auto_record_function("AdapterConvertType", group="Available")
-    def convert_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
+    def convert_type(cls, agate_table: agate.Table, col_idx: int) -> Optional[str]:
 
         return cls.convert_agate_type(agate_table, col_idx)
 
@@ -1886,7 +1895,8 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse_none
     @classmethod
-    @auto_record_function("AdapterGetHardDeletesBehavior", group="Available")
+    # @auto_record_function("AdapterGetHardDeletesBehavior", group="Available")
+    # TODO: type is a lie
     def get_hard_deletes_behavior(cls, config: Dict[str, str]) ->  str:
 
         """Check the hard_deletes config enum, and the legacy invalidate_hard_deletes
