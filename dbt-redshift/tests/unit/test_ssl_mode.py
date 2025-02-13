@@ -71,6 +71,7 @@ class TestSSLMode(TestCase):
             timeout=None,
             ssl=False,
             sslmode=None,
+            is_serverless=None,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -90,6 +91,7 @@ class TestSSLMode(TestCase):
             timeout=None,
             ssl=True,
             sslmode="verify-ca",
+            is_serverless=None,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -109,6 +111,7 @@ class TestSSLMode(TestCase):
             timeout=None,
             ssl=True,
             sslmode="verify-full",
+            is_serverless=None,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -128,6 +131,7 @@ class TestSSLMode(TestCase):
             timeout=None,
             ssl=True,
             sslmode="verify-ca",
+            is_serverless=None,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -147,7 +151,8 @@ class TestSSLMode(TestCase):
             timeout=None,
             ssl=True,
             sslmode="verify-ca",
-        )
+            is_serverless=None,
+            )
 
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_connection_timeout(self):
@@ -165,4 +170,5 @@ class TestSSLMode(TestCase):
             region=None,
             timeout=30,
             **DEFAULT_SSL_CONFIG,
+            is_serverless=None,
         )
