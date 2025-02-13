@@ -98,6 +98,7 @@ jobs:
         needs: affected-packages
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
+            # testing this change; adding a change here to produce a PR
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
