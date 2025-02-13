@@ -709,7 +709,7 @@ class TestIAMIdcBrowser(AuthMethod):
                 user="",
                 timeout=None,
                 port=5439,
-                is_serverless=True, 
+                is_serverless=True,
                 **DEFAULT_SSL_CONFIG,
                 credentials_provider="BrowserIdcAuthPlugin",
                 listen_port=1111,

@@ -152,7 +152,7 @@ class TestSSLMode(TestCase):
             ssl=True,
             sslmode="verify-ca",
             is_serverless=None,
-            )
+        )
 
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_connection_timeout(self):
