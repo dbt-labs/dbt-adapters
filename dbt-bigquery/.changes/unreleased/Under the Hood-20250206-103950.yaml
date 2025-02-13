@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: replace DbtRuntime exception with DbtDatabase exception in dbt-bigquery connection
+  exception handling
+time: 2025-02-06T10:39:50.681276-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "798"

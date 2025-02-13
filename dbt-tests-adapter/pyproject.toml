@@ -30,7 +30,7 @@ dependencies = [
     "dbt-core>=1.8.0a1",
     # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
-    "dbt-adapters",
+    "dbt-adapters>=1.14.0,<2.0",
     "pyyaml",
     "freezegun",
 ]

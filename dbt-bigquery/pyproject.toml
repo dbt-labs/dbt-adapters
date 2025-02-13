@@ -53,6 +53,7 @@ mypy_path = "../third-party-stubs/"
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
