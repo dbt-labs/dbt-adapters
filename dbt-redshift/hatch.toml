@@ -10,9 +10,12 @@ packages = ["src/dbt"]
 sources = ["src"]
 
 [envs.default]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-postgres",
+]
 dependencies = [
-    "dbt-adapters @ {root:uri}/../dbt-adapters",
-    "dbt-tests-adapter @ {root:uri}/../dbt-tests-adapter",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
@@ -29,7 +32,10 @@ dependencies = [
 ]
 
 [envs.default.scripts]
-setup = "pre-commit install"
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+]
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest {args:tests/functional}"
