@@ -42,11 +42,6 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adap
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
-[tool.pytest]
-env_files = ["test.env"]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
-color = true
-csv = "results.csv"
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
