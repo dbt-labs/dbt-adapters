@@ -194,7 +194,7 @@ class RedshiftCredentials(Credentials):
 
 
 def is_serverless(credentials: RedshiftCredentials) -> bool:
-    return "serverless" in credentials.host or credentials.is_serverless
+    return "serverless" in credentials.host or credentials.is_serverless is True
 
 
 def get_connection_method(
