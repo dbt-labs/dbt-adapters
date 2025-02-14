@@ -490,7 +490,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
         )
 
         if backend_pid := cls._get_backend_pid(open_connection):
-            open_connection.backend_pid = backend_pid  # type: ignore
+            open_connection.backend_pid = backend_pid
         return open_connection
 
     def execute(
