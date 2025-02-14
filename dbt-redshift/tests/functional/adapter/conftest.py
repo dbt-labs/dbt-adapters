@@ -1,8 +1,10 @@
+from typing import Generator
+
 import pytest
 
 
 @pytest.fixture
-def model_ddl(request) -> str:
+def model_ddl(request) -> Generator[str, None, None]:
     """
     Returns the contents of the DDL file for the model provided. Use with pytest parameterization.
 
