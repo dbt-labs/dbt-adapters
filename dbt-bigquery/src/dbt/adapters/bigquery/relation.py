@@ -34,7 +34,7 @@ class BigQueryRelation(BaseRelation):
     renameable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.Table,
+                RelationType.Table,  # type:ignore
             }
         )
     )
@@ -42,8 +42,8 @@ class BigQueryRelation(BaseRelation):
     replaceable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.View,
-                RelationType.Table,
+                RelationType.View,  # type:ignore
+                RelationType.Table,  # type:ignore
             }
         )
     )
@@ -97,7 +97,7 @@ class BigQueryRelation(BaseRelation):
 
         if new_materialized_view.options != existing_materialized_view.options:
             config_change_collection.options = BigQueryOptionsConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.options,
             )
 
@@ -105,12 +105,12 @@ class BigQueryRelation(BaseRelation):
             # the existing PartitionConfig is not hashable, but since we need to do
             # a full refresh either way, we don't need to provide a context
             config_change_collection.partition = BigQueryPartitionConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
             )
 
         if new_materialized_view.cluster != existing_materialized_view.cluster:
             config_change_collection.cluster = BigQueryClusterConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.cluster,
             )
 
