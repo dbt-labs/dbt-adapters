@@ -416,7 +416,9 @@ class RedshiftConnectionManager(SQLConnectionManager):
         with connection.handle.cursor() as c:
             sql = "select pg_backend_pid()"
             res = c.execute(sql).fetchone()
-        return res[0]
+        if res:
+            return res[0]
+        return None
 
     @classmethod
     def get_response(cls, cursor: redshift_connector.Cursor) -> AdapterResponse:
@@ -492,7 +494,9 @@ class RedshiftConnectionManager(SQLConnectionManager):
             retry_limit=credentials.retries,
             retryable_exceptions=retryable_exceptions,
         )
-        open_connection.backend_pid = cls._get_backend_pid(open_connection)
+
+        if backend_pid := cls._get_backend_pid(open_connection):
+            open_connection.backend_pid = backend_pid
         return open_connection
 
     def execute(
