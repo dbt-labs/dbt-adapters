@@ -2,9 +2,9 @@ import re
 import redshift_connector
 import sqlparse
 
-from multiprocessing import Lock
+from multiprocessing.synchronize import RLock
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Tuple, Union, Optional, List, TYPE_CHECKING
+from typing import Any, Callable, Dict, Generator, Tuple, Union, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from dbt.adapters.exceptions import FailedToConnectError
@@ -85,7 +85,7 @@ SSL_MODE_TRANSLATION = {
 
 
 @dataclass
-class RedshiftSSLConfig(dbtClassMixin, Replaceable):  # type: ignore
+class RedshiftSSLConfig(dbtClassMixin, Replaceable):
     ssl: bool = True
     sslmode: Optional[RedshiftSSLMode] = SSL_MODE_TRANSLATION[UserSSLMode.default()]
 
@@ -119,9 +119,9 @@ class RedshiftSSLConfig(dbtClassMixin, Replaceable):  # type: ignore
 class RedshiftCredentials(Credentials):
     host: str
     port: Port
-    method: str = RedshiftConnectionMethod.DATABASE  # type: ignore
+    method: str = RedshiftConnectionMethod.DATABASE
     user: Optional[str] = None
-    password: Optional[str] = None  # type: ignore
+    password: Optional[str] = None
     cluster_id: Optional[str] = field(
         default=None,
         metadata={"description": "If using IAM auth, the name of the cluster"},
@@ -392,7 +392,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
 
     def cancel(self, connection: Connection):
-        pid = connection.backend_pid  # type: ignore
+        pid = connection.backend_pid
         sql = f"select pg_terminate_backend({pid})"
         logger.debug(f"Cancel query on: '{connection.name}' with PID: {pid}")
         logger.debug(sql)
@@ -443,14 +443,14 @@ class RedshiftConnectionManager(SQLConnectionManager):
             raise DbtRuntimeError(str(e)) from e
 
     @contextmanager
-    def fresh_transaction(self):
+    def fresh_transaction(self) -> Generator[None, None, None]:
         """On entrance to this context manager, hold an exclusive lock and
         create a fresh transaction for redshift, then commit and begin a new
         one before releasing the lock on exit.
 
         See drop_relation in RedshiftAdapter for more information.
         """
-        drop_lock: Lock = self.lock
+        drop_lock: RLock = self.lock
 
         with drop_lock:
             connection = self.get_thread_connection()
@@ -486,7 +486,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             retry_limit=credentials.retries,
             retryable_exceptions=retryable_exceptions,
         )
-        open_connection.backend_pid = cls._get_backend_pid(open_connection)  # type: ignore
+        open_connection.backend_pid = cls._get_backend_pid(open_connection)
         return open_connection
 
     def execute(
@@ -560,7 +560,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
         Resolves: https://github.com/dbt-labs/dbt-redshift/issues/710
         Implementation of this fix: https://github.com/dbt-labs/dbt-core/pull/8215
         """
-        from sqlparse.lexer import Lexer  # type: ignore
+        from sqlparse.lexer import Lexer
 
         if hasattr(Lexer, "get_default_instance"):
             Lexer.get_default_instance()

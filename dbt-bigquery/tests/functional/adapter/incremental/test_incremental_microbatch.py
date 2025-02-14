@@ -51,7 +51,7 @@ class TestBigQueryMicrobatchInputWithDatetime(TestBigQueryMicrobatch):
 
 class TestBigQueryMicrobatchMissingPartitionBy:
     @pytest.fixture(scope="class")
-    def models(self) -> str:
+    def models(self):
         return {
             "microbatch.sql": microbatch_model_no_partition_by_sql,
             "input_model.sql": microbatch_input_sql,
@@ -65,7 +65,7 @@ class TestBigQueryMicrobatchMissingPartitionBy:
 
 class TestBigQueryMicrobatchInvalidPartitionByGranularity:
     @pytest.fixture(scope="class")
-    def models(self) -> str:
+    def models(self):
         return {
             "microbatch.sql": microbatch_model_invalid_partition_by_sql,
             "input_model.sql": microbatch_input_sql,

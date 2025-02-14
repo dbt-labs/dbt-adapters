@@ -47,9 +47,6 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-bigq
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-bigquery/CHANGELOG.md"
 
-[tool.mypy]
-mypy_path = "../third-party-stubs/"
-
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"

@@ -36,10 +36,7 @@ Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
 
 [tool.pytest.ini_options]
-testpaths = [
-    "../dbt-athena/tests/unit",
-    "../dbt-athena/tests/functional",
-]
+testpaths = ["../tests/unit", "../tests/functional"]
 env_files = ["../dbt-athena/test.env"]
 addopts = "-v --color=yes -n auto"
 filterwarnings = [
