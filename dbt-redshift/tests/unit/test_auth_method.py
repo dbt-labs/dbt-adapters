@@ -93,7 +93,7 @@ class TestInvalidMethod(AuthMethod):
                 profile="test",
                 timeout=None,
                 port=5439,
-                is_serverless=None,
+                is_serverless=False,
                 **DEFAULT_SSL_CONFIG,
             )
 
@@ -142,7 +142,7 @@ class TestDatabaseMethod(AuthMethod):
             db_groups=[],
             timeout=None,
             region=None,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -162,7 +162,7 @@ class TestDatabaseMethod(AuthMethod):
             db_groups=[],
             region=None,
             timeout=None,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -254,7 +254,7 @@ class TestIAMUserMethod(AuthMethod):
             db_groups=[],
             profile=None,
             port=5439,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -283,7 +283,7 @@ class TestIAMUserMethod(AuthMethod):
             profile="test",
             timeout=None,
             port=5439,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -313,7 +313,7 @@ class TestIAMUserMethod(AuthMethod):
             auto_create=False,
             db_groups=[],
             port=5439,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -466,7 +466,7 @@ class TestIAMRoleMethod(AuthMethod):
             db_groups=[],
             port=5439,
             group_federation=True,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -494,7 +494,7 @@ class TestIAMRoleMethod(AuthMethod):
             profile="test",
             port=5439,
             group_federation=True,
-            is_serverless=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 

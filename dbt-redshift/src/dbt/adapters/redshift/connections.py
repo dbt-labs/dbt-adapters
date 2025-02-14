@@ -186,6 +186,7 @@ class RedshiftCredentials(Credentials):
             "retries",
             "autocommit",
             "access_key_id",
+            "is_serverless",
         )
 
     @property
