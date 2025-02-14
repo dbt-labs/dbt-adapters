@@ -99,10 +99,14 @@ class RedshiftMaterializedViewConfig(RedshiftRelationConfigBase, RelationConfigV
     @classmethod
     def from_dict(cls, config_dict) -> Self:
         kwargs_dict = {
-            "mv_name": cls._render_part(ComponentName.Identifier, config_dict.get("mv_name")),
-            "schema_name": cls._render_part(ComponentName.Schema, config_dict.get("schema_name")),
+            "mv_name": cls._render_part(
+                ComponentName.Identifier, config_dict.get("mv_name")  # type:ignore
+            ),
+            "schema_name": cls._render_part(
+                ComponentName.Schema, config_dict.get("schema_name")  # type:ignore
+            ),
             "database_name": cls._render_part(
-                ComponentName.Database, config_dict.get("database_name")
+                ComponentName.Database, config_dict.get("database_name")  # type:ignore
             ),
             "query": config_dict.get("query"),
             "backup": config_dict.get("backup"),
@@ -136,7 +140,7 @@ class RedshiftMaterializedViewConfig(RedshiftRelationConfigBase, RelationConfigV
         if autorefresh_value is not None:
             config_dict["autorefresh"] = evaluate_bool(autorefresh_value)
 
-        if query := config.compiled_code:  # type: ignore
+        if query := config.compiled_code:
             config_dict.update({"query": query.strip()})
 
         if config.config.get("dist"):  # type: ignore
