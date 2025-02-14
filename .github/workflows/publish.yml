@@ -83,7 +83,7 @@ jobs:
         needs: bump-version  # bump-version can be skipped and is not directly used
         uses: ./.github/workflows/_integration-tests.yml
         with:
-            package: ${{ inputs.package }}
+            packages: ${{ toJSON(inputs.package) }}
             branch: ${{ inputs.branch }}
         secrets: inherit
 

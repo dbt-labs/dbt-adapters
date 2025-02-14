@@ -111,7 +111,7 @@ class AthenaCredentials(Credentials):
 
 
 class AthenaCursor(Cursor):
-    def __init__(self, **kwargs) -> None:  # type: ignore
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._executor = ThreadPoolExecutor()
 
@@ -224,9 +224,9 @@ class AthenaCursor(Cursor):
                     return self
                 raise OperationalError(query_execution.state_change_reason)
 
-            return execute_with_iceberg_retries()  # type: ignore
+            return execute_with_iceberg_retries()
 
-        return inner()  # type: ignore
+        return inner()
 
 
 class AthenaConnectionManager(SQLConnectionManager):
@@ -236,7 +236,7 @@ class AthenaConnectionManager(SQLConnectionManager):
         self.query_header = AthenaMacroQueryStringSetter(self.profile, query_header_context)
 
     @classmethod
-    def data_type_code_to_name(cls, type_code: str) -> str:
+    def data_type_code_to_name(cls, type_code: str) -> str:  # type:ignore
         """
         Get the string representation of the data type from the Athena metadata. Dbt performs a
         query to retrieve the types of the columns in the SQL query. Then these types are compared
@@ -287,7 +287,7 @@ class AthenaConnectionManager(SQLConnectionManager):
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
 
-            connection.state = ConnectionState.OPEN
+            connection.state = ConnectionState.OPEN  # type:ignore
             connection.handle = handle
 
         except Exception as exc:
@@ -295,7 +295,7 @@ class AthenaConnectionManager(SQLConnectionManager):
                 f"Got an error when attempting to open a Athena connection due to {exc}"
             )
             connection.handle = None
-            connection.state = ConnectionState.FAIL
+            connection.state = ConnectionState.FAIL  # type:ignore
             raise ConnectionError(str(exc))
 
         return connection
