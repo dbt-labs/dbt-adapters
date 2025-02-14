@@ -22,6 +22,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     refresh_interval_minutes: Optional[float] = 30
     expiration_timestamp: Optional[datetime] = None
     max_staleness: Optional[str] = None
+    allow_non_incremental_definition: Optional[bool] = None
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
@@ -58,6 +59,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "refresh_interval_minutes": numeric,
             "expiration_timestamp": interval,
             "max_staleness": interval,
+            "allow_non_incremental_definition": boolean,
             "kms_key_name": string,
             "description": escaped_string,
             "labels": array,
@@ -85,6 +87,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "refresh_interval_minutes": float_setting,
             "expiration_timestamp": None,
             "max_staleness": None,
+            "allow_non_incremental_definition": bool_setting,
             "kms_key_name": None,
             "description": None,
             "labels": None,
@@ -103,18 +106,19 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         if kwargs_dict["enable_refresh"] is False:
             kwargs_dict.update({"refresh_interval_minutes": None, "max_staleness": None})
 
-        options: Self = super().from_dict(kwargs_dict)  # type:ignore
+        options: Self = super().from_dict(kwargs_dict)
         return options
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
         config_dict = {
-            option: relation_config.config.extra.get(option)  # type:ignore
+            option: relation_config.config.extra.get(option)
             for option in [
                 "enable_refresh",
                 "refresh_interval_minutes",
                 "expiration_timestamp",
                 "max_staleness",
+                "allow_non_incremental_definition",
                 "kms_key_name",
                 "description",
                 "labels",
@@ -122,13 +126,11 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         }
 
         # update dbt-specific versions of these settings
-        if hours_to_expiration := relation_config.config.extra.get(  # type:ignore
-            "hours_to_expiration"
-        ):
+        if hours_to_expiration := relation_config.config.extra.get("hours_to_expiration"):
             config_dict.update(
                 {"expiration_timestamp": datetime.now() + timedelta(hours=hours_to_expiration)}
             )
-        if not relation_config.config.persist_docs:  # type:ignore
+        if not relation_config.config.persist_docs:
             del config_dict["description"]
 
         return config_dict
@@ -140,6 +142,9 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "refresh_interval_minutes": table.mview_refresh_interval.seconds / 60,
             "expiration_timestamp": table.expires,
             "max_staleness": None,
+            "allow_non_incremental_definition": table._properties.get("materializedView", {}).get(
+                "allowNonIncrementalDefinition"
+            ),
             "description": table.description,
         }
 
