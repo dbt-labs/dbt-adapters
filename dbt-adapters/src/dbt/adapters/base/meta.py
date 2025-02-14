@@ -121,7 +121,7 @@ class AdapterMeta(abc.ABCMeta):
         # I'm not sure there is any benefit to it after poking around a bit,
         # but having it doesn't hurt on the python side (and omitting it could
         # hurt for obscure metaclass reasons, for all I know)
-        cls = abc.ABCMeta.__new__(mcls, name, bases, namespace, **kwargs)  # type: ignore
+        cls = abc.ABCMeta.__new__(mcls, name, bases, namespace, **kwargs)
 
         # this is very much inspired by ABCMeta's own implementation
 

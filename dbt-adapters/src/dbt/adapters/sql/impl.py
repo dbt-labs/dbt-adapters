@@ -75,7 +75,7 @@ class SQLAdapter(BaseAdapter):
         import agate
 
         # TODO CT-211
-        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))  # type: ignore[attr-defined]
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
         return "float8" if decimals else "integer"
 
     @classmethod
@@ -247,7 +247,7 @@ class SQLAdapter(BaseAdapter):
         # return fetched output for engines where explain plans are emitted as columnar
         # results. Any macro override that deviates from this behavior may encounter an
         # assertion error in the runtime.
-        adapter_response = result.response  # type: ignore[attr-defined]
+        adapter_response = result.response
         assert isinstance(adapter_response, AdapterResponse), (
             f"Expected AdapterResponse from validate_sql macro execution, "
             f"got {type(adapter_response)}."
