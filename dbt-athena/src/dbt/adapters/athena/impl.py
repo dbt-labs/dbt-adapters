@@ -216,7 +216,7 @@ class AthenaAdapter(SQLAdapter):
                     region_name=client.region_name,
                     config=get_boto3_config(num_retries=creds.effective_num_retries),
                 )
-            catalog = self._get_data_catalog(relation.database)
+            catalog = self._get_data_catalog(relation.database)  # type:ignore
             catalog_id = get_catalog_id(catalog)
             lf_permissions = LfPermissions(catalog_id, relation, lf)  # type: ignore
             lf_permissions.process_filters(lf_config)
@@ -321,11 +321,15 @@ class AthenaAdapter(SQLAdapter):
 
         mapping = {
             S3DataNaming.UNIQUE: path.join(table_prefix, str(uuid4())),
-            S3DataNaming.TABLE: path.join(table_prefix, s3_path_table_part),
-            S3DataNaming.TABLE_UNIQUE: path.join(table_prefix, s3_path_table_part, str(uuid4())),
-            S3DataNaming.SCHEMA_TABLE: path.join(table_prefix, schema_name, s3_path_table_part),
+            S3DataNaming.TABLE: path.join(table_prefix, s3_path_table_part),  # type:ignore
+            S3DataNaming.TABLE_UNIQUE: path.join(
+                table_prefix, s3_path_table_part, str(uuid4())  # type:ignore
+            ),
+            S3DataNaming.SCHEMA_TABLE: path.join(
+                table_prefix, schema_name, s3_path_table_part  # type:ignore
+            ),
             S3DataNaming.SCHEMA_TABLE_UNIQUE: path.join(
-                table_prefix, schema_name, s3_path_table_part, str(uuid4())
+                table_prefix, schema_name, s3_path_table_part, str(uuid4())  # type:ignore
             ),
         }
 
@@ -340,7 +344,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -402,7 +406,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -441,7 +445,7 @@ class AthenaAdapter(SQLAdapter):
     def generate_unique_temporary_table_suffix(self, suffix_initial: str = "__dbt_tmp") -> str:
         return f"{suffix_initial}_{str(uuid4()).replace('-', '_')}"
 
-    def quote(self, identifier: str) -> str:
+    def quote(self, identifier: str) -> str:  # type:ignore
         return f"{self.quote_character}{identifier}{self.quote_character}"
 
     @available
@@ -622,7 +626,7 @@ class AthenaAdapter(SQLAdapter):
         """
         This function is invoked by Adapter.get_catalog for each schema.
         """
-        data_catalog = self._get_data_catalog(information_schema.database)
+        data_catalog = self._get_data_catalog(information_schema.database)  # type:ignore
         data_catalog_type = get_catalog_type(data_catalog)
 
         conn = self.connections.get_thread_connection()
@@ -652,7 +656,9 @@ class AthenaAdapter(SQLAdapter):
                 for page in paginator.paginate(**kwargs):
                     for table in page["TableList"]:
                         catalog.extend(
-                            self._get_one_table_for_catalog(table, information_schema.database)
+                            self._get_one_table_for_catalog(
+                                table, information_schema.database  # type:ignore
+                            )
                         )
             table = agate.Table.from_object(catalog)
         else:
@@ -674,14 +680,14 @@ class AthenaAdapter(SQLAdapter):
                     for table in page["TableMetadataList"]:
                         catalog.extend(
                             self._get_one_table_for_non_glue_catalog(
-                                table, schema, information_schema.database
+                                table, schema, information_schema.database  # type:ignore
                             )
                         )
             table = agate.Table.from_object(catalog)
 
         return self._catalog_filter_table(table, used_schemas)
 
-    def _get_catalog_schemas(
+    def _get_catalog_schemas(  # type:ignore
         self, relation_configs: Iterable[RelationConfig]
     ) -> AthenaSchemaSearchMap:
         """
@@ -723,10 +729,10 @@ class AthenaAdapter(SQLAdapter):
     def list_relations_without_caching(
         self, schema_relation: AthenaRelation
     ) -> List[BaseRelation]:
-        data_catalog = self._get_data_catalog(schema_relation.database)
+        data_catalog = self._get_data_catalog(schema_relation.database)  # type:ignore
         if data_catalog and data_catalog["Type"] != "GLUE":
             # For non-Glue Data Catalogs, use the original Athena query against INFORMATION_SCHEMA approach
-            return super().list_relations_without_caching(schema_relation)  # type: ignore
+            return super().list_relations_without_caching(schema_relation)
 
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
@@ -795,7 +801,7 @@ class AthenaAdapter(SQLAdapter):
             glue_table_definition = self.get_glue_table(_rel)
             if glue_table_definition:
                 _table_definition = self._get_one_table_for_catalog(
-                    glue_table_definition["Table"], _rel.database
+                    glue_table_definition["Table"], _rel.database  # type:ignore
                 )
                 _table_definitions.extend(_table_definition)
         table = agate.Table.from_object(_table_definitions)
@@ -812,7 +818,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(src_relation.database)
+        data_catalog = self._get_data_catalog(src_relation.database)  # type:ignore
         src_catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -838,7 +844,7 @@ class AthenaAdapter(SQLAdapter):
         )
         src_table_partitions = src_table_partitions_result.build_full_result().get("Partitions")
 
-        data_catalog = self._get_data_catalog(src_relation.database)
+        data_catalog = self._get_data_catalog(src_relation.database)  # type:ignore
         target_catalog_id = get_catalog_id(data_catalog)
 
         target_get_partitions_paginator = glue_client.get_paginator("get_partitions")
@@ -945,7 +951,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -1006,7 +1012,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -1174,7 +1180,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -1222,7 +1228,7 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
-        data_catalog = self._get_data_catalog(relation.database)
+        data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
@@ -1309,7 +1315,7 @@ class AthenaAdapter(SQLAdapter):
         """
         col_csv = f", \n{' ' * 16}".join(table_columns)
         staging_relation = relation.incorporate(
-            path={"identifier": relation.identifier + "__dbt_tmp_migration_staging"}
+            path={"identifier": relation.identifier + "__dbt_tmp_migration_staging"}  # type:ignore
         )
         ctas = dedent(
             f"""\
@@ -1329,7 +1335,7 @@ class AthenaAdapter(SQLAdapter):
         )
 
         backup_relation = relation.incorporate(
-            path={"identifier": relation.identifier + "__dbt_tmp_migration_backup"}
+            path={"identifier": relation.identifier + "__dbt_tmp_migration_backup"}  # type:ignore
         )
         backup_sql = self.execute_macro(
             "create_table_as",
@@ -1477,7 +1483,7 @@ class AthenaAdapter(SQLAdapter):
     @classmethod
     def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
         try:
-            table_format = config._extra.get("table_type")
+            table_format = config._extra.get("table_type")  # type:ignore
         except AttributeError:
             table_format = None
         return {
