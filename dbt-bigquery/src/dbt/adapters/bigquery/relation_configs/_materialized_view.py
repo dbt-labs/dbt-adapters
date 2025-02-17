@@ -48,9 +48,15 @@ class BigQueryMaterializedViewConfig(BigQueryBaseRelationConfig):
     def from_dict(cls, config_dict: Dict[str, Any]) -> "BigQueryMaterializedViewConfig":
         # required
         kwargs_dict: Dict[str, Any] = {
-            "table_id": cls._render_part(ComponentName.Identifier, config_dict["table_id"]),
-            "dataset_id": cls._render_part(ComponentName.Schema, config_dict["dataset_id"]),
-            "project_id": cls._render_part(ComponentName.Database, config_dict["project_id"]),
+            "table_id": cls._render_part(
+                ComponentName.Identifier, config_dict["table_id"]  # type:ignore
+            ),
+            "dataset_id": cls._render_part(
+                ComponentName.Schema, config_dict["dataset_id"]  # type:ignore
+            ),
+            "project_id": cls._render_part(
+                ComponentName.Database, config_dict["project_id"]  # type:ignore
+            ),
             "options": BigQueryOptionsConfig.from_dict(config_dict["options"]),
         }
 
@@ -61,7 +67,9 @@ class BigQueryMaterializedViewConfig(BigQueryBaseRelationConfig):
         if cluster := config_dict.get("cluster"):
             kwargs_dict.update({"cluster": BigQueryClusterConfig.from_dict(cluster)})
 
-        materialized_view: "BigQueryMaterializedViewConfig" = super().from_dict(kwargs_dict)
+        materialized_view: "BigQueryMaterializedViewConfig" = super().from_dict(
+            kwargs_dict
+        )  # type:ignore
         return materialized_view
 
     @classmethod

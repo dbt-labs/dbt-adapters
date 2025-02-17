@@ -37,7 +37,7 @@ class RelationConfigBase:
 
         Returns: the `RelationConfigBase` representation associated with the provided dict
         """
-        return cls(**filter_null_values(kwargs_dict))  # type: ignore
+        return cls(**filter_null_values(kwargs_dict))
 
     @classmethod
     def _not_implemented_error(cls) -> NotImplementedError:

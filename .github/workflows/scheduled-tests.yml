@@ -58,7 +58,7 @@ jobs:
         strategy:
             fail-fast: false
         with:
-            package: '["dbt-athena", "dbt-athena-community", "dbt-bigquery", "dbt-postgres", "dbt-redshift", "dbt-snowflake", "dbt-spark"]'
+            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}

@@ -43,11 +43,9 @@ Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-postgres/CHANGELOG.md"
 
 [tool.pytest.ini_options]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
-color = true
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
 markers = [
     "serial: marks tests to be run one at a time (de-select with `-m 'not serial'`)"
 ]
