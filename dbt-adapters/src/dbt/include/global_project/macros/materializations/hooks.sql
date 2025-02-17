@@ -1,14 +1,14 @@
-{% macro run_hooks(hooks, inside_transaction=True) %}
-  {% if len(hooks) > 0 %}
+{% macro run_hooks(hooks, inside_transaction=True, span_name='run_hooks') %}
+  {% if hooks|length > 0 %}
       {% set tracer = modules.opentelemetry.trace.get_tracer("dbt-runner") %}
-      {% set hook_span = tracer.start_span('hooks', context=modules.opentelemetry.context.get_current())%}
+      {% set hook_span = tracer.start_span(span_name, context=modules.opentelemetry.context.get_current())%}
       {% set ctx = modules.opentelemetry.trace.set_span_in_context(hook_span) %}
       {% set token = modules.opentelemetry.context.attach(ctx) %}
       {% for hook in hooks | selectattr('transaction', 'equalto', inside_transaction)  %}
         {% if not inside_transaction and loop.first %}
           {% call statement(auto_begin=inside_transaction) %}
             commit;
-          {% endcall %}
+{% endcall %}
         {% endif %}
         {% set rendered = render(hook.get('sql')) | trim %}
         {% if (rendered | length) > 0 %}
