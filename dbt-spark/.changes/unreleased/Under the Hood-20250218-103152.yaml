@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: handle new is_iceberg column gracefully
+time: 2025-02-18T10:31:52.545425-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "799"
