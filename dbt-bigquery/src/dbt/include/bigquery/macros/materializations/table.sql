@@ -46,6 +46,8 @@
 {% endmaterialization %}
 
 {% macro py_write_table(compiled_code, target_relation) %}
+{%- set dataframe_python_syntax = config.get('dataframe_python_syntax', 'spark') -%}
+{%- if dataframe_python_syntax == 'spark' %}
 from pyspark.sql import SparkSession
 {%- set raw_partition_by = config.get('partition_by', none) -%}
 {%- set raw_cluster_by = config.get('cluster_by', none) -%}
@@ -138,4 +140,17 @@ df.write \
   .option("clusteredFields", "{{- raw_cluster_by | join(',') -}}") \
   {%- endif %}
   .save("{{target_relation}}")
+{% endif %}
+{%- if dataframe_python_syntax == 'bigframes' %}
+import bigframes.pandas as bpd
+bpd.options.bigquery.project = "{{target.project}}"
+bpd.options.bigquery.location = "{{target.location}}"
+bpd.options.compute.extra_query_labels["bigframes-dbt-api-0"] = 'python-model-table-test0'
+bpd.options.compute.extra_query_labels["bigframes-dbt-api-1"] = 'python-model-table-test1'
+{{ compiled_code }}
+dbt = dbtObj(bpd.read_gbq)
+session = None
+df = model(dbt,session)
+df.to_gbq("{{target_relation}}",if_exists='replace')
+{% endif %}
 {% endmacro %}

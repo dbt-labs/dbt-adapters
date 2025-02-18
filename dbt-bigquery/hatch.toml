@@ -27,6 +27,8 @@ dependencies = [
     "pytest-logbook~=1.2",
     "pytest-mock",
     "pytest-xdist",
+    "nbformat~=5.10.4",
+    "google-cloud-aiplatform~=1.72.0",
 ]
 
 [envs.default.scripts]

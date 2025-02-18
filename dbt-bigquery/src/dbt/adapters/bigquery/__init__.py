@@ -12,3 +12,5 @@ Plugin = AdapterPlugin(
     credentials=BigQueryCredentials,
     include_path=bigquery.PACKAGE_PATH,
 )
+
+print('34834837498hjsdhfudshfhiuedfiuf49r9438573985798')
