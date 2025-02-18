@@ -283,7 +283,7 @@ class SnowflakeAdapter(SQLAdapter):
         if self.behavior.enable_iceberg_materializations.no_warn:
             database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
         else:
-            if "is_iceberg" in result.column_names:
+            if "is_iceberg" in result:
                 database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
             else:
                 database, schema, identifier, relation_type, is_dynamic = result
