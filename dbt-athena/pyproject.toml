@@ -39,16 +39,16 @@ dependencies=[
     "tenacity>=8.2,<10.0",
 ]
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-athena/dbt-athena"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-athena.git#subdirectory=dbt-athena"
-Issues = "https://github.com/dbt-labs/dbt-athena/issues"
-Changelog = "https://github.com/dbt-labs/dbt-athena/blob/main/dbt-athena/CHANGELOG.md"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-athena"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
 
-[tool.pytest]
+[tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
-color = true
-csv = "results.csv"
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",

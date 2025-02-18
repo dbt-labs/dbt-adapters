@@ -24,7 +24,7 @@ defaults:
 
 jobs:
     changelog-check:
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'Skip Changelog') }}
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip:changelog-check') }}
         outputs:
             exists: ${{ steps.changelog.outputs.exists }}
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -39,7 +39,7 @@ jobs:
 
     comment:
         needs: changelog-check
-        if: needs.changelog-check.outputs.exists == false
+        if: needs.changelog-check.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         env:
             AUTHOR: "github-actions[bot]"

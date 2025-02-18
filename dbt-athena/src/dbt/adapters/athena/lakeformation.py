@@ -174,7 +174,7 @@ class LfTagsManager:
     ) -> None:
         table_appendix = f".{self.table}" if self.table else ""
         columns_appendix = f" for columns {columns}" if columns else ""
-        resource_msg = self.database + table_appendix + columns_appendix
+        resource_msg = self.database + table_appendix + columns_appendix  # type:ignore
         if failures := response.get("Failures", []):
             base_msg = f"Failed to {verb} LF tags: {lf_tags} to " + resource_msg
             for failure in failures:
@@ -224,8 +224,8 @@ class LfPermissions:
     ) -> None:
         self.catalog_id = catalog_id
         self.relation = relation
-        self.database: str = relation.schema
-        self.table: str = relation.identifier
+        self.database: str = relation.schema  # type:ignore
+        self.table: str = relation.identifier  # type:ignore
         self.lf_client = lf_client
 
     def get_filters(self) -> Dict[str, DataCellsFilterTypeDef]:

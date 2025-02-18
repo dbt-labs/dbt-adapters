@@ -37,20 +37,16 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-bigquery"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-bigquery"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-bigquery.git"
-Issues = "https://github.com/dbt-labs/dbt-bigquery/issues"
-Changelog = "https://github.com/dbt-labs/dbt-bigquery/blob/main/CHANGELOG.md"
-
-[tool.mypy]
-mypy_path = "third-party-stubs/"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-bigquery"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-bigquery/CHANGELOG.md"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/functional", "tests/unit"]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
 env_files = ["test.env"]
-addopts = "-v -n auto"
-color = true
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",

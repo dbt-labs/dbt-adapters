@@ -36,23 +36,12 @@ dependencies = [
     "typing-extensions>=4.0,<5.0",
 ]
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-adapters"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-adapters"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-adapters.git"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
-Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/CHANGELOG.md"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
-[tool.mypy]
-mypy_path = "third-party-stubs/"
-[[tool.mypy.overrides]]
-module = ["dbt.adapters.events.adapter_types_pb2"]
-follow_imports = "skip"
-
-[tool.pytest]
-env_files = ["test.env"]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
-color = true
-csv = "results.csv"
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
