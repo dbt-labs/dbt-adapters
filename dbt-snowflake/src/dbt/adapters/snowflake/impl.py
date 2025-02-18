@@ -283,9 +283,11 @@ class SnowflakeAdapter(SQLAdapter):
         if self.behavior.enable_iceberg_materializations.no_warn:
             database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
         else:
-            database, schema, identifier, relation_type, is_dynamic = result
-            is_iceberg = "N"
-
+            if "is_iceberg" in result.column_names:
+                database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+            else:
+                database, schema, identifier, relation_type, is_dynamic = result
+                is_iceberg = "N"
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
         except ValueError:
