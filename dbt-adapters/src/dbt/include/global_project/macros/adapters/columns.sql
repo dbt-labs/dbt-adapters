@@ -58,7 +58,7 @@
     {%- if (col_err | length) > 0 -%}
       {{ exceptions.column_type_missing(column_names=col_err) }}
     {%- elif (col_naked_numeric | length) > 0 -%}
-      {{ exceptions.warn("Detected columns with numeric type and unspecified precision/scale, this can lead to unintended rounding: " ~ col_naked_numeric ~ "`") }}
+      {{ exceptions.warn("Detected columns with numeric type and unspecified precision/scale, this can lead to unintended rounding: " ~ col_naked_numeric) }}
     {%- endif -%}
 {% endmacro %}
 
