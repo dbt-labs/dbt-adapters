@@ -16,6 +16,7 @@ jobs:
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
+            fail-fast: false
         uses: ./.github/workflows/publish-internal.yml
         with:
             package: ${{ matrix.package }}
