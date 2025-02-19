@@ -1,4 +1,5 @@
 from typing import List
+
 from dbt_common.exceptions import DbtRuntimeError
 
 
