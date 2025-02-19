@@ -1,14 +1,30 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg" alt="dbt logo" width="500"/>
+    <img
+        src="https://raw.githubusercontent.com/dbt-labs/dbt/ec7dee39f793aa4f7dd3dae37282cc87664813e4/etc/dbt-logo-full.svg"
+        alt="dbt logo"
+        width="500"
+    />
 </p>
+
 <p align="center">
-  <a href="https://github.com/dbt-labs/dbt-bigquery/actions/workflows/main.yml">
-    <img src="https://github.com/dbt-labs/dbt-bigquery/actions/workflows/main.yml/badge.svg?event=push" alt="Unit Tests Badge"/>
-  </a>
-  <a href="https://github.com/dbt-labs/dbt-bigquery/actions/workflows/integration.yml">
-    <img src="https://github.com/dbt-labs/dbt-bigquery/actions/workflows/integration.yml/badge.svg?event=push" alt="Integration Tests Badge"/>
-  </a>
+    <a href="https://pypi.org/project/dbt-bigquery/">
+        <img src="https://badge.fury.io/py/dbt-bigquery.svg" />
+    </a>
+    <a target="_blank" href="https://pypi.org/project/dbt-bigquery/" style="background:none">
+        <img src="https://img.shields.io/pypi/pyversions/dbt-bigquery">
+    </a>
+    <a href="https://github.com/psf/black">
+        <img src="https://img.shields.io/badge/code%20style-black-000000.svg" />
+    </a>
+    <a href="https://github.com/python/mypy">
+        <img src="https://www.mypy-lang.org/static/mypy_badge.svg" />
+    </a>
+    <a href="https://pepy.tech/project/dbt-bigquery">
+        <img src="https://static.pepy.tech/badge/dbt-bigquery/month" />
+    </a>
 </p>
+
+# dbt
 
 **[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
@@ -16,24 +32,13 @@ dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-agg
 
 ## dbt-bigquery
 
-The `dbt-bigquery` package contains all of the code enabling dbt to work with Google BigQuery. For
-more information on using dbt with BigQuery, consult [the docs](https://docs.getdbt.com/docs/profile-bigquery).
+`dbt-bigquery` enables dbt to work with Google BigQuery.
+For more information on using dbt with BigQuery, consult [the docs](https://docs.getdbt.com/docs/profile-bigquery).
 
-## Getting started
+# Getting started
 
-- [Install dbt](https://docs.getdbt.com/docs/installation)
-- Read the [introduction](https://docs.getdbt.com/docs/introduction/) and [viewpoint](https://docs.getdbt.com/docs/about/viewpoint/)
+Review the repository [README.md](/README.md) as most of that information pertains to `dbt-bigquery`.
 
-## Join the dbt Community
+## Contribute
 
-- Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
-- Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
-
-## Reporting bugs and contributing code
-
-- Want to report a bug or request a feature? Let us know on [Slack](http://community.getdbt.com/), or open [an issue](https://github.com/dbt-labs/dbt-bigquery/issues/new)
-- Want to help us build dbt? Check out the [Contributing Guide](https://github.com/dbt-labs/dbt-bigquery/blob/HEAD/CONTRIBUTING.md)
-
-## Code of Conduct
-
-Everyone interacting in the dbt project's codebases, issue trackers, chat rooms, and mailing lists is expected to follow the [dbt Code of Conduct](https://community.getdbt.com/code-of-conduct).
+- Want to help us build `dbt-bigquery`? Check out the [Contributing Guide](CONTRIBUTING.md).

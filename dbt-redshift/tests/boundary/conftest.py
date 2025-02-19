@@ -12,7 +12,7 @@ def connection() -> redshift_connector.Connection:
         user=os.getenv("REDSHIFT_TEST_USER"),
         password=os.getenv("REDSHIFT_TEST_PASS"),
         host=os.getenv("REDSHIFT_TEST_HOST"),
-        port=int(os.getenv("REDSHIFT_TEST_PORT")),
+        port=int(os.getenv("REDSHIFT_TEST_PORT", 5439)),
         database=os.getenv("REDSHIFT_TEST_DBNAME"),
         region=os.getenv("REDSHIFT_TEST_REGION"),
     )

@@ -39,7 +39,7 @@ jobs:
 
     comment:
         needs: changelog-check
-        if: needs.changelog-check.outputs.exists == false
+        if: needs.changelog-check.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         env:
             AUTHOR: "github-actions[bot]"

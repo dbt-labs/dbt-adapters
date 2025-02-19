@@ -1,17 +1,17 @@
-repo=$1
-source_branch=$2
-target_branch=$3
+ADAPTER=$1
+SOURCE_BRANCH=$2
+TARGET_BRANCH=$3
 
 # create a remote for the legacy adapter repo and fetch the latest commits
-git remote remove old || true
-git remote add old https://github.com/dbt-labs/$repo.git
-git fetch old
+git remote remove adapter || true
+git remote add adapter https://github.com/dbt-labs/$ADAPTER.git
+git fetch adapter
 
 # merge the updated branch from the legacy repo into the dbt-adapters repo
-git checkout $target_branch
-git merge old/$source_branch --allow-unrelated-histories
+git checkout $TARGET_BRANCH
+git merge adapter/$SOURCE_BRANCH --allow-unrelated-histories
 
 # remove the remote that was created by this process
-git remote remove old || true
+git remote remove adapter || true
 
 # manually clean up duplication or unwanted files

@@ -168,7 +168,7 @@ cython_debug/
 # VSCode
 .vscode/
 .venv/
-
+*.code-workspace
 # Vim
 *.swp
 

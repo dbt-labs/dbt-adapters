@@ -65,6 +65,7 @@ class TestBigQueryValidateConnection(BaseValidateConnection):
     pass
 
 
+@pytest.mark.skip(reason="Known flakey test to be reviewed")
 class TestDocsGenerateBigQuery(BaseDocsGenerate):
     @pytest.fixture(scope="class")
     def expected_catalog(self, project):

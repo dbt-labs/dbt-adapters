@@ -30,7 +30,7 @@ class AthenaColumn(Column):
         return self.dtype.lower() in {"timestamp"}
 
     def is_array(self) -> bool:
-        return self.dtype.lower().startswith("array")  # type: ignore
+        return self.dtype.lower().startswith("array")
 
     @classmethod
     def string_type(cls, size: int) -> str:
@@ -58,7 +58,7 @@ class AthenaColumn(Column):
         if match:
             return match.group(1)
         # If for some reason there's no match, fall back to the original string
-        return self.dtype  # type: ignore
+        return self.dtype
 
     def string_size(self) -> int:
         if not self.is_string():
@@ -72,7 +72,7 @@ class AthenaColumn(Column):
             return self.string_type(self.string_size())
 
         if self.is_numeric():
-            return self.numeric_type(self.dtype, self.numeric_precision, self.numeric_scale)  # type: ignore
+            return self.numeric_type(self.dtype, self.numeric_precision, self.numeric_scale)
 
         if self.is_binary():
             return self.binary_type()
@@ -94,4 +94,4 @@ class AthenaColumn(Column):
             )
             return self.array_type(inner_type_col.data_type)
 
-        return self.dtype  # type: ignore
+        return self.dtype

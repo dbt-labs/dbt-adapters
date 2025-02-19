@@ -44,11 +44,11 @@ class RedshiftConfig(AdapterConfig):
 
 
 class RedshiftAdapter(SQLAdapter):
-    Relation = RedshiftRelation  # type: ignore
+    Relation = RedshiftRelation
     ConnectionManager = RedshiftConnectionManager
     connections: RedshiftConnectionManager
 
-    AdapterSpecificConfigs = RedshiftConfig  # type: ignore
+    AdapterSpecificConfigs = RedshiftConfig
 
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,

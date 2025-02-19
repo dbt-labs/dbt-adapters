@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import ContextManager, List, Optional, Tuple
+from typing import Generator, List, Optional, Tuple, Any
 
 import agate
 
@@ -15,7 +15,7 @@ class ConnectionManagerStub(BaseConnectionManager):
     raised_exceptions: List[Exception]
 
     @contextmanager
-    def exception_handler(self, sql: str) -> ContextManager:  # type: ignore
+    def exception_handler(self, sql: str) -> Generator[None, Any, None]:  # type: ignore
         # catch all exceptions and put them on this class for inspection in tests
         try:
             yield
@@ -28,7 +28,7 @@ class ConnectionManagerStub(BaseConnectionManager):
         names = []
         for connection in self.thread_connections.values():
             if connection.state == ConnectionState.OPEN:
-                connection.state = ConnectionState.CLOSED
+                connection.state = ConnectionState.CLOSED  # type: ignore
                 if name := connection.name:
                     names.append(name)
         return names
@@ -36,7 +36,7 @@ class ConnectionManagerStub(BaseConnectionManager):
     @classmethod
     def open(cls, connection: Connection) -> Connection:
         # there's no database, so just change the state
-        connection.state = ConnectionState.OPEN
+        connection.state = ConnectionState.OPEN  # type: ignore
         return connection
 
     def begin(self) -> None:

@@ -106,7 +106,7 @@ class RedshiftSortConfig(RedshiftRelationConfigBase, RelationConfigValidationMix
             "sortkey": tuple(column for column in config_dict.get("sortkey", {})),
         }
         sort: Self = super().from_dict(kwargs_dict)  # type: ignore
-        return sort  # type: ignore
+        return sort
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:

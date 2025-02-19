@@ -47,5 +47,5 @@ class SnowflakeColumn(Column):
         if "vector" in raw_data_type.lower():
             column = cls(name, raw_data_type, None, None, None)
         else:
-            column = super().from_description(name, raw_data_type)
+            column = super().from_description(name, raw_data_type)  # type:ignore
         return column
