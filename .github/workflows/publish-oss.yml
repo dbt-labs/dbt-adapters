@@ -1,5 +1,5 @@
-name: "Publish"
-run-name: "Publish - ${{ inputs.package }} - ${{ inputs.deploy-to }} - ${{ github.actor }}"
+name: "Publish to OSS"
+run-name: "Publish to OSS - ${{ inputs.package }} - ${{ inputs.deploy-to }} - ${{ github.actor }}"
 
 on:
     workflow_dispatch:
@@ -25,14 +25,6 @@ on:
                 description: "Choose the branch to publish from"
                 type: string
                 default: "main"
-            pypi-internal:
-                description: "Publish Internally"
-                type: boolean
-                default: true
-            pypi-public:
-                description: "Publish to PyPI"
-                type: boolean
-                default: false
             skip-unit-tests:
                 description: "Skip running unit tests"
                 type: boolean
@@ -44,7 +36,7 @@ on:
 
 # don't publish to the same target in parallel
 concurrency:
-    group: ${{ github.workflow }}-${{ inputs.package }}-${{ inputs.deploy-to }}
+    group: Publish_OSS-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
 
 defaults:
@@ -82,25 +74,10 @@ jobs:
                 jobs: ${{ toJSON(needs) }}
                 allowed-skips: ${{ toJSON(needs) }}
 
-    publish-internal:
-        if: |
-            always() &&
-            inputs.pypi-internal == true &&
-            needs.publish-prep-checks.result == 'success' &&
-            !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter", "dbt-athena-community"]'), inputs.package)
-        needs: publish-prep-checks
-        uses: ./.github/workflows/_publish-internal.yml
-        with:
-            package: ${{ inputs.package }}
-            deploy-to: ${{ inputs.deploy-to }}
-            branch: ${{ inputs.branch }}
-        secrets: inherit
-
     generate-changelog:
         needs: publish-prep-checks
         if: |
             always() &&
-            inputs.pypi-public == true &&
             needs.publish-prep-checks.result == 'success'
         uses: ./.github/workflows/_generate-changelog.yml
         with:
@@ -109,10 +86,9 @@ jobs:
             branch: ${{ inputs.branch }}
         secrets: inherit
 
-    publish-pypi:
+    publish:
         if: |
             always() &&
-            inputs.pypi-public == true &&
             needs.publish-prep-checks.result == 'success' &&
             needs.generate-changelog.result == 'success'
         needs: [publish-prep-checks, generate-changelog]
