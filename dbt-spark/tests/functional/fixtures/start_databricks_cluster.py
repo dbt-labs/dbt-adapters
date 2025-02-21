@@ -46,14 +46,14 @@ def _cursor():
     creds = databricks_http_cluster_target()
 
     conn_url = SparkConnectionManager.SPARK_CONNECTION_URL.format(
-        host=creds.host,
-        port=creds.port,
-        organization=creds.organization,
-        cluster=creds.cluster,
+        host=creds["host"],
+        port=creds["port"],
+        organization=creds["organization"],
+        cluster=creds["cluster"],
     )
 
     transport = THttpClient.THttpClient(conn_url)
-    raw_token = f"token:{creds.token}".encode()
+    raw_token = f"token:{creds['token']}".encode()
     token = base64.standard_b64encode(raw_token).decode()
     transport.setCustomHeaders({"Authorization": f"Basic {token}"})
 
