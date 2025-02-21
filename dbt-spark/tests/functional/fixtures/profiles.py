@@ -7,12 +7,12 @@ import pytest
 def dbt_profile_target(request):
 
     creds = {
-        "databricks_cluster": databricks_cluster_target,
-        "databricks_sql_endpoint": databricks_sql_endpoint_target,
         "apache_spark": apache_spark_target,
-        "databricks_http_cluster": databricks_http_cluster_target,
-        "spark_session": spark_session_target,
         "spark_http_odbc": spark_http_odbc_target,
+        "spark_session": spark_session_target,
+        "databricks_cluster": databricks_cluster_target,
+        "databricks_http_cluster": databricks_http_cluster_target,
+        "databricks_sql_endpoint": databricks_sql_endpoint_target,
     }
 
     profile = request.config.getoption("--profile")
@@ -84,7 +84,6 @@ def databricks_http_cluster_target():
         "token": os.getenv("DBT_DATABRICKS_TOKEN"),
         "method": "http",
         "port": 443,
-        "organization": "0",
         "connect_retries": 3,
         "connect_timeout": 5,
         "retry_all": False,

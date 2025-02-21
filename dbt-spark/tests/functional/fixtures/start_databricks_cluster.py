@@ -1,17 +1,23 @@
-import base64
-import time
+from base64 import standard_b64encode
+from os import getenv
+from time import sleep
 
 import pytest
 
 try:
     from pyhive import hive
-    from thrift.transport import THttpClient
+    from thrift.transport.THttpClient import THttpClient
 except ImportError:
     pass
 
 from dbt.adapters.spark.connections import SparkConnectionManager
 
-from tests.functional.fixtures.profiles import databricks_http_cluster_target
+
+HOST = getenv("DBT_DATABRICKS_HOST_NAME")
+CLUSTER = getenv("DBT_DATABRICKS_CLUSTER_NAME")
+TOKEN = getenv("DBT_DATABRICKS_TOKEN")
+PORT = 443
+ORGANIZATION = "0"
 
 
 # Running this should prevent tests from needing to be retried because the Databricks cluster isn't available
@@ -20,7 +26,7 @@ def start_databricks_cluster(request):
 
     profile = request.config.getoption("--profile")
 
-    if profile == "databricks_http_cluster":
+    if profile.startswith("databricks"):
         _wait_for_databricks_cluster()
 
     yield
@@ -37,24 +43,22 @@ def _wait_for_databricks_cluster():
             cursor.execute("SELECT 1", async_=False)
             return
         except Exception:
-            time.sleep(10)
+            sleep(10)
 
     raise Exception("Databricks cluster did not start in time")
 
 
 def _cursor():
-    creds = databricks_http_cluster_target()
-
     conn_url = SparkConnectionManager.SPARK_CONNECTION_URL.format(
-        host=creds["host"],
-        port=creds["port"],
-        organization=creds["organization"],
-        cluster=creds["cluster"],
+        host=HOST,
+        cluster=CLUSTER,
+        port=PORT,
+        organization=ORGANIZATION,
     )
 
-    transport = THttpClient.THttpClient(conn_url)
-    raw_token = f"token:{creds['token']}".encode()
-    token = base64.standard_b64encode(raw_token).decode()
+    transport = THttpClient(conn_url)
+    raw_token = f"token:{TOKEN}".encode()
+    token = standard_b64encode(raw_token).decode()
     transport.setCustomHeaders({"Authorization": f"Basic {token}"})
 
     conn = hive.connect(thrift_transport=transport)
