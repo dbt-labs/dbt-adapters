@@ -162,5 +162,8 @@ class TestPersistDocsMissingColumn:
         """
         run_dbt(["seed"])
         res = run_dbt(["run"], expect_pass=False)
-        assert any("[UNRESOLVED_COLUMN.WITH_SUGGESTION]" in res[0].message, "Missing field name in table" in res[0].message)
+        assert any(
+            "[UNRESOLVED_COLUMN.WITH_SUGGESTION]" in res[0].message,
+            "Missing field name in table" in res[0].message,
+        )
         assert "name `name` cannot be resolve" in res[0].message
