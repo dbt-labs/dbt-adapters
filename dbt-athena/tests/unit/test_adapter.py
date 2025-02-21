@@ -1,6 +1,7 @@
 import datetime
 import decimal
 from multiprocessing import get_context
+import sys
 from unittest import mock
 from unittest.mock import patch
 
@@ -1314,6 +1315,9 @@ class TestAthenaAdapter:
         assert 0 <= bucket_number < 100
         assert bucket_number == 54
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="%s (seconds from epoch) is not supported on Windows"
+    )
     def test_murmur3_hash_with_date(self):
         d = datetime.date.today()
         bucket_number = self.adapter.murmur3_hash(d, 100)
