@@ -13,7 +13,7 @@ except ImportError:
 from dbt.adapters.spark.connections import SparkConnectionManager
 
 
-HOST = getenv("DBT_DATABRICKS_HOST_NAME")
+HOST = "https://" + getenv("DBT_DATABRICKS_HOST_NAME")
 CLUSTER = getenv("DBT_DATABRICKS_CLUSTER_NAME")
 TOKEN = getenv("DBT_DATABRICKS_TOKEN")
 PORT = 443
