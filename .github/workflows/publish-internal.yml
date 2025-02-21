@@ -47,12 +47,14 @@ on:
 
 jobs:
     unit-tests:
+        if: inputs.skip-unit-tests == false
         uses: ./.github/workflows/_unit-tests.yml
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
 
     integration-tests:
+        if: inputs.skip-integration-tests == false
         uses: ./.github/workflows/_integration-tests.yml
         with:
             packages: ${{ toJSON(inputs.package) }}
@@ -60,6 +62,7 @@ jobs:
         secrets: inherit
 
     publish-internal:
+        if: always() && !failure()
         needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:
