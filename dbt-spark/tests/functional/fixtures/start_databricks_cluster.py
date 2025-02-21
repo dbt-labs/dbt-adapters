@@ -11,7 +11,7 @@ except ImportError:
 
 from dbt.adapters.spark.connections import SparkConnectionManager
 
-from .profiles import databricks_http_cluster_target
+from tests.functional.fixtures.profiles import databricks_http_cluster_target
 
 
 # Running this should prevent tests from needing to be retried because the Databricks cluster isn't available

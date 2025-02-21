@@ -1,4 +1,9 @@
-from fixtures import dbt_profile_target, skip_by_profile_type, start_databricks_cluster
+from tests.functional.fixtures import (
+    dbt_profile_target,
+    skip_by_profile_type,
+    start_databricks_cluster,
+)
+
 
 pytest_plugins = ["dbt.tests.fixtures.project"]
 
