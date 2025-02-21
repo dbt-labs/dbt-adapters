@@ -180,7 +180,11 @@ class SparkAdapter(SQLAdapter):
                 f'Invalid value from "show tables ...", got {len(row)} values, expected 3'
             )
 
-        table_name = f"{_schema}.{name}"
+        # CCCS retrieve the database from the dbt_project.yml. Note we could also
+        # pass it in from  list_relations_without_caching it has the full name
+        # kwargs = {"schema_relation": schema_relation}
+        database = self.config.models.get("+database")
+        table_name = f"{database}.{_schema}.{name}"
         try:
             table_results = self.execute_macro(
                 DESCRIBE_TABLE_EXTENDED_MACRO_NAME, kwargs={"table_name": table_name}
@@ -216,7 +220,12 @@ class SparkAdapter(SQLAdapter):
             is_hudi: bool = "Provider: hudi" in information
             is_iceberg: bool = "Provider: iceberg" in information
 
+            # CCCS retrieve the database from the dbt_project.yml. Note we could also
+            # pass it in from  list_relations_without_caching it has the full name
+            # kwargs = {"schema_relation": schema_relation}
+            database = self.config.models.get("+database")
             relation: BaseRelation = self.Relation.create(
+                database=database,
                 schema=_schema,
                 identifier=name,
                 type=rel_type,
@@ -291,8 +300,9 @@ class SparkAdapter(SQLAdapter):
         raw_table_stats = metadata.get(KEY_TABLE_STATISTICS)
         table_stats = SparkColumn.convert_table_stats(raw_table_stats)
         return [
+            # CCCS pass in the relation.database
             SparkColumn(
-                table_database=None,
+                table_database=relation.database,
                 table_schema=relation.schema,
                 table_name=relation.name,
                 table_type=relation.type,
@@ -349,8 +359,9 @@ class SparkAdapter(SQLAdapter):
         table_stats = SparkColumn.convert_table_stats(raw_table_stats)
         for match_num, match in enumerate(matches):
             column_name, column_type, nullable = match.groups()
+            # CCCS
             column = SparkColumn(
-                table_database=None,
+                table_database=relation.database,
                 table_schema=relation.schema,
                 table_name=relation.table,
                 table_type=relation.type,

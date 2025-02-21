@@ -113,7 +113,8 @@ class Cursor:
         if len(parameters) > 0:
             sql = sql % parameters
 
-        builder = SparkSession.builder.enableHiveSupport()
+        # CCCS
+        builder = SparkSession.builder
 
         for parameter, value in self.server_side_parameters.items():
             builder = builder.config(parameter, value)

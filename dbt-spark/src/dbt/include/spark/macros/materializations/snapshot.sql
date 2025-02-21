@@ -95,8 +95,9 @@
   {%- set file_format = config.get('file_format') or 'parquet' -%}
   {%- set grant_config = config.get('grants') -%}
 
+  {# CCCS -- make sure to pass in the database part #}
   {% set target_relation_exists, target_relation = get_or_create_relation(
-          database=none,
+          database=model.database,,
           schema=model.schema,
           identifier=target_table,
           type='table') -%}
@@ -118,8 +119,13 @@
     {% endif %}
   {% endif %}
 
+  {# CCCS  #}
   {% if not adapter.check_schema_exists(model.database, model.schema) %}
-    {% do create_schema(model.schema) %}
+    {%- set new_relation = api.Relation.create(
+      database=model.database,
+      schema=model.schema,
+      type="table") -%}
+    {% do create_schema(new_relation) %}
   {% endif %}
 
   {%- if not target_relation.is_table -%}

@@ -18,9 +18,10 @@ class SparkQuotePolicy(Policy):
     identifier: bool = False
 
 
+# CCCS
 @dataclass
 class SparkIncludePolicy(Policy):
-    database: bool = False
+    database: bool = True
     schema: bool = True
     identifier: bool = True
 
@@ -36,14 +37,17 @@ class SparkRelation(BaseRelation):
     # TODO: make this a dict everywhere
     information: Optional[str] = None
 
+    # CCCS
     def __post_init__(self) -> None:
-        if self.database != self.schema and self.database:
-            raise DbtRuntimeError("Cannot set database in spark!")
+        # if self.database != self.schema and self.database:
+        #     raise DbtRuntimeError("Cannot set database in spark!")
+        pass
 
+    # CCCS
     def render(self) -> str:
-        if self.include_policy.database and self.include_policy.schema:
-            raise DbtRuntimeError(
-                "Got a spark relation with schema and database set to "
-                "include, but only one can be set"
-            )
+        # if self.include_policy.database and self.include_policy.schema:
+        #     raise DbtRuntimeError(
+        #         "Got a spark relation with schema and database set to "
+        #         "include, but only one can be set"
+        #     )
         return super().render()
