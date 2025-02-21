@@ -36,9 +36,12 @@ from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.spark import SparkConnectionManager
 from dbt.adapters.spark import SparkRelation
 from dbt.adapters.spark import SparkColumn
+
+# CCCS
 from dbt.adapters.spark.python_submissions import (
     JobClusterPythonJobHelper,
     AllPurposeClusterPythonJobHelper,
+    SparkSessionBasedClusterPythonJobHelper,
 )
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.contracts.relation import RelationType, RelationConfig
@@ -503,9 +506,11 @@ class SparkAdapter(SQLAdapter):
 
     @property
     def python_submission_helpers(self) -> Dict[str, Type[PythonJobHelper]]:
+        # CCCS
         return {
             "job_cluster": JobClusterPythonJobHelper,
             "all_purpose_cluster": AllPurposeClusterPythonJobHelper,
+            "spark_session_based_cluster": SparkSessionBasedClusterPythonJobHelper,
         }
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:

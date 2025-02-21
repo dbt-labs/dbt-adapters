@@ -10,6 +10,11 @@ from dbt_common.exceptions import DbtRuntimeError
 from dbt.adapters.spark import SparkCredentials
 from dbt.adapters.spark import __version__
 
+# CCCS
+import traceback
+import dbt
+from pyspark.sql import SparkSession
+
 DEFAULT_POLLING_INTERVAL = 10
 SUBMISSION_LANGUAGE = "python"
 DEFAULT_TIMEOUT = 60 * 60 * 24
@@ -293,3 +298,24 @@ class AllPurposeClusterPythonJobHelper(BaseDatabricksHelper):
                     )
             finally:
                 context.destroy(context_id)
+
+
+# CCCS
+class SparkSessionBasedClusterPythonJobHelper(PythonJobHelper):
+    """
+    Submit python to local spark driver session.
+    """
+
+    def __init__(self, parsed_model: Dict, credential: SparkCredentials) -> None:
+        self.parsed_model = parsed_model
+
+    def submit(self, compiled_code: str) -> None:
+        try:
+            from copy import deepcopy
+
+            spark = SparkSession.builder.getOrCreate()  # Local passed to compiled_code call
+            model_config = deepcopy(self.parsed_model.get("config"))
+            exec(compiled_code, locals())
+        except Exception as e:
+            print(f"There's an issue with the Python model. See trace: {traceback.format_exc()}")
+            raise dbt.exceptions.RuntimeException(f"The Python model failed with traceback: {e}")

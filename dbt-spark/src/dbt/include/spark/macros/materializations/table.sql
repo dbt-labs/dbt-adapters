@@ -98,7 +98,14 @@ else:
   msg = f"{type(df)} is not a supported type for dbt Python materialization"
   raise Exception(msg)
 
-df.write.mode("overwrite").format("{{ config.get('file_format', 'delta') }}").option("overwriteSchema", "true").saveAsTable("{{ target_relation }}")
+writer = df.write.mode("overwrite").format("{{ config.get('file_format', 'delta') }}").option("overwriteSchema", "true")
+{% if partition_cols() -%}
+writer = writer.partitionBy('{{ partition_cols() | trim }}'.strip("()").split(","))
+{%- endif %}
+{% if location_clause() -%}
+writer = writer.option("path", "{{ location_clause() | trim }}".split("'")[1])
+{%- endif %}
+writer.saveAsTable("{{ target_relation }}")
 {%- endmacro -%}
 
 {%macro py_script_comment()%}
