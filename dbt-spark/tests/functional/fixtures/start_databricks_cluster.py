@@ -38,12 +38,12 @@ def _wait_for_databricks_cluster():
     """
     cursor = _cursor()
 
-    for _ in range(60):
+    for _ in range(20):
         try:
             cursor.execute("SELECT 1", async_=False)
             return
         except Exception:
-            sleep(10)
+            sleep(30)
 
     raise Exception("Databricks cluster did not start in time")
 
