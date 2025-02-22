@@ -1,4 +1,5 @@
-name: "Integration tests"
+name: "# Integration tests"
+run-name: "Integration tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:

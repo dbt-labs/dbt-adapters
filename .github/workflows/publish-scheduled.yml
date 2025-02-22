@@ -1,5 +1,5 @@
 name: "Scheduled publishing"
-run-name: "Publish to internal - Scheduled"
+run-name: "Scheduled publishing - ${{ github.actor }}"
 
 on:
     schedule:
