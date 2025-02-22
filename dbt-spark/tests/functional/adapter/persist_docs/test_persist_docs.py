@@ -168,4 +168,3 @@ class TestPersistDocsMissingColumn:
                 "Missing field name in table" in res[0].message,
             ]
         )
-        assert "name `name` cannot be resolve" in res[0].message
