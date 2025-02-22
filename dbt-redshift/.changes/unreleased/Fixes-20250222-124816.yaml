@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixes a bug where dbt's drop column and add column failed on incremental models if a column name begins with a question mark by quoting column names.
+time: 2025-02-22T12:48:16.964091-08:00
+custom:
+    Author: MiConnell
+    Issue: "841"
