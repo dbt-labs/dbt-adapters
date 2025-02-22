@@ -79,24 +79,9 @@ jobs:
             branch: ${{ inputs.branch }}
         secrets: inherit
 
-    publish-internal:
-        if: |
-            always() && !failure() &&
-            inputs.pypi-internal == true &&
-            !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter", "dbt-athena-community"]'), inputs.package)
-        needs: [unit-tests, integration-tests]
-        uses: ./.github/workflows/_publish-internal.yml
-        with:
-            package: ${{ inputs.package }}
-            deploy-to: ${{ inputs.deploy-to }}
-            branch: ${{ inputs.branch }}
-        secrets: inherit
-
     generate-changelog:
-        needs: publish-prep-checks
-        if: |
-            always() &&
-            needs.publish-prep-checks.result == 'success'
+        if: always() && !failure()
+        needs: [bump-version, unit-tests, integration-tests]
         uses: ./.github/workflows/_generate-changelog.yml
         with:
             package: ${{ inputs.package }}
@@ -105,9 +90,7 @@ jobs:
         secrets: inherit
 
     publish:
-        if: |
-            always() && !failure() &&
-            inputs.pypi-public == true
+        if: always() && !failure()
         needs: generate-changelog
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
