@@ -55,6 +55,7 @@ jobs:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
             version: ${{ inputs.version }}
+        secrets: inherit
 
     unit-tests:
         if: |
