@@ -42,6 +42,7 @@ def _wait_for_databricks_cluster() -> None:
     for _ in range(20):
         try:
             hive.connect(thrift_transport=transport_client)
+            return
         except TApplicationException:
             sleep(30)
 
