@@ -97,7 +97,7 @@
 
   {# CCCS -- make sure to pass in the database part #}
   {% set target_relation_exists, target_relation = get_or_create_relation(
-          database=model.database,,
+          database=model.database,
           schema=model.schema,
           identifier=target_table,
           type='table') -%}
