@@ -6,11 +6,7 @@ on:
             package:
                 description: "Choose the package to publish"
                 type: string
-                default: "dbt-adapters"
-            deploy-to:
-                description: "Choose whether to publish to test or prod"
-                type: string
-                default: "prod"
+                required: true
             branch:
                 description: "Choose the branch to publish"
                 type: string
@@ -21,21 +17,21 @@ on:
                 description: "Choose the package to publish"
                 type: choice
                 options:
-                -   "dbt-adapters"
                 -   "dbt-athena"
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
-            deploy-to:
-                description: "Choose whether to publish to test or prod"
-                type: environment
-                default: "test"
             branch:
                 description: "Choose the branch to publish"
                 type: string
                 default: "main"
+
+# don't publish to the same target in parallel
+concurrency:
+    group: PyPI_Internal-${{ inputs.package }}
+    cancel-in-progress: true
 
 defaults:
     run:
@@ -48,7 +44,7 @@ jobs:
     publish:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
-            name: ${{ inputs.deploy-to }}
+            name: "prod"
         steps:
         -   uses: actions/checkout@v4
             with:

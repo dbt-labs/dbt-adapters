@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 from typing import Generator
 
@@ -55,6 +56,7 @@ def test_private_key_from_string_pem(private_key_string, private_key):
     assert serialize(calculated_private_key) == serialize(private_key)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="permission issues on Windows")
 def test_private_key_from_file(private_key_file, private_key):
     assert os.path.exists(private_key_file)
     calculated_private_key = private_key_from_file(private_key_file, PASSPHRASE)

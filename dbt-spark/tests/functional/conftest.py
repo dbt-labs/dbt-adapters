@@ -1,27 +1,21 @@
-import time
-import pytest
+from tests.functional.fixtures import (
+    dbt_profile_target,
+    skip_by_profile_type,
+    start_databricks_cluster,
+)
 
 
-def _wait_for_databricks_cluster(project):
-    """
-    It takes roughly 3min for the cluster to start, to be safe we'll wait for 5min
-    """
-    for _ in range(60):
-        try:
-            project.run_sql("SELECT 1", fetch=True)
-            return
-        except Exception:
-            time.sleep(10)
-
-    raise Exception("Databricks cluster did not start in time")
+pytest_plugins = ["dbt.tests.fixtures.project"]
 
 
-# Running this should prevent tests from needing to be retried because the Databricks cluster isn't available
-@pytest.fixture(scope="class", autouse=True)
-def start_databricks_cluster(project, request):
-    profile_type = request.config.getoption("--profile")
+def pytest_addoption(parser):
+    parser.addoption("--profile", action="store", default="apache_spark", type=str)
 
-    if "databricks" in profile_type:
-        _wait_for_databricks_cluster(project)
 
-    yield 1
+# Using @pytest.mark.skip_profile('apache_spark') uses the 'skip_by_profile_type'
+# autouse fixture below
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "skip_profile(profile): skip test for the given profile",
+    )
