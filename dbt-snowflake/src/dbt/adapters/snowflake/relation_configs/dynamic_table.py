@@ -67,10 +67,14 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
         kwargs_dict = {
-            "name": cls._render_part(ComponentName.Identifier, config_dict.get("name")),
-            "schema_name": cls._render_part(ComponentName.Schema, config_dict.get("schema_name")),
+            "name": cls._render_part(
+                ComponentName.Identifier, config_dict.get("name")  # type:ignore
+            ),
+            "schema_name": cls._render_part(
+                ComponentName.Schema, config_dict.get("schema_name")  # type:ignore
+            ),
             "database_name": cls._render_part(
-                ComponentName.Database, config_dict.get("database_name")
+                ComponentName.Database, config_dict.get("database_name")  # type:ignore
             ),
             "query": config_dict.get("query"),
             "target_lag": config_dict.get("target_lag"),
@@ -80,7 +84,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "initialize": config_dict.get("initialize"),
         }
 
-        return super().from_dict(kwargs_dict)
+        return super().from_dict(kwargs_dict)  # type:ignore
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
@@ -89,15 +93,17 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "schema_name": relation_config.schema,
             "database_name": relation_config.database,
             "query": relation_config.compiled_code,
-            "target_lag": relation_config.config.extra.get("target_lag"),
-            "snowflake_warehouse": relation_config.config.extra.get("snowflake_warehouse"),
+            "target_lag": relation_config.config.extra.get("target_lag"),  # type:ignore
+            "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
+                "snowflake_warehouse"
+            ),
             "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
         }
 
-        if refresh_mode := relation_config.config.extra.get("refresh_mode"):
+        if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
             config_dict["refresh_mode"] = refresh_mode.upper()
 
-        if initialize := relation_config.config.extra.get("initialize"):
+        if initialize := relation_config.config.extra.get("initialize"):  # type:ignore
             config_dict["initialize"] = initialize.upper()
 
         return config_dict
