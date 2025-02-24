@@ -44,16 +44,16 @@ stages:
           #     python -m build
           #   displayName: 'Package the extension'
 
-          - task: CopyFiles@2
-            inputs:
-              targetFolder: $(Build.ArtifactStagingDirectory)
-            displayName: 'Stage build artifact to publish'
+          # - task: CopyFiles@2
+          #   inputs:
+          #     targetFolder: $(Build.ArtifactStagingDirectory)
+          #   displayName: 'Stage build artifact to publish'
 
           - task: PublishBuildArtifacts@1
             inputs:
-              pathtoPublish: '$(Build.ArtifactStagingDirectory)/dist'
-              artifactName: 'dist'
-              publishLocation: 'Container'
+              targetPath: 'dist/'
+              artifactName: 'dbt-spark'
+              publishLocation: 'pipeline'
             displayName: 'Publish build artifacts'
 
       # - job: PublishArtifactToAPAFeed
