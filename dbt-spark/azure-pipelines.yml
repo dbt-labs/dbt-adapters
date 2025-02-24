@@ -50,11 +50,10 @@ stages:
           #   displayName: 'Stage build artifact to publish'
 
           - task: PublishBuildArtifacts@1
+            displayName: 'Publish dbt-spark artifacts'
             inputs:
-              targetPath: '$(Build.SourcesDirectory)/dist'
+              targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
               artifactName: 'dbt-spark'
-              publishLocation: 'pipeline'
-            displayName: 'Publish build artifacts'
 
       # - job: PublishArtifactToAPAFeed
       #   displayName: Publish artifact to APA feed
