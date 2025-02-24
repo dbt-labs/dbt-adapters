@@ -115,10 +115,12 @@ class SnowflakeCredentials(Credentials):
     connection_name: Optional[str] = None
 
     def __post_init__(self):
-        # skip authentication parameter checking if the connection_name is specified because additional 
+        # skip authentication parameter checking if the connection_name is specified because additional
         # parameters can be provided in a connections.toml file
         if not self.connection_name:
-            if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
+            if self.authenticator != "oauth" and (
+                self.oauth_client_secret or self.oauth_client_id
+            ):
                 # the user probably forgot to set 'authenticator' like I keep doing
                 warn_or_error(
                     AdapterEventWarning(
@@ -140,7 +142,9 @@ class SnowflakeCredentials(Credentials):
                 if not self.user:
                     # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
                     warn_or_error(
-                        AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
+                        AdapterEventError(
+                            base_msg="Invalid profile: 'user' is a required property."
+                        )
                     )
 
         self.account = self.account.replace("_", "-")
