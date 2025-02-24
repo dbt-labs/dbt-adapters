@@ -22,7 +22,6 @@ profiles.yml, we can test that we can connect based on credentials in the connec
 import os
 import pytest
 import tempfile
-import toml
 
 from dbt.tests.util import run_dbt
 
@@ -47,23 +46,22 @@ class TestConnectionName:
     def test_connection(self, project):
 
         # We are creating a toml file that contains the password
-        connections_for_toml = {
-            "default": {
-                "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-                "authenticator": "snowflake",
-                "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
-                "password": os.getenv("SNOWFLAKE_TEST_PASSWORD"),
-                "role": os.getenv("DBT_TEST_USER_1"),
-                "user": os.getenv("SNOWFLAKE_TEST_USER"),
-                "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
-            }
-        }
+        connections_for_toml = f"""
+[default]
+account = "{ os.getenv("SNOWFLAKE_TEST_ACCOUNT") }"
+authenticator = "snowflake"
+database = "{ os.getenv("SNOWFLAKE_TEST_DATABASE") }"
+password = "{ os.getenv("SNOWFLAKE_TEST_PASSWORD") }"
+role = "{ os.getenv("DBT_TEST_USER_1") }"
+user = "{ os.getenv("SNOWFLAKE_TEST_USER") }"
+warehouse = "{ os.getenv("SNOWFLAKE_TEST_WAREHOUSE") }"
+"""
         temp_dir = tempfile.gettempdir()
         connections_toml = os.path.join(temp_dir, "connections.toml")
         os.environ["SNOWFLAKE_HOME"] = temp_dir
 
         with open(connections_toml, "w") as f:
-            toml.dump(connections_for_toml, f)
+            f.write(connections_for_toml)
         os.chmod(connections_toml, 0o600)
 
         run_dbt()
