@@ -64,7 +64,7 @@ stages:
             displayName: 'Publish artifact to analytical-platform feed'
 
       - job: PublishArtifactToPypi
-        displayName: Publish artifact to PyPI
+        displayName: Publish artifact to bagofholding.cse-cst.gc.ca
         dependsOn: BuildPythonArtifact
         steps:
           - task: DownloadPipelineArtifact@2
@@ -81,5 +81,5 @@ stages:
 
           - script: |
               pip install twine
-              python -m twine upload -r pypi-ap --config-file /azp/pypirc/pypirc $(Pipeline.Workspace)/dbt-spark/* --verbose
-            displayName: 'Publish artifact to [BagOfHolding Unclass](https://bagofholding.cse-cst.gc.ca/#browse/browse:pypi-ap)'
+              python -m twine upload -r pypi-ap --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/* --verbose
+            displayName: 'Publish artifact to BagOfHolding Unclass'
