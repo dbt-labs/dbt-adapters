@@ -74,11 +74,6 @@ stages:
               downloadPath: '$(Pipeline.Workspace)/dbt-spark/'
             displayName: 'Download dbt-spark adapter build artifact'
 
-          - task: TwineAuthenticate@1
-            inputs:
-              pythonUploadServiceConnection: cccs-pypi
-            displayName: 'Twine Authenticate'
-
           - script: |
               pip install twine
               python -m twine upload -r pypi-ap --config-file /azp/pypirc/pypirc $(Pipeline.Workspace)/dbt-spark/* --verbose
