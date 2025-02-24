@@ -112,32 +112,36 @@ class SnowflakeCredentials(Credentials):
     insecure_mode: Optional[bool] = False
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
+    connection_name: Optional[str] = None
 
     def __post_init__(self):
-        if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
-            # the user probably forgot to set 'authenticator' like I keep doing
-            warn_or_error(
-                AdapterEventWarning(
-                    base_msg="Authenticator is not set to oauth, but an oauth-only parameter is set! Did you mean to set authenticator: oauth?"
-                )
-            )
-
-        if self.authenticator not in ["oauth", "jwt"]:
-            if self.token:
+        # skip authentication parameter checking if the connection_name is specified because additional 
+        # parameters can be provided in a connections.toml file
+        if not self.connection_name:
+            if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
+                # the user probably forgot to set 'authenticator' like I keep doing
                 warn_or_error(
                     AdapterEventWarning(
-                        base_msg=(
-                            "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth' or 'jwt'."
-                        )
+                        base_msg="Authenticator is not set to oauth, but an oauth-only parameter is set! Did you mean to set authenticator: oauth?"
                     )
                 )
 
-            if not self.user:
-                # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
-                warn_or_error(
-                    AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
-                )
+            if self.authenticator not in ["oauth", "jwt"]:
+                if self.token:
+                    warn_or_error(
+                        AdapterEventWarning(
+                            base_msg=(
+                                "The token parameter was set, but the authenticator was "
+                                "not set to 'oauth' or 'jwt'."
+                            )
+                        )
+                    )
+
+                if not self.user:
+                    # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
+                    warn_or_error(
+                        AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
+                    )
 
         self.account = self.account.replace("_", "-")
 
@@ -179,12 +183,15 @@ class SnowflakeCredentials(Credentials):
             "retry_all",
             "insecure_mode",
             "reuse_connections",
+            "connection_name",
         )
 
     def auth_args(self):
         # Pull all of the optional authentication args for the connector,
         # let connector handle the actual arg validation
         result = {}
+        if self.connection_name:
+            result["connection_name"] = self.connection_name
         if self.user:
             result["user"] = self.user
         if self.password:
