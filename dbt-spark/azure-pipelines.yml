@@ -3,8 +3,7 @@ trigger:
     include:
       - main
 
-pool:
-  vmImage: 'ubuntu-latest'
+pool: cybertron-build-pool
 
 variables:
   tag: '$(Build.BuildId)'
@@ -41,27 +40,6 @@ stages:
             inputs:
               targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
               artifactName: 'dbt-spark'
-
-      - job: PublishArtifactToAPAFeed
-        displayName: Publish artifact to APA feed
-        dependsOn: BuildPythonArtifact
-        steps:
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              buildType: 'current'
-              artifactName: 'dbt-spark'
-              downloadPath: '$(Pipeline.Workspace)/dbt-spark/'
-            displayName: 'Download dbt-spark adapter build artifact'
-
-          - task: TwineAuthenticate@1
-            inputs:
-              artifactFeed: Analytical Platform/analytical-platform
-            displayName: 'Twine Authenticate'
-
-          - script: |
-              pip install twine
-              python -m twine upload --skip-existing -r analytical-platform --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/*
-            displayName: 'Publish artifact to analytical-platform feed'
 
       - job: PublishArtifactToPypi
         displayName: Publish artifact to BagOfHolding Unclass
