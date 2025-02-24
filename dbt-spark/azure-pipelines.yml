@@ -34,6 +34,8 @@ stages:
               set -eux
               cd dbt-spark
               hatch build
+              ls -l dist/
+              pwd
             displayName: 'Build the dbt-spark adapter'
 
           # - script: |
@@ -49,8 +51,15 @@ stages:
           #     targetFolder: $(Build.ArtifactStagingDirectory)
           #   displayName: 'Stage build artifact to publish'
 
+          - script: |
+              set -eux
+              cd $(Build.SourcesDirectory)/dbt-spark/dist
+              ls -l
+              pwd
+            displayName: 'Show dist'
+
           - task: PublishBuildArtifacts@1
-            displayName: 'Publish dbt-spark artifacts'
+            displayName: 'Publish dbt-spark adapter artifacts'
             inputs:
               targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
               artifactName: 'dbt-spark'
