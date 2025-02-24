@@ -26,12 +26,9 @@ stages:
               versionSpec: '$(python.version)'
             displayName: 'Use Python $(python.version)'
 
-          - name: Install Hatch
-            uses: pypa/hatch@install
-
-          # - script: |
-          #     python -m pip install -U "jupyterlab>=4.0.0,<5"
-          #   displayName: 'Install dependencies'
+          - script: |
+              python -m pip install hatch
+            displayName: 'Install hatch dependencies'
 
           # - script: |
           #     set -eux
