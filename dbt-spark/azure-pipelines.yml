@@ -51,7 +51,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             inputs:
-              targetPath: 'dist/'
+              targetPath: '$(Build.SourcesDirectory)/dist'
               artifactName: 'dbt-spark'
               publishLocation: 'pipeline'
             displayName: 'Publish build artifacts'
