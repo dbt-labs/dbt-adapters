@@ -59,34 +59,27 @@ stages:
             displayName: 'Twine Authenticate'
 
           - script: |
-              set -eux
-              echo $(Pipeline.Workspace)
-              pwd
-              ls -l $(Pipeline.Workspace)
-            displayName: 'Debug'
-
-          - script: |
               pip install twine
               python -m twine upload --skip-existing -r analytical-platform --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/*
             displayName: 'Publish artifact to analytical-platform feed'
 
-      # - job: PublishArtifactToPypi
-      #   displayName: Publish artifact to PyPI
-      #   dependsOn: BuildPythonArtifact
-      #   steps:
-      #     - task: DownloadBuildArtifacts@0
-      #       inputs:
-      #         buildType: 'current'
-      #         downloadType: 'specific'
-      #         downloadPath: '$(Pipeline.Workspace)'
-      #       displayName: 'Download build artifact'
+      - job: PublishArtifactToPypi
+        displayName: Publish artifact to PyPI
+        dependsOn: BuildPythonArtifact
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: 'dbt-spark'
+              downloadPath: '$(Pipeline.Workspace)/dbt-spark/'
+            displayName: 'Download dbt-spark adapter build artifact'
 
-      #     - task: TwineAuthenticate@1
-      #       inputs:
-      #         pythonUploadServiceConnection: cccs-pypi
-      #       displayName: 'Twine Authenticate'
+          - task: TwineAuthenticate@1
+            inputs:
+              pythonUploadServiceConnection: cccs-pypi
+            displayName: 'Twine Authenticate'
 
-      #     - script: |
-      #         pip install twine
-      #         python -m twine upload --skip-existing -r "cccs-pypi" --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dist/* --verbose
-      #       displayName: 'Publish artifact to PyPI'
+          - script: |
+              pip install twine
+              python -m twine upload --skip-existing -r "cccs-pypi" --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/* --verbose
+            displayName: 'Publish artifact to PyPI'
