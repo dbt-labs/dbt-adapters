@@ -34,21 +34,7 @@ stages:
               set -eux
               cd dbt-spark
               hatch build
-              ls -l dist/
-              pwd
             displayName: 'Build the dbt-spark adapter'
-
-          # - task: CopyFiles@2
-          #   inputs:
-          #     targetFolder: $(Build.ArtifactStagingDirectory)
-          #   displayName: 'Stage build artifact to publish'
-
-          - script: |
-              set -eux
-              cd $(Build.SourcesDirectory)/dbt-spark/dist
-              ls -l
-              pwd
-            displayName: 'Show dist'
 
           - task: PublishPipelineArtifact@1
             displayName: 'Publish dbt-spark adapter artifacts'
@@ -56,21 +42,21 @@ stages:
               targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
               artifactName: 'dbt-spark'
 
-      # - job: PublishArtifactToAPAFeed
-      #   displayName: Publish artifact to APA feed
-      #   dependsOn: BuildPythonArtifact
-      #   steps:
-      #     - task: DownloadBuildArtifacts@0
-      #       inputs:
-      #         buildType: 'current'
-      #         downloadType: 'specific'
-      #         downloadPath: '$(Pipeline.Workspace)'
-      #       displayName: 'Download build artifact'
+      - job: PublishArtifactToAPAFeed
+        displayName: Publish artifact to APA feed
+        dependsOn: BuildPythonArtifact
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: 'dbt-spark'
+              downloadPath: '$(Pipeline.Workspace)'
+            displayName: 'Download dbt-spark adapter build artifact'
 
-      #     - task: TwineAuthenticate@1
-      #       inputs:
-      #         artifactFeed: Analytical Platform/analytical-platform
-      #       displayName: 'Twine Authenticate'
+          # - task: TwineAuthenticate@1
+          #   inputs:
+          #     artifactFeed: Analytical Platform/analytical-platform
+          #   displayName: 'Twine Authenticate'
 
       #     - script: |
       #         pip install twine
