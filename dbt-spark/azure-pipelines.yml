@@ -59,6 +59,13 @@ stages:
             displayName: 'Twine Authenticate'
 
           - script: |
+              set -eux
+              echo $(Pipeline.Workspace)
+              pwd
+              ls -l $(Pipeline.Workspace)
+            displayName: 'Debug'
+
+          - script: |
               pip install twine
               python -m twine upload --skip-existing -r analytical-platform --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/*
             displayName: 'Publish artifact to analytical-platform feed'
