@@ -38,14 +38,6 @@ stages:
               pwd
             displayName: 'Build the dbt-spark adapter'
 
-          # - script: |
-          #     set -eux
-
-          #     echo '.$(tag)' >> version.txt
-          #     pip install build
-          #     python -m build
-          #   displayName: 'Package the extension'
-
           # - task: CopyFiles@2
           #   inputs:
           #     targetFolder: $(Build.ArtifactStagingDirectory)
@@ -58,7 +50,7 @@ stages:
               pwd
             displayName: 'Show dist'
 
-          - task: PublishBuildArtifacts@1
+          - task: PublishPipelineArtifact@1
             displayName: 'Publish dbt-spark adapter artifacts'
             inputs:
               targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
