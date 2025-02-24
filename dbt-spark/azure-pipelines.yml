@@ -30,10 +30,11 @@ stages:
               python -m pip install hatch
             displayName: 'Install hatch dependencies'
 
-          # - script: |
-          #     set -eux
-          #     python -m pip install -v .[all]
-          #   displayName: 'Build the extension'
+          - script: |
+              set -eux
+              cd dbt-spark
+              hatch build
+            displayName: 'Build the extension'
 
           # - script: |
           #     set -eux
