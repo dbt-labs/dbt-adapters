@@ -53,15 +53,15 @@ stages:
               downloadPath: '$(Pipeline.Workspace)'
             displayName: 'Download dbt-spark adapter build artifact'
 
-          # - task: TwineAuthenticate@1
-          #   inputs:
-          #     artifactFeed: Analytical Platform/analytical-platform
-          #   displayName: 'Twine Authenticate'
+          - task: TwineAuthenticate@1
+            inputs:
+              artifactFeed: Analytical Platform/analytical-platform
+            displayName: 'Twine Authenticate'
 
-      #     - script: |
-      #         pip install twine
-      #         python -m twine upload --skip-existing -r analytical-platform --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dist/*
-      #       displayName: 'Publish artifact to analytical-platform feed'
+          - script: |
+              pip install twine
+              python -m twine upload --skip-existing -r analytical-platform --config-file $(PYPIRC_PATH) $(Pipeline.Workspace)/dbt-spark/*
+            displayName: 'Publish artifact to analytical-platform feed'
 
       # - job: PublishArtifactToPypi
       #   displayName: Publish artifact to PyPI
