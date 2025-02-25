@@ -1,0 +1,57 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pool: cybertron-build-pool
+
+variables:
+  tag: '$(Build.BuildId)'
+  pythonVersion: "3.10"
+
+stages:
+  - stage: Build_and_Publish_Python_Artifact
+    displayName: Build, package and publish python artifacts.
+    jobs:
+      - job: BuildPythonArtifact
+        displayName: Build and package python artifacts.
+        workspace:
+          clean: all
+
+        steps:
+          - script: |
+              virtualenv -p python$(pythonVersion) env
+              source env/bin/activate
+              python -m pip install hatch
+            displayName: 'Install hatch dependencies'
+
+          - script: |
+              source env/bin/activate
+              set -eux
+              cd dbt-spark
+              hatch build
+            displayName: 'Build the dbt-spark adapter'
+
+          - task: PublishPipelineArtifact@1
+            inputs:
+              targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
+              artifactName: 'dbt-spark'
+            displayName: 'Publish dbt-spark adapter artifacts'
+
+      - job: PublishArtifactToPypi
+        displayName: Publish artifact to BagOfHolding Unclass
+        dependsOn: BuildPythonArtifact
+        steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              buildType: 'current'
+              artifactName: 'dbt-spark'
+              downloadPath: '$(Pipeline.Workspace)/dbt-spark/'
+            displayName: 'Download dbt-spark adapter build artifact'
+
+          - script: |
+              virtualenv -p python$(pythonVersion) env
+              source env/bin/activate
+              pip install twine
+              python -m twine upload -r pypi-ap --config-file /azp/pypirc/pypirc $(Pipeline.Workspace)/dbt-spark/* --verbose
+            displayName: 'Publish artifact to bagofholding.cse-cst.gc.ca'

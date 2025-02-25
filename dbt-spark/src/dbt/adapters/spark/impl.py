@@ -378,7 +378,23 @@ class SparkAdapter(SQLAdapter):
         return columns
 
     def _get_columns_for_catalog(self, relation: BaseRelation) -> Iterable[Dict[str, Any]]:
-        columns = self.parse_columns_from_information(relation)
+        # CCCS
+        if relation.is_iceberg:
+            # Iceberg information column does not contain the relation's schema (columns)
+            # Instead of parsing the information column we use the get_columns_in_relation macro
+            # this macro executes 'describe extended <table name>' which returns the column
+            # names and their type
+            rows: List[agate.Row] = super().get_columns_in_relation(relation)
+            columns = self.parse_describe_extended(relation, rows)
+            for column in columns:
+                # convert SparkColumns into catalog dicts
+                as_dict = column.to_column_dict()
+                as_dict["column_name"] = as_dict.pop("column", None)
+                as_dict["column_type"] = as_dict.pop("dtype")
+                as_dict["table_database"] = relation.database if relation.is_iceberg else None
+                yield as_dict
+        else:
+            columns = self.parse_columns_from_information(relation)
 
         for column in columns:
             # convert SparkColumns into catalog dicts
@@ -394,10 +410,12 @@ class SparkAdapter(SQLAdapter):
         used_schemas: FrozenSet[Tuple[str, str]],
     ) -> Tuple["agate.Table", List[Exception]]:
         schema_map = self._get_catalog_schemas(relation_configs)
-        if len(schema_map) > 1:
-            raise CompilationError(
-                f"Expected only one database in get_catalog, found " f"{list(schema_map)}"
-            )
+        # CCCS
+        # In iceberg there can be multiple catalogs.
+        # if len(schema_map) > 1:
+        #     raise CompilationError(
+        #         f"Expected only one database in get_catalog, found " f"{list(schema_map)}"
+        #     )
 
         with executor(self.config) as tpe:
             futures: List[Future["agate.Table"]] = []
