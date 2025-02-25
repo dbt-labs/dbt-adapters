@@ -37,6 +37,22 @@ warehouse = "{warehouse}"
 
 class TestConnectionName:
 
+    @pytest.fixture(scope="class", autouse=True)
+    def dbt_profile_target(self):
+        # We are returning a profile that does not contain the password
+        return {
+            "type": "snowflake",
+            "threads": 4,
+            "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
+            "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
+            "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
+            "connection_name": "default",
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"my_model.sql": "select 1 as id"}
+
     @pytest.fixture(autouse=True)
     def connection_name(self, tmp_path, monkeypatch):
         # We are creating a toml file that contains the password
@@ -66,22 +82,6 @@ class TestConnectionName:
         monkeypatch.delenv("SNOWFLAKE_HOME")
         config_toml.unlink()
         connections_toml.unlink()
-
-    @pytest.fixture(scope="class", autouse=True)
-    def dbt_profile_target(self, connection_name):
-        # We are returning a profile that does not contain the password
-        return {
-            "type": "snowflake",
-            "threads": 4,
-            "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-            "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
-            "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
-            "connection_name": connection_name,
-        }
-
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {"my_model.sql": "select 1 as id"}
 
     def test_connection(self, project):
         run_dbt()
