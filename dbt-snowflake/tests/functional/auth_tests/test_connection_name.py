@@ -24,7 +24,7 @@ import tempfile
 import pytest
 import os
 
-connections_toml_template = f"""[{connection_name}]
+connections_toml_template = f"""[default]
 account = "{account}"
 authenticator = "snowflake"
 database = "{database}"
@@ -40,7 +40,6 @@ class TestConnectionName:
     @pytest.fixture(scope="class", autouse=True)
     def connection_name(self, tmp_path, monkeypatch):
         # We are creating a toml file that contains the password
-        connection_name = "default"
         config_toml = tmp_path / "config.toml"
         connections_toml = tmp_path / "connections.toml"
         monkeypatch.setenv("SNOWFLAKE_HOME", str(tmp_path.absolute()))
@@ -50,7 +49,6 @@ class TestConnectionName:
 
         connections_toml.write_text(
             connections_toml_template.format(
-                connection_name=connection_name,
                 account=os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
                 database=os.getenv("SNOWFLAKE_TEST_DATABASE"),
                 password=os.getenv("SNOWFLAKE_TEST_PASSWORD"),
@@ -61,7 +59,7 @@ class TestConnectionName:
         )
         connections_toml.chmod(0o600)
 
-        yield connection_name
+        yield "default"
 
         monkeypatch.delenv("SNOWFLAKE_HOME")
         config_toml.unlink()
