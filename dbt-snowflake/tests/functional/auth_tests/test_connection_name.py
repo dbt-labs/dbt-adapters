@@ -37,7 +37,7 @@ warehouse = "{warehouse}"
 
 class TestConnectionName:
 
-    @pytest.fixture(scope="class", autouse=True)
+    @pytest.fixture(autouse=True)
     def connection_name(self, tmp_path, monkeypatch):
         # We are creating a toml file that contains the password
         connection_name = "default"
