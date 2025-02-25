@@ -44,7 +44,7 @@ class SnowflakeColumn(Column):
 
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
-        if "vector" in raw_data_type.lower():
+        if raw_data_type.lower() in ["vector", "array"]:
             column = cls(name, raw_data_type, None, None, None)
         else:
             column = super().from_description(name, raw_data_type)  # type:ignore
