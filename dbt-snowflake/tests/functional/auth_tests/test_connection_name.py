@@ -10,7 +10,7 @@ account = "SNOWFLAKE_TEST_ACCOUNT"
 authenticator = "snowflake"
 database = "SNOWFLAKE_TEST_DATABASE"
 password = "SNOWFLAKE_TEST_PASSWORD"
-role = "DBT_TEST_USER_1"
+role = "SNOWFLAKE_TEST_ROLE"
 user = "SNOWFLAKE_TEST_USER"
 warehouse = "SNOWFLAKE_TEST_WAREHOUSE"
 
@@ -19,7 +19,12 @@ profiles.yml, we can test that we can connect based on credentials in the connec
 
 """
 
-connections_toml_template = f"""[default]
+from dbt.tests.util import run_dbt
+import tempfile
+import pytest
+import os
+
+connections_toml_template = f"""[{connection_name}]
 account = "{account}"
 authenticator = "snowflake"
 database = "{database}"
@@ -29,48 +34,38 @@ user = "{user}"
 warehouse = "{warehouse}"
 """
 
-import os
-import pytest
-import tempfile
-
-from dbt.tests.util import run_dbt
-
 
 class TestConnectionName:
 
     @pytest.fixture(scope="class", autouse=True)
-    def connection_name(self):
+    def connection_name(self, tmp_path, monkeypatch):
         # We are creating a toml file that contains the password
-        snowflake_home_dir = os.path.expanduser("~/.snowflake")
-        config_toml = os.path.join(snowflake_home_dir, "config.toml")
-        connections_toml = os.path.join(snowflake_home_dir, "connections.toml")
-        os.environ["SNOWFLAKE_HOME"] = snowflake_home_dir
+        connection_name = "default"
+        config_toml = tmp_path / "config.toml"
+        connections_toml = tmp_path / "connections.toml"
+        monkeypatch.setenv("SNOWFLAKE_HOME", str(tmp_path.absolute()))
 
-        if not os.path.exists(snowflake_home_dir):
-            os.makedirs(snowflake_home_dir)
+        config_toml.write_text('default_connection_name = "default"\n')
+        config_toml.chmod(0o600)
 
-        with open(config_toml, "w") as f:
-            f.write('default_connection_name = "default"')
-        os.chmod(config_toml, 0o600)
+        connections_toml.write_text(
+            connections_toml_template.format(
+                connection_name=connection_name,
+                account=os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
+                database=os.getenv("SNOWFLAKE_TEST_DATABASE"),
+                password=os.getenv("SNOWFLAKE_TEST_PASSWORD"),
+                role=os.getenv("SNOWFLAKE_TEST_ROLE"),
+                user=os.getenv("SNOWFLAKE_TEST_USER"),
+                warehouse=os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
+            ).strip()
+        )
+        connections_toml.chmod(0o600)
 
-        with open(connections_toml, "w") as f:
-            f.write(
-                connections_toml_template.format(
-                    account=os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-                    database=os.getenv("SNOWFLAKE_TEST_DATABASE"),
-                    password=os.getenv("SNOWFLAKE_TEST_PASSWORD"),
-                    role=os.getenv("SNOWFLAKE_TEST_ROLE"),
-                    user=os.getenv("SNOWFLAKE_TEST_USER"),
-                    warehouse=os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
-                ).strip()
-            )
-        os.chmod(connections_toml, 0o600)
+        yield connection_name
 
-        yield "default"
-
-        del os.environ["SNOWFLAKE_HOME"]
-        os.unlink(config_toml)
-        os.unlink(connections_toml)
+        monkeypatch.delenv("SNOWFLAKE_HOME")
+        config_toml.unlink()
+        connections_toml.unlink()
 
     @pytest.fixture(scope="class", autouse=True)
     def dbt_profile_target(self, connection_name):
