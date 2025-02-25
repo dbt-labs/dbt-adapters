@@ -29,6 +29,43 @@ from dbt.tests.util import run_dbt
 class TestConnectionName:
     @pytest.fixture(scope="class", autouse=True)
     def dbt_profile_target(self):
+
+        # We are creating a toml file that contains the password
+        home_dir = os.getenv("HOME")
+        snowflake_home_dir = os.getenv("SNOWFLAKE_HOME")
+        # Use the snowflake home if available
+        if snowflake_home_dir != None:
+            config_toml = os.path.join(snowflake_home_dir, "config.toml")
+            connections_toml = os.path.join(snowflake_home_dir, "connections.toml")
+        else:
+            config_toml = os.path.join(home_dir, ".snowflake", "config.toml")
+            connections_toml = os.path.join(home_dir, ".snowflake", "connections.toml")
+            snowflake_home_dir = os.path.join(home_dir, ".snowflake")
+            os.environ["SNOWFLAKE_HOME"] = snowflake_home_dir
+
+        if not os.path.exists(snowflake_home_dir):
+            os.makedirs(snowflake_home_dir)
+        os.chmod(snowflake_home_dir, 0o700)
+
+        with open(config_toml, "w") as f:
+            f.write('default_connection_name = "default"')
+        os.chmod(config_toml, 0o600)
+
+        with open(connections_toml, "w") as f:
+            f.write(
+                f"""
+[default]
+account = "{ os.getenv("SNOWFLAKE_TEST_ACCOUNT") }"
+authenticator = "snowflake"
+database = "{ os.getenv("SNOWFLAKE_TEST_DATABASE") }"
+password = "{ os.getenv("SNOWFLAKE_TEST_PASSWORD") }"
+role = "{ os.getenv("DBT_TEST_USER_1") }"
+user = "{ os.getenv("SNOWFLAKE_TEST_USER") }"
+warehouse = "{ os.getenv("SNOWFLAKE_TEST_WAREHOUSE") }"
+"""
+            )
+        os.chmod(connections_toml, 0o600)
+
         # We are returning a profile that does not contain the password
         return {
             "type": "snowflake",
@@ -44,26 +81,4 @@ class TestConnectionName:
         return {"my_model.sql": "select 1 as id"}
 
     def test_connection(self, project):
-
-        # We are creating a toml file that contains the password
-        connections_for_toml = f"""
-[default]
-account = "{ os.getenv("SNOWFLAKE_TEST_ACCOUNT") }"
-authenticator = "snowflake"
-database = "{ os.getenv("SNOWFLAKE_TEST_DATABASE") }"
-password = "{ os.getenv("SNOWFLAKE_TEST_PASSWORD") }"
-role = "{ os.getenv("DBT_TEST_USER_1") }"
-user = "{ os.getenv("SNOWFLAKE_TEST_USER") }"
-warehouse = "{ os.getenv("SNOWFLAKE_TEST_WAREHOUSE") }"
-"""
-        temp_dir = tempfile.gettempdir()
-        connections_toml = os.path.join(temp_dir, "connections.toml")
-        os.environ["SNOWFLAKE_HOME"] = temp_dir
-
-        with open(connections_toml, "w") as f:
-            f.write(connections_for_toml)
-        os.chmod(connections_toml, 0o600)
-
         run_dbt()
-
-        os.unlink(connections_toml)
