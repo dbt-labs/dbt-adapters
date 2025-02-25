@@ -32,30 +32,11 @@ stages:
               hatch build
             displayName: 'Build the dbt-spark adapter'
 
-          # - script: |
-          #     # Determine the value of dev based on the branch name
-          #     if [ "$(Build.SourceBranch)" == "refs/heads/cccs/main" ]; then
-          #       dev=""
-          #     else
-          #       dev="dev"
-          #     fi
-          
-          #     virtualenv -p python$(pythonVersion) env
-          #     source env/bin/activate
-          #     pip install wheel setuptools==70.1.0
-          #     pip install -r requirements.txt 
-          #     # Version explicitly set to 1.4.10 until we move to dbt-core 1.6.0 and above
-          #     # where the version of this package will be <dbt-core-version>.<seq-build-id>
-          #     # VERSION=$(python setup.py --version).${dev}$(tag)
-          #     VERSION=1.4.10.${dev}$(tag)
-          #     DBT_SPARK_PACKAGE_VERSION=${VERSION} python setup.py sdist bdist_wheel
-          #   displayName: "Install and Build."
-
           - task: PublishPipelineArtifact@1
-            displayName: 'Publish dbt-spark adapter artifacts'
             inputs:
               targetPath: '$(Build.SourcesDirectory)/dbt-spark/dist'
               artifactName: 'dbt-spark'
+            displayName: 'Publish dbt-spark adapter artifacts'
 
       - job: PublishArtifactToPypi
         displayName: Publish artifact to BagOfHolding Unclass
