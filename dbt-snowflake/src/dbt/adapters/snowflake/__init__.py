@@ -8,7 +8,7 @@ from dbt.adapters.base import AdapterPlugin
 from dbt.include import snowflake
 
 Plugin = AdapterPlugin(
-    adapter=SnowflakeAdapter,  # type:ignore
+    adapter=SnowflakeAdapter,
     credentials=SnowflakeCredentials,
     include_path=snowflake.PACKAGE_PATH,
 )

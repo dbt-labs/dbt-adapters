@@ -66,26 +66,24 @@ class SnowflakeCatalogConfig(SnowflakeRelationConfigBase, RelationConfigValidati
         }
         if table_format := config_dict.get("table_format"):
             kwargs_dict["table_format"] = TableFormat(table_format)
-        return super().from_dict(kwargs_dict)  # type:ignore
+        return super().from_dict(kwargs_dict)
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
 
-        if relation_config.config.extra.get("table_format") is None:  # type:ignore
+        if relation_config.config.extra.get("table_format") is None:
             return {}
 
         config_dict = {
-            "table_format": relation_config.config.extra.get("table_format"),  # type:ignore
+            "table_format": relation_config.config.extra.get("table_format"),
             "name": "SNOWFLAKE",  # this is not currently configurable
         }
 
-        if external_volume := relation_config.config.extra.get("external_volume"):  # type:ignore
+        if external_volume := relation_config.config.extra.get("external_volume"):
             config_dict["external_volume"] = external_volume
 
         catalog_dirs: List[str] = ["_dbt", relation_config.schema, relation_config.name]
-        if base_location_subpath := relation_config.config.extra.get(  # type:ignore
-            "base_location_subpath"
-        ):
+        if base_location_subpath := relation_config.config.extra.get("base_location_subpath"):
             catalog_dirs.append(base_location_subpath)
         config_dict["base_location"] = "/".join(catalog_dirs)
 

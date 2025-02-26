@@ -44,8 +44,18 @@ class SnowflakeColumn(Column):
 
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
-        if "vector" in raw_data_type.lower():
+        # We want to pass through numeric parsing for composite types
+        if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
             column = cls(name, raw_data_type, None, None, None)
         else:
-            column = super().from_description(name, raw_data_type)  # type:ignore
+            column = super().from_description(name, raw_data_type)
         return column
+
+    def is_array(self) -> bool:
+        return self.dtype.lower().startswith("array")
+
+    def is_object(self) -> bool:
+        return self.dtype.lower().startswith("object")
+
+    def is_map(self) -> bool:
+        return self.dtype.lower().startswith("map")
