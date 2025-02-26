@@ -48,7 +48,7 @@ class SnowflakeColumn(Column):
         if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
             column = cls(name, raw_data_type, None, None, None)
         else:
-            column = super().from_description(name, raw_data_type)
+            column = super().from_description(name, raw_data_type)  # type:ignore
         return column
 
     def is_array(self) -> bool:
