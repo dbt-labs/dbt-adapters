@@ -113,6 +113,7 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     connection_name: Optional[str] = None
+    connections_file_path: Optional[str] = None
 
     def __post_init__(self):
         # skip authentication parameter checking if the connection_name is specified because additional
@@ -188,6 +189,7 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "connection_name",
+            "connections_file_path",
         )
 
     def auth_args(self):
@@ -196,6 +198,8 @@ class SnowflakeCredentials(Credentials):
         result = {}
         if self.connection_name:
             result["connection_name"] = self.connection_name
+        if self.connections_file_path:
+            result["connections_file_path"] = self.connections_file_path
         if self.user:
             result["user"] = self.user
         if self.password:
