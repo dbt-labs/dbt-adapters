@@ -1,7 +1,7 @@
 {% macro run_hooks(hooks, inside_transaction=True, span_name='run_hooks') %}
   {% if hooks|length > 0 %}
       {% set tracer = modules.opentelemetry.trace.get_tracer("dbt.runner") %}
-      {% with tracer.start_as_current_span(span_name) %}
+      {% with _ = tracer.start_as_current_span(span_name) %}
       {% for hook in hooks | selectattr('transaction', 'equalto', inside_transaction)  %}
         {% if not inside_transaction and loop.first %}
           {% call statement(auto_begin=inside_transaction) %}
