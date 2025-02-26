@@ -1,9 +1,7 @@
 {% macro run_hooks(hooks, inside_transaction=True, span_name='run_hooks') %}
   {% if hooks|length > 0 %}
-      {% set tracer = modules.opentelemetry.trace.get_tracer("dbt-runner") %}
-      {% set hook_span = tracer.start_span(span_name) %}
-      {% set ctx = modules.opentelemetry.trace.set_span_in_context(hook_span) %}
-      {% set token = modules.opentelemetry.context.attach(ctx) %}
+      {% set tracer = modules.opentelemetry.trace.get_tracer("dbt.runner") %}
+      {% with tracer.start_as_current_span(span_name) %}
       {% for hook in hooks | selectattr('transaction', 'equalto', inside_transaction)  %}
         {% if not inside_transaction and loop.first %}
           {% call statement(auto_begin=inside_transaction) %}
@@ -17,8 +15,7 @@
           {% endcall %}
         {% endif %}
       {% endfor %}
-      {% set _ = modules.opentelemetry.context.detach(token) %}
-      {% set _ = hook_span.end() %}
+      {% endwith %}
   {% endif %}
 {% endmacro %}
 
