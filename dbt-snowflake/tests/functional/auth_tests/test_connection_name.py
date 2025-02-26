@@ -24,7 +24,8 @@ import tempfile
 import pytest
 import os
 
-connections_toml_template = """[{name}]
+connections_toml_template = """
+[{name}]
 account = "{account}"
 authenticator = "snowflake"
 database = "{database}"
@@ -38,7 +39,7 @@ warehouse = "{warehouse}"
 class TestConnectionName:
 
     @pytest.fixture(scope="class", autouse=True)
-    def dbt_profile_target(self):
+    def dbt_profile_target(self, tmp_path):
         # We are returning a profile that does not contain the password
         return {
             "type": "snowflake",
@@ -47,6 +48,7 @@ class TestConnectionName:
             "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
             "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
             "connection_name": "default",
+            "connections_file_path": tmp_path / "connections.toml",
         }
 
     @pytest.fixture(scope="class")
@@ -54,32 +56,23 @@ class TestConnectionName:
         return {"my_model.sql": "select 1 as id"}
 
     # Test that we can write a connections.toml and use it to connect
-    def test_connection(self, project, tmp_path, monkeypatch):
+    def test_connection(self, project, dbt_profile_target):
+        connections_toml = dbt_profile_target.connections_file_path
 
         # We are creating a toml file that contains the password
-        connection_name = "default"
-        config_toml = tmp_path / "config.toml"
-        connections_toml = tmp_path / "connections.toml"
-
-        config_toml.write_text('default_connection_name = "default"\n')
-        config_toml.chmod(0o600)
-
         connections_toml.write_text(
             connections_toml_template.format(
-                name=connection_name,
-                account=os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-                database=os.getenv("SNOWFLAKE_TEST_DATABASE"),
+                name=dbt_profile_target.connection_name,
+                account=dbt_profile_target.account,
+                database=dbt_profile_target.database,
                 password=os.getenv("SNOWFLAKE_TEST_PASSWORD"),
                 role=os.getenv("SNOWFLAKE_TEST_ROLE"),
                 user=os.getenv("SNOWFLAKE_TEST_USER"),
-                warehouse=os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
-            ).strip()
+                warehouse=dbt_profile_target.warehouse,
+            )
         )
         connections_toml.chmod(0o600)
 
-        monkeypatch.setattr(os, "environ", {"SNOWFLAKE_HOME": str(tmp_path.absolute())})
-
         run_dbt()
 
-        config_toml.unlink()
         connections_toml.unlink()
