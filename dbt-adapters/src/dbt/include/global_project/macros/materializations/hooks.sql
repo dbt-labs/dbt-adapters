@@ -1,19 +1,17 @@
 {% macro run_hooks(hooks, inside_transaction=True, span_name='run_hooks') %}
-  {% if hooks|length > 0 %}
-      {% for hook in hooks | selectattr('transaction', 'equalto', inside_transaction)  %}
-        {% if not inside_transaction and loop.first %}
-          {% call statement(auto_begin=inside_transaction) %}
-            commit;
+  {% for hook in hooks | selectattr('transaction', 'equalto', inside_transaction)  %}
+    {% if not inside_transaction and loop.first %}
+      {% call statement(auto_begin=inside_transaction) %}
+        commit;
 {% endcall %}
-        {% endif %}
-        {% set rendered = render(hook.get('sql')) | trim %}
-        {% if (rendered | length) > 0 %}
-          {% call statement(auto_begin=inside_transaction) %}
-            {{ rendered }}
-          {% endcall %}
-        {% endif %}
-      {% endfor %}
-  {% endif %}
+    {% endif %}
+    {% set rendered = render(hook.get('sql')) | trim %}
+    {% if (rendered | length) > 0 %}
+      {% call statement(auto_begin=inside_transaction) %}
+        {{ rendered }}
+      {% endcall %}
+    {% endif %}
+  {% endfor %}
 {% endmacro %}
 
 
