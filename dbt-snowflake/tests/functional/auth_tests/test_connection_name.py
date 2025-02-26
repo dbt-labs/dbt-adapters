@@ -53,13 +53,13 @@ class TestConnectionName:
     def models(self):
         return {"my_model.sql": "select 1 as id"}
 
-    @pytest.fixture(autouse=True)
-    def connection_name(self, tmp_path, monkeypatch):
+    # Test that we can write a connections.toml and use it to connect
+    def test_connection(self, project, tmp_path, monkeypatch):
+
         # We are creating a toml file that contains the password
         connection_name = "default"
         config_toml = tmp_path / "config.toml"
         connections_toml = tmp_path / "connections.toml"
-        monkeypatch.setenv("SNOWFLAKE_HOME", str(tmp_path.absolute()))
 
         config_toml.write_text('default_connection_name = "default"\n')
         config_toml.chmod(0o600)
@@ -77,11 +77,9 @@ class TestConnectionName:
         )
         connections_toml.chmod(0o600)
 
-        yield connection_name
+        monkeypatch.setattr(os, "environ", {"SNOWFLAKE_HOME": str(tmp_path.absolute())})
 
-        monkeypatch.delenv("SNOWFLAKE_HOME")
+        run_dbt()
+
         config_toml.unlink()
         connections_toml.unlink()
-
-    def test_connection(self, project):
-        run_dbt()
