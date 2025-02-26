@@ -86,7 +86,7 @@
 
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
 
-  {{ run_hooks(pre_hooks) }}
+  {{ run_hooks(pre_hooks, span_name='pre-hook') }}
 
   {% if existing_relation is none %}
     {%- call statement('main', language=language) -%}
@@ -148,7 +148,7 @@
 
   {% do drop_relation_if_exists(tmp_relation) %}
 
-  {{ run_hooks(post_hooks) }}
+  {{ run_hooks(post_hooks, span_name='post-hook') }}
 
   {% set target_relation = target_relation.incorporate(type='table') %}
 
