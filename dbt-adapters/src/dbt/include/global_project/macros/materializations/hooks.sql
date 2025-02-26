@@ -3,7 +3,7 @@
     {% if not inside_transaction and loop.first %}
       {% call statement(auto_begin=inside_transaction) %}
         commit;
-{% endcall %}
+      {% endcall %}
     {% endif %}
     {% set rendered = render(hook.get('sql')) | trim %}
     {% if (rendered | length) > 0 %}
