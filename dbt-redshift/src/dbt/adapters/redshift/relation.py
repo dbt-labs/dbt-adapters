@@ -29,20 +29,20 @@ class RedshiftRelation(BaseRelation):
     quote_policy = RedshiftQuotePolicy  # type: ignore
     require_alias: bool = False
     relation_configs = {
-        RelationType.MaterializedView.value: RedshiftMaterializedViewConfig,
+        RelationType.MaterializedView.value: RedshiftMaterializedViewConfig,  # type:ignore
     }
     renameable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.View,
-                RelationType.Table,
+                RelationType.View,  # type:ignore
+                RelationType.Table,  # type:ignore
             }
         )
     )
     replaceable_relations: FrozenSet[RelationType] = field(
         default_factory=lambda: frozenset(
             {
-                RelationType.View,
+                RelationType.View,  # type:ignore
             }
         )
     )
@@ -89,19 +89,19 @@ class RedshiftRelation(BaseRelation):
 
         if new_materialized_view.autorefresh != existing_materialized_view.autorefresh:
             config_change_collection.autorefresh = RedshiftAutoRefreshConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.autorefresh,
             )
 
         if new_materialized_view.dist != existing_materialized_view.dist:
             config_change_collection.dist = RedshiftDistConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.dist,
             )
 
         if new_materialized_view.sort != existing_materialized_view.sort:
             config_change_collection.sort = RedshiftSortConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.sort,
             )
 

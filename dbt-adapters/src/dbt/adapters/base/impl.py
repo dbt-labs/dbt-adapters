@@ -1283,7 +1283,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         kwargs = {"information_schema": information_schema, "schemas": schemas}
         table = self.execute_macro(GET_CATALOG_MACRO_NAME, kwargs=kwargs)
 
-        results = self._catalog_filter_table(table, used_schemas)  # type: ignore[arg-type]
+        results = self._catalog_filter_table(table, used_schemas)
         return results
 
     def _get_one_catalog_by_relations(
@@ -1298,7 +1298,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         }
         table = self.execute_macro(GET_CATALOG_RELATIONS_MACRO_NAME, kwargs=kwargs)
 
-        results = self._catalog_filter_table(table, used_schemas)  # type: ignore[arg-type]
+        results = self._catalog_filter_table(table, used_schemas)
         return results
 
     def get_filtered_catalog(
@@ -1494,7 +1494,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 macro_resolver=macro_resolver,
                 needs_conn=True,
             )
-            adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+            adapter_response, table = result.response, result.table
             adapter_responses.append(adapter_response)
 
             for row in table:
