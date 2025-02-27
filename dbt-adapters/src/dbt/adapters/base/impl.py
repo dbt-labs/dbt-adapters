@@ -233,7 +233,7 @@ class SnapshotStrategy(TypedDict):
     scd_id: Optional[str]
     hard_deletes: Optional[str]
 
-
+@supports_replay
 class BaseAdapter(metaclass=AdapterMeta):
     """The BaseAdapter provides an abstract base class for adapters.
 
