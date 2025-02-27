@@ -29,7 +29,7 @@ _MODEL_BASIC_TABLE_WITH_STRUCTURED_TYPES = """
 select
     array_construct(1, 2, 3) as my_array,
     object_construct('languagepreference', 'english', 'localepreference', 'en_us') as my_object,
-    object_construct('theme', 'dark', 'notifications', TO_VARCHAR(true)) as my_map,
+    { 'key1': 'value1', 'key2': 123, 'key3': true } AS my_object_literal,
     array_construct(0.1, 0.2, 0.3)::vector(float, 3) as my_vector
 """
 
