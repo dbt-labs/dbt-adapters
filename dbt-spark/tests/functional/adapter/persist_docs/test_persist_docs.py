@@ -150,7 +150,21 @@ class TestPersistDocsMissingColumn:
         return {"schema.yml": _PROPERTIES__MODELS}
 
     def test_missing_column(self, project):
-        """spark will use our schema to verify all columns exist rather than fail silently"""
+        """
+        spark will use our schema to verify all columns exist rather than fail silently
+
+        "resolve" vs "resolved" is intentional; example error message:
+            ('42000', '[42000] [Simba][Hardy] (80) Syntax or semantic analysis error thrown in server while executing query.
+            Error message from server:
+                org.apache.hive.service.cli.HiveSQLException: Error running query: [UNRESOLVED_COLUMN.WITH_SUGGESTION]
+                org.apache.spark.sql.AnalysisException: [UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with name `name` cannot be resolve (80) (SQLExecDirectW)'
+            )
+        """
         run_dbt(["seed"])
         res = run_dbt(["run"], expect_pass=False)
-        assert "Missing field name in table" in res[0].message
+        assert any(
+            [
+                "[UNRESOLVED_COLUMN.WITH_SUGGESTION]" in res[0].message,
+                "Missing field name in table" in res[0].message,
+            ]
+        )
