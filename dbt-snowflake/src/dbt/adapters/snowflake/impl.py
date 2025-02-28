@@ -268,22 +268,39 @@ class SnowflakeAdapter(SQLAdapter):
 
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
-        if self.behavior.enable_iceberg_materializations.no_warn:
+
+        # If the is_iceberg column is already on schema_objects query, we can ignore
+        # normalizing using our homemade is_iceberg
+        if (
+            self.behavior.enable_iceberg_materializations.no_warn
+            and "is_iceberg" not in schema_objects.column_names
+        ):
             # The QUOTED_IDENTIFIERS_IGNORE_CASE setting impacts column names like
             # is_iceberg which is created by dbt, but it does not affect the case
             # of column values in Snowflake's SHOW OBJECTS query! This
             # normalization step ensures metadata queries are handled consistently.
-            schema_objects = schema_objects.rename(column_names={"IS_ICEBERG": "is_iceberg"})
+            schema_objects = schema_objects.rename(
+                column_names={
+                    "IS_ICEBERG_DBT": "is_iceberg",
+                    "is_iceberg_dbt": "is_iceberg",
+                }
+            )
+
+        # Make sure is_iceberg is present in the column set regardless of how it
+        # entered the schema_objects set. If the column is not there at all, keep
+        # it out of the column set.
+        if "is_iceberg" in schema_objects.column_names:
             columns.append("is_iceberg")
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
+        # We won't deprecate this for awhile as the bundle with is_iceberg will need time to be adopted
         if self.behavior.enable_iceberg_materializations.no_warn:
             database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
         else:
-            database, schema, identifier, relation_type, is_dynamic = result
+            # protective removal of any additional fields
+            database, schema, identifier, relation_type, is_dynamic, *_ = result
             is_iceberg = "N"
 
         try:
