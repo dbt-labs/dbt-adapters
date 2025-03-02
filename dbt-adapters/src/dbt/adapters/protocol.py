@@ -16,7 +16,7 @@ from typing_extensions import Protocol
 
 from dbt_common.clients.jinja import MacroProtocol
 from dbt_common.contracts.config.base import BaseConfig
-
+from dbt.adapters.catalogs import CatalogIntegration
 from dbt.adapters.contracts.connection import (
     AdapterRequiredConfig,
     AdapterResponse,
@@ -42,27 +42,6 @@ class ColumnProtocol(Protocol):
     pass
 
 
-class CatalogIntegrationConfigProtocol(Protocol):
-    catalog_name: str
-    integration_name: str
-    table_format: str
-    catalog_type: str
-    external_volume: Optional[str]
-    namespace: Optional[str]
-    adapter_properties: Optional[Dict]
-
-
-class CatalogIntegrationProtocol(Protocol):
-    catalog_name: str
-    integration_name: str
-    table_format: str
-    integration_type: str
-    external_volume: Optional[str]
-    namespace: Optional[str]
-
-    def __init__(self, integration_config: CatalogIntegrationConfigProtocol) -> None: ...
-
-
 Self = TypeVar("Self", bound="RelationProtocol")
 
 
@@ -83,7 +62,7 @@ AdapterConfig_T = TypeVar("AdapterConfig_T", bound=AdapterConfig)
 ConnectionManager_T = TypeVar("ConnectionManager_T", bound=ConnectionManagerProtocol)
 Relation_T = TypeVar("Relation_T", bound=RelationProtocol)
 Column_T = TypeVar("Column_T", bound=ColumnProtocol)
-CatalogIntegration_T = TypeVar("CatalogIntegration_T", bound=CatalogIntegrationProtocol)
+CatalogIntegration_T = TypeVar("CatalogIntegration_T", bound=CatalogIntegration)
 
 
 class MacroContextGeneratorCallable(Protocol):
