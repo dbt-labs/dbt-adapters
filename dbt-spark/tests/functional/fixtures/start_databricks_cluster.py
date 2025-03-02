@@ -7,6 +7,7 @@ import pytest
 try:
     from pyhive import hive
     from thrift.transport.THttpClient import THttpClient
+    from thrift.Thrift import TApplicationException
 except ImportError:
     pass
 
@@ -32,23 +33,23 @@ def start_databricks_cluster(request):
     yield
 
 
-def _wait_for_databricks_cluster():
+def _wait_for_databricks_cluster() -> None:
     """
     It takes roughly 3-5 minutes for the cluster to start, to be safe we'll wait for 10 minutes
     """
-    cursor = _cursor()
+    transport_client = _transport_client()
 
     for _ in range(20):
         try:
-            cursor.execute("SELECT 1", async_=False)
+            hive.connect(thrift_transport=transport_client)
             return
-        except Exception:
+        except TApplicationException:
             sleep(30)
 
     raise Exception("Databricks cluster did not start in time")
 
 
-def _cursor():
+def _transport_client():
     conn_url = SparkConnectionManager.SPARK_CONNECTION_URL.format(
         host=HOST,
         cluster=CLUSTER,
@@ -56,10 +57,8 @@ def _cursor():
         organization=ORGANIZATION,
     )
 
-    transport = THttpClient(conn_url)
+    transport_client = THttpClient(conn_url)
     raw_token = f"token:{TOKEN}".encode()
     token = standard_b64encode(raw_token).decode()
-    transport.setCustomHeaders({"Authorization": f"Basic {token}"})
-
-    conn = hive.connect(thrift_transport=transport)
-    return conn.cursor()
+    transport_client.setCustomHeaders({"Authorization": f"Basic {token}"})
+    return transport_client

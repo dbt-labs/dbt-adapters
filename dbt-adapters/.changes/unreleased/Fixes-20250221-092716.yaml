@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix incremental delete+insert SQL
+time: 2025-02-21T09:27:16.166423+02:00
+custom:
+    Author: ataft, adrianburusdbt
+    Issue: 150, 364
