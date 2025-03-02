@@ -1,5 +1,3 @@
-from argparse import Namespace
-
 import pytest
 
 from dbt.adapters.catalogs import (
@@ -19,7 +17,7 @@ def fake_client() -> CatalogIntegrationClient:
 
 @pytest.fixture
 def fake_catalog() -> CatalogIntegrationConfig:
-    return Namespace(
+    return CatalogIntegrationConfig(
         name="test_integration",
         type="managed",
         table_format="iceberg",
@@ -28,7 +26,7 @@ def fake_catalog() -> CatalogIntegrationConfig:
 
 @pytest.fixture
 def fake_unsupported_catalog() -> CatalogIntegrationConfig:
-    return Namespace(
+    return CatalogIntegrationConfig(
         name="test_integration",
         type="banana",
         table_format="iceberg",

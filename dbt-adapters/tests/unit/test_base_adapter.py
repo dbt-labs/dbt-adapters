@@ -10,17 +10,15 @@ from unittest.mock import MagicMock, patch
 import agate
 import pytz
 
-from dbt.adapters.base.catalog import CatalogIntegrationConfig, CatalogIntegrationType
+from dbt.adapters.catalogs import CatalogIntegrationConfig
 from dbt.adapters.contracts.connection import AdapterResponse
-from dbt.adapters.relation_configs.formats import TableFormat
 
 
 def test_adapter_can_add_catalog_integration(adapter):
     catalog_config = CatalogIntegrationConfig(
-        catalog_type="managed",
-        catalog_name="some_catalog",
-        integration_name="test_integration",
-        table_format=TableFormat.ICEBERG,
+        name="some_catalog",
+        type="managed",
+        table_format="iceberg",
         external_volume="test_volume",
         adapter_properties={"extra_fake_property": 42},
     )
@@ -29,10 +27,9 @@ def test_adapter_can_add_catalog_integration(adapter):
 
 def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
     catalog_config = CatalogIntegrationConfig(
-        catalog_type="not_supported_type",
-        catalog_name="some_catalog",
-        integration_name="test_integration",
-        table_format=TableFormat.ICEBERG,
+        name="some_catalog",
+        type="not_supported_type",
+        table_format="iceberg",
         external_volume="test_volume",
         adapter_properties={"extra_fake_property": 42},
     )

@@ -1,10 +1,12 @@
 import abc
-from typing import Dict, Optional, Protocol
+from dataclasses import dataclass
+from typing import Dict, Optional
 
 from dbt.adapters.contracts.relation import RelationConfig
 
 
-class CatalogIntegrationConfig(Protocol):
+@dataclass
+class CatalogIntegrationConfig:
     name: str
     type: str
     table_format: str
