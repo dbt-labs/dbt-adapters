@@ -93,10 +93,7 @@ from dbt.adapters.exceptions import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapters.protocol import (
-    AdapterConfig,
-    MacroContextGeneratorCallable,
-)
+from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 
 if TYPE_CHECKING:
     import agate
