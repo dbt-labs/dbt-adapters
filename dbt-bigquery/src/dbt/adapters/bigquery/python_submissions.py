@@ -198,8 +198,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         for required_config in python_required_configs:
             if not getattr(credentials, required_config):
                 raise ValueError(
-                    f"Need to supply {required_config} in profile to submit "
-                    "python job"
+                    f"Need to supply {required_config} in profile to submit python job"
                 )
 
         self._parsed_model = parsed_model
@@ -208,9 +207,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         # TODO(jialuo): add a function in clients.py.
         self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
             credentials=self._GoogleCredentials,
-            client_options=ClientOptions(
-                api_endpoint=f"{self._region}-aiplatform.googleapis.com"
-            ),
+            client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
         self._gcs_location = f"gs://{self._gcs_bucket}/{self._model_file_name}"
 
@@ -282,18 +279,16 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
 
         if hasattr(self._GoogleCredentials, "_service_account_email"):
-            notebook_execution_job.service_account = (self._GoogleCredentials._service_account_email)
+            notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
         else:
             from google.auth.transport.requests import Request
             request = Request()
             response = request(
                 method='GET',
                 url='https://www.googleapis.com/oauth2/v2/userinfo',
-                headers={
-                    'Authorization': f'Bearer {self._GoogleCredentials.token}'
-                }
+                headers={'Authorization': f'Bearer {self._GoogleCredentials.token}'},
             )
-            notebook_execution_job.execution_user = (json.loads(response.data).get('email'))
+            notebook_execution_job.execution_user = json.loads(response.data).get('email')
 
         notebook_execution_job.gcs_output_uri = (
             f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
