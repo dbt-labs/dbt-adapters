@@ -58,3 +58,6 @@ filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",
 ]
+markers = [
+    "serial: marks tests to be run one at a time (de-select with `-m 'not serial'`)"
+]

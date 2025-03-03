@@ -46,3 +46,6 @@ env_files = ["test.env"]
 filterwarnings = [
     "ignore:datetime.datetime.utcnow:DeprecationWarning",
 ]
+markers = [
+    "serial: marks tests to be run one at a time (de-select with `-m 'not serial'`)"
+]

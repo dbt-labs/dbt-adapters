@@ -54,13 +54,15 @@ jobs:
             python-version: ${{ matrix.python-version }}
 
     integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
+        uses: ./.github/workflows/_create-integration-test-runs.yml
+        strategy:
+            fail-fast: false
         with:
             packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
         secrets: inherit
 
     notification:

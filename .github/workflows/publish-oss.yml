@@ -57,10 +57,11 @@ jobs:
         if: |
             inputs.skip-integration-tests == false &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
-        uses: ./.github/workflows/_integration-tests.yml
+        uses: ./.github/workflows/_create-integration-test-runs.yml
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ inputs.branch }}
+            os: ${{ format('["{0}"]', vars.DEFAULT_RUNNER) }}
         secrets: inherit
 
     publish-prep-checks:
