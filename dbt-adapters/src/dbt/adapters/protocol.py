@@ -16,7 +16,7 @@ from typing_extensions import Protocol
 
 from dbt_common.clients.jinja import MacroProtocol
 from dbt_common.contracts.config.base import BaseConfig
-
+from dbt.adapters.catalogs import CatalogIntegration
 from dbt.adapters.contracts.connection import (
     AdapterRequiredConfig,
     AdapterResponse,
@@ -62,6 +62,7 @@ AdapterConfig_T = TypeVar("AdapterConfig_T", bound=AdapterConfig)
 ConnectionManager_T = TypeVar("ConnectionManager_T", bound=ConnectionManagerProtocol)
 Relation_T = TypeVar("Relation_T", bound=RelationProtocol)
 Column_T = TypeVar("Column_T", bound=ColumnProtocol)
+CatalogIntegration_T = TypeVar("CatalogIntegration_T", bound=CatalogIntegration)
 
 
 class MacroContextGeneratorCallable(Protocol):
@@ -82,6 +83,7 @@ class AdapterProtocol(
         ConnectionManager_T,
         Relation_T,
         Column_T,
+        CatalogIntegration_T,
     ],
 ):
     # N.B. Technically these are ClassVars, but mypy doesn't support putting type vars in a
@@ -91,6 +93,7 @@ class AdapterProtocol(
     Column: Type[Column_T]
     Relation: Type[Relation_T]
     ConnectionManager: Type[ConnectionManager_T]
+    CatalogIntegrations: Dict[str, Type[CatalogIntegration_T]]
     connections: ConnectionManager_T
 
     def __init__(self, config: AdapterRequiredConfig) -> None: ...

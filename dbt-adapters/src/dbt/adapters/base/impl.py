@@ -65,6 +65,11 @@ from dbt.adapters.base.relation import (
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationClient,
+    CatalogIntegrationConfig,
+)
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
@@ -269,6 +274,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
+    CATALOG_INTEGRATIONS: Dict[str, Type[CatalogIntegration]] = {}
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
@@ -295,6 +301,21 @@ class BaseAdapter(metaclass=AdapterMeta):
         self._macro_resolver: Optional[MacroResolverProtocol] = None
         self._macro_context_generator: Optional[MacroContextGeneratorCallable] = None
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
+        self.catalog_client = CatalogIntegrationClient(self.CATALOG_INTEGRATIONS)
+
+    def add_catalog_integrations(
+        self, catalog_integrations: List[CatalogIntegrationConfig]
+    ) -> List[CatalogIntegration]:
+        return [
+            self.add_catalog_integration(integration_config)
+            for integration_config in catalog_integrations
+        ]
+
+    def add_catalog_integration(self, integration: CatalogIntegrationConfig) -> CatalogIntegration:
+        return self.catalog_client.add(integration)
+
+    def get_catalog_integration(self, name: str) -> Optional[CatalogIntegration]:
+        return self.catalog_client.get(name)
 
     ###
     # Methods to set / access a macro resolver
