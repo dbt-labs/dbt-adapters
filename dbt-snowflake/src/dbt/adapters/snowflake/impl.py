@@ -446,7 +446,7 @@ CALL {proc_name}();
         return response
 
     def valid_incremental_strategies(self):
-        return ["append", "merge", "delete+insert", "microbatch"]
+        return ["append", "merge", "delete+insert", "microbatch", "insert_overwrite"]
 
     def debug_query(self):
         """Override for DebugTask method"""
