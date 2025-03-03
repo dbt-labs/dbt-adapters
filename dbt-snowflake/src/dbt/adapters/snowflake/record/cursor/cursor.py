@@ -10,7 +10,6 @@ class SnowflakeRecordReplayCursor(RecordReplayCursor):
     and sfqid properties which are specific to snowflake-connector."""
 
     @property
-    @property
     @record_function(CursorGetSqlStateRecord, method=True, id_field_name="connection_name")
     def sqlstate(self):
         return self.native_cursor.sqlstate
