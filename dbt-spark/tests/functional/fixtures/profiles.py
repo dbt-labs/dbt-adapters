@@ -1,40 +1,35 @@
-import pytest
 import os
 
-pytest_plugins = ["dbt.tests.fixtures.project"]
-
-
-def pytest_addoption(parser):
-    parser.addoption("--profile", action="store", default="apache_spark", type=str)
-
-
-# Using @pytest.mark.skip_profile('apache_spark') uses the 'skip_by_profile_type'
-# autouse fixture below
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers",
-        "skip_profile(profile): skip test for the given profile",
-    )
+import pytest
 
 
 @pytest.fixture(scope="session")
 def dbt_profile_target(request):
+
+    creds = {
+        "apache_spark": apache_spark_target,
+        "spark_http_odbc": spark_http_odbc_target,
+        "spark_session": spark_session_target,
+        "databricks_cluster": databricks_cluster_target,
+        "databricks_http_cluster": databricks_http_cluster_target,
+        "databricks_sql_endpoint": databricks_sql_endpoint_target,
+    }
+
+    profile = request.config.getoption("--profile")
+
+    try:
+        return creds[profile]()
+    except KeyError:
+        raise ValueError(f"Invalid profile type '{profile}'")
+
+
+@pytest.fixture(autouse=True)
+def skip_by_profile_type(request):
     profile_type = request.config.getoption("--profile")
-    if profile_type == "databricks_cluster":
-        target = databricks_cluster_target()
-    elif profile_type == "databricks_sql_endpoint":
-        target = databricks_sql_endpoint_target()
-    elif profile_type == "apache_spark":
-        target = apache_spark_target()
-    elif profile_type == "databricks_http_cluster":
-        target = databricks_http_cluster_target()
-    elif profile_type == "spark_session":
-        target = spark_session_target()
-    elif profile_type == "spark_http_odbc":
-        target = spark_http_odbc_target()
-    else:
-        raise ValueError(f"Invalid profile type '{profile_type}'")
-    return target
+    if request.node.get_closest_marker("skip_profile"):
+        for skip_profile_type in request.node.get_closest_marker("skip_profile").args:
+            if skip_profile_type == profile_type:
+                pytest.skip(f"skipped on '{profile_type}' profile")
 
 
 def apache_spark_target():
@@ -116,23 +111,3 @@ def spark_http_odbc_target():
         "connect_timeout": 5,
         "retry_all": True,
     }
-
-
-@pytest.fixture(autouse=True)
-def skip_by_profile_type(request):
-    profile_type = request.config.getoption("--profile")
-    if request.node.get_closest_marker("skip_profile"):
-        for skip_profile_type in request.node.get_closest_marker("skip_profile").args:
-            if skip_profile_type == profile_type:
-                pytest.skip(f"skipped on '{profile_type}' profile")
-
-
-def pytest_sessionfinish(session, exitstatus):
-    """
-    Configures pytest to treat a scenario with no tests as passing
-
-    pytest returns a code 5 when it collects no tests in an effort to warn when tests are expected but not collected
-    We don't want this when running tox because some combinations of markers and test segments return nothing
-    """
-    if exitstatus == 5:
-        session.exitstatus = 0
