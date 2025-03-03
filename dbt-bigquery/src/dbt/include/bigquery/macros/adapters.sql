@@ -50,13 +50,13 @@
     {%- if (old_relation.is_table and (should_full_refresh())) -%}
       {% do adapter.drop_relation(relation) %}
     {%- endif -%}
-    {%- set dataframe_python_syntax = config.get('dataframe_python_syntax', 'spark') -%}
-    {%- if dataframe_python_syntax == 'spark' -%}
+    {%- set submission_method = config.get('submission_method', 'spark') -%}
+    {%- if submission_method == 'spark' -%}
       {{ py_write_table(compiled_code=compiled_code, target_relation=relation.quote(database=False, schema=False, identifier=False)) }}
-    {%- elif dataframe_python_syntax == 'bigframes' -%}
+    {%- elif submission_method == 'bigframes' -%}
       {{ bigframes_write_table(compiled_code=compiled_code, target_relation=relation.quote(database=False, schema=False, identifier=False)) }}
     {%- else -%}
-      {% do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported dataframe syntax, it got %s" % dataframe_python_syntax) %} {%- endif -%}
+      {% do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported dataframe syntax, it got %s" % submission_method) %} {%- endif -%}
   {%- else -%}
     {% do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported language, it got %s" % language) %}
   {%- endif -%}

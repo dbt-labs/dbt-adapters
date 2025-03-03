@@ -11,17 +11,15 @@ from dbt.adapters.bigquery.clients import (
     create_gcs_client,
 )
 from dbt.adapters.bigquery.credentials import (
-    BigQueryCredentials,
     create_google_credentials,
     DataprocBatchConfig,
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from google.api_core.client_options import ClientOptions
-from google.api_core.future.polling import POLLING_PREDICATE
 
-from google.cloud import aiplatform_v1  # type: ignore
-from google.cloud.dataproc_v1 import Batch, CreateBatchRequest, Job, RuntimeConfig
+from google.cloud import aiplatform_v1
+from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
 import nbformat
@@ -237,11 +235,13 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
         page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
         if list(page_result):
-            # Extract template id from name
-            notebook_template_id = re.search(
-                r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name
-            ).group(1)
-            return notebook_template_id
+            # Extract template id from name.
+            match = re.search(r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name)
+            if match:  # Check if match is not None.
+                notebook_template_id = match.group(1)
+                return notebook_template_id
+            else:
+                raise ValueError("No matching notebook runtime template name found.")
         else:
             raise ValueError("No Default notebook runtime templates found.")
 
@@ -278,17 +278,19 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_location)
         )
 
+        # TODO(jialuo): Add a method for it.
         if hasattr(self._GoogleCredentials, "_service_account_email"):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
         else:
             from google.auth.transport.requests import Request
+
             request = Request()
             response = request(
-                method='GET',
-                url='https://www.googleapis.com/oauth2/v2/userinfo',
-                headers={'Authorization': f'Bearer {self._GoogleCredentials.token}'},
+                method="GET",
+                url="https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
             )
-            notebook_execution_job.execution_user = json.loads(response.data).get('email')
+            notebook_execution_job.execution_user = json.loads(response.data).get("email")
 
         notebook_execution_job.gcs_output_uri = (
             f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
@@ -304,9 +306,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         gcs_log = self._read_json_from_gcs(gcs_log_uri)
-        # TODO(jialuo): improve the logger info.
-        _logger.info(
-            f"The colab notebook runtime outputs from GCS: {gcs_log['cells'][0]['outputs']}"
-        )
+        if gcs_log:
+            # TODO(jialuo): improve the logger info.
+            # TODO(jialuo): raise errors here. There are some situations when
+            # the notebook failed but the pipeline still showed success.
+            _logger.info(
+                f"The colab notebook runtime outputs from GCS: {gcs_log['cells'][0]['outputs']}"
+            )
+        else:
+            _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
 
         _ = self._ai_platform_client.get_notebook_execution_job(name=res.name)
