@@ -204,19 +204,15 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         self._parsed_model = parsed_model
         self._model_name = parsed_model["alias"]
-        # Ihis might not needed since we have self._project and _region, and .. ###################
-        self._credentials = credentials
         self._GoogleCredentials = create_google_credentials(credentials)
         # TODO(jialuo): add a function in clients.py.
         self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
             credentials=self._GoogleCredentials,
             client_options=ClientOptions(
-                api_endpoint=(
-                    f"{self._credentials.bigframes_region}-aiplatform.googleapis.com"
-                )
+                api_endpoint=f"{self._region}-aiplatform.googleapis.com"
             ),
         )
-        self._gcs_location = f"gs://{self._credentials.gcs_bucket}/{self._model_file_name}"
+        self._gcs_location = f"gs://{self._gcs_bucket}/{self._model_file_name}"
 
     def _get_batch_id(self) -> str:
         model = self._parsed_model
@@ -239,16 +235,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
     def _get_notebook_template_id(self) -> str:
         request = aiplatform_v1.ListNotebookRuntimeTemplatesRequest(
-            parent=(
-                f"projects/{self._credentials.execution_project}/locations/"
-                f"{self._credentials.bigframes_region}"
-            ),
+            parent=f"projects/{self._project}/locations/{self._region}",
             filter="notebookRuntimeType = ONE_CLICK",
         )
-        page_result = self._ai_platform_client.list_notebook_runtime_templates(
-            request=request
-        )
-        if len(list(page_result)) > 0:
+        page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
+        if list(page_result):
             # Extract template id from name
             notebook_template_id = re.search(
                 r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name
@@ -282,21 +273,16 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
         notebook_execution_job.notebook_runtime_template_resource_name = (
-            f"projects/{self._credentials.execution_project}/"
-            f"locations/{self._credentials.bigframes_region}/"
+            f"projects/{self._project}/locations/{self._region}/"
             f"notebookRuntimeTemplates/{notebook_template_id}"
         )
 
         notebook_execution_job.gcs_notebook_source = (
-            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(
-                uri=self._gcs_location
-            )
+            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_location)
         )
 
         if hasattr(self._GoogleCredentials, "_service_account_email"):
-            notebook_execution_job.service_account = (
-                self._GoogleCredentials._service_account_email
-            )
+            notebook_execution_job.service_account = (self._GoogleCredentials._service_account_email)
         else:
             from google.auth.transport.requests import Request
             request = Request()
@@ -307,30 +293,21 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     'Authorization': f'Bearer {self._GoogleCredentials.token}'
                 }
             )
-            notebook_execution_job.execution_user = (
-                json.loads(response.data).get('email')
-            )
+            notebook_execution_job.execution_user = (json.loads(response.data).get('email'))
 
         notebook_execution_job.gcs_output_uri = (
-            f"gs://{self._credentials.gcs_bucket}/{self._model_file_name}/logs"
+            f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
         )
         notebook_execution_job.display_name = self._get_batch_id()
         request = aiplatform_v1.CreateNotebookExecutionJobRequest(
-            parent=(
-                f"projects/{self._credentials.execution_project}/"
-                f"locations/{self._credentials.bigframes_region}"
-            ),
+            parent=f"projects/{self._project}/locations/{self._region}",
             notebook_execution_job=notebook_execution_job,
         )
 
-        res = self._ai_platform_client.create_notebook_execution_job(
-            request=request
-        ).result()
+        res = self._ai_platform_client.create_notebook_execution_job(request=request).result()
 
         job_id = res.name.split("/")[-1]
-        gcs_log_uri = (
-            f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
-        )
+        gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         gcs_log = self._read_json_from_gcs(gcs_log_uri)
         # TODO(jialuo): improve the logger info.
         _logger.info(
