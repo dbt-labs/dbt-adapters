@@ -1,0 +1,6 @@
+kind: Features
+body: Add insert_overwrite 'incremental' strategy.
+time: 2025-02-28T06:57:25.124021-08:00
+custom:
+    Author: versusfacit
+    Issue: "736"
