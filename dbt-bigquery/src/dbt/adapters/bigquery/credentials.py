@@ -2,6 +2,7 @@ import base64
 import binascii
 from dataclasses import dataclass, field
 from functools import lru_cache
+import json
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 from google.auth import default
@@ -9,6 +10,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from google.oauth2.credentials import Credentials as GoogleCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.auth.identity_pool import Credentials as IdentityPoolCredentials
 from mashumaro import pass_through
 
 from dbt_common.clients.system import run_cmd
@@ -17,9 +19,12 @@ from dbt_common.exceptions import DbtConfigError, DbtRuntimeError
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt.adapters.bigquery.auth_providers import create_token_service_client
 
 
 _logger = AdapterLogger("BigQuery")
+
+_TOKEN_FILE_PATH = "/tmp/access_token.json"
 
 
 class Priority(StrEnum):
@@ -38,6 +43,7 @@ class _BigQueryConnectionMethod(StrEnum):
     OAUTH_SECRETS = "oauth-secrets"
     SERVICE_ACCOUNT = "service-account"
     SERVICE_ACCOUNT_JSON = "service-account-json"
+    EXTERNAL_OAUTH_WIF = "external-oauth-wif"
 
 
 @dataclass
@@ -70,6 +76,16 @@ class BigQueryCredentials(Credentials):
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     token_uri: Optional[str] = None
+
+    # wif
+    audience: Optional[str] = None
+    service_account_impersonation_url: Optional[str] = None
+
+    # token_endpoint
+    #   a field that we expect to be a dictionary of values used to create
+    #   access tokens from an external identity provider integrated with GCP's
+    #   workload identity federation service
+    token_endpoint: Optional[Dict[str, str]] = None
 
     dataproc_region: Optional[str] = None
     dataproc_cluster_name: Optional[str] = None
@@ -219,10 +235,67 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             scopes=credentials.scopes,
         )
 
+    elif credentials.method == _BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
+        creds = _create_identity_pool_credentials(credentials=credentials)
+
     else:
         raise FailedToConnectError(f"Invalid `method` in profile: '{credentials.method}'")
 
     return creds
+
+
+def _create_identity_pool_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
+    """
+    The ADC dict here represents a configuration for a Google Cloud credential that is used to authenticate with a Google Cloud service.
+    `credential_source` can either be a file path or a URL. In our case, it needs to be a file path to the access token file.
+    """
+    _fetch_and_save_access_token(credentials.token_endpoint)
+
+    adc_dict = {
+        "universe_domain": "googleapis.com",
+        "type": "external_account",
+        "audience": credentials.audience,
+        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+        "token_url": "https://sts.googleapis.com/v1/token",
+        "credential_source": {
+            "file": _TOKEN_FILE_PATH,
+            "format": {"type": "json", "subject_token_field_name": "access_token"},
+        },
+    }
+
+    if credentials.service_account_impersonation_url:
+        adc_dict["service_account_impersonation_url"] = (
+            credentials.service_account_impersonation_url
+        )
+
+    creds = IdentityPoolCredentials.from_info(adc_dict)
+    return creds.with_scopes(credentials.scopes)
+
+
+def _fetch_and_save_access_token(token_endpoint: Optional[Dict[str, Any]]) -> None:
+    """
+    We fetch the access token from the identity provider and save it to a file.
+    We specify this file path when creating the Application Default Credentials (ADC) config.
+    """
+    if not token_endpoint:
+        raise FailedToConnectError("token_endpoint is required for external-oauth-wif")
+
+    token_service = create_token_service_client(token_endpoint)
+    response = token_service.handle_request()
+    try:
+        token_data = {"access_token": response.json()["access_token"]}
+    except KeyError:
+        raise FailedToConnectError(
+            "access_token missing from Idp token request. Please confirm correct configuration of the token_endpoint field in profiles.yml and that your Idp can obtain an OIDC-compliant access token."
+        )
+
+    try:
+        with open(_TOKEN_FILE_PATH, "w") as token_file:
+            json.dump(token_data, token_file)
+    except (FileNotFoundError, PermissionError) as e:
+        raise FailedToConnectError(
+            f"Failed to write access token to {_TOKEN_FILE_PATH}. This may be due to insufficient permissions or a missing directory. Error: {str(e)}"
+        )
 
 
 @lru_cache()
