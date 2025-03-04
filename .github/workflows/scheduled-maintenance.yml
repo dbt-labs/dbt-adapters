@@ -1,4 +1,5 @@
 name: "Scheduled maintenance"
+run-name: "Scheduled maintenance - ${{ github.actor }}"
 
 on:
     schedule:

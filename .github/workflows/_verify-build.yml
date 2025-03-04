@@ -1,4 +1,5 @@
-name: "Verify build"
+name: "# Verify build"
+run-name: "Verify build - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
