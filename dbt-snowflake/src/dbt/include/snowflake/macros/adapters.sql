@@ -150,7 +150,7 @@
     {# -- Gated for performance reason. If you don't want Iceberg, you shouldn't pay the
        -- latency penalty. #}
     {% if adapter.behavior.enable_iceberg_materializations.no_warn %}
-      select all_objects.*, is_iceberg
+      select all_objects.*, is_iceberg as is_iceberg_dbt
       from table(result_scan(last_query_id(-1))) all_objects
       left join INFORMATION_SCHEMA.tables as all_tables
         on all_tables.table_name = all_objects."name"
