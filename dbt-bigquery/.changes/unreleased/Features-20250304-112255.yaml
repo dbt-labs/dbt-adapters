@@ -1,0 +1,6 @@
+kind: Features
+body: Add authentication method for Workload Identity Federation.
+time: 2025-03-04T11:22:55.719762-08:00
+custom:
+    Author: jenniferjsmmiller
+    Issue: "593"
