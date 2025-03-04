@@ -6,6 +6,7 @@ from dbt.tests.util import run_dbt, rm_file, write_file
 
 from tests.functional.iceberg.models import (
     _MODEL_BASIC_TABLE_MODEL,
+    _MODEL_BASIC_TABLE_LITERALS,
     _MODEL_BASIC_ICEBERG_MODEL,
     _MODEL_BASIC_ICEBERG_MODEL_WITH_PATH,
     _MODEL_BASIC_ICEBERG_MODEL_WITH_PATH_SUBPATH,
@@ -29,6 +30,7 @@ class TestIcebergTableBuilds:
     def models(self):
         return {
             "first_table.sql": _MODEL_BASIC_TABLE_MODEL,
+            "first_table_literals.sql": _MODEL_BASIC_TABLE_LITERALS,
             "iceberg_table.sql": _MODEL_BASIC_ICEBERG_MODEL,
             "iceberg_tableb.sql": _MODEL_BASIC_ICEBERG_MODEL_WITH_PATH,
             "iceberg_tablec.sql": _MODEL_BASIC_ICEBERG_MODEL_WITH_PATH_SUBPATH,
@@ -41,7 +43,7 @@ class TestIcebergTableBuilds:
 
     def test_iceberg_tables_build_and_can_be_referred(self, project):
         run_results = run_dbt()
-        assert len(run_results) == 9
+        assert len(run_results) == 10
 
 
 class TestIcebergTableTypeBuildsOnExistingTable:
