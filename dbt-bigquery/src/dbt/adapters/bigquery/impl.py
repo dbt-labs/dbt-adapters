@@ -59,6 +59,7 @@ from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
+    BigFramesHelper,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -110,6 +111,7 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
+    dataframe_python_syntax: Optional[str] = "spark"
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -911,6 +913,7 @@ class BigQueryAdapter(BaseAdapter):
         return {
             "cluster": ClusterDataprocHelper,
             "serverless": ServerlessDataProcHelper,
+            "bigframes": BigFramesHelper,
         }
 
     @available

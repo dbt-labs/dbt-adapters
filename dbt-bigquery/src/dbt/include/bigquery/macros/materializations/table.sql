@@ -51,7 +51,6 @@ from pyspark.sql import SparkSession
 {%- set raw_cluster_by = config.get('cluster_by', none) -%}
 {%- set enable_list_inference = config.get('enable_list_inference', true) -%}
 {%- set intermediate_format = config.get('intermediate_format', none) -%}
-
 {%- set partition_config = adapter.parse_partition_by(raw_partition_by) %}
 
 spark = SparkSession.builder.appName('smallTest').getOrCreate()
@@ -138,4 +137,17 @@ df.write \
   .option("clusteredFields", "{{- raw_cluster_by | join(',') -}}") \
   {%- endif %}
   .save("{{target_relation}}")
+{% endmacro %}
+
+{% macro bigframes_write_table(compiled_code, target_relation) %}
+import bigframes.pandas as bpd
+bpd.options.bigquery.project = "{{target.project}}"
+bpd.options.bigquery.location = "{{target.location}}"
+bpd.options.compute.extra_query_labels["bigframes-dbt-api-0"] = 'python-model-table-test0'
+bpd.options.compute.extra_query_labels["bigframes-dbt-api-1"] = 'python-model-table-test1'
+{{ compiled_code }}
+dbt = dbtObj(bpd.read_gbq)
+session = None
+df = model(dbt,session)
+df.to_gbq("{{target_relation}}",if_exists='replace')
 {% endmacro %}
