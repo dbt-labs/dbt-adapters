@@ -21,6 +21,24 @@ def select_1(dataset: str, materialized: str):
     )
 
 
+def select_1_materialized_view(dataset: str):
+    config = f"""config(
+                materialized='materialized_view',
+                grant_access_to=[
+                  {{'project': 'dbt-test-env', 'dataset': '{dataset}'}},
+                ]
+            )"""
+    return (
+        "{{"
+        + config
+        + "}}"
+        + """
+           SELECT one, COUNT(1) AS count_one
+           FROM {{ ref('select_1_table') }}
+           GROUP BY one"""
+    )
+
+
 BAD_CONFIG_TABLE_NAME = "bad_view"
 BAD_CONFIG_TABLE = """
 {{ config(
@@ -75,15 +93,34 @@ class TestAccessGrantSucceeds:
         return {
             "select_1.sql": select_1(dataset=dataset, materialized="view"),
             "select_1_table.sql": select_1(dataset=dataset, materialized="table"),
+            "select_1_materialized_view.sql": select_1_materialized_view(dataset=dataset),
         }
 
-    def test_grant_access_succeeds(self, project, setup_grant_schema, teardown_grant_schema):
+    def test_grant_access_succeeds(
+        self, project, setup_grant_schema, teardown_grant_schema, unique_schema
+    ):
         # Need to run twice to validate idempotency
         results = run_dbt(["run"])
-        assert len(results) == 2
+        assert len(results) == 3
         time.sleep(10)
-        results = run_dbt(["run"])
+        # Materialized view excluded since it would produce an error since source table is replaced
+        results = run_dbt(["run", "--exclude", "select_1_materialized_view"])
         assert len(results) == 2
+
+        with project.adapter.connection_named("__test_grants"):
+            client = project.adapter.connections.get_thread_connection().handle
+            dataset_name = get_schema_name(unique_schema)
+            dataset_id = "{}.{}".format("dbt-test-env", dataset_name)
+            bq_dataset = client.get_dataset(dataset_id)
+
+            authorized_view_names = []
+            for access_entry in bq_dataset.access_entries:
+                if access_entry.entity_type != "view":
+                    continue
+
+                authorized_view_names.append(access_entry.entity_id["tableId"])
+
+            assert set(authorized_view_names) == set(["select_1", "select_1_materialized_view"])
 
 
 class TestAccessGrantFails:
