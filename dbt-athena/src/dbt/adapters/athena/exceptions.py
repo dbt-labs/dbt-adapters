@@ -7,3 +7,7 @@ class SnapshotMigrationRequired(CompilationError):
 
 class S3LocationException(DbtRuntimeError):
     pass
+
+
+class CancelledQueryException(DbtRuntimeError):
+    pass
