@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Issue a warning to dbt-athena-community users to migrate to dbt-athena
+time: 2025-03-05T18:42:06.109752-05:00
+custom:
+  Author: mikealfare
+  Issue: "879"
