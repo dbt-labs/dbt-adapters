@@ -43,7 +43,7 @@ jobs:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}
                 notification_title: "dbt-mantle lockfile is ready for review"
-                message_format: "View PR: https://github.com/dbt-labs/dbt-adapters/pull/${{ steps.pr.outputs.number }}"
+                message_format: "View PR: https://github.com/dbt-labs/dbt-mantle/pull/${{ steps.pr.outputs.number }}"
                 mention_groups: ${{ vars.SLACK_ON_CALL }}
                 mention_groups_when: "success"
             env:
