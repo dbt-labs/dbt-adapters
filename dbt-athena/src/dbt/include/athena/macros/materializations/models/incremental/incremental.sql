@@ -63,7 +63,7 @@
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
   -- Insert Overwrite Strategy --
-  {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
+  {% elif strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
