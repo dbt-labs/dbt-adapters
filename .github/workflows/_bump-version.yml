@@ -49,6 +49,10 @@ on:
 permissions:
     contents: write
 
+defaults:
+    run:
+        shell: bash
+
 jobs:
     main:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -65,8 +69,12 @@ jobs:
                 echo "initial=$(hatch version)" >> $GITHUB_OUTPUT
                 hatch version ${{ inputs.version }}
                 echo "final=$(hatch version)" >> $GITHUB_OUTPUT
-            shell: bash
             working-directory: ./${{ inputs.package }}
+        -   if: inputs.package == 'dbt-athena'
+            run: sed -i "s/$INITIAL/$FINAL/g" dbt-athena-community/pyproject.toml
+            env:
+                INITIAL: ${{ steps.version.outputs.initial }}
+                FINAL: ${{ steps.version.outputs.final }}
         -   uses: ./.github/actions/bot-commit
             with:
                 message: "Bump version from ${{ steps.version.outputs.initial }} to ${{ steps.version.outputs.final }}"

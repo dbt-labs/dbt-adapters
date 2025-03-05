@@ -11,7 +11,6 @@ on:
                 -   "dbt-adapters"
                 -   "dbt-tests-adapter"
                 -   "dbt-athena"
-                -   "dbt-athena-community"
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
@@ -109,8 +108,6 @@ jobs:
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         -   uses: pypa/hatch@install
-            # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
-            # this is done via environment variables in the test environment in GitHub
         -   run: hatch build && hatch run build:check-all
             working-directory: ./${{ inputs.package }}
         -   uses: pypa/gh-action-pypi-publish@release/v1
@@ -125,4 +122,20 @@ jobs:
                 timeout_seconds: 10
                 retry_wait_seconds: 10
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
-                command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ steps.version.outputs.version }}
+                command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
+        # publish dbt-athena-community following dbt-athena
+        -   if: inputs.package == 'dbt-athena'
+            run: hatch build && hatch run build:check-all
+            working-directory: ./dbt-athena-community
+        -   if: inputs.package == 'dbt-athena'
+            uses: pypa/gh-action-pypi-publish@release/v1
+            with:
+                repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+                packages-dir: ./dbt-athena-community/dist/
+        -   if: inputs.package == 'dbt-athena'
+            uses: nick-fields/retry@v3
+            with:
+                timeout_seconds: 10
+                retry_wait_seconds: 10
+                max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
+                command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
