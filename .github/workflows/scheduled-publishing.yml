@@ -1,0 +1,50 @@
+name: "Scheduled publishing"
+run-name: "Publish to internal - Scheduled"
+
+on:
+    schedule:
+    -   cron: "0 0 * * SUN"
+
+jobs:
+    publish:
+        strategy:
+            matrix:
+                package:
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            fail-fast: false
+        uses: ./.github/workflows/publish-internal.yml
+        with:
+            package: ${{ matrix.package }}
+        secrets: inherit
+
+    open-lockfile-pr:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   id: pr
+            shell: bash
+            run: |
+                RUN_ID=$(gh workflow run $WORKFLOW --repo $REPO)
+                echo $RUN_ID
+                gh run watch $RUN_ID
+                PR=$(gh pr list --repo $REPO --search "$PR_TITLE in:title" --json number | jq 'max .number')
+                echo "number=$PR" >> $GITHUB_OUTPUT
+            env:
+                GH_TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
+                REPO: "dbt-labs/dbt-mantle"
+                WORKFLOW: "open-lockfile-pr.yml"
+                PR_TITLE: "Generate new lockfile for dbt-mantle"
+        -   uses: ravsamhq/notify-slack-action@v2
+            with:
+                token: ${{ secrets.GITHUB_TOKEN }}
+                status: ${{ job.status }}
+                notification_title: "dbt-mantle lockfile is ready for review"
+                message_format: "View PR: https://github.com/dbt-labs/dbt-adapters/pull/${{ steps.pr.outputs.number }}"
+                mention_groups: ${{ vars.SLACK_ON_CALL }}
+                mention_groups_when: "success"
+            env:
+                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_PULL_REQUESTS }}
