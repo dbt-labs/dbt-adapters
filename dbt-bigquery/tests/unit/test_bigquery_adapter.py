@@ -61,6 +61,19 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "keyfile": "/tmp/dummy-service-account.json",
                     "threads": 1,
                 },
+                "external_oauth_wif": {
+                    "type": "bigquery",
+                    "method": "external-oauth-wif",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "token_endpoint": {
+                        "type": "entra",
+                        "request_url": "https://example.com/token",
+                        "request_data": "mydata",
+                    },
+                    "audience": "https://example.com/audience",
+                },
                 "loc": {
                     "type": "bigquery",
                     "method": "oauth",
@@ -325,6 +338,23 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         self, mock_open_connection
     ):
         adapter = self.get_adapter("impersonate")
+        try:
+            connection = adapter.acquire_connection("dummy")
+            self.assertEqual(connection.type, "bigquery")
+
+        except dbt_common.exceptions.base.DbtValidationError as e:
+            self.fail("got DbtValidationError: {}".format(str(e)))
+
+        except BaseException:
+            raise
+
+        mock_open_connection.assert_not_called()
+        connection.handle
+        mock_open_connection.assert_called_once()
+
+    @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
+    def test_acquire_connection_external_oauth_wif_validations(self, mock_open_connection):
+        adapter = self.get_adapter("external_oauth_wif")
         try:
             connection = adapter.acquire_connection("dummy")
             self.assertEqual(connection.type, "bigquery")
