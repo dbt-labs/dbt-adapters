@@ -384,6 +384,21 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         connection.handle
         mock_open_connection.assert_called_once()
 
+    @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
+    def test_acquire_connection_maximum_bytes_billed(self, mock_open_connection):
+        adapter = self.get_adapter("loc")
+        try:
+            connection = adapter.acquire_connection("dummy")
+            self.assertEqual(connection.type, "bigquery")
+            self.assertEqual(connection.credentials.maximum_bytes_billed, 0)
+
+        except dbt_common.exceptions.base.DbtValidationError as e:
+            self.fail("got DbtValidationError: {}".format(str(e)))
+
+        mock_open_connection.assert_not_called()
+        connection.handle
+        mock_open_connection.assert_called_once()
+
     def test_cancel_open_connections_empty(self):
         adapter = self.get_adapter("oauth")
         self.assertEqual(len(list(adapter.cancel_open_connections())), 0)
