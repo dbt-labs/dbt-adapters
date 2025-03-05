@@ -34,6 +34,15 @@
     {% set strategy = 'append' %}
   {% endif %}
 
+  -- If no partitions are used with microbatch, raise an error.
+  {% if partitioned_by is none and strategy == 'microbatch' %}
+    {% set missing_partition_key_microbatch_msg -%}
+      dbt-athena 'microbatch' incremental strategy requires a `partition_by` config.
+      Ensure you are using a `partition_by` column that is of grain {{ config.get('batch_size') }}.
+    {%- endset %}
+    {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
+  {% endif %}
+
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
 
   -- `BEGIN` happens here:
