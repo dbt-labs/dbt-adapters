@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop adding aliases to render_limited output for --empty
+time: 2025-02-28T07:36:29.779607-08:00
+custom:
+    Author: anaghshineh versusfacit
+    Issue: "474"
