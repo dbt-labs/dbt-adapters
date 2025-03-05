@@ -23,6 +23,7 @@ jobs:
         secrets: inherit
 
     open-lockfile-pr:
+        needs: publish
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   id: pr
@@ -31,7 +32,9 @@ jobs:
                 RUN_ID=$(gh workflow run $WORKFLOW --repo $REPO)
                 echo $RUN_ID
                 gh run watch $RUN_ID
+
                 PR=$(gh pr list --repo $REPO --search "$PR_TITLE in:title" --json number | jq 'max .number')
+                echo $PR
                 echo "number=$PR" >> $GITHUB_OUTPUT
             env:
                 GH_TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
