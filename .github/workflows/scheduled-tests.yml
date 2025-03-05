@@ -22,7 +22,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -45,7 +45,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJson(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.ref }}
@@ -55,19 +55,8 @@ jobs:
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
         with:
-            package: ${{ matrix.package }}
+            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}

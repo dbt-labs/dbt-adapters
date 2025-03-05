@@ -34,7 +34,7 @@ class BaseAdapterStub(BaseAdapter):
         return False
 
     def list_schemas(self, database: str) -> List[str]:
-        return list(self.cache.schemas)
+        return list(schema for database, schema in self.cache.schemas if isinstance(schema, str))
 
     ###
     # Abstract methods about relations

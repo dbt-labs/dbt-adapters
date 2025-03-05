@@ -135,7 +135,7 @@ class BaseRelation(FakeAPIObject, Hashable):
             if str(self.path.get_lowered_part(k)).strip(self.quote_character) != v.lower().strip(
                 self.quote_character
             ):
-                approximate_match = False  # type: ignore[union-attr]
+                approximate_match = False
 
         if approximate_match and not exact_match:
             target = self.create(database=database, schema=schema, identifier=identifier)

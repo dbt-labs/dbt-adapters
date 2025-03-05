@@ -2,7 +2,7 @@ import os
 
 import argparse
 import sys
-from typing import Dict
+from typing import Dict, Tuple
 
 import anyio as anyio
 import dagger as dagger
@@ -29,7 +29,7 @@ def env_variables(envs: Dict[str, str]):
     return env_variables_inner
 
 
-def get_postgres_container(client: dagger.Client) -> (dagger.Container, str):
+def get_postgres_container(client: dagger.Client) -> Tuple[dagger.Container, str]:
     ctr = (
         client.container()
         .from_("postgres:13")
@@ -41,7 +41,7 @@ def get_postgres_container(client: dagger.Client) -> (dagger.Container, str):
     return ctr, "postgres_db"
 
 
-def get_spark_container(client: dagger.Client) -> (dagger.Service, str):
+def get_spark_container(client: dagger.Client) -> Tuple[dagger.Service, str]:
     spark_dir = client.host().directory("./dagger/spark-container")
     spark_ctr_base = (
         client.container()
@@ -154,6 +154,7 @@ async def test_spark(test_args):
         return result
 
 
+# TODO: update this to align more closely with the pytest api, e.g. --test-path should be an arg instead of a kwarg
 parser = argparse.ArgumentParser()
 parser.add_argument("--profile", required=True, type=str)
 parser.add_argument("--test-path", required=False, type=str, default="tests/functional/adapter")
