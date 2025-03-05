@@ -181,9 +181,7 @@ jobs:
             working-directory: ./${{ inputs.package }}
             env:
                 CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
-        -   run: |
-                pre-commit run trailing-whitespace --files __version__.py CHANGELOG.md .changes/*
-                pre-commit run end-of-file-fixer --files __version__.py CHANGELOG.md .changes/*
+        -   run: pre-commit run --all-files
             continue-on-error: true
         -   run: |
                 git config user.name "Github Build Bot"
