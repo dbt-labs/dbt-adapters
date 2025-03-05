@@ -40,6 +40,8 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% set to_drop = [] %}
+
+  -- Relation doesn't exist, do full build --
   {% if existing_relation is none %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
@@ -48,6 +50,8 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
+
+  -- Running in full refresh, drop existing relation, and do full build --
   {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
@@ -57,6 +61,8 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
+
+  -- Insert Overwrite Strategy --
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
@@ -73,6 +79,8 @@
       )
     %}
     {% do to_drop.append(tmp_relation) %}
+
+  -- Append Strategy --
   {% elif strategy == 'append' %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
@@ -88,6 +96,8 @@
       )
     %}
     {% do to_drop.append(tmp_relation) %}
+
+  -- Iceberge Merge Stategy --
   {% elif strategy == 'merge' and table_type == 'iceberg' %}
     {% set unique_key = config.get('unique_key') %}
     {% set incremental_predicates = config.get('incremental_predicates') %}
