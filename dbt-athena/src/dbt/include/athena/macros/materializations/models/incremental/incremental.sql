@@ -62,8 +62,8 @@
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
-  -- Insert Overwrite Strategy --
-  {% elif strategy == 'insert_overwrite' %}
+  -- Insert Overwrite and Microbatch Strategies --
+  {% elif strategy in ("insert_overwrite", "microbatch") %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
