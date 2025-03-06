@@ -16,6 +16,7 @@ from typing_extensions import Protocol
 
 from dbt_common.clients.jinja import MacroProtocol
 from dbt_common.contracts.config.base import BaseConfig
+
 from dbt.adapters.contracts.connection import (
     AdapterRequiredConfig,
     AdapterResponse,
