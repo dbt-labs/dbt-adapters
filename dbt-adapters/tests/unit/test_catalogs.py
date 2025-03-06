@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import pytest
 
 from dbt.adapters.catalogs import (
@@ -8,11 +10,20 @@ from dbt.adapters.catalogs import (
     DbtCatalogIntegrationNotFoundError,
     DbtCatalogNotSupportedError,
 )
+from dbt.adapters.contracts.relation import RelationConfig
+
+
+class FakeCatalogIntegration(CatalogIntegration):
+    def _handle_adapter_properties(self, adapter_properties: Dict[str, Any]):
+        pass
+
+    def render_ddl_predicates(self, relation, config: RelationConfig) -> str:
+        raise NotImplementedError("render_ddl_predicates not implemented")
 
 
 @pytest.fixture(scope="function")
 def fake_client() -> CatalogIntegrationClient:
-    return CatalogIntegrationClient({"managed": CatalogIntegration})
+    return CatalogIntegrationClient({"managed": FakeCatalogIntegration})
 
 
 @pytest.fixture
