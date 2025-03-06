@@ -139,12 +139,3 @@ jobs:
                 retry_wait_seconds: 10
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
-
-    bump-version-post:
-        needs: publish
-        uses: ./.github/workflows/_bump-version.yml
-        with:
-            package: ${{ inputs.package }}
-            branch: ${{ inputs.branch }}
-            version: "patch,alpha"  # dbt-core checks for semver, which does not support post releases
-        secrets: inherit
