@@ -45,7 +45,7 @@ jobs:
     publish:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
-            name: "prod"
+            name: "cloud-prod"
         steps:
         -   uses: actions/checkout@v4
             with:
