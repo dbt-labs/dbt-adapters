@@ -25,7 +25,7 @@ on:
                 type: string
                 default: "main"
             version:
-                description: "Does the version need to be bumped?"
+                description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release) or leave empty"
                 type: string
                 default: ""
             skip-unit-tests:
