@@ -1,4 +1,5 @@
-name: "Code quality"
+name: "# Code quality"
+run-name: "Code quality - ${{ github.actor }} - branch:${{ inputs.branch }} repository:${{ inputs.repository }}"
 
 on:
     workflow_call:
