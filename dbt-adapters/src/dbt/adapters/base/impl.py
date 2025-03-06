@@ -306,7 +306,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     def add_catalog_integrations(
         self, catalogs: Iterable[CatalogIntegrationConfig]
-    ) -> Generator[CatalogIntegration]:
+    ) -> Generator[CatalogIntegration, None, None]:
         for catalog in catalogs:
             yield self.add_catalog_integration(catalog)
 
