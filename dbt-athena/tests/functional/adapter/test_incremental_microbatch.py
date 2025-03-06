@@ -23,13 +23,13 @@ _microbatch_model_sql = """
     event_time='event_time',
     batch_size='day',
     begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
-    partition_by=['date_day']
+    partitioned_by=['date_day']
     )
 }}
 select * from {{ ref('input_model') }}
 """
 
-_microbatch_model_no_partition_by_sql = """
+_microbatch_model_no_partitioned_by_sql = """
 {{ config(
     materialized='incremental',
     incremental_strategy='microbatch',
@@ -56,7 +56,7 @@ class TestAthenaMicrobatchMissingPartitionBy:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "microbatch.sql": _microbatch_model_no_partition_by_sql,
+            "microbatch.sql": _microbatch_model_no_partitioned_by_sql,
             "input_model.sql": _input_model_sql,
         }
 
@@ -64,6 +64,6 @@ class TestAthenaMicrobatchMissingPartitionBy:
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
             _, stdout = run_dbt_and_capture(["run"], expect_pass=False)
         assert (
-            "dbt-athena 'microbatch' incremental strategy requires a `partition_by` config"
+            "dbt-athena 'microbatch' incremental strategy requires a `partitioned_by` config"
             in stdout
         )
