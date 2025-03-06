@@ -146,5 +146,5 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
-            version: "patch,dev"  # dbt-core checks for semver, which does not support post releases
+            version: "patch,alpha"  # dbt-core checks for semver, which does not support post releases
         secrets: inherit
