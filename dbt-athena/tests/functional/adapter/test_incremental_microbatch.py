@@ -8,18 +8,25 @@ from dbt.tests.adapter.incremental.test_incremental_microbatch import (
 
 _input_model_sql = """
 {{ config(materialized='table', event_time='event_time') }}
-select 1 as id, from_iso8601_timestamp('2020-01-01T00:00:00.000000Z') as event_time
+select 1 as id, CAST(from_iso8601_timestamp('2020-01-01T00:00:00.000000Z') as timestamp) as event_time
 union all
-select 2 as id, from_iso8601_timestamp('2020-01-02T00:00:00.000000Z') as event_time
+select 2 as id, CAST(from_iso8601_timestamp('2020-01-02T00:00:00.000000Z') as timestamp) as event_time
 union all
-select 3 as id, from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as event_time
+select 3 as id, CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as timestamp) as event_time
 """
 
 # No requirement for a unique_id for athena microbatch!
 _microbatch_model_sql = """
-{{ config(materialized='incremental', incremental_strategy='microbatch', event_time='event_time', batch_size='day', begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0), partition_by=['date_day']) }}
-select *, cast(event_time as date) as date_day
-from {{ ref('input_model') }}
+{{ config(
+    materialized='incremental',
+    incremental_strategy='microbatch',
+    event_time='event_time',
+    batch_size='day',
+    begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
+    partition_by=['date_day']
+    )
+}}
+select * from {{ ref('input_model') }}
 """
 
 _microbatch_model_no_partition_by_sql = """
