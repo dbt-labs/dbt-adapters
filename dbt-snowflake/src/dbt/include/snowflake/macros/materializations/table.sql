@@ -16,7 +16,7 @@
 	table_format=config.get('table_format', 'default')
     ) -%}
 
-  {{ run_hooks(pre_hooks) }}
+  {{ run_hooks(pre_hooks,  span_name='pre-hook') }}
 
   {% if target_relation.needs_to_drop(existing_relation) %}
     {{ drop_relation_if_exists(existing_relation) }}
@@ -26,7 +26,7 @@
       {{ create_table_as(False, target_relation, compiled_code, language) }}
   {%- endcall %}
 
-  {{ run_hooks(post_hooks) }}
+  {{ run_hooks(post_hooks,  span_name='post-hook') }}
 
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
