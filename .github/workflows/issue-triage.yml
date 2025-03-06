@@ -1,5 +1,5 @@
 name: "Issue triage"
-run-name: "Issue triage - #${{ github.event.issue.number }}: ${{ github.event.issue.title }} - ${{ github.actor }}"
+run-name: "Issue triage - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 
 on: issue_comment
 

@@ -1,4 +1,5 @@
-name: "Publish to PyPI"
+name: "# Publish PyPI"
+run-name: "Publish PyPI - ${{ github.actor }} - package:${{ inputs.package }} deploy-to:${{ inputs.deploy-to }} branch:${{ inputs.branch }}"
 
 on:
     workflow_call:
