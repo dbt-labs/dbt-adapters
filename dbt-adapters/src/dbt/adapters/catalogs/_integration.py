@@ -1,6 +1,6 @@
 import abc
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from dbt.adapters.contracts.relation import RelationConfig
 
@@ -8,10 +8,9 @@ from dbt.adapters.contracts.relation import RelationConfig
 @dataclass
 class CatalogIntegrationConfig:
     name: str
-    type: str
+    catalog_type: str
     table_format: str
     external_volume: Optional[str] = None
-    namespace: Optional[str] = None
     adapter_properties: Optional[dict] = None
 
 
@@ -24,22 +23,20 @@ class CatalogIntegration(abc.ABC):
     """
 
     name: str
-    type: str
+    catalog_type: str
     table_format: str
     external_volume: Optional[str] = None
-    namespace: Optional[str] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         self.name = config.name
-        self.type = config.type
+        self.catalog_type = config.catalog_type
         self.table_format = config.table_format
         self.external_volume = config.external_volume
-        self.namespace = config.namespace
         if config.adapter_properties:
             self._handle_adapter_properties(config.adapter_properties)
 
     @abc.abstractmethod
-    def _handle_adapter_properties(self, adapter_properties: Dict) -> None:
+    def _handle_adapter_properties(self, adapter_properties: Dict[str, Any]) -> None:
         pass
 
     @abc.abstractmethod

@@ -1,15 +1,13 @@
+from datetime import datetime
 from unittest import mock
 
+import agate
 import pytest
+import pytz
+
 from dbt_common.exceptions.base import DbtValidationError
 
 from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
-
-from datetime import datetime
-from unittest.mock import MagicMock, patch
-import agate
-import pytz
-
 from dbt.adapters.catalogs import CatalogIntegrationConfig
 from dbt.adapters.contracts.connection import AdapterResponse
 
@@ -17,7 +15,7 @@ from dbt.adapters.contracts.connection import AdapterResponse
 def test_adapter_can_add_catalog_integration(adapter):
     catalog_config = CatalogIntegrationConfig(
         name="some_catalog",
-        type="managed",
+        catalog_type="managed",
         table_format="iceberg",
         external_volume="test_volume",
         adapter_properties={"extra_fake_property": 42},
@@ -28,7 +26,7 @@ def test_adapter_can_add_catalog_integration(adapter):
 def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
     catalog_config = CatalogIntegrationConfig(
         name="some_catalog",
-        type="not_supported_type",
+        catalog_type="not_supported_type",
         table_format="iceberg",
         external_volume="test_volume",
         adapter_properties={"extra_fake_property": 42},
@@ -272,7 +270,7 @@ class TestCalculateFreshnessFromCustomSQL:
     @pytest.fixture
     def adapter(self):
         # Create mock config and context
-        config = MagicMock()
+        config = mock.MagicMock()
 
         # Create test adapter class that implements abstract methods
         class TestAdapter(BaseAdapter):
@@ -330,15 +328,15 @@ class TestCalculateFreshnessFromCustomSQL:
             def truncate_relation(self, *args, **kwargs):
                 return None
 
-        return TestAdapter(config, MagicMock())
+        return TestAdapter(config, mock.MagicMock())
 
     @pytest.fixture
     def mock_relation(self):
-        mock = MagicMock()
-        mock.__str__ = lambda x: "test.table"
-        return mock
+        relation = mock.MagicMock()
+        relation.__str__ = lambda x: "test.table"
+        return relation
 
-    @patch("dbt.adapters.base.BaseAdapter.execute_macro")
+    @mock.patch("dbt.adapters.base.BaseAdapter.execute_macro")
     def test_calculate_freshness_from_customsql_success(
         self, mock_execute_macro, adapter, mock_relation
     ):
@@ -354,7 +352,7 @@ class TestCalculateFreshnessFromCustomSQL:
         )
 
         # Configure mock execute_macro
-        mock_execute_macro.return_value = MagicMock(
+        mock_execute_macro.return_value = mock.MagicMock(
             response=AdapterResponse("SUCCESS"), table=mock_table
         )
 
@@ -381,7 +379,7 @@ class TestCalculateFreshnessFromCustomSQL:
         assert freshness_response["snapshotted_at"] == current_time
         assert isinstance(freshness_response["age"], float)
 
-    @patch("dbt.adapters.base.BaseAdapter.execute_macro")
+    @mock.patch("dbt.adapters.base.BaseAdapter.execute_macro")
     def test_calculate_freshness_from_customsql_null_last_modified(
         self, mock_execute_macro, adapter, mock_relation
     ):
@@ -394,7 +392,7 @@ class TestCalculateFreshnessFromCustomSQL:
             [{"last_modified": None, "snapshotted_at": current_time}]
         )
 
-        mock_execute_macro.return_value = MagicMock(
+        mock_execute_macro.return_value = mock.MagicMock(
             response=AdapterResponse("SUCCESS"), table=mock_table
         )
 

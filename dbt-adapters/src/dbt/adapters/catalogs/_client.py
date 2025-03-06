@@ -17,16 +17,17 @@ class CatalogIntegrationClient:
         self.catalogs: Dict[str, CatalogIntegration] = {}
 
     def add(self, catalog: CatalogIntegrationConfig) -> CatalogIntegration:
-        if catalog.type not in self._supported_catalogs:
-            raise DbtCatalogNotSupportedError(catalog.type, list(self._supported_catalogs.keys()))
+        if catalog.catalog_type not in self._supported_catalogs:
+            raise DbtCatalogNotSupportedError(
+                catalog.catalog_type, list(self._supported_catalogs.keys())
+            )
         if catalog.name in self.catalogs:
             raise DbtCatalogIntegrationAlreadyExistsError(catalog.name)
 
-        catalog_factory = self._supported_catalogs[catalog.type]
-        rendered_catalog = catalog_factory(catalog)
-        self.catalogs[rendered_catalog.name] = rendered_catalog
+        catalog_factory = self._supported_catalogs[catalog.catalog_type]
+        self.catalogs[catalog.name] = catalog_factory(catalog)
 
-        return rendered_catalog
+        return self.get(catalog.name)
 
     def get(self, name: str) -> CatalogIntegration:
         try:

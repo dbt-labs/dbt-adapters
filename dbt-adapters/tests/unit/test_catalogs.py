@@ -19,7 +19,7 @@ def fake_client() -> CatalogIntegrationClient:
 def fake_catalog() -> CatalogIntegrationConfig:
     return CatalogIntegrationConfig(
         name="test_integration",
-        type="managed",
+        catalog_type="managed",
         table_format="iceberg",
     )
 
@@ -28,7 +28,7 @@ def fake_catalog() -> CatalogIntegrationConfig:
 def fake_unsupported_catalog() -> CatalogIntegrationConfig:
     return CatalogIntegrationConfig(
         name="test_integration",
-        type="banana",
+        catalog_type="banana",
         table_format="iceberg",
     )
 
@@ -65,6 +65,6 @@ def test_getting_catalog_integration_that_does_not_exist(fake_client, fake_catal
 def test_unsupported_catalog_integration(fake_client, fake_unsupported_catalog, fake_catalog):
     with pytest.raises(DbtCatalogNotSupportedError) as e:
         fake_client.add(fake_unsupported_catalog)
-    assert e.value.catalog_type == fake_unsupported_catalog.type
-    assert fake_unsupported_catalog.type in str(e.value)
-    assert fake_catalog.type in str(e.value)
+    assert e.value.catalog_type == fake_unsupported_catalog.catalog_type
+    assert fake_unsupported_catalog.catalog_type in str(e.value)
+    assert fake_catalog.catalog_type in str(e.value)

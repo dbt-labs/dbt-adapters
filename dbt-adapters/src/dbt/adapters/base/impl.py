@@ -11,6 +11,7 @@ from typing import (
     Callable,
     Dict,
     FrozenSet,
+    Generator,
     Iterable,
     Iterator,
     List,
@@ -304,17 +305,15 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.catalog_client = CatalogIntegrationClient(self.CATALOG_INTEGRATIONS)
 
     def add_catalog_integrations(
-        self, catalog_integrations: List[CatalogIntegrationConfig]
-    ) -> List[CatalogIntegration]:
-        return [
-            self.add_catalog_integration(integration_config)
-            for integration_config in catalog_integrations
-        ]
+        self, catalogs: Iterable[CatalogIntegrationConfig]
+    ) -> Generator[CatalogIntegration]:
+        for catalog in catalogs:
+            yield self.add_catalog_integration(catalog)
 
-    def add_catalog_integration(self, integration: CatalogIntegrationConfig) -> CatalogIntegration:
-        return self.catalog_client.add(integration)
+    def add_catalog_integration(self, catalog: CatalogIntegrationConfig) -> CatalogIntegration:
+        return self.catalog_client.add(catalog)
 
-    def get_catalog_integration(self, name: str) -> Optional[CatalogIntegration]:
+    def get_catalog_integration(self, name: str) -> CatalogIntegration:
         return self.catalog_client.get(name)
 
     ###
