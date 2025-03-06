@@ -1,4 +1,5 @@
 name: "Scheduled tests"
+run-name: "Scheduled tests - ${{ github.actor }}"
 
 on:
     schedule:
