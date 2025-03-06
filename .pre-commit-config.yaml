@@ -52,7 +52,6 @@ repos:
         -   --namespace-packages
         -   --ignore-missing-imports
         -   --warn-redundant-casts
-        -   --warn-unused-ignores
         -   --pretty
         -   --show-error-codes
         additional_dependencies:

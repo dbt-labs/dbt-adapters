@@ -27,6 +27,7 @@ dependencies = [
     "pytest-logbook~=1.2",
     "pytest-mock",
     "pytest-xdist",
+    "requests",
 ]
 
 [envs.default.scripts]
