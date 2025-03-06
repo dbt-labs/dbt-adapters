@@ -41,17 +41,9 @@ on:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
                 type: string
                 default: "beta"
-        secrets:
-            FISHTOWN_BOT_PAT:
-                description: "Token to commit/merge changes into branches"
-                required: true
 
 permissions:
     contents: write
-
-defaults:
-    run:
-        shell: bash
 
 jobs:
     main:
