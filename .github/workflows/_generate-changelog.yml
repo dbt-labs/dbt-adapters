@@ -1,4 +1,5 @@
-name: "Changelog generation"
+name: "# Changelog generation"
+run-name: "Changelog generation - ${{ github.actor }} - package:${{ inputs.package }} merge:${{ inputs.merge }} branch:${{ inputs.branch }}"
 
 on:
     workflow_call:
@@ -33,8 +34,8 @@ on:
                 type: choice
                 options:
                 -   "dbt-adapters"
+                -   "dbt-tests-adapter"
                 -   "dbt-athena"
-                -   "dbt-athena-community"
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"

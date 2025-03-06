@@ -1,0 +1,72 @@
+name: "Bump version"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to bump"
+                type: string
+                required: true
+            branch:
+                description: "Choose the branch to use"
+                type: string
+                default: "main"
+            version:
+                description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
+                type: string
+                default: "beta"
+        secrets:
+            FISHTOWN_BOT_PAT:
+                description: "Token to commit/merge changes into branches"
+                required: true
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to bump"
+                type: choice
+                options:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            branch:
+                description: "Choose the branch to use"
+                type: string
+                default: "main"
+            version:
+                description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
+                type: string
+                default: "beta"
+
+permissions:
+    contents: write
+
+jobs:
+    main:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+        -   uses: pypa/hatch@install
+        -   id: version
+            run: |
+                echo "initial=$(hatch version)" >> $GITHUB_OUTPUT
+                hatch version ${{ inputs.version }}
+                echo "final=$(hatch version)" >> $GITHUB_OUTPUT
+            working-directory: ./${{ inputs.package }}
+        -   if: inputs.package == 'dbt-athena'
+            run: sed -i "s/$INITIAL/$FINAL/g" dbt-athena-community/pyproject.toml
+            env:
+                INITIAL: ${{ steps.version.outputs.initial }}
+                FINAL: ${{ steps.version.outputs.final }}
+        -   uses: ./.github/actions/bot-commit
+            with:
+                message: "Bump version from ${{ steps.version.outputs.initial }} to ${{ steps.version.outputs.final }}"
