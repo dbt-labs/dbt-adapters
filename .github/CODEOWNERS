@@ -1,3 +1,6 @@
 # This codeowners file is used to ensure all PRs require reviews from the adapters team
 
 * @dbt-labs/adapters
+
+# extend approval permissions to some Core members
+.github/* @dbt-labs/adapters @emmyoop
