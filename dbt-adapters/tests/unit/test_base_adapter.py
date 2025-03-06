@@ -5,10 +5,8 @@ import agate
 import pytest
 import pytz
 
-from dbt_common.exceptions.base import DbtValidationError
-
 from dbt.adapters.base.impl import BaseAdapter, ConstraintSupport
-from dbt.adapters.catalogs import CatalogIntegrationConfig
+from dbt.adapters.catalogs import CatalogIntegrationConfig, DbtCatalogNotSupportedError
 from dbt.adapters.contracts.connection import AdapterResponse
 
 
@@ -31,7 +29,7 @@ def test_adapter_add_catalog_integration_raises_expected_exception(adapter):
         external_volume="test_volume",
         adapter_properties={"extra_fake_property": 42},
     )
-    with pytest.raises(DbtValidationError):
+    with pytest.raises(DbtCatalogNotSupportedError):
         adapter.add_catalog_integrations([catalog_config])
 
 
