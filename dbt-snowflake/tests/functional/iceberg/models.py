@@ -8,6 +8,20 @@ _MODEL_BASIC_TABLE_MODEL = """
 select 1 as id
 """
 
+_MODEL_BASIC_TABLE_LITERALS = """
+{{
+  config(
+    materialized = "table",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+  )
+}}
+
+select
+    object_construct('theme', 'dark', 'notifications', TO_VARCHAR(true))::MAP(VARCHAR(20), VARCHAR(20)) as my_map_conversion,
+"""
+
 _MODEL_BASIC_ICEBERG_MODEL = """
 {{
   config(

@@ -20,7 +20,18 @@ from dbt.tests.adapter.basic.expected_catalog import base_expected_catalog, no_s
 from dbt_common.contracts.metadata import CatalogTable, TableMetadata, ColumnMetadata, StatsItem
 
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
+from dbt.tests.util import run_dbt
 from tests.functional.adapter.expected_stats import snowflake_stats
+
+
+_MODEL_BASIC_TABLE_WITH_STRUCTURED_TYPES = """
+{{ config(materialized='table') }}
+select
+    array_construct(1, 2, 3) as my_array,
+    object_construct('languagepreference', 'english', 'localepreference', 'en_us') as my_object,
+    { 'key1': 'value1', 'key2': 123, 'key3': true } AS my_object_literal,
+    array_construct(0.1, 0.2, 0.3)::vector(float, 3) as my_vector
+"""
 
 
 class TestSimpleMaterializationsSnowflake(BaseSimpleMaterializations):
@@ -241,3 +252,17 @@ class TestDocsGenerateSnowflake(BaseDocsGenerate):
             case=lambda x: x.upper(),
             case_columns=False,
         )
+
+
+class TestStructureTypesSnowflake:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "first_table.sql": _MODEL_BASIC_TABLE_WITH_STRUCTURED_TYPES,
+        }
+
+    def test_structured_types_parse_right(self, project):
+        run_results = run_dbt()
+        assert len(run_results) == 1
+        run_results = run_dbt()
+        assert len(run_results) == 1

@@ -1,0 +1,6 @@
+kind: Security
+body: Resolve CVE-2025-24794
+time: 2025-03-03T17:54:01.974296-05:00
+custom:
+  Author: mikealfare
+  PR: "859"

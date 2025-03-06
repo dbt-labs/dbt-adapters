@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Expand types allowed in columns to allow structured types.
+time: 2025-02-26T06:31:43.698096-08:00
+custom:
+    Author: versusfacit
+    Issue: "310"
