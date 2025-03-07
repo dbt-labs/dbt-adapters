@@ -1,6 +1,0 @@
-kind: Features
-body: Add 'is_serverless' param to profile and connection calls
-time: 2025-02-13T12:19:03.649012-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "819"

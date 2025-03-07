@@ -14,7 +14,14 @@ on:
             version:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
                 type: string
-                default: "beta"
+                default: ""
+        outputs:
+            initial:
+                description: "The version before the bump"
+                value: ${{ jobs.main.outputs.initial }}
+            final:
+                description: "The version after the bump"
+                value: ${{ jobs.main.outputs.final }}
         secrets:
             FISHTOWN_BOT_PAT:
                 description: "Token to commit/merge changes into branches"
@@ -40,7 +47,7 @@ on:
             version:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release)"
                 type: string
-                default: "beta"
+                default: ""
 
 permissions:
     contents: write
@@ -48,6 +55,9 @@ permissions:
 jobs:
     main:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            initial: ${{ steps.version.outputs.initial
+            final: ${{ steps.version.outputs.final
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -56,17 +66,19 @@ jobs:
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
         -   uses: pypa/hatch@install
+        # bump the version or perform a no-op ("")
         -   id: version
             run: |
                 echo "initial=$(hatch version)" >> $GITHUB_OUTPUT
                 hatch version ${{ inputs.version }}
                 echo "final=$(hatch version)" >> $GITHUB_OUTPUT
             working-directory: ./${{ inputs.package }}
-        -   if: inputs.package == 'dbt-athena'
-            run: sed -i "s/$INITIAL/$FINAL/g" dbt-athena-community/pyproject.toml
+        -   run: sed -i "s/$INITIAL/$FINAL/g" dbt-athena-community/pyproject.toml
+            if: inputs.package == 'dbt-athena' && steps.version.outputs.final != steps.version.outputs.initial
             env:
                 INITIAL: ${{ steps.version.outputs.initial }}
                 FINAL: ${{ steps.version.outputs.final }}
         -   uses: ./.github/actions/bot-commit
+            if: steps.version.outputs.final != steps.version.outputs.initial
             with:
                 message: "Bump version from ${{ steps.version.outputs.initial }} to ${{ steps.version.outputs.final }}"

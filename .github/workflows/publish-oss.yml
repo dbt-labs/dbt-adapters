@@ -1,5 +1,5 @@
 name: "Publish OSS"
-run-name: "Publish OSS - ${{ github.actor }} - package:${{ inputs.package }} deploy-to:${{ inputs.deploy-to }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
+run-name: "Publish OSS - ${{ github.actor }} - package:${{ inputs.package }} deploy-to:${{ inputs.deploy-to }} branch:${{ inputs.branch }} version:${{ inputs.version }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
 
 on:
     workflow_dispatch:
@@ -42,18 +42,41 @@ concurrency:
     group: Publish_OSS-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
 
-defaults:
-    run:
-        shell: bash
-
 jobs:
+    work-branch:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            name: ${{ steps.branch.outputs.name }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   id: branch
+            run: |
+                name="publish-oss/${{ inputs.package }}/$GITHUB_RUN_ID"
+                echo "name=$name" >> $GITHUB_OUTPUT
+        -   run: |
+                git checkout -b ${{ steps.branch.outputs.name }}
+                git push -u origin ${{ steps.branch.outputs.name }}
+
     bump-version:
-        if: inputs.version != ''
+        needs: work-branch
         uses: ./.github/workflows/_bump-version.yml
         with:
             package: ${{ inputs.package }}
-            branch: ${{ inputs.branch }}
+            branch: ${{ needs.work-branch.outputs.name }}
             version: ${{ inputs.version }}
+        secrets: inherit
+
+    generate-changelog:
+        if: always() && !failure()
+        needs:
+        -   work-branch
+        -   bump-version  # bump-version may be a no-op, but the changelog should be generated for the latest version
+        uses: ./.github/workflows/_generate-changelog.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ needs.work-branch.outputs.name }}
         secrets: inherit
 
     unit-tests:
@@ -61,37 +84,36 @@ jobs:
             always() && !failure() &&
             inputs.skip-unit-tests == false &&
             !contains(fromJSON('["dbt-tests-adapter"]'), inputs.package)
-        needs: bump-version  # bump-version can be skipped and is not directly used
+        needs:
+        -   work-branch
+        -   bump-version  # bump-version may be a no-op, but tests need to run with the latest version
         uses: ./.github/workflows/_unit-tests.yml
         with:
             package: ${{ inputs.package }}
-            branch: ${{ inputs.branch }}
+            branch: ${{ needs.work-branch.outputs.name }}
 
     integration-tests:
         if: |
             always() && !failure() &&
             inputs.skip-integration-tests == false &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
-        needs: bump-version  # bump-version can be skipped and is not directly used
+        needs:
+            -   work-branch
+            -   bump-version  # bump-version may be a no-op, but tests need to run with the latest version
         uses: ./.github/workflows/_integration-tests.yml
         with:
             packages: ${{ toJSON(inputs.package) }}
-            branch: ${{ inputs.branch }}
-        secrets: inherit
-
-    generate-changelog:
-        if: always() && !failure()
-        needs: [bump-version, unit-tests, integration-tests]
-        uses: ./.github/workflows/_generate-changelog.yml
-        with:
-            package: ${{ inputs.package }}
-            merge: ${{ inputs.deploy-to == 'prod' }}
-            branch: ${{ inputs.branch }}
+            branch: ${{ needs.work-branch.outputs.name }}
         secrets: inherit
 
     publish:
         if: always() && !failure()
-        needs: generate-changelog
+        needs:
+        -   work-branch
+        -   bump-version
+        -   generate-changelog
+        -   unit-tests
+        -   integration-tests
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -101,9 +123,27 @@ jobs:
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
         steps:
-        -   uses: actions/checkout@v4
+
+        # merge changes before publishing to prod because we lock trusted publishing to main
+        -   uses: everlytic/branch-merge@1.1.5
+            if: inputs.deploy-to == 'prod'
             with:
-                ref: ${{ needs.generate-changelog.outputs.branch-name || inputs.branch }}
+                source_ref: ${{ needs.work-branch.outputs.name }}
+                target_branch: ${{ inputs.branch }}
+                github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
+                commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
+        -   uses: actions/checkout@v4
+            if: inputs.deploy-to == 'prod'
+            with:
+                ref: ${{ inputs.branch }}
+
+        # if we're not publishing to prod, just check out the work branch
+        -   uses: actions/checkout@v4
+            if: inputs.deploy-to != 'prod'
+            with:
+                ref: ${{ needs.work-branch.outputs.name }}
+
+        # build and publish using whichever branch was checked out above
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -123,6 +163,7 @@ jobs:
                 retry_wait_seconds: 10
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
+
         # publish dbt-athena-community following dbt-athena
         -   if: inputs.package == 'dbt-athena'
             run: hatch build && hatch run build:check-all
@@ -139,3 +180,17 @@ jobs:
                 retry_wait_seconds: 10
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
+
+    clean-up:
+        if: always()
+        needs:
+            -   work-branch
+            -   publish
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        # we should delete this regardless of whether we merged it to avoid building up stale release branches
+        -   run: git push origin -d ${{ needs.work-branch.outputs.name }}
+            continue-on-error: true
