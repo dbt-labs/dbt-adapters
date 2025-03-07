@@ -1,4 +1,5 @@
-name: "Changelog generation"
+name: "# Changelog generation"
+run-name: "Changelog generation - ${{ github.actor }} - package:${{ inputs.package }} merge:${{ inputs.merge }} branch:${{ inputs.branch }}"
 
 on:
     workflow_call:
