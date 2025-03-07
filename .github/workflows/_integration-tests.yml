@@ -1,4 +1,5 @@
-name: "Integration tests"
+name: "# Integration tests"
+run-name: "Integration tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
@@ -53,7 +54,7 @@ permissions:
 env:
     DBT_INVOCATION_ENV: ${{ vars.DBT_INVOCATION_ENV }}
     DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ vars.DD_CIVISIBILITY_AGENTLESS_ENABLED }}
-    DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
     DD_SITE: ${{ vars.DD_SITE }}
     DD_ENV: ${{ vars.DD_ENV }}
     DD_SERVICE: ${{ github.event.repository.name }}  # this can change per run because of forks

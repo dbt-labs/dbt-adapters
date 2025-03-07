@@ -1,5 +1,5 @@
-name: "Publish to internal"
-run-name: "Publish to internal - ${{ inputs.package }} - ${{ github.actor }}"
+name: "Publish internal"
+run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
 
 on:
     workflow_dispatch:
