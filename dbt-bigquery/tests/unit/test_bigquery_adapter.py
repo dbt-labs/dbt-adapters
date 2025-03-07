@@ -837,6 +837,71 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         actual = adapter.get_view_options(mock_config, node={})
         self.assertEqual(expected, actual)
 
+    def test_get_common_options_labels_merge(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": True,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("meta_label", "value2"), ("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_no_meta(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": True,
+            "meta": {},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_no_labels_from_meta(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": False,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_no_labels(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels_from_meta": True,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("meta_label", "value2")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_empty(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {}
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
 
 class TestBigQueryFilterCatalog(unittest.TestCase):
     def test__catalog_filter_table(self):
