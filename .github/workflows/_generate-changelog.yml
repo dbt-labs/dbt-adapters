@@ -131,7 +131,6 @@ jobs:
                 ref: ${{ inputs.branch }}
         -   run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
         -   run: |
-                brew install pre-commit
                 brew tap miniscruff/changie https://github.com/miniscruff/changie
                 brew install changie
         -   run: |
@@ -148,7 +147,7 @@ jobs:
             working-directory: ./${{ inputs.package }}
             env:
                 CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
-        -   run: pre-commit run --all-files
+        -   uses: pre-commit/action@v3.0.1
             continue-on-error: true
         -   uses: ./.github/actions/bot-commit
             with:
