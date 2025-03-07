@@ -15,6 +15,7 @@ runs:
             git pull
             git add .
             git commit -m "$MESSAGE"
+            git remote set-url origin "https://x-access-token:${{ secrets.FISHTOWN_BOT_PAT }}@github.com/$GITHUB_REPOSITORY
             git push
         shell: bash
         env:
