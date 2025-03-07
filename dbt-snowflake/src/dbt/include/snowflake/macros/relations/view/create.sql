@@ -49,7 +49,7 @@ eventually be retired in favor of a standardized approach. Changed line:
       type='view') -%}
   {% set grant_config = config.get('grants') %}
 
-  {{ run_hooks(pre_hooks) }}
+  {{ run_hooks(pre_hooks,  span_name='pre-hook') }}
 
   -- If there's a table with the same name and we weren't told to full refresh,
   -- that's an error. If we were told to full refresh, drop it. This behavior differs
@@ -66,7 +66,7 @@ eventually be retired in favor of a standardized approach. Changed line:
   {% set should_revoke = should_revoke(exists_as_view, full_refresh_mode=True) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
-  {{ run_hooks(post_hooks) }}
+  {{ run_hooks(post_hooks,  span_name='post-hook') }}
 
   {{ return({'relations': [target_relation]}) }}
 
