@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/bigquery/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt"]
 sources = ["src"]

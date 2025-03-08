@@ -1,7 +1,3 @@
-[build.targets.sdist]
-packages = ["src/dbt/adapters"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/adapters"]
 sources = ["src"]
