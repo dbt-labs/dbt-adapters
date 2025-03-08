@@ -1,0 +1,6 @@
+kind: Features
+body: Allow configuring the format of EventTimeFilter
+time: 2025-03-08T19:06:12.577376+09:00
+custom:
+    Author: logicoffee
+    Issue: "11331"
