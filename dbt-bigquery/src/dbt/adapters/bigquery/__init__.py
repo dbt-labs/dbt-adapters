@@ -12,9 +12,3 @@ Plugin = AdapterPlugin(
     credentials=BigQueryCredentials,
     include_path=bigquery.PACKAGE_PATH,
 )
-
-print()
-print()
-print('+++++++ skdjskahdsahi ++++++')
-print()
-print()
