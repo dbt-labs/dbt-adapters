@@ -41,7 +41,7 @@ SerializableIterable = Union[Tuple, FrozenSet]
 @dataclass
 class EventTimeFilter(FakeAPIObject):
     field_name: str
-    filter_format: str = "%Y-%m-%d %H:%M:%S%z"
+    filter_format: Optional[str] = None
     start: Optional[datetime] = None
     end: Optional[datetime] = None
 
@@ -49,12 +49,16 @@ class EventTimeFilter(FakeAPIObject):
     def start_time_formatted(self) -> Optional[str]:
         if self.start is None:
             return None
+        if self.filter_format is None:
+            return str(self.start)
         return self.start.strftime(self.filter_format)
 
     @property
     def end_time_formatted(self) -> Optional[str]:
         if self.end is None:
             return None
+        if self.filter_format is None:
+            return str(self.end)
         return self.end.strftime(self.filter_format)
 
 
