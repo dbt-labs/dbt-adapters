@@ -207,7 +207,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
             credentials=self._GoogleCredentials,
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
-        self._gcs_location = f"gs://{self._gcs_bucket}/{self._model_file_name}"
+
+        self._packages = []
+        if "packages" in parsed_model["config"]:
+            self._packages = parsed_model["config"]["packages"]
 
     def _get_batch_id(self) -> str:
         model = self._parsed_model
@@ -221,6 +224,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return nbformat.writes(nb, nbformat.NO_CONVERT)
 
     def submit(self, compiled_code: str) -> None:
+        # TODO(jialuo): write a method for it.
+        if self._packages:
+            import inspect
+            exe_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                inspect.getsource(_install_packages) + exe_code + compiled_code
+            )
+
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
@@ -275,7 +286,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
 
         notebook_execution_job.gcs_notebook_source = (
-            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_location)
+            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
         # TODO(jialuo): Add a method for it.
@@ -317,3 +328,21 @@ class BigFramesHelper(_BigQueryPythonHelper):
             _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
 
         _ = self._ai_platform_client.get_notebook_execution_job(name=res.name)
+
+
+def _install_packages(packages: list) -> None:
+    import subprocess
+    for package in packages:
+        try:
+            process = subprocess.Popen(
+                ["pip", "install", package],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,  # Redirect stderr to stdout
+                text=True,  # Return output as strings
+            )
+            output, _ = process.communicate()
+            print(f"Trying to install {package}: {output}")
+        except subprocess.CalledProcessError as e:
+            print(f"subprocess.CalledProcessError: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
