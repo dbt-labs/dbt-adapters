@@ -110,6 +110,7 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
+    allow_non_incremental_definition: Optional[bool] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -158,7 +159,7 @@ class BigQueryAdapter(BaseAdapter):
         return True
 
     def drop_relation(self, relation: BigQueryRelation) -> None:
-        is_cached = self._schema_is_cached(relation.database, relation.schema)  # type:ignore
+        is_cached = self._schema_is_cached(relation.database, relation.schema)
         if is_cached:
             self.cache_dropped(relation)
 
@@ -461,9 +462,7 @@ class BigQueryAdapter(BaseAdapter):
             schema=bq_table.dataset_id,
             identifier=bq_table.table_id,
             quote_policy={"schema": True, "identifier": True},
-            type=self.RELATION_TYPES.get(
-                bq_table.table_type, RelationType.External
-            ),  # type:ignore
+            type=self.RELATION_TYPES.get(bq_table.table_type, RelationType.External),
         )
 
     @classmethod
@@ -715,8 +714,8 @@ class BigQueryAdapter(BaseAdapter):
         for candidate, schemas in candidates.items():
             database = candidate.database
             if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
-            if candidate.schema in db_schemas[database]:  # type:ignore
+                db_schemas[database] = set(self.list_schemas(database))
+            if candidate.schema in db_schemas[database]:
                 result[candidate] = schemas
             else:
                 logger.debug(
@@ -828,7 +827,7 @@ class BigQueryAdapter(BaseAdapter):
         Given an entity, grants it access to a dataset.
         """
         conn: BigQueryConnectionManager = self.connections.get_thread_connection()
-        client = conn.handle  # type:ignore
+        client = conn.handle
         GrantTarget.validate(grant_target_dict)
         grant_target = GrantTarget.from_dict(grant_target_dict)
         if entity_type == "view":
