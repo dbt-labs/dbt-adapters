@@ -8,7 +8,6 @@ from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
     InformationSchema,
-    EventTimeFilter,
 )
 from dbt.adapters.contracts.relation import RelationConfig, RelationType
 from dbt.adapters.relation_configs import RelationConfigChangeAction
@@ -120,24 +119,6 @@ class BigQueryRelation(BaseRelation):
 
     def information_schema(self, identifier: Optional[str] = None) -> "BigQueryInformationSchema":
         return BigQueryInformationSchema.from_relation(self, identifier)
-
-    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
-        """
-        Returns "" if start and end are both None
-        """
-        filter = ""
-        if event_time_filter.start and event_time_filter.end:
-            filter = f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}' and cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
-        elif event_time_filter.start:
-            filter = (
-                f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}'"
-            )
-        elif event_time_filter.end:
-            filter = (
-                f"cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
-            )
-
-        return filter
 
 
 @dataclass(frozen=True, eq=False, repr=False)
