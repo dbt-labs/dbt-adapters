@@ -41,8 +41,21 @@ SerializableIterable = Union[Tuple, FrozenSet]
 @dataclass
 class EventTimeFilter(FakeAPIObject):
     field_name: str
+    filter_format: str = "%Y-%m-%d %H:%M:%S%z"
     start: Optional[datetime] = None
     end: Optional[datetime] = None
+
+    @property
+    def start_time_formatted(self) -> Optional[str]:
+        if self.start is None:
+            return None
+        return self.start.strftime(self.filter_format)
+
+    @property
+    def end_time_formatted(self) -> Optional[str]:
+        if self.end is None:
+            return None
+        return self.end.strftime(self.filter_format)
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -256,12 +269,14 @@ class BaseRelation(FakeAPIObject, Hashable):
         Returns "" if start and end are both None
         """
         filter = ""
-        if event_time_filter.start and event_time_filter.end:
-            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start}' and {event_time_filter.field_name} < '{event_time_filter.end}'"
-        elif event_time_filter.start:
-            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start}'"
-        elif event_time_filter.end:
-            filter = f"{event_time_filter.field_name} < '{event_time_filter.end}'"
+        if event_time_filter.start_time_formatted and event_time_filter.end_time_formatted:
+            filter = f"{event_time_filter.field_name} >= '{event_time_filter.start_time_formatted}' and {event_time_filter.field_name} < '{event_time_filter.end_time_formatted}'"
+        elif event_time_filter.start_time_formatted:
+            filter = (
+                f"{event_time_filter.field_name} >= '{event_time_filter.start_time_formatted}'"
+            )
+        elif event_time_filter.end_time_formatted:
+            filter = f"{event_time_filter.field_name} < '{event_time_filter.end_time_formatted}'"
 
         return filter
 
