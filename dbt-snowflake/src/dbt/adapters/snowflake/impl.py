@@ -4,12 +4,8 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogIntegrationType
 from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.snowflake.catalog import (
-    SnowflakeManagedIcebergCatalogIntegration,
-    SnowflakeGlueCatalogIntegration,
-)
+from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -70,10 +66,7 @@ class SnowflakeAdapter(SQLAdapter):
     ConnectionManager = SnowflakeConnectionManager
 
     AdapterSpecificConfigs = SnowflakeConfig
-    CatalogIntegrations = {
-        CatalogIntegrationType.managed.value: SnowflakeManagedIcebergCatalogIntegration,
-        CatalogIntegrationType.glue.value: SnowflakeGlueCatalogIntegration,
-    }
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,

@@ -1,7 +1,9 @@
 from dbt.adapters.base.catalog import CatalogIntegrationConfig
 import pytest
 from dbt.adapters.snowflake.relation import SnowflakeRelation
-from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+from dbt.adapters.snowflake.catalogs.managed_iceberg import (
+    SnowflakeManagedIcebergCatalogIntegration,
+)
 from dbt_common.exceptions import DbtValidationError
 
 

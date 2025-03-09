@@ -11,7 +11,9 @@ from dbt.adapters.relation_configs import (
     RelationConfigChangeAction,
     RelationResults,
 )
-from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+from dbt.adapters.snowflake.catalogs.managed_iceberg import (
+    SnowflakeManagedIcebergCatalogIntegration,
+)
 from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error

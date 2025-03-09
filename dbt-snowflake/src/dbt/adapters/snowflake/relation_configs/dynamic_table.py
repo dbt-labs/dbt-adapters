@@ -10,7 +10,9 @@ from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard lib
 from typing_extensions import Self
 
 from dbt.adapters.relation_configs.formats import TableFormat
-from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+from dbt.adapters.snowflake.catalogs.managed_iceberg import (
+    SnowflakeManagedIcebergCatalogIntegration,
+)
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 from dbt.adapters.snowflake.relation_configs.catalog import (
     SnowflakeCatalogConfig,
