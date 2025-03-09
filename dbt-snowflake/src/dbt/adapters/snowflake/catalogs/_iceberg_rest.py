@@ -6,6 +6,7 @@ from dbt.adapters.base import BaseRelation
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
+from dbt_common.exceptions import DbtInternalError
 
 from dbt.adapters.snowflake.utils import set_boolean
 
@@ -18,12 +19,10 @@ class IcebergRESTConfig(CatalogIntegrationConfig):
     name: str
     table_name: str
     catalog_type: str = "iceberg_rest"
-    table_format: str = "iceberg"
     external_volume: Optional[str] = None
-    adapter_properties: Optional[dict] = None
     namespace: Optional[str] = None
-    replace_invalid_characters: Optional[str] = None
-    auto_refresh: Optional[str] = None
+    replace_invalid_characters: Optional[Union[bool, str]] = None
+    auto_refresh: Optional[Union[bool, str]] = None
 
 
 class IcebergRESTCatalog(CatalogIntegration):
@@ -33,16 +32,18 @@ class IcebergRESTCatalog(CatalogIntegration):
     https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-rest
     """
 
-    name: str
-    table_name: str
-    catalog_type = "iceberg_rest"
-    table_format = "iceberg"
-    external_volume: Optional[str] = None
-    namespace: Optional[str] = None
+    catalog_type: str = "iceberg_rest"
+    table_format: str = "iceberg"
 
     def __init__(self, config: CatalogIntegrationConfig):
         super().__init__(config)
+        if config.catalog_type != "iceberg_rest":
+            raise DbtInternalError(
+                f"Attempting to create IcebergREST catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
+            )
         if isinstance(config, IcebergRESTConfig):
+            self.table_name = config.table_name
+            self.external_volume = config.external_volume
             self.namespace = config.namespace
             self.auto_refresh = config.auto_refresh  # type:ignore
             self.replace_invalid_characters = config.replace_invalid_characters  # type:ignore
@@ -64,9 +65,6 @@ class IcebergRESTCatalog(CatalogIntegration):
         self._replace_invalid_characters = set_boolean(
             "replace_invalid_characters", value, default=False
         )
-
-    def _handle_adapter_properties(self, adapter_properties: Dict[str, Any]) -> None:
-        pass
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         """

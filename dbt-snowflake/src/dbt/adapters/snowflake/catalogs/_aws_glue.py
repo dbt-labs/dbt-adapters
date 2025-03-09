@@ -1,10 +1,11 @@
 from dataclasses import dataclass
 
-from typing import Dict, Optional, Union
+from typing import Optional, Union
 
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
+from dbt_common.exceptions import DbtInternalError
 
 from dbt.adapters.snowflake.utils import set_boolean
 
@@ -13,13 +14,11 @@ from dbt.adapters.snowflake.utils import set_boolean
 class IcebergGlueConfig(CatalogIntegrationConfig):
     name: str
     table_name: str
-    catalog_type: str = "iceberg_rest"
-    table_format: str = "iceberg"
+    catalog_type: str = "glue"
     external_volume: Optional[str] = None
-    adapter_properties: Optional[dict] = None
     namespace: Optional[str] = None
-    replace_invalid_characters: Optional[str] = None
-    auto_refresh: Optional[str] = None
+    replace_invalid_characters: Optional[Union[bool, str]] = None
+    auto_refresh: Optional[Union[bool, str]] = None
 
 
 class AWSGlueCatalog(CatalogIntegration):
@@ -29,16 +28,18 @@ class AWSGlueCatalog(CatalogIntegration):
     https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-glue
     """
 
-    name: str
-    table_name: str
     catalog_type = "glue"
     table_format = "iceberg"
-    external_volume: Optional[str] = None
-    namespace: Optional[str] = None
 
     def __init__(self, config: CatalogIntegrationConfig):
         super().__init__(config)
+        if config.catalog_type != "iceberg_rest":
+            raise DbtInternalError(
+                f"Attempting to create AWS Glue catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
+            )
         if isinstance(config, IcebergGlueConfig):
+            self.table_name = config.table_name
+            self.external_volume = config.external_volume
             self.namespace = config.namespace
             self.auto_refresh = config.auto_refresh  # type:ignore
             self.replace_invalid_characters = config.replace_invalid_characters  # type:ignore
@@ -60,9 +61,6 @@ class AWSGlueCatalog(CatalogIntegration):
         self._replace_invalid_characters = set_boolean(
             "replace_invalid_characters", value, default=False
         )
-
-    def _handle_adapter_properties(self, adapter_properties: Optional[Dict]) -> None:
-        pass
 
     def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
         ddl_predicate = f"""
