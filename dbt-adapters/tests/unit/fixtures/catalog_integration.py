@@ -1,12 +1,10 @@
-from typing import Any, Dict
+from dataclasses import dataclass
 
 from dbt.adapters.catalogs import CatalogIntegration
-from dbt.adapters.contracts.relation import RelationConfig
 
 
+@dataclass
 class CatalogIntegrationStub(CatalogIntegration):
-    def _handle_adapter_properties(self, adapter_properties: Dict[str, Any]):
-        pass
-
-    def render_ddl_predicates(self, relation, config: RelationConfig) -> str:
-        raise NotImplementedError("render_ddl_predicates not implemented")
+    name: str
+    catalog_type: str = "managed"
+    table_format: str = "iceberg"
