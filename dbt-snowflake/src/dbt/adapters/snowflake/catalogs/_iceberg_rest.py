@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-import textwrap
-from typing import Any, Dict, Optional, Union, TYPE_CHECKING
+from typing import Optional, Union, TYPE_CHECKING
+from typing_extensions import Self
 
-from dbt.adapters.base import BaseRelation
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
-from dbt_common.exceptions import DbtInternalError
+from dbt_common.exceptions import DbtInternalError, DbtValidationError
 
 from dbt.adapters.snowflake.utils import set_boolean
 
@@ -15,105 +14,94 @@ if TYPE_CHECKING:
 
 
 @dataclass
-class IcebergRESTConfig(CatalogIntegrationConfig):
+class IcebergRESTCatalogIntegrationConfig(CatalogIntegrationConfig):
     name: str
-    table_name: str
     catalog_type: str = "iceberg_rest"
     external_volume: Optional[str] = None
     namespace: Optional[str] = None
-    replace_invalid_characters: Optional[Union[bool, str]] = None
-    auto_refresh: Optional[Union[bool, str]] = None
 
 
-class IcebergRESTCatalog(CatalogIntegration):
+class IcebergRESTTable:
     """
-    Implement Snowflake's Iceberg REST Catalog Integration:
+    Model a table from Snowflake's Iceberg REST Catalog Integration:
     https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
-    https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-rest
+
+    Model a table from Snowflake's AWS Glue Catalog Integration:
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-aws-glue
     """
 
-    catalog_type: str = "iceberg_rest"
-    table_format: str = "iceberg"
-
-    def __init__(self, config: CatalogIntegrationConfig):
-        super().__init__(config)
-        if config.catalog_type != "iceberg_rest":
-            raise DbtInternalError(
-                f"Attempting to create IcebergREST catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
-            )
-        if isinstance(config, IcebergRESTConfig):
-            self.table_name = config.table_name
-            self.external_volume = config.external_volume
-            self.namespace = config.namespace
-            self.auto_refresh = config.auto_refresh  # type:ignore
-            self.replace_invalid_characters = config.replace_invalid_characters  # type:ignore
+    def __init__(self, relation_config: RelationConfig) -> None:
+        catalog = relation_config.config.extra.get("catalog")
+        self.catalog_table_name: str = catalog.get("catalog_table_name")
+        self.replace_invalid_characters: bool = catalog.get("replace_invalid_characters")
+        self.auto_refresh: bool = catalog.get("auto_refresh")
 
     @property
-    def auto_refresh(self) -> bool:
-        return self._auto_refresh
+    def catalog_table_name(self) -> str:
+        return self.__catalog_table_name
 
-    @auto_refresh.setter
-    def auto_refresh(self, value: Union[bool, str]) -> None:
-        self._auto_refresh = set_boolean("auto_refresh", value, default=False)
+    @catalog_table_name.setter
+    def catalog_table_name(self, value: Optional[str]) -> None:
+        if value and len(value) > 0:
+            self.__catalog_table_name = value
+        raise DbtValidationError("table_name is required for IcebergREST catalogs")
 
     @property
     def replace_invalid_characters(self) -> bool:
-        return self._replace_invalid_characters
+        return self.__replace_invalid_characters
 
     @replace_invalid_characters.setter
     def replace_invalid_characters(self, value: Union[bool, str]) -> None:
-        self._replace_invalid_characters = set_boolean(
+        self.__replace_invalid_characters = set_boolean(
             "replace_invalid_characters", value, default=False
         )
 
-    def render_ddl_predicates(self, relation: BaseRelation, config: RelationConfig) -> str:
-        """
-        {{ optional('external_volume', dynamic_table.catalog.external_volume) }}
-        {{ optional('catalog', dynamic_table.catalog.name) }}
-        base_location = '{{ dynamic_table.catalog.base_location }}'
-        :param config:
-        :param relation:
-        :return:
-        """
-        base_location: str = f"{config.get('base_location_root', '_dbt')}"
-        base_location += f"/{relation.schema}/{relation.name}"
+    @property
+    def auto_refresh(self) -> bool:
+        return self.__auto_refresh
 
-        if sub_path := config.get("base_location_subpath"):
-            base_location += f"/{sub_path}"
+    @auto_refresh.setter
+    def auto_refresh(self, value: Union[bool, str]) -> None:
+        self.__auto_refresh = set_boolean("auto_refresh", value, default=False)
 
-        ddl_predicate = f"""
-                external_volume = '{self.external_volume}'
-                catalog = 'snowflake'
-                base_location = '{base_location}'
-                """
-        if self.auto_refresh:
-            ddl_predicate += f"auto_refresh = {self.auto_refresh}\n"
-        if self.replace_invalid_characters:
-            ddl_predicate += f"replace_invalid_characters = {self.replace_invalid_characters}\n"
-        return textwrap.indent(textwrap.dedent(ddl_predicate), " " * 10)
+
+class IcebergRESTCatalogIntegration(CatalogIntegration):
+    """
+    Implements Snowflake's Iceberg REST Catalog Integration:
+    https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-rest
+
+    Implements Snowflake's AWS Glue Catalog Integration:
+    https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-glue
+
+    While external volumes are a separate, but related concept in Snowflake,
+    we assume that a catalog integration is always associated with an external volume.
+    """
+
+    table_format: str = "iceberg"
+
+    def __init__(self, config: CatalogIntegrationConfig) -> None:
+        super().__init__(config)
+        if config.catalog_type in ["iceberg_rest", "aws_glue"]:
+            self.catalog_type = config.catalog_type
+        else:
+            raise DbtInternalError(
+                f"Attempting to create IcebergREST catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
+            )
+        if isinstance(config, IcebergRESTCatalogIntegrationConfig):
+            self.namespace: Optional[str] = config.namespace
+            self.external_volume: Optional[str] = config.external_volume
+
+    def table(self, relation_config: RelationConfig) -> IcebergRESTTable:
+        return IcebergRESTTable(relation_config)
 
     @classmethod
-    def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
-        # this try block can be removed once enable_iceberg_materializations is retired
-        try:
-            catalog_results: "agate.Table" = relation_results["catalog"]
-        except KeyError:
-            # this happens when `enable_iceberg_materializations` is turned off
-            return {}
-
-        if len(catalog_results) == 0:
-            # this happens when the dynamic table is a standard dynamic table (e.g. not iceberg)
-            return {}
-
-        # for now, if we get catalog results, it's because this is an iceberg table
-        # this is because we only run `show iceberg tables` to get catalog metadata
-        # this will need to be updated once this is in `show objects`
-        catalog: "agate.Row" = catalog_results.rows[0]
-        config_dict = {
-            "table_format": "iceberg",
-            "name": catalog.get("catalog_name"),
-            "external_volume": catalog.get("external_volume_name"),
-            "base_location": catalog.get("base_location"),
-        }
-
-        return config_dict
+    def from_relation_results(cls, relation_results: RelationResults) -> Self:
+        table: "agate.Row" = relation_results["table"][0]
+        catalog: "agate.Row" = relation_results["catalog"][0]
+        config = IcebergRESTCatalogIntegrationConfig(
+            name=catalog.get("catalog_name"),
+            catalog_type=catalog.get("catalog_type"),
+            external_volume=table.get("external_volume_name"),
+            namespace=catalog.get("namespace"),
+        )
+        return cls(config)

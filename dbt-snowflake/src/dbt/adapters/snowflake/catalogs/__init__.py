@@ -1,9 +1,8 @@
-from dbt.adapters.snowflake.catalogs._aws_glue import AWSGlueCatalog
-from dbt.adapters.snowflake.catalogs._iceberg_rest import IcebergRESTCatalog
+from dbt.adapters.snowflake.catalogs._iceberg_rest import IcebergRESTCatalogIntegration
 
 
 # these are the valid values for `catalog_type`
 CATALOG_INTEGRATIONS = {
-    "iceberg_rest": IcebergRESTCatalog,
-    "glue": AWSGlueCatalog,
+    "iceberg_rest": IcebergRESTCatalogIntegration,
+    "aws_glue": IcebergRESTCatalogIntegration,
 }
