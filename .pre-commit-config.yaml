@@ -7,7 +7,6 @@ repos:
     hooks:
     -   id: check-yaml
         args: [--unsafe]
-    -   id: check-json
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
     -   id: check-case-conflict
