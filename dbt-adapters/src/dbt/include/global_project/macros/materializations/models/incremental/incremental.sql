@@ -22,6 +22,13 @@
   {%- set preexisting_backup_relation = load_cached_relation(backup_relation) -%}
    -- grab current tables grants config for comparision later on
   {% set grant_config = config.get('grants') %}
+
+  {% set on_schema_change_full_refresh_bool = on_schema_change_full_refresh(on_schema_change, existing_relation) %}
+  {% if on_schema_change_full_refresh_bool %}
+    {% set full_refresh_mode = True %}
+    {% set sql = sql_full_refresh %}
+  {% endif %}
+
   {{ drop_relation_if_exists(preexisting_intermediate_relation) }}
   {{ drop_relation_if_exists(preexisting_backup_relation) }}
 
