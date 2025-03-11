@@ -66,7 +66,7 @@ class SnowflakeAdapter(SQLAdapter):
     ConnectionManager = SnowflakeConnectionManager
 
     AdapterSpecificConfigs = SnowflakeConfig
-    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS  # type:ignore
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
