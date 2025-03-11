@@ -13,20 +13,17 @@
 -#}
 
 {%- set sql_header = config.get('sql_header', none) -%}
-
 {%- set catalog_name = config.get('catalog_name') -%}
 {%- set catalog_integration = adapter.get_catalog_integration(catalog_name) -%}
-{%- set catalog_table = catalog_integration.table(relation) -%}
+{%- set catalog_table_name = config.get('catalog_table_name') -%}
 
 {{ sql_header if sql_header is not none }}
 
 create iceberg table {{ relation }}
     {{ optional('external_volume', catalog_integration.external_volume, "'") }}
     {{ optional('catalog', catalog_integration.name, "'") }}
-    catalog_table_name = '{{ catalog_table.catalog_table_name }}'
+    catalog_table_name = '{{ catalog_table_name }}'
     {{ optional('catalog_namespace', catalog_integration.namespace, "'") }}
-    {{ optional('replace_invalid_characters', catalog_table.replace_invalid_characters) }}
-    {{ optional('auto_refresh', catalog_table.auto_refresh) }}
 );
 
 {% endmacro %}
