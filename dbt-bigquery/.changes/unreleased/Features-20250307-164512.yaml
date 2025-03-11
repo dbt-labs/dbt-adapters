@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for creating BigQuery labels from meta configuration
+time: 2025-03-07T16:45:12.899016Z
+custom:
+    Author: physcat
+    Issue: "889"

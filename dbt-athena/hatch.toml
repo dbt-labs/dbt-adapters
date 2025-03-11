@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/athena/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt/adapters", "src/dbt/include"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
