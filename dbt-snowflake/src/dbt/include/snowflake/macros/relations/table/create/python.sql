@@ -5,8 +5,6 @@
 {% endif %}
 
 {{ compiled_code }}
-
-
 def materialize(session, df, target_relation):
     # make sure pandas exists
     import importlib.util
@@ -21,11 +19,9 @@ def materialize(session, df, target_relation):
     {% set target_relation_name = resolve_model_name(target_relation) %}
     df.write.mode("overwrite").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}')
 
-
 def main(session):
     dbt = dbtObj(session.table)
     df = model(dbt, session)
     materialize(session, df, dbt.this)
     return "OK"
-
 {% endmacro %}
