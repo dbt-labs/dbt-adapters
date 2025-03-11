@@ -23,6 +23,8 @@ class IcebergRESTCatalogIntegrationConfig(CatalogIntegrationConfig):
         -   must be "iceberg_rest" or "aws_glue"
         external_volume (Optional[str]): the external volume associated with the catalog integration
         -   if left empty, the default for the database/account will be used
+        table_format (str): the table format this catalog uses
+        -   must be "iceberg"
         adapter_properties (Optional[Dict[str, Any]]): a dictionary containing additional
             adapter-specific properties for the catalog
         -   this is only parsed for `namespace`
@@ -31,7 +33,8 @@ class IcebergRESTCatalogIntegrationConfig(CatalogIntegrationConfig):
     name: str
     catalog_type: str
     external_volume: Optional[str]
-    adapter_properties: Optional[Dict[str, Any]] = field(default_factory=dict)
+    table_format: str = "iceberg"
+    adapter_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 class IcebergRESTCatalogIntegration(CatalogIntegration):
@@ -71,7 +74,8 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
                 f"Unsupported table format for catalog {self.name}: {self.table_format}. Expected `iceberg` or unset."
             )
 
-        self.namespace = config.adapter_properties.get("namespace")
+        if config.adapter_properties:
+            self.namespace = config.adapter_properties.get("namespace")
 
     @classmethod
     def from_relation_results(cls, relation_results: RelationResults) -> Self:
