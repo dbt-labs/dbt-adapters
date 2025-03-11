@@ -1,13 +1,10 @@
-from dataclasses import dataclass
-from typing import Optional, Union, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, TYPE_CHECKING
 from typing_extensions import Self
 
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
-from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import RelationResults
-from dbt_common.exceptions import DbtInternalError, DbtValidationError
-
-from dbt.adapters.snowflake.utils import set_boolean
+from dbt_common.exceptions import DbtInternalError
 
 if TYPE_CHECKING:
     import agate
@@ -15,54 +12,26 @@ if TYPE_CHECKING:
 
 @dataclass
 class IcebergRESTCatalogIntegrationConfig(CatalogIntegrationConfig):
+    """
+    Implements the CatalogIntegrationConfig protocol for integrating with an Iceberg REST or AWS Glue catalog
+
+    This class extends CatalogIntegrationConfig to add default settings.
+
+    Attributes:
+        name (str): the name of the catalog integration
+        catalog_type (str): the type of catalog integration
+        -   must be "iceberg_rest" or "aws_glue"
+        external_volume (Optional[str]): the external volume associated with the catalog integration
+        -   if left empty, the default for the database/account will be used
+        adapter_properties (Optional[Dict[str, Any]]): a dictionary containing additional
+            adapter-specific properties for the catalog
+        -   this is only parsed for `namespace`
+    """
+
     name: str
-    catalog_type: str = "iceberg_rest"
-    external_volume: Optional[str] = None
-    namespace: Optional[str] = None
-
-
-class IcebergRESTTable:
-    """
-    Model a table from Snowflake's Iceberg REST Catalog Integration:
-    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
-
-    Model a table from Snowflake's AWS Glue Catalog Integration:
-    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-aws-glue
-    """
-
-    def __init__(self, relation_config: RelationConfig) -> None:
-        catalog = relation_config.config.extra.get("catalog")
-        self.catalog_table_name: str = catalog.get("catalog_table_name")
-        self.replace_invalid_characters: bool = catalog.get("replace_invalid_characters")
-        self.auto_refresh: bool = catalog.get("auto_refresh")
-
-    @property
-    def catalog_table_name(self) -> str:
-        return self.__catalog_table_name
-
-    @catalog_table_name.setter
-    def catalog_table_name(self, value: Optional[str]) -> None:
-        if value and len(value) > 0:
-            self.__catalog_table_name = value
-        raise DbtValidationError("table_name is required for IcebergREST catalogs")
-
-    @property
-    def replace_invalid_characters(self) -> bool:
-        return self.__replace_invalid_characters
-
-    @replace_invalid_characters.setter
-    def replace_invalid_characters(self, value: Union[bool, str]) -> None:
-        self.__replace_invalid_characters = set_boolean(
-            "replace_invalid_characters", value, default=False
-        )
-
-    @property
-    def auto_refresh(self) -> bool:
-        return self.__auto_refresh
-
-    @auto_refresh.setter
-    def auto_refresh(self, value: Union[bool, str]) -> None:
-        self.__auto_refresh = set_boolean("auto_refresh", value, default=False)
+    catalog_type: str
+    external_volume: Optional[str]
+    adapter_properties: Optional[Dict[str, Any]] = field(default_factory=dict)
 
 
 class IcebergRESTCatalogIntegration(CatalogIntegration):
@@ -75,33 +44,48 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
 
     While external volumes are a separate, but related concept in Snowflake,
     we assume that a catalog integration is always associated with an external volume.
+
+    Attributes:
+        name (str): the name of the catalog integration, e.g. "my_iceberg_rest_catalog"
+        catalog_type (str): the type of catalog integration
+        -   must be "iceberg_rest" or "aws_glue"
+        external_volume (str): the external volume associated with the catalog integration
+        -   if left empty, the default for the database/account will be used
+        table_format (str): the table format this catalog uses
+        -   must be "iceberg"
+        allows_writes (bool): identifies whether this catalog integration supports writes
+        -   must be False
     """
 
     table_format: str = "iceberg"
+    allows_writes: bool = False
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         super().__init__(config)
-        if config.catalog_type in ["iceberg_rest", "aws_glue"]:
-            self.catalog_type = config.catalog_type
-        else:
+        if self.catalog_type not in ["iceberg_rest", "aws_glue"]:
             raise DbtInternalError(
                 f"Attempting to create IcebergREST catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
             )
-        if isinstance(config, IcebergRESTCatalogIntegrationConfig):
-            self.namespace: Optional[str] = config.namespace
-            self.external_volume: Optional[str] = config.external_volume
+        if self.table_format and self.table_format != "iceberg":
+            raise DbtInternalError(
+                f"Unsupported table format for catalog {self.name}: {self.table_format}. Expected `iceberg` or unset."
+            )
 
-    def table(self, relation_config: RelationConfig) -> IcebergRESTTable:
-        return IcebergRESTTable(relation_config)
+        self.namespace = config.adapter_properties.get("namespace")
 
     @classmethod
     def from_relation_results(cls, relation_results: RelationResults) -> Self:
         table: "agate.Row" = relation_results["table"][0]
         catalog: "agate.Row" = relation_results["catalog"][0]
+
+        adapter_properties = {}
+        if namespace := catalog.get("namespace"):
+            adapter_properties["namespace"] = namespace
+
         config = IcebergRESTCatalogIntegrationConfig(
             name=catalog.get("catalog_name"),
             catalog_type=catalog.get("catalog_type"),
             external_volume=table.get("external_volume_name"),
-            namespace=catalog.get("namespace"),
+            adapter_properties=adapter_properties,
         )
         return cls(config)
