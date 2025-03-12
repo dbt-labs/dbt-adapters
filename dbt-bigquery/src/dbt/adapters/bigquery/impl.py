@@ -111,7 +111,6 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
-    dataframe_python_syntax: Optional[str] = "spark"
 
 
 class BigQueryAdapter(BaseAdapter):

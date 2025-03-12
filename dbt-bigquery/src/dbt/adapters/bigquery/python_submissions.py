@@ -25,7 +25,6 @@ from google.protobuf.json_format import ParseDict
 import nbformat
 
 _logger = AdapterLogger("BigQuery")
-DEFAULT_VAI_NOTEBOOK_NAME = "Default"
 
 
 _DEFAULT_JAR_FILE_URI = "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.34.0.jar"
@@ -42,6 +41,7 @@ class _BigQueryPythonHelper(PythonJobHelper):
         self._model_file_name = f"{schema}/{identifier}.py"
         self._gcs_bucket = credentials.gcs_bucket
         self._gcs_path = f"gs://{credentials.gcs_bucket}/{self._model_file_name}"
+        self._parsed_model = parsed_model
 
         # set retry policy, default to timeout after 24 hours
         retry = RetryFactory(credentials)
@@ -53,6 +53,11 @@ class _BigQueryPythonHelper(PythonJobHelper):
         bucket = self._storage_client.get_bucket(self._gcs_bucket)
         blob = bucket.blob(self._model_file_name)
         blob.upload_from_string(compiled_code)
+
+    def _get_batch_id(self) -> str:
+        model = self._parsed_model
+        default_batch_id = str(uuid.uuid4())
+        return model["config"].get("batch_id", default_batch_id)
 
 
 class ClusterDataprocHelper(_BigQueryPythonHelper):
@@ -114,19 +119,18 @@ class ServerlessDataProcHelper(_BigQueryPythonHelper):
                 )
 
         self._batch_controller_client = create_dataproc_batch_controller_client(credentials)
-        self._batch_id = parsed_model["config"].get("batch_id", str(uuid.uuid4()))
         self._jar_file_uri = parsed_model["config"].get("jar_file_uri", _DEFAULT_JAR_FILE_URI)
         self._dataproc_batch = credentials.dataproc_batch
 
     def submit(self, compiled_code: str) -> Batch:
-        _logger.debug(f"Submitting batch job with id: {self._batch_id}")
+        _logger.debug(f"Submitting batch job with id: {self._get_batch_id()}")
 
         self._write_to_gcs(compiled_code)
 
         request = CreateBatchRequest(
             parent=f"projects/{self._project}/locations/{self._region}",
             batch=self._create_batch(),
-            batch_id=self._batch_id,
+            batch_id=self._get_batch_id(),
         )
 
         # submit the batch
@@ -199,7 +203,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     f"Need to supply {required_config} in profile to submit python job"
                 )
 
-        self._parsed_model = parsed_model
         self._model_name = parsed_model["alias"]
         self._GoogleCredentials = create_google_credentials(credentials)
         # TODO(jialuo): add a function in clients.py.
@@ -212,11 +215,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
         if "packages" in parsed_model["config"]:
             self._packages = parsed_model["config"]["packages"]
 
-    def _get_batch_id(self) -> str:
-        model = self._parsed_model
-        default_batch_id = str(uuid.uuid4())
-        return model["config"].get("batch_id", default_batch_id)
-
     def _py_to_ipynb(self, compiled_code: str) -> str:
         nb = nbformat.v4.new_notebook()
         nb.cells.append(nbformat.v4.new_code_cell(compiled_code))
@@ -227,10 +225,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
         # TODO(jialuo): write a method for it.
         if self._packages:
             import inspect
+
             exe_code = f"_install_packages({self._packages})"
-            compiled_code = (
-                inspect.getsource(_install_packages) + exe_code + compiled_code
-            )
+            compiled_code = inspect.getsource(_install_packages) + exe_code + compiled_code
 
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
@@ -277,7 +274,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         return data
 
-    def _submit_bigframes_job(self, notebook_template_id: str) -> None:
+    def _submit_bigframes_job(
+        self, notebook_template_id: str
+    ) -> aiplatform_v1.NotebookExecutionJob:
 
         notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
         notebook_execution_job.notebook_runtime_template_resource_name = (
@@ -316,8 +315,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
-        gcs_log = self._read_json_from_gcs(gcs_log_uri)
-        if gcs_log:
+        if gcs_log := self._read_json_from_gcs(gcs_log_uri):
             # TODO(jialuo): improve the logger info.
             # TODO(jialuo): raise errors here. There are some situations when
             # the notebook failed but the pipeline still showed success.
@@ -327,11 +325,12 @@ class BigFramesHelper(_BigQueryPythonHelper):
         else:
             _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
 
-        _ = self._ai_platform_client.get_notebook_execution_job(name=res.name)
+        return self._ai_platform_client.get_notebook_execution_job(name=res.name)
 
 
 def _install_packages(packages: list) -> None:
     import subprocess
+
     for package in packages:
         try:
             process = subprocess.Popen(
