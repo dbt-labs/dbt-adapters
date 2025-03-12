@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix regression to re-enable browser-based IDC authentication
-time: 2025-03-12T12:26:41.493013-04:00
-custom:
-  Author: mikealfare
-  Issue: "904"
