@@ -56,8 +56,8 @@ jobs:
     main:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
-            initial: ${{ steps.version.outputs.initial
-            final: ${{ steps.version.outputs.final
+            initial: ${{ steps.version.outputs.initial }}
+            final: ${{ steps.version.outputs.final }}
         steps:
         -   uses: actions/checkout@v4
             with:
