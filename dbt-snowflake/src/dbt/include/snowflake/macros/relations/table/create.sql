@@ -12,6 +12,8 @@
     {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
     {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
     {%- set copy_grants = config.get('copy_grants', default=false) -%}
+    {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+    {%- set table_tag = config.get('table_tag', default=none) -%}
 
     {%- if cluster_by_keys is not none and cluster_by_keys is string -%}
       {%- set cluster_by_keys = [cluster_by_keys] -%}
@@ -40,7 +42,10 @@
           {{ get_table_columns_and_constraints() }}
           {% set compiled_code = get_select_subquery(compiled_code) %}
         {% endif %}
-        {% if copy_grants and not temporary -%} copy grants {%- endif %} as
+        {% if copy_grants and not temporary -%} copy grants {%- endif %}
+        {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+        {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+        as
         (
           {%- if cluster_by_string is not none -%}
             select * from (
