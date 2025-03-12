@@ -74,6 +74,8 @@ class BigQueryCredentials(Credentials):
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     token_uri: Optional[str] = None
+    # BigFrames related config.
+    bigframes_region: Optional[str] = None
 
     # workload identity federation
 
