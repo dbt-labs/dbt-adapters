@@ -47,7 +47,7 @@
     {{ return("table") }}
   {% elif tmp_relation_type == "view" %}
     {{ return("view") }}
-  {% elif strategy in ("default", "merge", "append") %}
+  {% elif strategy in ("default", "merge", "append", "insert_overwrite") %}
     {{ return("view") }}
   {% elif strategy in ["delete+insert", "microbatch"] and unique_key is none %}
     {{ return("view") }}
