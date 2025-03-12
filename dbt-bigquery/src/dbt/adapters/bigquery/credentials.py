@@ -95,6 +95,24 @@ class BigQueryCredentials(Credentials):
     #   workload identity federation service
     token_endpoint: Optional[Dict[str, str]] = None
 
+    # workload identity federation
+
+    # workload_pool_provider_path
+    #  The Security Token Service audience, which is usually the fully specified resource name of the workload pool provider.
+    #  This field is equivalent to the `audience` key in an Application Default Credentials file downloaded from Google Cloud Platform.
+    #  ex: //iam.googleapis.com/projects/<project-id>/locations/global/workloadIdentityPools/<workload-identity-pool>/providers/<workload-identity-provider>
+    workload_pool_provider_path: Optional[str] = None
+    # service_account_impersonation_url
+    #   The URL for the service account impersonation request, used to generate access tokens via GCP's IAM service.
+    #   ex: https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/<service-account-email>:generateAccessToken
+    service_account_impersonation_url: Optional[str] = None
+
+    # token_endpoint
+    #   a field that we expect to be a dictionary of values used to create
+    #   access tokens from an external identity provider integrated with GCP's
+    #   workload identity federation service
+    token_endpoint: Optional[Dict[str, str]] = None
+
     dataproc_region: Optional[str] = None
     dataproc_cluster_name: Optional[str] = None
     gcs_bucket: Optional[str] = None

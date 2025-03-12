@@ -761,8 +761,13 @@ class BigQueryAdapter(BaseAdapter):
             description = sql_escape(node["description"])
             opts["description"] = '"""{}"""'.format(description)
 
-        if config.get("labels"):
-            labels = config.get("labels", {})
+        labels = config.get("labels") or {}
+
+        if config.get("labels_from_meta"):
+            meta = config.get("meta") or {}
+            labels = {**meta, **labels}  # Merge with priority to labels
+
+        if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
         return opts

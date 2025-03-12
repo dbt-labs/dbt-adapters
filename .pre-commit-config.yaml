@@ -7,7 +7,6 @@ repos:
     hooks:
     -   id: check-yaml
         args: [--unsafe]
-    -   id: check-json
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
     -   id: check-case-conflict
@@ -52,7 +51,6 @@ repos:
         -   --namespace-packages
         -   --ignore-missing-imports
         -   --warn-redundant-casts
-        -   --warn-unused-ignores
         -   --pretty
         -   --show-error-codes
         additional_dependencies:

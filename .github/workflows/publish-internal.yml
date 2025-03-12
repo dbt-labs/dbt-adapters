@@ -1,0 +1,71 @@
+name: "Publish internal"
+run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
+
+on:
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            branch:
+                description: "Choose the branch to publish from"
+                type: string
+                default: "main"
+            skip-unit-tests:
+                description: "Skip running unit tests"
+                type: boolean
+                default: false
+            skip-integration-tests:
+                description: "Skip running integration tests"
+                type: boolean
+                default: false
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: string
+                required: true
+            branch:
+                description: "Choose the branch to publish from"
+                type: string
+                default: "main"
+            skip-unit-tests:
+                description: "Skip running unit tests"
+                type: boolean
+                default: false
+            skip-integration-tests:
+                description: "Skip running integration tests"
+                type: boolean
+                default: false
+
+jobs:
+    unit-tests:
+        if: inputs.skip-unit-tests == false
+        uses: ./.github/workflows/_unit-tests.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+
+    integration-tests:
+        if: inputs.skip-integration-tests == false
+        uses: ./.github/workflows/_integration-tests.yml
+        with:
+            packages: ${{ toJSON(inputs.package) }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    publish-internal:
+        if: always() && !failure()
+        needs: [unit-tests, integration-tests]
+        uses: ./.github/workflows/_publish-internal.yml
+        with:
+            package: ${{ inputs.package }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
