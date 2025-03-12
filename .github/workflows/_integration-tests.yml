@@ -123,7 +123,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -k "not TestPython"
+        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
@@ -157,7 +157,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
+        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
 
     integration-tests-postgres:
         if: contains(fromJSON(inputs.packages), 'dbt-postgres')
