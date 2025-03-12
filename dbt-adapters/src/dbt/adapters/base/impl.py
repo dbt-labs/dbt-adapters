@@ -24,6 +24,13 @@ from typing import (
     TYPE_CHECKING,
 )
 import pytz
+
+from dbt.adapters.record.base import (
+    AdapterExecuteRecord,
+    AdapterGetPartitionsMetadataRecord,
+    AdapterConvertTypeRecord,
+    AdapterStandardizeGrantsDictRecord,
+)
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
@@ -42,7 +49,7 @@ from dbt_common.exceptions import (
     NotImplementedError,
     UnexpectedNullError,
 )
-from dbt_common.record import auto_record_function, supports_replay, Recorder
+from dbt_common.record import auto_record_function, record_function, supports_replay
 from dbt_common.utils import (
     AttrDict,
     cast_to_str,
@@ -91,21 +98,8 @@ from dbt.adapters.exceptions import (
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 
-# if TYPE_CHECKING:
-import agate
-
-from dbt.adapters.record.serialization import AdapterExecuteSerializer, PartitionsMetadataSerializer, \
-    AgateTableSerializer
-
-ExecuteReturn = Tuple[AdapterResponse, agate.Table]
-
-Recorder.register_serialization_strategy(ExecuteReturn, AdapterExecuteSerializer())
-
-PartitionsMetadata = Tuple[agate.Table]
-
-Recorder.register_serialization_strategy(PartitionsMetadata, PartitionsMetadataSerializer())
-Recorder.register_serialization_strategy(agate.Table, AgateTableSerializer())
-
+if TYPE_CHECKING:
+    import agate
 
 
 GET_CATALOG_MACRO_NAME = "get_catalog"
@@ -232,6 +226,7 @@ class SnapshotStrategy(TypedDict):
     row_changed: Optional[str]
     scd_id: Optional[str]
     hard_deletes: Optional[str]
+
 
 @supports_replay
 class BaseAdapter(metaclass=AdapterMeta):
@@ -397,15 +392,16 @@ class BaseAdapter(metaclass=AdapterMeta):
                 self.connections.query_header.reset()
 
     @available.parse(_parse_callback_empty_table)
-    @auto_record_function("AdapterExecute", group="Available")
+    @record_function(
+        AdapterExecuteRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def execute(
         self,
         sql: str,
         auto_begin: bool = False,
         fetch: bool = False,
         limit: Optional[int] = None,
-    ) -> ExecuteReturn:
-
+    ) -> Tuple[AdapterResponse, "agate.Table"]:
         """Execute the given SQL. This is a thin wrapper around
         ConnectionManager.execute.
 
@@ -433,7 +429,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterGetColumnSchemaFromQuery", group="Available")
     @available.parse(lambda *a, **k: [])
     def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
-
         """Get a list of the Columns with names and data types from the given sql."""
         _, cursor = self.connections.add_select_query(sql)
         columns = [
@@ -445,10 +440,14 @@ class BaseAdapter(metaclass=AdapterMeta):
         ]
         return columns
 
-    @auto_record_function("AdapterGetPartitionsMetadata", group="Available")
+    @record_function(
+        AdapterGetPartitionsMetadataRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @available.parse(_parse_callback_empty_table)
-    def get_partitions_metadata(self, table: str) -> PartitionsMetadata:
-
+    def get_partitions_metadata(self, table: str) -> Tuple["agate.Table"]:
         """
         TODO: Can we move this to dbt-bigquery?
         Obtain partitions metadata for a BigQuery partitioned table.
@@ -599,7 +598,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterCacheAdded", group="Available")
     @available
     def cache_added(self, relation: Optional[BaseRelation]) -> str:
-
         """Cache a new relation in dbt. It will show up in `list relations`."""
         if relation is None:
             name = self.nice_connection_name()
@@ -611,7 +609,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterCacheDropped", group="Available")
     @available
     def cache_dropped(self, relation: Optional[BaseRelation]) -> str:
-
         """Drop a relation in dbt. It will no longer show up in
         `list relations`, and any bound views will be dropped from the cache
         """
@@ -665,7 +662,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterCheckSchemaExists", group="Available")
     @available.parse(lambda *a, **k: False)
     def check_schema_exists(self, database: str, schema: str) -> bool:
-
         """Check if a schema exists.
 
         The default implementation of this is potentially unnecessarily slow,
@@ -721,7 +717,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterGetColumnsInTable", group="Available")
     @available.deprecated("get_columns_in_relation", lambda *a, **k: [])
     def get_columns_in_table(self, schema: str, identifier: str) -> List[BaseColumn]:
-
         """DEPRECATED: Get a list of the columns in the given table."""
         relation = self.Relation.create(
             database=self.config.credentials.database,
@@ -762,9 +757,14 @@ class BaseAdapter(metaclass=AdapterMeta):
     ###
     # Methods about grants
     ###
-    @auto_record_function("AdapterStandardizeGrantsDict", group="Available")
+    @record_function(
+        AdapterStandardizeGrantsDictRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @available
-    def standardize_grants_dict(self, grants_table: agate.Table) -> dict:
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of `show grants` (or equivalent) to match the
         grants which a user would configure in their project.
 
@@ -796,7 +796,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_missing_columns(
         self, from_relation: BaseRelation, to_relation: BaseRelation
     ) -> List[BaseColumn]:
-
         """Returns a list of Columns in from_relation that are missing from
         to_relation.
         """
@@ -829,7 +828,6 @@ class BaseAdapter(metaclass=AdapterMeta):
     def valid_snapshot_target(
         self, relation: BaseRelation, column_names: Optional[Dict[str, str]] = None
     ) -> None:
-
         """Ensure that the target relation is valid, by making sure it has the
         expected columns.
 
@@ -1031,8 +1029,8 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     @classmethod
-    @abc.abstractmethod
     @auto_record_function("AdapterQuote", group="Available")
+    @abc.abstractmethod
     def quote(cls, identifier: str) -> str:
         """Quote the given identifier, as appropriate for the database."""
         raise NotImplementedError("`quote` is not implemented for this adapter!")
@@ -1164,8 +1162,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     @classmethod
-    @auto_record_function("AdapterConvertType", group="Available")
-    def convert_type(cls, agate_table: agate.Table, col_idx: int) -> Optional[str]:
+    @record_function(
+        AdapterConvertTypeRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
+    def convert_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
 
         return cls.convert_agate_type(agate_table, col_idx)
 
@@ -1900,10 +1900,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse_none
     @classmethod
-    # @auto_record_function("AdapterGetHardDeletesBehavior", group="Available")
-    # TODO: type is a lie
-    def get_hard_deletes_behavior(cls, config: Dict[str, str]) ->  str:
-
+    def get_hard_deletes_behavior(cls, config: Dict[str, str]) -> str:
         """Check the hard_deletes config enum, and the legacy invalidate_hard_deletes
         config flag in order to determine which behavior should be used for deleted
         records in a snapshot. The default is to ignore them."""

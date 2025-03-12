@@ -30,17 +30,11 @@ class RecordReplayHandle:
         self.native_handle.rollback()
 
     def close(self):
-        # NOTE: Some native handles apparently don't have close, so this
-        # might cause record/replay problems.
         self.native_handle.close()
 
     def get_backend_pid(self):
-        # NOTE: Some native handles apparently don't have close, so this
-        # might cause record/replay problems.
         return self.native_handle.get_backend_pid()
 
     @property
     def closed(self):
-        # NOTE: Some native handles apparently don't have close, so this
-        # might cause record/replay problems.
         return self.native_handle.closed
