@@ -1,0 +1,6 @@
+kind: Features
+body: feat: support bigframes in dbt bigquery python model
+time: 2025-03-12T20:14:15.993388-07:00
+custom:
+  Author: jialuoo
+  PR: "902"
