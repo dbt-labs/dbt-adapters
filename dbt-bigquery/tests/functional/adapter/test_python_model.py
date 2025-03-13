@@ -267,3 +267,27 @@ class TestChangingSchemaDataproc:
             assert "On model.test.simple_python_model:" in log
             assert "return spark.createDataFrame(data, schema=['test1', 'test3'])" in log
             assert "Execution status: OK in" in log
+
+
+models__simple_bigframes_model = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModels:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "simple_bigframes_model.py": models__simple_bigframes_model,
+        }
+
+    def test_simple_bigframes_models(self, project):
+        result = run_dbt(["run"])
+        assert len(result) == 1
