@@ -426,7 +426,7 @@ jobs:
         -   run: hatch run integration-tests --profile ${{ matrix.profile }}
 
     integration-tests-databricks:
-        if: contains(fromJSON(inputs.packages), 'dbt-spark')
+        if: contains(fromJSON(inputs.packages), 'dbt-databricks')
         runs-on: ${{ inputs.os }}
         defaults:
             run:
@@ -491,11 +491,19 @@ jobs:
                 client-id: ${{ env.DBT_AZURE_SP_NAME }}
                 tenant-id: ${{ env.DBT_AZURE_TENANT }}
                 allow-no-subscriptions: true
-                federated-token: true
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: pip install -r dev_requirements.txt azure-core azure-identity
+        -   run: |
+                pip install \
+                    "pytest==8.0.1" \
+                    "pytest-dotenv==0.5.2" \
+                    "pytest-xdist==3.5.0" \
+                    "flaky==3.7.0" \
+                    "azure-core" \
+                    "azure-identity" \
+                    -e "../dbt-adapters" \
+                    -e "../dbt-tests-adapter"
         -   id: fetch-token
             run: |
                 from azure.identity import DefaultAzureCredential
@@ -535,5 +543,13 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: pip install -r dev_requirements.txt
+        -   run: |
+                pip install \
+                    "pytest==8.0.1" \
+                    "pytest-dotenv==0.5.2" \
+                    "pytest-xdist==3.5.0" \
+                    "flaky==3.7.0" \
+                    "aiohttp==3.8.3" \
+                    -e "../dbt-adapters" \
+                    -e "../dbt-tests-adapter"
         -   run: pytest -r a -vv -x tests/functional --profile "ci_azure_auto"
