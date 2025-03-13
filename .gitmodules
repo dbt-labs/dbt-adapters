@@ -1,0 +1,9 @@
+[submodule "dbt-synapse"]
+	path = dbt-synapse
+	url = https://github.com/microsoft/dbt-synapse
+[submodule "dbt-fabric"]
+	path = dbt-fabric
+	url = https://github.com/microsoft/dbt-fabric
+[submodule "dbt-databricks"]
+	path = dbt-databricks
+	url = https://github.com/databricks/dbt-databricks
