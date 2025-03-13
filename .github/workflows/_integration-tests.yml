@@ -439,6 +439,7 @@ jobs:
             DBT_DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_DATABRICKS_CLIENT_SECRET }}
             DBT_DATABRICKS_UC_INITIAL_CATALOG: ${{ vars.DBT_DATABRICKS_UC_INITIAL_CATALOG }}
             DBT_DATABRICKS_LOCATION_ROOT: ${{ vars.DBT_DATABRICKS_LOCATION_ROOT }}
+            TEST_PECO_CLUSTER_ID: ${{ secrets.TEST_PECO_CLUSTER_ID }}
             TEST_PECO_UC_CLUSTER_ID: ${{ secrets.TEST_PECO_UC_CLUSTER_ID }}
             DBT_DATABRICKS_HTTP_PATH: ${{ secrets.DBT_DATABRICKS_HTTP_PATH }}
             DBT_DATABRICKS_TOKEN: ${{ secrets.DBT_DATABRICKS_TOKEN }}
@@ -471,6 +472,8 @@ jobs:
         environment:
             name: "dbt-fabric"
         env:
+            DBT_AZURE_SP_NAME: ${{ vars.DBT_AZURE_SP_NAME }}
+            DBT_AZURE_TENANT_ID: ${{ secrets.DBT_AZURE_TENANT_ID }}
             DBT_AZURESQL_SERVER: ${{ secrets.DBT_AZURESQL_SERVER }}
             DBT_AZURESQL_DB: ${{ vars.DBT_AZURESQL_DB }}
             FABRIC_TEST_DRIVER: ${{ vars.FABRIC_TEST_DRIVER }}
@@ -485,8 +488,8 @@ jobs:
         -   run: git submodule update --init
         -   uses: azure/login@v2
             with:
-                client-id: ${{ secrets.DBT_AZURE_SP_NAME }}
-                tenant-id: ${{ secrets.DBT_AZURE_TENANT }}
+                client-id: ${{ env.DBT_AZURE_SP_NAME }}
+                tenant-id: ${{ env.DBT_AZURE_TENANT }}
                 allow-no-subscriptions: true
                 federated-token: true
         -   uses: actions/setup-python@v5
