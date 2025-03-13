@@ -1,5 +1,5 @@
 {% macro redshift__get_merge_sql(target, source, unique_key, dest_columns, incremental_predicates=none) -%}
-    {%- set predicates = _update_predicates(incremental_predicates) -%}
+    {%- set predicates = _update_predicates(target, incremental_predicates) -%}
 
     {%- set merge_update_columns = config.get('merge_update_columns') -%}
     {%- set merge_exclude_columns = config.get('merge_exclude_columns') -%}
@@ -102,7 +102,7 @@
 {% endmacro %}
 
 
-{% macro _update_predicates(incremental_predicates) %}
+{% macro _update_predicates(target, incremental_predicates) %}
 
     {%- set predicates = [] -%}
     {% if incremental_predicates is not none %}
