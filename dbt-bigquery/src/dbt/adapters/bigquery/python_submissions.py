@@ -254,7 +254,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
         else:
             raise ValueError("No Default notebook runtime templates found.")
 
-    def _config_notebook_job(self, notebook_template_id: str) -> aiplatform_v1.NotebookExecutionJob:
+    def _config_notebook_job(
+        self, notebook_template_id: str
+    ) -> aiplatform_v1.NotebookExecutionJob:
         notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
         notebook_execution_job.notebook_runtime_template_resource_name = (
             f"projects/{self._project}/locations/{self._region}/"
