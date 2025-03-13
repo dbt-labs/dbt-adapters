@@ -48,6 +48,36 @@ class AdapterExecuteRecord(Record):
 
 
 @dataclasses.dataclass
+class AdapterTestSqlResult:
+    return_val: Any
+
+
+@dataclasses.dataclass
+class AdapterTestSqlParams:
+    thread_id: str
+    sql: str
+    fetch: str
+    conn: Any
+
+    def _to_dict(self):
+        return {
+            "thread_id": self.thread_id,
+            "sql": self.sql,
+            "fetch": self.fetch,
+            "conn": "conn",
+        }
+
+
+@Recorder.register_record_type
+class AdapterTestSqlRecord(Record):
+    """Implements record/replay support for the BaseAdapter.execute() method."""
+
+    params_cls = AdapterTestSqlParams
+    result_cls = AdapterTestSqlResult
+    group = "Available"
+
+
+@dataclasses.dataclass
 class AdapterGetPartitionsMetadataParams:
     thread_id: str
     table: str
