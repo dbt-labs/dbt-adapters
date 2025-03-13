@@ -18,6 +18,7 @@ from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from google.api_core.client_options import ClientOptions
 
+from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
@@ -253,6 +254,35 @@ class BigFramesHelper(_BigQueryPythonHelper):
         else:
             raise ValueError("No Default notebook runtime templates found.")
 
+    def _config_notebook_job(self, notebook_template_id: str) -> aiplatform_v1.NotebookExecutionJob:
+        notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
+        notebook_execution_job.notebook_runtime_template_resource_name = (
+            f"projects/{self._project}/locations/{self._region}/"
+            f"notebookRuntimeTemplates/{notebook_template_id}"
+        )
+
+        notebook_execution_job.gcs_notebook_source = (
+            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
+        )
+
+        if hasattr(self._GoogleCredentials, "_service_account_email"):
+            notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
+        else:
+            request = Request()
+            response = request(
+                method="GET",
+                url="https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
+            )
+            notebook_execution_job.execution_user = json.loads(response.data).get("email")
+
+        notebook_execution_job.gcs_output_uri = (
+            f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
+        )
+        notebook_execution_job.display_name = self._get_batch_id()
+
+        return notebook_execution_job
+
     def _read_json_from_gcs(self, gcs_uri: str) -> Optional[Any]:
         bucket_name, *blob_names = gcs_uri.split("gs://")[1].split("/")
         blob_name = "/".join(blob_names)
@@ -278,34 +308,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
 
-        notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
-        notebook_execution_job.notebook_runtime_template_resource_name = (
-            f"projects/{self._project}/locations/{self._region}/"
-            f"notebookRuntimeTemplates/{notebook_template_id}"
-        )
+        notebook_execution_job = self._config_notebook_job(notebook_template_id)
 
-        notebook_execution_job.gcs_notebook_source = (
-            aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
-        )
-
-        # TODO(jialuo): Add a method for it.
-        if hasattr(self._GoogleCredentials, "_service_account_email"):
-            notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        else:
-            from google.auth.transport.requests import Request
-
-            request = Request()
-            response = request(
-                method="GET",
-                url="https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
-            )
-            notebook_execution_job.execution_user = json.loads(response.data).get("email")
-
-        notebook_execution_job.gcs_output_uri = (
-            f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
-        )
-        notebook_execution_job.display_name = self._get_batch_id()
         request = aiplatform_v1.CreateNotebookExecutionJobRequest(
             parent=f"projects/{self._project}/locations/{self._region}",
             notebook_execution_job=notebook_execution_job,
