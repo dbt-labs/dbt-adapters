@@ -426,7 +426,7 @@ jobs:
         -   run: hatch run integration-tests --profile ${{ matrix.profile }}
 
     integration-tests-databricks:
-        if: contains(fromJSON(inputs.packages), 'dbt-databricks')
+        if: contains(fromJSON(inputs.packages), 'dbt-databricks') && runner.os == 'Linux'
         runs-on: ${{ inputs.os }}
         defaults:
             run:
@@ -466,7 +466,7 @@ jobs:
         -   run: hatch -v run ${{ matrix.profile }}
 
     integration-tests-fabric:
-        if: contains(fromJSON(inputs.packages), 'dbt-fabric')
+        if: contains(fromJSON(inputs.packages), 'dbt-fabric') && runner.os == 'Linux'
         runs-on: ${{ inputs.os }}
         defaults:
             run:
@@ -496,6 +496,7 @@ jobs:
             with:
                 creds: ${{ env.CREDS }}
                 allow-no-subscriptions: true
+        -   run: sudo ACCEPT_EULA=Y apt-get update && apt-get install -y curl unixodbc odbcinst msodbcsql18 mssql-tools18
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
@@ -523,7 +524,7 @@ jobs:
                 FABRIC_INTEGRATION_TESTS_TOKEN: ${{ steps.fetch-token.outputs.access-token }}
 
     integration-tests-synapse:
-        if: contains(fromJSON(inputs.packages), 'dbt-synapse')
+        if: contains(fromJSON(inputs.packages), 'dbt-synapse') && runner.os == 'Linux'
         runs-on: ${{ inputs.os }}
         defaults:
             run:
@@ -546,7 +547,7 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
-        -   run: sudo ACCEPT_EULA=Y apt-get install -y curl unixodbc msodbcsql18 mssql-tools18
+        -   run: sudo ACCEPT_EULA=Y apt-get update && apt-get install -y curl unixodbc odbcinst msodbcsql18 mssql-tools18
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
