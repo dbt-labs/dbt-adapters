@@ -546,7 +546,7 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
-        -   run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
+        -   run: sudo ACCEPT_EULA=Y apt-get install -y curl unixodbc msodbcsql18 mssql-tools18
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
