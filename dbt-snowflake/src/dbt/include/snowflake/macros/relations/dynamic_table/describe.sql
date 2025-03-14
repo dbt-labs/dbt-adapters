@@ -15,13 +15,13 @@
             in schema {{ relation.database }}.{{ relation.schema }}
         ;
         select
-            "name",
-            "schema_name",
-            "database_name",
-            "text",
-            "target_lag",
-            "warehouse",
-            "refresh_mode"
+            "NAME" as "name",
+            "SCHEMA_NAME" as "schema_name",
+            "DATABASE_NAME" as "database_name",
+            "TEXT" as "text",
+            "TARGET_LAG" as "target_lag",
+            "WAREHOUSE" as "warehouse",
+            "REFRESH_MODE" as "refresh_mode"
         from table(result_scan(last_query_id()))
     {%- endset %}
     {% set results = {'dynamic_table': run_query(_dynamic_table_sql)} %}
@@ -48,8 +48,8 @@
         in schema {{ relation.database }}.{{ relation.schema }}
     ;
     select
-        "catalog_name",
-        "external_volume_name",
-        "base_location"
+        CATALOG_NAME as "catalog_name",
+        EXTERNAL_VOLUME_NAME as "external_volume_name",
+        BASE_LOCATION as "base_location"
     from table(result_scan(last_query_id()))
 {% endmacro %}
