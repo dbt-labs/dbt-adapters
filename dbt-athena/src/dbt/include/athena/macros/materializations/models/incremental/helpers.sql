@@ -10,10 +10,10 @@
   {%- else -%}
     {% set invalid_strategy_msg -%}
       Invalid incremental strategy provided: {{ raw_strategy }}
-      Expected one of: 'append', 'insert_overwrite'
+      Expected one of: 'append', 'insert_overwrite', 'microbatch'
     {%- endset %}
 
-    {% if raw_strategy not in ['append', 'insert_overwrite'] %}
+    {% if raw_strategy not in ['append', 'insert_overwrite', 'microbatch'] %}
       {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
     {% endif %}
   {% endif %}
