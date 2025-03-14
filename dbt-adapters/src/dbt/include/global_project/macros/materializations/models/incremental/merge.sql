@@ -67,10 +67,10 @@
 
         {%- set unique_key_str = unique_key|join(', ') -%}
 
-        delete from {{ target }}
+        delete from {{ target }} as DBT_INTERNAL_DEST
         where ({{ unique_key_str }}) in (
             select distinct {{ unique_key_str }}
-            from {{ source }}
+            from {{ source }} as DBT_INTERNAL_SOURCE
         )
         {%- if incremental_predicates %}
             {% for predicate in incremental_predicates %}

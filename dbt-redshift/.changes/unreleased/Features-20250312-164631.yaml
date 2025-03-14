@@ -1,0 +1,7 @@
+kind: Features
+body: Make source and target tables able to be referenced via DBT_INTERNAL_DEST and DBT_INTERNAL_SOURCE
+  for the delete/insert incremental strategy
+time: 2025-03-12T16:46:31.989362-04:00
+custom:
+  Author: mikealfare
+  Issue: "910"
