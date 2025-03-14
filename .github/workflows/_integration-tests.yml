@@ -475,6 +475,8 @@ jobs:
             name: "dbt-fabric"
         env:
             DBT_AZURE_SP_NAME: ${{ vars.DBT_AZURE_SP_NAME }}
+            DBT_AZURE_CLIENT_ID: ${{ vars.DBT_AZURE_CLIENT_ID }}
+            DBT_AZURE_CLIENT_SECRET: ${{ secrets.DBT_AZURE_CLIENT_SECRET }}
             DBT_AZURE_TENANT_ID: ${{ secrets.DBT_AZURE_TENANT_ID }}
             DBT_AZURESQL_SERVER: ${{ secrets.DBT_AZURESQL_SERVER }}
             DBT_AZURESQL_DB: ${{ vars.DBT_AZURESQL_DB }}
@@ -488,10 +490,11 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
+        -   run: |
+                echo "CREDS={\"clientId\": $DBT_AZURE_CLIENT_ID, \"clientSecret\": $DBT_AZURE_CLIENT_SECRET, \"tenantId\": $DBT_AZURE_TENANT_ID\"}" >> $GITHUB_ENV
         -   uses: azure/login@v2
             with:
-                client-id: ${{ env.DBT_AZURE_SP_NAME }}
-                tenant-id: ${{ env.DBT_AZURE_TENANT_ID }}
+                creds: ${{ env.CREDS }}
                 allow-no-subscriptions: true
         -   uses: actions/setup-python@v5
             with:
@@ -543,7 +546,7 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
-        -   run: ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
+        -   run: sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
