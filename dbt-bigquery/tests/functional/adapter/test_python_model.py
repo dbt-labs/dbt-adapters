@@ -272,3 +272,11 @@ class TestChangingSchemaDataproc:
             assert "On model.test.simple_python_model:" in log
             assert "return spark.createDataFrame(data, schema=['test1', 'test3'])" in log
             assert "Execution status: OK in" in log
+
+
+class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
+    pass
+
+
+class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
+    pass

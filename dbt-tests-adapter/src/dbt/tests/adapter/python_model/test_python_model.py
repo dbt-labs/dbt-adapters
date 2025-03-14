@@ -1,9 +1,11 @@
 import os
+from pprint import pformat
+from typing import Dict
 
 import pytest
 import yaml
 
-from dbt.tests.util import run_dbt
+from dbt.tests.util import relation_from_name, run_dbt
 
 
 basic_sql = """
@@ -26,6 +28,21 @@ def model(dbt, _):
     df5 = dbt.ref("test", "my_versioned_sql_model", version=1)
     df6 = dbt.source("test_source", "test_table")
     df = df.limit(2)
+    return df
+"""
+
+_input_model_sql = """
+{{ config(materialized='table', event_time='event_time') }}
+select 1 as id, TIMESTAMP '2025-01-01 01:25:00-0' as event_time
+UNION ALL
+select 2 as id, TIMESTAMP '2025-01-02 13:47:00-0' as event_time
+UNION ALL
+select 3 as id, TIMESTAMP '2025-01-03 01:32:00-0' as event_time
+"""
+
+_model_that_refs_input_py = """
+def model(dbt, session):
+    df = dbt.ref("input_model")
     return df
 """
 
@@ -152,4 +169,68 @@ class BasePythonIncrementalTests:
                 fetch="one",
             )[0]
             == 7
+        )
+
+
+class _BaseSkipRefFiltering:
+    @pytest.fixture(scope="class")
+    def model_that_refs_input_py(self) -> str:
+        """
+        This is the SQL that references the input_model which can be sampled
+        """
+        return _model_that_refs_input_py
+
+    @pytest.fixture(scope="class")
+    def input_model_sql(self) -> str:
+        """
+        This is the SQL that defines the input model to be sampled, including any {{ config(..) }}.
+        event_time is a required configuration of this input
+        """
+        return _input_model_sql
+
+    @pytest.fixture(scope="class")
+    def models(self, model_that_refs_input_py: str, input_model_sql: str) -> Dict[str, str]:
+        return {
+            "input_model.sql": input_model_sql,
+            "model_that_refs_input.py": model_that_refs_input_py,
+        }
+
+    def assert_row_count(self, project, relation_name: str, expected_row_count: int):
+        relation = relation_from_name(project.adapter, relation_name)
+        result = project.run_sql(f"select * from {relation}", fetch="all")
+
+        assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
+
+
+class BasePythonEmptyTests(_BaseSkipRefFiltering):
+    def test_empty_mode(self, project) -> None:
+        _ = run_dbt(["run"])
+        self.assert_row_count(
+            project=project,
+            relation_name="model_that_refs_input",
+            expected_row_count=3,
+        )
+
+        _ = run_dbt(["run", "--empty"])
+        self.assert_row_count(
+            project=project,
+            relation_name="model_that_refs_input",
+            expected_row_count=3,
+        )
+
+
+class BasePythonSampleTests(_BaseSkipRefFiltering):
+    def test_sample_mode(self, project) -> None:
+        _ = run_dbt(["run"])
+        self.assert_row_count(
+            project=project,
+            relation_name="model_that_refs_input",
+            expected_row_count=3,
+        )
+
+        _ = run_dbt(["run", "--sample={'start': '2025-01-03', 'end': '2025-01-04'}"])
+        self.assert_row_count(
+            project=project,
+            relation_name="model_that_refs_input",
+            expected_row_count=3,
         )
