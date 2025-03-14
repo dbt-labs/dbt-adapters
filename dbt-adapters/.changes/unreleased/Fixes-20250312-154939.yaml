@@ -1,0 +1,6 @@
+kind: Fixes
+body: Run python models normally instead of breaking when run with `--sample` or `--empty`
+time: 2025-03-12T15:49:39.76892-05:00
+custom:
+  Author: QMalcolm
+  Issue: "906"
