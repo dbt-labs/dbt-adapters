@@ -43,8 +43,8 @@ class TestCaseSensitiveSupport:
         return {
             "models": {
                 "on_configuration_change": "apply",
-                "pre-hook": "ALTER SESSION SET QUOTED_IDENTIFIERS_IGNORE_CASE = TRUE",
-                "post-hook": "ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE",
+                "pre-hook": "alter session set quoted_identifiers_ignore_case = true",
+                "post-hook": "alter session unset quoted_identifiers_ignore_case",
             }
         }
 
@@ -53,7 +53,7 @@ class TestCaseSensitiveSupport:
         run_dbt(["seed"])
         yield
         project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-        project.run_sql(f"ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE")
+        project.run_sql(f"alter session unset quoted_identifiers_ignore_case")
 
     def test_changes_are_applied(self, project):
 

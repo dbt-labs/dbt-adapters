@@ -10,7 +10,7 @@
 --      - catalog: the metadata associated with the iceberg catalog
 -#}
     {%- set _dynamic_table_sql -%}
-        ALTER SESSION SET QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE;
+        alter session set quoted_identifiers_ignore_case = false;
         show dynamic tables
             like '{{ relation.identifier }}'
             in schema {{ relation.database }}.{{ relation.schema }}
@@ -31,7 +31,7 @@
         {% set _ = results.update({'catalog': run_query(_get_describe_iceberg_catalog_sql(relation))}) %}
     {% endif %}
 
-    ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE;
+    alter session unset quoted_identifiers_ignore_case;
 
     {% do return(results) %}
 {% endmacro %}
