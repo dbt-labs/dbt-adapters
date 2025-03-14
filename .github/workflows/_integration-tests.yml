@@ -491,7 +491,7 @@ jobs:
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
         -   run: |
-                echo "CREDS={\"clientId\": $DBT_AZURE_CLIENT_ID, \"clientSecret\": $DBT_AZURE_CLIENT_SECRET, \"tenantId\": $DBT_AZURE_TENANT_ID}" >> $GITHUB_ENV
+                echo "CREDS={\"clientId\": \"$DBT_AZURE_CLIENT_ID\", \"clientSecret\": \"$DBT_AZURE_CLIENT_SECRET\", \"tenantId\": \"$DBT_AZURE_TENANT_ID\"}" >> $GITHUB_ENV
         -   uses: azure/login@v2
             with:
                 creds: ${{ env.CREDS }}
