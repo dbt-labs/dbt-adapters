@@ -491,7 +491,7 @@ jobs:
         -   uses: azure/login@v2
             with:
                 client-id: ${{ env.DBT_AZURE_SP_NAME }}
-                tenant-id: ${{ env.DBT_AZURE_TENANT }}
+                tenant-id: ${{ env.DBT_AZURE_TENANT_ID }}
                 allow-no-subscriptions: true
         -   uses: actions/setup-python@v5
             with:
@@ -543,6 +543,7 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
+        -   run: ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
