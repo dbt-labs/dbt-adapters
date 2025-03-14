@@ -7,12 +7,13 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
+    "pip install -e ../../dbt-mantle/core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@paw/record-sequence-no",
+    "dbt-core",
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
     "pre-commit~=3.7.0",
