@@ -24,6 +24,10 @@ class TestCaseSensitiveSupport:
     returns these field names:
         NAME, SCHEMA_NAME, DATABASE_NAME, TEXT, TARGET_LAG, WAREHOUSE, REFRESH_MODE
     when QUOTED_IDENTIFIERS_IGNORE_CASE = TRUE
+
+    Relevant resources:
+    https://docs.snowflake.com/en/sql-reference/parameters#quoted-identifiers-ignore-case
+    https://docs.snowflake.com/en/sql-reference/identifiers-syntax#controlling-case-using-the-quoted-identifiers-ignore-case-parameter
     """
 
     @pytest.fixture(scope="class", autouse=True)
