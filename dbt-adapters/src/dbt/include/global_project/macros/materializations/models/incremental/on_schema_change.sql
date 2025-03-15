@@ -1,6 +1,6 @@
 {% macro incremental_validate_on_schema_change(on_schema_change, default='ignore') %}
 
-   {% if on_schema_change not in ['sync_all_columns', 'append_new_columns', 'fail', 'ignore'] %}
+   {% if on_schema_change not in ['sync_all_columns', 'append_new_columns', 'fail', 'ignore', 'full_refresh'] %}
 
      {% set log_message = 'Invalid value for on_schema_change (%s) specified. Setting default value of %s.' % (on_schema_change, default) %}
      {% do log(log_message) %}
@@ -101,7 +101,7 @@
 
 {% macro process_schema_changes(on_schema_change, source_relation, target_relation) %}
 
-    {% if on_schema_change == 'ignore' %}
+    {% if on_schema_change in ['ignore', 'full_refresh'] %}
 
      {{ return({}) }}
 
@@ -141,4 +141,34 @@
 
     {% endif %}
 
+{% endmacro %}
+
+
+{% macro on_schema_change_full_refresh(on_schema_change, existing_relation) %}
+  {% if on_schema_change == 'full_refresh' and existing_relation is not none and existing_relation.is_view == false %}
+      {# we can only check column names and not types because get_columns_in_query only return names #}
+      {%- set existing_columns_with_types = adapter.get_columns_in_relation(existing_relation) -%}
+      {%- set new_columns = get_columns_in_query(sql) -%}
+
+      {% set ns = namespace(schema_changed=False) %}
+
+      {% set existing_columns = [] %}
+      {% for existing_column in existing_columns_with_types %}
+        {% if existing_column.name not in new_columns %}
+          {% set ns.schema_changed = True %}
+        {% endif %}
+        {% set existing_columns = existing_columns.append(existing_column.name) %}
+      {% endfor %}
+      
+      {% for new_column in new_columns %}
+        {% if new_column not in existing_columns %}
+          {% set ns.schema_changed = True %}
+        {% endif %}
+      {% endfor %}
+
+      {% if ns.schema_changed %}
+        {{ return(True) }}
+      {% endif %}
+  {% endif %}
+  {{ return(False) }}
 {% endmacro %}
