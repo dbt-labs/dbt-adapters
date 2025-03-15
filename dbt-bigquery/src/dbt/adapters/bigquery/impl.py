@@ -59,6 +59,7 @@ from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
+    BigFramesHelper,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -916,6 +917,7 @@ class BigQueryAdapter(BaseAdapter):
         return {
             "cluster": ClusterDataprocHelper,
             "serverless": ServerlessDataProcHelper,
+            "bigframes": BigFramesHelper,
         }
 
     @available
