@@ -101,14 +101,14 @@ def _create_reopen_on_error(connection: Connection) -> Callable[[Exception], Non
 
             try:
                 connection.handle = create_bigquery_client(connection.credentials)
-                connection.state = ConnectionState.OPEN  # type:ignore
+                connection.state = ConnectionState.OPEN
 
             except Exception as e:
                 _logger.debug(
                     f"""Got an error when attempting to create a bigquery " "client: '{e}'"""
                 )
                 connection.handle = None
-                connection.state = ConnectionState.FAIL  # type:ignore
+                connection.state = ConnectionState.FAIL
                 raise FailedToConnectError(str(e))
 
     return on_error
