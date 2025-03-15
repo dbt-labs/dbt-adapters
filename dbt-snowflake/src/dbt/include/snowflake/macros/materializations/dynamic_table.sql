@@ -5,7 +5,7 @@
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.DynamicTable) %}
 
-    {{ run_hooks(pre_hooks) }}
+    {{ run_hooks(pre_hooks, span_name='pre-hook') }}
 
     {% set build_sql = dynamic_table_get_build_sql(existing_relation, target_relation) %}
 
@@ -15,7 +15,7 @@
         {{ dynamic_table_execute_build_sql(build_sql, existing_relation, target_relation) }}
     {% endif %}
 
-    {{ run_hooks(post_hooks) }}
+    {{ run_hooks(post_hooks, span_name='post-hook') }}
 
     {% do unset_query_tag(query_tag) %}
 
