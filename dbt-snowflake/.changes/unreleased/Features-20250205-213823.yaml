@@ -1,0 +1,6 @@
+kind: Features
+body: Support ocsp_fail_open setting in dbt-snowflake
+time: 2025-02-05T21:38:23.389392Z
+custom:
+    Author: jcrobak
+    Issue: "793"
