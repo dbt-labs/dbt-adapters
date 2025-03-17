@@ -498,7 +498,7 @@ jobs:
                 allow-no-subscriptions: true
         -   run: |
                 sudo apt-get update
-                sudo apt-get install -y curl upzip
+                sudo apt-get install -y curl unzip
                 curl --output /tmp/msodbc.zip https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
                 unzip /tmp/msodbc.zip -d /tmp/
                 ACCEPT_EULA=Y dpkg -i /tmp/msodbcsql18_18.4.1.1-1_amd64.deb
@@ -554,7 +554,7 @@ jobs:
         -   run: git submodule update --init
         -   run: |
                 sudo apt-get update
-                sudo apt-get install -y curl upzip
+                sudo apt-get install -y curl unzip
                 curl --output /tmp/msodbc.zip https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
                 unzip /tmp/msodbc.zip -d /tmp/
                 ACCEPT_EULA=Y dpkg -i /tmp/msodbcsql18_18.4.1.1-1_amd64.deb
