@@ -499,9 +499,8 @@ jobs:
         -   run: |
                 sudo apt-get update
                 sudo apt-get install -y curl unzip
-                curl --output /tmp/msodbc.zip https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
-                unzip /tmp/msodbc.zip -d /tmp/
-                ACCEPT_EULA=Y dpkg -i /tmp/msodbcsql18_18.4.1.1-1_amd64.deb
+                curl --output /tmp/msodbc.deb https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
+                ACCEPT_EULA=Y dpkg -i /tmp/msodbc.deb
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
@@ -555,9 +554,8 @@ jobs:
         -   run: |
                 sudo apt-get update
                 sudo apt-get install -y curl unzip
-                curl --output /tmp/msodbc.zip https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
-                unzip /tmp/msodbc.zip -d /tmp/
-                ACCEPT_EULA=Y dpkg -i /tmp/msodbcsql18_18.4.1.1-1_amd64.deb
+                curl --output /tmp/msodbc.deb https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
+                ACCEPT_EULA=Y dpkg -i /tmp/msodbc.deb
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
