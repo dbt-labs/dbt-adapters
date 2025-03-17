@@ -524,7 +524,7 @@ jobs:
                 token = DefaultAzureCredential().get_token("https://database.windows.net/.default")
                 print(f"::set-output name=access-token::{token.token}")
             shell: python
-        -   run: pytest -ra -v tests/functional --profile "integration_tests"
+        -   run: pytest -v --color=yes -n auto tests/functional --profile "integration_tests"
             env:
                 FABRIC_INTEGRATION_TESTS_TOKEN: ${{ steps.fetch-token.outputs.access-token }}
 
@@ -571,4 +571,4 @@ jobs:
                     "../dbt-adapters" \
                     "../dbt-tests-adapter" \
                     .
-        -   run: pytest -r a -vv -x tests/functional --profile "ci_azure_auto"
+        -   run: pytest -v --color=yes -n auto tests/functional --profile "ci_azure_auto"
