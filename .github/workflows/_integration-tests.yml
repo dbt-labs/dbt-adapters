@@ -497,10 +497,11 @@ jobs:
                 creds: ${{ env.CREDS }}
                 allow-no-subscriptions: true
         -   run: |
-                sudo apt-get update
-                sudo apt-get install -y curl unzip
-                curl --output /tmp/msodbc.deb https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
-                ACCEPT_EULA=Y sudo dpkg -i /tmp/msodbc.deb
+                curl -fsSL 'https://packages.microsoft.com/keys/microsoft.asc' | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+                curl 'https://packages.microsoft.com/config/debian/12/prod.list' | sudo tee /etc/apt/sources.list.d/mssql-release.list
+                apt-get update
+                ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
+                export PATH="$PATH:/opt/mssql-tools18/bin"
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
@@ -552,10 +553,11 @@ jobs:
                 repository: ${{ inputs.repository }}
         -   run: git submodule update --init
         -   run: |
-                sudo apt-get update
-                sudo apt-get install -y curl unzip
-                curl --output /tmp/msodbc.deb https://packages.microsoft.com/ubuntu/22.04/prod/pool/main/m/msodbcsql18/msodbcsql18_18.4.1.1-1_amd64.deb
-                ACCEPT_EULA=Y sudo dpkg -i /tmp/msodbc.deb
+                curl -fsSL 'https://packages.microsoft.com/keys/microsoft.asc' | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+                curl 'https://packages.microsoft.com/config/debian/12/prod.list' | sudo tee /etc/apt/sources.list.d/mssql-release.list
+                apt-get update
+                ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18
+                export PATH="$PATH:/opt/mssql-tools18/bin"
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
