@@ -116,8 +116,7 @@
           {% set fail_msg %}
               The source and target schemas on this incremental model are out of sync!
               They can be reconciled in several ways:
-                - set the `on_schema_change` config to either append_new_columns or sync_all_columns, depending on your situation.
-                - Re-run the incremental model with `full_refresh: True` to update the target schema.
+                - set the `on_schema_change` config to either append_new_columns, sync_all_columns or full_refresh, depending on your situation.
                 - update the schema manually and re-run the process.
 
               Additional troubleshooting context:
@@ -159,7 +158,7 @@
         {% endif %}
         {% set existing_columns = existing_columns.append(existing_column.name) %}
       {% endfor %}
-      
+
       {% for new_column in new_columns %}
         {% if new_column not in existing_columns %}
           {% set ns.schema_changed = True %}
