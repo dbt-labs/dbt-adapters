@@ -81,6 +81,7 @@ jobs:
             DBT_TEST_ATHENA_SCHEMA: ${{ vars.DBT_TEST_ATHENA_SCHEMA }}
             DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
             DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
+            DBT_DATABRICKS_ENDPOINT: ${{ DBT_DATABRICKS_ENDPOINT }}
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -463,7 +464,7 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: |
-                pip install pyhive thrift
+                pip install databricks-sql-connector
                 python .github/scripts/wait_for_databricks_cluster.py
             working-directory: .
         -   run: hatch run ${{ matrix.profile }}
