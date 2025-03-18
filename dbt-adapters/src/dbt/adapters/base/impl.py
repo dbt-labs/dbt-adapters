@@ -980,18 +980,15 @@ class BaseAdapter(metaclass=AdapterMeta):
         schema: str,
         identifier: str,
     ) -> List[BaseRelation]:
-        try:
-            matches = []
+        matches = []
 
-            search = self._make_match_kwargs(database, schema, identifier)
+        search = self._make_match_kwargs(database, schema, identifier)
 
-            for relation in relations_list:
-                if relation.matches(**search):
-                    matches.append(relation)
+        for relation in relations_list:
+            if relation.matches(**search):
+                matches.append(relation)
 
-            return matches
-        except Exception as e:
-            pass
+        return matches
 
     @auto_record_function("AdapterGetRelation", group="Available")
     @available.parse_none
@@ -1689,8 +1686,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         Not used to validate custom strategies defined by end users.
         """
         return ["append"]
-
-    "".format()
 
     def builtin_incremental_strategies(self):
         """
