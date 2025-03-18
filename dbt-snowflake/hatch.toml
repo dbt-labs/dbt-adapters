@@ -12,7 +12,7 @@ pre-install-commands = [
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@catalogs-parsing#subdirectory=core",
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
     "pre-commit~=3.7.0",
@@ -36,6 +36,17 @@ docker-dev = [
     "docker build -f docker/dev.Dockerfile -t dbt-snowflake-dev .",
 	"docker run --rm -it --name dbt-snowflake-dev -v $(pwd):/opt/code dbt-snowflake-dev",
 ]
+
+[envs.local]
+# TODO: if/when hatch gets support for  defining editable dependencies, the
+# pre-install commands here and post-install commands in the matrix can be moved
+# to the dependencies section
+pre-install-commands = [
+  "pip install -e ../dbt-adapter",
+]
+post-install-commands = [
+  "pip install -e ../dbt-core/core",
+    ]
 
 [envs.build]
 detached = true
