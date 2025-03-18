@@ -7,12 +7,9 @@ from thrift.transport.THttpClient import THttpClient
 from thrift.Thrift import TApplicationException
 
 
-HOST = "https://" + getenv("DBT_DATABRICKS_HOST_NAME")
+HOST = getenv("DBT_DATABRICKS_HOST_NAME")
 CLUSTER = getenv("DBT_DATABRICKS_CLUSTER_NAME")
 TOKEN = getenv("DBT_DATABRICKS_TOKEN")
-PORT = 443
-ORGANIZATION = "0"
-SPARK_CONNECTION_URL = "{host}:{port}/sql/protocolv1/o/{organization}/{cluster}"
 
 
 def _wait_for_databricks_cluster() -> None:
@@ -32,14 +29,7 @@ def _wait_for_databricks_cluster() -> None:
 
 
 def _transport_client() -> THttpClient:
-    conn_url = SPARK_CONNECTION_URL.format(
-        host=HOST,
-        cluster=CLUSTER,
-        port=PORT,
-        organization=ORGANIZATION,
-    )
-
-    transport_client = THttpClient(conn_url)
+    transport_client = THttpClient(f"https://{HOST}:443/sql/protocolv1/o/0/{CLUSTER}")
     raw_token = f"token:{TOKEN}".encode()
     token = standard_b64encode(raw_token).decode()
     transport_client.setCustomHeaders({"Authorization": f"Basic {token}"})
