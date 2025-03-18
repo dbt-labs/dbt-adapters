@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 from typing_extensions import Protocol
 
 from dbt_common.dataclass_schema import dbtClassMixin
+from dataclasses import dataclass
 
 
 class CatalogIntegrationConfig(Protocol):
@@ -43,6 +44,7 @@ class CatalogIntegrationMode(Enum):
     WRITE = "w"
 
 
+@dataclass
 class CatalogIntegration(dbtClassMixin):
     """
     Represent a catalog integration for a given user config
