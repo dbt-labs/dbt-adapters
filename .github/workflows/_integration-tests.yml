@@ -81,7 +81,7 @@ jobs:
             DBT_TEST_ATHENA_SCHEMA: ${{ vars.DBT_TEST_ATHENA_SCHEMA }}
             DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
             DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
-            DBT_DATABRICKS_ENDPOINT: ${{ DBT_DATABRICKS_ENDPOINT }}
+            DBT_DATABRICKS_ENDPOINT: ${{ secrets.DBT_DATABRICKS_ENDPOINT }}
         steps:
         -   uses: actions/checkout@v4
             with:
