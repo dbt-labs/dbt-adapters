@@ -29,8 +29,10 @@ class AdapterExecuteResult:
         adapter_response = self.return_val[0]
         table = self.return_val[1]
         return {
-            "adapter_response": adapter_response.to_dict(),
-            "table": serialize_agate_table(table),
+            "return_val": {
+                "adapter_response": adapter_response.to_dict(),
+                "table": serialize_agate_table(table),
+            }
         }
 
     def _from_dict(self, data: Dict[str, Any]):
@@ -49,7 +51,7 @@ class AdapterExecuteRecord(Record):
 
 @dataclasses.dataclass
 class AdapterTestSqlResult:
-    return_val: Any
+    return_val: str
 
 
 @dataclasses.dataclass
