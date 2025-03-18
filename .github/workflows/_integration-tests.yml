@@ -463,7 +463,8 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: |
                 pip install pyhive thrift
-                python ./.github/scripts/wait_for_databricks_cluster.py
+                python .github/scripts/wait_for_databricks_cluster.py
+            working-directory: .
         -   run: hatch run ${{ matrix.profile }}
 
     integration-tests-fabric:
