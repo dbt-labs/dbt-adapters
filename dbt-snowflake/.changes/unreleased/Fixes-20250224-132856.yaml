@@ -1,0 +1,6 @@
+kind: Fixes
+body: Correctly detect Iceberg tables when using multiple databases.
+time: 2025-02-24T13:28:56.116807Z
+custom:
+    Author: ms32035
+    Issue: "846"
