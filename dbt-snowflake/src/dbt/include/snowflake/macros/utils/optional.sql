@@ -1,4 +1,4 @@
-{% macro optional(name, value, quote_char = '') %}
+{% macro optional(name, value, quote_char = '', quote_char_right = '', with_equal = true) %}
 {#-
 --  Insert optional DDL parameters only when their value is provided; makes DDL statements more readable
 --
@@ -10,5 +10,6 @@
 --      If the value is not None (e.g. provided by the user), return the option setting DDL
 --      If the value is None, return an empty string
 -#}
-{% if value is not none %}{{ name }} = {{ quote_char }}{{ value }}{{ quote_char }}{% endif %}
+{% set quote_char_right = quote_char_right if quote_char_right else quote_char %}
+{% if value is not none %}{{ name }} {{"=" if with_equal else ""}} {{ quote_char }}{{ value }}{{ quote_char_right }}{% endif %}
 {% endmacro %}
