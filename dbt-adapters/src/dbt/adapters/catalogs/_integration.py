@@ -6,7 +6,7 @@ from dbt_common.dataclass_schema import dbtClassMixin
 from dataclasses import dataclass
 
 
-class CatalogIntegrationConfig(Protocol):
+class CatalogIntegrationConfig(Protocol, dbtClassMixin):
     """
     Represents the user configuration required to describe a catalog integration
 
