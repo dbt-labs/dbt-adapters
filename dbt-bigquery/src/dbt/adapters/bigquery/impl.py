@@ -891,6 +891,7 @@ class BigQueryAdapter(BaseAdapter):
             )
 
     # This is used by the test suite
+    @available
     def run_sql_for_tests(self, sql, fetch, conn=None):
         """For the testing framework.
         Run an SQL query on a bigquery adapter. No cursors, transactions,
