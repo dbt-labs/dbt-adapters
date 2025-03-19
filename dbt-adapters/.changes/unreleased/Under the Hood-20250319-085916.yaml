@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Make use of new record/replay features to enable recording "available" functions
+time: 2025-03-19T08:59:16.600088-04:00
+custom:
+    Author: peterallenwebb
+    Issue: "761"
