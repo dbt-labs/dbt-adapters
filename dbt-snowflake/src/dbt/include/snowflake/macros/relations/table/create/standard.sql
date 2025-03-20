@@ -5,7 +5,12 @@
     https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
 -#}
 
+{%- if relation.is_iceberg_format and not adapter.behavior.enable_iceberg_materializations.no_warn %}
+{% do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') %}
+{%- endif %}
+
 {%- set materialization_prefix = relation.get_ddl_prefix_for_create(config.model.config, temporary) -%}
+{%- set alter_prefix = relation.get_ddl_prefix_for_alter() -%}
 
 {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
 {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
@@ -24,6 +29,13 @@
 {{ sql_header if sql_header is not none }}
 
 create or replace {{ materialization_prefix }} table {{ relation }}
+    {%- if relation.is_iceberg_format %}
+      {#
+        Valid DDL in CTAS statements. Plain create statements have a different order.
+        https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table
+      #}
+      {{ relation.get_iceberg_ddl_options(config.model.config) }}
+    {%- endif -%}
 
     {%- set contract_config = config.get('contract') -%}
     {%- if contract_config.enforced -%}
