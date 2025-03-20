@@ -1,10 +1,10 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
-    {%- set catalog_name = config.get('catalog_name', default=none) -%}
+    {%- set catalog_name = config.get('catalog_name') -%}
     {%- if catalog_name is not none -%}
         {%- set catalog_integration = adapter.get_catalog_integration(catalog_name) -%}
     {%- else -%}
-        {%- set catalog_integration = none -%}
+        {%- set catalog_integration = adapter.add_managed_catalog_integration(config.model.config) -%}
     {%- endif -%}
 
     {%- if language == 'sql' -%}
