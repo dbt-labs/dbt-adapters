@@ -50,8 +50,8 @@
     {%- if (old_relation.is_table and (should_full_refresh())) -%}
       {% do adapter.drop_relation(relation) %}
     {%- endif -%}
-    {%- set submission_method = config.get("submission_method", "spark") -%}
-    {%- if submission_method == "spark" -%}
+    {%- set submission_method = config.get("submission_method", "serverless") -%}
+    {%- if submission_method in ("serverless", "cluster") -%}
       {{ py_write_table(compiled_code=compiled_code, target_relation=relation.quote(database=False, schema=False, identifier=False)) }}
     {%- elif submission_method == "bigframes" -%}
       {{ bigframes_write_table(compiled_code=compiled_code, target_relation=relation.quote(database=False, schema=False, identifier=False)) }}
