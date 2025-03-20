@@ -50,8 +50,8 @@ class BigQueryCredentials(Credentials):
 
     # BigQuery allows an empty database / project, where it defers to the
     # environment for the project
-    database: Optional[str] = None  # type:ignore
-    schema: Optional[str] = None  # type:ignore
+    database: Optional[str] = None
+    schema: Optional[str] = None
     execution_project: Optional[str] = None
     quota_project: Optional[str] = None
     location: Optional[str] = None
