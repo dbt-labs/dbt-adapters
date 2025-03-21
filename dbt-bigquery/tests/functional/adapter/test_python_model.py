@@ -327,6 +327,6 @@ class TestBigframesModelsMerge:
             "bigframes_model_merge.py": models__bigframes_model_merge,
         }
 
-    def test_simple_bigframes_models(self, project):
+    def test_bigframes_model_merge(self, project):
         result = run_dbt(["run"])
         assert len(result) == 1
