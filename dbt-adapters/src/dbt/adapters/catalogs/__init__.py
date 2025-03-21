@@ -7,4 +7,5 @@ from dbt.adapters.catalogs._exceptions import (
 from dbt.adapters.catalogs._integration import (
     CatalogIntegration,
     CatalogIntegrationConfig,
+    CatalogIntegrationMode,
 )

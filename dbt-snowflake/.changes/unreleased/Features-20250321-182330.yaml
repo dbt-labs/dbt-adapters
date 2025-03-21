@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for Snowflake's managed Iceberg catalog via dbt's catalog framework
+time: 2025-03-21T18:23:30.838231-04:00
+custom:
+  Author: mikealfare
+  Issue: "932"
