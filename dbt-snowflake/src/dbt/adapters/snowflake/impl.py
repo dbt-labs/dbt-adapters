@@ -23,6 +23,7 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS, ICEBERG_MANAGED_CATALOG
 from dbt.adapters.snowflake.relation_configs import (
     SnowflakeRelationType,
     TableFormat,
@@ -56,6 +57,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    catalog_name: Optional[str] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
@@ -65,6 +67,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = SnowflakeConfig
 
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS  # type:ignore
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -82,6 +85,10 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
         }
     )
+
+    def __init__(self, config, mp_context) -> None:
+        super().__init__(config, mp_context)
+        self.add_catalog_integration(ICEBERG_MANAGED_CATALOG)
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:

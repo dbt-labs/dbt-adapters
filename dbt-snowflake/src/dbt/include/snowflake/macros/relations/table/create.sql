@@ -1,14 +1,15 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
     {%- set catalog_name = config.get('catalog_name') -%}
-    {%- if catalog_name is not none -%}
-        {%- set catalog_integration = adapter.get_catalog_integration(catalog_name) -%}
-    {%- else -%}
-        {%- set catalog_integration = adapter.add_managed_catalog_integration(config.model.config) -%}
-    {%- endif -%}
+    {%- set table_format = config.get('table_format') -%}
 
     {%- if language == 'sql' -%}
-        {%- if catalog_integration is none -%}
+        {%- if catalog_name == 'snowflake' -%}
+            {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
+        {%- elif table_format == 'iceberg' -%}
+            {{ exceptions.warn("This configuration is deprecated. Please use `catalog_name: snowflake` in the future.") }}
+            {{ snowflake__create_table_iceberg_managed_legacy_sql(temporary, relation, compiled_code) }}
+        {%- elif catalog_name is none -%}
             {{ snowflake__create_table_standard_sql(temporary, relation, compiled_code) }}
         {%- else -%}
             {%- do exceptions.raise_compiler_error("Unsupported catalog integration: " ~ catalog_name ~ " of type: " ~ catalog_integration.catalog_type) -%}

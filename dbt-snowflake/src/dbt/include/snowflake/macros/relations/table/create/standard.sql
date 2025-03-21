@@ -6,7 +6,6 @@
 -#}
 
 {%- set materialization_prefix = relation.get_ddl_prefix_for_create(config.model.config, temporary) -%}
-{%- set alter_prefix = relation.get_ddl_prefix_for_alter() -%}
 
 {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
 {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
@@ -43,10 +42,10 @@ create or replace {{ materialization_prefix }} table {{ relation }}
       {%- endif %}
     );
   {% if cluster_by_string is not none and not temporary -%}
-    alter {{ alter_prefix }} table {{relation}} cluster by ({{cluster_by_string}});
+    alter table {{relation}} cluster by ({{cluster_by_string}});
   {%- endif -%}
   {% if enable_automatic_clustering and cluster_by_string is not none and not temporary %}
-    alter {{ alter_prefix }} table {{relation}} resume recluster;
+    alter table {{relation}} resume recluster;
   {%- endif -%}
 
 {% endmacro %}
