@@ -1,5 +1,3 @@
-import textwrap
-
 from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
@@ -198,27 +196,10 @@ class SnowflakeRelation(BaseRelation):
 
     def get_ddl_prefix_for_alter(self) -> str:
         """All ALTER statements on Iceberg tables require an ICEBERG prefix"""
-        if self.is_iceberg_format:
+        if self.is_iceberg_format or self.catalog_name == "snowflake":
             return "iceberg"
         else:
             return ""
-
-    def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
-        # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
-        base_location: str = (
-            f"{config.get('base_location_root', '_dbt')}/{self.schema}/{self.name}"  # type:ignore
-        )
-
-        if subpath := config.get("base_location_subpath"):  # type:ignore
-            base_location += f"/{subpath}"
-
-        external_volume = config.get("external_volume")  # type:ignore
-        iceberg_ddl_predicates: str = f"""
-        external_volume = '{external_volume}'
-        catalog = 'snowflake'
-        base_location = '{base_location}'
-        """
-        return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def __drop_conditions(self, old_relation: "SnowflakeRelation") -> Iterator[Tuple[bool, str]]:
         drop_view_message: str = (

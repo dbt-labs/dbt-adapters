@@ -13,13 +13,10 @@
 
 {%- set sql_header = config.get('sql_header', none) -%}
 
-{%- set catalog_name = config.get('catalog_name') -%}
-{%- if catalog_name is none %}
-    {%- set catalog_name = adapter.add_managed_catalog_integration(config.model.config) -%}
-{%- endif -%}
-{%- set catalog_integration = adapter.get_catalog_integration(catalog_name) -%}
+{%- set catalog_integration = adapter.get_catalog_integration("snowflake") -%}
+{%- set catalog_table = catalog_integration.catalog_table(config.model.config) -%}
 
-{%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
+{%- set cluster_by_keys = config.get('cluster_by') -%}
 {%- if cluster_by_keys is not none and cluster_by_keys is string -%}
     {%- set cluster_by_string = cluster_by_keys -%}
 {%- elif cluster_by_keys is not none -%}
@@ -43,9 +40,9 @@ create iceberg table {{ relation }}
     {%- endif %}
 
     {{ optional('cluster by', cluster_by_string, "(") }}
-    {{ optional('external_volume', catalog_integration.external_volume, "'") }}
+    {{ optional('external_volume', catalog_table.external_volume, "'") }}
     -- catalog = 'snowflake'
-    base_location = '{{ catalog_integration.base_location(relation, config.model.config) }}'
+    base_location = '{{ catalog_table.base_location }}'
 as (
     {%- if cluster_by_string is not none -%}
     select * from (
