@@ -37,6 +37,21 @@ _MODEL_BASIC_ICEBERG_MODEL = """
 select * from {{ ref('first_table') }}
 """
 
+_MODEL_BASIC_ICEBERG_BUILTIN_MODEL = """
+{{
+  config(
+    transient = "true",
+    materialized = "table",
+    cluster_by=['id'],
+    catalog="snowflake",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+  )
+}}
+
+select * from {{ ref('first_table') }}
+"""
+
 _MODEL_BASIC_ICEBERG_MODEL_WITH_PATH = """
 {{
   config(
