@@ -6,7 +6,6 @@
 -#}
 
 {%- set materialization_prefix = relation.get_ddl_prefix_for_create(config.model.config, temporary) -%}
-{%- set alter_prefix = relation.get_ddl_prefix_for_alter() -%}
 
 {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
 {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
