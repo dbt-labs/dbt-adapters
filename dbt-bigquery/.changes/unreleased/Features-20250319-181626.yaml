@@ -1,0 +1,6 @@
+kind: Features
+body: Support bigframes in dbt bigquery python model
+time: 2025-03-19T18:16:26.325940767Z
+custom:
+    Author: jialuoo
+    Issue: "921"
