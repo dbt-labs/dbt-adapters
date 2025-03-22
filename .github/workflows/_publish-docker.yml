@@ -15,6 +15,30 @@ on:
                 description: "Choose whether to publish to test or prod"
                 type: string
                 default: "prod"
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                    -   "dbt-athena"
+                    -   "dbt-bigquery"
+                    -   "dbt-postgres"
+                    -   "dbt-redshift"
+                    -   "dbt-snowflake"
+                    -   "dbt-spark"
+            deploy-to:
+                description: "Choose whether to publish to test or prod"
+                type: environment
+                default: "test"
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
 
 jobs:
     publish:
@@ -39,4 +63,4 @@ jobs:
                 file: ./${{ inputs.package }}/docker/Dockerfile
                 platforms: 'linux/amd64'
                 tags: ${{ steps.tags.outputs.tags }}
-                build-args: commit_ref=v${{ inputs.version_number }}
+                build-args: commit_ref=v${{ inputs.branch }}
