@@ -15,10 +15,10 @@ on:
                 description: "Choose whether to publish to test or prod"
                 type: string
                 default: "prod"
-            branch:
-                description: "Choose the branch to publish"
+            version:
+                description: "Choose the version to publish"
                 type: string
-                default: "main"
+                required: true
     workflow_dispatch:
         inputs:
             package:
@@ -35,10 +35,10 @@ on:
                 description: "Choose whether to publish to test or prod"
                 type: environment
                 default: "test"
-            branch:
-                description: "Choose the branch to publish"
+            version:
+                description: "Choose the version to publish"
                 type: string
-                default: "main"
+                required: true
 
 jobs:
     publish:
@@ -60,7 +60,7 @@ jobs:
             with:
                 push: ${{ inputs.deploy-to == 'prod' }}
                 target: ${{ inputs.package }}
-                file: ./${{ inputs.package }}/docker/Dockerfile
+                file: ./Dockerfile
                 platforms: 'linux/amd64'
                 tags: ${{ steps.tags.outputs.tags }}
-                build-args: commit_ref=v${{ inputs.branch }} py_version=${{ vars.DOCKER_PYTHON_VERSION }}
+                build-args: version=v${{ inputs.version }} py_version=${{ vars.DOCKER_PYTHON_VERSION }}

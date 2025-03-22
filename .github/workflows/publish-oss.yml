@@ -208,12 +208,14 @@ jobs:
 
     publish-docker:
         if: always() && !failure() && contains(fromJSON('["docker", "all"]'), inputs.target)
-        needs: merge-changes
+        needs:
+        -   merge-changes
+        -   bump-version
         uses: ./.github/workflows/_publish-docker.yml
         with:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
-            branch: ${{ inputs.branch }}
+            version: ${{ needs.bump-version.outputs.final }}
         secrets: inherit
 
     clean-up:
