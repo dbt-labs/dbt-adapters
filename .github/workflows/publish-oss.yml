@@ -28,6 +28,13 @@ on:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release) or leave empty"
                 type: string
                 default: ""
+            target:
+                description: "Choose where to publish"
+                type: choice
+                options:
+                -   "pypi"
+                -   "github"
+                -   "all"
             skip-unit-tests:
                 description: "Skip running unit tests"
                 type: boolean
@@ -137,7 +144,7 @@ jobs:
                 echo "name=$BRANCH" >> $GITHUB_OUTPUT
 
     publish-pypi:
-        if: always() && !failure()
+        if: always() && !failure() && contains(fromJSON('["pypi", "all"]'), inputs.target)
         needs: merge-changes
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
@@ -188,11 +195,22 @@ jobs:
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
 
+    publish-github:
+        if: always() && !failure() && contains(fromJSON('["github", "all"]'), inputs.target)
+        needs: merge-changes
+        uses: ./.github/workflows/_publish-github.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
     clean-up:
         if: always()
         needs:
             -   work-branch
             -   publish-pypi
+            -   publish-github
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: actions/checkout@v4
