@@ -63,4 +63,4 @@ jobs:
                 file: ./${{ inputs.package }}/docker/Dockerfile
                 platforms: 'linux/amd64'
                 tags: ${{ steps.tags.outputs.tags }}
-                build-args: commit_ref=v${{ inputs.branch }}
+                build-args: commit_ref=v${{ inputs.branch }} py_version=${{ vars.DOCKER_PYTHON_VERSION }}
