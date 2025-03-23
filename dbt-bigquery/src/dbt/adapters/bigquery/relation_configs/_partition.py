@@ -6,6 +6,7 @@ from dbt.adapters.relation_configs import RelationConfigChange
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt_common.dataclass_schema import dbtClassMixin, ValidationError
 from google.cloud.bigquery.table import Table as BigQueryTable
+from typing_extensions import Self
 
 
 @dataclass
@@ -80,7 +81,7 @@ class PartitionConfig(dbtClassMixin):
             return self.render(alias)
 
     @classmethod
-    def parse(cls, raw_partition_by) -> Optional["PartitionConfig"]:
+    def parse(cls, raw_partition_by: Dict[str, Any]) -> Optional[Self]:
         if raw_partition_by is None:
             return None
         try:
@@ -111,9 +112,7 @@ class PartitionConfig(dbtClassMixin):
             This doesn't currently collect `time_ingestion_partitioning` and `copy_partitions`
             because this was built for materialized views, which do not support those settings.
         """
-        config_dict: Dict[str, Any] = relation_config.config.extra.get(  # type:ignore
-            "partition_by"
-        )
+        config_dict: Dict[str, Any] = relation_config.config.extra.get("partition_by")
         if "time_ingestion_partitioning" in config_dict:
             del config_dict["time_ingestion_partitioning"]
         if "copy_partitions" in config_dict:
