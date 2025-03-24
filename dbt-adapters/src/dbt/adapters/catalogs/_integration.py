@@ -14,23 +14,28 @@ class CatalogIntegrationConfig(Protocol):
     ensuring a standardized structure and attributes are in place.
 
     Attributes:
-        name (str): the name of the catalog integration in the data platform, e.g. "my_favorite_iceberg_catalog"
+        name (str): the name of the catalog integration in the dbt project, e.g. "my_iceberg_operational_data"
             - this is required for dbt to correctly reference catalogs by name from model configuration
-            - expected to be unique within the adapter, if not the entire data platform
+            - expected to be unique within the adapter
         catalog_type (str): the type of the catalog integration in the data platform, e.g. "iceberg_rest"
             - this is required for dbt to determine the correct method for parsing user configuration
             - usually a combination of the catalog and the way in which the data platform interacts with it
+        catalog_name (Optional(str)): the name of the catalog integration in the data platform, e.g. "my_favorite_iceberg_catalog"
+            - this is required for dbt to correctly reference catalogs by name from model configuration
+            - expected to be unique within the data platform, but many dbt catalog integrations can share the same catalog name
         table_format (Optional[str]): the table format this catalog uses
             - this is commonly unique to each catalog type, and should only be required from the user for catalogs that support multiple formats
         external_volume (Optional[str]): external storage volume identifier
             - while this is a separate concept from catalogs, we feel it is more user-friendly to group it with the catalog configuration
             - a result of this grouping is that there can only be one external volume per catalog integration, but many catalogs can share the same volume
+            - a user should create a new dbt catalog integration if they want to use a different external volume for a given catalog
         adapter_properties (Optional[Dict[str, Any]]):
             - additional, adapter-specific properties are nested here to avoid future collision when expanding the catalog integration protocol
     """
 
     name: str
     catalog_type: str
+    catalog_name: Optional[str]
     table_format: Optional[str]
     external_volume: Optional[str]
     adapter_properties: Optional[Dict[str, Any]]
@@ -49,12 +54,15 @@ class CatalogIntegration:
     A catalog integration is a specific platform's way of interacting with a specific catalog.
 
     Attributes:
-        name (str): the name of the catalog integration in the data platform, e.g. "my_favorite_iceberg_catalog"
+        name (str): the name of the catalog integration in the dbt project, e.g. "my_iceberg_operational_data"
             - this is required for dbt to correctly reference catalogs by name from model configuration
-            - expected to be unique within the adapter, if not the entire data platform
+            - expected to be unique within the adapter
         catalog_type (str): the type of the catalog integration in the data platform, e.g. "iceberg_rest"
             - this is required for dbt to determine the correct method for parsing user configuration
             - usually a combination of the catalog and the way in which the data platform interacts with it
+        catalog_name (Optional(str)): the name of the catalog integration in the data platform, e.g. "my_favorite_iceberg_catalog"
+            - this is required for dbt to correctly reference catalogs by name from model configuration
+            - expected to be unique within the data platform, but many dbt catalog integrations can share the same catalog name
         allows_writes (bool): identifies whether this catalog integration supports writes
             - this is required for dbt to correctly identify whether a catalog is writable during parse time
             - this is determined by the catalog integration type, hence it is a class attribute
@@ -71,5 +79,6 @@ class CatalogIntegration:
     def __init__(self, config: CatalogIntegrationConfig):
         self.name: str = config.name
         self.catalog_type: str = config.catalog_type
+        self.catalog_name: Optional[str] = config.catalog_name or None
         self.table_format: Optional[str] = config.table_format or None
         self.external_volume: Optional[str] = config.external_volume or None
