@@ -105,7 +105,7 @@ def test_getting_catalog_integration_that_does_not_exist(fake_client, fake_catal
     fake_client.add(fake_catalog)
     with pytest.raises(DbtCatalogIntegrationNotFoundError) as e:
         fake_client.get("non_existent_catalog")
-    assert e.value.name == "non_existent_catalog"
+    assert e.value.catalog_name == "non_existent_catalog"
     assert fake_catalog.name in str(e.value)
     assert "non_existent_catalog" in str(e.value)
 
