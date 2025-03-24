@@ -18,11 +18,10 @@ class CursorExecuteParams:
         elif isinstance(self.parameters, list) or isinstance(self.parameters, tuple):
             p = [CursorFetchAllResult._process_value(v) for v in self.parameters]
 
-
         return {
             "connection_name": self.connection_name,
             "operation": self.operation,
-            "parameters": p
+            "parameters": p,
         }
 
     def _from_dict(cls, data):
