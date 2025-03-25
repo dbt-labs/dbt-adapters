@@ -69,7 +69,9 @@ class SnowflakeCatalogConfig(SnowflakeRelationConfigBase, RelationConfigValidati
         return super().from_dict(kwargs_dict)  # type:ignore
 
     @classmethod
-    def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
+    def parse_relation_config(  # type:ignore
+        cls, relation_config: RelationConfig
+    ) -> Dict[str, Any]:
 
         if relation_config.config.extra.get("table_format") is None:  # type:ignore
             return {}

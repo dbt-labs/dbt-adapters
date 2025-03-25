@@ -14,7 +14,12 @@ from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error
 
+from dbt.adapters.snowflake.catalogs import (
+    IcebergManagedCatalogRelation,
+    SnowflakeCatalogRelation,
+)
 from dbt.adapters.snowflake.relation_configs import (
+    IcebergManagedTableConfig,
     RefreshMode,
     SnowflakeCatalogConfigChange,
     SnowflakeDynamicTableConfig,
@@ -24,6 +29,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableWarehouseConfigChange,
     TableFormat,
     SnowflakeQuotePolicy,
+    SnowflakeRelationConfig,
     SnowflakeRelationType,
 )
 
@@ -81,6 +87,19 @@ class SnowflakeRelation(BaseRelation):
 
         raise DbtRuntimeError(
             f"from_config() is not supported for the provided relation type: {relation_type}"
+        )
+
+    @classmethod
+    def build_relation(
+        cls, config: RelationConfig, catalog: Optional[SnowflakeCatalogRelation]
+    ) -> SnowflakeRelationConfig:
+        relation_type: str = config.config.materialized  # type:ignore
+        if relation_type == SnowflakeRelationType.Table and isinstance(
+            catalog, IcebergManagedCatalogRelation
+        ):
+            return IcebergManagedTableConfig.from_relation_config(config, catalog)
+        raise DbtRuntimeError(
+            f"build_relation() is not supported for the provided relation type and catalog type: {relation_type} - {type(catalog)}"
         )
 
     @classmethod
