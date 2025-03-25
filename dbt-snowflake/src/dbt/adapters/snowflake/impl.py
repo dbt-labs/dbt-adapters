@@ -23,8 +23,12 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS, ICEBERG_MANAGED_CATALOG
+from dbt.adapters.snowflake.catalogs import (
+    CATALOG_INTEGRATIONS,
+    DEFAULT_ICEBERG_CATALOG_INTEGRATION,
+)
 from dbt.adapters.snowflake.relation_configs import (
+    SnowflakeRelationConfig,
     SnowflakeRelationType,
     TableFormat,
 )
@@ -88,7 +92,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
-        self.add_catalog_integration(ICEBERG_MANAGED_CATALOG)
+        self.add_catalog_integration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -451,3 +455,36 @@ CALL {proc_name}();
             "adapter_type": "snowflake",
             "table_format": table_format,
         }
+
+    @available
+    def build_relation(self, config: RelationConfig) -> SnowflakeRelationConfig:
+        """
+        Builds a relation for a given configuration.
+
+        This method uses the provided configuration to determine the appropriate catalog
+        integration and config parser for building the relation. It defaults to the managed Iceberg
+        catalog if none is provided in the configuration for backward compatibility.
+
+        Args:
+            config (RelationConfig): a configuration object containing details such as
+                catalog name and table format
+
+        Returns:
+            Any: The constructed relation object generated through the catalog integration and parser
+        """
+        catalog_integration_name = (
+            config.catalog_name
+            if config.catalog_name
+            else (
+                "default_iceberg_catalog"
+                if config.config.get("table_format") == "iceberg"
+                else None
+            )
+        )
+        if catalog_integration_name:
+            catalog_integration = self.get_catalog_integration(catalog_integration_name)
+            catalog_relation = catalog_integration.catalog_relation(config)
+        else:
+            catalog_relation = None
+
+        return self.Relation.build_relation(config, catalog_relation)

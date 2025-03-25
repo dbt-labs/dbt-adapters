@@ -13,8 +13,7 @@
 
 {%- set sql_header = config.get('sql_header', none) -%}
 
-{%- set catalog_integration = adapter.get_catalog_integration("snowflake") -%}
-{%- set catalog_table = catalog_integration.catalog_table(config.model.config) -%}
+{%- set relation_config = adapter.build_relation(config.model) -%}
 
 {%- set cluster_by_keys = config.get('cluster_by') -%}
 {%- if cluster_by_keys is not none and cluster_by_keys is string -%}
@@ -40,9 +39,9 @@ create iceberg table {{ relation }}
     {%- endif %}
 
     {{ optional('cluster by', cluster_by_string, "(") }}
-    {{ optional('external_volume', catalog_table.external_volume, "'") }}
+    {{ optional('external_volume', relation_config.external_volume, "'") }}
     -- catalog = 'snowflake'
-    base_location = '{{ catalog_table.base_location }}'
+    base_location = '{{ relation_config.base_location }}'
 as (
     {%- if cluster_by_string is not none -%}
     select * from (
