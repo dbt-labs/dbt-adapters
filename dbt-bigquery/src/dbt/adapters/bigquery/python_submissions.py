@@ -188,6 +188,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         self._model_name = parsed_model["alias"]
         self._GoogleCredentials = create_google_credentials(credentials)
+        # Set 24 hours as default timeout.
+        self._timeout = parsed_model["config"].get("timeout") or 24 * 60 * 60
 
         # TODO(jialuo): Add a function in clients.py for it.
         self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
@@ -290,7 +292,18 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_execution_job=notebook_execution_job,
         )
 
-        res = self._ai_platform_client.create_notebook_execution_job(request=request).result()
+        try:
+            res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
+                timeout=self._timeout
+            )
+        except TimeoutError as timeout_error:
+            raise TimeoutError(
+                f"The timeout error occurred from dbt: {timeout_error}\n"
+                "Please cancel the job from GCP console since the submitted "
+                "notebook might still be running on the backend."
+            )
+        except Exception as e:
+            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
