@@ -283,7 +283,7 @@ class BaseAdapter(metaclass=AdapterMeta):
     Relation: Type[BaseRelation] = BaseRelation
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
-    CATALOG_INTEGRATIONS: Dict[str, Type[CatalogIntegration]] = {}
+    CATALOG_INTEGRATIONS: Iterable[Type[CatalogIntegration]] = []
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations
@@ -312,8 +312,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         self.behavior = DEFAULT_BASE_BEHAVIOR_FLAGS  # type: ignore
         self._catalog_client = CatalogIntegrationClient(self.CATALOG_INTEGRATIONS)
 
-    def add_catalog_integration(self, catalog: CatalogIntegrationConfig) -> CatalogIntegration:
-        return self._catalog_client.add(catalog)
+    def add_catalog_integration(
+        self, catalog_integration: CatalogIntegrationConfig
+    ) -> CatalogIntegration:
+        return self._catalog_client.add(catalog_integration)
 
     @available
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
