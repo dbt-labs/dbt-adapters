@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import Any, Dict, Optional
 from typing_extensions import Protocol
 
@@ -41,11 +40,6 @@ class CatalogIntegrationConfig(Protocol):
     adapter_properties: Optional[Dict[str, Any]]
 
 
-class CatalogIntegrationMode(Enum):
-    READ = "r"
-    WRITE = "w"
-
-
 class CatalogIntegration:
     """
     Represent a catalog integration for a given user config
@@ -74,7 +68,7 @@ class CatalogIntegration:
             - a result of this grouping is that there can only be one external volume per catalog integration, but many catalogs can share the same volume
     """
 
-    allows_writes: CatalogIntegrationMode = CatalogIntegrationMode.READ
+    allows_writes: bool = False
 
     def __init__(self, config: CatalogIntegrationConfig):
         self.name: str = config.name
