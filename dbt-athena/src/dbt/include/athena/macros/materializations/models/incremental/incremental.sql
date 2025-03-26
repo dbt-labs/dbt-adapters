@@ -70,14 +70,8 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    -- after the full refresh is complete, create a backup table name
-    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
-    -- rename the current table to the backup table
-    {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the fully refreshed temp table to the target table
-    {%- do rename_relation(tmp_relation, target_relation) -%}
-    -- drop the backup table
-    {%- do drop_relation(relation_bkp) -%}
+    -- swap tmp_relation with target_relation
+    {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
