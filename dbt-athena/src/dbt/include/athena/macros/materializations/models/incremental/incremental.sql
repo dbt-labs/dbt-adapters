@@ -78,7 +78,6 @@
     {%- do rename_relation(tmp_relation, target_relation) -%}
     -- drop the relation backup
     {%- do drop_relation(relation_bkp) -%}
-    
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
