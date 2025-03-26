@@ -70,12 +70,15 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    -- swap tables by dropping the existing relation
-    -- after the new iceberg table has been build
-    -- drop the existing table
-    {%- do drop_relation(existing_relation) -%}
-    -- rename the tmp_relation to the target relation
+    -- create a backup relation
+    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
+    -- rename to current relation to a backup
+    {%- do rename_relation(target_relation, relation_bkp) -%}
+    -- rename the new full refresh to the target relation
     {%- do rename_relation(tmp_relation, target_relation) -%}
+    -- drop the relation backup
+    {%- do drop_relation(relation_bkp) -%}
+    
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
