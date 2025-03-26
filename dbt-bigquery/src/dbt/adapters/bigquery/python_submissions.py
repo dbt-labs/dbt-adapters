@@ -212,7 +212,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
         try:
             # Check if a default runtime template is available and applicable.
             return self._extract_template_id(next(iter(page_result)).name)
-        except:
+        except Exception:
+            _logger.info("No default template found, a new one will be created.")
             # If no default runtime template is found, create a new one.
             return self._create_notebook_template()
 
@@ -237,17 +238,16 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_runtime_template=template,
         )
 
-        operation = self._ai_platform_client.create_notebook_runtime_template(request=create_request)
+        operation = self._ai_platform_client.create_notebook_runtime_template(
+            request=create_request
+        )
         response = operation.result()
 
         return self._extract_template_id(response.name)
 
     def _extract_template_id(self, template_name: str) -> str:
         match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
-        if match:
-            return match.group(1)
-        else:
-            raise ValueError("Failed to extract notebook runtime template ID.")
+        return match.group(1) if match else ""
 
     def _config_notebook_job(
         self, notebook_template_id: str
