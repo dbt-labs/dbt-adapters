@@ -298,9 +298,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
             )
         except TimeoutError as timeout_error:
             raise TimeoutError(
-                f"The timeout error occurred from dbt: {timeout_error}\n"
-                "Please cancel the job from GCP console since the submitted "
-                "notebook might still be running on the backend."
+                f"The dbt operation encountered a timeout: {timeout_error}\n"
+                "Please cancel the related notebook job manually via the GCP "
+                "console since it might still be actively running."
             )
         except Exception as e:
             raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
