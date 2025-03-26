@@ -70,10 +70,11 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    -- swap table
+    -- swap tables by dropping the existing relation
+    -- after the new iceberg table has been build
     -- drop the existing table
     {%- do drop_relation(existing_relation) -%}
-    -- rename the new table to the target
+    -- rename the tmp_relation to the target relation
     {%- do rename_relation(tmp_relation, target_relation) -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
