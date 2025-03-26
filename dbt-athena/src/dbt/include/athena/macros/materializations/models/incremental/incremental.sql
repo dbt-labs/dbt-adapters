@@ -70,6 +70,7 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
+    {% set build_sql = "select '" ~ query_result ~ "'" -%}
     -- swap table
     {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
     -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
