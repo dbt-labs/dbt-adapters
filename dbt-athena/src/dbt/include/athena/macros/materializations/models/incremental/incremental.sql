@@ -75,6 +75,7 @@
     {%- do drop_relation(existing_relation) -%}
     -- rename the new table to the target
     {%- do rename_relation(tmp_relation, target_relation) -%}
+    {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
