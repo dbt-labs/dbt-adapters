@@ -71,7 +71,8 @@
       {% endcall %}
     {%- endif -%}
     -- swap table
-    {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
+    {%- do drop_relation(existing_relation) -%}
+    {%- do rename_relation(tmp_relation, target_relation) -%}
     -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
     {%- do adapter.delete_from_glue_catalog(tmp_relation) -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
