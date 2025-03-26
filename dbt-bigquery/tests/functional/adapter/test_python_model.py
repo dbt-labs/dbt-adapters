@@ -23,6 +23,7 @@ def model(dbt, _):
 """
 
 
+@pytest.mark.flaky
 class TestPythonModelDataprocTimeoutTest:
     @pytest.fixture(scope="class")
     def models(self):
@@ -34,6 +35,7 @@ class TestPythonModelDataprocTimeoutTest:
         assert "Operation did not complete within the designated timeout of 5 seconds." in output
 
 
+@pytest.mark.flaky
 class TestPythonModelDataproc(dbt_tests.BasePythonModelTests):
     pass
 
@@ -126,6 +128,7 @@ models:
 """
 
 
+@pytest.mark.flaky
 class TestPythonPartitionedModels:
     @pytest.fixture(scope="class")
     def macros(self):
@@ -214,6 +217,7 @@ models:
 """
 
 
+@pytest.mark.flaky
 class TestPythonBatchIdModels:
     @pytest.fixture(scope="class")
     def models(self):
@@ -230,6 +234,7 @@ class TestPythonBatchIdModels:
         assert len(result_two) == 1
 
 
+@pytest.mark.flaky
 class TestPythonDuplicateBatchIdModels:
     @pytest.fixture(scope="class")
     def models(self):
@@ -267,3 +272,61 @@ class TestChangingSchemaDataproc:
             assert "On model.test.simple_python_model:" in log
             assert "return spark.createDataFrame(data, schema=['test1', 'test3'])" in log
             assert "Execution status: OK in" in log
+
+
+class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
+    pass
+
+
+class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
+    pass
+
+
+models__simple_bigframes_model = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModels:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "simple_bigframes_model.py": models__simple_bigframes_model,
+        }
+
+    def test_simple_bigframes_models(self, project):
+        result = run_dbt(["run"])
+        assert len(result) == 1
+
+
+models__bigframes_model_merge = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='id',
+    )
+    data = {"id": [1, 2, 4], "values": ['a', 'b', 'd']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsMerge:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_merge.py": models__bigframes_model_merge,
+        }
+
+    def test_bigframes_model_merge(self, project):
+        result = run_dbt(["run"])
+        assert len(result) == 1

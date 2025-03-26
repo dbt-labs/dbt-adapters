@@ -59,6 +59,7 @@ from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
+    BigFramesHelper,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -110,6 +111,7 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
+    submission_method: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -158,7 +160,7 @@ class BigQueryAdapter(BaseAdapter):
         return True
 
     def drop_relation(self, relation: BigQueryRelation) -> None:
-        is_cached = self._schema_is_cached(relation.database, relation.schema)
+        is_cached = self._schema_is_cached(relation.database, relation.schema)  # type:ignore
         if is_cached:
             self.cache_dropped(relation)
 
@@ -350,7 +352,7 @@ class BigQueryAdapter(BaseAdapter):
     def convert_number_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         import agate
 
-        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))  # type: ignore[attr-defined]
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
         return "float64" if decimals else "int64"
 
     @classmethod
@@ -461,7 +463,9 @@ class BigQueryAdapter(BaseAdapter):
             schema=bq_table.dataset_id,
             identifier=bq_table.table_id,
             quote_policy={"schema": True, "identifier": True},
-            type=self.RELATION_TYPES.get(bq_table.table_type, RelationType.External),
+            type=self.RELATION_TYPES.get(
+                bq_table.table_type, RelationType.External
+            ),  # type:ignore
         )
 
     @classmethod
@@ -661,7 +665,7 @@ class BigQueryAdapter(BaseAdapter):
         connection = self.connections.get_thread_connection()
         client: Client = connection.handle
         table_schema = self._agate_to_schema(agate_table, column_override)
-        file_path = agate_table.original_abspath  # type: ignore
+        file_path = agate_table.original_abspath
 
         self.connections.write_dataframe_to_table(
             client,
@@ -713,8 +717,8 @@ class BigQueryAdapter(BaseAdapter):
         for candidate, schemas in candidates.items():
             database = candidate.database
             if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))
-            if candidate.schema in db_schemas[database]:
+                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
+            if candidate.schema in db_schemas[database]:  # type:ignore
                 result[candidate] = schemas
             else:
                 logger.debug(
@@ -758,8 +762,13 @@ class BigQueryAdapter(BaseAdapter):
             description = sql_escape(node["description"])
             opts["description"] = '"""{}"""'.format(description)
 
-        if config.get("labels"):
-            labels = config.get("labels", {})
+        labels = config.get("labels") or {}
+
+        if config.get("labels_from_meta"):
+            meta = config.get("meta") or {}
+            labels = {**meta, **labels}  # Merge with priority to labels
+
+        if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
         return opts
@@ -826,7 +835,7 @@ class BigQueryAdapter(BaseAdapter):
         Given an entity, grants it access to a dataset.
         """
         conn: BigQueryConnectionManager = self.connections.get_thread_connection()
-        client = conn.handle
+        client = conn.handle  # type:ignore
         GrantTarget.validate(grant_target_dict)
         grant_target = GrantTarget.from_dict(grant_target_dict)
         if entity_type == "view":
@@ -883,6 +892,7 @@ class BigQueryAdapter(BaseAdapter):
             )
 
     # This is used by the test suite
+    @available
     def run_sql_for_tests(self, sql, fetch, conn=None):
         """For the testing framework.
         Run an SQL query on a bigquery adapter. No cursors, transactions,
@@ -902,6 +912,11 @@ class BigQueryAdapter(BaseAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
+        if (
+            hasattr(self.connections.profile.credentials, "submission_method")
+            and self.connections.profile.credentials.submission_method
+        ):
+            return self.connections.profile.credentials.submission_method
         return "serverless"
 
     @property
@@ -909,6 +924,7 @@ class BigQueryAdapter(BaseAdapter):
         return {
             "cluster": ClusterDataprocHelper,
             "serverless": ServerlessDataProcHelper,
+            "bigframes": BigFramesHelper,
         }
 
     @available

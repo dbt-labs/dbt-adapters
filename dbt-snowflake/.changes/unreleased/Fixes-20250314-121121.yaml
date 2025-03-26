@@ -1,0 +1,7 @@
+kind: Fixes
+body: Dynamic table metadata queries now ignore the QUOTED_IDENTIFIERS_IGNORE_CASE
+  setting
+time: 2025-03-14T12:11:21.706531-04:00
+custom:
+  Author: mikealfare
+  Issue: "917"

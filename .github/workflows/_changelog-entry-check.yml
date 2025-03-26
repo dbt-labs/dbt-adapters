@@ -1,4 +1,5 @@
-name: "Changelog entry check"
+name: "# Changelog entry check"
+run-name: "Changelog entry check - ${{ github.actor }} - package:${{ inputs.package }} pull-request:${{ inputs.pull-request }}"
 
 # this cannot be tested via workflow_dispatch
 # dorny/paths-filter inspects the current trigger to determine how to compare branches
@@ -39,7 +40,7 @@ jobs:
 
     comment:
         needs: changelog-check
-        if: needs.changelog-check.outputs.exists == false
+        if: needs.changelog-check.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         env:
             AUTHOR: "github-actions[bot]"

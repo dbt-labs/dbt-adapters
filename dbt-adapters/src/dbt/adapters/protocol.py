@@ -75,7 +75,7 @@ class MacroContextGeneratorCallable(Protocol):
 
 
 # TODO CT-211
-class AdapterProtocol(  # type: ignore[misc]
+class AdapterProtocol(
     Protocol,
     Generic[
         AdapterConfig_T,

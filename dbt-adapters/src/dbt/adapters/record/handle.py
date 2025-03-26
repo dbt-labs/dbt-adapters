@@ -22,3 +22,19 @@ class RecordReplayHandle:
         # actual database access should be performed in that mode.
         cursor = None if self.native_handle is None else self.native_handle.cursor()
         return RecordReplayCursor(cursor, self.connection)
+
+    def commit(self):
+        self.native_handle.commit()
+
+    def rollback(self):
+        self.native_handle.rollback()
+
+    def close(self):
+        self.native_handle.close()
+
+    def get_backend_pid(self):
+        return self.native_handle.get_backend_pid()
+
+    @property
+    def closed(self):
+        return self.native_handle.closed

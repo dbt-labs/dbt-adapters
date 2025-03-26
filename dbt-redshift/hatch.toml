@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/redshift/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt"]
 sources = ["src"]
@@ -19,6 +15,7 @@ dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
+    "flaky",
     "freezegun",
     "ipdb~=0.13.13",
     "pre-commit==3.7.0",
@@ -32,7 +29,10 @@ dependencies = [
 ]
 
 [envs.default.scripts]
-setup = "pre-commit install"
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+]
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest {args:tests/functional}"

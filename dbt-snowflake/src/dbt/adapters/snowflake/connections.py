@@ -530,6 +530,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
+        *args,
+        **kwargs,
     ) -> Tuple[Connection, Any]:
         if bindings:
             # The snowflake connector is stricter than, e.g., psycopg2 -

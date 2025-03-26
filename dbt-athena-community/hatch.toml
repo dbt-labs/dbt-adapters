@@ -1,7 +1,3 @@
-[build.targets.sdist]
-packages = ["src/dbt/adapters"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/adapters"]
 sources = ["src"]
@@ -25,7 +21,6 @@ dependencies = [
 [envs.default.scripts]
 setup = [
     "pre-commit install",
-    "cp -n ../dbt-athena/test.env.example test.env",
 ]
 code-quality = "pre-commit run --all-files"
 unit-tests = "pytest --cov=dbt --cov-report=html:htmlcov {args:../dbt-athena/tests/unit}"

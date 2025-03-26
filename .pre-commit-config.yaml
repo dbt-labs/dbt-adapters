@@ -7,7 +7,6 @@ repos:
     hooks:
     -   id: check-yaml
         args: [--unsafe]
-    -   id: check-json
     -   id: end-of-file-fixer
     -   id: trailing-whitespace
     -   id: check-case-conflict
@@ -46,13 +45,14 @@ repos:
     rev: v1.11.2
     hooks:
     -   id: mypy
-        exclude: dbt-adapters/src/dbt/adapters/events/adapter_types_pb2.py|dbt-tests-adapter/src/dbt/__init__.py
+        files: (dbt-adapters|dbt-athena|dbt-bigquery|dbt-postgres|dbt-redshift|dbt-snowflake|dbt-spark)/src/dbt/adapters|dbt-tests-adapter/src/dbt/tests
         args:
         -   --explicit-package-bases
+        -   --namespace-packages
         -   --ignore-missing-imports
+        -   --warn-redundant-casts
         -   --pretty
         -   --show-error-codes
-        files: ^dbt-adapters/src/dbt/adapters/
         additional_dependencies:
         -   types-PyYAML
         -   types-protobuf

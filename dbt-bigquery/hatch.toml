@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/bigquery/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt"]
 sources = ["src"]
@@ -20,6 +16,7 @@ dependencies = [
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
     "pre-commit==3.7.0",
+    "flaky",
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
@@ -27,10 +24,14 @@ dependencies = [
     "pytest-logbook~=1.2",
     "pytest-mock",
     "pytest-xdist",
+    "requests",
 ]
 
 [envs.default.scripts]
-setup = "pre-commit install"
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+]
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest --profile service_account {args:tests/functional}"

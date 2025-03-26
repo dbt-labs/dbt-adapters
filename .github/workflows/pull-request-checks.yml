@@ -1,5 +1,5 @@
 name: "Pull request checks"
-run-name: "Pull request checks - #${{ github.event.number }} - ${{ github.actor }}"
+run-name: "Pull request checks - ${{ github.actor }} - #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
 
 on:
     pull_request_target:
@@ -47,7 +47,7 @@ jobs:
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -66,7 +66,7 @@ jobs:
     verify-build:
         uses: ./.github/workflows/_verify-build.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.verify-build)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -81,7 +81,7 @@ jobs:
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.unit-tests)) != '[]' }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
         strategy:
             fail-fast: false
             matrix:
@@ -96,13 +96,9 @@ jobs:
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         needs: affected-packages
-        if: ${{ toJson(fromJson(needs.affected-packages.outputs.integration-tests)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.integration-tests) }}
+        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
-            package: ${{ matrix.package }}
+            packages: ${{ needs.affected-packages.outputs.integration-tests }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}

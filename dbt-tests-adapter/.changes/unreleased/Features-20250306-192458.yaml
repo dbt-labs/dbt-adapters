@@ -1,0 +1,6 @@
+kind: Features
+body: Add base test case for sample mode
+time: 2025-03-06T19:24:58.691802-06:00
+custom:
+  Author: QMalcolm
+  Issue: "878"
