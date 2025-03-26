@@ -55,6 +55,11 @@
     {%- endif -%}
     -- create tmp table
     {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch) -%}
+    {%- if model_language == 'python' -%}
+      {% call statement('create_table', language=model_language) %}
+        {{ query_result }}
+      {% endcall %}
+    {%- endif -%}
     -- swap table
     {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
     -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
