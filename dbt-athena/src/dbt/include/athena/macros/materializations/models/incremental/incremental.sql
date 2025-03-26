@@ -57,7 +57,8 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  {% elif should_full_refresh() %}
+  -- full refresh on iceberg table
+  {% elif should_full_refresh() and table_type == 'iceberg' %}
     -- drop the old_tmp_relation if it exists
     {%- if old_tmp_relation is not none -%}
       {%- do adapter.delete_from_glue_catalog(old_tmp_relation) -%}
