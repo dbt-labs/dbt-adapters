@@ -63,20 +63,20 @@
     {%- if old_tmp_relation is not none -%}
       {%- do adapter.delete_from_glue_catalog(old_tmp_relation) -%}
     {%- endif -%}
-    -- create tmp table
+    -- fully refresh the iceberg table named with the tmp_relation
     {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    -- create a backup relation
+    -- after the full refresh is complete, create a backup table name
     {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
-    -- rename to current relation to a backup
+    -- rename the current table to the backup table
     {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the new full refresh to the target relation
+    -- rename the fully refreshed temp table to the target table
     {%- do rename_relation(tmp_relation, target_relation) -%}
-    -- drop the relation backup
+    -- drop the backup table
     {%- do drop_relation(relation_bkp) -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
