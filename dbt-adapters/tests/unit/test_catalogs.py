@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 import pytest
@@ -7,14 +8,16 @@ from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
+    CatalogRelation,
     DbtCatalogIntegrationAlreadyExistsError,
     DbtCatalogIntegrationNotFoundError,
     DbtCatalogIntegrationNotSupportedError,
 )
+from dbt.adapters.contracts.relation import RelationConfig
 
 
 @dataclass
-class FakeCatalogIntegrationConfig(CatalogIntegrationConfig):
+class FakeCatalogIntegrationConfig:
     name: str
     catalog_type: str
     catalog_name: Optional[str] = None
@@ -23,23 +26,54 @@ class FakeCatalogIntegrationConfig(CatalogIntegrationConfig):
     adapter_properties: Optional[Dict[str, Any]] = None
 
 
+@dataclass
+class FakeRelationConfig:
+    resource_type = ""
+    name = ""
+    description = ""
+    database = ""
+    schema = ""
+    identifier = ""
+    compiled_code = None
+    meta = {}
+    tags = []
+    quoting_dict = {}
+    config = None
+    catalog_name = None
+    external_volume: str = "fake_relation_volume"
+
+
+class FakeCatalogIntegration(CatalogIntegration):
+    catalog_type: str = "fake"
+    allows_writes: bool = False
+    table_format: str = "fake_format"
+
+    def build_relation(self, config: RelationConfig) -> CatalogRelation:
+        return SimpleNamespace(
+            catalog_name=self.catalog_name,
+            table_format=self.table_format,
+            external_volume=config.external_volume or self.external_volume,
+        )
+
+
 @pytest.fixture(scope="function")
 def fake_client() -> CatalogIntegrationClient:
-    return CatalogIntegrationClient({"fake": CatalogIntegration})
+    return CatalogIntegrationClient([FakeCatalogIntegration])
 
 
 @pytest.fixture
 def fake_catalog() -> CatalogIntegrationConfig:
     return FakeCatalogIntegrationConfig(
-        name="test_integration",
+        name="fake_integration",
         catalog_type="fake",
+        external_volume="fake_volume",
     )
 
 
 @pytest.fixture
 def fake_unsupported_catalog() -> CatalogIntegrationConfig:
     return FakeCatalogIntegrationConfig(
-        name="test_integration",
+        name="fake_integration",
         catalog_type="banana",
     )
 
@@ -84,3 +118,13 @@ def test_adding_unsupported_catalog_integration(
     assert e.value.catalog_type == fake_unsupported_catalog.catalog_type
     assert fake_unsupported_catalog.catalog_type in str(e.value)
     assert fake_catalog.catalog_type in str(e.value)
+
+
+def test_build_relation(fake_client, fake_catalog):
+    fake_client.add(fake_catalog)
+    catalog = fake_client.get("fake_integration")
+    relation_config = FakeRelationConfig()
+    relation = catalog.build_relation(relation_config)
+    assert relation.catalog_name == catalog.catalog_name
+    assert relation.table_format == catalog.table_format
+    assert relation.external_volume == relation_config.external_volume
