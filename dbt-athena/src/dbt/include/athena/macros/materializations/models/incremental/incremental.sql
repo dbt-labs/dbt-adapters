@@ -64,7 +64,7 @@
       {%- do adapter.delete_from_glue_catalog(old_tmp_relation) -%}
     {%- endif -%}
     -- create tmp table
-    {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch) -%}
+    {%- set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
