@@ -208,16 +208,46 @@ class BigFramesHelper(_BigQueryPythonHelper):
             filter="notebookRuntimeType = ONE_CLICK",
         )
         page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
-        if list(page_result):
-            # Extract template id from name.
-            match = re.search(r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name)
-            if match:  # Check if match is not None.
-                notebook_template_id = match.group(1)
-                return notebook_template_id
-            else:
-                raise ValueError("No matching notebook runtime template name found.")
+
+        try:
+            # Check if a default runtime template is available and applicable.
+            return self._extract_template_id(next(iter(page_result)).name)
+        except:
+            # If no default runtime template is found, create a new one.
+            return self._create_notebook_template()
+
+    def _create_notebook_template(self) -> str:
+        template = aiplatform_v1.NotebookRuntimeTemplate(
+            # The display name of the created runtime template.
+            display_name="default-one-click-notebook",
+            # This "ONE_CLICK" will be marked default.
+            notebook_runtime_type=aiplatform_v1.NotebookRuntimeType.ONE_CLICK,
+            machine_spec=aiplatform_v1.MachineSpec(
+                # Choose the machine type.
+                machine_type="e2-standard-4",
+            ),
+            network_spec=aiplatform_v1.NetworkSpec(
+                # Explicitly enable internet access
+                enable_internet_access=True,
+            ),
+        )
+
+        create_request = aiplatform_v1.CreateNotebookRuntimeTemplateRequest(
+            parent=f"projects/{self._project}/locations/{self._region}",
+            notebook_runtime_template=template,
+        )
+
+        operation = self._ai_platform_client.create_notebook_runtime_template(request=create_request)
+        response = operation.result()
+
+        return self._extract_template_id(response.name)
+
+    def _extract_template_id(self, template_name: str) -> str:
+        match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
+        if match:
+            return match.group(1)
         else:
-            raise ValueError("No Default notebook runtime templates found.")
+            raise ValueError("Failed to extract notebook runtime template ID.")
 
     def _config_notebook_job(
         self, notebook_template_id: str
