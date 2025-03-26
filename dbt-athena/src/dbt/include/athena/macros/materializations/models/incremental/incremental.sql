@@ -48,7 +48,18 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  {% elif existing_relation.is_view or should_full_refresh() %}
+  {% elif table_type == 'iceberg' and existing_relation is not none and should_full_refresh() %}
+    -- drop the old_tmp_relation if it exists
+    {%- if old_tmp_relation is not none -%}
+      {%- do adapter.delete_from_glue_catalog(old_tmp_relation) -%}
+    {%- endif -%}
+    -- create tmp table
+    {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch) -%}
+    -- swap table
+    {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
+    -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
+    {%- do adapter.delete_from_glue_catalog(tmp_relation) -%}
+  {% elif existing_relation.is_view %}
     {% do drop_relation(existing_relation) %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
