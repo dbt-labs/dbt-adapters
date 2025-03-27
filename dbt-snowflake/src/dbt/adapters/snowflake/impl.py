@@ -28,7 +28,10 @@ from dbt.adapters.snowflake.catalogs import (
     CATALOG_INTEGRATIONS,
     DEFAULT_ICEBERG_CATALOG_INTEGRATION,
 )
-from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType, TableFormat
+from dbt.adapters.snowflake.relation_configs import (
+    SnowflakeRelationType,
+    TableFormat,
+)
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -58,7 +61,6 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
-    catalog_name: Optional[str] = None
 
 
 class SnowflakeAdapter(SQLAdapter):

@@ -87,9 +87,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         return super().from_dict(kwargs_dict)  # type:ignore
 
     @classmethod
-    def parse_relation_config(  # type:ignore
-        cls, relation_config: RelationConfig
-    ) -> Dict[str, Any]:
+    def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
         config_dict = {
             "name": relation_config.identifier,
             "schema_name": relation_config.schema,
