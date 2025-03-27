@@ -54,6 +54,8 @@
   {% elif should_full_refresh() and table_type == 'iceberg' and s3_data_naming == 'schema_table_unique' %}
     -- create a new tmp_relation that has its s3 path set to the target location path
     -- except with a unique UUID
+    -- this allows for once the fully refreshed `tmp_relation` is completed, the `rename_relation()`
+    -- macro can be used to rename the tmp_relation to the target_relation
     {%- set tmp_relation = api.Relation.create(
             identifier=target_relation.identifier ~ '__dbt_tmp',
             schema=target_relation.schema,
@@ -85,11 +87,11 @@
       {{ drop_relation(relation_bkp) }}
     {%- endif -%}
 
-    -- rename to current target relation to a backup
+    -- rename the current target_relation to a backup_relation
     {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the new full refresh to the target relation
+    -- rename the new full refreshed tmp_relation to the target_relation
     {%- do rename_relation(tmp_relation, target_relation) -%}
-    -- drop the relation backup
+    -- drop the backup_relation
     {%- do drop_relation(relation_bkp) -%}
 
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
