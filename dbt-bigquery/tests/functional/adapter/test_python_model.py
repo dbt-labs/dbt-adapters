@@ -280,3 +280,53 @@ class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
 
 class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
     pass
+
+
+models__simple_bigframes_model = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModels:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "simple_bigframes_model.py": models__simple_bigframes_model,
+        }
+
+    def test_simple_bigframes_models(self, project):
+        result = run_dbt(["run"])
+        assert len(result) == 1
+
+
+models__bigframes_model_merge = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='id',
+    )
+    data = {"id": [1, 2, 4], "values": ['a', 'b', 'd']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsMerge:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_merge.py": models__bigframes_model_merge,
+        }
+
+    def test_bigframes_model_merge(self, project):
+        result = run_dbt(["run"])
+        assert len(result) == 1
