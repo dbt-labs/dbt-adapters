@@ -14,11 +14,12 @@
         {%- set resolved = ref(*_ref_args, v=_ref.get('version')) -%}
 
         {#
-            We want to get the string of the returned relation in order to skip sample/empty mode rendering logic.
-            However, people override the default ref macro, and often return a string instead of a relation. Thus,
-            to make sure we dont blow things up, we have ot ensure the resolved relation is not already a string.
+            We want to get the string of the returned relation by calling .render() in order to skip sample/empty
+            mode rendering logic. However, people override the default ref macro, and often return a string instead
+            of a relation (like the ref macro does by default). Thus, to make sure we dont blow things up, we have
+            to ensure the resolved relation has a .render() method.
         #}
-        {%- if resolved is not string -%}
+        {%- if resolved.render is defined and resolved.render is callable -%}
             {%- set resolved = resolved.render() -%}
         {%- endif -%}
 
