@@ -1,5 +1,19 @@
+from dbt.adapters.base.catalog import CatalogIntegrationConfig
 import pytest
 from dbt.adapters.snowflake.relation import SnowflakeRelation
+from dbt.adapters.snowflake.catalog import SnowflakeManagedIcebergCatalogIntegration
+@pytest.fixture
+def catalog_integration():
+    return SnowflakeManagedIcebergCatalogIntegration(
+        CatalogIntegrationConfig(
+            catalog_name="my_catalog",
+            integration_name="my_integration",
+            table_format="iceberg",
+            catalog_type="managed",
+            external_volume="s3_iceberg_snow",
+            namespace="my_namespace",
+        )
+    )
 
 
 @pytest.fixture
