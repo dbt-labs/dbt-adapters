@@ -196,7 +196,7 @@ class SnowflakeRelation(BaseRelation):
 
     def get_ddl_prefix_for_alter(self) -> str:
         """All ALTER statements on Iceberg tables require an ICEBERG prefix"""
-        if self.is_iceberg_format or self.catalog_name == "snowflake":
+        if self.is_iceberg_format or self.catalog == "snowflake":
             return "iceberg"
         else:
             return ""
