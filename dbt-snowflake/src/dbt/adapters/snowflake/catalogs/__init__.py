@@ -17,10 +17,9 @@ CATALOG_INTEGRATIONS = [IcebergManagedCatalogIntegration]
 DEFAULT_ICEBERG_CATALOG_INTEGRATION = SimpleNamespace(
     **{
         "name": "snowflake",
-        "catalog_name": "snowflake",
         "catalog_type": "iceberg_managed",
-        "table_format": "iceberg",
-        "external_volume": None,  # assume you are using the default volume or specify in the model
+        # assume you are using the default volume or specify in the model
+        "external_volume": None,
         "adapter_properties": {},
     }
 )

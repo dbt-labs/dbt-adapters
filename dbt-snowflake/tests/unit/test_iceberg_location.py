@@ -1,79 +1,69 @@
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
 import pytest
-from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+from dbt.adapters.contracts.relation import MaterializationConfig, RelationConfig
+from dbt.adapters.snowflake.catalogs import (
+    IcebergManagedCatalogIntegration,
+    DEFAULT_ICEBERG_CATALOG_INTEGRATION,
+)
 
 
 @pytest.fixture
-def iceberg_config() -> dict:
-    """Fixture providing standard Iceberg configuration."""
-    return {
-        "schema": "my_schema",
-        "identifier": "my_table",
-        "external_volume": "s3_iceberg_snow",
-        "base_location_root": "root_path",
-        "base_location_subpath": "subpath",
-    }
+def fake_integration() -> IcebergManagedCatalogIntegration:
+    return IcebergManagedCatalogIntegration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
 
 
-def get_actual_base_location(config: dict[str, str]) -> str:
-    """Get the actual base location from the configuration by parsing the DDL predicates."""
-
-    relation = SnowflakeRelation.create(
-        schema=config["schema"],
-        identifier=config["identifier"],
-    )
-
-    actual_ddl_predicates = relation.get_iceberg_ddl_options(config).strip()
-    actual_base_location = actual_ddl_predicates.split("base_location = ")[1]
-
-    return actual_base_location
+@dataclass
+class FakeMaterializationConfig:
+    extra: Dict[str, Any]
 
 
-def test_iceberg_path_and_subpath(iceberg_config: dict[str, str]):
+@dataclass
+class FakeRelationConfig:
+    resource_type: str = ""
+    name: str = ""
+    description: str = ""
+    database: str = "my_database"
+    schema: str = "my_schema"
+    identifier: str = "my_table"
+    compiled_code: Optional[str] = None
+    meta: Dict[str, Any] = field(default_factory=dict)
+    tags: List[str] = field(default_factory=list)
+    quoting_dict: Dict[str, bool] = field(default_factory=dict)
+    config: Optional[MaterializationConfig] = field(default_factory=FakeMaterializationConfig)
+    catalog: Optional[str] = "snowflake"
+
+    external_volume: Optional[str] = "s3_iceberg_snow"
+    base_location_root: Optional[str] = None
+    base_location_subpath: Optional[str] = None
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        (
+            {"base_location_root": "root_path", "base_location_subpath": "subpath"},
+            "root_path/my_schema/my_table/subpath",
+        ),
+        (
+            {"base_location_subpath": "subpath"},
+            "_dbt/my_schema/my_table/subpath",
+        ),
+        (
+            {"base_location_root": "root_path"},
+            "root_path/my_schema/my_table",
+        ),
+        (
+            {},
+            "_dbt/my_schema/my_table",
+        ),
+    ],
+)
+def test_iceberg_base_location_managed(fake_integration, config, expected):
     """Test when base_location_root and base_location_subpath are provided"""
-    expected_base_location = (
-        f"'{iceberg_config['base_location_root']}/"
-        f"{iceberg_config['schema']}/"
-        f"{iceberg_config['identifier']}/"
-        f"{iceberg_config['base_location_subpath']}'"
-    ).strip()
-
-    assert get_actual_base_location(iceberg_config) == expected_base_location
-
-
-def test_iceberg_only_subpath(iceberg_config: dict[str, str]):
-    """Test when only base_location_subpath is provided"""
-    del iceberg_config["base_location_root"]
-
-    expected_base_location = (
-        f"'_dbt/"
-        f"{iceberg_config['schema']}/"
-        f"{iceberg_config['identifier']}/"
-        f"{iceberg_config['base_location_subpath']}'"
-    ).strip()
-
-    assert get_actual_base_location(iceberg_config) == expected_base_location
-
-
-def test_iceberg_only_path(iceberg_config: dict[str, str]):
-    """Test when only base_location_root is provided"""
-    del iceberg_config["base_location_subpath"]
-
-    expected_base_location = (
-        f"'{iceberg_config['base_location_root']}/"
-        f"{iceberg_config['schema']}/"
-        f"{iceberg_config['identifier']}'"
-    ).strip()
-
-    assert get_actual_base_location(iceberg_config) == expected_base_location
-
-
-def test_iceberg_no_path(iceberg_config: dict[str, str]):
-    """Test when no base_location_root or is base_location_subpath provided"""
-    del iceberg_config["base_location_root"]
-    del iceberg_config["base_location_subpath"]
-
-    expected_base_location = (
-        f"'_dbt/" f"{iceberg_config['schema']}/" f"{iceberg_config['identifier']}'"
-    ).strip()
-
-    assert get_actual_base_location(iceberg_config) == expected_base_location
+    materialization_config = FakeMaterializationConfig(extra=config)
+    relation_config = FakeRelationConfig(config=materialization_config)
+    relation = fake_integration.build_relation(relation_config)
+    assert relation.base_location == expected
