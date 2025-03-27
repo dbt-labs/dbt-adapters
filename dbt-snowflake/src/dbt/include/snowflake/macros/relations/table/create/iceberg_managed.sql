@@ -11,19 +11,7 @@
     {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
 {%- endif -%}
 
-{%- set sql_header = config.get('sql_header', none) -%}
-
-{%- set relation_config = adapter.build_relation(config.model) -%}
-
-{%- set cluster_by_keys = config.get('cluster_by') -%}
-{%- if cluster_by_keys is not none and cluster_by_keys is string -%}
-    {%- set cluster_by_string = cluster_by_keys -%}
-{%- elif cluster_by_keys is not none -%}
-    {%- set cluster_by_string = cluster_by_keys|join(", ") -%}
-{% else %}
-    {%- set cluster_by_string = none -%}
-{%- endif -%}
-{%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
+{%- set _catalog = adapter.build_catalog_relation(config.model) -%}
 
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
@@ -31,6 +19,7 @@
     {%- set compiled_code = get_select_subquery(compiled_code) -%}
 {%- endif -%}
 
+{%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
 create iceberg table {{ relation }}
@@ -38,24 +27,24 @@ create iceberg table {{ relation }}
         {{ get_table_columns_and_constraints() }}
     {%- endif %}
 
-    {{ optional('cluster by', cluster_by_string, "(") }}
-    {{ optional('external_volume', relation_config.external_volume, "'") }}
+    {{ optional('cluster by', _catalog.cluster_by, "(") }}
+    {{ optional('external_volume', _catalog.external_volume, "'") }}
     -- catalog = 'snowflake'
-    base_location = '{{ relation_config.base_location }}'
+    base_location = '{{ _catalog.base_location }}'
 as (
-    {%- if cluster_by_string is not none -%}
+    {%- if _catalog.cluster_by is not none -%}
     select * from (
         {{ compiled_code }}
     )
     order by (
-        {{ cluster_by_string }}
+        {{ _catalog.cluster_by }}
     )
     {%- else -%}
     {{ compiled_code }}
     {%- endif %}
 );
 
-{% if enable_automatic_clustering and cluster_by_string is not none %}
+{% if _catalog.automatic_clustering and _catalog.cluster_by is not none %}
 alter iceberg table {{relation}} resume recluster;
 {%- endif -%}
 
