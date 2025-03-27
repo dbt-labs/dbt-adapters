@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix the python model empty/sample mode fix to not break when the ref macro has
+  been overridden
+time: 2025-03-27T14:09:35.463143-05:00
+custom:
+  Author: QMalcolm
+  Issue: "953"
