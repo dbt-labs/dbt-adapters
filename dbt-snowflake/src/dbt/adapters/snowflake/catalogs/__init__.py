@@ -7,6 +7,7 @@ from dbt.adapters.snowflake.catalogs._iceberg_managed import (
 from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergAWSGlueCatalogIntegration,
     IcebergRESTCatalogIntegration,
+    IcebergRESTCatalogRelation,
 )
 from dbt.adapters.snowflake.catalogs._native import (
     NativeCatalogIntegration,
@@ -16,11 +17,14 @@ from dbt.adapters.snowflake.catalogs._native import (
 
 SnowflakeCatalogRelation = Union[
     IcebergManagedCatalogRelation,
+    IcebergRESTCatalogRelation,
     NativeCatalogRelation,
 ]
 
 
 SnowflakeCatalogIntegration = Union[
+    IcebergAWSGlueCatalogIntegration,
     IcebergManagedCatalogIntegration,
+    IcebergRESTCatalogIntegration,
     NativeCatalogIntegration,
 ]

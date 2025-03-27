@@ -1,13 +1,16 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TYPE_CHECKING
-from typing_extensions import Self
+from typing import Any, Dict, Optional
 
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
-from dbt.adapters.relation_configs import RelationResults
-from dbt_common.exceptions import DbtInternalError
+from dbt.adapters.contracts.relation import RelationConfig
 
-if TYPE_CHECKING:
-    import agate
+
+@dataclass
+class IcebergRESTCatalogRelation:
+    base_location: str
+    catalog_name: str
+    external_volume: Optional[str] = None
+    table_format: str = "iceberg"
 
 
 @dataclass
@@ -60,36 +63,34 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
         -   must be False
     """
 
+    catalog_type: str = "iceberg_rest"
     table_format: str = "iceberg"
     allows_writes: bool = False
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         super().__init__(config)
-        if self.catalog_type not in ["iceberg_rest", "aws_glue"]:
-            raise DbtInternalError(
-                f"Attempting to create IcebergREST catalog integration for catalog {self.name} with catalog type {config.catalog_type}."
-            )
-        if self.table_format and self.table_format != "iceberg":
-            raise DbtInternalError(
-                f"Unsupported table format for catalog {self.name}: {self.table_format}. Expected `iceberg` or unset."
-            )
-
         if config.adapter_properties:
             self.namespace = config.adapter_properties.get("namespace")
 
-    @classmethod
-    def from_relation_results(cls, relation_results: RelationResults) -> Self:
-        table: "agate.Row" = relation_results["table"][0]
-        catalog: "agate.Row" = relation_results["catalog"][0]
-
-        adapter_properties = {}
-        if namespace := catalog.get("namespace"):
-            adapter_properties["namespace"] = namespace
-
-        config = IcebergRESTCatalogIntegrationConfig(
-            name=catalog.get("catalog_name"),
-            catalog_type=catalog.get("catalog_type"),
-            external_volume=table.get("external_volume_name"),
-            adapter_properties=adapter_properties,
+    def build_relation(self, config: RelationConfig) -> IcebergRESTCatalogRelation:
+        return IcebergRESTCatalogRelation(
+            base_location=self.__base_location(config),
+            external_volume=config.config.extra.get("external_volume", self.external_volume),
+            catalog_name=self.catalog_name,
         )
-        return cls(config)
+
+    @staticmethod
+    def __base_location(config: RelationConfig) -> str:
+        # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
+        prefix = config.config.extra.get("base_location_root", "_dbt")
+
+        base_location = f"{prefix}/{config.schema}/{config.identifier}"
+
+        if subpath := config.config.extra.get("base_location_subpath"):
+            base_location += f"/{subpath}"
+
+        return base_location
+
+
+class IcebergAWSGlueCatalogIntegration(IcebergRESTCatalogIntegration):
+    catalog_type: str = "aws_glue"
