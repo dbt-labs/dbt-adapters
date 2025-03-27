@@ -49,7 +49,7 @@
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   -- must use s3_data_naming schema_table_unique in order to support high availability
-  -- on a full fresh for an iceberg incremental table
+  -- on a full fresh for an incremental iceberg table
   {% elif should_full_refresh() and table_type == 'iceberg' and s3_data_naming == 'schema_table_unique' %}
     -- create a new tmp_relation that has its s3 path set to the target location path
     -- except with a unique UUID
