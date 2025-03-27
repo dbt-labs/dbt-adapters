@@ -16,6 +16,10 @@
     {% if raw_strategy not in ['append', 'insert_overwrite', 'microbatch'] %}
       {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
     {% endif %}
+
+    {% if raw_strategy == 'microbatch' %}
+      {% do return('insert_overwrite') %}
+    {% endif %}
   {% endif %}
 
   {% do return(raw_strategy) %}

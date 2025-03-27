@@ -1,5 +1,6 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
   {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
+  {% set is_microbatch = raw_strategy == 'microbatch' %}
   {% set table_type = config.get('table_type', default='hive') | lower %}
   {% set model_language = model['language'] %}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
@@ -29,18 +30,19 @@
                                              database=database) %}
   {% set tmp_relation = make_temp_relation(target_relation, suffix=tmp_table_suffix, temp_schema=temp_schema) %}
 
-  -- If no partitions are used with insert_overwrite, we fall back to append mode.
-  {% if partitioned_by is none and strategy == 'insert_overwrite' %}
-    {% set strategy = 'append' %}
-  {% endif %}
 
-  -- If no partitions are used with microbatch, raise an error.
-  {% if partitioned_by is none and strategy == 'microbatch' %}
-    {% set missing_partition_key_microbatch_msg -%}
-      dbt-athena 'microbatch' incremental strategy requires a `partitioned_by` config.
-      Ensure you are using a `partitioned_by` column that is of grain {{ config.get('batch_size') }}.
-    {%- endset %}
-    {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
+  {% if partitioned_by is none and strategy == 'insert_overwrite' %}
+    {% if is_microbatch %}
+      -- If no partitions are used with insert_overwrite microbatch, raise an error.
+      {% set missing_partition_key_microbatch_msg -%}
+        dbt-athena 'microbatch' incremental strategy for hive tables requires a `partitioned_by` config.
+        Ensure you are using a `partitioned_by` column that is of grain {{ config.get('batch_size') }}.
+      {%- endset %}
+      {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
+    {% else %}
+      -- If no partitions are used with insert_overwrite, we fall back to append mode.
+      {% set strategy = 'append' %}
+    {% endif %}
   {% endif %}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
@@ -71,8 +73,8 @@
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
-  -- Insert Overwrite and Microbatch Strategies --
-  {% elif strategy in ("insert_overwrite", "microbatch") %}
+  -- Insert Overwrite Strategy --
+  {% elif strategy in ("insert_overwrite") %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}

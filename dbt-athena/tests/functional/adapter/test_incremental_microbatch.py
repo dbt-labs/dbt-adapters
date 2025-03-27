@@ -23,7 +23,7 @@ _microbatch_model_sql = """
     event_time='event_time',
     batch_size='day',
     begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
-    partitioned_by=['date_day']
+    partitioned_by=['event_time']
     )
 }}
 select * from {{ ref('input_model') }}
@@ -60,7 +60,7 @@ class TestAthenaMicrobatchMissingPartitionBy:
             "input_model.sql": _input_model_sql,
         }
 
-    def test_execution_failure_no_partition_by(self, project):
+    def test_execution_failure_no_partitioned_by(self, project):
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
             _, stdout = run_dbt_and_capture(["run"], expect_pass=False)
         assert (
