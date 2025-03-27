@@ -48,7 +48,51 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  {% elif existing_relation.is_view %}
+  -- must use s3_data_naming schema_table_unique in order to support high availability
+  -- on a full fresh for an iceberg incremental table
+  {% elif should_full_refresh() and table_type == 'iceberg' and s3_data_naming == 'schema_table_unique' %}
+    -- create a new tmp_relation that has its s3 path set to the target location path
+    -- except with a unique UUID
+    {%- set tmp_relation = api.Relation.create(
+            identifier=target_relation.identifier ~ '__dbt_tmp',
+            schema=target_relation.schema,
+            database=target_relation.database,
+            s3_path_table_part=target_relation.identifier,
+            type='table'
+        )
+    -%}
+
+    -- if the existing tmp_relation exists, drop it
+    {%- if tmp_relation is not none -%}
+      {{ drop_relation(tmp_relation) }}
+    {%- endif -%}
+
+    -- create the full refresh version of the incremental iceberg table
+    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- if model_language == 'python' -%}
+      {% call statement('create_table', language=model_language) %}
+        {{ query_result }}
+      {% endcall %}
+    {%- endif -%}
+
+    -- create a backup relation
+    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
+
+    -- if something failed in a prior run and previously created
+    -- backup migration still exists, drop it
+    {%- if relation_bkp is not none -%}
+      {{ drop_relation(relation_bkp) }}
+    {%- endif -%}
+
+    -- rename to current target relation to a backup
+    {%- do rename_relation(target_relation, relation_bkp) -%}
+    -- rename the new full refresh to the target relation
+    {%- do rename_relation(tmp_relation, target_relation) -%}
+    -- drop the relation backup
+    {%- do drop_relation(relation_bkp) -%}
+
+    {% set build_sql = "select '" ~ query_result ~ "'" -%}
+  {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
@@ -56,22 +100,6 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  -- full refresh on iceberg table
-  {% elif should_full_refresh() and table_type == 'iceberg' %}
-    -- drop the old_tmp_relation if it exists
-    {%- if old_tmp_relation is not none -%}
-      {%- do adapter.delete_from_glue_catalog(old_tmp_relation) -%}
-    {%- endif -%}
-    -- fully refresh the iceberg table named with the tmp_relation
-    {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-    -- swap tmp_relation with target_relation
-    {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
   {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
     {% if old_tmp_relation is not none %}
