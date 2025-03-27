@@ -13,6 +13,7 @@
   {% set temp_schema = config.get('temp_schema') %}
   {% set target_relation = this.incorporate(type='table') %}
   {% set existing_relation = load_relation(this) %}
+  {% set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) %}
   -- If using insert_overwrite on Hive table, allow to set a unique tmp table suffix
   {% if unique_tmp_table_suffix == True and strategy == 'insert_overwrite' and table_type == 'hive' %}
     {% set tmp_table_suffix = adapter.generate_unique_temporary_table_suffix() %}
