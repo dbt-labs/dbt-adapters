@@ -1,6 +1,3 @@
-from dbt.adapters.snowflake.relation_configs.base import (
-    SnowflakeRelationConfigBase as SnowflakeRelationConfig,
-)
 from dbt.adapters.snowflake.relation_configs.catalog import (
     SnowflakeCatalogConfig,
     SnowflakeCatalogConfigChange,
@@ -18,7 +15,4 @@ from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
-)
-from dbt.adapters.snowflake.relation_configs.iceberg_managed_table import (
-    IcebergManagedTableConfig,
 )

@@ -8,7 +8,6 @@ from dbt.adapters.relation_configs import (
 
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
 
-from dbt.adapters.snowflake.catalogs import SnowflakeCatalogRelation
 from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,
     SnowflakeQuotePolicy,
@@ -34,17 +33,13 @@ class SnowflakeRelationConfigBase(RelationConfigBase):
         return SnowflakeQuotePolicy()
 
     @classmethod
-    def from_relation_config(
-        cls, relation_config: RelationConfig, catalog: Optional[SnowflakeCatalogRelation] = None
-    ):
-        relation_config_dict = cls.parse_relation_config(relation_config, catalog)
+    def from_relation_config(cls, relation_config: RelationConfig):
+        relation_config_dict = cls.parse_relation_config(relation_config)
         relation = cls.from_dict(relation_config_dict)
         return relation
 
     @classmethod
-    def parse_relation_config(
-        cls, relation_config: RelationConfig, catalog: Optional[SnowflakeCatalogRelation]
-    ) -> Dict[str, Any]:
+    def parse_relation_config(cls, relation_config: RelationConfig) -> Dict:
         raise NotImplementedError(
             "`parse_relation_config()` needs to be implemented on this RelationConfigBase instance"
         )
