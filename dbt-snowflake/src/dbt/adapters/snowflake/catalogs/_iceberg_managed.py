@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
-from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationMode
+from dbt.adapters.catalogs import CatalogIntegration
 from dbt.adapters.contracts.relation import RelationConfig
 
 
@@ -9,22 +9,25 @@ from dbt.adapters.contracts.relation import RelationConfig
 class IcebergManagedCatalogRelation:
     base_location: str
     external_volume: Optional[str] = None
+    catalog_name: str = "snowflake"
+    table_format: str = "iceberg"
+    cluster_by: Optional[str] = None
+    automatic_clustering: bool = False
 
 
 class IcebergManagedCatalogIntegration(CatalogIntegration):
-    allows_writes = CatalogIntegrationMode.WRITE
+    allows_writes = True
 
-    def catalog_relation(self, config: RelationConfig) -> IcebergManagedCatalogRelation:
+    def build_relation(self, config: RelationConfig) -> IcebergManagedCatalogRelation:
         return IcebergManagedCatalogRelation(
-            base_location=self._base_location(config),
-            external_volume=self._external_volume(config),
+            base_location=self.__base_location(config),
+            external_volume=config.config.extra.get("external_volume", self.external_volume),
+            cluster_by=self.__cluster_by(config),
+            automatic_clustering=config.config.get("automatic_clustering", False),
         )
 
-    def _external_volume(self, config: RelationConfig) -> Optional[str]:
-        return config.config.extra.get("external_volume", self.external_volume)
-
     @staticmethod
-    def _base_location(config: RelationConfig) -> str:
+    def __base_location(config: RelationConfig) -> str:
         # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
         prefix = config.config.extra.get("base_location_root", "_dbt")
 
@@ -34,3 +37,11 @@ class IcebergManagedCatalogIntegration(CatalogIntegration):
             base_location += f"/{subpath}"
 
         return base_location
+
+    @staticmethod
+    def __cluster_by(config: RelationConfig) -> Optional[str]:
+        if cluster_by := config.config.get("cluster_by"):
+            if isinstance(cluster_by, Iterable):
+                return ", ".join(cluster_by)
+            return cluster_by
+        return None

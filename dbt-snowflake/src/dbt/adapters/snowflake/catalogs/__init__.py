@@ -11,14 +11,12 @@ SnowflakeCatalogRelation = Union[IcebergManagedCatalogRelation]
 SnowflakeCatalogIntegration = Union[IcebergManagedCatalogIntegration]
 
 
-CATALOG_INTEGRATIONS = {
-    "iceberg_managed": IcebergManagedCatalogIntegration,
-}
+CATALOG_INTEGRATIONS = [IcebergManagedCatalogIntegration]
 
 
 DEFAULT_ICEBERG_CATALOG_INTEGRATION = SimpleNamespace(
     **{
-        "name": "default_iceberg_catalog",
+        "name": "snowflake",
         "catalog_name": "snowflake",
         "catalog_type": "iceberg_managed",
         "table_format": "iceberg",

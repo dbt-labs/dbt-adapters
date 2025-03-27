@@ -4,6 +4,7 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
+from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
@@ -27,11 +28,7 @@ from dbt.adapters.snowflake.catalogs import (
     CATALOG_INTEGRATIONS,
     DEFAULT_ICEBERG_CATALOG_INTEGRATION,
 )
-from dbt.adapters.snowflake.relation_configs import (
-    SnowflakeRelationConfig,
-    SnowflakeRelationType,
-    TableFormat,
-)
+from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType, TableFormat
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -71,7 +68,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = SnowflakeConfig
 
-    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS  # type:ignore
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -457,7 +454,7 @@ CALL {proc_name}();
         }
 
     @available
-    def build_relation(self, config: RelationConfig) -> SnowflakeRelationConfig:
+    def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
         """
         Builds a relation for a given configuration.
 
@@ -472,19 +469,12 @@ CALL {proc_name}();
         Returns:
             Any: The constructed relation object generated through the catalog integration and parser
         """
-        catalog_integration_name = (
-            config.catalog_name
-            if config.catalog_name
-            else (
-                "default_iceberg_catalog"
-                if config.config.get("table_format") == "iceberg"
-                else None
-            )
-        )
-        if catalog_integration_name:
-            catalog_integration = self.get_catalog_integration(catalog_integration_name)
-            catalog_relation = catalog_integration.catalog_relation(config)
+        if config.catalog:
+            catalog_integration = self.get_catalog_integration(config.catalog)
+        elif config.config.get("table_format") == "iceberg":
+            catalog_integration = self.get_catalog_integration("snowflake")
         else:
-            catalog_relation = None
-
-        return self.Relation.build_relation(config, catalog_relation)
+            raise DbtRuntimeError(
+                f"{config.database}.{config.schema}.{config.identifier} is not a catalog relation."
+            )
+        return catalog_integration.build_relation(config)
