@@ -1,13 +1,13 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
-    {%- set catalog_name = config.get('catalog_name') -%}
+    {%- set catalog_name = config.get('catalog') -%}
     {%- set table_format = config.get('table_format') -%}
 
     {%- if language == 'sql' -%}
         {%- if catalog_name == 'snowflake' -%}
             {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
         {%- elif table_format == 'iceberg' -%}
-            {{ exceptions.warn("This configuration is deprecated. Please use `catalog_name: snowflake` in the future.") }}
+            {{ exceptions.warn("This configuration is deprecated. Please include `catalog: snowflake` in the future.") }}
             {{ snowflake__create_table_iceberg_managed_legacy_sql(temporary, relation, compiled_code) }}
         {%- elif catalog_name is none -%}
             {{ snowflake__create_table_standard_sql(temporary, relation, compiled_code) }}
