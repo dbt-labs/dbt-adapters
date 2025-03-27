@@ -324,7 +324,7 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
-        catalog = self.get_catalog_integration(config.catalog_name)
+        catalog = self.get_catalog_integration(config.catalog)
         return catalog.build_relation(config)
 
     ###
