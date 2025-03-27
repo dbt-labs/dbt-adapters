@@ -11,7 +11,17 @@
     {%- set ref_dict = {} -%}
     {%- for _ref in model.refs -%}
         {% set _ref_args = [_ref.get('package'), _ref['name']] if _ref.get('package') else [_ref['name'],] %}
-        {%- set resolved = ref(*_ref_args, v=_ref.get('version')).render() -%}
+        {%- set resolved = ref(*_ref_args, v=_ref.get('version')) -%}
+
+        {#
+            We want to get the string of the returned relation in order to skip sample/empty mode rendering logic.
+            However, people override the default ref macro, and often return a string instead of a relation. Thus,
+            to make sure we dont blow things up, we have ot ensure the resolved relation is not already a string.
+        #}
+        {%- if resolved is not string -%}
+            {%- set resolved = resolved.render() -%}
+        {%- endif -%}
+
         {%- if _ref.get('version') -%}
             {% do _ref_args.extend(["v" ~ _ref['version']]) %}
         {%- endif -%}
