@@ -1,6 +1,0 @@
-kind: Features
-body: Add Base Adapter implementation of Catalog Integration support.
-time: 2025-02-19T09:39:58.358674-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "790"

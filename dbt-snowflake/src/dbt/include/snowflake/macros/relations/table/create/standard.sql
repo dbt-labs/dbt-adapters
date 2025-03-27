@@ -10,10 +10,6 @@
     {%- set transient='' -%}
 {%- endif -%}
 
-{%- set sql_header = config.get('sql_header', none) -%}
-
-{%- set copy_grants = config.get('copy_grants', default=false) -%}
-
 {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
 {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
