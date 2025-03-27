@@ -473,7 +473,7 @@ CALL {proc_name}();
         """
         if config.catalog:
             catalog_integration = self.get_catalog_integration(config.catalog)
-        elif config.config.get("table_format") == "iceberg":
+        elif config.config and config.config.get("table_format") == "iceberg":
             catalog_integration = self.get_catalog_integration("snowflake")
         else:
             raise DbtRuntimeError(

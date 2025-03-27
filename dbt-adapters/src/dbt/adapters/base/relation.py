@@ -1,5 +1,3 @@
-import textwrap
-
 from collections.abc import Hashable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -205,23 +203,6 @@ class BaseRelation(FakeAPIObject, Hashable):
         The hash of the returned object is the result of render().
         """
         return self.include(identifier=False).replace_path(identifier=None)
-
-    def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
-        # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
-        base_location: str = (
-            f"{config.get('base_location_root', '_dbt')}/{self.schema}/{self.name}"  # type:ignore
-        )
-
-        if subpath := config.get("base_location_subpath"):  # type:ignore
-            base_location += f"/{subpath}"
-
-        external_volume = config.get("external_volume")  # type:ignore
-        iceberg_ddl_predicates: str = f"""
-        external_volume = '{external_volume}'
-        catalog = 'snowflake'
-        base_location = '{base_location}'
-        """
-        return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def _render_iterator(
         self,
