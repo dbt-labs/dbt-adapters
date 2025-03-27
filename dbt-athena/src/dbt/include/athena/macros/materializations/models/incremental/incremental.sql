@@ -115,16 +115,20 @@
     {% set delete_condition = config.get('delete_condition') %}
     {% set update_condition = config.get('update_condition') %}
     {% set insert_condition = config.get('insert_condition') %}
-    {% set empty_unique_key -%}
-      Merge strategy must implement unique_key as a single column or a list of columns.
-    {%- endset %}
+    {% if is_microbatch %}
+      {% set stategy_error_msg = 'Microbatch strategy for iceberg tables' %}
+    {% else %}
+      {% set stategy_error_msg = 'Merge strategy' %}
+    {% endif %}
+
+    -- Raise error if unique_key is not set
     {% if unique_key is none %}
+      {% set empty_unique_key = stategy_error_msg ~ ' must implement unique_key as a single column or a list of columns.' %}
       {% do exceptions.raise_compiler_error(empty_unique_key) %}
     {% endif %}
+
     {% if incremental_predicates is not none %}
-      {% set inc_predicates_not_list -%}
-        Merge strategy must implement incremental_predicates as a list of predicates.
-      {%- endset %}
+      {% set inc_predicates_not_list = stategy_error_msg ~ ' must implement incremental_predicates as a list of predicates when provided.' %}
       {% if not adapter.is_list(incremental_predicates) %}
         {% do exceptions.raise_compiler_error(inc_predicates_not_list) %}
       {% endif %}

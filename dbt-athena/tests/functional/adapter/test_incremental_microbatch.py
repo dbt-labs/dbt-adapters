@@ -15,15 +15,51 @@ union all
 select 3 as id, CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as timestamp) as event_time
 """
 
-# No requirement for a unique_id for athena microbatch!
-_microbatch_model_sql = """
+_iceberg_input_model_sql = """
+{{ config(materialized='table', event_time='event_time', table_type='iceberg') }}
+select 1 as id, CAST(from_iso8601_timestamp('2020-01-01T00:00:00.000000Z') as timestamp(6)) as event_time
+union all
+select 2 as id, CAST(from_iso8601_timestamp('2020-01-02T00:00:00.000000Z') as timestamp(6)) as event_time
+union all
+select 3 as id, CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as timestamp(6)) as event_time
+"""
+
+_hive_microbatch_model_sql = """
 {{ config(
     materialized='incremental',
     incremental_strategy='microbatch',
     event_time='event_time',
     batch_size='day',
     begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
-    partitioned_by=['event_time']
+    partitioned_by=['event_time'],
+    table_type='hive'
+    )
+}}
+select * from {{ ref('input_model') }}
+"""
+
+_iceberg_microbatch_model_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='microbatch',
+    event_time='event_time',
+    batch_size='day',
+    begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
+    unique_key='id',
+    table_type='iceberg'
+    )
+}}
+select * from {{ ref('input_model') }}
+"""
+
+_iceberg_microbatch_model_no_unique_key_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='microbatch',
+    event_time='event_time',
+    batch_size='day',
+    begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0),
+    table_type='iceberg'
     )
 }}
 select * from {{ ref('input_model') }}
@@ -42,17 +78,17 @@ select * from {{ ref('input_model') }}
 """
 
 
-class TestAthenaMicrobatch(BaseMicrobatch):
+class TestAthenaHiveMicrobatch(BaseMicrobatch):
     @pytest.fixture(scope="class")
     def microbatch_model_sql(self) -> str:
-        return _microbatch_model_sql
+        return _hive_microbatch_model_sql
 
     @pytest.fixture(scope="class")
     def input_model_sql(self) -> str:
         return _input_model_sql
 
 
-class TestAthenaMicrobatchMissingPartitionBy:
+class TestAthenaHiveMicrobatchMissingPartitionBy:
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -64,6 +100,33 @@ class TestAthenaMicrobatchMissingPartitionBy:
         with patch_microbatch_end_time("2020-01-03 13:57:00"):
             _, stdout = run_dbt_and_capture(["run"], expect_pass=False)
         assert (
-            "dbt-athena 'microbatch' incremental strategy requires a `partitioned_by` config"
+            "dbt-athena 'microbatch' incremental strategy for hive tables requires a `partitioned_by` config."
+            in stdout
+        )
+
+
+class TestAthenaIcebergMicrobatch(BaseMicrobatch):
+    @pytest.fixture(scope="class")
+    def microbatch_model_sql(self) -> str:
+        return _iceberg_microbatch_model_sql
+
+    @pytest.fixture(scope="class")
+    def input_model_sql(self) -> str:
+        return _iceberg_input_model_sql
+
+
+class TestAthenaIcebergMicrobatchMissingUniqueKey:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "microbatch.sql": _iceberg_microbatch_model_no_unique_key_sql,
+            "input_model.sql": _iceberg_input_model_sql,
+        }
+
+    def test_execution_failure_no_unique_key(self, project):
+        with patch_microbatch_end_time("2020-01-03 13:57:00"):
+            _, stdout = run_dbt_and_capture(["run"], expect_pass=False)
+        assert (
+            "Microbatch strategy for iceberg tables must implement unique_key as a single column or a list of columns."
             in stdout
         )
