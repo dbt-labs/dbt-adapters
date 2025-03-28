@@ -188,8 +188,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         self._model_name = parsed_model["alias"]
         self._GoogleCredentials = create_google_credentials(credentials)
-        # Set 24 hours as default timeout.
-        self._timeout = parsed_model["config"].get("timeout") or 24 * 60 * 60
 
         # TODO(jialuo): Add a function in clients.py for it.
         self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
@@ -294,7 +292,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         try:
             res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
-                timeout=self._timeout
+                timeout=self._polling_retry.timeout
             )
         except TimeoutError as timeout_error:
             raise TimeoutError(
