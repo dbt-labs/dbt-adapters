@@ -6,7 +6,7 @@ from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
-from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
+from dbt.adapters.events.types import AdapterEventDebug
 from dbt.adapters.relation_configs import (
     RelationConfigBase,
     RelationConfigChangeAction,
@@ -14,7 +14,7 @@ from dbt.adapters.relation_configs import (
 )
 from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
-from dbt_common.events.functions import fire_event, warn_or_error
+from dbt_common.events.functions import fire_event
 
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
@@ -65,6 +65,12 @@ class SnowflakeRelation(BaseRelation):
     @property
     def is_iceberg_format(self) -> bool:
         return self.table_format == TableFormat.ICEBERG
+
+    @staticmethod
+    def is_transient(config: RelationConfig) -> bool:
+        # Always supply transient on table create DDL unless user specifically sets
+        # transient to false or unset.
+        return config.get("transient", False) or config.get("transient", True)  # type:ignore
 
     @classproperty
     def DynamicTable(cls) -> str:
@@ -150,51 +156,6 @@ class SnowflakeRelation(BaseRelation):
         The iceberg standard does support renaming, so this may change in the future.
         """
         return self.type in self.renameable_relations and not self.is_iceberg_format
-
-    def get_ddl_prefix_for_create(self, config: RelationConfig, temporary: bool) -> str:
-        """
-        This macro renders the appropriate DDL prefix during the create_table_as
-        macro. It decides based on mutually exclusive table configuration options:
-
-        - TEMPORARY: Indicates a table that exists only for the duration of the session.
-        - ICEBERG: A specific storage format that requires a distinct DDL layout.
-        - TRANSIENT: A table similar to a permanent table but without fail-safe.
-
-        Additional Caveats for Iceberg models:
-        - transient=true throws a warning because Iceberg does not support transient tables
-        - A temporary relation is never an Iceberg relation because Iceberg does not
-          support temporary relations.
-        """
-
-        transient_explicitly_set_true: bool = config.get("transient", False)  # type:ignore
-
-        # Temporary tables are a Snowflake feature that do not exist in the
-        # Iceberg framework. We ignore the Iceberg status of the model.
-        if temporary:
-            return "temporary"
-        elif self.is_iceberg_format:
-            # Log a warning that transient=true on an Iceberg relation is ignored.
-            if transient_explicitly_set_true:
-                warn_or_error(
-                    AdapterEventWarning(
-                        base_msg=(
-                            "Iceberg format relations cannot be transient. Please "
-                            "remove either the transient or iceberg config options "
-                            f"from {self.path.database}.{self.path.schema}."
-                            f"{self.path.identifier}. If left unmodified, dbt will "
-                            "ignore 'transient'."
-                        )
-                    )
-                )
-
-            return "iceberg"
-
-        # Always supply transient on table create DDL unless user specifically sets
-        # transient to false or unset. Might as well update the object attribute too!
-        elif transient_explicitly_set_true or config.get("transient", True):  # type:ignore
-            return "transient"
-        else:
-            return ""
 
     def get_ddl_prefix_for_alter(self) -> str:
         """All ALTER statements on Iceberg tables require an ICEBERG prefix"""

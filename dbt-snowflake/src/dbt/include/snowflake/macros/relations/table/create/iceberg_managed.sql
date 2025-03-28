@@ -13,6 +13,8 @@
 
 {%- set _catalog = adapter.build_catalog_relation(config.model) -%}
 
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
+
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
     {{- get_assert_columns_equivalent(compiled_code) -}}
@@ -22,15 +24,15 @@
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
-create iceberg table {{ relation }}
-    {% if contract_config.enforced -%}
-        {{ get_table_columns_and_constraints() }}
+create or replace iceberg table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
     {%- endif %}
-
     {{ optional('cluster by', _catalog.cluster_by, "(") }}
     {{ optional('external_volume', _catalog.external_volume, "'") }}
     -- catalog = 'snowflake'
     base_location = '{{ _catalog.base_location }}'
+    {% if copy_grants %}copy grants{% endif %}
 as (
     {%- if _catalog.cluster_by is not none -%}
     select * from (
@@ -44,8 +46,12 @@ as (
     {%- endif %}
 );
 
-{% if _catalog.automatic_clustering and _catalog.cluster_by is not none %}
-alter iceberg table {{relation}} resume recluster;
+{% if _catalog.cluster_by is not none -%}
+alter iceberg table {{ relation }} cluster by ({{ _catalog.cluster_by }});
 {%- endif -%}
 
-{% endmacro %}
+{% if _catalog.automatic_clustering and _catalog.cluster_by is not none %}
+alter iceberg table {{ relation }} resume recluster;
+{%- endif -%}
+
+{%- endmacro %}
