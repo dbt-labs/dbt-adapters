@@ -32,7 +32,9 @@ class IcebergManagedCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
 
-    def build_relation(self, model: Dict[str, Any]) -> IcebergManagedCatalogRelation:
+    def build_relation(
+        self, model: Dict[str, Any]  # type:ignore
+    ) -> IcebergManagedCatalogRelation:
         """
         Args:
             model: A RelationConfig object as a dict
