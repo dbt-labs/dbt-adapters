@@ -1,11 +1,14 @@
-{% macro snowflake__create_table_standard_sql(temporary, relation, compiled_code) -%}
+{% macro snowflake__create_table_standard_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE TABLE and CREATE TABLE ... AS SELECT:
     https://docs.snowflake.com/en/sql-reference/sql/create-table
     https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
 -#}
-
-{%- set materialization_prefix = relation.get_ddl_prefix_for_create(config.model.config, temporary) -%}
+{%- if relation.is_transient(config.model.config) -%}
+    {%- set transient='transient ' -%}
+{%- else -%}
+    {%- set transient='' -%}
+{%- endif -%}
 
 {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
 {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
@@ -23,29 +26,31 @@
 
 {{ sql_header if sql_header is not none }}
 
-create or replace {{ materialization_prefix }} table {{ relation }}
-
+create or replace {{ transient }}table {{ relation }}
     {%- set contract_config = config.get('contract') -%}
     {%- if contract_config.enforced -%}
-      {{ get_assert_columns_equivalent(sql) }}
-      {{ get_table_columns_and_constraints() }}
-      {% set compiled_code = get_select_subquery(compiled_code) %}
+    {{ get_assert_columns_equivalent(sql) }}
+    {{ get_table_columns_and_constraints() }}
+    {% set compiled_code = get_select_subquery(compiled_code) %}
     {% endif %}
-    {% if copy_grants and not temporary -%} copy grants {%- endif %} as
+    {% if copy_grants -%} copy grants {%- endif %} as
     (
-      {%- if cluster_by_string is not none -%}
+        {%- if cluster_by_string is not none -%}
         select * from (
-          {{ compiled_code }}
-          ) order by ({{ cluster_by_string }})
-      {%- else -%}
+            {{ compiled_code }}
+        ) order by ({{ cluster_by_string }})
+        {%- else -%}
         {{ compiled_code }}
-      {%- endif %}
-    );
-  {% if cluster_by_string is not none and not temporary -%}
-    alter table {{relation}} cluster by ({{cluster_by_string}});
-  {%- endif -%}
-  {% if enable_automatic_clustering and cluster_by_string is not none and not temporary %}
-    alter table {{relation}} resume recluster;
-  {%- endif -%}
+        {%- endif %}
+    )
+;
 
-{% endmacro %}
+{% if cluster_by_string is not none -%}
+alter table {{relation}} cluster by ({{cluster_by_string}});
+{%- endif -%}
+
+{% if enable_automatic_clustering and cluster_by_string is not none %}
+alter table {{relation}} resume recluster;
+{%- endif -%}
+
+{%- endmacro %}
