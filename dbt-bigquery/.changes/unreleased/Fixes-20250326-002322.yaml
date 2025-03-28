@@ -1,0 +1,6 @@
+kind: Fixes
+body: Format the outputs of notebook execution
+time: 2025-03-26T00:23:22.929575207Z
+custom:
+    Author: jialuoo
+    Issue: "943"
