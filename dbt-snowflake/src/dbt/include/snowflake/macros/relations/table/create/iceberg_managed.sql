@@ -11,7 +11,7 @@
     {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
 {%- endif -%}
 
-{%- set _catalog = adapter.build_catalog_relation(config.model) -%}
+{%- set _catalog = adapter.build_catalog_relation(model) -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
@@ -28,9 +28,9 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', _catalog.cluster_by, "(") }}
+    {{ optional('cluster by', _catalog.cluster_by, '(', '') }}
     {{ optional('external_volume', _catalog.external_volume, "'") }}
-    -- catalog = 'snowflake'
+    catalog = 'snowflake'
     base_location = '{{ _catalog.base_location }}'
     {% if copy_grants %}copy grants{% endif %}
 as (

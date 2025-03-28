@@ -456,7 +456,7 @@ CALL {proc_name}();
         }
 
     @available
-    def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
+    def build_catalog_relation(self, model: Dict[str, Any]) -> CatalogRelation:
         """
         Builds a relation for a given configuration.
 
@@ -465,18 +465,12 @@ CALL {proc_name}();
         catalog if none is provided in the configuration for backward compatibility.
 
         Args:
-            config (RelationConfig): a configuration object containing details such as
+            model (Dict[str, Any]): a RelationConfig object as a dict containing details such as
                 catalog name and table format
 
         Returns:
             Any: The constructed relation object generated through the catalog integration and parser
         """
-        if config.catalog:
-            catalog_integration = self.get_catalog_integration(config.catalog)
-        elif config.config and config.config.get("table_format") == "iceberg":
-            catalog_integration = self.get_catalog_integration("snowflake")
-        else:
-            raise DbtRuntimeError(
-                f"{config.database}.{config.schema}.{config.identifier} is not a catalog relation."
-            )
-        return catalog_integration.build_relation(config)
+        catalog_name = model.get("config", {}).get("catalog", "snowflake")
+        catalog_integration = self.get_catalog_integration(catalog_name)
+        return catalog_integration.build_relation(model)

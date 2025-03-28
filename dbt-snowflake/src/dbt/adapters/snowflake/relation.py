@@ -1,7 +1,7 @@
 import textwrap
 
 from dataclasses import dataclass, field
-from typing import FrozenSet, Optional, Type, Iterator, Tuple
+from typing import Any, Dict, FrozenSet, Optional, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation
@@ -66,10 +66,21 @@ class SnowflakeRelation(BaseRelation):
     def is_iceberg_format(self) -> bool:
         return self.table_format == TableFormat.ICEBERG
 
-    @staticmethod
-    def is_transient(config: RelationConfig) -> bool:
-        # Always supply transient on table create DDL unless user specifically sets
-        # transient to false or unset.
+    @classmethod
+    def is_transient(cls, model: Dict[str, Any]) -> bool:
+        """
+        Always supply transient on table create DDL unless user specifically sets
+        transient to false or unset.
+
+        Args:
+            model: A RelationConfig object as a dict.
+
+        Returns:
+            True if the user has set it to True or if the user has explicitly unset it.
+        """
+        config = model["config"]
+        if config.get("table_format") == "iceberg":
+            return False
         return config.get("transient", False) or config.get("transient", True)  # type:ignore
 
     @classproperty

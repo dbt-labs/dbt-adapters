@@ -30,7 +30,7 @@ class TestIcebergTableBuilds:
 
     def test_iceberg_tables_build_and_can_be_referred(self, project):
         run_results = run_dbt()
-        assert len(run_results) == 10
+        assert len(run_results) == 11
 
 
 class TestIcebergTableTypeBuildsOnExistingTable:

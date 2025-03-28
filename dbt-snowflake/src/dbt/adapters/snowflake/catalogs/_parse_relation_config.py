@@ -1,39 +1,52 @@
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 from dbt_common.exceptions import DbtConfigError
-from dbt.adapters.contracts.relation import RelationConfig
 
 
-def external_volume(config: RelationConfig) -> Optional[str]:
-    if materialization_config := config.config:
-        return materialization_config.extra.get("external_volume")
-    return None
+def external_volume(model: Dict[str, Any]) -> Optional[str]:
+    """
+    Args:
+        model: A RelationConfig object as a dict
+    """
+    return model["config"].get("external_volume")
 
 
-def base_location(config: RelationConfig) -> str:
-    if materialization_config := config.config:
-        prefix = materialization_config.extra.get("base_location_root", "_dbt")
-        path = f"{prefix}/{config.schema}/{config.identifier}"
-        if subpath := materialization_config.extra.get("base_location_subpath"):
-            path += f"/{subpath}"
-    else:
-        path = f"_dbt/{config.schema}/{config.identifier}"
+def base_location(model: Dict[str, Any]) -> str:
+    """
+    Args:
+        model: A RelationConfig object as a dict
+    """
+    schema = model["schema"]
+    identifier = model["alias"]
+    config = model["config"]
+    prefix = config.get("base_location_root", "_dbt")
+    subpath = config.get("base_location_subpath")
+
+    path = f"{prefix}/{schema}/{identifier}"
+    if subpath:
+        path += f"/{subpath}"
+
     return path
 
 
-def cluster_by(config: RelationConfig) -> Optional[str]:
-    if materialization_config := config.config:
-        fields = materialization_config.extra.get("cluster_by")
-        if isinstance(fields, Iterable):
-            return ", ".join(fields)
-        elif isinstance(fields, str):
-            return fields
-        elif fields is not None:
-            raise DbtConfigError(f"Unexpected cluster_by configuration: {fields}")
+def cluster_by(model: Dict[str, Any]) -> Optional[str]:
+    """
+    Args:
+        model: A RelationConfig object as a dict
+    """
+    fields = model["config"].get("cluster_by")
+    if isinstance(fields, Iterable):
+        return ", ".join(fields)
+    elif isinstance(fields, str):
+        return fields
+    elif fields is not None:
+        raise DbtConfigError(f"Unexpected cluster_by configuration: {fields}")
     return None
 
 
-def automatic_clustering(config: RelationConfig) -> bool:
-    if materialization_config := config.config:
-        return materialization_config.extra.get("automatic_clustering", False)
-    return False
+def automatic_clustering(model: Dict[str, Any]) -> bool:
+    """
+    Args:
+        model: A RelationConfig object as a dict
+    """
+    return model["config"].get("automatic_clustering", False)
