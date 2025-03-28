@@ -19,7 +19,7 @@ def base_location(model: Dict[str, Any]) -> str:
     schema = model["schema"]
     identifier = model["alias"]
     config = model["config"]
-    prefix = config.get("base_location_root", "_dbt")
+    prefix = config.get("base_location_root") or "_dbt"  # allow users to pass in None
     subpath = config.get("base_location_subpath")
 
     path = f"{prefix}/{schema}/{identifier}"
