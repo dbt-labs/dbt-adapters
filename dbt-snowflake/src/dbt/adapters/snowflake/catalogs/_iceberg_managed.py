@@ -1,8 +1,7 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
-from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake.catalogs._parse_relation_config import (
     automatic_clustering,
@@ -33,10 +32,14 @@ class IcebergManagedCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
 
-    def build_relation(self, config: RelationConfig) -> IcebergManagedCatalogRelation:
+    def build_relation(self, model: Dict[str, Any]) -> IcebergManagedCatalogRelation:
+        """
+        Args:
+            model: A RelationConfig object as a dict
+        """
         return IcebergManagedCatalogRelation(
-            base_location=base_location(config),
-            external_volume=external_volume(config) or self.external_volume,
-            cluster_by=cluster_by(config),
-            automatic_clustering=automatic_clustering(config),
+            base_location=base_location(model),
+            external_volume=external_volume(model) or self.external_volume,
+            cluster_by=cluster_by(model),
+            automatic_clustering=automatic_clustering(model),
         )
