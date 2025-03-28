@@ -1,0 +1,6 @@
+kind: Features
+body: Support timeout in bigframes mode of dbt python model
+time: 2025-03-26T18:42:31.250132145Z
+custom:
+    Author: jialuoo
+    Issue: "949"
