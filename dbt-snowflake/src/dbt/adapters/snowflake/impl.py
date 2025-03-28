@@ -4,6 +4,7 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
+from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
@@ -23,6 +24,10 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.catalogs import (
+    CATALOG_INTEGRATIONS,
+    DEFAULT_ICEBERG_CATALOG_INTEGRATION,
+)
 from dbt.adapters.snowflake.relation_configs import (
     SnowflakeRelationType,
     TableFormat,
@@ -65,6 +70,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = SnowflakeConfig
 
+    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -82,6 +88,10 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
         }
     )
+
+    def __init__(self, config, mp_context) -> None:
+        super().__init__(config, mp_context)
+        self.add_catalog_integration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -449,3 +459,23 @@ CALL {proc_name}();
             "adapter_type": "snowflake",
             "table_format": table_format,
         }
+
+    @available
+    def build_catalog_relation(self, model: Dict[str, Any]) -> CatalogRelation:
+        """
+        Builds a relation for a given configuration.
+
+        This method uses the provided configuration to determine the appropriate catalog
+        integration and config parser for building the relation. It defaults to the managed Iceberg
+        catalog if none is provided in the configuration for backward compatibility.
+
+        Args:
+            model (Dict[str, Any]): a RelationConfig object as a dict containing details such as
+                catalog name and table format
+
+        Returns:
+            Any: The constructed relation object generated through the catalog integration and parser
+        """
+        catalog_name = model.get("config", {}).get("catalog", "snowflake")
+        catalog_integration = self.get_catalog_integration(catalog_name)
+        return catalog_integration.build_relation(model)
