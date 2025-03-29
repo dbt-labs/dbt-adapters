@@ -67,7 +67,7 @@ class BaseAliasErrors:
             "model_b.sql": fixtures.MODELS_DUPE__MODEL_B_SQL,
         }
 
-    def test_alias_dupe_thorews_exeption(self, project):
+    def test_alias_dupe_throws_exeption(self, project):
         message = ".*identical database representation.*"
         with pytest.raises(Exception) as exc:
             assert message in exc
