@@ -1,6 +1,6 @@
 {% macro py_write_table(compiled_code, target_relation) %}
 
-{% if target_relation.is_transient(model) %}
+{% if target_relation.is_transient(config.model) %}
     {%- set table_type='transient' -%}
 {% endif %}
 

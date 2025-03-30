@@ -4,7 +4,7 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation
+from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
@@ -92,6 +92,16 @@ class SnowflakeAdapter(SQLAdapter):
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
         self.add_catalog_integration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
+
+    @available
+    def get_catalog_integration_from_model(
+        self, model: RelationConfig
+    ) -> Optional[CatalogIntegration]:
+        if catalog_name := model.config.get("catalog"):
+            return self.get_catalog_integration(catalog_name)
+        elif model.config.get("table_format") == "iceberg":
+            return self.get_catalog_integration("snowflake")
+        return None
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -456,7 +466,7 @@ CALL {proc_name}();
         }
 
     @available
-    def build_catalog_relation(self, model: Dict[str, Any]) -> CatalogRelation:
+    def build_catalog_relation(self, model: RelationConfig) -> CatalogRelation:
         """
         Builds a relation for a given configuration.
 
@@ -465,12 +475,11 @@ CALL {proc_name}();
         catalog if none is provided in the configuration for backward compatibility.
 
         Args:
-            model (Dict[str, Any]): a RelationConfig object as a dict containing details such as
-                catalog name and table format
+            model (RelationConfig): `config.model` (not `model`) from the jinja context
 
         Returns:
             Any: The constructed relation object generated through the catalog integration and parser
         """
-        catalog_name = model.get("config", {}).get("catalog", "snowflake")
+        catalog_name = model.config.get("catalog", "snowflake")
         catalog_integration = self.get_catalog_integration(catalog_name)
         return catalog_integration.build_relation(model)

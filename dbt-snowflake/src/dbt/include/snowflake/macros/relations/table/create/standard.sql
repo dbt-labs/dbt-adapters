@@ -4,7 +4,7 @@
     https://docs.snowflake.com/en/sql-reference/sql/create-table
     https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
 -#}
-{%- if relation.is_transient(model) -%}
+{%- if relation.is_transient(config.model) -%}
     {%- set transient='transient ' -%}
 {%- else -%}
     {%- set transient='' -%}
@@ -46,11 +46,11 @@ create or replace {{ transient }}table {{ relation }}
 ;
 
 {% if cluster_by_string is not none -%}
-alter table {{relation}} cluster by ({{cluster_by_string}});
+alter table {{ relation }} cluster by ({{ cluster_by_string }});
 {%- endif -%}
 
 {% if enable_automatic_clustering and cluster_by_string is not none %}
-alter table {{relation}} resume recluster;
+alter table {{ relation }} resume recluster;
 {%- endif -%}
 
 {%- endmacro %}
