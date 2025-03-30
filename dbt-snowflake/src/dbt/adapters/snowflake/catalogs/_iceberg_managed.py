@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake.catalogs._parse_relation_config import (
     automatic_clustering,
@@ -14,8 +15,8 @@ from dbt.adapters.snowflake.catalogs._parse_relation_config import (
 @dataclass
 class IcebergManagedCatalogRelation:
     base_location: str
-    catalog_name: Optional[str] = "snowflake"
-    table_format: Optional[str] = "iceberg"
+    catalog_name: str = "snowflake"
+    table_format: str = "iceberg"
     external_volume: Optional[str] = None
     cluster_by: Optional[str] = None
     automatic_clustering: bool = False
@@ -32,12 +33,10 @@ class IcebergManagedCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
 
-    def build_relation(
-        self, model: Dict[str, Any]  # type:ignore
-    ) -> IcebergManagedCatalogRelation:
+    def build_relation(self, model: RelationConfig) -> IcebergManagedCatalogRelation:
         """
         Args:
-            model: A RelationConfig object as a dict
+            model: `config.model` (not `model`) from the jinja context
         """
         return IcebergManagedCatalogRelation(
             base_location=base_location(model),

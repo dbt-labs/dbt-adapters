@@ -1,7 +1,7 @@
 import textwrap
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, FrozenSet, Optional, Type, Iterator, Tuple
+from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation
@@ -18,7 +18,6 @@ from dbt_common.events.functions import fire_event
 
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
-    SnowflakeCatalogConfigChange,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableRefreshModeConfigChange,
@@ -67,21 +66,20 @@ class SnowflakeRelation(BaseRelation):
         return self.table_format == TableFormat.ICEBERG
 
     @classmethod
-    def is_transient(cls, model: Dict[str, Any]) -> bool:
+    def is_transient(cls, model: RelationConfig) -> bool:
         """
         Always supply transient on table create DDL unless user specifically sets
         transient to false or unset.
 
         Args:
-            model: A RelationConfig object as a dict.
+            model (RelationConfig): `config.model` (not `model`) from the jinja context.
 
         Returns:
             True if the user has set it to True or if the user has explicitly unset it.
         """
-        config = model["config"]
-        if config.get("table_format") == "iceberg":
+        if model.config.get("table_format") == "iceberg":
             return False
-        return config.get("transient", False) or config.get("transient", True)  # type:ignore
+        return model.config.get("transient", False) or model.config.get("transient", True)
 
     @classproperty
     def DynamicTable(cls) -> str:
@@ -134,12 +132,6 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
-            )
-
-        if new_dynamic_table.catalog != existing_dynamic_table.catalog:
-            config_change_collection.catalog = SnowflakeCatalogConfigChange(
-                action=RelationConfigChangeAction.create,  # type:ignore
-                context=new_dynamic_table.catalog,
             )
 
         if config_change_collection.has_changes:

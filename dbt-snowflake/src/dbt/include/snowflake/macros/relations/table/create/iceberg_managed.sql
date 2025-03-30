@@ -11,7 +11,7 @@
     {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
 {%- endif -%}
 
-{%- set _catalog = adapter.build_catalog_relation(model) -%}
+{%- set catalog = adapter.build_catalog_relation(config.model) -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
@@ -28,29 +28,29 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', _catalog.cluster_by, '(', '') }}
-    {{ optional('external_volume', _catalog.external_volume, "'") }}
+    {{ optional('cluster by', catalog.cluster_by, '(', '') }}
+    {{ optional('external_volume', catalog.external_volume, "'") }}
     catalog = 'snowflake'
-    base_location = '{{ _catalog.base_location }}'
+    base_location = '{{ catalog.base_location }}'
     {% if copy_grants %}copy grants{% endif %}
 as (
-    {%- if _catalog.cluster_by is not none -%}
+    {%- if catalog.cluster_by is not none -%}
     select * from (
         {{ compiled_code }}
     )
     order by (
-        {{ _catalog.cluster_by }}
+        {{ catalog.cluster_by }}
     )
     {%- else -%}
     {{ compiled_code }}
     {%- endif %}
 );
 
-{% if _catalog.cluster_by is not none -%}
-alter iceberg table {{ relation }} cluster by ({{ _catalog.cluster_by }});
+{% if catalog.cluster_by is not none -%}
+alter iceberg table {{ relation }} cluster by ({{ catalog.cluster_by }});
 {%- endif -%}
 
-{% if _catalog.automatic_clustering and _catalog.cluster_by is not none %}
+{% if catalog.automatic_clustering and catalog.cluster_by is not none %}
 alter iceberg table {{ relation }} resume recluster;
 {%- endif -%}
 
