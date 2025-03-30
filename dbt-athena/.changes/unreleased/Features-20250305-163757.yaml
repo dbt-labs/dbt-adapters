@@ -1,0 +1,6 @@
+kind: Features
+body: Implement microbatch incremental strategy
+time: 2025-03-05T16:37:57.062511-06:00
+custom:
+  Author: QMalcolm
+  Issue: "409"
