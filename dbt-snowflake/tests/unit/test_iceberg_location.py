@@ -1,4 +1,5 @@
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 
@@ -13,15 +14,15 @@ def fake_integration() -> IcebergManagedCatalogIntegration:
     return IcebergManagedCatalogIntegration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
 
 
-model_base = {
-    "database": "my_database",
-    "schema": "my_schema",
-    "alias": "my_table",
-    "config": {
+model_base = SimpleNamespace(
+    database="my_database",
+    schema="my_schema",
+    identifier="my_table",
+    config={
         "catalog": "snowflake",
         "external_volume": "s3_iceberg_snow",
     },
-}
+)
 
 
 @pytest.mark.parametrize(
@@ -52,6 +53,6 @@ model_base = {
 def test_iceberg_base_location_managed(fake_integration, config, expected):
     """Test when base_location_root and base_location_subpath are provided"""
     model = deepcopy(model_base)
-    model["config"].update(config)
+    model.config.update(config)
     relation = fake_integration.build_relation(model)
     assert relation.base_location == expected

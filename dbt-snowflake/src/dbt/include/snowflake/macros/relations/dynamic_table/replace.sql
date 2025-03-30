@@ -16,7 +16,7 @@
     {%- set dynamic_table = relation.from_config(config.model) -%}
     {%- set catalog_integration = adapter.get_catalog_integration_from_model(config.model) -%}
 
-    {%- if catalog is None -%}
+    {%- if catalog is none -%}
         {{ snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) }}
     {%- elif catalog_integration.catalog_type == 'iceberg_managed' -%}
         {{ snowflake__replace_dynamic_table_iceberg_managed_sql(dynamic_table, relation, catalog, sql) }}
