@@ -23,6 +23,7 @@ class TestIcebergTableBuilds:
             "iceberg_tablec.sql": models._MODEL_BASIC_ICEBERG_MODEL_WITH_PATH_SUBPATH,
             "table_built_on_iceberg_table.sql": models._MODEL_BUILT_ON_ICEBERG_TABLE,
             "dynamic_table.sql": models._MODEL_BASIC_DYNAMIC_TABLE_MODEL,
+            "dynamic_table_builtin.sql": models._MODEL_BASIC_DYNAMIC_TABLE_ICEBERG_MODEL,
             "dynamic_tableb.sql": models._MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_PATH,
             "dynamic_tablec.sql": models._MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_PATH_SUBPATH,
             "dynamic_tabled.sql": models._MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_SUBPATH,
@@ -30,7 +31,7 @@ class TestIcebergTableBuilds:
 
     def test_iceberg_tables_build_and_can_be_referred(self, project):
         run_results = run_dbt()
-        assert len(run_results) == 11
+        assert len(run_results) == 12
 
 
 class TestIcebergTableTypeBuildsOnExistingTable:
