@@ -77,6 +77,8 @@ class SnowflakeRelation(BaseRelation):
         Returns:
             True if the user has set it to True or if the user has explicitly unset it.
         """
+        if not model.config:
+            return False
         if model.config.get("table_format") == "iceberg":
             return False
         return model.config.get("transient", False) or model.config.get("transient", True)

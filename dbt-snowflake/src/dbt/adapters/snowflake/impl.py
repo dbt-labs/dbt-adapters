@@ -97,7 +97,9 @@ class SnowflakeAdapter(SQLAdapter):
     def get_catalog_integration_from_model(
         self, model: RelationConfig
     ) -> Optional[CatalogIntegration]:
-        if catalog_name := model.config.get("catalog"):
+        if not model.config:
+            return None
+        elif catalog_name := model.config.get("catalog"):
             return self.get_catalog_integration(catalog_name)
         elif model.config.get("table_format") == "iceberg":
             return self.get_catalog_integration("snowflake")
@@ -466,7 +468,7 @@ CALL {proc_name}();
         }
 
     @available
-    def build_catalog_relation(self, model: RelationConfig) -> CatalogRelation:
+    def build_catalog_relation(self, model: RelationConfig) -> Optional[CatalogRelation]:
         """
         Builds a relation for a given configuration.
 
@@ -480,6 +482,8 @@ CALL {proc_name}();
         Returns:
             Any: The constructed relation object generated through the catalog integration and parser
         """
+        if not model.config:
+            return None
         catalog_name = model.config.get("catalog", "snowflake")
         catalog_integration = self.get_catalog_integration(catalog_name)
         return catalog_integration.build_relation(model)
