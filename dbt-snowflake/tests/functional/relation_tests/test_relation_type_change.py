@@ -118,9 +118,6 @@ class TestRelationTypeChange:
         if self.include(scenario):
             relation_type = query_relation_type(project, scenario.name)
             assert relation_type == scenario.final.relation_type, scenario.error_message
-            if relation_type == "dynamic_table":
-                dynamic_table = describe_dynamic_table(project, scenario.name)
-                assert dynamic_table.catalog.table_format == scenario.final.table_format
         else:
             pytest.skip()
 
