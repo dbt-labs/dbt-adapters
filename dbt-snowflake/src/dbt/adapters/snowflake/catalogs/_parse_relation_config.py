@@ -5,13 +5,18 @@ from dbt.adapters.contracts.relation import RelationConfig
 
 
 def external_volume(model: RelationConfig) -> Optional[str]:
-    return model.config.get("external_volume")
+    if model.config:
+        return model.config.get("external_volume")
+    return None
 
 
 def base_location(model: RelationConfig) -> str:
-    config = model.config
-    prefix = config.get("base_location_root") or "_dbt"  # allow users to pass in None
-    subpath = config.get("base_location_subpath")
+    if config := model.config:
+        prefix = config.get("base_location_root") or "_dbt"  # allow users to pass in None
+        subpath = config.get("base_location_subpath")
+    else:
+        prefix = "_dbt"
+        subpath = None
 
     path = f"{prefix}/{model.schema}/{model.identifier}"
     if subpath:
@@ -21,6 +26,9 @@ def base_location(model: RelationConfig) -> str:
 
 
 def cluster_by(model: RelationConfig) -> Optional[str]:
+    if not model.config:
+        return None
+
     fields = model.config.get("cluster_by")
     if isinstance(fields, Iterable):
         return ", ".join(fields)
@@ -32,4 +40,6 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
 
 
 def automatic_clustering(model: RelationConfig) -> bool:
-    return model.config.get("automatic_clustering", False)
+    if model.config:
+        return model.config.get("automatic_clustering", False)
+    return False
