@@ -96,6 +96,19 @@ _MODEL_BASIC_DYNAMIC_TABLE_MODEL = """
 select * from {{ ref('first_table') }}
 """
 
+_MODEL_BASIC_DYNAMIC_TABLE_ICEBERG_MODEL = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 minute',
+    refresh_mode='INCREMENTAL',
+    catalog='snowflake',
+    external_volume='s3_iceberg_snow',
+) }}
+
+select * from {{ ref('first_table') }}
+"""
+
 _MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_PATH = """
 {{
   config(
