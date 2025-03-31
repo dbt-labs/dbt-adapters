@@ -1,5 +1,6 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
   {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
+  {% set is_microbatch = raw_strategy == 'microbatch' %}
   {% set table_type = config.get('table_type', default='hive') | lower %}
   {% set model_language = model['language'] %}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
@@ -30,9 +31,19 @@
                                              database=database) %}
   {% set tmp_relation = make_temp_relation(target_relation, suffix=tmp_table_suffix, temp_schema=temp_schema) %}
 
-  -- If no partitions are used with insert_overwrite, we fall back to append mode.
+
   {% if partitioned_by is none and strategy == 'insert_overwrite' %}
-    {% set strategy = 'append' %}
+    {% if is_microbatch %}
+      -- If no partitions are used with insert_overwrite microbatch, raise an error.
+      {% set missing_partition_key_microbatch_msg -%}
+        dbt-athena 'microbatch' incremental strategy for hive tables requires a `partitioned_by` config.
+        Ensure you are using a `partitioned_by` column that is of grain {{ config.get('batch_size') }}.
+      {%- endset %}
+      {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
+    {% else %}
+      -- If no partitions are used with insert_overwrite, we fall back to append mode.
+      {% set strategy = 'append' %}
+    {% endif %}
   {% endif %}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
@@ -41,6 +52,8 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% set to_drop = [] %}
+
+  -- Relation doesn't exist, do full build --
   {% if existing_relation is none %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
     {%- if model_language == 'python' -%}
@@ -49,8 +62,10 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  -- must use s3_data_naming schema_table_unique in order to support high availability
-  -- on a full fresh for an incremental iceberg table
+
+  -- Running in full refresh, support High Availability for Iceberg table type --
+  -- Must use s3_data_naming schema_table_unique in order to support high availability --
+  -- on a full fresh for an incremental iceberg table --
   {% elif should_full_refresh() and table_type == 'iceberg' and s3_data_naming == 'schema_table_unique' %}
     -- create a new tmp_relation that has its s3 path set to the target location path
     -- except with a unique UUID
@@ -95,6 +110,8 @@
     {%- do drop_relation(relation_bkp) -%}
 
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
+
+  -- Running in full refresh, drop existing relation, and do full build --
   {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
@@ -104,7 +121,9 @@
       {% endcall %}
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
-  {% elif partitioned_by is not none and strategy == 'insert_overwrite' %}
+
+  -- Insert Overwrite Strategy --
+  {% elif strategy in ("insert_overwrite") %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
@@ -120,6 +139,8 @@
       )
     %}
     {% do to_drop.append(tmp_relation) %}
+
+  -- Append Strategy --
   {% elif strategy == 'append' %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
@@ -135,22 +156,28 @@
       )
     %}
     {% do to_drop.append(tmp_relation) %}
+
+  -- Iceberge Merge Stategy --
   {% elif strategy == 'merge' and table_type == 'iceberg' %}
     {% set unique_key = config.get('unique_key') %}
     {% set incremental_predicates = config.get('incremental_predicates') %}
     {% set delete_condition = config.get('delete_condition') %}
     {% set update_condition = config.get('update_condition') %}
     {% set insert_condition = config.get('insert_condition') %}
-    {% set empty_unique_key -%}
-      Merge strategy must implement unique_key as a single column or a list of columns.
-    {%- endset %}
+    {% if is_microbatch %}
+      {% set stategy_error_msg = 'Microbatch strategy for iceberg tables' %}
+    {% else %}
+      {% set stategy_error_msg = 'Merge strategy' %}
+    {% endif %}
+
+    -- Raise error if unique_key is not set
     {% if unique_key is none %}
+      {% set empty_unique_key = stategy_error_msg ~ ' must implement unique_key as a single column or a list of columns.' %}
       {% do exceptions.raise_compiler_error(empty_unique_key) %}
     {% endif %}
+
     {% if incremental_predicates is not none %}
-      {% set inc_predicates_not_list -%}
-        Merge strategy must implement incremental_predicates as a list of predicates.
-      {%- endset %}
+      {% set inc_predicates_not_list = stategy_error_msg ~ ' must implement incremental_predicates as a list of predicates when provided.' %}
       {% if not adapter.is_list(incremental_predicates) %}
         {% do exceptions.raise_compiler_error(inc_predicates_not_list) %}
       {% endif %}
