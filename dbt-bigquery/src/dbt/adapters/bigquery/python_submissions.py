@@ -35,10 +35,9 @@ class _BigQueryPythonHelper(PythonJobHelper):
     def __init__(self, parsed_model: Dict, credentials: BigQueryCredentials) -> None:
         self._storage_client = create_gcs_client(credentials)
         self._project = credentials.execution_project
-        # TODO(jialuo): Use more generic naming "python_compute_region".
-        self._region = credentials.dataproc_region
+        self._region = credentials.compute_region
         # validate all additional stuff for python is set
-        for required_config in ["dataproc_region", "gcs_bucket"]:
+        for required_config in ["compute_region", "gcs_bucket"]:
             if not getattr(credentials, required_config):
                 raise ValueError(
                     f"Need to supply {required_config} in profile to submit python job"

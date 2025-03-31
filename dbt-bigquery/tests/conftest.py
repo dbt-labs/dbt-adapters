@@ -31,7 +31,7 @@ def oauth_target():
         "method": "oauth",
         "threads": 1,
         "job_retries": 2,
-        "dataproc_region": os.getenv("DATAPROC_REGION"),
+        "compute_region": os.getenv("COMPUTE_REGION"),
         "dataproc_cluster_name": os.getenv("DATAPROC_CLUSTER_NAME"),
         "gcs_bucket": os.getenv("GCS_BUCKET"),
     }
@@ -51,7 +51,7 @@ def service_account_target():
         "project": project_id,
         "keyfile_json": credentials,
         # following 3 for python model
-        "dataproc_region": os.getenv("DATAPROC_REGION"),
+        "compute_region": os.getenv("COMPUTE_REGION"),
         "dataproc_cluster_name": os.getenv(
             "DATAPROC_CLUSTER_NAME"
         ),  # only needed for cluster submission method
