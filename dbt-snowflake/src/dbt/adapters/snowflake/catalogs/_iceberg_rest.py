@@ -4,12 +4,29 @@ from typing import Any, Dict, Optional
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
+from dbt.adapters.snowflake.catalogs._parse_relation_config import (
+    auto_refresh,
+    catalog_namespace,
+    catalog_table,
+    external_volume,
+    replace_invalid_characters,
+)
+
 
 @dataclass
 class IcebergRESTCatalogRelation:
-    base_location: str
-    catalog_name: str
+    """
+    Represents a Snowflake Iceberg REST or AWS Glue catalog relation:
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-aws-glue
+    """
+
+    catalog_table: str
+    catalog_name: Optional[str] = None
+    catalog_namespace: Optional[str] = None
     external_volume: Optional[str] = None
+    replace_invalid_characters: bool = False
+    auto_refresh: bool = False
     table_format: str = "iceberg"
 
 
@@ -70,26 +87,35 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         super().__init__(config)
         if config.adapter_properties:
-            self.namespace = config.adapter_properties.get("namespace")
+            self.catalog_namespace = config.adapter_properties.get("catalog_namespace")
+            self.replace_invalid_characters = config.adapter_properties.get(
+                "replace_invalid_characters"
+            )
+            self.auto_refresh = config.adapter_properties.get("auto_refresh")
+        else:
+            self.catalog_namespace = None
+            self.replace_invalid_characters = None
+            self.auto_refresh = None
 
-    def build_relation(self, config: RelationConfig) -> IcebergRESTCatalogRelation:
+    def build_relation(self, model: RelationConfig) -> IcebergRESTCatalogRelation:
+
+        # booleans need to be handled explicitly since False is "None-sey"
+        _replace_invalid_characters = replace_invalid_characters(model)
+        if _replace_invalid_characters is None:
+            _replace_invalid_characters = self.replace_invalid_characters
+
+        _auto_refresh = auto_refresh(model)
+        if _auto_refresh is None:
+            _auto_refresh = self.auto_refresh
+
         return IcebergRESTCatalogRelation(
-            base_location=self.__base_location(config),
-            external_volume=config.config.extra.get("external_volume", self.external_volume),
+            catalog_table=catalog_table(model),
             catalog_name=self.catalog_name,
+            catalog_namespace=catalog_namespace(model) or self.catalog_namespace,
+            external_volume=external_volume(model) or self.external_volume,
+            replace_invalid_characters=_replace_invalid_characters,
+            auto_refresh=_auto_refresh,
         )
-
-    @staticmethod
-    def __base_location(config: RelationConfig) -> str:
-        # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
-        prefix = config.config.extra.get("base_location_root", "_dbt")
-
-        base_location = f"{prefix}/{config.schema}/{config.identifier}"
-
-        if subpath := config.config.extra.get("base_location_subpath"):
-            base_location += f"/{subpath}"
-
-        return base_location
 
 
 class IcebergAWSGlueCatalogIntegration(IcebergRESTCatalogIntegration):
