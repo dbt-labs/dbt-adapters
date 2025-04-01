@@ -43,6 +43,8 @@ from dbt.adapters.spark.python_submissions import (
     AllPurposeClusterPythonJobHelper,
     SparkSessionBasedClusterPythonJobHelper,
 )
+from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
+
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.contracts.relation import RelationType, RelationConfig
 from dbt_common.clients.agate_helper import DEFAULT_TYPE_TESTER
@@ -122,6 +124,11 @@ class SparkAdapter(SQLAdapter):
         ConstraintType.primary_key: ConstraintSupport.NOT_ENFORCED,
         ConstraintType.foreign_key: ConstraintSupport.NOT_ENFORCED,
     }
+
+    # CCCS
+    _capabilities = CapabilityDict(
+        {Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full)}
+    )
 
     Relation: TypeAlias = SparkRelation
     RelationInfo = Tuple[str, str, str]
@@ -452,6 +459,43 @@ class SparkAdapter(SQLAdapter):
         for relation in self.list_relations(database, schema):
             logger.debug("Getting table schema for relation {}", str(relation))
             columns.extend(self._get_columns_for_catalog(relation))
+
+        import agate
+
+        return agate.Table.from_object(columns, column_types=DEFAULT_TYPE_TESTER)
+
+    # CCCS
+    def _get_one_catalog_by_relations(
+        self,
+        information_schema: InformationSchema,
+        relations: List[SparkRelation],
+        used_schemas: FrozenSet[Tuple[str, str]],
+    ) -> "agate.Table":
+        """
+        Overwrite of _get_one_catalog_by_relations for Spark, in order to prevent listing
+        all tables in schemas and then finding their columns.
+        This function is invoked by Adapter.get_catalog_by_relations.
+
+        Note CCCS: I'm hard coding the fact that relations are tables and of type Iceberg.
+        For some reason the SparkRelation provided do not state what is there `type`
+        nor does it state if they are huidi, delta or iceberg.
+        """
+
+        columns: List[Dict[str, Any]] = []
+        for relation in relations:
+            r: BaseRelation = self.Relation.create(
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
+                type=RelationType.Table,
+                information=relation.information,
+                is_delta=False,
+                is_iceberg=True,
+                is_hudi=False,
+            )
+
+            logger.debug("Getting table schema for relation {}", str(r))
+            columns.extend(self._get_columns_for_catalog(r))
 
         import agate
 
