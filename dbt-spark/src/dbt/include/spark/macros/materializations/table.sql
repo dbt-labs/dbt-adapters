@@ -103,7 +103,7 @@ else:
   msg = f"{type(df)} is not a supported type for dbt Python materialization"
   raise Exception(msg)
 
-{#- CCCS -#}
+{# CCCS #}
 if {{ temporary }}:
   df.createOrReplaceTempView("{{ target_relation }}")
 else:
