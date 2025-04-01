@@ -18,9 +18,24 @@
   {%- set existing_relation = load_relation(this) -%}
   {% set tmp_relation = this.incorporate(path = {"identifier": this.identifier ~ '__dbt_tmp'}) -%}
 
+  {#-- CCCS --#}
+  {%- set use_temporary_view = True -%}
   {#-- for SQL model we will create temp view that doesn't have database and schema --#}
-  {%- if language == 'sql'-%}
+  {%- if language == 'sql' -%}
     {%- set tmp_relation = tmp_relation.include(database=false, schema=false) -%}
+  {%- endif -%}
+
+  {#-- CCCS when using the spark_session_based_cluster python submission method
+     we can create views which can then be used by spark later on.
+     Thus here we pass to the py_write_table the temporary flag.
+     --#}
+  {%- if language == 'python' -%}
+    {%- if config.get('submission_method') == 'spark_session_based_cluster' -%}
+      {%- set tmp_relation = tmp_relation.include(database=false, schema=false) -%}
+    {%- else -%}
+      {#-- Other submission method are unable to use temporary views, they create actual tables --#}
+      {%- set use_temporary_view = False -%}
+    {%- endif -%}
   {%- endif -%}
 
   {#-- Set Overwrite Mode --#}
@@ -53,13 +68,15 @@
   {%- else -%}
     {#-- Relation must be merged --#}
     {%- call statement('create_tmp_relation', language=language) -%}
-      {{ create_table_as(True, tmp_relation, compiled_code, language) }}
+      {#-- CCCS --#}
+      {{ create_table_as(use_temporary_view, tmp_relation, compiled_code, language) }}
     {%- endcall -%}
     {%- do process_schema_changes(on_schema_change, tmp_relation, existing_relation) -%}
     {%- call statement('main') -%}
       {{ dbt_spark_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
     {%- endcall -%}
-    {%- if language == 'python' -%}
+    {#-- CCCS Add a check to see if a real table was created if so go ahead and delete this table. --#}
+    {%- if language == 'python' and not use_temporary_view -%}
       {#--
       This is yucky.
       See note in dbt-spark/dbt/include/spark/macros/adapters.sql

@@ -177,7 +177,12 @@
     TODO: Deep dive into spark sessions to see if we can reuse a single session for an entire
     dbt invocation.
      --#}
-    {{ py_write_table(compiled_code=compiled_code, target_relation=relation) }}
+
+    {#-- CCCS when using the spark_session_based_cluster python submission method
+     we can create views which can then be used by spark later on.
+     Thus here we pass to the py_write_table the temporary
+     --#}
+    {{ py_write_table(compiled_code=compiled_code, target_relation=relation, temporary=temporary) }}
   {%- endif -%}
 {%- endmacro -%}
 
