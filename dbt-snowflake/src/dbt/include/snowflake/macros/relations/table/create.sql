@@ -9,8 +9,6 @@
             {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'ICEBERG_MANAGED' -%}
             {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
-        {%- elif catalog_integration.catalog_type in ['iceberg_rest', 'aws_glue'] -%}
-            {{ snowflake__create_table_iceberg_rest_sql(relation) }}
         {%- else -%}
             {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
