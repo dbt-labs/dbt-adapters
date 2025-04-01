@@ -119,7 +119,7 @@ class BigQueryCredentials(Credentials):
         "target_dataset": "target_schema",
         "retries": "job_retries",
         "timeout_seconds": "job_execution_timeout_seconds",
-        "compute_region": "dataproc_region"
+        "dataproc_region": "compute_region"
     }
 
     def __post_init__(self):
