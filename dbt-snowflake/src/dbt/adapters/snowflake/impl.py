@@ -1,10 +1,11 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration
+from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
@@ -24,14 +25,8 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.catalogs import (
-    CATALOG_INTEGRATIONS,
-    DEFAULT_ICEBERG_CATALOG_INTEGRATION,
-)
-from dbt.adapters.snowflake.relation_configs import (
-    SnowflakeRelationType,
-    TableFormat,
-)
+from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS
+from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -91,19 +86,39 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
-        self.add_catalog_integration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
+        self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def add_catalog_integration(
+        self, catalog_integration: CatalogIntegrationConfig
+    ) -> CatalogIntegration:
+        # Snowflake uppercases everything in their metadata tables
+        catalog_integration = deepcopy(catalog_integration)
+        catalog_integration.name = catalog_integration.name.upper()
+        return super().add_catalog_integration(catalog_integration)
+
+    def get_catalog_integration(self, name: str) -> CatalogIntegration:
+        # Snowflake uppercases everything in their metadata tables
+        return super().get_catalog_integration(name.upper())
 
     @available
     def get_catalog_integration_from_model(
         self, model: RelationConfig
     ) -> Optional[CatalogIntegration]:
+        catalog_name = self.get_catalog_integration_name_from_model(model)
+        if catalog_name and catalog_name != constants.DEFAULT_CATALOG.name:
+            return self.get_catalog_integration(catalog_name)
+        return None
+
+    @available
+    @staticmethod
+    def get_catalog_integration_name_from_model(model: RelationConfig) -> Optional[str]:
         if not model.config:
             return None
         elif catalog_name := model.config.get("catalog"):
-            return self.get_catalog_integration(catalog_name)
-        elif model.config.get("table_format") == "iceberg":
-            return self.get_catalog_integration("snowflake")
-        return None
+            return catalog_name.upper()
+        elif model.config.get("table_format") == constants.ICEBERG_TABLE_FORMAT:
+            return constants.DEFAULT_ICEBERG_CATALOG.name.upper()
+        return constants.DEFAULT_CATALOG.name.upper()
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -291,17 +306,17 @@ class SnowflakeAdapter(SQLAdapter):
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
         if self.behavior.enable_iceberg_materializations.no_warn:
-            columns.append("is_iceberg")
+            columns.append("catalog_name")
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         if self.behavior.enable_iceberg_materializations.no_warn:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+            database, schema, identifier, relation_type, is_dynamic, catalog = result
         else:
             database, schema, identifier, relation_type, is_dynamic = result
-            is_iceberg = "N"
+            catalog = constants.DEFAULT_CATALOG.name
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
@@ -311,8 +326,6 @@ class SnowflakeAdapter(SQLAdapter):
         if relation_type == self.Relation.Table and is_dynamic == "Y":
             relation_type = self.Relation.DynamicTable
 
-        table_format = TableFormat.ICEBERG if is_iceberg in ("Y", "YES") else TableFormat.DEFAULT
-
         quote_policy = {"database": True, "schema": True, "identifier": True}
 
         return self.Relation.create(
@@ -320,7 +333,7 @@ class SnowflakeAdapter(SQLAdapter):
             schema=schema,
             identifier=identifier,
             type=relation_type,
-            table_format=table_format,
+            catalog=catalog.upper() if catalog else constants.DEFAULT_CATALOG.name.upper(),
             quote_policy=quote_policy,
         )
 
@@ -454,18 +467,18 @@ CALL {proc_name}();
 
     @classmethod
     def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
-        table_format: Optional[str] = None
-        if (
-            config
-            and hasattr(config, "_extra")
-            and (relation_format := config._extra.get("table_format"))
-        ):
-            table_format = relation_format
-
-        return {
-            "adapter_type": "snowflake",
-            "table_format": table_format,
+        run_info = {
+            "adapter_type": constants.ADAPTER_TYPE,
+            "table_format": None,
         }
+
+        if config and hasattr(config, "_extra"):
+            if config._extra.get("catalog"):  # type:ignore
+                run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
+            elif table_format := config._extra.get("table_format"):  # type:ignore
+                run_info["table_format"] = table_format
+
+        return run_info
 
     @available
     def build_catalog_relation(self, model: RelationConfig) -> Optional[CatalogRelation]:
@@ -484,6 +497,6 @@ CALL {proc_name}();
         """
         if not model.config:
             return None
-        catalog_name = model.config.get("catalog", "snowflake")
+        catalog_name = model.config.get("catalog", constants.DEFAULT_ICEBERG_CATALOG.name)
         catalog_integration = self.get_catalog_integration(catalog_name)
         return catalog_integration.build_relation(model)

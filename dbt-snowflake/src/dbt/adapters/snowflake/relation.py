@@ -16,6 +16,7 @@ from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event
 
+from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
@@ -23,7 +24,6 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
-    TableFormat,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -32,7 +32,7 @@ from dbt.adapters.snowflake.relation_configs import (
 @dataclass(frozen=True, eq=False, repr=False)
 class SnowflakeRelation(BaseRelation):
     type: Optional[SnowflakeRelationType] = None
-    table_format: str = TableFormat.DEFAULT
+    catalog: str = constants.DEFAULT_CATALOG.name
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
     relation_configs = {
@@ -63,7 +63,7 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_iceberg_format(self) -> bool:
-        return self.table_format == TableFormat.ICEBERG
+        return self.catalog.upper() != constants.DEFAULT_CATALOG.name
 
     @classmethod
     def is_transient(cls, model: RelationConfig) -> bool:
@@ -79,7 +79,7 @@ class SnowflakeRelation(BaseRelation):
         """
         if not model.config:
             return False
-        if model.config.get("table_format") == "iceberg":
+        if model.config.get("catalog") or model.config.get("table_format") == "iceberg":
             return False
         return model.config.get("transient", False) or model.config.get("transient", True)
 
@@ -164,7 +164,7 @@ class SnowflakeRelation(BaseRelation):
 
     def get_ddl_prefix_for_alter(self) -> str:
         """All ALTER statements on Iceberg tables require an ICEBERG prefix"""
-        if self.is_iceberg_format or self.catalog == "snowflake":
+        if self.is_iceberg_format or self.catalog == constants.DEFAULT_ICEBERG_CATALOG.name:
             return "iceberg"
         else:
             return ""
@@ -181,7 +181,7 @@ class SnowflakeRelation(BaseRelation):
         external_volume = config.get("external_volume")  # type:ignore
         iceberg_ddl_predicates: str = f"""
         external_volume = '{external_volume}'
-        catalog = 'snowflake'
+        catalog = {constants.DEFAULT_ICEBERG_CATALOG.name}
         base_location = '{base_location}'
         """
         return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
@@ -193,29 +193,29 @@ class SnowflakeRelation(BaseRelation):
         )
 
         drop_table_for_iceberg_message: str = (
-            f"Dropping relation {old_relation} because it is a default format table "
-            f"and target relation {self} is an Iceberg format table."
+            f"Dropping relation {old_relation} because it is a standard table "
+            f"and target relation {self} is an Iceberg catalog table."
         )
 
         drop_iceberg_for_table_message: str = (
-            f"Dropping relation {old_relation} because it is an Iceberg format table "
-            f"and target relation {self} is a default format table."
+            f"Dropping relation {old_relation} because it is an Iceberg catalog table "
+            f"and target relation {self} is a standard table."
         )
 
-        # An existing view must be dropped for model to build into a table".
-        yield (not old_relation.is_table, drop_view_message)
+        # An existing view or dynamic table must be dropped for model to build into a table".
+        yield not old_relation.is_table, drop_view_message
         # An existing table must be dropped for model to build into an Iceberg table.
         yield (
-            old_relation.is_table
-            and not old_relation.is_iceberg_format
-            and self.is_iceberg_format,
+            (old_relation.is_table or old_relation.is_dynamic_table)
+            and old_relation.catalog == constants.DEFAULT_CATALOG.name
+            and self.catalog != constants.DEFAULT_CATALOG.name,
             drop_table_for_iceberg_message,
         )
         # existing Iceberg table must be dropped for model to build into a table.
         yield (
-            old_relation.is_table
-            and old_relation.is_iceberg_format
-            and not self.is_iceberg_format,
+            (old_relation.is_table or old_relation.is_dynamic_table)
+            and old_relation.catalog != constants.DEFAULT_CATALOG.name
+            and self.catalog == constants.DEFAULT_CATALOG.name,
             drop_iceberg_for_table_message,
         )
 

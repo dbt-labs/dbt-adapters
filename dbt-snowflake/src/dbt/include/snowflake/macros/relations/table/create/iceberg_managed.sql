@@ -30,7 +30,7 @@ create or replace iceberg table {{ relation }}
     {%- endif %}
     {{ optional('cluster by', catalog.cluster_by, '(', '') }}
     {{ optional('external_volume', catalog.external_volume, "'") }}
-    catalog = 'snowflake'
+    catalog = 'SNOWFLAKE'
     base_location = '{{ catalog.base_location }}'
     {% if copy_grants %}copy grants{% endif %}
 as (

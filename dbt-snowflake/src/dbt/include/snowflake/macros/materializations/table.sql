@@ -13,8 +13,8 @@
 	schema=schema,
 	database=database,
 	type='table',
-	table_format=config.get('table_format', 'default')
-    ) -%}
+	catalog=adapter.get_catalog_integration_name_from_model(config.model)
+   ) -%}
 
   {{ run_hooks(pre_hooks) }}
 
