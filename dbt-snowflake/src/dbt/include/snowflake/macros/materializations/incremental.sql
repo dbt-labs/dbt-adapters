@@ -71,8 +71,8 @@
 	schema=schema,
 	database=database,
 	type='table',
-	table_format=config.get('table_format', 'default')
-    ) -%}
+	catalog=adapter.get_catalog_integration_name_from_model(config.model)
+  ) -%}
 
   {% set existing_relation = load_relation(this) %}
 
@@ -109,9 +109,9 @@
       {{ create_table_as(False, target_relation, compiled_code, language) }}
     {%- endcall -%}
 
-  {% elif target_relation.table_format != existing_relation.table_format %}
+  {% elif target_relation.catalog != existing_relation.catalog %}
     {% do exceptions.raise_compiler_error(
-        "Unable to alter incremental model `" ~ target_relation.identifier  ~ "` to '" ~ target_relation.table_format ~ " table format due to Snowflake limitation. Please execute with --full-refresh to drop the table and recreate in new table format.'"
+        "Unable to update the catalog on incremental model `" ~ target_relation.identifier ~ "` from `" ~ existing_relation.catalog ~ "` to `" ~ target_relation.catalog ~ "` due to Snowflake limitation. Please execute with --full-refresh to drop the table and recreate in the new catalog.'"
       )
     %}
 

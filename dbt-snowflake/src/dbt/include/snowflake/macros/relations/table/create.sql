@@ -14,7 +14,7 @@
         {%- endif -%}
 
     {%- elif language == 'python' -%}
-        {%- if relation.is_iceberg_format %}
+        {%- if catalog_integration is not none %}
             {% do exceptions.raise_compiler_error('Iceberg is incompatible with Python models. Please use a SQL model for the iceberg format.') %}
         {%- else -%}
             {{ py_write_table(compiled_code, relation) }}

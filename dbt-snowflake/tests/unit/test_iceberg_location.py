@@ -3,15 +3,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from dbt.adapters.snowflake.catalogs import (
-    IcebergManagedCatalogIntegration,
-    DEFAULT_ICEBERG_CATALOG_INTEGRATION,
-)
+from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.catalogs import IcebergManagedCatalogIntegration
 
 
 @pytest.fixture
 def fake_integration() -> IcebergManagedCatalogIntegration:
-    return IcebergManagedCatalogIntegration(DEFAULT_ICEBERG_CATALOG_INTEGRATION)
+    return IcebergManagedCatalogIntegration(constants.DEFAULT_ICEBERG_CATALOG)
 
 
 model_base = SimpleNamespace(

@@ -18,7 +18,7 @@ from dbt.adapters.snowflake.catalogs._parse_relation_config import (
 @dataclass
 class IcebergManagedCatalogRelation:
     base_location: str
-    catalog_name: Optional[str] = "snowflake"
+    catalog_name: Optional[str] = "SNOWFLAKE"
     table_format: Optional[str] = "iceberg"
     external_volume: Optional[str] = None
     cluster_by: Optional[str] = None
@@ -26,7 +26,7 @@ class IcebergManagedCatalogRelation:
 
 
 class IcebergManagedCatalogIntegration(CatalogIntegration):
-    catalog_name = "snowflake"
+    catalog_name = "SNOWFLAKE"
     catalog_type = "iceberg_managed"
     table_format = "iceberg"
     allows_writes = True
