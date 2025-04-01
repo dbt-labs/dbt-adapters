@@ -186,6 +186,15 @@ config_materialized_incremental = """
   {{ config(materialized="incremental") }}
 """
 
+config_materialized_incremental_delete_insert = """
+  {{
+    config(materialized="incremental",
+           incremental_strategy='delete+insert',
+           unique_key=['id', 'name']
+    )
+  }}
+"""
+
 config_materialized_incremental_invalid_strategy = """
   {{ config(materialized="incremental", incremental_strategy="bad_strategy") }}
 """
@@ -221,6 +230,7 @@ ephemeral_with_cte_sql = config_materialized_ephemeral + model_ephemeral_with_ct
 ephemeral_view_sql = config_materialized_view + model_ephemeral
 ephemeral_table_sql = config_materialized_table + model_ephemeral
 incremental_sql = config_materialized_incremental + model_incremental
+incremental_delete_insert_sql = config_materialized_incremental_delete_insert + model_incremental
 incremental_invalid_strategy_sql = (
     config_materialized_incremental_invalid_strategy + model_incremental
 )
