@@ -52,7 +52,7 @@ class SSLConfigError(CompilationError):
 logger = AdapterLogger("Redshift")
 
 
-class RedshiftConnectionMethod(StrEnum):
+class RedshiftConnectionAuthenticator(StrEnum):
     DATABASE = "database"
     IAM = "iam"
     IAM_ROLE = "iam_role"
@@ -60,12 +60,12 @@ class RedshiftConnectionMethod(StrEnum):
     IAM_IDENTITY_CENTER_TOKEN = "oauth_token_identity_center"
 
     @classmethod
-    def uses_identity_center(cls, method: str) -> bool:
-        return method in (cls.IAM_IDENTITY_CENTER_BROWSER, cls.IAM_IDENTITY_CENTER_TOKEN)
+    def uses_identity_center(cls, authenticator: str) -> bool:
+        return authenticator in (cls.IAM_IDENTITY_CENTER_BROWSER, cls.IAM_IDENTITY_CENTER_TOKEN)
 
     @classmethod
-    def is_iam(cls, method: str) -> bool:
-        return not cls.uses_identity_center(method)
+    def is_iam(cls, authenticator: str) -> bool:
+        return not cls.uses_identity_center(authenticator)
 
 
 class UserSSLMode(StrEnum):
@@ -132,7 +132,7 @@ class RedshiftSSLConfig(dbtClassMixin, Replaceable):
 class RedshiftCredentials(Credentials):
     host: str
     port: Port
-    authenticator: str = RedshiftConnectionMethod.DATABASE
+    authenticator: str = RedshiftConnectionAuthenticator.DATABASE
     user: Optional[str] = None
     password: Optional[str] = None
     cluster_id: Optional[str] = field(
@@ -258,11 +258,11 @@ def get_connection_method(
     def __iam_kwargs(credentials) -> Dict[str, Any]:
 
         # iam True except for identity center methods
-        iam: bool = RedshiftConnectionMethod.is_iam(credentials.authenticator)
+        iam: bool = RedshiftConnectionAuthenticator.is_iam(credentials.authenticator)
         cluster_identifier: Optional[str]
         serverless_work_group: Optional[str]
         serverless_acct_id: Optional[str]
-        if RedshiftConnectionMethod.uses_identity_center(credentials.authenticator):
+        if RedshiftConnectionAuthenticator.uses_identity_center(credentials.authenticator):
             cluster_identifier = None
             serverless_work_group = None
             serverless_acct_id = None
@@ -404,18 +404,18 @@ def get_connection_method(
     # Head of function execution
     #
 
-    method_to_kwargs_function = {
+    authenticator_to_kwargs_function = {
         None: __database_kwargs,
-        RedshiftConnectionMethod.DATABASE: __database_kwargs,
-        RedshiftConnectionMethod.IAM: __iam_user_kwargs,
-        RedshiftConnectionMethod.IAM_ROLE: __iam_role_kwargs,
-        RedshiftConnectionMethod.IAM_IDENTITY_CENTER_BROWSER: __iam_idc_browser_kwargs,
-        RedshiftConnectionMethod.IAM_IDENTITY_CENTER_TOKEN: __iam_idc_token_kwargs,
+        RedshiftConnectionAuthenticator.DATABASE: __database_kwargs,
+        RedshiftConnectionAuthenticator.IAM: __iam_user_kwargs,
+        RedshiftConnectionAuthenticator.IAM_ROLE: __iam_role_kwargs,
+        RedshiftConnectionAuthenticator.IAM_IDENTITY_CENTER_BROWSER: __iam_idc_browser_kwargs,
+        RedshiftConnectionAuthenticator.IAM_IDENTITY_CENTER_TOKEN: __iam_idc_token_kwargs,
     }
 
     try:
         kwargs_function: Callable[[RedshiftCredentials], Dict[str, Any]] = (
-            method_to_kwargs_function[credentials.authenticator]
+            authenticator_to_kwargs_function[credentials.authenticator]
         )
     except KeyError:
         raise FailedToConnectError(
