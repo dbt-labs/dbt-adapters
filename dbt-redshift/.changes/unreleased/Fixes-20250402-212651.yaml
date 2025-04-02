@@ -1,0 +1,6 @@
+kind: Fixes
+body: Rename param `method` to `authenticator` in dbt-redshift
+time: 2025-04-02T21:26:51.718441+09:00
+custom:
+    Author: jx2lee
+    Issue: "620"
