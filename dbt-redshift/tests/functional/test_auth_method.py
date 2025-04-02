@@ -40,7 +40,7 @@ class TestDatabaseMethod(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "method": RedshiftConnectionMethod.DATABASE.value,
+            "authenticator": RedshiftConnectionMethod.DATABASE.value,
             "host": os.getenv("REDSHIFT_TEST_HOST"),
             "port": int(os.getenv("REDSHIFT_TEST_PORT")),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
@@ -56,7 +56,7 @@ class TestIAMUserMethodProfile(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "method": RedshiftConnectionMethod.IAM.value,
+            "authenticator": RedshiftConnectionMethod.IAM.value,
             "cluster_id": os.getenv("REDSHIFT_TEST_CLUSTER_ID"),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
             "iam_profile": os.getenv("REDSHIFT_TEST_IAM_USER_PROFILE"),
@@ -73,7 +73,7 @@ class TestIAMUserMethodExplicit(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "method": RedshiftConnectionMethod.IAM.value,
+            "authenticator": RedshiftConnectionMethod.IAM.value,
             "cluster_id": os.getenv("REDSHIFT_TEST_CLUSTER_ID"),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
             "access_key_id": os.getenv("REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID"),
