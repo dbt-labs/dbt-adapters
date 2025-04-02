@@ -1,0 +1,6 @@
+kind: Fixes
+body: Create indexes on the intermediate relation before the swap
+time: 2025-04-02T13:02:04.442441-06:00
+custom:
+    Author: dbeatty10 etx121
+    Issue: "966"
