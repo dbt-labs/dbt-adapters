@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from dbt.adapters.redshift.connections import RedshiftConnectionMethod
+from dbt.adapters.redshift.connections import RedshiftConnectionAuthenticator
 from dbt.tests.util import run_dbt
 
 
@@ -40,7 +40,7 @@ class TestDatabaseMethod(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "authenticator": RedshiftConnectionMethod.DATABASE.value,
+            "authenticator": RedshiftConnectionAuthenticator.DATABASE.value,
             "host": os.getenv("REDSHIFT_TEST_HOST"),
             "port": int(os.getenv("REDSHIFT_TEST_PORT")),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
@@ -56,7 +56,7 @@ class TestIAMUserMethodProfile(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "authenticator": RedshiftConnectionMethod.IAM.value,
+            "authenticator": RedshiftConnectionAuthenticator.IAM.value,
             "cluster_id": os.getenv("REDSHIFT_TEST_CLUSTER_ID"),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
             "iam_profile": os.getenv("REDSHIFT_TEST_IAM_USER_PROFILE"),
@@ -73,7 +73,7 @@ class TestIAMUserMethodExplicit(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "authenticator": RedshiftConnectionMethod.IAM.value,
+            "authenticator": RedshiftConnectionAuthenticator.IAM.value,
             "cluster_id": os.getenv("REDSHIFT_TEST_CLUSTER_ID"),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
             "access_key_id": os.getenv("REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID"),
@@ -95,7 +95,7 @@ class TestIAMRoleAuthProfile(AuthMethod):
     def dbt_profile_target(self):
         return {
             "type": "redshift",
-            "method": RedshiftConnectionMethod.IAM_ROLE.value,
+            "method": RedshiftConnectionAuthenticator.IAM_ROLE.value,
             "cluster_id": os.getenv("REDSHIFT_TEST_CLUSTER_ID"),
             "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
             "iam_profile": os.getenv("REDSHIFT_TEST_IAM_ROLE_PROFILE"),
