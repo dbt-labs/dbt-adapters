@@ -141,7 +141,7 @@ class RedshiftCredentials(Credentials):
     secret_access_key: Optional[str] = None
 
     #
-    # IAM identity center methods
+    # IAM identity center authenticators
     #
 
     # browser
@@ -202,7 +202,7 @@ def get_connection_method(
     credentials: RedshiftCredentials,
 ) -> Callable[[], redshift_connector.Connection]:
     #
-    # Helper Methods
+    # Helper authenticators
     #
     def __validate_required_fields(method_name: str, required_fields: Tuple[str, ...]):
         missing_fields: List[str] = [
@@ -232,7 +232,7 @@ def get_connection_method(
 
     def __iam_kwargs(credentials) -> Dict[str, Any]:
 
-        # iam True except for identity center methods
+        # iam True except for identity center authenticators
         iam: bool = RedshiftConnectionAuthenticator.is_iam(credentials.authenticator)
         cluster_identifier: Optional[str]
         if is_serverless(credentials) or RedshiftConnectionAuthenticator.uses_identity_center(
