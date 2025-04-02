@@ -61,7 +61,7 @@ class AuthMethod(TestCase):
 class TestInvalidMethod(AuthMethod):
     def test_invalid_auth_method(self):
         # we have to set method this way, otherwise it won't validate
-        self.config.credentials.method = "badmethod"
+        self.config.credentials.authenticator = "badmethod"
         with self.assertRaises(FailedToConnectError) as context:
             connect_method_factory = get_connection_method(self.config.credentials)
             connect_method_factory.get_connect_method()
@@ -71,7 +71,7 @@ class TestInvalidMethod(AuthMethod):
     def test_missing_region_failure(self):
         # Failure test with no region
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host="doesnotexist.1233_no_region",
             region=None,
@@ -101,7 +101,7 @@ class TestInvalidMethod(AuthMethod):
     def test_invalid_region_failure(self):
         # Invalid region test
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host="doesnotexist.1233_no_region.us-not-a-region-1",
             region=None,
@@ -148,7 +148,7 @@ class TestDatabaseMethod(AuthMethod):
 
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_explicit_auth_method(self):
-        self.config.method = "database"
+        self.config.authenticator = "database"
 
         connection = self.adapter.acquire_connection("dummy")
         connection.handle
@@ -224,7 +224,7 @@ class TestIAMUserMethod(AuthMethod):
         config_from_parts_or_dicts(self.config, profile_cfg)
 
     def test_no_cluster_id(self):
-        self.config.credentials = self.config.credentials.replace(method="iam")
+        self.config.credentials = self.config.credentials.replace(authenticator="iam")
         with self.assertRaises(FailedToConnectError) as context:
             connect_method_factory = get_connection_method(self.config.credentials)
             connect_method_factory.get_connect_method()
@@ -234,7 +234,7 @@ class TestIAMUserMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_default(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             cluster_id="my_redshift",
             host="thishostshouldnotexist.test.us-east-1",
         )
@@ -263,7 +263,7 @@ class TestIAMUserMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             cluster_id="my_redshift",
             iam_profile="test",
             host="thishostshouldnotexist.test.us-east-1",
@@ -294,7 +294,7 @@ class TestIAMUserMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_explicit(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             cluster_id="my_redshift",
             host="thishostshouldnotexist.test.us-east-1",
             access_key_id="my_access_key_id",
@@ -365,7 +365,7 @@ class TestIAMUserMethodServerless(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_default_region(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host="doesnotexist.1233.us-east-2.redshift-serverless.amazonaws.com",
         )
@@ -395,7 +395,7 @@ class TestIAMUserMethodServerless(AuthMethod):
     def test_profile_explicit_serverless(self):
         host = "doesnotexist.custom-domain.com"
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host=host,
             is_serverless=True,
@@ -426,7 +426,7 @@ class TestIAMUserMethodServerless(AuthMethod):
     def test_profile_explicit_region(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host="doesnotexist.1233.redshift-serverless.amazonaws.com",
             region="us-east-2",
@@ -456,7 +456,7 @@ class TestIAMUserMethodServerless(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_invalid_serverless(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             iam_profile="test",
             host="doesnotexist.1233.us-east-2.redshift-srvrlss.amazonaws.com",
         )
@@ -485,7 +485,7 @@ class TestIAMUserMethodServerless(AuthMethod):
 class TestIAMRoleMethod(AuthMethod):
 
     def test_no_cluster_id(self):
-        self.config.credentials = self.config.credentials.replace(method="iam_role")
+        self.config.credentials = self.config.credentials.replace(authenticator="iam_role")
         with self.assertRaises(FailedToConnectError) as context:
             connect_method_factory = get_connection_method(self.config.credentials)
             connect_method_factory.get_connect_method()
@@ -495,7 +495,7 @@ class TestIAMRoleMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_default(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             cluster_id="my_redshift",
         )
         connection = self.adapter.acquire_connection("dummy")
@@ -523,7 +523,7 @@ class TestIAMRoleMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             cluster_id="my_redshift",
             iam_profile="test",
         )
@@ -557,7 +557,7 @@ class TestIAMRoleMethodServerless(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_default_region(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             iam_profile="iam_profile_test",
             host="doesnotexist.1233.us-east-2.redshift-serverless.amazonaws.com",
         )
@@ -587,7 +587,7 @@ class TestIAMRoleMethodServerless(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_ignore_cluster(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             iam_profile="iam_profile_test",
             host="doesnotexist.1233.us-east-2.redshift-serverless.amazonaws.com",
             cluster_id="my_redshift",
@@ -619,7 +619,7 @@ class TestIAMRoleMethodServerless(AuthMethod):
     def test_profile_explicit_region(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             iam_profile="iam_profile_test",
             host="doesnotexist.1233.redshift-serverless.amazonaws.com",
             region="us-east-2",
@@ -650,7 +650,7 @@ class TestIAMRoleMethodServerless(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_invalid_serverless(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam_role",
+            authenticator="iam_role",
             iam_profile="iam_profile_test",
             host="doesnotexist.1233.us-east-2.redshift-srvrlss.amazonaws.com",
         )
@@ -684,7 +684,7 @@ class TestIAMIdcBrowser(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_idc_browser_all_fields(self):
         self.config.credentials = self.config.credentials.replace(
-            method="browser_identity_center",
+            authenticator="browser_identity_center",
             idc_region="us-east-1",
             issuer_url="https://identitycenter.amazonaws.com/ssoins-randomchars",
             idc_client_display_name="display name",
@@ -721,7 +721,7 @@ class TestIAMIdcBrowser(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_profile_idc_browser_required_fields_only(self):
         self.config.credentials = self.config.credentials.replace(
-            method="browser_identity_center",
+            authenticator="browser_identity_center",
             idc_region="us-east-1",
             issuer_url="https://identitycenter.amazonaws.com/ssoins-randomchars",
             host="doesnotexist.1233.us-east-2.redshift-serverless.amazonaws.com",
@@ -754,7 +754,7 @@ class TestIAMIdcBrowser(AuthMethod):
 
     def test_invalid_adapter_missing_fields(self):
         self.config.credentials = self.config.credentials.replace(
-            method="browser_identity_center",
+            authenticator="browser_identity_center",
             idp_listen_port=1111,
             idc_client_display_name="my display",
         )
@@ -782,7 +782,7 @@ class TestIAMIdcBrowser(AuthMethod):
             )
 
         assert (
-            "'idc_region', 'issuer_url' field(s) are required for 'browser_identity_center' credentials method"
+            "'idc_region', 'issuer_url' field(s) are required for 'browser_identity_center' credentials authenticator"
             in context.exception.msg
         )
 
@@ -796,7 +796,7 @@ class TestIAMIdcToken(AuthMethod):
         merge. This is a surrogate test.
         """
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
             token_endpoint={
                 "type": "okta",
                 "request_url": "https://dbtcs.oktapreview.com/oauth2/default/v1/token",
@@ -822,7 +822,7 @@ class TestIAMIdcToken(AuthMethod):
         merge. This is a surrogate test.
         """
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
             token_endpoint={
                 "type": "entra",
                 "request_url": "https://login.microsoftonline.com/my_tenant/oauth2/v2.0/token",
@@ -843,13 +843,13 @@ class TestIAMIdcToken(AuthMethod):
     def test_invalid_idc_token_missing_field(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
         )
         with self.assertRaises(FailedToConnectError) as context:
             connection = self.adapter.acquire_connection("dummy")
             connection.handle
         assert (
-            "'token_endpoint' field(s) are required for 'oauth_token_identity_center' credentials method"
+            "'token_endpoint' field(s) are required for 'oauth_token_identity_center' credentials authenticator"
             in context.exception.msg
         )
 
@@ -857,7 +857,7 @@ class TestIAMIdcToken(AuthMethod):
     def test_invalid_idc_token_missing_token_endpoint_subfield_okta(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
             token_endpoint={
                 "type": "okta",
                 "request_data": "my_data",
@@ -873,7 +873,7 @@ class TestIAMIdcToken(AuthMethod):
     def test_invalid_idc_token_missing_token_endpoint_subfield_entra(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
             token_endpoint={
                 "type": "entra",
                 "request_url": "https://dbtcs.oktapreview.com/oauth2/default/v1/token",
@@ -888,7 +888,7 @@ class TestIAMIdcToken(AuthMethod):
     def test_invalid_idc_token_missing_token_endpoint_type(self):
         # Successful test
         self.config.credentials = self.config.credentials.replace(
-            method="oauth_token_identity_center",
+            authenticator="oauth_token_identity_center",
             token_endpoint={},
         )
         with self.assertRaises(FailedToConnectError) as context:
