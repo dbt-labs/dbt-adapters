@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from typing import Optional
 
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
@@ -25,36 +25,9 @@ class IcebergRESTCatalogRelation:
     catalog_name: Optional[str] = None
     catalog_namespace: Optional[str] = None
     external_volume: Optional[str] = None
-    replace_invalid_characters: bool = False
-    auto_refresh: bool = False
+    replace_invalid_characters: Optional[bool] = None
+    auto_refresh: Optional[bool] = None
     table_format: str = "iceberg"
-
-
-@dataclass
-class IcebergRESTCatalogIntegrationConfig(CatalogIntegrationConfig):
-    """
-    Implements the CatalogIntegrationConfig protocol for integrating with an Iceberg REST or AWS Glue catalog
-
-    This class extends CatalogIntegrationConfig to add default settings.
-
-    Attributes:
-        name (str): the name of the catalog integration
-        catalog_type (str): the type of catalog integration
-        -   must be "iceberg_rest" or "aws_glue"
-        external_volume (Optional[str]): the external volume associated with the catalog integration
-        -   if left empty, the default for the database/account will be used
-        table_format (str): the table format this catalog uses
-        -   must be "iceberg"
-        adapter_properties (Optional[Dict[str, Any]]): a dictionary containing additional
-            adapter-specific properties for the catalog
-        -   this is only parsed for `namespace`
-    """
-
-    name: str
-    catalog_type: str
-    external_volume: Optional[str]
-    table_format: str = "iceberg"
-    adapter_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 class IcebergRESTCatalogIntegration(CatalogIntegration):
