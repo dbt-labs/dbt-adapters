@@ -1,6 +1,8 @@
 {% macro py_write_table(compiled_code, target_relation) %}
 
-{% if target_relation.is_transient(config.model) %}
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{% if catalog_relation.is_transient %}
     {%- set table_type='transient' -%}
 {% endif %}
 

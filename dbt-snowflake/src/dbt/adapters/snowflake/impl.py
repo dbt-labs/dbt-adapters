@@ -24,7 +24,7 @@ from dbt_common.contracts.metadata import (
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
-from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
@@ -86,12 +86,14 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
+        self.add_catalog_integration(constants.DEFAULT_NATIVE_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
     ) -> CatalogIntegration:
         # Snowflake uppercases everything in their metadata tables
+        # don't mutate the object that dbt-core passes in
         catalog_integration = deepcopy(catalog_integration)
         catalog_integration.name = catalog_integration.name.upper()
         return super().add_catalog_integration(catalog_integration)
@@ -99,26 +101,6 @@ class SnowflakeAdapter(SQLAdapter):
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
         # Snowflake uppercases everything in their metadata tables
         return super().get_catalog_integration(name.upper())
-
-    @available
-    def get_catalog_integration_from_model(
-        self, model: RelationConfig
-    ) -> Optional[CatalogIntegration]:
-        catalog_name = self.get_catalog_integration_name_from_model(model)
-        if catalog_name and catalog_name != constants.DEFAULT_CATALOG.name:
-            return self.get_catalog_integration(catalog_name)
-        return None
-
-    @available
-    @staticmethod
-    def get_catalog_integration_name_from_model(model: RelationConfig) -> Optional[str]:
-        if not model.config:
-            return None
-        elif catalog_name := model.config.get("catalog"):
-            return catalog_name.upper()
-        elif model.config.get("table_format") == constants.ICEBERG_TABLE_FORMAT:
-            return constants.DEFAULT_ICEBERG_CATALOG.name.upper()
-        return constants.DEFAULT_CATALOG.name.upper()
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -306,17 +288,17 @@ class SnowflakeAdapter(SQLAdapter):
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
         if self.behavior.enable_iceberg_materializations.no_warn:
-            columns.append("catalog_name")
+            columns.append("is_iceberg")
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         if self.behavior.enable_iceberg_materializations.no_warn:
-            database, schema, identifier, relation_type, is_dynamic, catalog = result
+            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
         else:
             database, schema, identifier, relation_type, is_dynamic = result
-            catalog = constants.DEFAULT_CATALOG.name
+            is_iceberg = "N"
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
@@ -333,7 +315,11 @@ class SnowflakeAdapter(SQLAdapter):
             schema=schema,
             identifier=identifier,
             type=relation_type,
-            catalog=catalog.upper() if catalog else constants.DEFAULT_CATALOG.name.upper(),
+            table_format=(
+                constants.ICEBERG_TABLE_FORMAT
+                if is_iceberg == "Y"
+                else constants.NATIVE_TABLE_FORMAT
+            ),
             quote_policy=quote_policy,
         )
 
@@ -467,16 +453,27 @@ CALL {proc_name}();
 
     @classmethod
     def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
+        # `config` is not a RelationConfig!
         run_info = {
             "adapter_type": constants.ADAPTER_TYPE,
             "table_format": None,
         }
 
         if config and hasattr(config, "_extra"):
-            if config._extra.get("catalog"):  # type:ignore
+
+            catalog = config._extra.get("catalog")
+
+            if _table_format := config._extra.get("table_format"):  # type:ignore
+                run_info["table_format"] = _table_format
+            elif not catalog:
+                # no table_format and no catalog definitely means native table
+                run_info["table_format"] = constants.NATIVE_TABLE_FORMAT
+            elif catalog == constants.DEFAULT_NATIVE_CATALOG.name:  # type:ignore
+                # if the user happens to set the catalog to the native, catch that
+                run_info["table_format"] = constants.NATIVE_TABLE_FORMAT
+            else:  # catalog is set, and it's not the native catalog
+                # it's unlikely that users will set a catalog that's not Iceberg
                 run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
-            elif table_format := config._extra.get("table_format"):  # type:ignore
-                run_info["table_format"] = table_format
 
         return run_info
 
@@ -495,8 +492,8 @@ CALL {proc_name}();
         Returns:
             Any: The constructed relation object generated through the catalog integration and parser
         """
-        if not model.config:
-            return None
-        catalog_name = model.config.get("catalog", constants.DEFAULT_ICEBERG_CATALOG.name)
-        catalog_integration = self.get_catalog_integration(catalog_name)
-        return catalog_integration.build_relation(model)
+        if catalog := parse_model.catalog_name(model):
+            catalog_integration = self.get_catalog_integration(catalog)
+            relation = catalog_integration.build_relation(model)
+            return relation
+        return None

@@ -14,12 +14,14 @@
 -#}
 
     {%- set dynamic_table = relation.from_config(config.model) -%}
-    {%- set catalog_integration = adapter.get_catalog_integration_from_model(config.model) -%}
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-    {%- if catalog_integration is none -%}
+    {%- if catalog_relation.catalog_type == 'NATIVE' -%}
         {{ snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) }}
-    {%- elif catalog_integration.catalog_type == 'iceberg_managed' -%}
+    {%- elif catalog_relation.catalog_type == 'ICEBERG_MANAGED' -%}
         {{ snowflake__replace_dynamic_table_iceberg_managed_sql(dynamic_table, relation, sql) }}
+    {%- else -%}
+        {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
     {%- endif -%}
 
 {%- endmacro %}

@@ -1,16 +1,16 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
-    {%- set catalog_integration = adapter.get_catalog_integration_from_model(config.model) -%}
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
     {%- if language == 'sql' -%}
         {%- if temporary -%}
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}
-        {%- elif catalog_integration is none -%}
+        {%- elif catalog_relation.catalog_type == 'NATIVE' -%}
             {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
-        {%- elif catalog_integration.catalog_type == 'iceberg_managed' -%}
+        {%- elif catalog_relation.catalog_type == 'ICEBERG_MANAGED' -%}
             {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
         {%- else -%}
-            {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
+            {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
 
     {%- elif language == 'python' -%}
