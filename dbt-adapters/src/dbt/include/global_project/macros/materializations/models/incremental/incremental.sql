@@ -37,11 +37,14 @@
 
   {% if existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
+      {% set relation_for_indexes = target_relation %}
   {% elif full_refresh_mode %}
       {% set build_sql = get_create_table_as_sql(False, intermediate_relation, sql) %}
+      {% set relation_for_indexes = intermediate_relation %}
       {% set need_swap = true %}
   {% else %}
     {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
+    {% set relation_for_indexes = temp_relation %}
     {% set contract_config = config.get('contract') %}
     {% if not contract_config or not contract_config.enforced %}
       {% do adapter.expand_target_column_types(
@@ -65,6 +68,10 @@
       {{ build_sql }}
   {% endcall %}
 
+  {% if existing_relation is none or existing_relation.is_view or should_full_refresh() %}
+    {% do create_indexes(relation_for_indexes) %}
+  {% endif %}
+
   {% if need_swap %}
       {% do adapter.rename_relation(target_relation, backup_relation) %}
       {% do adapter.rename_relation(intermediate_relation, target_relation) %}
@@ -75,10 +82,6 @@
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
   {% do persist_docs(target_relation, model) %}
-
-  {% if existing_relation is none or existing_relation.is_view or should_full_refresh() %}
-    {% do create_indexes(target_relation) %}
-  {% endif %}
 
   {{ run_hooks(post_hooks, inside_transaction=True) }}
 
