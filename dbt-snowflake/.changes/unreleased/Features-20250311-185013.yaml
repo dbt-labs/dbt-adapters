@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for Iceberg REST and AWS Glue catalogs
+time: 2025-03-11T18:50:13.180115-04:00
+custom:
+  Author: mikealfare colin-rogers-dbt
+  Issue: "792"
