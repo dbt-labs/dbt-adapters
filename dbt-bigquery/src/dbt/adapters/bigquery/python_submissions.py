@@ -11,6 +11,7 @@ from dbt.adapters.bigquery.clients import (
     create_gcs_client,
 )
 from dbt.adapters.bigquery.credentials import (
+    BigQueryConnectionMethod,
     create_google_credentials,
     DataprocBatchConfig,
 )
@@ -28,6 +29,11 @@ import nbformat
 _logger = AdapterLogger("BigQuery")
 
 
+# Google Cloud usually automatically creates VPC Network & Subnetwork named
+# "default" in the project when enabling the Compute Engine API. We will use
+# the "default" network to create a default runtime template when needed.
+_NETWORK_NAME = "default"
+_SUBNETWORK_NAME = "default"
 _DEFAULT_JAR_FILE_URI = "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.34.0.jar"
 
 
@@ -187,6 +193,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         super().__init__(parsed_model, credentials)
 
         self._model_name = parsed_model["alias"]
+        self._connection_method = credentials.method
         self._GoogleCredentials = create_google_credentials(credentials)
 
         # TODO(jialuo): Add a function in clients.py for it.
@@ -194,6 +201,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             credentials=self._GoogleCredentials,
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
+        self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -203,21 +211,74 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return nbformat.writes(notebook, nbformat.NO_CONVERT)
 
     def _get_notebook_template_id(self) -> str:
+        # If user specifies a runtime template id, use it.
+        if self._notebook_template_id:
+            return self._notebook_template_id
+
+        # Try to find and use the default runtime template id.
         request = aiplatform_v1.ListNotebookRuntimeTemplatesRequest(
             parent=f"projects/{self._project}/locations/{self._region}",
             filter="notebookRuntimeType = ONE_CLICK",
         )
         page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
-        if list(page_result):
-            # Extract template id from name.
-            match = re.search(r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name)
-            if match:  # Check if match is not None.
-                notebook_template_id = match.group(1)
-                return notebook_template_id
-            else:
-                raise ValueError("No matching notebook runtime template name found.")
-        else:
-            raise ValueError("No Default notebook runtime templates found.")
+
+        try:
+            # Check if a default runtime template is available and applicable.
+            return self._extract_template_id(next(iter(page_result)).name)
+        except Exception:
+            _logger.info(
+                "No default template found, a new one will be created but with "
+                "disabled internet access. If your models do require internet "
+                "access, please go to the GCP console and do either:\n"
+                "    1. Recreate the default template yourself with enabled "
+                "internet access. OR \n"
+                "    2. Specify your own template ID which has enabled "
+                "internet access.\n"
+            )
+            # If no default runtime template is found, create a new one.
+            return self._create_notebook_template()
+
+    def _create_notebook_template(self) -> str:
+        # Construct the full network and subnetwork resource names.
+        network_full_name = f"projects/{self._project}/global/networks/{_NETWORK_NAME}"
+        subnetwork_full_name = (
+            f"projects/{self._project}/regions/{self._region}/subnetworks/{_SUBNETWORK_NAME}"
+        )
+
+        template = aiplatform_v1.NotebookRuntimeTemplate(
+            # The display name of the created runtime template.
+            display_name="default-one-click-notebook",
+            # This "ONE_CLICK" will be marked default.
+            notebook_runtime_type=aiplatform_v1.NotebookRuntimeType.ONE_CLICK,
+            machine_spec=aiplatform_v1.MachineSpec(
+                # Choose the machine type.
+                machine_type="e2-standard-4",
+            ),
+            network_spec=aiplatform_v1.NetworkSpec(
+                # Explicitly disable internet access.
+                enable_internet_access=False,
+                # Need to specify the network & subnetwork (full name) when
+                # disable internet access.
+                network=network_full_name,
+                subnetwork=subnetwork_full_name,
+            ),
+        )
+
+        create_request = aiplatform_v1.CreateNotebookRuntimeTemplateRequest(
+            parent=f"projects/{self._project}/locations/{self._region}",
+            notebook_runtime_template=template,
+        )
+
+        operation = self._ai_platform_client.create_notebook_runtime_template(
+            request=create_request
+        )
+        response = operation.result()
+
+        return self._extract_template_id(response.name)
+
+    def _extract_template_id(self, template_name: str) -> str:
+        match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
+        return match.group(1) if match else ""
 
     def _config_notebook_job(
         self, notebook_template_id: str
@@ -232,9 +293,12 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
-        if hasattr(self._GoogleCredentials, "_service_account_email"):
+        if self._connection_method in (
+            BigQueryConnectionMethod.SERVICE_ACCOUNT,
+            BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
+        ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        else:
+        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
             request = Request()
             response = request(
                 method="GET",
@@ -242,6 +306,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
             )
             notebook_execution_job.execution_user = json.loads(response.data).get("email")
+        else:
+            raise ValueError(
+                f"Unsupported credential method in BigFrames: '{self._connection_method}'"
+            )
 
         notebook_execution_job.gcs_output_uri = (
             f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
