@@ -5,21 +5,21 @@
     https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
 -#}
 
-{%- set sql_header = config.get('sql_header', none) -%}
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
 
+{%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
 create or replace temporary table {{ relation }}
-    {%- set contract_config = config.get('contract') -%}
-    {%- if contract_config.enforced -%}
-    {{ get_assert_columns_equivalent(sql) }}
+    {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
-    {% set compiled_code = get_select_subquery(compiled_code) %}
-    {% endif %}
-    as
-    (
-        {{ compiled_code }}
-    )
-;
+    {%- endif %}
+as (
+    {{ compiled_code }}
+);
 
 {%- endmacro %}

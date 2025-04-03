@@ -15,14 +15,14 @@
         A valid DDL statement which will result in a new dynamic iceberg table.
 -#}
 
-{%- set catalog = adapter.build_catalog_relation(config.model) -%}
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
 create dynamic iceberg table {{ relation }}
     target_lag = '{{ dynamic_table.target_lag }}'
     warehouse = {{ dynamic_table.snowflake_warehouse }}
-    {{ optional('external_volume', catalog.external_volume, "'") }}
+    {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'
-    base_location = '{{ catalog.base_location }}'
+    base_location = '{{ catalog_relation.base_location }}'
     {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
     {{ optional('initialize', dynamic_table.initialize) }}
     as (

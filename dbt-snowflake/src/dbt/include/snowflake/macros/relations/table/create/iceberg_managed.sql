@@ -11,7 +11,7 @@
     {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
 {%- endif -%}
 
-{%- set catalog = adapter.build_catalog_relation(config.model) -%}
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
@@ -28,29 +28,29 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', catalog.cluster_by, '(', '') }}
-    {{ optional('external_volume', catalog.external_volume, "'") }}
+    {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
+    {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'
-    base_location = '{{ catalog.base_location }}'
-    {% if copy_grants %}copy grants{% endif %}
+    base_location = '{{ catalog_relation.base_location }}'
+    {% if copy_grants -%} copy grants {%- endif %}
 as (
-    {%- if catalog.cluster_by is not none -%}
+    {%- if catalog_relation.cluster_by is not none -%}
     select * from (
         {{ compiled_code }}
     )
     order by (
-        {{ catalog.cluster_by }}
+        {{ catalog_relation.cluster_by }}
     )
     {%- else -%}
     {{ compiled_code }}
     {%- endif %}
 );
 
-{% if catalog.cluster_by is not none -%}
-alter iceberg table {{ relation }} cluster by ({{ catalog.cluster_by }});
+{% if catalog_relation.cluster_by is not none -%}
+alter iceberg table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
 {%- endif -%}
 
-{% if catalog.automatic_clustering and catalog.cluster_by is not none %}
+{% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
 alter iceberg table {{ relation }} resume recluster;
 {%- endif -%}
 
