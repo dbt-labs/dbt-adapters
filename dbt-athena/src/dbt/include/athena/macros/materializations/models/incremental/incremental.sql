@@ -66,11 +66,11 @@
   -- Running in full refresh, support High Availability for Iceberg table type --
   -- Must use s3_data_naming schema_table_unique in order to support high availability --
   -- on a full fresh for an incremental iceberg table --
-  {% elif (
+  {%- elif (
     should_full_refresh()
     and table_type == 'iceberg'
     and ('unique' not in s3_data_naming or external_location is not none)
-  ) %}
+  ) -%}
     -- create a new tmp_relation that has its s3 path set to the target location path
     -- except with a unique UUID
     -- this allows for once the fully refreshed `tmp_relation` is completed, the `rename_relation()`
