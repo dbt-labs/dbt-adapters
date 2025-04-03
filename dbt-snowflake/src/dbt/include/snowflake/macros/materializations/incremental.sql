@@ -65,13 +65,14 @@
   {%- set language = model['language'] -%}
 
   {%- set identifier = this.name -%}
+  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
   {%- set target_relation = api.Relation.create(
 	identifier=identifier,
 	schema=schema,
 	database=database,
 	type='table',
-	catalog=adapter.get_catalog_integration_name_from_model(config.model)
+	table_format=catalog_relation.table_format
   ) -%}
 
   {% set existing_relation = load_relation(this) %}
@@ -109,9 +110,9 @@
       {{ create_table_as(False, target_relation, compiled_code, language) }}
     {%- endcall -%}
 
-  {% elif target_relation.catalog != existing_relation.catalog %}
+  {% elif target_relation.table_format != existing_relation.table_format %}
     {% do exceptions.raise_compiler_error(
-        "Unable to update the catalog on incremental model `" ~ target_relation.identifier ~ "` from `" ~ existing_relation.catalog ~ "` to `" ~ target_relation.catalog ~ "` due to Snowflake limitation. Please execute with --full-refresh to drop the table and recreate in the new catalog.'"
+        "Unable to update the incremental model `" ~ target_relation.identifier ~ "` from `" ~ existing_relation.table_format ~ "` to `" ~ target_relation.table_format ~ "` due to Snowflake limitation. Please execute with --full-refresh to drop the table and recreate in the new catalog.'"
       )
     %}
 

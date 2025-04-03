@@ -8,12 +8,14 @@
   {% set grant_config = config.get('grants') %}
 
   {%- set existing_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
+
+  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
   {%- set target_relation = api.Relation.create(
 	identifier=identifier,
 	schema=schema,
 	database=database,
 	type='table',
-	catalog=adapter.get_catalog_integration_name_from_model(config.model)
+	table_format=catalog_relation.table_format
    ) -%}
 
   {{ run_hooks(pre_hooks) }}

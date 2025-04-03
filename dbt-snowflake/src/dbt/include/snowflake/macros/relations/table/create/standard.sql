@@ -4,7 +4,10 @@
     https://docs.snowflake.com/en/sql-reference/sql/create-table
     https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
 -#}
-{%- if relation.is_transient(config.model) -%}
+
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{%- if catalog_relation.is_transient -%}
     {%- set transient='transient ' -%}
 {%- else -%}
     {%- set transient='' -%}
