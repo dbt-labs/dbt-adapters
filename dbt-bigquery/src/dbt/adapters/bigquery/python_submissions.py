@@ -234,7 +234,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
-        if self._connection_method in (BigQueryConnectionMethod.SERVICE_ACCOUNT, BigQueryConnectionMethod.SERVICE_ACCOUNT):
+        if self._connection_method in (
+            BigQueryConnectionMethod.SERVICE_ACCOUNT,
+            BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
+        ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
         elif self._connection_method == BigQueryConnectionMethod.OAUTH:
             request = Request()
