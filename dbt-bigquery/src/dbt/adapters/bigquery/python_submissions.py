@@ -11,6 +11,7 @@ from dbt.adapters.bigquery.clients import (
     create_gcs_client,
 )
 from dbt.adapters.bigquery.credentials import (
+    BigQueryConnectionMethod,
     create_google_credentials,
     DataprocBatchConfig,
 )
@@ -187,6 +188,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         super().__init__(parsed_model, credentials)
 
         self._model_name = parsed_model["alias"]
+        self._connection_method = credentials.method
         self._GoogleCredentials = create_google_credentials(credentials)
 
         # TODO(jialuo): Add a function in clients.py for it.
@@ -232,9 +234,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
-        if hasattr(self._GoogleCredentials, "_service_account_email"):
+        if self._connection_method == BigQueryConnectionMethod.SERVICE_ACCOUNT:
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        else:
+        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
             request = Request()
             response = request(
                 method="GET",
@@ -242,6 +244,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
             )
             notebook_execution_job.execution_user = json.loads(response.data).get("email")
+        else:
+            raise ValueError(
+                f"Unsupported credential method in BigFrames: '{self._connection_method}'"
+            )
 
         notebook_execution_job.gcs_output_uri = (
             f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
