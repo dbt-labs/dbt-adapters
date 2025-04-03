@@ -15,6 +15,7 @@ class NativeCatalogRelation:
     catalog_type: str = constants.DEFAULT_NATIVE_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_NATIVE_CATALOG.name
     table_format: Optional[str] = constants.NATIVE_TABLE_FORMAT
+    external_volume: Optional[str] = None
     cluster_by: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False

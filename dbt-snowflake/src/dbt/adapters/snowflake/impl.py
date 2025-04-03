@@ -308,6 +308,12 @@ class SnowflakeAdapter(SQLAdapter):
         if relation_type == self.Relation.Table and is_dynamic == "Y":
             relation_type = self.Relation.DynamicTable
 
+        table_format = (
+            constants.ICEBERG_TABLE_FORMAT
+            if is_iceberg in ("Y", "YES")
+            else constants.NATIVE_TABLE_FORMAT
+        )
+
         quote_policy = {"database": True, "schema": True, "identifier": True}
 
         return self.Relation.create(
@@ -315,11 +321,7 @@ class SnowflakeAdapter(SQLAdapter):
             schema=schema,
             identifier=identifier,
             type=relation_type,
-            table_format=(
-                constants.ICEBERG_TABLE_FORMAT
-                if is_iceberg == "Y"
-                else constants.NATIVE_TABLE_FORMAT
-            ),
+            table_format=table_format,
             quote_policy=quote_policy,
         )
 
