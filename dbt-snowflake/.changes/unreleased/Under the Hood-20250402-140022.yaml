@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Update list_relations_without_caching macro to reuse the same query on pagination
+  and handle the quoted_identifiers_ignore_case setting
+time: 2025-04-02T14:00:22.060062-04:00
+custom:
+  Author: mikealfare
+  Issue: "967"
