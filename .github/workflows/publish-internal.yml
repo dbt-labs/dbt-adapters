@@ -62,7 +62,7 @@ jobs:
         secrets: inherit
 
     publish-internal:
-        if: always() && !failure()
+        if: always() && !failure() && !cancelled()
         needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:

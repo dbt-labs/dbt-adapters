@@ -131,7 +131,7 @@ jobs:
         if: |
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
             inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
-            always()
+            always() && !cancelled()
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-bigquery
@@ -302,7 +302,7 @@ jobs:
         if: |
             contains(fromJSON(inputs.packages), 'dbt-redshift') &&
             inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
-            always()
+            always() && !cancelled()
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-redshift

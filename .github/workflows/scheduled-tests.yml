@@ -65,7 +65,7 @@ jobs:
         secrets: inherit
 
     notification:
-        if: always()
+        if: always() && !cancelled()
         needs: [verify-builds, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
@@ -75,7 +75,7 @@ jobs:
             with:
                 jobs: ${{ toJSON(needs) }}
         -   uses: ravsamhq/notify-slack-action@v2
-            if: ${{ always() }}
+            if: always()
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}
