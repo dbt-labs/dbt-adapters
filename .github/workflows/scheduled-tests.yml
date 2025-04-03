@@ -65,7 +65,7 @@ jobs:
         secrets: inherit
 
     notification:
-        if: always() && !cancelled()
+        if: ${{ !cancelled() }}
         needs: [verify-builds, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
