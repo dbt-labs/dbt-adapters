@@ -354,7 +354,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     else:
                         formatted_output += f"    {value}\n"
 
-                    # Check errors from the output.
+                    # Check errors from the output of notebook execution.
                     if isinstance(value, str) and value.strip().lower() == "error":
                         raise RuntimeError(f"See details from GCP console: {formatted_output}")
             else:
@@ -391,7 +391,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             formatted_output = self._format_outputs(outputs)
             _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
         except RuntimeError as e:
-            raise RuntimeError(f"Colab notebook job failed: {e}")
+            raise RuntimeError(f"Colab notebook execution failed: {e}")
         except Exception:
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
