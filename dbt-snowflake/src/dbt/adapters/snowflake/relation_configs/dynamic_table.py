@@ -102,8 +102,10 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
                 "snowflake_warehouse"
             ),
             "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
-            "row_access_policy": relation_config.config.extra.get("row_access_policy"),
-            "table_tag": relation_config.config.extra.get("table_tag"),
+            "row_access_policy": relation_config.config.extra.get(
+                "row_access_policy"
+            ),  # type:ignore
+            "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
