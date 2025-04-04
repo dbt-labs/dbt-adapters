@@ -9,7 +9,7 @@ from dbt.adapters.bigquery.clients import (
     create_dataproc_batch_controller_client,
     create_dataproc_job_controller_client,
     create_gcs_client,
-    create_notebook_client
+    create_notebook_client,
 )
 from dbt.adapters.bigquery.credentials import (
     BigQueryConnectionMethod,
@@ -264,9 +264,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_runtime_template=template,
         )
 
-        operation = self._notebook_client.create_notebook_runtime_template(
-            request=create_request
-        )
+        operation = self._notebook_client.create_notebook_runtime_template(request=create_request)
         response = operation.result()
 
         return self._extract_template_id(response.name)
