@@ -50,6 +50,8 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    row_access_policy: Optional[str] = None
+    table_tag: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
