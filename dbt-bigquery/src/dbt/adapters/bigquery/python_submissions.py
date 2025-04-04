@@ -358,7 +358,18 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_execution_job=notebook_execution_job,
         )
 
-        res = self._ai_platform_client.create_notebook_execution_job(request=request).result()
+        try:
+            res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
+                timeout=self._polling_retry.timeout
+            )
+        except TimeoutError as timeout_error:
+            raise TimeoutError(
+                f"The dbt operation encountered a timeout: {timeout_error}\n"
+                "Please cancel the related notebook job manually via the GCP "
+                "console since it might still be actively running."
+            )
+        except Exception as e:
+            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
