@@ -1,3 +1,5 @@
+from typing import Optional
+
 from google.api_core.client_info import ClientInfo
 from google.api_core.client_options import ClientOptions
 from google.auth.exceptions import DefaultCredentialsError
@@ -72,7 +74,7 @@ def _dataproc_endpoint(credentials: BigQueryCredentials) -> str:
 
 
 def create_notebook_client(
-    credentials: GoogleCredentials, region: str | None
+    credentials: GoogleCredentials, region: Optional[str]
 ) -> aiplatform_v1.NotebookServiceClient:
     api_endpoint = f"{region}-aiplatform.googleapis.com"
     notebook_client = aiplatform_v1.NotebookServiceClient(
