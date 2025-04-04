@@ -112,6 +112,7 @@ jobs:
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
             COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
@@ -148,6 +149,7 @@ jobs:
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
             COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
