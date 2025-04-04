@@ -31,7 +31,7 @@
     {% else %}
       {%- set order_by_string = none -%}
     {%- endif -%}
-  
+
     {%- set sql_header = config.get('sql_header', none) -%}
 
     {{ sql_header if sql_header is not none }}
