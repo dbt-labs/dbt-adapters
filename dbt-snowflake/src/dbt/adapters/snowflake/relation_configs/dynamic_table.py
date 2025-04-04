@@ -102,9 +102,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
                 "snowflake_warehouse"
             ),
             "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
-            "row_access_policy": relation_config.config.extra.get(
+            "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
-            ),  # type:ignore
+            ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
         }
 
