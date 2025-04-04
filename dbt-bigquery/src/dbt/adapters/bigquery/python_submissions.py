@@ -339,6 +339,55 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         return data
 
+    def _format_outputs(self, output_list: list) -> str:
+        """Formats a list of outputs into readable string."""
+        formatted_output = "\n"
+
+        # The item of it can be dictionaries or strings.
+        for item in output_list:
+            if isinstance(item, dict) and True:
+                for key, value in item.items():
+                    formatted_output += f"{key}:\n"
+                    if isinstance(value, dict):
+                        for inner_key, inner_value in value.items():
+                            formatted_output += f"    {inner_key}: {inner_value}\n"
+                    else:
+                        formatted_output += f"    {value}\n"
+            else:
+                formatted_output += f"{item}\n"
+
+            # Add a newline between items.
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _process_gcs_log(self, gcs_log_uri: str) -> None:
+        """Processes a Colab notebook execution log stored GCS."""
+        gcs_log = self._read_json_from_gcs(gcs_log_uri)
+
+        if not gcs_log:
+            _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
+            return
+
+        # Extract the notebook 'cells' information list from the log.
+        cells = gcs_log.get("cells", [])
+        if not cells:
+            _logger.debug(f"No 'cells' found. Full content from GCS log: {gcs_log}")
+            return
+
+        # Only one cell exists and gets executed in the notebook.
+        outputs = cells[0].get("outputs", [])
+        if not outputs:
+            _logger.debug(f"No 'outputs' found. Full content from GCS log: {gcs_log}")
+            return
+
+        try:
+            # Improve the output format for better readability.
+            formatted_output = self._format_outputs(outputs)
+            _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
+        except Exception:
+            _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
+
     def submit(self, compiled_code: str) -> None:
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
@@ -373,14 +422,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
-        if gcs_log := self._read_json_from_gcs(gcs_log_uri):
-            # TODO(jialuo): Improve the logger info.
-            # TODO(jialuo): Raise errors here. There are some situations when
-            # the notebook failed but the pipeline still showed success.
-            _logger.info(
-                f"The colab notebook runtime outputs from GCS: {gcs_log['cells'][0]['outputs']}"
-            )
-        else:
-            _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
+        self._process_gcs_log(gcs_log_uri)
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
