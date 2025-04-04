@@ -1,0 +1,6 @@
+kind: Fixes
+body: Create a new default runtime template
+time: 2025-03-26T19:47:01.541326112Z
+custom:
+    Author: jialuoo
+    Issue: "950"

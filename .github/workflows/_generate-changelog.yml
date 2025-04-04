@@ -144,6 +144,7 @@ jobs:
                     changie batch ${{ needs.version.outputs.base }}
                 fi
                 changie merge
+                git add .
             working-directory: ./${{ inputs.package }}
             env:
                 CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}

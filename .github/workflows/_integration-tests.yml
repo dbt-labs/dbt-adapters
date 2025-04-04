@@ -127,9 +127,11 @@ jobs:
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky BQ tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-bigquery
@@ -296,9 +298,11 @@ jobs:
 
     integration-tests-redshift-flaky:
         # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky RS tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-redshift') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-redshift
