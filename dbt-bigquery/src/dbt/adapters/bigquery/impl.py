@@ -112,6 +112,7 @@ class BigqueryConfig(AdapterConfig):
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
     submission_method: Optional[str] = None
+    notebook_template_id: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):

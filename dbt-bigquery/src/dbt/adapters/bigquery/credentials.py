@@ -35,7 +35,7 @@ class DataprocBatchConfig(ExtensibleDbtClassMixin):
         self.batch_config = batch_config
 
 
-class _BigQueryConnectionMethod(StrEnum):
+class BigQueryConnectionMethod(StrEnum):
     OAUTH = "oauth"
     OAUTH_SECRETS = "oauth-secrets"
     SERVICE_ACCOUNT = "service-account"
@@ -46,7 +46,7 @@ class _BigQueryConnectionMethod(StrEnum):
 
 @dataclass
 class BigQueryCredentials(Credentials):
-    method: _BigQueryConnectionMethod = None  # type: ignore
+    method: BigQueryConnectionMethod = None  # type: ignore
 
     # BigQuery allows an empty database / project, where it defers to the
     # environment for the project
@@ -217,15 +217,15 @@ def _create_impersonated_credentials(credentials: BigQueryCredentials) -> Impers
 
 def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
 
-    if credentials.method == _BigQueryConnectionMethod.OAUTH:
+    if credentials.method == BigQueryConnectionMethod.OAUTH:
         creds, _ = _create_bigquery_defaults(scopes=credentials.scopes)
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT:
         creds = ServiceAccountCredentials.from_service_account_file(
             credentials.keyfile, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
         details = credentials.keyfile_json
         if _is_base64(details):  # type:ignore
             details = _base64_to_string(details)
@@ -233,7 +233,7 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             details, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.OAUTH_SECRETS:
+    elif credentials.method == BigQueryConnectionMethod.OAUTH_SECRETS:
         creds = GoogleCredentials(
             token=credentials.token,
             refresh_token=credentials.refresh_token,
@@ -243,7 +243,7 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             scopes=credentials.scopes,
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
+    elif credentials.method == BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
         creds = _create_identity_pool_credentials(credentials=credentials)
 
     else:
