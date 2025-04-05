@@ -460,7 +460,7 @@ def _install_packages(packages: list[str]) -> None:
         if installed:
             if required_version and version != required_version:
                 print(
-                    f"Package '{package_name}' is already installed and cannot update the version."
+                    f"Package '{package_name}' is already installed (version {version}) and cannot be updated. Skipping"
                 )
             else:
                 print(
@@ -475,7 +475,7 @@ def _install_packages(packages: list[str]) -> None:
 
     # Try to pip install the uninstalled packages.
     pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
-    print(f"Attempting to install the following packages: {' '.join(packages_to_install)}")
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
 
     try:
         result = subprocess.run(
@@ -489,6 +489,7 @@ def _install_packages(packages: list[str]) -> None:
             print(f"pip output:\n{result.stdout.strip()}")
         if result.stderr:
             print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
 
     except Exception as e:
-        print(f"An unexpected error occurred during package installation: {e}")
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")
