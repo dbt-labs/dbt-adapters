@@ -352,7 +352,12 @@ class BigFramesHelper(_BigQueryPythonHelper):
                             formatted_output += f"    {inner_key}: {inner_value}\n"
                     else:
                         formatted_output += f"    {value}\n"
+
+                    # Check errors from the output of notebook execution.
+                    if isinstance(value, str) and value.strip().lower() == "error":
+                        raise RuntimeError(f"See details from GCP console: {formatted_output}")
             else:
+                _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
 
             # Add a newline between items.
@@ -384,6 +389,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             # Improve the output format for better readability.
             formatted_output = self._format_outputs(outputs)
             _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
+        except RuntimeError as e:
+            raise RuntimeError(f"Colab notebook execution failed: {e}")
         except Exception:
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
