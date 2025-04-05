@@ -1,0 +1,6 @@
+kind: Features
+body: Make expiration of temp table dynamic, based on model timeout.
+time: 2025-02-09T12:37:50.314467072+01:00
+custom:
+    Author: gjskibinski
+    Issue: "805"
