@@ -128,12 +128,24 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
         )
 
-    def test_job_labels_valid_json(self):
+    @patch("dbt.adapters.bigquery.connections.get_invocation_id", new=Mock(return_value="uuid4"))
+    @patch.object(BigQueryConnectionManager, "get_labels_from_query_comment")
+    def test_get_job_labels(self, mock_get_query_comment_labels):
+        query_labels = {"key": "value"}
+        expected = {**query_labels, "dbt_invocation_id": "uuid4"}
+        mock_get_query_comment_labels.return_value = self.connections._labels_from_query_comment(
+            json.dumps(query_labels)
+        )
+
+        labels = self.connections.get_job_labels()
+        self.assertEqual(labels, expected)
+
+    def test_job_labels_from_query_comment_valid_json(self):
         expected = {"key": "value"}
         labels = self.connections._labels_from_query_comment(json.dumps(expected))
         self.assertEqual(labels, expected)
 
-    def test_job_labels_invalid_json(self):
+    def test_job_labels_from_query_comment_invalid_json(self):
         labels = self.connections._labels_from_query_comment("not json")
         self.assertEqual(labels, {"query_comment": "not_json"})
 
