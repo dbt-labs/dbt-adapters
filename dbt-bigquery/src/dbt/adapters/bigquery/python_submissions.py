@@ -438,7 +438,7 @@ def _install_packages(packages: list[str]) -> None:
     import subprocess
     import importlib.metadata
 
-    def _is_package_installed(package: str) -> tuple[bool, str | None]:
+    def _is_package_installed(package: str) -> tuple[bool, Optional[str]]:
         try:
             normalized_name = package.replace("_", "-")
             version = importlib.metadata.version(normalized_name)
