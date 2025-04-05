@@ -443,11 +443,11 @@ def _install_packages(packages: list[str]) -> None:
             normalized_name = package.replace("_", "-")
             version = importlib.metadata.version(normalized_name)
             return True, version
-        except Exception as e:
-            print(f"Unable to determine version for '{package}': {e}")
+        except Exception:
+            # Unable to determine the version.
             return False, None
 
-    # Check the installation of the packages.
+    # Check the installation of individual packages first.
     packages_to_install = []
     for package in packages:
         if "==" in package:
@@ -469,9 +469,11 @@ def _install_packages(packages: list[str]) -> None:
         else:
             packages_to_install.append(package)
 
+    # All packages have been installed with certain version.
     if not packages_to_install:
         return
 
+    # Try to pip install the uninstalled packages.
     pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
     print(f"Attempting to install the following packages: {' '.join(packages_to_install)}")
 
