@@ -130,7 +130,7 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "schema": "dummy_schema",
                     "threads": 1,
                     "gcs_bucket": "dummy-bucket",
-                    "dataproc_region": "europe-west1",
+                    "compute_region": "europe-west1",
                     "submission_method": "serverless",
                     "dataproc_batch": {
                         "environment_config": {
@@ -155,7 +155,7 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "schema": "dummy_schema",
                     "threads": 1,
                     "gcs_bucket": "dummy-bucket",
-                    "dataproc_region": "europe-west1",
+                    "compute_region": "europe-west1",
                     "submission_method": "serverless",
                 },
             },

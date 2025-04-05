@@ -93,7 +93,7 @@ class BigQueryCredentials(Credentials):
     #   workload identity federation service
     token_endpoint: Optional[Dict[str, str]] = None
 
-    dataproc_region: Optional[str] = None
+    compute_region: Optional[str] = None
     dataproc_cluster_name: Optional[str] = None
     gcs_bucket: Optional[str] = None
     submission_method: Optional[str] = None
@@ -119,6 +119,7 @@ class BigQueryCredentials(Credentials):
         "target_dataset": "target_schema",
         "retries": "job_retries",
         "timeout_seconds": "job_execution_timeout_seconds",
+        "dataproc_region": "compute_region",
     }
 
     def __post_init__(self):
@@ -157,7 +158,7 @@ class BigQueryCredentials(Credentials):
             "timeout_seconds",
             "client_id",
             "token_uri",
-            "dataproc_region",
+            "compute_region",
             "dataproc_cluster_name",
             "gcs_bucket",
             "dataproc_batch",
