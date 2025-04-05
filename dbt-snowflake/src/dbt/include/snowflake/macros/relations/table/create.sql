@@ -10,6 +10,7 @@
   {# Generate DDL/DML #}
   {%- if language == 'sql' -%}
     {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
+    {%- set order_by_keys = config.get('order_by', default=cluster_by_keys) -%}
     {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
     {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
@@ -21,6 +22,16 @@
     {% else %}
       {%- set cluster_by_string = none -%}
     {%- endif -%}
+
+    {%- if order_by_keys is not none and order_by_keys is string -%}
+      {%- set order_by_keys = [order_by_keys] -%}
+    {%- endif -%}
+    {%- if order_by_keys is not none -%}
+      {%- set order_by_string = order_by_keys|join(", ")-%}
+    {% else %}
+      {%- set order_by_string = none -%}
+    {%- endif -%}
+
     {%- set sql_header = config.get('sql_header', none) -%}
 
     {{ sql_header if sql_header is not none }}
@@ -42,10 +53,10 @@
         {% endif %}
         {% if copy_grants and not temporary -%} copy grants {%- endif %} as
         (
-          {%- if cluster_by_string is not none -%}
+          {%- if order_by_string is not none -%}
             select * from (
               {{ compiled_code }}
-              ) order by ({{ cluster_by_string }})
+              ) order by ({{ order_by_string }})
           {%- else -%}
             {{ compiled_code }}
           {%- endif %}
