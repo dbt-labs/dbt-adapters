@@ -66,4 +66,4 @@ def _create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
 
 
 def _dataproc_endpoint(credentials: BigQueryCredentials) -> str:
-    return f"{credentials.dataproc_region}-dataproc.googleapis.com:443"
+    return f"{credentials.compute_region}-dataproc.googleapis.com:443"
