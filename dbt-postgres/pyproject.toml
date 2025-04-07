@@ -36,14 +36,13 @@ dependencies = [
     "agate>=1.0,<2.0",
 ]
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-postgres"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-postgres"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-postgres.git"
-Issues = "https://github.com/dbt-labs/dbt-postgres/issues"
-Changelog = "https://github.com/dbt-labs/dbt-postgres/blob/main/CHANGELOG.md"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-postgres"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-postgres/CHANGELOG.md"
 
-[tool.pytest]
-testpaths = [
-    "tests/functional",
-    "tests/unit",
-]
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]

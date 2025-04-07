@@ -1,5 +1,5 @@
 name: "Issue triage"
-run-name: "Issue triage - #${{ github.event.issue.number }}: ${{ github.event.issue.title }} - ${{ github.actor }}"
+run-name: "Issue triage - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 
 on: issue_comment
 
@@ -15,6 +15,6 @@ jobs:
         if: contains(github.event.issue.labels.*.name, 'triage:awaiting-response')
         uses: dbt-labs/actions/.github/workflows/swap-labels.yml@main
         with:
-            add_label: "triage:dbt"
+            add_label: "triage:product"
             remove_label: "triage:awaiting-response"
         secrets: inherit

@@ -1,5 +1,5 @@
-name: "Open user docs issue"
-run-name: "Open user docs issue - #${{ github.event.issue.number }} - ${{ github.actor }}"
+name: "User docs"
+run-name: "User docs - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 
 on:
     issues:
@@ -22,7 +22,7 @@ jobs:
         if: |
             github.event.issue.state == 'closed' &&
             github.event.issue.state_reason == 'completed' &&
-            contains(github.event.issue.labels.*.name, 'user docs')
+            contains(github.event.issue.labels.*.name, 'needs:docs')
         uses: dbt-labs/actions/.github/workflows/open-issue-in-repo.yml@main
         with:
             issue_repository: "dbt-labs/docs.getdbt.com"

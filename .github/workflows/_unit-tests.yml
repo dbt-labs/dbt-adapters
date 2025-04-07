@@ -1,4 +1,5 @@
-name: "Unit tests"
+name: "# Unit tests"
+run-name: "Unit tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
@@ -57,14 +58,12 @@ on:
 permissions:
     contents: read
 
-jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
+defaults:
+    run:
+        shell: bash
 
+jobs:
     unit-tests:
-        needs: package
         runs-on: ${{ inputs.os }}
         steps:
         -   uses: actions/checkout@v4
@@ -75,6 +74,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
+        -   run: brew install unixodbc
+            if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
         -   run: hatch run unit-tests
-            shell: bash
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}

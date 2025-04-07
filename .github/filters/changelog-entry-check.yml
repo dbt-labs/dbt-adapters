@@ -1,0 +1,24 @@
+dbt-adapters:
+-   'dbt-adapters/src/**'
+-   'dbt-adapters/pyproject.toml'
+dbt-tests-adapter:
+-   'dbt-tests-adapter/src/**'
+-   'dbt-tests-adapter/pyproject.toml'
+dbt-athena:
+-   'dbt-athena/src/**'
+-   'dbt-athena/pyproject.toml'
+dbt-bigquery:
+-   'dbt-bigquery/src/**'
+-   'dbt-bigquery/pyproject.toml'
+dbt-postgres:
+-   'dbt-postgres/src/**'
+-   'dbt-postgres/pyproject.toml'
+dbt-redshift:
+-   'dbt-redshift/src/**'
+-   'dbt-redshift/pyproject.toml'
+dbt-snowflake:
+-   'dbt-snowflake/src/**'
+-   'dbt-snowflake/pyproject.toml'
+dbt-spark:
+-   'dbt-spark/src/**'
+-   'dbt-spark/pyproject.toml'

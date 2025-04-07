@@ -25,7 +25,8 @@ classifiers = [
 dependencies = [
     "dbt-common>=1.10,<2.0",
     "dbt-adapters>=1.10.4,<2.0",
-    "snowflake-connector-python[secure-local-storage]>=3.0.0,<3.12.4",
+    # lower bound pin due to CVE-2025-24794
+    "snowflake-connector-python[secure-local-storage]>=3.13.1,<4.0.0",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0",
     # installed via dbt-core but referenced directly; don't pin to avoid version conflicts with dbt-core
@@ -33,16 +34,16 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/dbt-labs/dbt-snowflake"
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-snowflake"
 Documentation = "https://docs.getdbt.com"
-Repository = "https://github.com/dbt-labs/dbt-snowflake.git"
-Issues = "https://github.com/dbt-labs/dbt-snowflake/issues"
-Changelog = "https://github.com/dbt-labs/dbt-snowflake/blob/main/CHANGELOG.md"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-snowflake"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CHANGELOG.md"
 
 [tool.pytest.ini_options]
-testpaths = ["tests/functional", "tests/unit"]
-env_files = ["test.env"]
+testpaths = ["tests/unit", "tests/functional"]
 addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
 filterwarnings = [
     "ignore:datetime.datetime.utcnow:DeprecationWarning",
 ]

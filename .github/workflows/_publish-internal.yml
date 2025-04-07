@@ -1,4 +1,5 @@
-name: "Publish internally"
+name: "# Publish internal"
+run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }}"
 
 on:
     workflow_call:
@@ -6,11 +7,7 @@ on:
             package:
                 description: "Choose the package to publish"
                 type: string
-                default: "dbt-adapters"
-            deploy-to:
-                description: "Choose whether to publish to test or prod"
-                type: string
-                default: "prod"
+                required: true
             branch:
                 description: "Choose the branch to publish"
                 type: string
@@ -21,21 +18,21 @@ on:
                 description: "Choose the package to publish"
                 type: choice
                 options:
-                -   "dbt-adapters"
                 -   "dbt-athena"
                 -   "dbt-bigquery"
                 -   "dbt-postgres"
                 -   "dbt-redshift"
                 -   "dbt-snowflake"
                 -   "dbt-spark"
-            deploy-to:
-                description: "Choose whether to publish to test or prod"
-                type: environment
-                default: "test"
             branch:
                 description: "Choose the branch to publish"
                 type: string
                 default: "main"
+
+# don't publish to the same target in parallel
+concurrency:
+    group: PyPI_Internal-${{ inputs.package }}
+    cancel-in-progress: true
 
 defaults:
     run:
@@ -45,16 +42,10 @@ env:
   TEMP_PROFILE_NAME: "temp_aws_profile"
 
 jobs:
-    package:
-        uses: ./.github/workflows/_package-directory.yml
-        with:
-            package: ${{ inputs.package }}
-
     publish:
-        needs: package
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
-            name: ${{ inputs.deploy-to }}
+            name: "cloud-prod"
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -77,15 +68,17 @@ jobs:
                 # strip the pre-release off to find all iterations of this patch
                 hatch version release
                 echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   id: published
             run: |
                 versions_published="$(aws codeartifact list-package-versions \
+                    --profile ${{ env.TEMP_PROFILE_NAME }} \
                     --domain ${{ vars.AWS_DOMAIN }} \
                     --repository ${{ vars.AWS_REPOSITORY }} \
                     --format pypi \
                     --package ${{ inputs.package }} \
                     --output json \
+                    --region ${{ vars.AWS_REGION }} \
                     --query 'versions[*].version' | jq -r '.[]' | grep "^${{ steps.package.outputs.version }}" || true )"  # suppress pipefail only here
                 echo "versions=$(echo "${versions_published[*]}"| tr '\n' ',')" >> $GITHUB_OUTPUT
         -   id: next
@@ -95,13 +88,14 @@ jobs:
                 versions_published: ${{ steps.published.outputs.versions }}
         -   run: |
                 VERSION=${{ steps.next.outputs.internal_release_version }}+$(git rev-parse HEAD)
-                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$(cut -c 5- ${{ inputs.package }})/__version__.py
-            working-directory: ./${{ needs.package.outputs.directory }}
+                PKG_DIR=$(echo ${{ inputs.package }} | cut -c 5-)
+                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$PKG_DIR/__version__.py
+            working-directory: ./${{ inputs.package }}
         -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}
         -   run: |
                 pip install twine
                 hatch build --clean
                 hatch run build:check-all
                 twine upload --repository codeartifact dist/*
-            working-directory: ./${{ needs.package.outputs.directory }}
+            working-directory: ./${{ inputs.package }}

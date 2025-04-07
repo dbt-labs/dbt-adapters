@@ -1,17 +1,13 @@
 [version]
 path = "src/dbt/adapters/spark/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt"]
 sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
@@ -29,7 +25,11 @@ dependencies = [
 features=["all"]
 
 [envs.default.scripts]
-setup = "pre-commit install"
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+    "pip install -r dagger/requirements.txt",
+]
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}"

@@ -1,0 +1,23 @@
+name: "Bot commit"
+description: "Commit to a local branch using the build bot"
+
+inputs:
+    message:
+        description: "The commit message"
+        required: true
+
+runs:
+    using: composite
+    steps:
+    -   run: |
+            git config user.name "$USERNAME"
+            git config user.email "$EMAIL"
+            git pull
+            git add .
+            git commit -m "$MESSAGE"
+            git push
+        shell: bash
+        env:
+            USERNAME: "Github Build Bot"
+            EMAIL: "buildbot@fishtownanalytics.com"
+            MESSAGE: "[Automated] ${{ inputs.message }}"

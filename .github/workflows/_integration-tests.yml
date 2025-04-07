@@ -1,10 +1,11 @@
-name: "Integration tests"
+name: "# Integration tests"
+run-name: "Integration tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
         inputs:
-            package:
-                description: "Choose the package to test"
+            packages:
+                description: "List the packages to test as a JSON string"
                 type: string
                 required: true
             branch:
@@ -25,17 +26,10 @@ on:
                 default: "3.9"
     workflow_dispatch:
         inputs:
-            package:
-                description: "Choose the package to test"
-                type: choice
-                options:
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+            packages:
+                description: "List the packages to test as a JSON string"
+                type: string
+                required: true
             branch:
                 description: "Choose the branch to test"
                 type: string
@@ -60,7 +54,7 @@ permissions:
 env:
     DBT_INVOCATION_ENV: ${{ vars.DBT_INVOCATION_ENV }}
     DD_CIVISIBILITY_AGENTLESS_ENABLED: ${{ vars.DD_CIVISIBILITY_AGENTLESS_ENABLED }}
-    DD_API_KEY: ${{ secrets.DD_API_KEY }}
+    DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
     DD_SITE: ${{ vars.DD_SITE }}
     DD_ENV: ${{ vars.DD_ENV }}
     DD_SERVICE: ${{ github.event.repository.name }}  # this can change per run because of forks
@@ -70,8 +64,11 @@ env:
 
 jobs:
     integration-tests-athena:
-        if: ${{ inputs.package == 'dbt-athena' || inputs.package == 'dbt-athena-community' }}
+        if: contains(fromJSON(inputs.packages), 'dbt-athena')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-athena"
         environment:
             name: "dbt-athena"
         env:
@@ -98,11 +95,13 @@ jobs:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
         -   run: hatch run integration-tests
-            working-directory: ./${{ inputs.package }}
 
     integration-tests-bigquery:
-        if: ${{ inputs.package == 'dbt-bigquery' }}
+        if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-bigquery"
         environment:
             name: "dbt-bigquery"
         env:
@@ -112,6 +111,7 @@ jobs:
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
             DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
@@ -124,17 +124,53 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -k "not TestPython"
-            working-directory: ./${{ inputs.package }}
-        -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
-            if: ${{ inputs.python-version == '3.9' }}  # we only run this for one version to run in series
-            working-directory: ./${{ inputs.package }}
+        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
+
+    integration-tests-bigquery-flaky:
+        # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky BQ tests even when they fail
+        if: |
+            contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
+        runs-on: ${{ inputs.os }}
+        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
+        needs: integration-tests-bigquery
+        defaults:
+            run:
+                working-directory: "./dbt-bigquery"
+        environment:
+            name: "dbt-bigquery"
+        env:
+            BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
+            BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
+            BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
+            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
+            DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
+            GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
 
     integration-tests-postgres:
-        if: inputs.package == 'dbt-postgres'
+        if: contains(fromJSON(inputs.packages), 'dbt-postgres')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-postgres"
         environment:
-            name: ${{ inputs.package }}
+            name: "dbt-postgres"
         env:
             POSTGRES_TEST_HOST: ${{ vars.POSTGRES_TEST_HOST }}
             POSTGRES_TEST_PORT: ${{ vars.POSTGRES_TEST_PORT }}
@@ -163,7 +199,6 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: psql -f ./scripts/setup_test_database.sql
-            working-directory: ./dbt-postgres
             env:
                 PGHOST: ${{ vars.POSTGRES_TEST_HOST }}
                 PGPORT: ${{ vars.POSTGRES_TEST_PORT }}
@@ -172,11 +207,13 @@ jobs:
                 PGDATABASE: postgres
         -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional --ddtrace
-            working-directory: ./${{ inputs.package }}
 
     integration-tests-postgres-psycopg2-check:
-        if: inputs.package == 'dbt-postgres'
+        if: contains(fromJSON(inputs.packages), 'dbt-postgres')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-postgres"
         steps:
         -   uses: actions/checkout@v4
         -   uses: actions/setup-python@v5
@@ -186,32 +223,31 @@ jobs:
             run: brew install postgresql
         -   name: "Test psycopg2 - default"
             run: scripts/psycopg2-check.sh
-            working-directory: ./${{ inputs.package }}
             env:
                 PSYCOPG2_EXPECTED_NAME: psycopg2-binary
         -   name: "Test psycopg2 - invalid override"
             run: scripts/psycopg2-check.sh
-            working-directory: ./${{ inputs.package }}
             env:
                 DBT_PSYCOPG2_NAME: rubber-baby-buggy-bumpers
                 PSYCOPG2_EXPECTED_NAME: psycopg2-binary
         -   name: "Test psycopg2 - override"
             run: scripts/psycopg2-check.sh
-            working-directory: ./${{ inputs.package }}
             env:
                 DBT_PSYCOPG2_NAME: psycopg2
                 PSYCOPG2_EXPECTED_NAME: psycopg2-binary  # we have not implemented the hook yet, so this doesn't work
         -   name: "Test psycopg2 - manual override"
             # verify that the workaround documented in the `README.md` continues to work
             run: scripts/psycopg2-check.sh
-            working-directory: ./${{ inputs.package }}
             env:
                 PSYCOPG2_WORKAROUND: true
                 PSYCOPG2_EXPECTED_NAME: psycopg2
 
     integration-tests-redshift:
-        if: ${{ inputs.package == 'dbt-redshift' }}
+        if: contains(fromJSON(inputs.packages), 'dbt-redshift')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-redshift"
         environment:
             name: "dbt-redshift"
         env:
@@ -235,9 +271,6 @@ jobs:
             REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
-            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
-            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
-            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -264,15 +297,78 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
               aws configure --profile $AWS_ROLE_PROFILE set output json
         -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
-            working-directory: ./${{ inputs.package }}
+
+    integration-tests-redshift-flaky:
+        # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky RS tests even when they fail
+        if: |
+            contains(fromJSON(inputs.packages), 'dbt-redshift') &&
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
+        runs-on: ${{ inputs.os }}
+        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
+        needs: integration-tests-redshift
+        defaults:
+            run:
+                working-directory: "./dbt-redshift"
+        environment:
+            name: "dbt-redshift"
+        env:
+            AWS_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            AWS_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            AWS_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            AWS_SOURCE_PROFILE: ${{ vars.AWS_SOURCE_PROFILE }}
+            AWS_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            AWS_ROLE_ACCESS_KEY_ID: ${{ vars.AWS_ROLE_ACCESS_KEY_ID }}
+            AWS_ROLE_SECRET_ACCESS_KEY: ${{ secrets.AWS_ROLE_SECRET_ACCESS_KEY }}
+            AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+            AWS_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
+            REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
+            REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
+            REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}
+            REDSHIFT_TEST_HOST: ${{ secrets.REDSHIFT_TEST_HOST }}
+            REDSHIFT_TEST_CLUSTER_ID: ${{ vars.REDSHIFT_TEST_CLUSTER_ID }}
+            REDSHIFT_TEST_REGION: ${{ vars.AWS_REGION }}
+            REDSHIFT_TEST_IAM_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
+            REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
+            REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
+            REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   name: Create AWS IAM profiles
+            run: |
+              aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
+              aws configure --profile $AWS_USER_PROFILE set aws_secret_access_key $AWS_USER_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_USER_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_USER_PROFILE set output json
+
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_access_key_id $AWS_ROLE_ACCESS_KEY_ID
+              aws configure --profile $AWS_SOURCE_PROFILE set aws_secret_access_key $AWS_ROLE_SECRET_ACCESS_KEY
+              aws configure --profile $AWS_SOURCE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_SOURCE_PROFILE set output json
+
+              aws configure --profile $AWS_ROLE_PROFILE set source_profile $AWS_SOURCE_PROFILE
+              aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
+              aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
+              aws configure --profile $AWS_ROLE_PROFILE set output json
         -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
-            working-directory: ./${{ inputs.package }}
 
     integration-tests-snowflake:
-        if: ${{ inputs.package == 'dbt-snowflake' }}
+        if: contains(fromJSON(inputs.packages), 'dbt-snowflake')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-snowflake"
         environment:
-            name: ${{ inputs.package }}
+            name: "dbt-snowflake"
         env:
             SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
             SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
@@ -298,11 +394,13 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch run integration-tests tests/functional --ddtrace
-            working-directory: ./${{ inputs.package }}
 
     integration-tests-spark:
-        if: ${{ inputs.package == 'dbt-spark' }}
+        if: contains(fromJSON(inputs.packages), 'dbt-spark')
         runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-spark"
         environment:
             name: "dbt-spark"
         env:
@@ -331,6 +429,4 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
-            working-directory: ./${{ inputs.package }}
         -   run: hatch run integration-tests --profile ${{ matrix.profile }}
-            working-directory: ./${{ inputs.package }}

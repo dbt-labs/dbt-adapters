@@ -269,11 +269,6 @@ class SnowflakeAdapter(SQLAdapter):
         # this can be collapsed once Snowflake adds is_iceberg to show objects
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
         if self.behavior.enable_iceberg_materializations.no_warn:
-            # The QUOTED_IDENTIFIERS_IGNORE_CASE setting impacts column names like
-            # is_iceberg which is created by dbt, but it does not affect the case
-            # of column values in Snowflake's SHOW OBJECTS query! This
-            # normalization step ensures metadata queries are handled consistently.
-            schema_objects = schema_objects.rename(column_names={"IS_ICEBERG": "is_iceberg"})
             columns.append("is_iceberg")
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
@@ -429,7 +424,7 @@ CALL {proc_name}();
         return response
 
     def valid_incremental_strategies(self):
-        return ["append", "merge", "delete+insert", "microbatch"]
+        return ["append", "merge", "delete+insert", "microbatch", "insert_overwrite"]
 
     def debug_query(self):
         """Override for DebugTask method"""

@@ -9,6 +9,7 @@ from google.auth.exceptions import DefaultCredentialsError
 from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from google.oauth2.credentials import Credentials as GoogleCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
+from google.auth.identity_pool import Credentials as IdentityPoolCredentials
 from mashumaro import pass_through
 
 from dbt_common.clients.system import run_cmd
@@ -17,6 +18,7 @@ from dbt_common.exceptions import DbtConfigError, DbtRuntimeError
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt.adapters.bigquery.token_suppliers import create_token_supplier
 
 
 _logger = AdapterLogger("BigQuery")
@@ -33,21 +35,23 @@ class DataprocBatchConfig(ExtensibleDbtClassMixin):
         self.batch_config = batch_config
 
 
-class _BigQueryConnectionMethod(StrEnum):
+class BigQueryConnectionMethod(StrEnum):
     OAUTH = "oauth"
     OAUTH_SECRETS = "oauth-secrets"
     SERVICE_ACCOUNT = "service-account"
     SERVICE_ACCOUNT_JSON = "service-account-json"
+    # WIF in this context refers to Workload Identity Federation https://cloud.google.com/iam/docs/workload-identity-federation
+    EXTERNAL_OAUTH_WIF = "external-oauth-wif"
 
 
 @dataclass
 class BigQueryCredentials(Credentials):
-    method: _BigQueryConnectionMethod = None  # type: ignore
+    method: BigQueryConnectionMethod = None  # type: ignore
 
     # BigQuery allows an empty database / project, where it defers to the
     # environment for the project
-    database: Optional[str] = None
-    schema: Optional[str] = None
+    database: Optional[str] = None  # type:ignore
+    schema: Optional[str] = None  # type:ignore
     execution_project: Optional[str] = None
     quota_project: Optional[str] = None
     location: Optional[str] = None
@@ -71,9 +75,28 @@ class BigQueryCredentials(Credentials):
     client_secret: Optional[str] = None
     token_uri: Optional[str] = None
 
-    dataproc_region: Optional[str] = None
+    # workload identity federation
+
+    # workload_pool_provider_path
+    #  The Security Token Service audience, which is usually the fully specified resource name of the workload pool provider.
+    #  This field is equivalent to the `audience` key in an Application Default Credentials file downloaded from Google Cloud Platform.
+    #  ex: //iam.googleapis.com/projects/<project-id>/locations/global/workloadIdentityPools/<workload-identity-pool>/providers/<workload-identity-provider>
+    workload_pool_provider_path: Optional[str] = None
+    # service_account_impersonation_url
+    #   The URL for the service account impersonation request, used to generate access tokens via GCP's IAM service.
+    #   ex: https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/<service-account-email>:generateAccessToken
+    service_account_impersonation_url: Optional[str] = None
+
+    # token_endpoint
+    #   a field that we expect to be a dictionary of values used to create
+    #   access tokens from an external identity provider integrated with GCP's
+    #   workload identity federation service
+    token_endpoint: Optional[Dict[str, str]] = None
+
+    compute_region: Optional[str] = None
     dataproc_cluster_name: Optional[str] = None
     gcs_bucket: Optional[str] = None
+    submission_method: Optional[str] = None
 
     dataproc_batch: Optional[DataprocBatchConfig] = field(
         metadata={
@@ -96,6 +119,7 @@ class BigQueryCredentials(Credentials):
         "target_dataset": "target_schema",
         "retries": "job_retries",
         "timeout_seconds": "job_execution_timeout_seconds",
+        "dataproc_region": "compute_region",
     }
 
     def __post_init__(self):
@@ -134,7 +158,7 @@ class BigQueryCredentials(Credentials):
             "timeout_seconds",
             "client_id",
             "token_uri",
-            "dataproc_region",
+            "compute_region",
             "dataproc_cluster_name",
             "gcs_bucket",
             "dataproc_batch",
@@ -193,15 +217,15 @@ def _create_impersonated_credentials(credentials: BigQueryCredentials) -> Impers
 
 def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
 
-    if credentials.method == _BigQueryConnectionMethod.OAUTH:
+    if credentials.method == BigQueryConnectionMethod.OAUTH:
         creds, _ = _create_bigquery_defaults(scopes=credentials.scopes)
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT:
         creds = ServiceAccountCredentials.from_service_account_file(
             credentials.keyfile, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
         details = credentials.keyfile_json
         if _is_base64(details):  # type:ignore
             details = _base64_to_string(details)
@@ -209,7 +233,7 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             details, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.OAUTH_SECRETS:
+    elif credentials.method == BigQueryConnectionMethod.OAUTH_SECRETS:
         creds = GoogleCredentials(
             token=credentials.token,
             refresh_token=credentials.refresh_token,
@@ -219,10 +243,45 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             scopes=credentials.scopes,
         )
 
+    elif credentials.method == BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
+        creds = _create_identity_pool_credentials(credentials=credentials)
+
     else:
         raise FailedToConnectError(f"Invalid `method` in profile: '{credentials.method}'")
 
     return creds
+
+
+def _create_identity_pool_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
+    if not credentials.token_endpoint:
+        raise FailedToConnectError("token_endpoint is required for external-oauth-wif")
+    token_supplier = create_token_supplier(credentials.token_endpoint)
+
+    # The dict here represents an Application Default Credentials configuration.
+    # Identity pool credentials can be created from these configurations, which informs the Google clients:
+    #   1. How to retrieve an access token from an external IdP, which is specified in the `credential_source` blob
+    #   2. Where to exchange that access token for a short-lived security token, which is specified by the
+    #      `token_url`; this should point to Google's Security Token Service (STS) API
+    #   3. The intended audience of the short-lived security tokens issued by Google's STS API,
+    #      which is generally the fully specified resource name of the workload pool provider
+    adc_dict = {
+        "universe_domain": "googleapis.com",
+        "type": "external_account",
+        "audience": credentials.workload_pool_provider_path,
+        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+        "token_url": "https://sts.googleapis.com/v1/token",
+        "subject_token_supplier": token_supplier,
+    }
+
+    # The service account impersonation URL here is optional, but we expect to see it in cases where IAM roles have not been
+    # assigned to external identities (such as Entra) or direct resource access has not been granted to the workpool
+    if credentials.service_account_impersonation_url:
+        adc_dict["service_account_impersonation_url"] = (
+            credentials.service_account_impersonation_url
+        )
+
+    creds = IdentityPoolCredentials.from_info(adc_dict)
+    return creds.with_scopes(credentials.scopes)
 
 
 @lru_cache()

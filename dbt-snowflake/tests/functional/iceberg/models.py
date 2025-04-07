@@ -8,6 +8,20 @@ _MODEL_BASIC_TABLE_MODEL = """
 select 1 as id
 """
 
+_MODEL_BASIC_TABLE_LITERALS = """
+{{
+  config(
+    materialized = "table",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+  )
+}}
+
+select
+    object_construct('theme', 'dark', 'notifications', TO_VARCHAR(true))::MAP(VARCHAR(20), VARCHAR(20)) as my_map_conversion,
+"""
+
 _MODEL_BASIC_ICEBERG_MODEL = """
 {{
   config(
@@ -70,8 +84,9 @@ select * from {{ ref('first_table') }}
 _MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_PATH = """
 {{
   config(
-    transient = "transient",
     materialized = "dynamic_table",
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 minute',
     cluster_by=['id'],
     table_format="iceberg",
     external_volume="s3_iceberg_snow",
@@ -85,8 +100,9 @@ select * from {{ ref('first_table') }}
 _MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_PATH_SUBPATH = """
 {{
   config(
-    transient = "true",
     materialized = "dynamic_table",
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 minute',
     cluster_by=['id'],
     table_format="iceberg",
     external_volume="s3_iceberg_snow",
