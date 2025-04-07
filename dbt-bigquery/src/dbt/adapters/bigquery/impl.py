@@ -775,7 +775,7 @@ class BigQueryAdapter(BaseAdapter):
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
         if iam_tags:
-            opts["iam_tags"] = list(iam_tags.items())
+            opts["iam_tags"] = list(iam_tags.items())  # type: ignore[assignment]
 
         return opts
 
