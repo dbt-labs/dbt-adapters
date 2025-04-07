@@ -29,11 +29,11 @@ labeled_model_sql = """
 select * from {{ ref('view_model') }}
 """.lstrip()
 
-tagged_model_sql = """
+iam_tagged_model_sql = """
 {{
     config(
         materialized = "table",
-        tags = {'environment': 'prod', 'component': 'batch', 'project': 'atlas'}
+        iam_tags = {'environment': 'prod', 'component': 'batch', 'project': 'atlas'}
     )
 }}
 

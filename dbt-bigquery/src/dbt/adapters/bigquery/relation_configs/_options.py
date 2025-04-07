@@ -25,7 +25,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
-    tags: Optional[Dict[str, str]] = None
+    iam_tags: Optional[Dict[str, str]] = None
 
     def as_ddl_dict(self) -> Dict[str, Any]:
         """
@@ -62,7 +62,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "kms_key_name": string,
             "description": escaped_string,
             "labels": array,
-            "tags": array,
+            "iam_tags": array,
         }
 
         def formatted_option(name: str) -> Optional[Any]:
@@ -90,7 +90,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "kms_key_name": None,
             "description": None,
             "labels": None,
-            "tags": None,
+            "iam_tags": None,
         }
 
         def formatted_setting(name: str) -> Any:
@@ -121,7 +121,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
                 "kms_key_name",
                 "description",
                 "labels",
-                "tags",
+                "iam_tags",
             ]
         }
 
@@ -151,8 +151,8 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         if labels := table.labels:
             config_dict.update({"labels": labels})
 
-        if tags := table.tags:
-            config_dict.update({"tags": tags})
+        if iam_tags := table.iam_tags:
+            config_dict.update({"iam_tags": iam_tags})
 
         if encryption_configuration := table.encryption_configuration:
             config_dict.update({"kms_key_name": encryption_configuration.kms_key_name})
