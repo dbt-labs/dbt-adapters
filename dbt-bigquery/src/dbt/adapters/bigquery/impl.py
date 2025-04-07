@@ -765,6 +765,7 @@ class BigQueryAdapter(BaseAdapter):
             opts["description"] = '"""{}"""'.format(description)
 
         labels = config.get("labels") or {}
+        tags = config.get("tags") or {}
 
         if config.get("labels_from_meta"):
             meta = config.get("meta") or {}
@@ -773,8 +774,7 @@ class BigQueryAdapter(BaseAdapter):
         if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
-        if config.get("tags"):
-            tags = config.get("tags", {})
+        if tags:
             opts["tags"] = list(tags.items())
 
         return opts
