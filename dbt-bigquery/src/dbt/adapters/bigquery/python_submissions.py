@@ -438,14 +438,14 @@ def _install_packages(packages: list[str]) -> None:
     import subprocess
     import importlib.metadata
 
-    def _is_package_installed(package: str) -> tuple[bool, Optional[str]]:
+    def _is_package_installed(package: str) -> tuple[bool, str]:
         try:
             normalized_name = package.replace("_", "-")
             version = importlib.metadata.version(normalized_name)
             return True, version
         except Exception:
             # Unable to determine the version.
-            return False, None
+            return False, ""
 
     # Check the installation of individual packages first.
     packages_to_install = []
