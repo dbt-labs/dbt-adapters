@@ -81,7 +81,7 @@ class EntraTokenSupplier(SubjectTokenSupplier):
         """Check if the cached token is still valid."""
         if not self._token_expiry:
             return False
-        return datetime.now(timezone.utc) < (self._token_expiry - self._expiry_buffer)
+        return datetime.now(timezone.utc).replace(tzinfo=None) < (self._token_expiry - self._expiry_buffer)
 
     def _fetch_new_token(self) -> str:
         """Fetch a new token from Entra ID."""
@@ -98,7 +98,7 @@ class EntraTokenSupplier(SubjectTokenSupplier):
         # Extract expiration time from token response
         # Default to 1 hour if not specified
         expires_in = token_data.get("expires_in", 3600)
-        self._token_expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        self._token_expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=expires_in)
         self._cached_token = token_data["access_token"]
 
         return token_data["access_token"]
