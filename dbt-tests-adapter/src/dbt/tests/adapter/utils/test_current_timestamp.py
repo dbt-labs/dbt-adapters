@@ -47,11 +47,10 @@ class BaseCurrentTimestamp:
         """
         Current UTC datetime with the same timezone-awareness (or naiveness) as the input.
         """
-        return (
-            datetime.now(timezone.utc)
-            if is_aware(dt)
-            else datetime.now(timezone.utc).replace(tzinfo=None)
-        )
+        if is_aware(dt):
+            return datetime.now(timezone.utc)
+
+        return datetime.now(timezone.utc).replace(tzinfo=None)
 
 class BaseCurrentTimestampAware(BaseCurrentTimestamp):
     def test_current_timestamp_type(self, current_timestamp):
