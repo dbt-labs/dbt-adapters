@@ -102,7 +102,8 @@ class EntraTokenSupplier(SubjectTokenSupplier):
         expires_in = token_data.get("expires_in", 3600)
         self._token_expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
             seconds=expires_in
-        )        self._cached_token = token_data["access_token"]
+        )
+        self._cached_token = token_data["access_token"]
 
         return token_data["access_token"]
 
