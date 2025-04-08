@@ -1,6 +1,0 @@
-kind: Fixes
-body: Create indexes on the intermediate relation before the swap for incremental models
-time: 2025-04-02T16:05:30.892493-06:00
-custom:
-    Author: dbeatty10 etx121
-    Issue: "966"
