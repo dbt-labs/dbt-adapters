@@ -52,6 +52,7 @@ class BaseCurrentTimestamp:
 
         return datetime.now(timezone.utc).replace(tzinfo=None)
 
+
 class BaseCurrentTimestampAware(BaseCurrentTimestamp):
     def test_current_timestamp_type(self, current_timestamp):
         assert is_aware(current_timestamp)
