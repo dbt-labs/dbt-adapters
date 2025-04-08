@@ -1,3 +1,4 @@
+import inspect
 import json
 import re
 from typing import Any, Dict, Optional, Union
@@ -201,6 +202,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
+        self._packages = parsed_model["config"].get("packages", [])
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -388,6 +390,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
     def submit(self, compiled_code: str) -> None:
+        if self._packages:
+            install_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                f"{inspect.getsource(_install_packages)}\n{install_code}\n{compiled_code}"
+            )
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
@@ -424,3 +431,65 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self._process_gcs_log(gcs_log_uri)
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+
+
+def _install_packages(packages: list[str]) -> None:
+    import sys
+    import subprocess
+    import importlib.metadata
+
+    def _is_package_installed(package: str) -> tuple[bool, str]:
+        try:
+            normalized_name = package.replace("_", "-")
+            version = importlib.metadata.version(normalized_name)
+            return True, version
+        except Exception:
+            # Unable to determine the version.
+            return False, ""
+
+    # Check the installation of individual packages first.
+    packages_to_install = []
+    for package in packages:
+        if "==" in package:
+            package_name, required_version = package.split("==")
+        else:
+            package_name, required_version = package, ""
+
+        installed, version = _is_package_installed(package_name)
+
+        if installed:
+            if required_version and version != required_version:
+                print(
+                    f"Package '{package_name}' is already installed (version {version}) and cannot be updated. Skipping"
+                )
+            else:
+                print(
+                    f"Package '{package_name}' is already installed (version {version}). Skipping."
+                )
+        else:
+            packages_to_install.append(package)
+
+    # All packages have been installed with certain version.
+    if not packages_to_install:
+        return
+
+    # Try to pip install the uninstalled packages.
+    pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
+
+    try:
+        result = subprocess.run(
+            pip_command,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+        )
+        if result.stdout:
+            print(f"pip output:\n{result.stdout.strip()}")
+        if result.stderr:
+            print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
+
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")
