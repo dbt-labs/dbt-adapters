@@ -17,6 +17,7 @@ from dbt.adapters.bigquery.credentials import (
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
+from dbt_common.exceptions import DbtRuntimeError
 from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
@@ -355,7 +356,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
                     # Check errors from the output of notebook execution.
                     if isinstance(value, str) and value.strip().lower() == "error":
-                        raise RuntimeError(f"See details from GCP console: {formatted_output}")
+                        raise DbtRuntimeError(f"See details from GCP console: {formatted_output}")
             else:
                 _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
@@ -389,8 +390,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             # Improve the output format for better readability.
             formatted_output = self._format_outputs(outputs)
             _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
-        except RuntimeError as e:
-            raise RuntimeError(f"Colab notebook execution failed: {e}")
+        except DbtRuntimeError as e:
+            raise DbtRuntimeError(f"Colab notebook execution failed: {e}")
         except Exception:
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
@@ -424,7 +425,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 "console since it might still be actively running."
             )
         except Exception as e:
-            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
+            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
