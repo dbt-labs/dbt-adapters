@@ -15,23 +15,29 @@
         It is recommended to start by increasing list_relations_page_limit to something more than the default of 10.
     {%- endset -%}
 
-    {%- set paginated_results = [] -%}
-    {%- set watermark = none -%}
+    {%- set paginated_state = namespace(paginated_results=[], watermark=none) -%}
 
-    {%- do run_query('alter session set quoted_identifiers_ignore_case = false;') -%}
+    {%- do run_query('alter session set quoted_identifiers_ignore_case = true;') -%}
 
-    {#- loop an extra time to catch the breach of max iterations -#}
-    {%- for _ in range(0, max_iter + 1) -%}
+    {#-
+        loop an extra time to catch the breach of max iterations
+        Note: while range is 0-based, loop.index starts at 1
+    -#}
+    {%- for _ in range(max_iter + 1) -%}
 
-        {#- raise an error if we still didn't exit and we're beyond the max iterations limit -#}
-        {%- if loop.index == max_iter -%}
-            {%- do exceptions.raise_compiler_error(too_many_relations_msg) -%}
+        {#-
+            raise a warning and break if we still didn't exit and we're beyond the max iterations limit
+            Note: while range is 0-based, loop.index starts at 1
+        -#}
+        {%- if loop.index == max_iter + 1 -%}
+            {%- do exceptions.warn(too_many_relations_msg) -%}
+            {%- break -%}
         {%- endif -%}
 
-        {%- set show_objects_sql = snowflake__show_objects_sql(schema, max_results_per_iter, watermark) -%}
+        {%- set show_objects_sql = snowflake__show_objects_sql(schema, max_results_per_iter, paginated_state.watermark) -%}
         {%- set paginated_result = run_query(show_objects_sql) -%}
-        {%- do paginated_results.append(paginated_result) -%}
-        {%- set watermark = paginated_result.columns.get('name').values()[-1] -%}
+        {%- do paginated_state.paginated_results.append(paginated_result) -%}
+        {%- set paginated_state.watermark = paginated_result.columns[1].values()[-1] -%}
 
         {#- we got less results than the max_results_per_iter (includes 0), meaning we reached the end -#}
         {%- if (paginated_result | length) < max_results_per_iter -%}
@@ -43,8 +49,8 @@
     {%- do run_query('alter session unset quoted_identifiers_ignore_case;') -%}
 
     {#- grab the first table in the paginated results to access the `merge` method -#}
-    {%- set agate_table = paginated_results[0] -%}
-    {%- do return(agate_table.merge(paginated_results)) -%}
+    {%- set agate_table = paginated_state.paginated_results[0] -%}
+    {%- do return(agate_table.merge(paginated_state.paginated_results)) -%}
 
 {% endmacro %}
 
