@@ -29,7 +29,7 @@ def oauth_target():
     return {
         "type": "bigquery",
         "method": "oauth",
-        "threads": 1,
+        "threads": 4,
         "job_retries": 2,
         "compute_region": os.getenv("COMPUTE_REGION") or os.getenv("DATAPROC_REGION"),
         "dataproc_cluster_name": os.getenv("DATAPROC_CLUSTER_NAME"),
@@ -46,7 +46,7 @@ def service_account_target():
     return {
         "type": "bigquery",
         "method": "service-account-json",
-        "threads": 1,
+        "threads": 4,
         "job_retries": 2,
         "project": project_id,
         "keyfile_json": credentials,
