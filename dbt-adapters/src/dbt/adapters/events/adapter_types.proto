@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package proto_types;
+package v1.public.fields.adapter_types;
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
