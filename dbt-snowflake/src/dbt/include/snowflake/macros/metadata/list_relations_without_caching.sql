@@ -17,7 +17,7 @@
 
     {%- set paginated_state = namespace(paginated_results=[], watermark=none) -%}
 
-    {%- do run_query('alter session set quoted_identifiers_ignore_case = true;') -%}
+    {%- do run_query('alter session set quoted_identifiers_ignore_case = false;') -%}
 
     {#-
         loop an extra time to catch the breach of max iterations
