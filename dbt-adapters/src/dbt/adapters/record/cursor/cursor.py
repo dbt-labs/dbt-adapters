@@ -1,5 +1,8 @@
 from typing import Any, Optional
 
+from dbt_common.events.base_types import BaseEvent
+from dbt_common.events.functions import fire_event
+from dbt_common.events.types import RecordReplayIssue
 from dbt_common.record import record_function
 
 from dbt.adapters.contracts.connection import Connection
@@ -52,3 +55,15 @@ class RecordReplayCursor:
     @record_function(CursorGetDescriptionRecord, method=True, id_field_name="connection_name")
     def description(self) -> str:
         return self.native_cursor.description
+
+    def _fire_event(self, evt: BaseEvent) -> None:
+        """Wraps fire_event for easier test mocking."""
+        fire_event(evt)
+
+    def __getattr__(self, name: str) -> Any:
+        self._fire_event(
+            RecordReplayIssue(
+                msg=f"Unexpected attribute '{name}' accessed on {self.__class__.__name__}"
+            )
+        )
+        return getattr(self.native_cursor, name)
