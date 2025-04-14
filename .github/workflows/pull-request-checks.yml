@@ -108,7 +108,7 @@ jobs:
     # This job does nothing and is only used for branch protection
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
-        if: always()
+        if: ${{ !cancelled() }}
         needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
