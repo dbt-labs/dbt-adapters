@@ -98,7 +98,6 @@ class SnowflakeAdapter(SQLAdapter):
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
     ) -> CatalogIntegration:
-        # Snowflake uppercases everything in their metadata tables
         # don't mutate the object that dbt-core passes in
         catalog_integration = deepcopy(catalog_integration)
         catalog_integration.name = catalog_integration.name.upper()
@@ -502,6 +501,5 @@ CALL {proc_name}();
         """
         if catalog := parse_model.catalog_name(model):
             catalog_integration = self.get_catalog_integration(catalog)
-            relation = catalog_integration.build_relation(model)
-            return relation
+            return catalog_integration.build_relation(model)
         return None
