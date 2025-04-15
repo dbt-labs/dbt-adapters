@@ -20,9 +20,3 @@ SnowflakeCatalogIntegration = Union[
     IcebergManagedCatalogIntegration,
     NativeCatalogIntegration,
 ]
-
-
-CATALOG_INTEGRATIONS = [
-    IcebergManagedCatalogIntegration,
-    NativeCatalogIntegration,
-]
