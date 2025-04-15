@@ -25,7 +25,10 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
-from dbt.adapters.snowflake.catalogs import CATALOG_INTEGRATIONS
+from dbt.adapters.snowflake.catalogs import (
+    IcebergManagedCatalogIntegration,
+    NativeCatalogIntegration,
+)
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
 from dbt.adapters.snowflake import SnowflakeColumn
@@ -65,7 +68,10 @@ class SnowflakeAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = SnowflakeConfig
 
-    CATALOG_INTEGRATIONS = CATALOG_INTEGRATIONS
+    CATALOG_INTEGRATIONS = [
+        IcebergManagedCatalogIntegration,
+        NativeCatalogIntegration,
+    ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
