@@ -45,6 +45,8 @@
         warehouse = {{ dynamic_table.snowflake_warehouse }}
         {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
         {{ optional('initialize', dynamic_table.initialize) }}
+        {{ optional('with row access policy', dynamic_table.row_access_policy, with_equal=false) }}
+        {{ optional('with tag', dynamic_table.table_tag, quote_char='(', quote_char_right=')', with_equal=false) }}
         as (
             {{ sql }}
         )
@@ -77,6 +79,8 @@
         base_location = '{{ dynamic_table.catalog.base_location }}'
         {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
         {{ optional('initialize', dynamic_table.initialize) }}
+        {{ optional('row_access_policy', dynamic_table.row_access_policy) }}
+        {{ optional('table_tag', dynamic_table.table_tag) }}
         as (
             {{ sql }}
         )
