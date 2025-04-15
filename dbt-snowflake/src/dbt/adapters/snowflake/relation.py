@@ -1,10 +1,11 @@
+import textwrap
 from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
-from dbt.adapters.events.types import AdapterEventDebug
+from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
 from dbt.adapters.relation_configs import (
     RelationConfigBase,
     RelationConfigChangeAction,
@@ -12,7 +13,7 @@ from dbt.adapters.relation_configs import (
 )
 from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
-from dbt_common.events.functions import fire_event
+from dbt_common.events.functions import fire_event, warn_or_error
 
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
@@ -142,12 +143,72 @@ class SnowflakeRelation(BaseRelation):
         """
         return self.type in self.renameable_relations and not self.is_iceberg_format
 
+    def get_ddl_prefix_for_create(self, config: RelationConfig, temporary: bool) -> str:
+        """
+        This macro renders the appropriate DDL prefix during the create_table_as
+        macro. It decides based on mutually exclusive table configuration options:
+        - TEMPORARY: Indicates a table that exists only for the duration of the session.
+        - ICEBERG: A specific storage format that requires a distinct DDL layout.
+        - TRANSIENT: A table similar to a permanent table but without fail-safe.
+        Additional Caveats for Iceberg models:
+        - transient=true throws a warning because Iceberg does not support transient tables
+        - A temporary relation is never an Iceberg relation because Iceberg does not
+          support temporary relations.
+        """
+
+        transient_explicitly_set_true: bool = config.get("transient", False)  # type:ignore
+
+        # Temporary tables are a Snowflake feature that do not exist in the
+        # Iceberg framework. We ignore the Iceberg status of the model.
+        if temporary:
+            return "temporary"
+        elif self.is_iceberg_format:
+            # Log a warning that transient=true on an Iceberg relation is ignored.
+            if transient_explicitly_set_true:
+                warn_or_error(
+                    AdapterEventWarning(
+                        base_msg=(
+                            "Iceberg format relations cannot be transient. Please "
+                            "remove either the transient or iceberg config options "
+                            f"from {self.path.database}.{self.path.schema}."
+                            f"{self.path.identifier}. If left unmodified, dbt will "
+                            "ignore 'transient'."
+                        )
+                    )
+                )
+
+            return "iceberg"
+
+        # Always supply transient on table create DDL unless user specifically sets
+        # transient to false or unset. Might as well update the object attribute too!
+        elif transient_explicitly_set_true or config.get("transient", True):  # type:ignore
+            return "transient"
+        else:
+            return ""
+
     def get_ddl_prefix_for_alter(self) -> str:
         """All ALTER statements on Iceberg tables require an ICEBERG prefix"""
         if self.is_iceberg_format:
             return "iceberg"
         else:
             return ""
+
+    def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
+        # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
+        base_location: str = (
+            f"{config.get('base_location_root', '_dbt')}/{self.schema}/{self.name}"  # type:ignore
+        )
+
+        if subpath := config.get("base_location_subpath"):  # type:ignore
+            base_location += f"/{subpath}"
+
+        external_volume = config.get("external_volume")  # type:ignore
+        iceberg_ddl_predicates: str = f"""
+        external_volume = '{external_volume}'
+        catalog = 'snowflake'
+        base_location = '{base_location}'
+        """
+        return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def __drop_conditions(self, old_relation: "SnowflakeRelation") -> Iterator[Tuple[bool, str]]:
         drop_view_message: str = (
