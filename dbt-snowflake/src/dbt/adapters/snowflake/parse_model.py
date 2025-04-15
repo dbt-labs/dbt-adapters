@@ -7,10 +7,7 @@ from dbt.adapters.snowflake import constants
 
 
 def automatic_clustering(model: RelationConfig) -> Optional[bool]:
-    if not model.config:
-        return None
-
-    return model.config.get("automatic_clustering", False)
+    return model.config.get("automatic_clustering", False) if model.config else None
 
 
 def base_location(model: RelationConfig) -> Optional[str]:
@@ -57,10 +54,7 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
 
 
 def external_volume(model: RelationConfig) -> Optional[str]:
-    if not model.config:
-        return None
-
-    return model.config.get("external_volume")
+    return model.config.get("external_volume") if model.config else None
 
 
 def is_transient(model: RelationConfig) -> Optional[bool]:
