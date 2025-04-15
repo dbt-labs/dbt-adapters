@@ -21,7 +21,7 @@ create dynamic iceberg table {{ relation }}
     target_lag = '{{ dynamic_table.target_lag }}'
     warehouse = {{ dynamic_table.snowflake_warehouse }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
-    catalog = 'SNOWFLAKE'
+    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for managed Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
     {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
     {{ optional('initialize', dynamic_table.initialize) }}
