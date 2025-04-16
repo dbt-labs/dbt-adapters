@@ -145,9 +145,9 @@ import bigframes.pandas as bpd
 bpd.options.bigquery.project = "{{ target.project }}"
 bpd.options.bigquery.location = "{{ target.location }}"
 bpd.options.compute.extra_query_labels["bigframes-dbt-api"] = "python-model-table"
+session = None
 {{ compiled_code }}
 dbt = dbtObj(bpd.read_gbq)
-session = None
 df = model(dbt, session)
 df.to_gbq("{{ target_relation }}", if_exists="replace")
 df._session.close()
