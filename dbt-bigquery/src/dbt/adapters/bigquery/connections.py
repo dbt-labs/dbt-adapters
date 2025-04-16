@@ -263,6 +263,10 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
+        job_timeout_ms = conn.credentials.job_timeout_ms
+        if job_timeout_ms is not None and job_timeout_ms != 0:
+            job_params["job_timeout_ms"] = job_timeout_ms
+
         with self.exception_handler(sql):
             job_id = self.generate_job_id()
 
