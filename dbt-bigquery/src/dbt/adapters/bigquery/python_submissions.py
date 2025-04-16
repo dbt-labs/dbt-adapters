@@ -22,6 +22,7 @@ from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
+from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
@@ -354,9 +355,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     else:
                         formatted_output += f"    {value}\n"
 
-                    # Check errors from the output of notebook execution.
+                    # Extract only the final error message line. Discard the
+                    # traceback details as they contain raw ANSI escape codes.
                     if isinstance(value, str) and value.strip().lower() == "error":
-                        raise DbtRuntimeError(f"See details from GCP console: {formatted_output}")
+                        return formatted_output
+
             else:
                 _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
@@ -390,8 +393,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
             # Improve the output format for better readability.
             formatted_output = self._format_outputs(outputs)
             _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
-        except DbtRuntimeError as e:
-            raise DbtRuntimeError(f"Colab notebook execution failed: {e}")
         except Exception:
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
@@ -418,6 +419,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
                 timeout=self._polling_retry.timeout
             )
+            retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
         except TimeoutError as timeout_error:
             raise TimeoutError(
                 f"The dbt operation encountered a timeout: {timeout_error}\n"
@@ -430,5 +432,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         self._process_gcs_log(gcs_log_uri)
+
+        if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' failed."
+            )
+        elif retrieved_job.job_state != aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' finished with unexpected state: {retrieved_job.job_state.name}"
+            )
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
