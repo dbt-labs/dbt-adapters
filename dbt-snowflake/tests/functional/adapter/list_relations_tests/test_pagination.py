@@ -49,9 +49,9 @@ class BaseConfig:
     @pytest.fixture(scope="class")
     def models(self):
         my_models = {"my_model_base.sql": TABLE}
-        for view in range(0, self.VIEWS):
+        for view in range(self.VIEWS):
             my_models[f"my_model_{view}.sql"] = VIEW
-        for dynamic_table in range(0, self.DYNAMIC_TABLES):
+        for dynamic_table in range(self.DYNAMIC_TABLES):
             my_models[f"my_dynamic_table_{dynamic_table}.sql"] = DYNAMIC_TABLE
         return my_models
 
