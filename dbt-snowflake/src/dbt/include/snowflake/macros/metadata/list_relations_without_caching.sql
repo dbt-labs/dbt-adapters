@@ -1,4 +1,4 @@
-{% macro snowflake__list_relations_without_caching(schema_relation, max_iter=10, max_results_per_iter=10000) %}
+{% macro snowflake__list_relations_without_caching(schema_relation, max_iter=10000, max_results_per_iter=10000) %}
 
     {%- if schema_relation is string -%}
         {%- set schema = schema_relation -%}
@@ -12,7 +12,7 @@
         dbt is currently configured to list a maximum of {{ max_results_per_iter * max_iter }} objects per schema.
         {{ schema }} exceeds this limit. If this is expected, you may configure this limit
         by setting list_relations_per_page and list_relations_page_limit in your project flags.
-        It is recommended to start by increasing list_relations_page_limit to something more than the default of 10.
+        It is recommended to start by increasing list_relations_page_limit.
     {%- endset -%}
 
     {%- set paginated_state = namespace(paginated_results=[], watermark=none) -%}
