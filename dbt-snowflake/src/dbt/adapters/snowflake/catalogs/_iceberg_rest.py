@@ -4,13 +4,7 @@ from typing import Optional
 from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
-from dbt.adapters.snowflake.catalogs._parse_relation_config import (
-    auto_refresh,
-    catalog_namespace,
-    catalog_table,
-    external_volume,
-    replace_invalid_characters,
-)
+from dbt.adapters.snowflake import parse_model
 
 
 @dataclass
@@ -73,19 +67,19 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
     def build_relation(self, model: RelationConfig) -> IcebergRESTCatalogRelation:
 
         # booleans need to be handled explicitly since False is "None-sey"
-        _replace_invalid_characters = replace_invalid_characters(model)
+        _replace_invalid_characters = parse_model.replace_invalid_characters(model)
         if _replace_invalid_characters is None:
             _replace_invalid_characters = self.replace_invalid_characters
 
-        _auto_refresh = auto_refresh(model)
+        _auto_refresh = parse_model.auto_refresh(model)
         if _auto_refresh is None:
             _auto_refresh = self.auto_refresh
 
         return IcebergRESTCatalogRelation(
-            catalog_table=catalog_table(model),
+            catalog_table=parse_model.catalog_table(model),
             catalog_name=self.catalog_name,
-            catalog_namespace=catalog_namespace(model) or self.catalog_namespace,
-            external_volume=external_volume(model) or self.external_volume,
+            catalog_namespace=parse_model.catalog_namespace(model) or self.catalog_namespace,
+            external_volume=parse_model.external_volume(model) or self.external_volume,
             replace_invalid_characters=_replace_invalid_characters,
             auto_refresh=_auto_refresh,
         )

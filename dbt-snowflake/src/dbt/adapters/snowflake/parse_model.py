@@ -6,6 +6,12 @@ from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.snowflake import constants
 
 
+def auto_refresh(model: RelationConfig) -> Optional[bool]:
+    if model.config:
+        return model.config.get("auto_refresh")
+    return None
+
+
 def automatic_clustering(model: RelationConfig) -> Optional[bool]:
     return model.config.get("automatic_clustering", False) if model.config else None
 
@@ -37,6 +43,16 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
         return constants.DEFAULT_ICEBERG_CATALOG.name
 
     return constants.DEFAULT_NATIVE_CATALOG.name
+
+
+def catalog_namespace(model: RelationConfig) -> Optional[str]:
+    return model.config.get("catalog_namespace") if model.config else None
+
+
+def catalog_table(model: RelationConfig) -> str:
+    return (
+        model.config.get("catalog_table", model.identifier) if model.config else model.identifier
+    )
 
 
 def cluster_by(model: RelationConfig) -> Optional[str]:
@@ -77,6 +93,10 @@ def is_transient(model: RelationConfig) -> Optional[bool]:
     if table_format(model) == constants.ICEBERG_TABLE_FORMAT:
         return False
     return model.config.get("transient", False) or model.config.get("transient", True)
+
+
+def replace_invalid_characters(model: RelationConfig) -> Optional[bool]:
+    return model.config.get("replace_invalid_characters") if model.config else None
 
 
 def table_format(model: RelationConfig) -> Optional[str]:
