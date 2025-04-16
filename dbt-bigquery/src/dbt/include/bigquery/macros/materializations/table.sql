@@ -143,7 +143,9 @@ df.write \
 {% macro bigframes_write_table(compiled_code, target_relation) %}
 import bigframes.pandas as bpd
 bpd.options.bigquery.project = "{{ target.project }}"
+{% if target.location %}
 bpd.options.bigquery.location = "{{ target.location }}"
+{% endif %}
 bpd.options.compute.extra_query_labels["bigframes-dbt-api"] = "python-model-table"
 {{ compiled_code }}
 dbt = dbtObj(bpd.read_gbq)
