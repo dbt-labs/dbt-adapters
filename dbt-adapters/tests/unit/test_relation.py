@@ -103,6 +103,15 @@ def test_render_limited(limit, require_alias, expected_result):
             """(select * from "test_database"."test_schema"."test_identifier" where column >= '2020-01-01 00:00:00')""",
         ),
         (
+            EventTimeFilter(
+                field_name="column",
+                start=datetime(year=2020, month=1, day=1),
+                filter_format="%Y-%m-%d",
+            ),
+            False,
+            """(select * from "test_database"."test_schema"."test_identifier" where column >= '2020-01-01')""",
+        ),
+        (
             EventTimeFilter(field_name="column", start=datetime(year=2020, month=1, day=1)),
             True,
             """(select * from "test_database"."test_schema"."test_identifier" where column >= '2020-01-01 00:00:00') _dbt_et_filter_subq_test_identifier""",
@@ -115,11 +124,30 @@ def test_render_limited(limit, require_alias, expected_result):
         (
             EventTimeFilter(
                 field_name="column",
+                end=datetime(year=2020, month=1, day=1),
+                filter_format="%Y-%m-%d",
+            ),
+            False,
+            """(select * from "test_database"."test_schema"."test_identifier" where column < '2020-01-01')""",
+        ),
+        (
+            EventTimeFilter(
+                field_name="column",
                 start=datetime(year=2020, month=1, day=1),
                 end=datetime(year=2020, month=1, day=2),
             ),
             False,
             """(select * from "test_database"."test_schema"."test_identifier" where column >= '2020-01-01 00:00:00' and column < '2020-01-02 00:00:00')""",
+        ),
+        (
+            EventTimeFilter(
+                field_name="column",
+                start=datetime(year=2020, month=1, day=1),
+                end=datetime(year=2020, month=1, day=2),
+                filter_format="%Y-%m-%d",
+            ),
+            False,
+            """(select * from "test_database"."test_schema"."test_identifier" where column >= '2020-01-01' and column < '2020-01-02')""",
         ),
     ],
 )
