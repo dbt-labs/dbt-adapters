@@ -26,7 +26,9 @@ from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import (
+    IcebergAWSGlueCatalogIntegration,
     IcebergManagedCatalogIntegration,
+    IcebergRESTCatalogIntegration,
     NativeCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
@@ -69,7 +71,9 @@ class SnowflakeAdapter(SQLAdapter):
     AdapterSpecificConfigs = SnowflakeConfig
 
     CATALOG_INTEGRATIONS = [
+        IcebergAWSGlueCatalogIntegration,
         IcebergManagedCatalogIntegration,
+        IcebergRESTCatalogIntegration,
         NativeCatalogIntegration,
     ]
     CONSTRAINT_SUPPORT = {
