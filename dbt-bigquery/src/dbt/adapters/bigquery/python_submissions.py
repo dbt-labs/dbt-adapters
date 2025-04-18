@@ -17,10 +17,12 @@ from dbt.adapters.bigquery.credentials import (
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
+from dbt_common.exceptions import DbtRuntimeError
 from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
+from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
@@ -352,7 +354,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
                             formatted_output += f"    {inner_key}: {inner_value}\n"
                     else:
                         formatted_output += f"    {value}\n"
+
+                    # Extract only the final error message line. Discard the
+                    # traceback details as they contain raw ANSI escape codes.
+                    if isinstance(value, str) and value.strip().lower() == "error":
+                        return formatted_output
+
             else:
+                _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
 
             # Add a newline between items.
@@ -410,6 +419,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
                 timeout=self._polling_retry.timeout
             )
+            retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
         except TimeoutError as timeout_error:
             raise TimeoutError(
                 f"The dbt operation encountered a timeout: {timeout_error}\n"
@@ -417,10 +427,19 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 "console since it might still be actively running."
             )
         except Exception as e:
-            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
+            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         self._process_gcs_log(gcs_log_uri)
+
+        if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' failed."
+            )
+        elif retrieved_job.job_state != aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' finished with unexpected state: {retrieved_job.job_state.name}"
+            )
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
