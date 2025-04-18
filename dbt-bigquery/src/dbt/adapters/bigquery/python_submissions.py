@@ -434,37 +434,46 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
 
 def _install_packages(packages: list[str]) -> None:
+    """Checks and installs packages via pip in a separate environment.
+
+    Parses requirement strings (e.g., 'pandas>=1.0', 'numpy==2.1.1') using the
+    'packaging' library to check against installed versions. It only installs
+    packages that are not already present in the environment. Existing packages
+    will not be updated, even if a different version is requested.
+
+    NOTE: This function is not intended for direct invocation. Instead, its
+    source code is extracted using inspect.getsource for execution in a separate
+    environment.
+    """
     import sys
     import subprocess
     import importlib.metadata
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+    from typing import Optional, Tuple
 
-    def _is_package_installed(package: str) -> tuple[bool, str]:
+    def _is_package_installed(requirement: Requirement) -> Tuple[bool, Optional[Version]]:
         try:
-            normalized_name = package.replace("_", "-")
-            version = importlib.metadata.version(normalized_name)
-            return True, version
+            version = importlib.metadata.version(requirement.name)
+            return True, Version(version)
         except Exception:
             # Unable to determine the version.
-            return False, ""
+            return False, None
 
     # Check the installation of individual packages first.
     packages_to_install = []
     for package in packages:
-        if "==" in package:
-            package_name, required_version = package.split("==")
-        else:
-            package_name, required_version = package, ""
-
-        installed, version = _is_package_installed(package_name)
+        requirement = Requirement(package)
+        installed, version = _is_package_installed(requirement)
 
         if installed:
-            if required_version and version != required_version:
+            if version and requirement.specifier and version not in requirement.specifier:
                 print(
-                    f"Package '{package_name}' is already installed (version {version}) and cannot be updated. Skipping"
+                    f"Package '{requirement.name}' is already installed (version {version}) and cannot be updated. Skipping."
                 )
             else:
                 print(
-                    f"Package '{package_name}' is already installed (version {version}). Skipping."
+                    f"Package '{requirement.name}' is already installed (version {version}). Skipping."
                 )
         else:
             packages_to_install.append(package)
