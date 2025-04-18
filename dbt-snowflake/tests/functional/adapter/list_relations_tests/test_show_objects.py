@@ -52,7 +52,7 @@ _MODEL_ICEBERG = """
   )
 }}
 
-select 1
+select 1 as id
 """
 
 
