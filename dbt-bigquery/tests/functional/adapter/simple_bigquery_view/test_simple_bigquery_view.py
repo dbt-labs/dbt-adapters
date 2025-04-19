@@ -15,6 +15,7 @@ from tests.functional.adapter.simple_bigquery_view.fixtures import (
     clustered_model_sql,
     funky_case_sql,
     labeled_model_sql,
+    iam_tagged_model_sql,
     multi_clustered_model_sql,
     partitioned_model_sql,
     sql_header_model_sql,
@@ -51,6 +52,7 @@ class BaseBigQueryRun(SeedConfigBase):
             "clustered_model.sql": clustered_model_sql,
             "fUnKyCaSe.sql": funky_case_sql,
             "labeled_model.sql": labeled_model_sql,
+            "iam_tagged_model.sql": iam_tagged_model_sql,
             "multi_clustered_model.sql": multi_clustered_model_sql,
             "partitioned_model.sql": partitioned_model_sql,
             "sql_header_model.sql": sql_header_model_sql,
@@ -98,7 +100,7 @@ class TestSimpleBigQueryRun(BaseBigQueryRun):
 
         results = run_dbt()
         # Bump expected number of results when adding new model
-        assert len(results) == 11
+        assert len(results) == 12
         self.assert_nondupes_pass(project)
 
 
@@ -108,9 +110,9 @@ class TestUnderscoreBigQueryRun(BaseBigQueryRun):
     def test_bigquery_run_twice(self, project):
         run_dbt(["seed"])
         results = run_dbt()
-        assert len(results) == 11
+        assert len(results) == 12
 
         results = run_dbt()
-        assert len(results) == 11
+        assert len(results) == 12
 
         self.assert_nondupes_pass(project)
