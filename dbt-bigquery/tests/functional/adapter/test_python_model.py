@@ -339,7 +339,9 @@ def model(dbt, session):
         materialized='table',
         packages=['numpy<=1.1.1', 'pandas', 'mlflow'],
     )
-    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    import mlflow
+    mlflow_version = mlflow.__version__
+    data = {"id": [1, 2, 3], "values": ['a', 'b', mlflow_version]}
     return bpd.DataFrame(data=data)
 """
 
