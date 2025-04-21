@@ -469,11 +469,13 @@ def _install_packages(packages: list[str]) -> None:
         if installed:
             if version and requirement.specifier and version not in requirement.specifier:
                 print(
-                    f"Package '{requirement.name}' is already installed (version {version}) and cannot be updated. Skipping."
+                    f"Package '{requirement.name}' is already installed and cannot be updated. Skipping."
+                    f"The installed version: {version}."
                 )
             else:
                 print(
-                    f"Package '{requirement.name}' is already installed (version {version}). Skipping."
+                    f"Package '{requirement.name}' is already installed. Skipping."
+                    f"The installed version: {version}."
                 )
         else:
             packages_to_install.append(package)
