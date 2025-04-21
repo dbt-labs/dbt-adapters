@@ -147,9 +147,9 @@ bpd.options.bigquery.project = "{{ target.project }}"
 {% if target.location %}
 bpd.options.bigquery.location = "{{ target.location }}"
 {% endif %}
+session = bpd.get_global_session()
 {{ compiled_code }}
 dbt = dbtObj(bpd.read_gbq)
-session = None
 df = model(dbt, session)
 df.to_gbq("{{ target_relation }}", if_exists="replace")
 df._session.close()
