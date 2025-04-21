@@ -3,10 +3,10 @@
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
     {%- set dynamic_table = relation.from_config(config.model) -%}
 
-    {%- if catalog_relation.catalog_type == 'NATIVE' -%}
-        {{ snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, compiled_code) }}
-    {%- elif catalog_relation.catalog_type == 'ICEBERG_MANAGED' -%}
-        {{ snowflake__create_dynamic_table_iceberg_managed_sql(dynamic_table, relation, compiled_code) }}
+    {%- if catalog_relation.catalog_type == 'LOCAL' -%}
+        {{ snowflake__create_dynamic_table_local_sql(dynamic_table, relation, compiled_code) }}
+    {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
+        {{ snowflake__create_dynamic_table_built_in_sql(dynamic_table, relation, compiled_code) }}
     {%- else -%}
         {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
     {%- endif -%}
@@ -14,7 +14,7 @@
 {%- endmacro %}
 
 
-{% macro snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__create_dynamic_table_local_sql(dynamic_table, relation, sql) -%}
 {#-
     Produce DDL that creates a standard dynamic table
 
@@ -43,7 +43,7 @@ create dynamic table {{ relation }}
 {%- endmacro %}
 
 
-{% macro snowflake__create_dynamic_table_iceberg_managed_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__create_dynamic_table_built_in_sql(dynamic_table, relation, sql) -%}
 {#-
     Produce DDL that creates a dynamic iceberg table
 
@@ -66,7 +66,7 @@ create dynamic iceberg table {{ relation }}
     target_lag = '{{ dynamic_table.target_lag }}'
     warehouse = {{ dynamic_table.snowflake_warehouse }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
-    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for managed Iceberg tables
+    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
     {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
     {{ optional('initialize', dynamic_table.initialize) }}

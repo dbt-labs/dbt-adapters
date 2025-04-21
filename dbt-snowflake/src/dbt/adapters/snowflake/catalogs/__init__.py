@@ -1,22 +1,22 @@
 from typing import Union
 
-from dbt.adapters.snowflake.catalogs._iceberg_managed import (
-    IcebergManagedCatalogIntegration,
-    IcebergManagedCatalogRelation,
+from dbt.adapters.snowflake.catalogs._built_in import (
+    BuiltInCatalogIntegration,
+    BuiltInCatalogRelation,
 )
-from dbt.adapters.snowflake.catalogs._native import (
-    NativeCatalogIntegration,
-    NativeCatalogRelation,
+from dbt.adapters.snowflake.catalogs._local import (
+    LocalCatalogIntegration,
+    LocalCatalogRelation,
 )
 
 
 SnowflakeCatalogRelation = Union[
-    IcebergManagedCatalogRelation,
-    NativeCatalogRelation,
+    BuiltInCatalogRelation,
+    LocalCatalogRelation,
 ]
 
 
 SnowflakeCatalogIntegration = Union[
-    IcebergManagedCatalogIntegration,
-    NativeCatalogIntegration,
+    BuiltInCatalogIntegration,
+    LocalCatalogIntegration,
 ]
