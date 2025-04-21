@@ -16,8 +16,8 @@
     {%- set dynamic_table = relation.from_config(config.model) -%}
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-    {%- if catalog_relation.catalog_type == 'LOCAL' -%}
-        {{ snowflake__replace_dynamic_table_local_sql(dynamic_table, relation, sql) }}
+    {%- if catalog_relation.catalog_type == 'STANDARD' -%}
+        {{ snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) }}
     {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
         {{ snowflake__replace_dynamic_table_built_in_sql(dynamic_table, relation, sql) }}
     {%- else -%}
@@ -27,7 +27,7 @@
 {%- endmacro %}
 
 
-{% macro snowflake__replace_dynamic_table_local_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) -%}
 {#-
     Produce DDL that replaces a standard dynamic table with a new standard dynamic table
 

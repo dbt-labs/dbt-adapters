@@ -36,7 +36,7 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
     if _table_format == constants.ICEBERG_TABLE_FORMAT:
         return constants.DEFAULT_BUILT_IN_CATALOG.name
 
-    return constants.DEFAULT_LOCAL_CATALOG.name
+    return constants.DEFAULT_STANDARD_CATALOG.name
 
 
 def cluster_by(model: RelationConfig) -> Optional[str]:
@@ -85,7 +85,7 @@ def table_format(model: RelationConfig) -> Optional[str]:
 
     # we don't know what the table format is if it's not on the model
     # this could be derived from the catalog, and will moving forward
-    # so we cannot default to LOCAL/default here
+    # so we cannot default to STANDARD/default here
     if _table_format := model.config.get("table_format"):
         # make table_format case-insensitive
         return _table_format.upper()

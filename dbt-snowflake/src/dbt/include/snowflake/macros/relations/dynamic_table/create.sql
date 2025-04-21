@@ -3,8 +3,8 @@
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
     {%- set dynamic_table = relation.from_config(config.model) -%}
 
-    {%- if catalog_relation.catalog_type == 'LOCAL' -%}
-        {{ snowflake__create_dynamic_table_local_sql(dynamic_table, relation, compiled_code) }}
+    {%- if catalog_relation.catalog_type == 'STANDARD' -%}
+        {{ snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, compiled_code) }}
     {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
         {{ snowflake__create_dynamic_table_built_in_sql(dynamic_table, relation, compiled_code) }}
     {%- else -%}
@@ -14,7 +14,7 @@
 {%- endmacro %}
 
 
-{% macro snowflake__create_dynamic_table_local_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, sql) -%}
 {#-
     Produce DDL that creates a standard dynamic table
 

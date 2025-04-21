@@ -11,20 +11,20 @@ from dbt.adapters.snowflake import constants, parse_model
 
 
 @dataclass
-class LocalCatalogRelation:
-    catalog_type: str = constants.DEFAULT_LOCAL_CATALOG.catalog_type
-    catalog_name: Optional[str] = constants.DEFAULT_LOCAL_CATALOG.name
-    table_format: Optional[str] = constants.LOCAL_TABLE_FORMAT
+class StandardCatalogRelation:
+    catalog_type: str = constants.DEFAULT_STANDARD_CATALOG.catalog_type
+    catalog_name: Optional[str] = constants.DEFAULT_STANDARD_CATALOG.name
+    table_format: Optional[str] = constants.STANDARD_TABLE_FORMAT
     external_volume: Optional[str] = None
     cluster_by: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
 
 
-class LocalCatalogIntegration(CatalogIntegration):
-    catalog_name = constants.DEFAULT_LOCAL_CATALOG.name
-    catalog_type = constants.DEFAULT_LOCAL_CATALOG.catalog_type
-    table_format = constants.LOCAL_TABLE_FORMAT
+class StandardCatalogIntegration(CatalogIntegration):
+    catalog_name = constants.DEFAULT_STANDARD_CATALOG.name
+    catalog_type = constants.DEFAULT_STANDARD_CATALOG.catalog_type
+    table_format = constants.STANDARD_TABLE_FORMAT
     allows_writes = True
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
@@ -32,12 +32,12 @@ class LocalCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
 
-    def build_relation(self, model: RelationConfig) -> LocalCatalogRelation:
+    def build_relation(self, model: RelationConfig) -> StandardCatalogRelation:
         """
         Args:
             model: `config.model` (not `model`) from the jinja context
         """
-        return LocalCatalogRelation(
+        return StandardCatalogRelation(
             cluster_by=parse_model.cluster_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
             is_transient=parse_model.is_transient(model),

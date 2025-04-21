@@ -31,7 +31,7 @@ from dbt.adapters.snowflake.relation_configs import (
 @dataclass(frozen=True, eq=False, repr=False)
 class SnowflakeRelation(BaseRelation):
     type: Optional[SnowflakeRelationType] = None
-    table_format: str = constants.LOCAL_TABLE_FORMAT
+    table_format: str = constants.STANDARD_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
     relation_configs = {
