@@ -566,7 +566,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         client: Client = conn.handle
         timeout = self._retry.create_job_execution_timeout()
         query_job_config = QueryJobConfig(**job_params)
-        query_job_config.job_timeout_ms = timeout
+        query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
         # Cannot reuse job_config if destination is set and ddl is used
         query_job = client.query(
@@ -585,7 +585,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             )
 
         try:
-            iterator = query_job.result(max_results=limit, timeout=timeout)
+            iterator = query_job.result(max_results=limit)
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             raise TimeoutError(exc)
