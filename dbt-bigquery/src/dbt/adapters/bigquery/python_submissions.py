@@ -1,3 +1,4 @@
+import inspect
 import json
 import re
 from typing import Any, Dict, Optional, Union
@@ -201,6 +202,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
+        self._packages = parsed_model["config"].get("packages", [])
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -388,6 +390,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
     def submit(self, compiled_code: str) -> None:
+        if self._packages:
+            install_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                f"{inspect.getsource(_install_packages)}\n{install_code}\n{compiled_code}"
+            )
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
@@ -424,3 +431,72 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self._process_gcs_log(gcs_log_uri)
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+
+
+def _install_packages(packages: list[str]) -> None:
+    """Checks and installs packages via pip in a separate environment.
+    Parses requirement strings (e.g., 'pandas>=1.0', 'numpy==2.1.1') using the
+    'packaging' library to check against installed versions. It only installs
+    packages that are not already present in the environment. Existing packages
+    will not be updated, even if a different version is requested.
+    NOTE: This function is not intended for direct invocation. Instead, its
+    source code is extracted using inspect.getsource for execution in a separate
+    environment.
+    """
+    import sys
+    import subprocess
+    import importlib.metadata
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+    from typing import Optional, Tuple
+
+    def _is_package_installed(requirement: Requirement) -> Tuple[bool, Optional[Version]]:
+        try:
+            version = importlib.metadata.version(requirement.name)
+            return True, Version(version)
+        except Exception:
+            # Unable to determine the version.
+            return False, None
+
+    # Check the installation of individual packages first.
+    packages_to_install = []
+    for package in packages:
+        requirement = Requirement(package)
+        installed, version = _is_package_installed(requirement)
+
+        if installed:
+            if version and requirement.specifier and version not in requirement.specifier:
+                print(
+                    f"Package '{requirement.name}' is already installed (version {version}) and cannot be updated. Skipping."
+                )
+            else:
+                print(
+                    f"Package '{requirement.name}' is already installed (version {version}). Skipping."
+                )
+        else:
+            packages_to_install.append(package)
+
+    # All packages have been installed with certain version.
+    if not packages_to_install:
+        return
+
+    # Try to pip install the uninstalled packages.
+    pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
+
+    try:
+        result = subprocess.run(
+            pip_command,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+        )
+        if result.stdout:
+            print(f"pip output:\n{result.stdout.strip()}")
+        if result.stderr:
+            print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
+
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")
