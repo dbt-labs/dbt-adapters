@@ -1,0 +1,6 @@
+kind: Fixes
+body: set job_timeout_ms in job config so BQ cancels queries on timeout
+time: 2025-04-18T16:36:14.776263-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1004"
