@@ -4,6 +4,95 @@ import time
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 import dbt.tests.adapter.python_model.test_python_model as dbt_tests
 
+models__bigframes_model_packages = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+        packages=['numpy>=2.1.1', 'pandas', 'mlflow'],
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsPackages:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_packages.py": models__bigframes_model_packages,
+        }
+
+    def test_bigframes_models_packages(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=True)
+        print("$$$$$$")
+        print("$$$$$$")
+        print("$$$$$$")
+        print("type(result): ", type(result))
+        print(result)
+        print("type(output): ", type(output))
+        print(output)
+        print("$$$$$$")
+        print("$$$$$$")
+        print("$$$$$$")
+        assert len(result) == 1
+        assert "Package 'numpy' is already installed and cannot be updated. Skipping." in output
+        assert "Package 'pandas' is already installed. Skipping." in output
+        assert "Attempting to install the following packages: mlflow" in output
+
+
+models__bigframes_model_packages_error = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+        packages=['NotAValidPackage'],
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsPackagesError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_packages_error.py": models__bigframes_model_packages_error,
+        }
+
+    def test_bigframes_models_packages_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        assert "An unexpected error occurred during package installation" in output
+
+
+models__bigframes_model_error = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data) + undefined_var
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_error.py": models__bigframes_model_error,
+        }
+
+    def test_bigframes_models_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        assert "name 'undefined_var' is not defined" in output
+
+
 TEST_SKIP_MESSAGE = (
     "Skipping the Tests since Dataproc serverless is not stable. " "TODO: Fix later"
 )
@@ -330,39 +419,3 @@ class TestBigframesModelsMerge:
     def test_bigframes_model_merge(self, project):
         result = run_dbt(["run"])
         assert len(result) == 1
-
-
-models__bigframes_model_packages = """
-def model(dbt, session):
-    dbt.config(
-        submission_method='bigframes',
-        materialized='table',
-        packages=['numpy>=2.1.1', 'pandas', 'mlflow'],
-    )
-    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
-    return bpd.DataFrame(data=data)
-"""
-
-
-@pytest.mark.flaky
-class TestBigframesModelsPackages:
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "bigframes_model_packages.py": models__bigframes_model_packages,
-        }
-
-    def test_bigframes_models_packages(self, project):
-        result, output = run_dbt_and_capture(["run"], expect_pass=True)
-        print("$$$$$$")
-        print("$$$$$$")
-        print("$$$$$$")
-        print("type(output): ", type(output))
-        print(output)
-        print("$$$$$$")
-        print("$$$$$$")
-        print("$$$$$$")
-        assert len(result) == 1
-        assert "Package 'numpy' is already installed" in output
-        assert "Package 'pandas' is already installed" in output
-        assert "Attempting to install the following packages: mlflow." in output
