@@ -144,13 +144,16 @@ class TestTableIcebergIncrementalUniqueFullRefresh:
             f"alter table `{project.test_schema}`.`{relation_name}` "
             f"rename to `{project.test_schema}`.`{relation_name}__bkp`"
         )
+
         # we expect the __dbt_tmp model to be renamed to the target relation
         dbt_tmp_alter_statement = (
             f"alter table `{project.test_schema}`.`{relation_name}__dbt_tmp` "
             f"rename to `{project.test_schema}`.`{relation_name}`"
         )
+
         # the __bkp version should be removed
         delete_bkp_table_log = f'Deleted table from glue catalog: "awsdatacatalog"."{project.test_schema}"."{relation_name}__bkp"'
+
         assert bkp_alter_statement in out
         assert dbt_tmp_alter_statement in out
         assert delete_bkp_table_log in out
