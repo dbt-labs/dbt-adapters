@@ -1,3 +1,4 @@
+import inspect
 import json
 import re
 from typing import Any, Dict, Optional, Union
@@ -11,15 +12,18 @@ from dbt.adapters.bigquery.clients import (
     create_gcs_client,
 )
 from dbt.adapters.bigquery.credentials import (
+    BigQueryConnectionMethod,
     create_google_credentials,
     DataprocBatchConfig,
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
+from dbt_common.exceptions import DbtRuntimeError
 from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
+from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
@@ -28,6 +32,11 @@ import nbformat
 _logger = AdapterLogger("BigQuery")
 
 
+# Google Cloud usually automatically creates VPC Network & Subnetwork named
+# "default" in the project when enabling the Compute Engine API. We will use
+# the "default" network to create a default runtime template when needed.
+_NETWORK_NAME = "default"
+_SUBNETWORK_NAME = "default"
 _DEFAULT_JAR_FILE_URI = "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.34.0.jar"
 
 
@@ -35,10 +44,9 @@ class _BigQueryPythonHelper(PythonJobHelper):
     def __init__(self, parsed_model: Dict, credentials: BigQueryCredentials) -> None:
         self._storage_client = create_gcs_client(credentials)
         self._project = credentials.execution_project
-        # TODO(jialuo): Use more generic naming "python_compute_region".
-        self._region = credentials.dataproc_region
+        self._region = credentials.compute_region
         # validate all additional stuff for python is set
-        for required_config in ["dataproc_region", "gcs_bucket"]:
+        for required_config in ["compute_region", "gcs_bucket"]:
             if not getattr(credentials, required_config):
                 raise ValueError(
                     f"Need to supply {required_config} in profile to submit python job"
@@ -187,6 +195,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         super().__init__(parsed_model, credentials)
 
         self._model_name = parsed_model["alias"]
+        self._connection_method = credentials.method
         self._GoogleCredentials = create_google_credentials(credentials)
 
         # TODO(jialuo): Add a function in clients.py for it.
@@ -194,6 +203,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             credentials=self._GoogleCredentials,
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
+        self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
+        self._packages = parsed_model["config"].get("packages", [])
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -203,21 +214,74 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return nbformat.writes(notebook, nbformat.NO_CONVERT)
 
     def _get_notebook_template_id(self) -> str:
+        # If user specifies a runtime template id, use it.
+        if self._notebook_template_id:
+            return self._notebook_template_id
+
+        # Try to find and use the default runtime template id.
         request = aiplatform_v1.ListNotebookRuntimeTemplatesRequest(
             parent=f"projects/{self._project}/locations/{self._region}",
             filter="notebookRuntimeType = ONE_CLICK",
         )
         page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
-        if list(page_result):
-            # Extract template id from name.
-            match = re.search(r"notebookRuntimeTemplates/(\d+)", next(iter(page_result)).name)
-            if match:  # Check if match is not None.
-                notebook_template_id = match.group(1)
-                return notebook_template_id
-            else:
-                raise ValueError("No matching notebook runtime template name found.")
-        else:
-            raise ValueError("No Default notebook runtime templates found.")
+
+        try:
+            # Check if a default runtime template is available and applicable.
+            return self._extract_template_id(next(iter(page_result)).name)
+        except Exception:
+            _logger.info(
+                "No default template found, a new one will be created but with "
+                "disabled internet access. If your models do require internet "
+                "access, please go to the GCP console and do either:\n"
+                "    1. Recreate the default template yourself with enabled "
+                "internet access. OR \n"
+                "    2. Specify your own template ID which has enabled "
+                "internet access.\n"
+            )
+            # If no default runtime template is found, create a new one.
+            return self._create_notebook_template()
+
+    def _create_notebook_template(self) -> str:
+        # Construct the full network and subnetwork resource names.
+        network_full_name = f"projects/{self._project}/global/networks/{_NETWORK_NAME}"
+        subnetwork_full_name = (
+            f"projects/{self._project}/regions/{self._region}/subnetworks/{_SUBNETWORK_NAME}"
+        )
+
+        template = aiplatform_v1.NotebookRuntimeTemplate(
+            # The display name of the created runtime template.
+            display_name="default-one-click-notebook",
+            # This "ONE_CLICK" will be marked default.
+            notebook_runtime_type=aiplatform_v1.NotebookRuntimeType.ONE_CLICK,
+            machine_spec=aiplatform_v1.MachineSpec(
+                # Choose the machine type.
+                machine_type="e2-standard-4",
+            ),
+            network_spec=aiplatform_v1.NetworkSpec(
+                # Explicitly disable internet access.
+                enable_internet_access=False,
+                # Need to specify the network & subnetwork (full name) when
+                # disable internet access.
+                network=network_full_name,
+                subnetwork=subnetwork_full_name,
+            ),
+        )
+
+        create_request = aiplatform_v1.CreateNotebookRuntimeTemplateRequest(
+            parent=f"projects/{self._project}/locations/{self._region}",
+            notebook_runtime_template=template,
+        )
+
+        operation = self._ai_platform_client.create_notebook_runtime_template(
+            request=create_request
+        )
+        response = operation.result()
+
+        return self._extract_template_id(response.name)
+
+    def _extract_template_id(self, template_name: str) -> str:
+        match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
+        return match.group(1) if match else ""
 
     def _config_notebook_job(
         self, notebook_template_id: str
@@ -232,9 +296,12 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
-        if hasattr(self._GoogleCredentials, "_service_account_email"):
+        if self._connection_method in (
+            BigQueryConnectionMethod.SERVICE_ACCOUNT,
+            BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
+        ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        else:
+        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
             request = Request()
             response = request(
                 method="GET",
@@ -242,6 +309,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
             )
             notebook_execution_job.execution_user = json.loads(response.data).get("email")
+        else:
+            raise ValueError(
+                f"Unsupported credential method in BigFrames: '{self._connection_method}'"
+            )
 
         notebook_execution_job.gcs_output_uri = (
             f"gs://{self._gcs_bucket}/{self._model_file_name}/logs"
@@ -271,7 +342,68 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         return data
 
+    def _format_outputs(self, output_list: list) -> str:
+        """Formats a list of outputs into readable string."""
+        formatted_output = "\n"
+
+        # The item of it can be dictionaries or strings.
+        for item in output_list:
+            if isinstance(item, dict) and True:
+                for key, value in item.items():
+                    formatted_output += f"{key}:\n"
+                    if isinstance(value, dict):
+                        for inner_key, inner_value in value.items():
+                            formatted_output += f"    {inner_key}: {inner_value}\n"
+                    else:
+                        formatted_output += f"    {value}\n"
+
+                    # Extract only the final error message line. Discard the
+                    # traceback details as they contain raw ANSI escape codes.
+                    if isinstance(value, str) and value.strip().lower() == "error":
+                        return formatted_output
+
+            else:
+                _logger.debug("Unexpected output format of the Colab notebook.")
+                formatted_output += f"{item}\n"
+
+            # Add a newline between items.
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _process_gcs_log(self, gcs_log_uri: str) -> None:
+        """Processes a Colab notebook execution log stored GCS."""
+        gcs_log = self._read_json_from_gcs(gcs_log_uri)
+
+        if not gcs_log:
+            _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
+            return
+
+        # Extract the notebook 'cells' information list from the log.
+        cells = gcs_log.get("cells", [])
+        if not cells:
+            _logger.debug(f"No 'cells' found. Full content from GCS log: {gcs_log}")
+            return
+
+        # Only one cell exists and gets executed in the notebook.
+        outputs = cells[0].get("outputs", [])
+        if not outputs:
+            _logger.debug(f"No 'outputs' found. Full content from GCS log: {gcs_log}")
+            return
+
+        try:
+            # Improve the output format for better readability.
+            formatted_output = self._format_outputs(outputs)
+            _logger.info(f"Colab notebook runtime outputs from GCS: {formatted_output}")
+        except Exception:
+            _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
+
     def submit(self, compiled_code: str) -> None:
+        if self._packages:
+            install_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                f"{inspect.getsource(_install_packages)}\n{install_code}\n{compiled_code}"
+            )
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
@@ -290,18 +422,104 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_execution_job=notebook_execution_job,
         )
 
-        res = self._ai_platform_client.create_notebook_execution_job(request=request).result()
+        try:
+            res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
+                timeout=self._polling_retry.timeout
+            )
+            retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
+        except TimeoutError as timeout_error:
+            raise TimeoutError(
+                f"The dbt operation encountered a timeout: {timeout_error}\n"
+                "Please cancel the related notebook job manually via the GCP "
+                "console since it might still be actively running."
+            )
+        except Exception as e:
+            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
-        if gcs_log := self._read_json_from_gcs(gcs_log_uri):
-            # TODO(jialuo): Improve the logger info.
-            # TODO(jialuo): Raise errors here. There are some situations when
-            # the notebook failed but the pipeline still showed success.
-            _logger.info(
-                f"The colab notebook runtime outputs from GCS: {gcs_log['cells'][0]['outputs']}"
+        self._process_gcs_log(gcs_log_uri)
+
+        if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' failed."
             )
-        else:
-            _logger.debug(f"Failed to read log from GCS URI: {gcs_log_uri}")
+        elif retrieved_job.job_state != aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' finished with unexpected state: {retrieved_job.job_state.name}"
+            )
 
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+
+
+def _install_packages(packages: list[str]) -> None:
+    """Checks and installs packages via pip in a separate environment.
+
+    Parses requirement strings (e.g., 'pandas>=1.0', 'numpy==2.1.1') using the
+    'packaging' library to check against installed versions. It only installs
+    packages that are not already present in the environment. Existing packages
+    will not be updated, even if a different version is requested.
+
+    NOTE: This function is not intended for direct invocation. Instead, its
+    source code is extracted using inspect.getsource for execution in a separate
+    environment.
+    """
+    import sys
+    import subprocess
+    import importlib.metadata
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+    from typing import Optional, Tuple
+
+    def _is_package_installed(requirement: Requirement) -> Tuple[bool, Optional[Version]]:
+        try:
+            version = importlib.metadata.version(requirement.name)
+            return True, Version(version)
+        except Exception:
+            # Unable to determine the version.
+            return False, None
+
+    # Check the installation of individual packages first.
+    packages_to_install = []
+    for package in packages:
+        requirement = Requirement(package)
+        installed, version = _is_package_installed(requirement)
+
+        if installed:
+            if version and requirement.specifier and version not in requirement.specifier:
+                print(
+                    f"Package '{requirement.name}' is already installed and cannot be updated. Skipping."
+                    f"The installed version: {version}."
+                )
+            else:
+                print(
+                    f"Package '{requirement.name}' is already installed. Skipping."
+                    f"The installed version: {version}."
+                )
+        else:
+            packages_to_install.append(package)
+
+    # All packages have been installed with certain version.
+    if not packages_to_install:
+        return
+
+    # Try to pip install the uninstalled packages.
+    pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
+
+    try:
+        result = subprocess.run(
+            pip_command,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+        )
+        if result.stdout:
+            print(f"pip output:\n{result.stdout.strip()}")
+        if result.stderr:
+            print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
+
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")
