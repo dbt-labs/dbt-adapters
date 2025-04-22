@@ -306,6 +306,32 @@ class TestBigframesModels:
         assert len(result) == 1
 
 
+models__bigframes_model_error = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    data += undefined_var
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_error.py": models__bigframes_model_error,
+        }
+
+    def test_bigframes_models_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        assert "name 'undefined_var' is not defined" in output
+
+
 models__bigframes_model_merge = """
 def model(dbt, session):
     dbt.config(
