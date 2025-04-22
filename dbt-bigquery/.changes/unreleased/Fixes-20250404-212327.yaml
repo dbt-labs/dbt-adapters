@@ -1,0 +1,6 @@
+kind: Fixes
+body: Raise an error when notebook execution failed
+time: 2025-04-04T21:23:27.98150137Z
+custom:
+    Author: jialuoo
+    Issue: "976"
