@@ -37,7 +37,7 @@ select
     'test 2' as name
 """
 
-models__table_iceberg_naming_incremental_full_refresh_unique = """
+models__incremental_iceberg_naming_full_refresh = """
 {{ config(
         materialized='incremental',
         table_type='iceberg',
@@ -111,15 +111,15 @@ class TestTableIcebergTable:
             run_dbt(["run", "--select", relation_name])
 
 
-class TestTableIcebergIncrementalFullRefreshUnique:
+class TestIncrementalIcebergFullRefresh:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "incremental_iceberg_table_unique.sql": models__table_iceberg_naming_incremental_full_refresh_unique
+            "iceberg_incremental_full_refresh.sql": models__incremental_iceberg_naming_full_refresh
         }
 
     def test__table_creation(self, project, capsys):
-        relation_name = "incremental_iceberg_table_unique"
+        relation_name = "iceberg_incremental_full_refresh"
         model_run_result_row_count_query = (
             f"select count(*) as records from {project.test_schema}.{relation_name}"
         )
