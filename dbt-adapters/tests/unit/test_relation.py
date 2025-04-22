@@ -8,6 +8,27 @@ from dbt.adapters.contracts.relation import RelationType
 
 
 @pytest.mark.parametrize(
+    "relation_type,check_property",
+    [
+        (RelationType.CTE, "is_cte"),
+        (RelationType.MaterializedView, "is_materialized_view"),
+        (RelationType.PointerTable, "is_pointer"),
+        (RelationType.Table, "is_table"),
+        (RelationType.View, "is_view"),
+    ],
+)
+def test_relation_types(relation_type, check_property):
+    my_relation = BaseRelation.create(
+        "fake_database",
+        "fake_schema",
+        "fake_identifier",
+        type=relation_type,
+    )
+    assert getattr(my_relation, check_property)
+    assert my_relation.type == relation_type
+
+
+@pytest.mark.parametrize(
     "relation_type,result",
     [
         (RelationType.View, True),
