@@ -16,8 +16,8 @@
     {%- set dynamic_table = relation.from_config(config.model) -%}
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-    {%- if catalog_relation.catalog_type == 'STANDARD' -%}
-        {{ snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) }}
+    {%- if catalog_relation.catalog_type == 'INFO_SCHEMA' -%}
+        {{ snowflake__replace_dynamic_table_info_schema_sql(dynamic_table, relation, sql) }}
     {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
         {{ snowflake__replace_dynamic_table_built_in_sql(dynamic_table, relation, sql) }}
     {%- else -%}
@@ -27,9 +27,9 @@
 {%- endmacro %}
 
 
-{% macro snowflake__replace_dynamic_table_standard_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__replace_dynamic_table_info_schema_sql(dynamic_table, relation, sql) -%}
 {#-
-    Produce DDL that replaces a standard dynamic table with a new standard dynamic table
+    Produce DDL that replaces an info schema dynamic table with a new info schema dynamic table
 
     This follows the syntax outlined here:
     https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table#syntax
@@ -41,7 +41,7 @@
         - str - is already the rendered relation name
     - sql: str - the code defining the model
     Returns:
-        A valid DDL statement which will result in a new dynamic standard table.
+        A valid DDL statement which will result in a new dynamic info schema table.
 -#}
 
 create or replace dynamic table {{ relation }}

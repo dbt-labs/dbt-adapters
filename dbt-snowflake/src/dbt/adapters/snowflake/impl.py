@@ -27,7 +27,7 @@ from dbt_common.utils import filter_null_values
 from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
-    StandardCatalogIntegration,
+    InfoSchemaCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
@@ -70,7 +70,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     CATALOG_INTEGRATIONS = [
         BuiltInCatalogIntegration,
-        StandardCatalogIntegration,
+        InfoSchemaCatalogIntegration,
     ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
@@ -92,7 +92,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
-        self.add_catalog_integration(constants.DEFAULT_STANDARD_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
 
     def add_catalog_integration(
@@ -316,7 +316,7 @@ class SnowflakeAdapter(SQLAdapter):
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
             if is_iceberg in ("Y", "YES")
-            else constants.STANDARD_TABLE_FORMAT
+            else constants.INFO_SCHEMA_TABLE_FORMAT
         )
 
         quote_policy = {"database": True, "schema": True, "identifier": True}
@@ -473,12 +473,12 @@ CALL {proc_name}();
             if _table_format := config._extra.get("table_format"):  # type:ignore
                 run_info["table_format"] = _table_format
             elif not catalog:
-                # no table_format and no catalog definitely means standard table
-                run_info["table_format"] = constants.STANDARD_TABLE_FORMAT
-            elif catalog == constants.DEFAULT_STANDARD_CATALOG.name:  # type:ignore
-                # if the user happens to set the catalog to the standard catalog, catch that
-                run_info["table_format"] = constants.STANDARD_TABLE_FORMAT
-            else:  # catalog is set, and it's not the standard catalog
+                # no table_format and no catalog definitely means info schema table
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type:ignore
+                # if the user happens to set the catalog to the info schema catalog, catch that
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            else:  # catalog is set, and it's not the info schema catalog
                 # it's unlikely that users will set a catalog that's not Iceberg
                 run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
 

@@ -5,8 +5,8 @@
     {%- if language == 'sql' -%}
         {%- if temporary -%}
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}
-        {%- elif catalog_relation.catalog_type == 'STANDARD' -%}
-            {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'INFO_SCHEMA' -%}
+            {{ snowflake__create_table_info_schema_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
             {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
         {%- else -%}
@@ -56,7 +56,7 @@ as (
 {%- endmacro %}
 
 
-{% macro snowflake__create_table_standard_sql(relation, compiled_code) -%}
+{% macro snowflake__create_table_info_schema_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE TABLE and CREATE TABLE ... AS SELECT:
     https://docs.snowflake.com/en/sql-reference/sql/create-table

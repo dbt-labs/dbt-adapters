@@ -4,19 +4,7 @@ from dbt.adapters.snowflake.catalogs._built_in import (
     BuiltInCatalogIntegration,
     BuiltInCatalogRelation,
 )
-from dbt.adapters.snowflake.catalogs._standard import (
-    StandardCatalogIntegration,
-    StandardCatalogRelation,
+from dbt.adapters.snowflake.catalogs._info_schema import (
+    InfoSchemaCatalogIntegration,
+    InfoSchemaCatalogRelation,
 )
-
-
-SnowflakeCatalogRelation = Union[
-    BuiltInCatalogRelation,
-    StandardCatalogRelation,
-]
-
-
-SnowflakeCatalogIntegration = Union[
-    BuiltInCatalogIntegration,
-    StandardCatalogIntegration,
-]

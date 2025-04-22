@@ -3,8 +3,8 @@
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
     {%- set dynamic_table = relation.from_config(config.model) -%}
 
-    {%- if catalog_relation.catalog_type == 'STANDARD' -%}
-        {{ snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, compiled_code) }}
+    {%- if catalog_relation.catalog_type == 'INFO_SCHEMA' -%}
+        {{ snowflake__create_dynamic_table_info_schema_sql(dynamic_table, relation, compiled_code) }}
     {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
         {{ snowflake__create_dynamic_table_built_in_sql(dynamic_table, relation, compiled_code) }}
     {%- else -%}
@@ -14,9 +14,9 @@
 {%- endmacro %}
 
 
-{% macro snowflake__create_dynamic_table_standard_sql(dynamic_table, relation, sql) -%}
+{% macro snowflake__create_dynamic_table_info_schema_sql(dynamic_table, relation, sql) -%}
 {#-
-    Produce DDL that creates a standard dynamic table
+    Produce DDL that creates an info schema dynamic table
 
     Implements CREATE DYNAMIC TABLE:
     https://docs.snowflake.com/en/sql-reference/sql/create-dynamic-table#syntax
@@ -28,7 +28,7 @@
         - str - is already the rendered relation name
     - sql: str - the code defining the model
     Returns:
-        A valid DDL statement which will result in a new dynamic standard table.
+        A valid DDL statement which will result in a new dynamic info schema table.
 -#}
 
 create dynamic table {{ relation }}
