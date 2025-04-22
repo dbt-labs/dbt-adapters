@@ -37,11 +37,12 @@ select
     'test 2' as name
 """
 
-models__incremental_iceberg_naming_full_refresh = """
+models__incremental_full_refresh_iceberg_naming_table_unique = """
 {{ config(
         materialized='incremental',
         table_type='iceberg',
-        s3_data_naming='table_unique'
+        s3_data_naming='table_unique',
+        incremental_strategy='merge'
     )
 }}
 
@@ -115,11 +116,11 @@ class TestIncrementalIcebergFullRefresh:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "iceberg_incremental_full_refresh.sql": models__incremental_iceberg_naming_full_refresh
+            "iceberg_incremental_full_refresh_table_unique.sql": models__incremental_full_refresh_iceberg_naming_table_unique
         }
 
     def test__table_creation(self, project, capsys):
-        relation_name = "iceberg_incremental_full_refresh"
+        relation_name = "iceberg_incremental_full_refresh_table_unique"
         model_run_result_row_count_query = (
             f"select count(*) as records from {project.test_schema}.{relation_name}"
         )
