@@ -104,7 +104,10 @@ class SnowflakeAdapter(SQLAdapter):
     ) -> CatalogIntegration:
         # don't mutate the object that dbt-core passes in
         catalog_integration = deepcopy(catalog_integration)
+
+        # make catalog name and catalog type case-insensitive
         catalog_integration.name = catalog_integration.name.upper()
+        catalog_integration.catalog_type = catalog_integration.catalog_type.upper()
         return super().add_catalog_integration(catalog_integration)
 
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
