@@ -535,17 +535,27 @@ class RedshiftConnectionManager(SQLConnectionManager):
             if without_comments == "":
                 continue
 
-            retryable_exceptions = (
-                redshift_connector.InterfaceError,
-                redshift_connector.InternalError,
-            )
+            def retryable_exceptions_handler(e):
+                blanket_retryable_exceptions = (
+                    redshift_connector.InterfaceError,
+                    redshift_connector.InternalError,
+                )
+
+                oid_not_found_msg = "could not open relation with OID"
+
+                if e in blanket_retryable_exceptions:
+                    return True
+                if isinstance(e, redshift_connector.Error) and oid_not_found_msg in str(e):
+                    return True
+
+                return False
 
             connection, cursor = super().add_query(
                 query,
                 auto_begin,
                 bindings=bindings,
                 abridge_sql_log=abridge_sql_log,
-                retryable_exceptions=retryable_exceptions,
+                retryable_exceptions=retryable_exceptions_handler,
                 retry_limit=self.profile.credentials.retries,
             )
 

@@ -1,7 +1,9 @@
 import abc
+
 import time
 from typing import (
     Any,
+    Callable,
     Dict,
     Iterable,
     Iterator,
@@ -10,6 +12,7 @@ from typing import (
     Tuple,
     TYPE_CHECKING,
     Type,
+    Union,
 )
 
 from dbt_common.events.contextvars import get_node_info
@@ -72,7 +75,7 @@ class SQLConnectionManager(BaseConnectionManager):
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
-        retryable_exceptions: Tuple[Type[Exception], ...] = tuple(),
+        retryable_exceptions: Union[Callable, Tuple[Type[Exception], ...]] = tuple(),
         retry_limit: int = 1,
     ) -> Tuple[Connection, Any]:
         """
@@ -85,7 +88,7 @@ class SQLConnectionManager(BaseConnectionManager):
             cursor: Any,
             sql: str,
             bindings: Optional[Any],
-            retryable_exceptions: Tuple[Type[Exception], ...],
+            retryable_exceptions: Union[Callable, Tuple[Type[Exception], ...]],
             retry_limit: int,
             attempt: int,
         ):
@@ -95,7 +98,11 @@ class SQLConnectionManager(BaseConnectionManager):
             """
             try:
                 cursor.execute(sql, bindings)
-            except retryable_exceptions as e:
+            except Exception as e:
+                if isinstance(retryable_exceptions, tuple) and e not in retryable_exceptions:
+                    raise e
+                if callable(retryable_exceptions) and not retryable_exceptions(e):
+                    raise e
                 # Cease retries and fail when limit is hit.
                 if attempt >= retry_limit:
                     raise e
