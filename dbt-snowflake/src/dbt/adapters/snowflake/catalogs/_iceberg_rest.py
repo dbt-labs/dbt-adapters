@@ -5,6 +5,7 @@ from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import parse_model
+from dbt.adapters.snowflake.constants import ICEBERG_TABLE_FORMAT
 
 
 @dataclass
@@ -21,7 +22,7 @@ class IcebergRESTCatalogRelation:
     external_volume: Optional[str] = None
     replace_invalid_characters: Optional[bool] = None
     auto_refresh: Optional[bool] = None
-    table_format: str = "iceberg"
+    table_format: Optional[str] = ICEBERG_TABLE_FORMAT
 
 
 class IcebergRESTCatalogIntegration(CatalogIntegration):
@@ -48,7 +49,7 @@ class IcebergRESTCatalogIntegration(CatalogIntegration):
     """
 
     catalog_type: str = "iceberg_rest"
-    table_format: str = "iceberg"
+    table_format: str = ICEBERG_TABLE_FORMAT
     allows_writes: bool = False
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
