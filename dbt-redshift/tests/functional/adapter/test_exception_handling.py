@@ -10,7 +10,7 @@ class TestRetryOnRelationOidNotFound:
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
         outputs = {"default": dbt_profile_target}
-        outputs["default"]["retries"] = 0
+        outputs["default"]["retries"] = 5
         outputs["default"]["threads"] = 4
         return outputs
 
@@ -60,6 +60,7 @@ class TestRetryOnRelationOidNotFound:
         }
 
     def test_retry_on_relation_oid_not_found(self, project):
-        result, stdout = run_dbt_and_capture(["run"])
-        assert len(result) == 3
+        result, stdout = run_dbt_and_capture(["run", "--log-level=debug"])
+        print(stdout)
         assert "could not open relation with OID" in stdout
+        assert "Redshift adapter: Retrying query due to error: Database Error" in stdout

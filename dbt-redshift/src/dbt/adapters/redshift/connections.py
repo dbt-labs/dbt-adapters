@@ -1,4 +1,5 @@
 import re
+
 import time
 
 import redshift_connector
@@ -25,6 +26,8 @@ if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
     # Used by mypy for earlier type hints.
     import agate
+
+COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
 
 
 class SSLConfigError(CompilationError):
@@ -509,77 +512,72 @@ class RedshiftConnectionManager(SQLConnectionManager):
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, "agate.Table"]:
         sql = self._add_query_comment(sql)
-        _, cursor = self.add_query(sql, auto_begin)
-        response = self.get_response(cursor)
-        if fetch:
-            table = self.get_result_from_cursor(cursor, limit)
-        else:
-            from dbt_common.clients import agate_helper
+        retries = self.profile.credentials.retries
+        backoff = 1
+        response = None
+        table = None
+        while retries >= 0:
+            try:
+                _, cursor = self.add_query(sql, auto_begin)
+                response = self.get_response(cursor)
+                if fetch:
+                    table = self.get_result_from_cursor(cursor, limit)
+                else:
+                    from dbt_common.clients import agate_helper
 
-            table = agate_helper.empty_table()
+                    table = agate_helper.empty_table()
+                break
+            except Exception as e:
+                oid_not_found_msg = "could not open relation with OID"
+                if retries == 0:
+                    raise e
+                if oid_not_found_msg in str(e):
+                    logger.debug(f"Retrying query due to error: {e}")
+                    retries -= 1
+                    # we need to actually close and reopen the connection
+                    # otherwise the connection will be in a bad state
+                    self.close(self.get_thread_connection())
+                    self.open(self.get_thread_connection())
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 60)
+                else:
+                    logger.debug(f"Not retrying error: {e}")
+                    raise e
+        if response is None or table is None:
+            raise DbtRuntimeError(
+                f"Failed to execute SQL: {sql} on connection: {self.get_thread_connection().name}"
+            )
         return response, table
 
-    def add_query(
-        self, sql, auto_begin=True, bindings=None, abridge_sql_log=False
-    ) -> Tuple[Connection, Any]:
+    def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):  # type: ignore
+        connection = None
+        cursor = None
         self._initialize_sqlparse_lexer()
+
         queries = sqlparse.split(sql)
+
         redshift_retryable_exceptions = (
             redshift_connector.InterfaceError,
             redshift_connector.InternalError,
         )
+        for query in queries:
+            # Strip off comments from the current query
+            without_comments = re.sub(
+                COMMENT_REGEX,
+                "",
+                query,
+            ).strip()
 
-        comment_regex = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
+            if without_comments == "":
+                continue
 
-        def _add_queries_with_retry(
-            queries_to_run: List[str],
-            retries: int,
-            backoff: int,
-            retry_exceptions: Tuple,
-            add_query_func: Callable[[Any, ...], Tuple[Connection, Any]],
-        ) -> Tuple[Connection, Any]:
-            try:
-                for query in queries_to_run:
-                    # Strip off comments from the current query
-                    without_comments = re.sub(
-                        comment_regex,
-                        "",
-                        query,
-                    ).strip()
-
-                    if without_comments == "":
-                        continue
-
-                    return add_query_func(
-                        query,
-                        auto_begin,
-                        bindings=bindings,
-                        abridge_sql_log=abridge_sql_log,
-                        retryable_exceptions=retry_exceptions,
-                        retry_limit=self.profile.credentials.retries,
-                    )
-
-            except redshift_connector.Error as e:
-                oid_not_found_msg = "could not open relation with OID"
-                if retries == 0:
-                    raise e
-                if oid_not_found_msg not in str(e):
-                    raise e
-
-                logger.debug(f"Retrying query due to error: {e}")
-                time.sleep(backoff)
-                backoff = min(backoff * 2, 60)  # Cap backoff to 60 seconds
-                return _add_queries_with_retry(
-                    queries_to_run, retries - 1, backoff, retry_exceptions, add_query_func
-                )
-
-        connection, cursor = _add_queries_with_retry(
-            queries,
-            self.profile.credentials.retries,
-            1,
-            redshift_retryable_exceptions,
-            super().add_query,
-        )
+            connection, cursor = super().add_query(
+                sql=query,
+                retryable_exceptions=redshift_retryable_exceptions,
+                auto_begin=auto_begin,
+                bindings=bindings,
+                abridge_sql_log=abridge_sql_log,
+            )
 
         if cursor is None:
             conn = self.get_thread_connection()

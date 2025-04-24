@@ -3,7 +3,6 @@ import abc
 import time
 from typing import (
     Any,
-    Callable,
     Dict,
     Iterable,
     Iterator,
@@ -12,7 +11,6 @@ from typing import (
     Tuple,
     TYPE_CHECKING,
     Type,
-    Union,
 )
 
 from dbt_common.events.contextvars import get_node_info
