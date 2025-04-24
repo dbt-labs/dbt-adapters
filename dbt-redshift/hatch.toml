@@ -14,7 +14,6 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "ddtrace==2.3.0",
     "flaky",
     "freezegun",
     "ipdb~=0.13.13",
@@ -65,3 +64,47 @@ check-sdist = [
     "pip freeze | grep dbt-redshift",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-redshift ."
+
+[envs.ci]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-postgres",
+]
+dependencies = [
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
+    "flaky",
+    "freezegun",
+    "pytest-csv~=3.0",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+    "pytest>=7.0,<8.0",
+    "requests",
+]
+
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = 'python -m pytest tests/functional -m "not flaky" --ddtrace'
+integration-tests-flaky = "python -m pytest tests/functional -m flaky -n1 --ddtrace"
+
+[envs.cd]
+dependencies = [
+    "dbt-tests-adapter>=1.11.0,<2.0",
+    "ddtrace==2.3.0",
+    "flaky",
+    "freezegun",
+    "pytest-csv>=3.0,<4.0",
+    "pytest-logbook>=1.2,<2.0",
+    "pytest-mock",
+    "pytest-xdist",
+    "pytest>=7.0,<8.0",
+    "requests",
+]
+
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = 'python -m pytest tests/functional -m "not flaky" --ddtrace'
+integration-tests-flaky = "python -m pytest tests/functional -m flaky -n1 --ddtrace"

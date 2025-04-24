@@ -47,3 +47,24 @@ check-sdist = [
     "pip freeze | grep dbt-adapters",
 ]
 protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
+
+[envs.ci]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
+    "pytest",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+
+[envs.cd]
+dependencies = [
+    "ddtrace==2.3.0",
+    "pytest",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"

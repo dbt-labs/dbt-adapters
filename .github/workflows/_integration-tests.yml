@@ -24,6 +24,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: string
                 default: "3.9"
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
     workflow_dispatch:
         inputs:
             packages:
@@ -46,6 +50,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
 
 permissions:
     id-token: write
@@ -63,6 +71,7 @@ env:
     DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
 
 jobs:
+
     integration-tests-athena:
         if: contains(fromJSON(inputs.packages), 'dbt-athena')
         runs-on: ${{ inputs.os }}
@@ -94,7 +103,7 @@ jobs:
             with:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
-        -   run: hatch run integration-tests
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
@@ -124,7 +133,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
@@ -161,7 +170,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
 
     integration-tests-postgres:
         if: contains(fromJSON(inputs.packages), 'dbt-postgres')
@@ -206,7 +215,7 @@ jobs:
                 PGPASSWORD: postgres
                 PGDATABASE: postgres
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-postgres-psycopg2-check:
         if: contains(fromJSON(inputs.packages), 'dbt-postgres')
@@ -296,7 +305,7 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
               aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
               aws configure --profile $AWS_ROLE_PROFILE set output json
-        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-redshift-flaky:
         # we only run this for one python version to avoid running in parallel
@@ -359,7 +368,7 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
               aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
               aws configure --profile $AWS_ROLE_PROFILE set output json
-        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
 
     integration-tests-snowflake:
         if: contains(fromJSON(inputs.packages), 'dbt-snowflake')
@@ -393,7 +402,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional --ddtrace
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-spark:
         if: contains(fromJSON(inputs.packages), 'dbt-spark')
@@ -429,4 +438,4 @@ jobs:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
-        -   run: hatch run integration-tests --profile ${{ matrix.profile }}
+        -   run: hatch run ${{ inputs.hatch-env }}:integration-tests --profile ${{ matrix.profile }}
