@@ -1,6 +1,0 @@
-kind: Features
-body: Add "pointer_table" as a global relation type
-time: 2025-04-22T10:27:17.461175-04:00
-custom:
-  Author: mikealfare
-  Issue: "1012"
