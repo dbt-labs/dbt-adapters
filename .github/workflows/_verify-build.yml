@@ -73,8 +73,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
+        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
-        -   run: hatch build -py ${{ inputs.python-version }}
-            working-directory: ./${{ inputs.package }}
-        -   run: hatch run build:check-all -py ${{ inputs.python-version }}
+        -   run: hatch build && hatch run build:check-all
             working-directory: ./${{ inputs.package }}
