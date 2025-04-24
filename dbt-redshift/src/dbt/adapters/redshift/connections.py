@@ -536,7 +536,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             retries: int,
             backoff: int,
             retry_exceptions: Tuple,
-            add_query_func: Callable,
+            add_query_func: Callable[[Any, ...], Tuple[Connection, Any]],
         ) -> Tuple[Connection, Any]:
             try:
                 for query in queries_to_run:
