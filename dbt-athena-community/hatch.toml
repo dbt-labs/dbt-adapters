@@ -79,6 +79,6 @@ dependencies = [
     "pytest~=8.3",
     "pytest-xdist~=3.6",
 ]
-[envs.ci.scripts]
+[envs.cd.scripts]
 unit-tests = "python -m pytest -n auto ../dbt-athena/tests/unit --ddtrace"
 integration-tests = "python -m pytest -n auto ../dbt-athena/tests/functional --ddtrace"
