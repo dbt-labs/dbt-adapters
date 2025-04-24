@@ -26,8 +26,8 @@ from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import (
-    IcebergManagedCatalogIntegration,
-    NativeCatalogIntegration,
+    BuiltInCatalogIntegration,
+    InfoSchemaCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
@@ -69,8 +69,8 @@ class SnowflakeAdapter(SQLAdapter):
     AdapterSpecificConfigs = SnowflakeConfig
 
     CATALOG_INTEGRATIONS = [
-        IcebergManagedCatalogIntegration,
-        NativeCatalogIntegration,
+        BuiltInCatalogIntegration,
+        InfoSchemaCatalogIntegration,
     ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
@@ -92,8 +92,8 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
-        self.add_catalog_integration(constants.DEFAULT_NATIVE_CATALOG)
-        self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -316,7 +316,7 @@ class SnowflakeAdapter(SQLAdapter):
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
             if is_iceberg in ("Y", "YES")
-            else constants.NATIVE_TABLE_FORMAT
+            else constants.INFO_SCHEMA_TABLE_FORMAT
         )
 
         quote_policy = {"database": True, "schema": True, "identifier": True}
@@ -473,12 +473,12 @@ CALL {proc_name}();
             if _table_format := config._extra.get("table_format"):  # type:ignore
                 run_info["table_format"] = _table_format
             elif not catalog:
-                # no table_format and no catalog definitely means native table
-                run_info["table_format"] = constants.NATIVE_TABLE_FORMAT
-            elif catalog == constants.DEFAULT_NATIVE_CATALOG.name:  # type:ignore
-                # if the user happens to set the catalog to the native, catch that
-                run_info["table_format"] = constants.NATIVE_TABLE_FORMAT
-            else:  # catalog is set, and it's not the native catalog
+                # no table_format and no catalog definitely means info schema table
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type:ignore
+                # if the user happens to set the catalog to the info schema catalog, catch that
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            else:  # catalog is set, and it's not the info schema catalog
                 # it's unlikely that users will set a catalog that's not Iceberg
                 run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
 
@@ -490,7 +490,7 @@ CALL {proc_name}();
         Builds a relation for a given configuration.
 
         This method uses the provided configuration to determine the appropriate catalog
-        integration and config parser for building the relation. It defaults to the managed Iceberg
+        integration and config parser for building the relation. It defaults to the built-in Iceberg
         catalog if none is provided in the configuration for backward compatibility.
 
         Args:
