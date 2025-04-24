@@ -13,6 +13,7 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
     "pre-commit==3.7.0",
     "freezegun",
     "pytest>=7.0,<8.0",

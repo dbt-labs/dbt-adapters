@@ -71,7 +71,6 @@ env:
     DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
 
 jobs:
-
     integration-tests-athena:
         if: contains(fromJSON(inputs.packages), 'dbt-athena')
         runs-on: ${{ inputs.os }}

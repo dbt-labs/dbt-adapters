@@ -8,6 +8,7 @@ sources = ["src"]
 [envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
     'pre-commit==3.7.0',
     "pytest",
     "pytest-dotenv",

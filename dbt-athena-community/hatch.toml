@@ -9,6 +9,7 @@ pre-install-commands = [
     "pip install -e ../dbt-athena",
 ]
 dependencies = [
+    "ddtrace==2.3.0",
     "isort~=5.13",
     "moto~=5.0.13",
     "pre-commit~=3.5",
