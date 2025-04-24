@@ -4,12 +4,12 @@ from types import SimpleNamespace
 import pytest
 
 from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.catalogs import IcebergManagedCatalogIntegration
+from dbt.adapters.snowflake.catalogs import BuiltInCatalogIntegration
 
 
 @pytest.fixture
-def fake_integration() -> IcebergManagedCatalogIntegration:
-    return IcebergManagedCatalogIntegration(constants.DEFAULT_ICEBERG_CATALOG)
+def fake_integration() -> BuiltInCatalogIntegration:
+    return BuiltInCatalogIntegration(constants.DEFAULT_BUILT_IN_CATALOG)
 
 
 model_base = SimpleNamespace(
@@ -48,7 +48,7 @@ model_base = SimpleNamespace(
         ),
     ],
 )
-def test_iceberg_base_location_managed(fake_integration, config, expected):
+def test_iceberg_base_location_built_in(fake_integration, config, expected):
     """Test when base_location_root and base_location_subpath are provided"""
     model = deepcopy(model_base)
     model.config.update(config)

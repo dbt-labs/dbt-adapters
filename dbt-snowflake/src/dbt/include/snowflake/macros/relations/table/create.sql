@@ -5,16 +5,16 @@
     {%- if language == 'sql' -%}
         {%- if temporary -%}
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}
-        {%- elif catalog_relation.catalog_type == 'NATIVE' -%}
-            {{ snowflake__create_table_standard_sql(relation, compiled_code) }}
-        {%- elif catalog_relation.catalog_type == 'ICEBERG_MANAGED' -%}
-            {{ snowflake__create_table_iceberg_managed_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'INFO_SCHEMA' -%}
+            {{ snowflake__create_table_info_schema_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
+            {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
         {%- else -%}
             {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
 
     {%- elif language == 'python' -%}
-        {%- if catalog_relation.catalog_type == 'ICEBERG_MANAGED' %}
+        {%- if catalog_relation.catalog_type == 'BUILT_IN' %}
             {% do exceptions.raise_compiler_error('Iceberg is incompatible with Python models. Please use a SQL model for the iceberg format.') %}
         {%- else -%}
             {{ py_write_table(compiled_code, relation) }}
@@ -56,7 +56,7 @@ as (
 {%- endmacro %}
 
 
-{% macro snowflake__create_table_standard_sql(relation, compiled_code) -%}
+{% macro snowflake__create_table_info_schema_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE TABLE and CREATE TABLE ... AS SELECT:
     https://docs.snowflake.com/en/sql-reference/sql/create-table
@@ -114,7 +114,7 @@ alter table {{ relation }} resume recluster;
 {%- endmacro %}
 
 
-{% macro snowflake__create_table_iceberg_managed_sql(relation, compiled_code) -%}
+{% macro snowflake__create_table_built_in_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE ICEBERG TABLE and CREATE ICEBERG TABLE ... AS SELECT (Snowflake as the Iceberg catalog):
     https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-snowflake
@@ -146,7 +146,7 @@ create or replace iceberg table {{ relation }}
     {%- endif %}
     {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
-    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for managed Iceberg tables
+    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
     {% if copy_grants -%} copy grants {%- endif %}
 as (
