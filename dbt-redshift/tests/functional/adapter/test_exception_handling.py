@@ -57,4 +57,5 @@ class TestExceptionHandling:
                     result = adapter.execute("select * from pg_tables")
                     print(result)
         assert "could not open relation with OID" in str(excinfo.value)
+        assert "retries left. Retrying in 1 second." in str(excinfo.value)
         thread_1.join()
