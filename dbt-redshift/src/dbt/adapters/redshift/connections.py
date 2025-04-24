@@ -1,4 +1,6 @@
 import re
+import time
+
 import redshift_connector
 import sqlparse
 
@@ -23,22 +25,6 @@ if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
     # Used by mypy for earlier type hints.
     import agate
-
-
-def retryable_exceptions_handler(e):
-    blanket_retryable_exceptions = (
-        redshift_connector.InterfaceError,
-        redshift_connector.InternalError,
-    )
-
-    oid_not_found_msg = "could not open relation with OID"
-
-    if e in blanket_retryable_exceptions:
-        return True
-    if isinstance(e, redshift_connector.Error) and oid_not_found_msg in str(e):
-        return True
-
-    return False
 
 
 class SSLConfigError(CompilationError):
@@ -533,32 +519,67 @@ class RedshiftConnectionManager(SQLConnectionManager):
             table = agate_helper.empty_table()
         return response, table
 
-    def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):
-        connection = None
-        cursor = None
-
+    def add_query(
+        self, sql, auto_begin=True, bindings=None, abridge_sql_log=False
+    ) -> Tuple[Connection, Any]:
         self._initialize_sqlparse_lexer()
         queries = sqlparse.split(sql)
+        redshift_retryable_exceptions = (
+            redshift_connector.InterfaceError,
+            redshift_connector.InternalError,
+        )
 
-        for query in queries:
-            # Strip off comments from the current query
-            without_comments = re.sub(
-                re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE),
-                "",
-                query,
-            ).strip()
+        comment_regex = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
 
-            if without_comments == "":
-                continue
+        def _add_queries_with_retry(
+            queries_to_run: List[str],
+            retries: int,
+            backoff: int,
+            retry_exceptions: Tuple,
+            add_query_func: Callable,
+        ) -> Tuple[Connection, Any]:
+            try:
+                for query in queries_to_run:
+                    # Strip off comments from the current query
+                    without_comments = re.sub(
+                        comment_regex,
+                        "",
+                        query,
+                    ).strip()
 
-            connection, cursor = super().add_query(
-                query,
-                auto_begin,
-                bindings=bindings,
-                abridge_sql_log=abridge_sql_log,
-                retryable_exceptions=retryable_exceptions_handler,
-                retry_limit=self.profile.credentials.retries,
-            )
+                    if without_comments == "":
+                        continue
+
+                    return add_query_func(
+                        query,
+                        auto_begin,
+                        bindings=bindings,
+                        abridge_sql_log=abridge_sql_log,
+                        retryable_exceptions=retry_exceptions,
+                        retry_limit=self.profile.credentials.retries,
+                    )
+
+            except redshift_connector.Error as e:
+                oid_not_found_msg = "could not open relation with OID"
+                if retries == 0:
+                    raise e
+                if oid_not_found_msg not in str(e):
+                    raise e
+
+                logger.debug(f"Retrying query due to error: {e}")
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)  # Cap backoff to 60 seconds
+                return _add_queries_with_retry(
+                    queries_to_run, retries - 1, backoff, retry_exceptions, add_query_func
+                )
+
+        connection, cursor = _add_queries_with_retry(
+            queries,
+            self.profile.credentials.retries,
+            1,
+            redshift_retryable_exceptions,
+            super().add_query,
+        )
 
         if cursor is None:
             conn = self.get_thread_connection()

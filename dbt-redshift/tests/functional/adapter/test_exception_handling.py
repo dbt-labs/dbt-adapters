@@ -1,61 +1,65 @@
 import pytest
-import threading
-import time
-from dbt.tests.util import run_dbt
-from dbt_common.exceptions import DbtRuntimeError
+from dbt.tests.util import run_dbt_and_capture
 
 
-class TestExceptionHandling:
+class TestRetryOnRelationOidNotFound:
+    """
+    test based on bug report: https://github.com/dbt-labs/dbt-adapters/issues/642
+    """
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retries"] = 0
+        outputs["default"]["threads"] = 4
+        return outputs
+
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "concurrent_table.sql": """
-                {{ config(materialized='table') }}
-
-                select 1 as id, 'test' as name
+            "test_table.sql": """
+                {{
+                  config(
+                    materialized = 'table',
+                    )
+                }}
+                select 1 as test_col
             """
         }
 
-    def test_concurrent_relation_access_error(self, project, adapter):
-        """
-        This test validates that we can induce an error from redshift when we try to access a relation
-        while that relation is being modified. This is done by repeatedly dropping and recreating tables and granting
-        access to them at the same time.
-        """
-        run_dbt(["run", "--select", "concurrent_table"])
-        schema = project.adapter.config.credentials.schema
-        table_name = f"{schema}.concurrent_table"
-        table_script = f"""
-                        begin;
-                        drop table if exists {table_name}_tmp;
-                        create table {table_name}_tmp as (select 1 as id, 'test' as name);
-                        alter table {table_name} rename to concurrent_table_old;
-                        alter table {table_name}_tmp rename to concurrent_table;
-                        drop table if exists {table_name}_old;
-                        commit;
-                        """
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {
+            "macro.sql": """
+            {% macro transaction_macro() %}
+                {% if execute %}
+                    begin transaction;
+                      --temp table
+                      create temporary table trans_temp_table as (
+                          select 1 as test_col
+                      );
 
-        def drop_and_recreate_table(sql_script):
-            for _ in range(5):  # Do this 5 times to increase chance of race condition
-                with adapter.connection_named("test_concurrent_create"):
-                    try:
-                        adapter.execute(sql_script)
-                        print("Table recreated successfully.")
-                    except Exception as e:
-                        print(f"Error in thread: {e}")
-                    finally:
-                        time.sleep(0.1)  # Small delay to increase chance of race condition
+                      delete from {{target.schema}}.test_table where test_col in (select test_col from trans_temp_table);
+                      insert into {{target.schema}}.test_table  (select * from trans_temp_table);
+                      commit;
+                    end transaction;
 
-        thread_1 = threading.Thread(target=drop_and_recreate_table, args=(table_script,))
+                    drop table trans_temp_table;
+                {% endif %}
+            {% endmacro %}
+            """
+        }
 
-        thread_1.start()
-        time.sleep(0.1)
-        with pytest.raises(DbtRuntimeError) as excinfo:
-            for _ in range(10):
-                with adapter.connection_named("test_concurrent_pg_table"):
-                    adapter.execute(f"grant select on all tables in schema {schema} to public")
-                    result = adapter.execute("select * from pg_tables")
-                    print(result)
-        assert "could not open relation with OID" in str(excinfo.value)
-        assert "retries left. Retrying in 1 second." in str(excinfo.value)
-        thread_1.join()
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "on-run-end": [
+                "{{ transaction_macro() }}",
+                "{{ transaction_macro() }}",
+            ]
+        }
+
+    def test_retry_on_relation_oid_not_found(self, project):
+        result, stdout = run_dbt_and_capture(["run"])
+        assert len(result) == 3
+        assert "could not open relation with OID" in stdout

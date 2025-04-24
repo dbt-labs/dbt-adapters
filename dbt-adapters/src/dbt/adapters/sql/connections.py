@@ -75,7 +75,7 @@ class SQLConnectionManager(BaseConnectionManager):
         auto_begin: bool = True,
         bindings: Optional[Any] = None,
         abridge_sql_log: bool = False,
-        retryable_exceptions: Union[Callable, Tuple[Type[Exception], ...]] = tuple(),
+        retryable_exceptions: Tuple[Type[Exception], ...] = tuple(),
         retry_limit: int = 1,
     ) -> Tuple[Connection, Any]:
         """
@@ -88,7 +88,7 @@ class SQLConnectionManager(BaseConnectionManager):
             cursor: Any,
             sql: str,
             bindings: Optional[Any],
-            retryable_exceptions: Union[Callable, Tuple[Type[Exception], ...]],
+            retryable_exceptions: Tuple[Type[Exception], ...],
             retry_limit: int,
             attempt: int,
         ):
@@ -101,15 +101,14 @@ class SQLConnectionManager(BaseConnectionManager):
             except Exception as e:
                 if isinstance(retryable_exceptions, tuple) and e not in retryable_exceptions:
                     raise e
-                if callable(retryable_exceptions) and not retryable_exceptions(e):
-                    raise e
                 # Cease retries and fail when limit is hit.
                 if attempt >= retry_limit:
                     raise e
 
                 fire_event(
                     AdapterEventDebug(
-                        message=f"Got a retryable error {type(e)}. {retry_limit - attempt} retries left. Retrying in 1 second.\nError:\n{e}"
+                        base_msg=f"Got a retryable error {type(e)}. {retry_limit - attempt} retries left. "
+                        f"Retrying in 1 second.\nError:\n{e}"
                     )
                 )
                 time.sleep(1)
