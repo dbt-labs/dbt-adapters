@@ -71,6 +71,7 @@ unit-tests = "python -m pytest ../dbt-athena/tests/unit --ddtrace"
 integration-tests = "python -m pytest ../dbt-athena/tests/functional --ddtrace"
 
 [envs.cd]
+pre-install-commands = []
 dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
     "ddtrace==2.3.0",

@@ -92,6 +92,7 @@ integration-tests = 'python -m pytest tests/functional -m "not flaky" --ddtrace'
 integration-tests-flaky = "python -m pytest tests/functional -m flaky -n1 --ddtrace"
 
 [envs.cd]
+pre-install-commands = []
 dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
     "ddtrace==2.3.0",

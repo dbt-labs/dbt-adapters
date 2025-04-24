@@ -61,6 +61,7 @@ dependencies = [
 unit-tests = "python -m pytest tests/unit --ddtrace"
 
 [envs.cd]
+pre-install-commands = []
 dependencies = [
     "ddtrace==2.3.0",
     "pytest",

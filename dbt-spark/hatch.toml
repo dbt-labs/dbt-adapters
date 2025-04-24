@@ -81,6 +81,7 @@ unit-tests = "python -m pytest tests/unit --ddtrace"
 integration-tests = "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}"
 
 [envs.cd]
+pre-install-commands = []
 dependencies = [
     "ddtrace==2.3.0",
     "freezegun",
