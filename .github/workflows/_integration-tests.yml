@@ -95,10 +95,9 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   uses: actions/setup-python@v5
-            id: setup-python
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   uses: aws-actions/configure-aws-credentials@v4
             with:
@@ -131,10 +130,9 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   uses: actions/setup-python@v5
-            id: setup-python
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
@@ -172,7 +170,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
 
@@ -209,10 +207,9 @@ jobs:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
         -   uses: actions/setup-python@v5
-            id: setup-python
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   run: psql -f ./scripts/setup_test_database.sql
             env:
                 PGHOST: ${{ vars.POSTGRES_TEST_HOST }}
@@ -294,7 +291,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   name: Create AWS IAM profiles
             run: |
@@ -358,7 +355,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   name: Create AWS IAM profiles
             run: |
@@ -409,7 +406,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
@@ -445,7 +442,7 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_ENV
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests --profile ${{ matrix.profile }}
