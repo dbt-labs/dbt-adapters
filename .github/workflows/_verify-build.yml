@@ -74,5 +74,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch build && hatch run build:check-all
+        -   run: hatch build -py ${{ inputs.python-version }}
+            working-directory: ./${{ inputs.package }}
+        -   run: hatch run build:check-all -py ${{ inputs.python-version }}
             working-directory: ./${{ inputs.package }}

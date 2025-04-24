@@ -84,5 +84,5 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: brew install unixodbc
             if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
-        -   run: hatch run ${{ inputs.hatch-env }}:unit-tests
+        -   run: hatch run ${{ inputs.hatch-env }}:unit-tests -py ${{ inputs.python-version }}
             working-directory: ./${{ inputs.package }}
