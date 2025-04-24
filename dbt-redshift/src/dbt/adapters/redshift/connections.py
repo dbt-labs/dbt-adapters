@@ -25,6 +25,22 @@ if TYPE_CHECKING:
     import agate
 
 
+def retryable_exceptions_handler(e):
+    blanket_retryable_exceptions = (
+        redshift_connector.InterfaceError,
+        redshift_connector.InternalError,
+    )
+
+    oid_not_found_msg = "could not open relation with OID"
+
+    if e in blanket_retryable_exceptions:
+        return True
+    if isinstance(e, redshift_connector.Error) and oid_not_found_msg in str(e):
+        return True
+
+    return False
+
+
 class SSLConfigError(CompilationError):
     def __init__(self, exc: ValidationError):
         self.exc = exc
@@ -534,21 +550,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             if without_comments == "":
                 continue
-
-            def retryable_exceptions_handler(e):
-                blanket_retryable_exceptions = (
-                    redshift_connector.InterfaceError,
-                    redshift_connector.InternalError,
-                )
-
-                oid_not_found_msg = "could not open relation with OID"
-
-                if e in blanket_retryable_exceptions:
-                    return True
-                if isinstance(e, redshift_connector.Error) and oid_not_found_msg in str(e):
-                    return True
-
-                return False
 
             connection, cursor = super().add_query(
                 query,

@@ -3,6 +3,7 @@ import redshift_connector
 from multiprocessing import get_context
 from unittest import TestCase, mock
 
+from dbt.adapters.redshift.connections import retryable_exceptions_handler
 from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt_common.clients import agate_helper
 from dbt_common.exceptions import DbtRuntimeError
@@ -109,10 +110,7 @@ class TestQuery(TestCase):
             True,
             bindings=None,
             abridge_sql_log=False,
-            retryable_exceptions=(
-                redshift_connector.InterfaceError,
-                redshift_connector.InternalError,
-            ),
+            retryable_exceptions=retryable_exceptions_handler,
             retry_limit=1,
         )
 
