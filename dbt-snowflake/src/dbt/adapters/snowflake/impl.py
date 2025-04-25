@@ -257,14 +257,14 @@ class SnowflakeAdapter(SQLAdapter):
     def enable_iceberg_materializations_to_reconstruct_is_iceberg(self, schema):
         """
         enable_iceberg_materializations == True:
-            bundle is out of date and lacks is_iceberg on SHOW OBJECT.
+            bundle is out of date and lacks `is_iceberg` on SHOW OBJECTS.
             Advisory: this adds a latency penalty for the snowflake users when creating
             tables. This only affects, however, those that refuse to upgrade to new
             bundle by 4/28, which should be very few since the new bundle is required.
         enable_iceberg_materializations == False:
-            is_iceberg now comes for free in warehouse
+            `is_iceberg` now comes for free in warehouse
 
-        Will only ever execute once. I tried to use lru_cache but couldn't because
+        Will only ever execute flag change once. I tried to use lru_cache but couldn't because
         self is not hashable.
         """
 
@@ -273,7 +273,11 @@ class SnowflakeAdapter(SQLAdapter):
         if getattr(func, "_has_run", False):
             return
 
-        _, objs = self.execute(f"show objects in {schema} limit 1", fetch=True)
+        try:
+            _, objs = self.execute(f"show objects in {schema} limit 1", fetch=True)
+        except DbtDatabaseError as exc:
+            if "002043 (02000)" in str(exc):
+                return  # a la 'rollback transaction'
 
         # Abuse of the behavior flag interface to overwrite it / change its semantics
         # to a flag like: is there is_iceberg or must we reconstruct it?
