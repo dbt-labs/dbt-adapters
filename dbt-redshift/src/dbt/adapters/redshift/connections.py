@@ -139,6 +139,7 @@ class RedshiftCredentials(Credentials):
     role: Optional[str] = None
     sslmode: UserSSLMode = field(default_factory=UserSSLMode.default)
     retries: int = 1
+    retry_all: bool = False
     region: Optional[str] = None
     # opt-in by default per team deliberation on https://peps.python.org/pep-0249/#autocommit
     autocommit: Optional[bool] = True
@@ -189,6 +190,7 @@ class RedshiftCredentials(Credentials):
             "connect_timeout",
             "role",
             "retries",
+            "retry_all",
             "autocommit",
             "access_key_id",
             "is_serverless",
@@ -491,6 +493,8 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.DataError,
             redshift_connector.InterfaceError,
         )
+        if credentials.retry_all:
+            retryable_exceptions += redshift_connector.Error
 
         open_connection = cls.retry_connection(
             connection,
@@ -511,23 +515,28 @@ class RedshiftConnectionManager(SQLConnectionManager):
         fetch: bool = False,
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, "agate.Table"]:
-        def _handle_execute_exception(e: Exception, retries: int, backoff: int) -> Tuple[int, int]:
+        def _handle_execute_exception(
+            e: Exception, retries: int, backoff: int, retry_all: bool
+        ) -> Tuple[int, int]:
             oid_not_found_msg = "could not open relation with OID"
             if retries == 0:
                 raise e
             if oid_not_found_msg in str(e):
-                logger.debug(f"Retrying query due to error: {e}")
-                retries -= 1
-                # we need to actually close and open to get a new connection
-                # otherwise no queries will succeed on this connection
-                self.close(self.get_thread_connection())
-                self.open(self.get_thread_connection())
-                time.sleep(backoff)
-                # return with exponential backoff
-                return retries, min(backoff * 2, 60)
+                pass
+            elif isinstance(e, redshift_connector.Error) and retry_all:
+                pass
             else:
                 logger.debug(f"Not retrying error: {e}")
                 raise e
+            logger.debug(f"Retrying query due to error: {e}")
+            retries -= 1
+            # we need to actually close and open to get a new connection
+            # otherwise no queries will succeed on this connection
+            self.close(self.get_thread_connection())
+            self.open(self.get_thread_connection())
+            time.sleep(backoff)
+            # return with exponential backoff
+            return retries, min(backoff * 2, 60)
 
         def _execute_internal(
             sql: str,
@@ -536,6 +545,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             limit: Optional[int],
             retries: int,
             backoff: int,
+            retry_all: bool,
         ) -> Tuple[Optional[AdapterResponse], Optional["agate.Table"]]:
             try:
                 _, cursor = self.add_query(sql, auto_begin)
@@ -548,8 +558,10 @@ class RedshiftConnectionManager(SQLConnectionManager):
                     internal_table = agate_helper.empty_table()
                 return internal_response, internal_table
             except Exception as e:
-                retries, backoff = _handle_execute_exception(e, retries, backoff)
-                return _execute_internal(sql, auto_begin, fetch, limit, retries, backoff)
+                retries, backoff = _handle_execute_exception(e, retries, backoff, retry_all)
+                return _execute_internal(
+                    sql, auto_begin, fetch, limit, retries, backoff, retry_all
+                )
 
         response, table = _execute_internal(
             self._add_query_comment(sql),
@@ -558,6 +570,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             limit,
             self.profile.credentials.retries,
             1,
+            self.profile.credentials.retry_all,
         )
 
         # this should never happen but mypy doesn't know that and arguably neither do we
@@ -577,6 +590,9 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InterfaceError,
             redshift_connector.InternalError,
         )
+        if self.profile.credentials.retry_all:
+            redshift_retryable_exceptions += redshift_connector.Error
+
         for query in queries:
             # Strip off comments from the current query
             without_comments = re.sub(
