@@ -297,7 +297,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
         ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
+        elif self._connection_method in (
+            BigQueryConnectionMethod.OAUTH,
+            BigQueryConnectionMethod.OAUTH_SECRETS,
+        ):
             request = Request()
             response = request(
                 method="GET",
