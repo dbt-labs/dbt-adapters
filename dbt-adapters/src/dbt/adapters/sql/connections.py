@@ -1,5 +1,4 @@
 import abc
-
 import time
 from typing import (
     Any,
@@ -96,9 +95,7 @@ class SQLConnectionManager(BaseConnectionManager):
             """
             try:
                 cursor.execute(sql, bindings)
-            except Exception as e:
-                if isinstance(retryable_exceptions, tuple) and e not in retryable_exceptions:
-                    raise e
+            except retryable_exceptions as e:
                 # Cease retries and fail when limit is hit.
                 if attempt >= retry_limit:
                     raise e

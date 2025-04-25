@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Allow SQL adapters to pass a callable retry handle in add_query
-time: 2025-04-24T09:21:14.835921-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1014"
