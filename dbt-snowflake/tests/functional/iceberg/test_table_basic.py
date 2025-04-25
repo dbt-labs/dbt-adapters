@@ -30,8 +30,30 @@ class TestIcebergTableBuilds:
         }
 
     def test_iceberg_tables_build_and_can_be_referred(self, project):
+        expected_models = {
+            "first_table": ("table", "builtin"),
+            "first_table_literals": ("table", "iceberg"),
+            "dynamic_table": ("dynamic_table", "iceberg"),
+            "dynamic_table_builtin": ("dynamic_table", "builtin"),
+            "dynamic_tableb": ("dynamic_table", "iceberg"),
+            "dynamic_tablec": ("dynamic_table", "iceberg"),
+            "iceberg_builtin_table": ("table", "builtin"),
+            "dynamic_tabled": ("dynamic_table", "iceberg"),
+            "iceberg_table": ("table", "iceberg"),
+            "iceberg_tableb": ("table", "iceberg"),
+            "iceberg_tablec": ("table", "iceberg"),
+            "table_built_on_iceberg_table": ("table", "builtin"),
+        }
+
         run_results = run_dbt()
         assert len(run_results) == 12
+        for run_result in run_results:
+            name = run_result.node.name
+            materialized = run_result.node.config.materialized
+            raw_format = run_result.node.config._extra.get("table_format", "DEFAULT")
+            format_value = "iceberg" if raw_format.lower() == "iceberg" else "builtin"
+
+            assert expected_models.get(name) == (materialized, format_value)
 
 
 class TestIcebergTableTypeBuildsOnExistingTable:

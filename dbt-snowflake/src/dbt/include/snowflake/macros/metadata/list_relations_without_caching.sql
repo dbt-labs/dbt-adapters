@@ -63,7 +63,8 @@ show objects in {{ schema }}
     {% if watermark is not none -%} from '{{ watermark }}' {%- endif %}
 ;
 
-{#- gated for performance reasons - if you don't want iceberg, you shouldn't pay the latency penalty -#}
+{# -- Flag is true  ~= reconstruct the is_iceberg field
+   --         false ~= skip this, it's already there #}
 {%- if adapter.behavior.enable_iceberg_materializations.no_warn %}
 select all_objects.*, all_tables.IS_ICEBERG as "is_iceberg"
 from table(result_scan(last_query_id(-1))) all_objects
