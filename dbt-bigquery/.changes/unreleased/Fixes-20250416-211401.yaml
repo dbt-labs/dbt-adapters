@@ -1,0 +1,6 @@
+kind: Fixes
+body: Quick fix of session in table.sql
+time: 2025-04-16T21:14:01.558374043Z
+custom:
+    Author: jialuoo
+    Issue: "1003"
