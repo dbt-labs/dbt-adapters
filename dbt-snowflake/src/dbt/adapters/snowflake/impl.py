@@ -107,22 +107,6 @@ class SnowflakeAdapter(SQLAdapter):
         # Snowflake uppercases everything in their metadata tables
         return super().get_catalog_integration(name.upper())
 
-    @property
-    def _behavior_flags(self) -> List[BehaviorFlag]:
-        return [
-            {
-                "name": "enable_iceberg_materializations",
-                "default": False,
-                "description": (
-                    "Enabling Iceberg materializations introduces latency to metadata queries, "
-                    "specifically within the list_relations_without_caching macro. Since Iceberg "
-                    "benefits only those actively using it, we've made this behavior opt-in to "
-                    "prevent unnecessary latency for other users."
-                ),
-                "docs_url": "https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format",
-            }
-        ]
-
     @classmethod
     def date_function(cls):
         return "CURRENT_TIMESTAMP()"
@@ -290,20 +274,12 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
-        if self.behavior.enable_iceberg_materializations.no_warn:
-            columns.append("is_iceberg")
+        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
-        if self.behavior.enable_iceberg_materializations.no_warn:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-        else:
-            database, schema, identifier, relation_type, is_dynamic = result
-            is_iceberg = "N"
+        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
