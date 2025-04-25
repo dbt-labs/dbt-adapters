@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Seamlessly transition snowflake users to the new bundle semantics where is_iceberg is always present on show objects.
+time: 2025-04-25T04:10:18.362372-07:00
+custom:
+    Author: versusfacit
+    Issue: "963"

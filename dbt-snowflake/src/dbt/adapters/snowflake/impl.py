@@ -93,7 +93,12 @@ class SnowflakeAdapter(SQLAdapter):
                     "Enabling Iceberg materializations introduces latency to metadata queries, "
                     "specifically within the list_relations_without_caching macro. Since Iceberg "
                     "benefits only those actively using it, we've made this behavior opt-in to "
-                    "prevent unnecessary latency for other users."
+                    "prevent unnecessary latency for other users. "
+                    " "
+                    "With the introduction of bundle 2025_01, snowflake now has is_iceberg built "
+                    "into metadata queries. This behavior flag is now deprecated."
+                    " "
+                    "Make this message go away by upgrading to the latest bundle."
                 ),
                 "docs_url": "https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format",
             }
@@ -249,10 +254,45 @@ class SnowflakeAdapter(SQLAdapter):
             stats=stats_dict,
         )
 
+    def enable_iceberg_materializations_to_reconstruct_is_iceberg(self, schema):
+        """
+        enable_iceberg_materializations == True:
+            bundle is out of date and lacks is_iceberg on SHOW OBJECT.
+            Advisory: this adds a latency penalty for the snowflake users when creating
+            tables. This only affects, however, those that refuse to upgrade to new
+            bundle by 4/28, which should be very few since the new bundle is required.
+        enable_iceberg_materializations == False:
+            is_iceberg now comes for free in warehouse
+
+        Will only ever execute once. I tried to use lru_cache but couldn't because
+        self is not hashable.
+        """
+
+        func = type(self).enable_iceberg_materializations_to_reconstruct_is_iceberg
+
+        if getattr(func, "_has_run", False):
+            return
+
+        _, objs = self.execute(f"show objects in {schema} limit 1", fetch=True)
+
+        # Abuse of the behavior flag interface to overwrite it / change its semantics
+        # to a flag like: is there is_iceberg or must we reconstruct it?
+        # Don't do this. My hand was forced because of need of a schema.
+        if any(col.upper() == "IS_ICEBERG" for col in objs.column_names):
+            self.behavior.enable_iceberg_materializations.setting = (
+                False  # no need to reconstruct is_iceberg
+            )
+        else:
+            self.behavior.enable_iceberg_materializations.setting = True  # reconstruct is_iceberg
+
+        setattr(func, "_has_run", True)
+
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:
         kwargs = {"schema_relation": schema_relation}
+
+        self.enable_iceberg_materializations_to_reconstruct_is_iceberg(schema_relation)
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
@@ -261,7 +301,8 @@ class SnowflakeAdapter(SQLAdapter):
             # Alternatively, we could query the list of schemas before we start
             # and skip listing the missing ones, which sounds expensive.
             # "002043 (02000)" is error code for "object does not exist or is not found"
-            # The error message text may vary across languages, but the error code is expected to be more stable
+            # The error message text may vary across languages, but the error code is
+            # expected to be more stable
             if "002043 (02000)" in str(exc):
                 return []
             raise
@@ -275,16 +316,12 @@ class SnowflakeAdapter(SQLAdapter):
             # normalization step ensures metadata queries are handled consistently.
             schema_objects = schema_objects.rename(column_names={"IS_ICEBERG": "is_iceberg"})
             columns.append("is_iceberg")
+        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
-        if self.behavior.enable_iceberg_materializations.no_warn:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-        else:
-            database, schema, identifier, relation_type, is_dynamic = result
-            is_iceberg = "N"
+        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
