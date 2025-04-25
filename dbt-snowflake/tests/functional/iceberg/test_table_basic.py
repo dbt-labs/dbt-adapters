@@ -58,7 +58,6 @@ class TestIcebergTableBuilds:
         }
 
         run_results = run_dbt()
-        assert len(run_results) == 10
         assert len(run_results) == 12
         for run_result in run_results:
             name = run_result.node.name
