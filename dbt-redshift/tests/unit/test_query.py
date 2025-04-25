@@ -3,7 +3,6 @@ import redshift_connector
 from multiprocessing import get_context
 from unittest import TestCase, mock
 
-from dbt.adapters.redshift.connections import retryable_exceptions_handler
 from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt_common.clients import agate_helper
 from dbt_common.exceptions import DbtRuntimeError
@@ -73,7 +72,7 @@ class TestQuery(TestCase):
                 cursor,
             )  # when mock_add_query is called, it will always return None, cursor
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
-                mock_get_response.return_value = None
+                mock_get_response.return_value = {}
                 with mock.patch.object(
                     self.adapter.connections, "get_result_from_cursor"
                 ) as mock_get_result_from_cursor:
@@ -91,7 +90,7 @@ class TestQuery(TestCase):
                 cursor,
             )  # when mock_add_query is called, it will always return None, cursor
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
-                mock_get_response.return_value = None
+                mock_get_response.return_value = {}
                 with mock.patch.object(
                     self.adapter.connections, "get_result_from_cursor"
                 ) as mock_get_result_from_cursor:
@@ -110,7 +109,10 @@ class TestQuery(TestCase):
             True,
             bindings=None,
             abridge_sql_log=False,
-            retryable_exceptions=retryable_exceptions_handler,
+            retryable_exceptions=(
+                redshift_connector.InterfaceError,
+                redshift_connector.InternalError,
+            ),
             retry_limit=1,
         )
 

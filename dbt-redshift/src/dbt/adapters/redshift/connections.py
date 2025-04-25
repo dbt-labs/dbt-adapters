@@ -511,42 +511,59 @@ class RedshiftConnectionManager(SQLConnectionManager):
         fetch: bool = False,
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, "agate.Table"]:
-        sql = self._add_query_comment(sql)
-        retries = self.profile.credentials.retries
-        backoff = 1
-        response = None
-        table = None
-        while retries >= 0:
+        def _handle_execute_exception(e: Exception, retries: int, backoff: int) -> Tuple[int, int]:
+            oid_not_found_msg = "could not open relation with OID"
+            if retries == 0:
+                raise e
+            if oid_not_found_msg in str(e):
+                logger.debug(f"Retrying query due to error: {e}")
+                retries -= 1
+                # we need to actually close and open to get a new connection
+                # otherwise no queries will succeed on this connection
+                self.close(self.get_thread_connection())
+                self.open(self.get_thread_connection())
+                time.sleep(backoff)
+                # return with exponential backoff
+                return retries, min(backoff * 2, 60)
+            else:
+                logger.debug(f"Not retrying error: {e}")
+                raise e
+
+        def _execute_internal(
+            sql: str,
+            auto_begin: bool,
+            fetch: bool,
+            limit: Optional[int],
+            retries: int,
+            backoff: int,
+        ) -> Tuple[Optional[AdapterResponse], Optional["agate.Table"]]:
             try:
                 _, cursor = self.add_query(sql, auto_begin)
-                response = self.get_response(cursor)
+                internal_response = self.get_response(cursor)
                 if fetch:
-                    table = self.get_result_from_cursor(cursor, limit)
+                    internal_table = self.get_result_from_cursor(cursor, limit)
                 else:
                     from dbt_common.clients import agate_helper
 
-                    table = agate_helper.empty_table()
-                break
+                    internal_table = agate_helper.empty_table()
+                return internal_response, internal_table
             except Exception as e:
-                oid_not_found_msg = "could not open relation with OID"
-                if retries == 0:
-                    raise e
-                if oid_not_found_msg in str(e):
-                    logger.debug(f"Retrying query due to error: {e}")
-                    retries -= 1
-                    # we need to actually close and reopen the connection
-                    # otherwise the connection will be in a bad state
-                    self.close(self.get_thread_connection())
-                    self.open(self.get_thread_connection())
-                    time.sleep(backoff)
-                    backoff = min(backoff * 2, 60)
-                else:
-                    logger.debug(f"Not retrying error: {e}")
-                    raise e
+                retries, backoff = _handle_execute_exception(e, retries, backoff)
+                return _execute_internal(sql, auto_begin, fetch, limit, retries, backoff)
+
+        response, table = _execute_internal(
+            self._add_query_comment(sql),
+            auto_begin,
+            fetch,
+            limit,
+            self.profile.credentials.retries,
+            1,
+        )
+
+        # this should never happen but mypy doesn't know that and arguably neither do we
         if response is None or table is None:
-            raise DbtRuntimeError(
-                f"Failed to execute SQL: {sql} on connection: {self.get_thread_connection().name}"
-            )
+            conn_name = thread_conn.name if (thread_conn := self.get_if_exists()) else "<None>"
+            raise DbtRuntimeError(f"Failed to execute SQL: {sql} on connection: {conn_name}")
         return response, table
 
     def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):  # type: ignore
@@ -572,11 +589,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
                 continue
 
             connection, cursor = super().add_query(
-                sql=query,
-                retryable_exceptions=redshift_retryable_exceptions,
-                auto_begin=auto_begin,
+                query,
+                auto_begin,
                 bindings=bindings,
                 abridge_sql_log=abridge_sql_log,
+                retryable_exceptions=redshift_retryable_exceptions,
+                retry_limit=self.profile.credentials.retries,
             )
 
         if cursor is None:
