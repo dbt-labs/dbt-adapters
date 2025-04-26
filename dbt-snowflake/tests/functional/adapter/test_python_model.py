@@ -2,8 +2,10 @@ import pytest
 import uuid
 from dbt.tests.util import run_dbt, write_file
 from dbt.tests.adapter.python_model.test_python_model import (
+    BasePythonEmptyTests,
     BasePythonModelTests,
     BasePythonIncrementalTests,
+    BasePythonSampleTests,
 )
 
 models__simple_python_model = """
@@ -229,3 +231,11 @@ class TestSecrets:
         project.run_sql(
             f"drop external access integration if exists {TEST_EXTERNAL_ACCESS_INTEGRATION};"
         )
+
+
+class TestEmptyModeWithPythonModel(BasePythonEmptyTests):
+    pass
+
+
+class TestSampleModeWithPythonModel(BasePythonSampleTests):
+    pass

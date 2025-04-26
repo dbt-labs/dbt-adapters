@@ -2,19 +2,26 @@
   {%- if table_type == 'iceberg' -%}
     {% set invalid_strategy_msg -%}
       Invalid incremental strategy provided: {{ raw_strategy }}
-      Incremental models on Iceberg tables only work with 'append' or 'merge' (v3 only) strategy.
+      Incremental models on Iceberg tables only work with 'append', 'microbatch' or 'merge' (v3 only) strategy.
     {%- endset %}
-    {% if raw_strategy not in ['append', 'merge'] %}
+    {% if raw_strategy not in ['append', 'microbatch', 'merge'] %}
       {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
+    {% endif %}
+    {% if raw_strategy == 'microbatch' %}
+      {% do return('merge') %}
     {% endif %}
   {%- else -%}
     {% set invalid_strategy_msg -%}
       Invalid incremental strategy provided: {{ raw_strategy }}
-      Expected one of: 'append', 'insert_overwrite'
+      Expected one of: 'append', 'insert_overwrite', 'microbatch'
     {%- endset %}
 
-    {% if raw_strategy not in ['append', 'insert_overwrite'] %}
+    {% if raw_strategy not in ['append', 'insert_overwrite', 'microbatch'] %}
       {% do exceptions.raise_compiler_error(invalid_strategy_msg) %}
+    {% endif %}
+
+    {% if raw_strategy == 'microbatch' %}
+      {% do return('insert_overwrite') %}
     {% endif %}
   {% endif %}
 

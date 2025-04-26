@@ -139,3 +139,18 @@ df.write \
   {%- endif %}
   .save("{{target_relation}}")
 {% endmacro %}
+
+{% macro bigframes_write_table(compiled_code, target_relation) %}
+import bigframes.pandas as bpd
+bpd.options.compute.extra_query_labels["bigframes-dbt-api"] = "python-model-table"
+bpd.options.bigquery.project = "{{ target.project }}"
+{% if target.location %}
+bpd.options.bigquery.location = "{{ target.location }}"
+{% endif %}
+session = bpd.get_global_session()
+{{ compiled_code }}
+dbt = dbtObj(bpd.read_gbq)
+df = model(dbt, session)
+df.to_gbq("{{ target_relation }}", if_exists="replace")
+df._session.close()
+{% endmacro %}

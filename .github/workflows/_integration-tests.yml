@@ -1,4 +1,5 @@
-name: "Integration tests"
+name: "# Integration tests"
+run-name: "Integration tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
@@ -110,6 +111,7 @@ jobs:
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
             DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
@@ -122,14 +124,18 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -k "not TestPython"
+        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky BQ tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
         runs-on: ${{ inputs.os }}
+        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
+        needs: integration-tests-bigquery
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -142,6 +148,7 @@ jobs:
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
             DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
@@ -154,7 +161,7 @@ jobs:
             with:
                 python-version: ${{ inputs.python-version }}
         -   uses: pypa/hatch@install
-        -   run: hatch run integration-tests tests/functional -n1 -k "TestPython"
+        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
 
     integration-tests-postgres:
         if: contains(fromJSON(inputs.packages), 'dbt-postgres')
@@ -293,10 +300,14 @@ jobs:
 
     integration-tests-redshift-flaky:
         # we only run this for one python version to avoid running in parallel
+        # we need to run with "!cancelled()" so that we run after non-flaky RS tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-redshift') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
+            !cancelled()
         runs-on: ${{ inputs.os }}
+        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
+        needs: integration-tests-redshift
         defaults:
             run:
                 working-directory: "./dbt-redshift"

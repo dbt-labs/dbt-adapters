@@ -5,7 +5,7 @@ from typing import Dict, Optional, Set
 from mypy_boto3_glue.type_defs import TableTypeDef
 
 from dbt.adapters.athena.constants import LOGGER
-from dbt.adapters.base.relation import BaseRelation, InformationSchema, Policy
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter, InformationSchema, Policy
 
 
 class TableType(Enum):
@@ -71,6 +71,20 @@ class AthenaRelation(BaseRelation):
         rendered = self.render()
         object.__setattr__(self, "quote_character", old_value)
         return str(rendered)
+
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"cast({event_time_filter.field_name} as timestamp) >= timestamp '{event_time_filter.start}' and cast({event_time_filter.field_name} as timestamp) < timestamp '{event_time_filter.end}'"
+        elif event_time_filter.start:
+            filter = f"cast({event_time_filter.field_name} as timestamp) >= timestamp '{event_time_filter.start}'"
+        elif event_time_filter.end:
+            filter = f"cast({event_time_filter.field_name} as timestamp) < timestamp'{event_time_filter.end}'"
+
+        return filter
 
 
 class AthenaSchemaSearchMap(Dict[InformationSchema, Dict[str, Set[Optional[str]]]]):
