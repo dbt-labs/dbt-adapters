@@ -175,6 +175,9 @@ class BaseStoreTestFailuresLimit(BaseStoreTestFailures):
     def properties(self):
         return {"_seeds.yml": fixtures.properties__seeds_yml}
 
+    def test__store_and_assert(self, project, clean_up):
+        pass
+
     def test_store_limit(self, project, clean_up):
         results = run_dbt(["test"], expect_pass=False)
         # there are 9 actual failing rows, but the test `limit` config has a value of 4
