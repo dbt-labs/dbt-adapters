@@ -180,7 +180,7 @@ class BaseStoreTestFailuresLimit(BaseStoreTestFailures):
         # there are 9 actual failing rows, but the test `limit` config has a value of 4
         assert results.results[0].failures == 4
         relation_name = results.results[0].relation_name
-        sql_result = project.run_sql(f"select count(*) from {relation_name}", fetch="one")
+        sql_result = project.run_sql(f"select count(*) as cnt from {relation_name}", fetch="one")
         count = sql_result[0] if sql_result is not None else None
         # make sure the table also only has 4 rows (not 9!)
         assert count == 4, f"The test failure count {count} doesn't match the config `limit` of 4"
