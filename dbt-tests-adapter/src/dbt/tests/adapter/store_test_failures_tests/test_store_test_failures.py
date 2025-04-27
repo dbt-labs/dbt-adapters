@@ -188,3 +188,7 @@ class BaseStoreTestFailuresLimit(BaseStoreTestFailures):
 
 class TestStoreTestFailures(BaseStoreTestFailures):
     pass
+
+
+class TestStoreTestFailuresLimit(BaseStoreTestFailuresLimit):
+    pass
