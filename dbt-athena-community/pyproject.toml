@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dbt-athena-community"
+description = "The athena adapter plugin for dbt (data build tool)"
+readme = "README.md"
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "athena"]
+requires-python = ">=3.9.0"
+authors = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+maintainers = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+# these versions should always match and they both should match the local version of dbt-athena
+dependencies = ["dbt-athena==1.9.3"]
+version = "1.9.3"
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-athena"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+testpaths = ["../tests/unit", "../tests/functional"]
+env_files = ["../dbt-athena/test.env"]
+addopts = "-v --color=yes -n auto"
+filterwarnings = [
+    "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
+    "ignore:unclosed file .*:ResourceWarning",
+]

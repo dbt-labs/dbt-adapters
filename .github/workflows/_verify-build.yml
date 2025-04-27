@@ -1,0 +1,78 @@
+name: "# Verify build"
+run-name: "Verify build - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to build"
+                type: string
+                default: "dbt-adapters"
+            branch:
+                description: "Choose the branch to build"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to build, (used primarily when testing a fork)"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: "ubuntu-22.04"
+            python-version:
+                description: "Choose the Python version to test against"
+                type: string
+                default: "3.9"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to build"
+                type: choice
+                options:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            branch:
+                description: "Choose the branch to build"
+                type: string
+                default: "main"
+            repository:
+                description: "Choose the repository to build, (used primarily when testing a fork)"
+                type: string
+                default: "dbt-labs/dbt-adapters"
+            os:
+                description: "Choose the OS to test against"
+                type: string
+                default: "ubuntu-22.04"
+            python-version:
+                description: "Choose the Python version to test against"
+                type: choice
+                options: ["3.9", "3.10", "3.11", "3.12"]
+
+permissions: read-all
+
+defaults:
+    run:
+        shell: bash
+
+jobs:
+    build:
+        runs-on: ${{ inputs.os }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: hatch build && hatch run build:check-all
+            working-directory: ./${{ inputs.package }}

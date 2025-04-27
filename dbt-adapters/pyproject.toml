@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+dynamic = ["version"]
+name = "dbt-adapters"
+description = "The set of adapter protocols and base functionality that supports integration with dbt-core"
+readme = "README.md"
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs"]
+requires-python = ">=3.9.0"
+authors = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+maintainers = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "dbt-common>=1.13,<2.0",
+    "pytz>=2015.7",
+    # installed via dbt-common but used directly
+    "agate>=1.0,<2.0",
+    "mashumaro[msgpack]>=3.9,<3.15",
+    "protobuf>=5.0,<6.0",
+    "typing-extensions>=4.0,<5.0",
+]
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-adapters"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
