@@ -99,7 +99,7 @@ seeds:
               config:
                 store_failures_as: table
                 # 9 actual failing rows
-                limit: 4
+                limit: 7
 """
 
 #
