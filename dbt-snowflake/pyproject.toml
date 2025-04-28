@@ -27,6 +27,7 @@ dependencies = [
     "dbt-adapters>=1.10.4,<2.0",
     # lower bound pin due to CVE-2025-24794
     "snowflake-connector-python[secure-local-storage]>=3.13.1,<4.0.0",
+    "certifi<2025.4.26",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0",
     # installed via dbt-core but referenced directly; don't pin to avoid version conflicts with dbt-core
