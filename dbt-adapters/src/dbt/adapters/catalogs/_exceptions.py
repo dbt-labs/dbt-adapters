@@ -25,8 +25,8 @@ class DbtCatalogIntegrationNotSupportedError(DbtConfigError):
     def __init__(self, catalog_type: str, supported_catalog_types: Iterable[str]) -> None:
         self.catalog_type = catalog_type
         msg = (
-            f"Catalog type is not supported."
-            f"Received: {catalog_type}"
+            f"Catalog type is not supported.\n"
+            f"Received: {catalog_type}\n"
             f"Expected one of: {', '.join(supported_catalog_types)}"
         )
         super().__init__(msg)
