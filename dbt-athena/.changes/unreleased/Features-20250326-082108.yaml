@@ -1,6 +1,0 @@
-kind: Features
-body: Add high availability when doing full refresh on existing iceberg table
-time: 2025-03-26T08:21:08.11839Z
-custom:
-    Author: alex-antonison
-    Issue: "458"

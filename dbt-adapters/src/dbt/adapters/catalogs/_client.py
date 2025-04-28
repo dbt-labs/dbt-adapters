@@ -28,7 +28,7 @@ class CatalogIntegrationClient:
 
     def __init__(self, supported_catalogs: Iterable[Type[CatalogIntegration]]):
         self.__supported_catalogs: Dict[str, Type[CatalogIntegration]] = {
-            catalog.catalog_type: catalog for catalog in supported_catalogs
+            catalog.catalog_type.casefold(): catalog for catalog in supported_catalogs
         }
         self.__catalog_integrations: Dict[str, CatalogIntegration] = {}
 
@@ -47,7 +47,7 @@ class CatalogIntegrationClient:
 
     def __catalog_integration_factory(self, catalog_type: str) -> Type[CatalogIntegration]:
         try:
-            return self.__supported_catalogs[catalog_type]
+            return self.__supported_catalogs[catalog_type.casefold()]
         except KeyError as e:
             raise DbtCatalogIntegrationNotSupportedError(
                 catalog_type, self.__supported_catalogs.keys()
