@@ -1,0 +1,6 @@
+kind: Features
+body: Add 'serverless_work_group' and 'serverless_acct_id' params to profile and connection calls
+time: 2025-04-29T13:33:35.538055-05:00
+custom:
+    Author: csquire
+    Issue: "919"
