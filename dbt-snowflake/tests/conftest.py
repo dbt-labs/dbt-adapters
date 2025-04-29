@@ -18,6 +18,5 @@ def dbt_profile_target():
         "password": os.getenv("SNOWFLAKE_TEST_PASSWORD"),
         "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
         "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
-        "authenticator": os.getenv("SNOWFLAKE_TEST_AUTHENTICATOR"),
     }
     return profile
