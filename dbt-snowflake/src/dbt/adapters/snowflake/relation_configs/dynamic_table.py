@@ -13,7 +13,6 @@ from dbt.adapters.snowflake.relation_configs.catalog import (
     SnowflakeCatalogConfigChange,
 )
 
-
 if TYPE_CHECKING:
     import agate
 
@@ -60,7 +59,6 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     query: str
     target_lag: str
     snowflake_warehouse: str
-    catalog: SnowflakeCatalogConfig
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
@@ -81,7 +79,6 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": config_dict.get("query"),
             "target_lag": config_dict.get("target_lag"),
             "snowflake_warehouse": config_dict.get("snowflake_warehouse"),
-            "catalog": SnowflakeCatalogConfig.from_dict(config_dict["catalog"]),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
@@ -182,10 +179,9 @@ class SnowflakeDynamicTableConfigChangeset:
                     else False
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
-                self.catalog.requires_full_refresh if self.catalog else False,
             ]
         )
 
     @property
     def has_changes(self) -> bool:
-        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode, self.catalog])
+        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode])

@@ -14,6 +14,7 @@
   {% set temp_schema = config.get('temp_schema') %}
   {% set target_relation = this.incorporate(type='table') %}
   {% set existing_relation = load_relation(this) %}
+  {% set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) %}
   -- If using insert_overwrite on Hive table, allow to set a unique tmp table suffix
   {% if unique_tmp_table_suffix == True and strategy == 'insert_overwrite' and table_type == 'hive' %}
     {% set tmp_table_suffix = adapter.generate_unique_temporary_table_suffix() %}
@@ -60,6 +61,58 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
+    {% set build_sql = "select '" ~ query_result ~ "'" -%}
+
+  -- Running in full refresh, support High Availability for Iceberg table type --
+  -- Must use s3_data_naming schema_table_unique in order to support high availability --
+  -- on a full fresh for an incremental iceberg table --
+  {%- elif (
+    should_full_refresh()
+    and table_type == 'iceberg'
+    and ('unique' not in s3_data_naming or external_location is not none)
+  ) -%}
+    -- create a new tmp_relation that has its s3 path set to the target location path
+    -- except with a unique UUID
+    -- this allows for once the fully refreshed `tmp_relation` is completed, the `rename_relation()`
+    -- macro can be used to rename the tmp_relation to the target_relation
+    {%- set tmp_relation = api.Relation.create(
+            identifier=target_relation.identifier ~ '__dbt_tmp',
+            schema=target_relation.schema,
+            database=target_relation.database,
+            s3_path_table_part=target_relation.identifier,
+            type='table'
+        )
+    -%}
+
+    -- if the existing tmp_relation exists, drop it
+    {%- if tmp_relation is not none -%}
+      {{ drop_relation(tmp_relation) }}
+    {%- endif -%}
+
+    -- create the full refresh version of the incremental iceberg table
+    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- if model_language == 'python' -%}
+      {% call statement('create_table', language=model_language) %}
+        {{ query_result }}
+      {% endcall %}
+    {%- endif -%}
+
+    -- create a backup relation
+    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
+
+    -- if something failed in a prior run and previously created
+    -- backup migration still exists, drop it
+    {%- if relation_bkp is not none -%}
+      {{ drop_relation(relation_bkp) }}
+    {%- endif -%}
+
+    -- rename the current target_relation to a backup_relation
+    {%- do rename_relation(target_relation, relation_bkp) -%}
+    -- rename the new full refreshed tmp_relation to the target_relation
+    {%- do rename_relation(tmp_relation, target_relation) -%}
+    -- drop the backup_relation
+    {%- do drop_relation(relation_bkp) -%}
+
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
   -- Running in full refresh, drop existing relation, and do full build --

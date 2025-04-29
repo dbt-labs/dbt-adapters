@@ -1,5 +1,4 @@
 import textwrap
-
 from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
@@ -16,15 +15,14 @@ from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error
 
+from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
-    SnowflakeCatalogConfigChange,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
-    TableFormat,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -33,7 +31,7 @@ from dbt.adapters.snowflake.relation_configs import (
 @dataclass(frozen=True, eq=False, repr=False)
 class SnowflakeRelation(BaseRelation):
     type: Optional[SnowflakeRelationType] = None
-    table_format: str = TableFormat.DEFAULT
+    table_format: str = constants.INFO_SCHEMA_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
     relation_configs = {
@@ -64,7 +62,7 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_iceberg_format(self) -> bool:
-        return self.table_format == TableFormat.ICEBERG
+        return self.table_format == constants.ICEBERG_TABLE_FORMAT
 
     @classproperty
     def DynamicTable(cls) -> str:
@@ -119,12 +117,6 @@ class SnowflakeRelation(BaseRelation):
                 context=new_dynamic_table.refresh_mode,
             )
 
-        if new_dynamic_table.catalog != existing_dynamic_table.catalog:
-            config_change_collection.catalog = SnowflakeCatalogConfigChange(
-                action=RelationConfigChangeAction.create,  # type:ignore
-                context=new_dynamic_table.catalog,
-            )
-
         if config_change_collection.has_changes:
             return config_change_collection
         return None
@@ -155,11 +147,9 @@ class SnowflakeRelation(BaseRelation):
         """
         This macro renders the appropriate DDL prefix during the create_table_as
         macro. It decides based on mutually exclusive table configuration options:
-
         - TEMPORARY: Indicates a table that exists only for the duration of the session.
         - ICEBERG: A specific storage format that requires a distinct DDL layout.
         - TRANSIENT: A table similar to a permanent table but without fail-safe.
-
         Additional Caveats for Iceberg models:
         - transient=true throws a warning because Iceberg does not support transient tables
         - A temporary relation is never an Iceberg relation because Iceberg does not

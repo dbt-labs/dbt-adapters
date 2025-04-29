@@ -422,6 +422,10 @@ class BaseRelation(FakeAPIObject, Hashable):
     def is_materialized_view(self) -> bool:
         return self.type == RelationType.MaterializedView
 
+    @property
+    def is_pointer(self) -> bool:
+        return self.type == RelationType.PointerTable
+
     @classproperty
     def Table(cls) -> str:
         return str(RelationType.Table)
@@ -441,6 +445,10 @@ class BaseRelation(FakeAPIObject, Hashable):
     @classproperty
     def MaterializedView(cls) -> str:
         return str(RelationType.MaterializedView)
+
+    @classproperty
+    def PointerTable(cls) -> str:
+        return str(RelationType.PointerTable)
 
     @classproperty
     def get_relation_type(cls) -> Type[RelationType]:

@@ -1,3 +1,4 @@
+import inspect
 import json
 import re
 from typing import Any, Dict, Optional, Union
@@ -17,10 +18,12 @@ from dbt.adapters.bigquery.credentials import (
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
+from dbt_common.exceptions import DbtRuntimeError
 from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
+from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
@@ -41,10 +44,9 @@ class _BigQueryPythonHelper(PythonJobHelper):
     def __init__(self, parsed_model: Dict, credentials: BigQueryCredentials) -> None:
         self._storage_client = create_gcs_client(credentials)
         self._project = credentials.execution_project
-        # TODO(jialuo): Use more generic naming "python_compute_region".
-        self._region = credentials.dataproc_region
+        self._region = credentials.compute_region
         # validate all additional stuff for python is set
-        for required_config in ["dataproc_region", "gcs_bucket"]:
+        for required_config in ["compute_region", "gcs_bucket"]:
             if not getattr(credentials, required_config):
                 raise ValueError(
                     f"Need to supply {required_config} in profile to submit python job"
@@ -202,6 +204,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
         )
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
+        self._packages = parsed_model["config"].get("packages", [])
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -298,7 +301,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
         ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
+        elif self._connection_method in (
+            BigQueryConnectionMethod.OAUTH,
+            BigQueryConnectionMethod.OAUTH_SECRETS,
+        ):
             request = Request()
             response = request(
                 method="GET",
@@ -353,7 +359,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
                             formatted_output += f"    {inner_key}: {inner_value}\n"
                     else:
                         formatted_output += f"    {value}\n"
+
+                    # Extract only the final error message line. Discard the
+                    # traceback details as they contain raw ANSI escape codes.
+                    if isinstance(value, str) and value.strip().lower() == "error":
+                        return formatted_output
+
             else:
+                _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
 
             # Add a newline between items.
@@ -389,6 +402,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
     def submit(self, compiled_code: str) -> None:
+        if self._packages:
+            install_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                f"{inspect.getsource(_install_packages)}\n{install_code}\n{compiled_code}"
+            )
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
@@ -411,6 +429,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
                 timeout=self._polling_retry.timeout
             )
+            retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
         except TimeoutError as timeout_error:
             raise TimeoutError(
                 f"The dbt operation encountered a timeout: {timeout_error}\n"
@@ -418,10 +437,92 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 "console since it might still be actively running."
             )
         except Exception as e:
-            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
+            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
         job_id = res.name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         self._process_gcs_log(gcs_log_uri)
 
+        if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' failed."
+            )
+        elif retrieved_job.job_state != aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' finished with unexpected state: {retrieved_job.job_state.name}"
+            )
+
         return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+
+
+def _install_packages(packages: list[str]) -> None:
+    """Checks and installs packages via pip in a separate environment.
+
+    Parses requirement strings (e.g., 'pandas>=1.0', 'numpy==2.1.1') using the
+    'packaging' library to check against installed versions. It only installs
+    packages that are not already present in the environment. Existing packages
+    will not be updated, even if a different version is requested.
+
+    NOTE: This function is not intended for direct invocation. Instead, its
+    source code is extracted using inspect.getsource for execution in a separate
+    environment.
+    """
+    import sys
+    import subprocess
+    import importlib.metadata
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+    from typing import Optional, Tuple
+
+    def _is_package_installed(requirement: Requirement) -> Tuple[bool, Optional[Version]]:
+        try:
+            version = importlib.metadata.version(requirement.name)
+            return True, Version(version)
+        except Exception:
+            # Unable to determine the version.
+            return False, None
+
+    # Check the installation of individual packages first.
+    packages_to_install = []
+    for package in packages:
+        requirement = Requirement(package)
+        installed, version = _is_package_installed(requirement)
+
+        if installed:
+            if version and requirement.specifier and version not in requirement.specifier:
+                print(
+                    f"Package '{requirement.name}' is already installed and cannot be updated. Skipping."
+                    f"The installed version: {version}."
+                )
+            else:
+                print(
+                    f"Package '{requirement.name}' is already installed. Skipping."
+                    f"The installed version: {version}."
+                )
+        else:
+            packages_to_install.append(package)
+
+    # All packages have been installed with certain version.
+    if not packages_to_install:
+        return
+
+    # Try to pip install the uninstalled packages.
+    pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
+
+    try:
+        result = subprocess.run(
+            pip_command,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+        )
+        if result.stdout:
+            print(f"pip output:\n{result.stdout.strip()}")
+        if result.stderr:
+            print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
+
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")

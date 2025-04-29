@@ -306,6 +306,32 @@ class TestBigframesModels:
         assert len(result) == 1
 
 
+models__bigframes_model_error = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    data += undefined_var
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_error.py": models__bigframes_model_error,
+        }
+
+    def test_bigframes_models_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        assert "name 'undefined_var' is not defined" in output
+
+
 models__bigframes_model_merge = """
 def model(dbt, session):
     dbt.config(
@@ -330,3 +356,63 @@ class TestBigframesModelsMerge:
     def test_bigframes_model_merge(self, project):
         result = run_dbt(["run"])
         assert len(result) == 1
+
+
+models__bigframes_model_packages = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+        packages=['numpy<=1.1.1', 'pandas', 'mlflow'],
+    )
+    import mlflow
+    mlflow_version = mlflow.__version__
+    data = {"id": [1, 2, 3], "values": ['a', 'b', mlflow_version]}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsPackages:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_packages.py": models__bigframes_model_packages,
+        }
+
+    def test_bigframes_models_packages(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=True)
+        assert len(result) == 1
+        # Skipping "NumPy": Installation ignored because a different version is already present.
+        assert "Package 'numpy' is already installed and cannot be updated. Skipping." in output
+        # Skipping "Pandas": It's already present and satisfies the user's requirement.
+        assert "Package 'pandas' is already installed. Skipping." in output
+        # Only "mlflow" is not pre-installed, so it will be installed later.
+        assert "Attempting to install the following packages: mlflow" in output
+
+
+models__bigframes_model_packages_error = """
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+        packages=['NotAValidPackage'],
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsPackagesError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_packages_error.py": models__bigframes_model_packages_error,
+        }
+
+    def test_bigframes_models_packages_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        # Since "NotAValidPackage" is not a valid package, an error should be raised.
+        assert "An unexpected error occurred during package installation" in output
