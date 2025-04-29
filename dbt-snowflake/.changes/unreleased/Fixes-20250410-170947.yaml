@@ -1,7 +1,0 @@
-kind: Fixes
-body: Fix regression in list_relations pagination that did not properly handle projects
-  with more than 1,000 models
-time: 2025-04-10T17:09:47.669395-04:00
-custom:
-  Author: mikealfare
-  Issue: "989"

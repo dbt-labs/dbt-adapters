@@ -1,6 +1,0 @@
-kind: Breaking Changes
-body: Update `iceberg_managed` catalog type to `built_in`
-time: 2025-04-22T10:10:50.022641-04:00
-custom:
-  Author: mikealfare
-  Issue: "1011"
