@@ -5,7 +5,7 @@
 
   {% set sql_with_limit %}
     {{ sql }}
-    {{ "limit " ~ limit if limit != none }}
+    {{ get_limit_subquery_sql(sql, limit) }}
   {% endset %}
 
   {% if should_store_failures() %}
