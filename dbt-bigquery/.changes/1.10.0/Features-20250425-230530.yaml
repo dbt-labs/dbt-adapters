@@ -1,0 +1,6 @@
+kind: Features
+body: Support oauth secrets credential method in bigframes mode
+time: 2025-04-25T23:05:30.484302099Z
+custom:
+    Author: jialuoo
+    Issue: "1026"

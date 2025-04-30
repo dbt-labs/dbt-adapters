@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+dynamic = ["version"]
+name = "dbt-snowflake"
+description = "The Snowflake adapter plugin for dbt"
+readme = "README.md"
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "snowflake"]
+requires-python = ">=3.9.0"
+authors = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
+maintainers = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "dbt-common>=1.10,<2.0",
+    "dbt-adapters>=1.10.4,<2.0",
+    # lower bound pin due to CVE-2025-24794
+    "snowflake-connector-python[secure-local-storage]>=3.13.1,<4.0.0",
+    "certifi<2025.4.26",
+    # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
+    "dbt-core>=1.8.0",
+    # installed via dbt-core but referenced directly; don't pin to avoid version conflicts with dbt-core
+    "agate",
+]
+
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-snowflake"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-snowflake"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
+filterwarnings = [
+    "ignore:datetime.datetime.utcnow:DeprecationWarning",
+]

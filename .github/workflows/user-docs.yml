@@ -1,0 +1,31 @@
+name: "User docs"
+run-name: "User docs - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+
+on:
+    issues:
+        types: [labeled, closed]
+
+defaults:
+    run:
+        shell: bash
+
+permissions:
+    issues: write # comments on issues
+
+# only run this once per issue
+concurrency:
+    group: ${{ github.workflow }}-${{ github.event.issue.number }}
+    cancel-in-progress: true
+
+jobs:
+    open_issues:
+        if: |
+            github.event.issue.state == 'closed' &&
+            github.event.issue.state_reason == 'completed' &&
+            contains(github.event.issue.labels.*.name, 'needs:docs')
+        uses: dbt-labs/actions/.github/workflows/open-issue-in-repo.yml@main
+        with:
+            issue_repository: "dbt-labs/docs.getdbt.com"
+            issue_title: "Docs Changes Needed from dbt-adapters - Issue #${{ github.event.issue.number }}"
+            issue_body: "At a minimum, update body to include a link to the page on docs.getdbt.com requiring updates and what part(s) of the page you would like to see updated."
+        secrets: inherit

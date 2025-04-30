@@ -1,0 +1,8 @@
+version: 2
+
+seeds:
+  - name: summary_expected
+    config:
+      column_types:
+        ct: BIGINT
+        gender: text

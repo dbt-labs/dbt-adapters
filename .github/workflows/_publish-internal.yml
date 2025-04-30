@@ -1,0 +1,101 @@
+name: "# Publish internal"
+run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }}"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: string
+                required: true
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
+
+# don't publish to the same target in parallel
+concurrency:
+    group: PyPI_Internal-${{ inputs.package }}
+    cancel-in-progress: true
+
+defaults:
+    run:
+        shell: bash
+
+env:
+  TEMP_PROFILE_NAME: "temp_aws_profile"
+
+jobs:
+    publish:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        environment:
+            name: "cloud-prod"
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+        -   uses: pypa/hatch@install
+        -   name: "Configure AWS profile for upload"
+            run: |
+              aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws configure set output text --profile ${{ env.TEMP_PROFILE_NAME }}
+              aws codeartifact login --tool twine --repository ${{ vars.AWS_REPOSITORY }} \
+              --domain ${{ vars.AWS_DOMAIN }} --domain-owner ${{ secrets.AWS_DOMAIN_OWNER }} \
+              --region ${{ vars.AWS_REGION }} --profile ${{ env.TEMP_PROFILE_NAME }}
+        -   id: package
+            run: |
+                # strip the pre-release off to find all iterations of this patch
+                hatch version release
+                echo "version=$(hatch version)" >> $GITHUB_OUTPUT
+            working-directory: ./${{ inputs.package }}
+        -   id: published
+            run: |
+                versions_published="$(aws codeartifact list-package-versions \
+                    --profile ${{ env.TEMP_PROFILE_NAME }} \
+                    --domain ${{ vars.AWS_DOMAIN }} \
+                    --repository ${{ vars.AWS_REPOSITORY }} \
+                    --format pypi \
+                    --package ${{ inputs.package }} \
+                    --output json \
+                    --region ${{ vars.AWS_REGION }} \
+                    --query 'versions[*].version' | jq -r '.[]' | grep "^${{ steps.package.outputs.version }}" || true )"  # suppress pipefail only here
+                echo "versions=$(echo "${versions_published[*]}"| tr '\n' ',')" >> $GITHUB_OUTPUT
+        -   id: next
+            uses: dbt-labs/dbt-release/.github/actions/next-cloud-release-version@main
+            with:
+                version_number: ${{ steps.package.outputs.version }}
+                versions_published: ${{ steps.published.outputs.versions }}
+        -   run: |
+                VERSION=${{ steps.next.outputs.internal_release_version }}+$(git rev-parse HEAD)
+                PKG_DIR=$(echo ${{ inputs.package }} | cut -c 5-)
+                tee <<< "version = \"$VERSION\"" ./src/dbt/adapters/$PKG_DIR/__version__.py
+            working-directory: ./${{ inputs.package }}
+        -   run: sed -i "/dbt-core[<>~=]/d" ./pyproject.toml
+            working-directory: ./${{ inputs.package }}
+        -   run: |
+                pip install twine
+                hatch build --clean
+                hatch run build:check-all
+                twine upload --repository codeartifact dist/*
+            working-directory: ./${{ inputs.package }}
