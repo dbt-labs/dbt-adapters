@@ -48,7 +48,7 @@
 
     {{ adapter.commit() }}
 
-  {{ return(target_relation) }}
+    {{ return(target_relation) }}
 
 {%- endmacro %}
 
