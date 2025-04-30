@@ -4,7 +4,6 @@
   {% set limit = config.get('limit') %}
 
   {% set sql_with_limit %}
-    {{ sql }}
     {{ get_limit_subquery_sql(sql, limit) }}
   {% endset %}
 
