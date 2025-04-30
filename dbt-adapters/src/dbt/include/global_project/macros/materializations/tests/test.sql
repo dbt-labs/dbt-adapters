@@ -14,8 +14,13 @@
   {% if should_store_failures() %}
 
     {% set target_relation = store_failures(sql_with_limit) %}
-
     {% do relations.append(target_relation) %}
+
+    {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
+    {% set main_sql %}
+        select *
+        from {{ target_relation }}
+    {% endset %}
 
   {% else %}
 
