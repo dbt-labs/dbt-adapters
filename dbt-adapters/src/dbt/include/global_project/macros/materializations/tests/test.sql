@@ -47,7 +47,7 @@
 
   {% else %}
 
-     {% set main_sql = sql_with_limit %}
+      {% set main_sql = sql_with_limit %}
 
   {% endif %}
 
