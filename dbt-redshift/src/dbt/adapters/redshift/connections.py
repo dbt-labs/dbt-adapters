@@ -163,6 +163,14 @@ class RedshiftCredentials(Credentials):
     #   and aws org or account Iam Idc instance
     token_endpoint: Optional[Dict[str, str]] = None
     is_serverless: Optional[bool] = None
+    serverless_work_group: Optional[str] = field(
+        default=None,
+        metadata={"description": "If using IAM auth, the name of the serverless workgroup"},
+    )
+    serverless_acct_id: Optional[str] = field(
+        default=None,
+        metadata={"description": "If using IAM auth, the AWS account id"},
+    )
 
     _ALIASES = {"dbname": "database", "pass": "password"}
 
@@ -194,6 +202,8 @@ class RedshiftCredentials(Credentials):
             "autocommit",
             "access_key_id",
             "is_serverless",
+            "serverless_work_group",
+            "serverless_acct_id",
         )
 
     @property
@@ -242,12 +252,20 @@ def get_connection_method(
         # iam True except for identity center methods
         iam: bool = RedshiftConnectionMethod.is_iam(credentials.method)
         cluster_identifier: Optional[str]
-        if is_serverless(credentials) or RedshiftConnectionMethod.uses_identity_center(
-            credentials.method
-        ):
+        serverless_work_group: Optional[str]
+        serverless_acct_id: Optional[str]
+        if RedshiftConnectionMethod.uses_identity_center(credentials.method):
             cluster_identifier = None
+            serverless_work_group = None
+            serverless_acct_id = None
+        elif is_serverless(credentials):
+            cluster_identifier = None
+            serverless_work_group = credentials.serverless_work_group
+            serverless_acct_id = credentials.serverless_acct_id
         elif credentials.cluster_id:
             cluster_identifier = credentials.cluster_id
+            serverless_work_group = None
+            serverless_acct_id = None
         else:
             raise FailedToConnectError(
                 "Failed to use IAM method:"
@@ -260,6 +278,8 @@ def get_connection_method(
             "user": "",
             "password": "",
             "cluster_identifier": cluster_identifier,
+            "serverless_work_group": serverless_work_group,
+            "serverless_acct_id": serverless_acct_id,
         }
 
         return __base_kwargs(credentials) | iam_specific_kwargs
