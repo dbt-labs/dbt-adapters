@@ -1,6 +1,7 @@
 syntax = "proto3";
 
-package proto_types;
+package v1.public.fields.adapter_types;
+option go_package = "github.com/dbt-labs/proto-golang/v1/public/fields/adapter_types";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
@@ -39,6 +40,7 @@ message AdapterNodeInfo {
     string node_finished_at = 8;
     google.protobuf.Struct meta = 9;
     AdapterNodeRelation node_relation = 10;
+    string node_checksum = 11;
 }
 
 // ReferenceKey

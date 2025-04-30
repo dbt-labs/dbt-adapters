@@ -59,6 +59,7 @@ from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
+    BigFramesHelper,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -110,6 +111,8 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
+    submission_method: Optional[str] = None
+    notebook_template_id: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -760,8 +763,13 @@ class BigQueryAdapter(BaseAdapter):
             description = sql_escape(node["description"])
             opts["description"] = '"""{}"""'.format(description)
 
-        if config.get("labels"):
-            labels = config.get("labels", {})
+        labels = config.get("labels") or {}
+
+        if config.get("labels_from_meta"):
+            meta = config.get("meta") or {}
+            labels = {**meta, **labels}  # Merge with priority to labels
+
+        if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
         return opts
@@ -885,6 +893,7 @@ class BigQueryAdapter(BaseAdapter):
             )
 
     # This is used by the test suite
+    @available
     def run_sql_for_tests(self, sql, fetch, conn=None):
         """For the testing framework.
         Run an SQL query on a bigquery adapter. No cursors, transactions,
@@ -904,6 +913,11 @@ class BigQueryAdapter(BaseAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
+        if (
+            hasattr(self.connections.profile.credentials, "submission_method")
+            and self.connections.profile.credentials.submission_method
+        ):
+            return self.connections.profile.credentials.submission_method
         return "serverless"
 
     @property
@@ -911,6 +925,7 @@ class BigQueryAdapter(BaseAdapter):
         return {
             "cluster": ClusterDataprocHelper,
             "serverless": ServerlessDataProcHelper,
+            "bigframes": BigFramesHelper,
         }
 
     @available

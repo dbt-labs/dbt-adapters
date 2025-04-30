@@ -12,6 +12,17 @@
     {%- for _ref in model.refs -%}
         {% set _ref_args = [_ref.get('package'), _ref['name']] if _ref.get('package') else [_ref['name'],] %}
         {%- set resolved = ref(*_ref_args, v=_ref.get('version')) -%}
+
+        {#
+            We want to get the string of the returned relation by calling .render() in order to skip sample/empty
+            mode rendering logic. However, people override the default ref macro, and often return a string instead
+            of a relation (like the ref macro does by default). Thus, to make sure we dont blow things up, we have
+            to ensure the resolved relation has a .render() method.
+        #}
+        {%- if resolved.render is defined and resolved.render is callable -%}
+            {%- set resolved = resolved.render() -%}
+        {%- endif -%}
+
         {%- if _ref.get('version') -%}
             {% do _ref_args.extend(["v" ~ _ref['version']]) %}
         {%- endif -%}
