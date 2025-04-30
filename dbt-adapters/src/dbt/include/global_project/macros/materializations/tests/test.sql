@@ -17,23 +17,11 @@
 
     {% do relations.append(target_relation) %}
 
-    {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
-    {% set main_sql %}
-        select *
-        from {{ target_relation }}
-    {% endset %}
-
-    {{ adapter.commit() }}
-
   {% else %}
 
       {% set main_sql = sql_with_limit %}
 
   {% endif %}
-
-  {% set fail_calc = config.get('fail_calc') %}
-  {% set warn_if = config.get('warn_if') %}
-  {% set error_if = config.get('error_if') %}
 
   {% call statement('main', fetch_result=True) -%}
 
