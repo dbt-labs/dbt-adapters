@@ -8,10 +8,6 @@ from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard lib
 from typing_extensions import Self
 
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
-from dbt.adapters.snowflake.relation_configs.catalog import (
-    SnowflakeCatalogConfig,
-    SnowflakeCatalogConfigChange,
-)
 
 if TYPE_CHECKING:
     import agate
@@ -98,7 +94,6 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
             ),
@@ -124,7 +119,6 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": dynamic_table.get("text"),
             "target_lag": dynamic_table.get("target_lag"),
             "snowflake_warehouse": dynamic_table.get("warehouse"),
-            "catalog": SnowflakeCatalogConfig.parse_relation_results(relation_results),
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
@@ -166,7 +160,6 @@ class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeDynamicTableWarehouseConfigChange] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
-    catalog: Optional[SnowflakeCatalogConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
