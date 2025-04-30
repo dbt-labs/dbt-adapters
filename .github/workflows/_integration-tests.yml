@@ -81,6 +81,7 @@ jobs:
             DBT_TEST_ATHENA_SCHEMA: ${{ vars.DBT_TEST_ATHENA_SCHEMA }}
             DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
             DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
+            DBT_DATABRICKS_ENDPOINT: ${{ secrets.DBT_DATABRICKS_ENDPOINT }}
         steps:
         -   uses: actions/checkout@v4
             with:
@@ -367,3 +368,154 @@ jobs:
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
         -   run: hatch run integration-tests --profile ${{ matrix.profile }}
+
+    integration-tests-databricks:
+        if: contains(fromJSON(inputs.packages), 'dbt-databricks')
+        runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-databricks"
+        environment:
+            name: "dbt-databricks"
+        env:
+            DBT_DATABRICKS_WORKSPACE_ID: ${{ secrets.DBT_DATABRICKS_WORKSPACE_ID }}
+            DBT_DATABRICKS_HOST_NAME: ${{ secrets.DBT_DATABRICKS_HOST_NAME }}
+            DBT_DATABRICKS_CLIENT_ID: ${{ vars.DBT_DATABRICKS_CLIENT_ID }}
+            DBT_DATABRICKS_CLIENT_SECRET: ${{ secrets.DBT_DATABRICKS_CLIENT_SECRET }}
+            DBT_DATABRICKS_TOKEN: ${{ secrets.DBT_DATABRICKS_TOKEN }}
+            DBT_DATABRICKS_UC_INITIAL_CATALOG: ${{ vars.DBT_DATABRICKS_UC_INITIAL_CATALOG }}
+            DBT_DATABRICKS_LOCATION_ROOT: ${{ vars.DBT_DATABRICKS_LOCATION_ROOT }}
+            DBT_DATABRICKS_CLUSTER_NAME: ${{ secrets.TEST_PECO_CLUSTER_ID }}
+            TEST_PECO_CLUSTER_ID: ${{ secrets.TEST_PECO_CLUSTER_ID }}
+            TEST_PECO_UC_CLUSTER_ID: ${{ secrets.TEST_PECO_UC_CLUSTER_ID }}
+            DBT_DATABRICKS_HTTP_PATH: ${{ secrets.DBT_DATABRICKS_HTTP_PATH }}
+            DBT_DATABRICKS_CLUSTER_HTTP_PATH: "sql/protocolv1/o/${{ secrets.DBT_DATABRICKS_WORKSPACE_ID }}/${{ secrets.TEST_PECO_CLUSTER_ID }}"
+            DBT_DATABRICKS_UC_CLUSTER_HTTP_PATH: "sql/protocolv1/o/${{ secrets.DBT_DATABRICKS_WORKSPACE_ID }}/${{ secrets.TEST_PECO_UC_CLUSTER_ID }}"
+        strategy:
+            fail-fast: false
+            matrix:
+                profile:
+                -   "cluster-e2e"  #  "uc-cluster-e2e" and "sqlw-e2e" require Unity Catalog setup
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   run: git submodule update --init
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   uses: pypa/hatch@install
+        -   run: |
+                pip install databricks-sql-connector
+                python .github/scripts/wait_for_databricks_cluster.py
+            working-directory: .
+        -   run: hatch run ${{ matrix.profile }}
+
+    integration-tests-fabric:
+        if: contains(fromJSON(inputs.packages), 'dbt-fabric')
+        runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-fabric"
+        environment:
+            name: "dbt-fabric"
+        env:
+            DBT_AZURE_SP_NAME: ${{ vars.DBT_AZURE_SP_NAME }}
+            DBT_AZURE_CLIENT_ID: ${{ vars.DBT_AZURE_CLIENT_ID }}
+            DBT_AZURE_CLIENT_SECRET: ${{ secrets.DBT_AZURE_CLIENT_SECRET }}
+            DBT_AZURE_TENANT_ID: ${{ secrets.DBT_AZURE_TENANT_ID }}
+            DBT_AZURESQL_SERVER: ${{ secrets.DBT_AZURESQL_SERVER }}
+            DBT_AZURESQL_DB: ${{ vars.DBT_AZURESQL_DB }}
+            FABRIC_TEST_DRIVER: ${{ vars.FABRIC_TEST_DRIVER }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   run: git submodule update --init
+        -   run: |
+                echo "CREDS={\"clientId\": \"$DBT_AZURE_CLIENT_ID\", \"clientSecret\": \"$DBT_AZURE_CLIENT_SECRET\", \"tenantId\": \"$DBT_AZURE_TENANT_ID\"}" >> $GITHUB_ENV
+        -   uses: azure/login@v2
+            with:
+                creds: ${{ env.CREDS }}
+                allow-no-subscriptions: true
+        -   run: |
+                curl -fsSL 'https://packages.microsoft.com/keys/microsoft.asc' | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+                curl 'https://packages.microsoft.com/config/debian/12/prod.list' | sudo tee /etc/apt/sources.list.d/mssql-release.list
+                sudo apt-get update
+                ACCEPT_EULA=Y sudo apt-get install -y msodbcsql18 mssql-tools18
+                export PATH="$PATH:/opt/mssql-tools18/bin"
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   run: |
+                pip install \
+                    "pytest==8.0.1" \
+                    "pytest-dotenv==0.5.2" \
+                    "pytest-xdist==3.5.0" \
+                    "flaky==3.7.0" \
+                    "azure-core" \
+                    "azure-identity" \
+                    "../dbt-adapters" \
+                    "../dbt-tests-adapter" \
+                    .
+        -   id: fetch-token
+            run: |
+                from azure.identity import DefaultAzureCredential
+
+                credential = DefaultAzureCredential()
+                token = DefaultAzureCredential().get_token("https://database.windows.net/.default")
+                print(f"::set-output name=access-token::{token.token}")
+            shell: python
+        -   run: pytest -v --color=yes -n auto tests/functional --profile "integration_tests"
+            env:
+                FABRIC_INTEGRATION_TESTS_TOKEN: ${{ steps.fetch-token.outputs.access-token }}
+
+    integration-tests-synapse:
+        if: contains(fromJSON(inputs.packages), 'dbt-synapse')
+        runs-on: ${{ inputs.os }}
+        defaults:
+            run:
+                working-directory: "./dbt-synapse"
+        environment:
+            name: "dbt-synapse"
+        env:
+            DBT_SYNAPSE_SERVER: ${{ secrets.DBT_SYNAPSE_SERVER }}
+            DBT_SYNAPSE_DB: ${{ vars.DBT_SYNAPSE_DB }}
+            AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+            AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+            SYNAPSE_TEST_DRIVER: ${{ vars.SYNAPSE_TEST_DRIVER }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+                repository: ${{ inputs.repository }}
+        -   run: git submodule update --init
+        -   run: |
+                curl -fsSL 'https://packages.microsoft.com/keys/microsoft.asc' | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+                curl 'https://packages.microsoft.com/config/debian/12/prod.list' | sudo tee /etc/apt/sources.list.d/mssql-release.list
+                sudo apt-get update
+                ACCEPT_EULA=Y sudo apt-get install -y msodbcsql18 mssql-tools18
+                export PATH="$PATH:/opt/mssql-tools18/bin"
+        -   uses: actions/setup-python@v5
+            with:
+                python-version: ${{ inputs.python-version }}
+        -   run: |
+                pip install \
+                    "pytest==8.0.1" \
+                    "pytest-dotenv==0.5.2" \
+                    "pytest-xdist==3.5.0" \
+                    "flaky==3.7.0" \
+                    "aiohttp==3.8.3" \
+                    "../dbt-adapters" \
+                    "../dbt-tests-adapter" \
+                    .
+        -   run: pytest -v --color=yes -n auto tests/functional --profile "ci_azure_auto"
