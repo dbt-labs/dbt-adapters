@@ -102,7 +102,8 @@ class SQLConnectionManager(BaseConnectionManager):
 
                 fire_event(
                     AdapterEventDebug(
-                        message=f"Got a retryable error {type(e)}. {retry_limit - attempt} retries left. Retrying in 1 second.\nError:\n{e}"
+                        base_msg=f"Got a retryable error {type(e)}. {retry_limit - attempt} retries left. "
+                        f"Retrying in 1 second.\nError:\n{e}"
                     )
                 )
                 time.sleep(1)
