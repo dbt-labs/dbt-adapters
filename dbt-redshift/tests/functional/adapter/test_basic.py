@@ -38,9 +38,7 @@ seeds:
 
 # TODO: update these with test cases or remove them if not needed
 class TestSimpleMaterializationsRedshift(BaseSimpleMaterializations):
-    @pytest.mark.flaky
-    def test_base(self, project):
-        super().test_base(project)
+    pass
 
 
 class TestSingularTestsRedshift(BaseSingularTests):
@@ -56,15 +54,11 @@ class TestEmptyRedshift(BaseEmpty):
 
 
 class TestEphemeralRedshift(BaseEphemeral):
-    @pytest.mark.flaky
-    def test_ephemeral(self, project):
-        super().test_ephemeral(project)
+    pass
 
 
 class TestIncrementalRedshift(BaseIncremental):
-    @pytest.mark.flaky
-    def test_incremental(self, project):
-        super().test_incremental(project)
+    pass
 
 
 class TestGenericTestsRedshift(BaseGenericTests):
