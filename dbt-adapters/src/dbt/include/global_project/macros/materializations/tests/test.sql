@@ -3,7 +3,7 @@
   {% set relations = [] %}
   {% set limit = config.get('limit') %}
 
-  {% set main_sql %}
+  {% set sql_with_limit %}
     {{ sql }}
     {{ "limit " ~ limit if limit != none }}
   {% endset %}
@@ -32,7 +32,7 @@
     {% endif %}
 
     {% call statement(auto_begin=True) %}
-        {{ get_create_sql(target_relation, main_sql) }}
+        {{ get_create_sql(target_relation, sql_with_limit) }}
     {% endcall %}
 
     {% do relations.append(target_relation) %}
@@ -45,6 +45,10 @@
 
     {{ adapter.commit() }}
 
+  {% else %}
+
+     {% set main_sql = sql_with_limit %}
+
   {% endif %}
 
   {% set fail_calc = config.get('fail_calc') %}
@@ -53,8 +57,7 @@
 
   {% call statement('main', fetch_result=True) -%}
 
-    {# Since the limit has already been applied above, no need to apply it again! #}
-    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
+    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if)}}
 
   {%- endcall %}
 
