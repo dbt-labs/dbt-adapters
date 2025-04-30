@@ -296,70 +296,7 @@ jobs:
               aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
               aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
               aws configure --profile $AWS_ROLE_PROFILE set output json
-        -   run: hatch run integration-tests tests/functional -m "not flaky" --ddtrace
-
-    integration-tests-redshift-flaky:
-        # we only run this for one python version to avoid running in parallel
-        # we need to run with "!cancelled()" so that we run after non-flaky RS tests even when they fail
-        if: |
-            contains(fromJSON(inputs.packages), 'dbt-redshift') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
-            !cancelled()
-        runs-on: ${{ inputs.os }}
-        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
-        needs: integration-tests-redshift
-        defaults:
-            run:
-                working-directory: "./dbt-redshift"
-        environment:
-            name: "dbt-redshift"
-        env:
-            AWS_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
-            AWS_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
-            AWS_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
-            AWS_SOURCE_PROFILE: ${{ vars.AWS_SOURCE_PROFILE }}
-            AWS_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
-            AWS_ROLE_ACCESS_KEY_ID: ${{ vars.AWS_ROLE_ACCESS_KEY_ID }}
-            AWS_ROLE_SECRET_ACCESS_KEY: ${{ secrets.AWS_ROLE_SECRET_ACCESS_KEY }}
-            AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
-            AWS_REGION: ${{ vars.AWS_REGION }}
-            REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
-            REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
-            REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
-            REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}
-            REDSHIFT_TEST_HOST: ${{ secrets.REDSHIFT_TEST_HOST }}
-            REDSHIFT_TEST_CLUSTER_ID: ${{ vars.REDSHIFT_TEST_CLUSTER_ID }}
-            REDSHIFT_TEST_REGION: ${{ vars.AWS_REGION }}
-            REDSHIFT_TEST_IAM_USER_PROFILE: ${{ vars.AWS_USER_PROFILE }}
-            REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
-            REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
-            REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
-        steps:
-        -   uses: actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-                repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
-            with:
-                python-version: ${{ inputs.python-version }}
-        -   uses: pypa/hatch@install
-        -   name: Create AWS IAM profiles
-            run: |
-              aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
-              aws configure --profile $AWS_USER_PROFILE set aws_secret_access_key $AWS_USER_SECRET_ACCESS_KEY
-              aws configure --profile $AWS_USER_PROFILE set region $AWS_REGION
-              aws configure --profile $AWS_USER_PROFILE set output json
-
-              aws configure --profile $AWS_SOURCE_PROFILE set aws_access_key_id $AWS_ROLE_ACCESS_KEY_ID
-              aws configure --profile $AWS_SOURCE_PROFILE set aws_secret_access_key $AWS_ROLE_SECRET_ACCESS_KEY
-              aws configure --profile $AWS_SOURCE_PROFILE set region $AWS_REGION
-              aws configure --profile $AWS_SOURCE_PROFILE set output json
-
-              aws configure --profile $AWS_ROLE_PROFILE set source_profile $AWS_SOURCE_PROFILE
-              aws configure --profile $AWS_ROLE_PROFILE set role_arn $AWS_ROLE_ARN
-              aws configure --profile $AWS_ROLE_PROFILE set region $AWS_REGION
-              aws configure --profile $AWS_ROLE_PROFILE set output json
-        -   run: hatch run integration-tests tests/functional -m flaky -n1 --ddtrace
+        -   run: hatch run integration-tests tests/functional --ddtrace
 
     integration-tests-snowflake:
         if: contains(fromJSON(inputs.packages), 'dbt-snowflake')
