@@ -378,7 +378,9 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+        # TODO: update 3.10 to ${{ inputs.python-version }} once we update default python to >=3.10
+        # the version of dagger-io that we use does not support py3.9
+        -   run: echo "HATCH_PYTHON=3.10" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: hatch run pip install -r dagger/requirements.txt
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests --profile ${{ matrix.profile }}
