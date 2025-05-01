@@ -458,7 +458,7 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         mock_client_options = MockClientOptions.return_value
 
         adapter = self.get_adapter("api_endpoint")
-        adapter.acquire_connection("dummy")
+        connection = adapter.acquire_connection("dummy")
         MockClient.assert_not_called()
         connection.handle
 
