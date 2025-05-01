@@ -24,6 +24,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: string
                 default: 3.9
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
     workflow_dispatch:
         inputs:
             package:
@@ -54,6 +58,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
 
 permissions:
     contents: read
@@ -73,8 +81,9 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
         -   uses: pypa/hatch@install
         -   run: brew install unixodbc
             if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
-        -   run: hatch run unit-tests
+        -   run: hatch run ${{ inputs.hatch-env }}:unit-tests
             working-directory: ./${{ inputs.package }}
