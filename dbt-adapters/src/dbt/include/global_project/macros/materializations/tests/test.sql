@@ -56,6 +56,7 @@
 
   {% call statement('main', fetch_result=True) -%}
 
+    {# The limit has already been included above, and we do not want to duplicate it again. We also want to be safe for macro overrides treating `limit` as a required parameter. #}
     {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
 
   {%- endcall %}
