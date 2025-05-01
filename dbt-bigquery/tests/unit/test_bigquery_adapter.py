@@ -457,7 +457,7 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         mock_auth_default.return_value = (creds, MagicMock())
         mock_client_options = MockClientOptions.return_value
 
-        adapter = get_adapter("api_endpoint")
+        adapter = self.get_adapter("api_endpoint")
         adapter.acquire_connection("dummy")
         MockClient.assert_not_called()
         connection.handle
