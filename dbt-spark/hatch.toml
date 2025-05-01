@@ -78,7 +78,10 @@ features=["all"]
 
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}"
+integration-tests = [
+    "pip install -r dagger/requirements.txt",
+    "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}",
+]
 
 [envs.cd]
 pre-install-commands = []
@@ -95,4 +98,7 @@ features=["all"]
 
 [envs.cd.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}"
+integration-tests = [
+    "pip install -r dagger/requirements.txt",
+    "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}",
+]
