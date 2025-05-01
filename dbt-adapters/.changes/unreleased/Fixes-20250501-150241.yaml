@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep limit in get_test_sql
+time: 2025-05-01T15:02:41.175961+01:00
+custom:
+    Author: aranke
+    Issue: ' '
