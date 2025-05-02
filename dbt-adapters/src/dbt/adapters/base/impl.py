@@ -1300,7 +1300,7 @@ class BaseAdapter(metaclass=AdapterMeta):
                 "table_owner",
                 "column_name",
                 "column_type",
-                "column_comment"
+                "column_comment",
             ],
         )
         return table.where(_catalog_filter_schemas(used_schemas))
