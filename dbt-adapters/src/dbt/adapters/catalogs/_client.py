@@ -34,14 +34,14 @@ class CatalogIntegrationClient:
 
     def add(self, config: CatalogIntegrationConfig) -> CatalogIntegration:
         factory = self.__catalog_integration_factory(config.catalog_type)
-        if config.name in self.__catalog_integrations:
+        if config.name.casefold() in self.__catalog_integrations:
             raise DbtCatalogIntegrationAlreadyExistsError(config.name)
-        self.__catalog_integrations[config.name] = factory(config)
+        self.__catalog_integrations[config.name.casefold()] = factory(config)
         return self.get(config.name)
 
     def get(self, name: str) -> CatalogIntegration:
         try:
-            return self.__catalog_integrations[name]
+            return self.__catalog_integrations[name.casefold()]
         except KeyError:
             raise DbtCatalogIntegrationNotFoundError(name, self.__catalog_integrations.keys())
 
