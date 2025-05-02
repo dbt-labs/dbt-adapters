@@ -6,7 +6,7 @@
     - relation: SnowflakeRelation - the relation to describe
     Returns:
         A dictionary with one or two entries depending on whether iceberg is enabled:
-        - dynamic_table: the metadata associated with a standard dynamic table
+        - dynamic_table: the metadata associated with an info schema dynamic table
 -#}
     {%- set _dynamic_table_sql -%}
     alter session set quoted_identifiers_ignore_case = false;

@@ -40,9 +40,9 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
 
     _table_format = table_format(model)
     if _table_format == constants.ICEBERG_TABLE_FORMAT:
-        return constants.DEFAULT_ICEBERG_CATALOG.name
+        return constants.DEFAULT_BUILT_IN_CATALOG.name
 
-    return constants.DEFAULT_NATIVE_CATALOG.name
+    return constants.DEFAULT_INFO_SCHEMA_CATALOG.name
 
 
 def catalog_namespace(model: RelationConfig) -> Optional[str]:
@@ -60,11 +60,11 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
         return None
 
     fields = model.config.get("cluster_by")
+    if isinstance(fields, str):
+        return fields
     if isinstance(fields, Iterable):
         return ", ".join(fields)
-    elif isinstance(fields, str):
-        return fields
-    elif fields is not None:
+    if fields is not None:
         raise DbtConfigError(f"Unexpected cluster_by configuration: {fields}")
     return None
 
@@ -104,8 +104,8 @@ def table_format(model: RelationConfig) -> Optional[str]:
         return None
 
     # we don't know what the table format is if it's not on the model
-    # this could be derived from the catalog, and will moving forward
-    # so we cannot default to NATIVE/default here
+    # this could be derived from the catalog and will be derived from the catalog moving forward
+    # so we cannot default to INFO_SCHEMA here
     if _table_format := model.config.get("table_format"):
         # make table_format case-insensitive
         return _table_format.upper()

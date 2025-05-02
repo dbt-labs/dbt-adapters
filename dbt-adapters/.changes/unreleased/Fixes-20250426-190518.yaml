@@ -1,0 +1,6 @@
+kind: Fixes
+body: Respect the `limit` config when storing test failures
+time: 2025-04-26T19:05:18.553023-07:00
+custom:
+    Author: dbeatty10
+    Issue: "373"

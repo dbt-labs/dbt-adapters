@@ -72,7 +72,7 @@ class TestQuery(TestCase):
                 cursor,
             )  # when mock_add_query is called, it will always return None, cursor
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
-                mock_get_response.return_value = None
+                mock_get_response.return_value = {}
                 with mock.patch.object(
                     self.adapter.connections, "get_result_from_cursor"
                 ) as mock_get_result_from_cursor:
@@ -90,7 +90,7 @@ class TestQuery(TestCase):
                 cursor,
             )  # when mock_add_query is called, it will always return None, cursor
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
-                mock_get_response.return_value = None
+                mock_get_response.return_value = {}
                 with mock.patch.object(
                     self.adapter.connections, "get_result_from_cursor"
                 ) as mock_get_result_from_cursor:
@@ -98,6 +98,33 @@ class TestQuery(TestCase):
         mock_add_query.assert_called_once_with("select * from test2", False)
         mock_get_result_from_cursor.assert_not_called()
         mock_get_response.assert_called_once_with(cursor)
+
+    def test_execute_with_retry_all(self):
+        cursor = mock.Mock()
+        self.adapter.connections.close = mock.MagicMock()
+        self.adapter.connections.open = mock.MagicMock()
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection"
+        ) as mock_get_thread_connection:
+            mock_get_thread_connection.return_value = mock.MagicMock(name="test_connection")
+            with mock.patch.object(self.adapter.connections, "add_query") as mock_add_query:
+                self.adapter.connections.profile.credentials.retries = 3
+                self.adapter.connections.profile.credentials.retry_all = True
+                mock_add_query.side_effect = [
+                    redshift_connector.InterfaceError,
+                    redshift_connector.InternalError,
+                    (None, cursor),
+                ]
+                with mock.patch.object(
+                    self.adapter.connections, "get_response"
+                ) as mock_get_response:
+                    mock_get_response.return_value = {}
+                    with mock.patch.object(
+                        self.adapter.connections, "get_result_from_cursor"
+                    ) as mock_get_result_from_cursor:
+                        mock_get_result_from_cursor.return_value = agate_helper.empty_table()
+                        self.adapter.connections.execute(sql="select * from test", fetch=True)
+        assert mock_add_query.call_count == 3
 
     def test_add_query_success(self):
         cursor = mock.Mock()
