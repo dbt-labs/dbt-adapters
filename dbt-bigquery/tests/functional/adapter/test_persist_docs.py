@@ -195,7 +195,11 @@ class TestPersistDocsIncremental(BasePersistDocsBase):
 
         run_dbt()
         run_dbt(
-            ["run", "--vars", f'{{"INCREMENTAL_MODEL_DESCRIPTION":"{incremental_description}"}}']
+            [
+                "run",
+                "--vars",
+                f'{{"INCREMENTAL_MODEL_DESCRIPTION":"{incremental_model_description}"}}',
+            ]
         )
 
         node_id = "incremental_model"
