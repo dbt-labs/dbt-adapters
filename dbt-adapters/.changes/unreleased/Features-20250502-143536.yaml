@@ -1,0 +1,6 @@
+kind: Features
+body: Make catalog names case insensitive
+time: 2025-05-02T14:35:36.526112-04:00
+custom:
+  Author: mikealfare
+  Issue: "792"
