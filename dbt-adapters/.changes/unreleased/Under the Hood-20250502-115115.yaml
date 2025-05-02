@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Always keep table comments as strings
+time: 2025-05-02T11:51:15.467446+01:00
+custom:
+    Author: aranke
+    Issue: "1056"
