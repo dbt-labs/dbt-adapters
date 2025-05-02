@@ -1,11 +1,10 @@
-from copy import deepcopy
 from dataclasses import dataclass
 from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
@@ -98,19 +97,6 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
-
-    def add_catalog_integration(
-        self, catalog_integration: CatalogIntegrationConfig
-    ) -> CatalogIntegration:
-        # don't mutate the object that dbt-core passes in
-        catalog_integration = deepcopy(catalog_integration)
-        # make catalog name and catalog type case-insensitive
-        catalog_integration.name = catalog_integration.name.upper()
-        return super().add_catalog_integration(catalog_integration)
-
-    def get_catalog_integration(self, name: str) -> CatalogIntegration:
-        # Snowflake uppercases everything in their metadata tables
-        return super().get_catalog_integration(name.upper())
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
