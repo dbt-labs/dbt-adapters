@@ -1,4 +1,5 @@
 import re
+import os
 
 import time
 
@@ -28,6 +29,13 @@ if TYPE_CHECKING:
     import agate
 
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
+
+logger = AdapterLogger("Redshift")
+
+if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
+    for logger_name in ["redshift_connector"]:
+        logger.debug(f"Setting {logger_name} to DEBUG")
+        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
 
 
 class SSLConfigError(CompilationError):
