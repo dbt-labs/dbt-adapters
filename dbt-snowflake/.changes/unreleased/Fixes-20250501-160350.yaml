@@ -1,6 +1,0 @@
-kind: Fixes
-body: correct cluster_by type check to return str as-is
-time: 2025-05-01T16:03:50.922881-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1050"
