@@ -8,6 +8,19 @@ from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocs,
 )
 
+_MODELS__INCREMENTAL_MODEL = """
+{{
+    config(
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key='id',
+    )
+}}
+SELECT
+    1 AS id,
+    'name' AS name,
+"""
+
 _MODELS__TABLE_MODEL_NESTED = """
 {{ config(materialized='table') }}
 SELECT
@@ -30,7 +43,17 @@ SELECT
     ) AS level_1
 """
 
-_PROPERTIES__MODEL_COMMENTS = """
+_PROPERTIES__INCREMENTAL_MODEL_COMMENTS = """
+version: 2
+
+models:
+  - name: incremental_model
+    description: "{{ var('INCREMENTAL_MODEL_DESCRIPTION', 'Incremental model default description') }}"
+    columns:
+      - name: id
+"""
+
+_PROPERTIES__NESTED_MODEL_COMMENTS = """
 version: 2
 
 models:
@@ -139,10 +162,57 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
         run_dbt()
 
 
+class TestPersistDocsIncremental(BasePersistDocsBase):
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": _PROPERTIES__INCREMENTAL_MODEL_COMMENTS}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental_model.sql": _MODELS__INCREMENTAL_MODEL,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "relation": True,
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    def test_persist_docs(self, project):
+        """
+        run dbt and use the bigquery client from the adapter to check if the
+        column descriptions are persisted on the incremental model table.
+        """
+        incremental_model_description = "Incremental model new description"
+
+        run_dbt()
+        run_dbt(
+            ["run", "--vars", f'{{"INCREMENTAL_MODEL_DESCRIPTION":"{incremental_description}"}}']
+        )
+
+        node_id = "incremental_model"
+
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+
+            table_id = "{}.{}.{}".format(project.database, project.test_schema, node_id)
+            bq_table = client.get_table(table_id)
+
+            assert bq_table.description == incremental_model_description
+
+
 class TestPersistDocsNested(BasePersistDocsBase):
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": _PROPERTIES__MODEL_COMMENTS}
+        return {"schema.yml": _PROPERTIES__NESTED_MODEL_COMMENTS}
 
     @pytest.fixture(scope="class")
     def models(self):
