@@ -52,6 +52,7 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
+            hatch-env: "ci"
 
     integration-tests:
         if: inputs.skip-integration-tests == false
@@ -59,6 +60,7 @@ jobs:
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ inputs.branch }}
+            hatch-env: "ci"
         secrets: inherit
 
     publish-internal:

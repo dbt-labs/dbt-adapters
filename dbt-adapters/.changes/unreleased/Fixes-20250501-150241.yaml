@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep `limit` as a required parameter in `get_test_sql`
+time: 2025-05-01T15:02:41.175961+01:00
+custom:
+    Author: aranke dbeatty10
+    Issue: 1051
