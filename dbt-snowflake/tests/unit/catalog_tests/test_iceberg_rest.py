@@ -7,19 +7,16 @@ from dbt.adapters.snowflake.catalogs import (
     IcebergRESTCatalogIntegration,
     IcebergRESTCatalogRelation,
 )
-
-
-CATALOG_INTEGRATION_NAME = "my_iceberg_rest_catalog_integration"
-CATALOG_NAME = "my_iceberg_rest_catalog"
+from dbt.adapters.snowflake import constants
 
 
 @dataclass
 class FakeCatalogIntegrationConfig:
-    name: str = CATALOG_INTEGRATION_NAME
-    catalog_name: str = CATALOG_NAME
+    name: str = "my_iceberg_rest_catalog_integration"
+    catalog_name: str = "my_iceberg_rest_catalog"
     # the above are required, but static (for these tests) parameters
     catalog_type: str = "iceberg_rest"
-    table_format: str = "iceberg"
+    table_format: str = constants.ICEBERG_TABLE_FORMAT
     external_volume: Optional[str] = None
     adapter_properties: Dict[str, Any] = field(default_factory=dict)
 
@@ -55,32 +52,32 @@ MAXIMUM_RELATION_CONFIG = FakeRelationConfig(
 
 DEFAULTS = IcebergRESTCatalogRelation(
     catalog_table=MINIMUM_RELATION_CONFIG.identifier,
-    catalog_name=CATALOG_NAME,
+    catalog_name=FakeCatalogIntegrationConfig.catalog_name,
     catalog_namespace=None,
     external_volume=None,
     replace_invalid_characters=None,
     auto_refresh=None,
-    table_format="iceberg",
+    table_format=constants.ICEBERG_TABLE_FORMAT,
 )
 CATALOG_DEFAULTS = IcebergRESTCatalogRelation(
     catalog_table=MINIMUM_RELATION_CONFIG.identifier,
-    catalog_name=CATALOG_NAME,
+    catalog_name=FakeCatalogIntegrationConfig.catalog_name,
     catalog_namespace=MAXIMUM_CATALOG_INTEGRATION_CONFIG.adapter_properties["catalog_namespace"],
     external_volume=MAXIMUM_CATALOG_INTEGRATION_CONFIG.external_volume,
     replace_invalid_characters=MAXIMUM_CATALOG_INTEGRATION_CONFIG.adapter_properties[
         "replace_invalid_characters"
     ],
     auto_refresh=MAXIMUM_CATALOG_INTEGRATION_CONFIG.adapter_properties["auto_refresh"],
-    table_format="iceberg",
+    table_format=constants.ICEBERG_TABLE_FORMAT,
 )
 RELATION_OVERRIDES = IcebergRESTCatalogRelation(
     catalog_table=MAXIMUM_RELATION_CONFIG.config["catalog_table"],
-    catalog_name=CATALOG_NAME,
+    catalog_name=FakeCatalogIntegrationConfig.catalog_name,
     catalog_namespace=MAXIMUM_RELATION_CONFIG.config["catalog_namespace"],
     external_volume=MAXIMUM_RELATION_CONFIG.config["external_volume"],
     replace_invalid_characters=MAXIMUM_RELATION_CONFIG.config["replace_invalid_characters"],
     auto_refresh=MAXIMUM_RELATION_CONFIG.config["auto_refresh"],
-    table_format="iceberg",
+    table_format=constants.ICEBERG_TABLE_FORMAT,
 )
 
 
