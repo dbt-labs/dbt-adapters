@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Remove certifi upper bound and exclude only the problematic version
+time: 2025-05-05T09:37:56.180055691+02:00
+custom:
+    Author: maresb
+    PR: "1063"
