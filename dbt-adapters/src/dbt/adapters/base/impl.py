@@ -1285,8 +1285,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         from dbt_common.clients.agate_helper import table_from_rows
 
-        breakpoint()
-
         # force database + schema to be strings
         table = table_from_rows(
             table.rows,
