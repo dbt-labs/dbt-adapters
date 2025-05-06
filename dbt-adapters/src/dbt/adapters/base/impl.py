@@ -1289,7 +1289,17 @@ class BaseAdapter(metaclass=AdapterMeta):
         table = table_from_rows(
             table.rows,
             table.column_names,
-            text_only_columns=["table_database", "table_schema", "table_name"],
+            text_only_columns=[
+                "table_database",
+                "table_schema",
+                "table_name",
+                "table_type",
+                "table_comment",
+                "table_owner",
+                "column_name",
+                "column_type",
+                "column_comment",
+            ],
         )
         return table.where(_catalog_filter_schemas(used_schemas))
 
