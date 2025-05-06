@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: allow users to declare redshift_connector debug logging via env var
+time: 2025-05-02T16:19:14.274199-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1062"
