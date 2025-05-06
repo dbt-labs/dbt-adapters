@@ -1,6 +1,8 @@
 import pytest
 
-from dbt.tests.adapter.simple_snapshot.new_record_timestamp_mode import BaseSnapshotNewRecordTimestampMode
+from dbt.tests.adapter.simple_snapshot.new_record_timestamp_mode import (
+    BaseSnapshotNewRecordTimestampMode,
+)
 
 _snapshots_yml = """
 snapshots:
