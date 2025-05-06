@@ -126,14 +126,14 @@ select * from {{ ref('snapshot_actual') }}
 _invalidate_sql = """
 BEGIN
 
--- update records 11 - 21. Change email and updated_at field
+-- Update records 11 - 21. Change email and updated_at field.
 update {schema}.seed set
     updated_at = updated_at + interval '1 hour',
     email      =  case when id = 20 then 'pfoxj@creativecommons.org' else 'new_' || email end
 where id >= 10 and id <= 20;
 
 
--- invalidate records 11 - 21
+-- Update the expected snapshot data to reflect the changes we expect to the snapshot on the next run
 update {schema}.snapshot_expected set
     dbt_valid_to   = updated_at + interval '1 hour'
 where id >= 10 and id <= 20;
@@ -187,8 +187,22 @@ _delete_check_sql = """
 select dbt_valid_to, dbt_scd_id, dbt_is_deleted from {schema}.snapshot_actual where id = 1
 """
 
+# SQL to re-insert the deleted record from the snapshot source data
+_reinsert_sql = """
+insert into {database}.{schema}.seed (id, first_name, last_name, email, gender, ip_address, updated_at) values
+(1, 'Judith', 'Kennedy', '(not provided)', 'Female', '54.60.24.128', '2200-01-01 12:00:00');
+"""
 
-class SnapshotNewRecordMode:
+# If the re-insertion worked correctly, this should return three rows:
+#   - one for the original record
+#   - one for the deletion interval
+#   - one for the new record
+_reinsert_check_sql = """
+select dbt_valid_from, dbt_valid_to, dbt_scd_id, dbt_is_deleted from {schema}.snapshot_actual where id = 1;
+"""
+
+
+class BaseSnapshotNewRecordTimestampMode:
     @pytest.fixture(scope="class")
     def snapshots(self):
         return {"snapshot.sql": _snapshot_actual_sql}
@@ -216,8 +230,23 @@ class SnapshotNewRecordMode:
     def delete_sql(self):
         return _delete_sql
 
-    def test_snapshot_new_record_mode(
-        self, project, seed_new_record_mode, invalidate_sql, update_sql
+    @pytest.fixture(scope="class")
+    def reinsert_sql(self):
+        return _reinsert_sql
+
+    @pytest.fixture(scope="class")
+    def reinsert_check_sql(self):
+        return _reinsert_check_sql
+
+    def test_snapshot_new_record_timestamp_mode(
+        self,
+        project,
+        seed_new_record_mode,
+        invalidate_sql,
+        update_sql,
+        delete_sql,
+        reinsert_sql,
+        reinsert_check_sql,
     ):
         project.run_sql(seed_new_record_mode)
         results = run_dbt(["snapshot"])
@@ -264,3 +293,9 @@ class SnapshotNewRecordMode:
             == 1
         )
         assert check_result[0][scd_id] != check_result[1][scd_id]
+
+        project.run_sql(reinsert_sql)
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1
+        check_result = project.run_sql(reinsert_check_sql, fetch="all")
+        assert len(check_result) == 3
