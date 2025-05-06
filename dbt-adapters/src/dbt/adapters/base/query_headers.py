@@ -98,6 +98,9 @@ class MacroQueryStringSetter:
         comment_str = self.generator(name, wrapped)
 
         append = self.DEFAULT_QUERY_COMMENT_APPEND
-        if isinstance(self.config.query_comment, QueryComment) and self.config.query_comment.append is not None:
+        if (
+            isinstance(self.config.query_comment, QueryComment)
+            and self.config.query_comment.append is not None
+        ):
             append = self.config.query_comment.append
         self.comment.set(comment_str, append)
