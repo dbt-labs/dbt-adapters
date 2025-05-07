@@ -416,3 +416,34 @@ class TestBigframesModelsPackagesError:
         assert len(result) == 1
         # Since "NotAValidPackage" is not a valid package, an error should be raised.
         assert "An unexpected error occurred during package installation" in output
+
+
+models__bigframes_model_timeout_error = """
+import time
+def model(dbt, session):
+    dbt.config(
+        submission_method='bigframes',
+        materialized='table',
+        timeout=2,
+    )
+    data = {"id": [1, 2, 3], "values": ['a', 'b', 'c']}
+    time.sleep(3)
+    return bpd.DataFrame(data=data)
+"""
+
+
+@pytest.mark.flaky
+class TestBigframesModelsTimeoutError:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bigframes_model_timeout_error.py": models__bigframes_model_timeout_error,
+        }
+
+    def test_bigframes_models_timeout_error(self, project):
+        result, output = run_dbt_and_capture(["run"], expect_pass=False)
+        assert len(result) == 1
+        assert (
+            "The dbt operation encountered a timeout: Operation did not "
+            "complete within the designated timeout of 2 seconds" in output
+        )
