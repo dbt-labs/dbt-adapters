@@ -522,7 +522,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InterfaceError,
         )
         if credentials.retry_all:
-            retryable_exceptions += redshift_connector.Error
+            retryable_exceptions = redshift_connector.Error
 
         open_connection = cls.retry_connection(
             connection,
@@ -619,7 +619,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InternalError,
         )
         if self.profile.credentials.retry_all:
-            redshift_retryable_exceptions += redshift_connector.Error
+            redshift_retryable_exceptions = redshift_connector.Error
 
         for query in queries:
             # Strip off comments from the current query
