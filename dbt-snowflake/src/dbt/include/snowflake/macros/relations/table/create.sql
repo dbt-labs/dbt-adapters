@@ -87,7 +87,6 @@ create or replace {{ transient }}table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
     {% if copy_grants -%} copy grants {%- endif %}
     as (
         {%- if catalog_relation.cluster_by is not none -%}
@@ -144,7 +143,6 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
