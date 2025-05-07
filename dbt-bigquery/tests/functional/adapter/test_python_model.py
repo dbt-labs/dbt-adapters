@@ -443,8 +443,4 @@ class TestBigframesModelsTimeoutError:
     def test_bigframes_models_timeout_error(self, project):
         result, output = run_dbt_and_capture(["run"], expect_pass=False)
         assert len(result) == 1
-        assert "The dbt operation encountered a timeout: " in output
-        assert (
-            "Please cancel the related notebook job manually via the GCP "
-            "console since it might still be actively running." in output
-        )
+        assert "Operation did not complete within the designated timeout of 2 seconds." in output
