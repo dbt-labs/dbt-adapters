@@ -41,9 +41,6 @@ defaults:
 env:
   TEMP_PROFILE_NAME: "temp_aws_profile"
 
-permissions:
-    id-token: write
-
 jobs:
     publish:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
