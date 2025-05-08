@@ -1,6 +1,6 @@
 {% macro bigquery__create_table_as(temporary, relation, compiled_code, language='sql') -%}
     {%- if language == 'sql' -%}
-        {{ bigquery__create_table_info_schema_sql(temporary, relation, compiled_code }}
+        {{ bigquery__create_table_info_schema_sql(temporary, relation, compiled_code) }}
     {%- elif language == 'python' -%}
         {#-
             N.B. Python models _can_ write to temp views HOWEVER they use a different session
@@ -31,6 +31,10 @@
 
 
 {% macro bigquery__create_table_info_schema_sql(temporary, relation, compiled_code) -%}
+{#-
+    Implements CREATE TABLE:
+    https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_statement
+-#}
     {%- set raw_partition_by = config.get('partition_by', none) -%}
     {%- set raw_cluster_by = config.get('cluster_by', none) -%}
     {%- set sql_header = config.get('sql_header', none) -%}
