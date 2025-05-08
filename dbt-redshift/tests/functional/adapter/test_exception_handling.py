@@ -32,7 +32,6 @@ _MACROS = {
 
                       delete from {{target.schema}}.test_table where test_col in (select test_col from trans_temp_table);
                       insert into {{target.schema}}.test_table  (select * from trans_temp_table);
-                      insert into {{target.schema}}.test_table  (select * from trans_temp_table);
                       commit;
                     end transaction;
 
