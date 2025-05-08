@@ -1,6 +1,16 @@
 import pytest
 from dbt.tests.util import run_dbt_and_capture
 
+_BAD_MODEL = """
+                {{
+                  config(
+                    materialized = 'view',
+                    )
+                }}
+
+SELECT 1 FROM non_existent_table
+"""
+
 _TEST_MODEL = """
                 {{
                   config(
@@ -68,3 +78,23 @@ class TestRetryOnRelationOidNotFound:
         result, stdout = run_dbt_and_capture(["run", "--log-level=debug"])
         assert "could not open relation with OID" in stdout
         assert "Redshift adapter: Retrying query due to error: Database Error" in stdout
+
+
+class TestRetryAll:
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "bad_model.sql": _BAD_MODEL,
+        }
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retries"] = 2
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+    def test_running_bad_model_retries(self, project):
+        result, log = run_dbt_and_capture(["run", "--log-level=debug"], expect_pass=False)
+        assert "adapter: Got a retryable error" in log

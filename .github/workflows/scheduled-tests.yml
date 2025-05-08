@@ -53,6 +53,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
+            hatch-env: "ci"
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
@@ -62,6 +63,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
         secrets: inherit
 
     notification:

@@ -91,6 +91,7 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
 
     integration-tests:
         if: |
@@ -104,6 +105,7 @@ jobs:
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
         secrets: inherit
 
     publish:
