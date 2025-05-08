@@ -10,11 +10,17 @@ from dbt.tests.adapter.query_comment.test_query_comment import (
 
 
 class TestQueryCommentsSnowflake(BaseQueryComments):
-    pass
+    def test_matches_comment(self, project):
+        logs = self.run_get_json()
+        # No newline in logs because query comment is appended and newline stripped.
+        assert r"/* dbt\nrules! */" in logs
 
 
 class TestMacroQueryCommentsSnowflake(BaseMacroQueryComments):
-    pass
+    def test_matches_comment(self, project):
+        logs = self.run_get_json()
+        # No newline in logs because query comment is appended and newline stripped.
+        assert r"/* dbt macros\nare pretty cool */" in logs
 
 
 class TestMacroArgsQueryCommentsSnowflake(BaseMacroArgsQueryComments):
