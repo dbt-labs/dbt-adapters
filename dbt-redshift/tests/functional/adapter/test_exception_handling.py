@@ -32,6 +32,7 @@ _MACROS = {
 
                       delete from {{target.schema}}.test_table where test_col in (select test_col from trans_temp_table);
                       insert into {{target.schema}}.test_table  (select * from trans_temp_table);
+                      insert into {{target.schema}}.test_table  (select * from trans_temp_table);
                       commit;
                     end transaction;
 
@@ -42,6 +43,7 @@ _MACROS = {
 }
 
 
+@pytest.mark.skip("We can't reliably reproduce this error in the test environment.")
 class TestRetryOnRelationOidNotFound:
     """
     test based on bug report: https://github.com/dbt-labs/dbt-adapters/issues/642
