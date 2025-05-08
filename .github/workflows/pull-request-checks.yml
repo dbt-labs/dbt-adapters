@@ -10,9 +10,6 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.number }}
     cancel-in-progress: true
 
-permissions:
-    contents: read
-
 jobs:
     affected-packages:
         runs-on: ubuntu-latest
@@ -50,8 +47,6 @@ jobs:
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
-        permissions:
-            pull-requests: write
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
@@ -102,8 +97,6 @@ jobs:
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         needs: affected-packages
-        permissions:
-            id-token: write
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
