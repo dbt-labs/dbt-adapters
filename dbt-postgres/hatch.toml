@@ -16,6 +16,7 @@ dependencies = [
     "ddtrace==2.3.0",
     "pre-commit==3.7.0",
     "freezegun",
+    "psycopg2-binary>=2.9,<3.0",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-mock",
@@ -31,8 +32,8 @@ unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest {args:tests/functional}"
 docker-dev = [
     "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
-	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
-	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
+    "docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
+    "docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
 
@@ -42,6 +43,7 @@ dependencies = [
     "wheel",
     "twine",
     "check-wheel-contents",
+    "psycopg2-binary>=2.9,<3.0",
 ]
 [envs.build.scripts]
 check-all = [
@@ -72,6 +74,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-mock",
     "pytest-xdist",
+    "psycopg2-binary>=2.9,<3.0",
 ]
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
@@ -83,6 +86,7 @@ dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
     "ddtrace==2.3.0",
     "freezegun",
+    "psycopg2-binary>=2.9,<3.0",
     "pytest>=7.0,<8.0",
     "pytest-mock",
     "pytest-xdist",
