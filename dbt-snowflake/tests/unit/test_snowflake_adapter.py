@@ -55,7 +55,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
         }
         self.config = config_from_parts_or_dicts(project_cfg, profile_cfg)
         self.assertEqual(self.config.query_comment.comment, "dbt")
-        self.assertEqual(self.config.query_comment.append, False)
+        self.assertEqual(self.config.query_comment.append, None)
 
         self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
         self.cursor = self.handle.cursor.return_value
