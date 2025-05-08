@@ -1,6 +1,10 @@
 name: "Publish internal"
 run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
 
+permissions:
+    id-token: write
+    contents: read
+
 on:
     workflow_dispatch:
         inputs:
