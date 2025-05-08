@@ -42,10 +42,6 @@ concurrency:
     group: Publish_OSS-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
 
-permissions:
-    contents: write
-    id-token: write
-
 jobs:
     work-branch:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
