@@ -11,7 +11,7 @@ concurrency:
     cancel-in-progress: true
 
 permissions:
-    contents: read
+    contents: read-all
 env:
     CI_LABEL: "ci:approve-public-fork-ci"
 
