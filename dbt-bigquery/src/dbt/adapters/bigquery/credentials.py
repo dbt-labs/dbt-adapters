@@ -55,6 +55,7 @@ class BigQueryCredentials(Credentials):
     execution_project: Optional[str] = None
     quota_project: Optional[str] = None
     location: Optional[str] = None
+    api_endpoint: Optional[str] = None
     priority: Optional[Priority] = None
     maximum_bytes_billed: Optional[int] = None
     impersonate_service_account: Optional[str] = None
