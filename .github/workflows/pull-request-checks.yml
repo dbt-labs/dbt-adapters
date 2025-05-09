@@ -24,7 +24,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -   name: "If the event is to synchronize, we should remove the label from the PR"
-                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }} && github.event.pull_request.head.repo.full_name != github.repository }} && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
                 run: |
                     echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
                     gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
