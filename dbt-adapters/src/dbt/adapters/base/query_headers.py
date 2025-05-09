@@ -54,6 +54,8 @@ QueryStringFunc = Callable[[str, Optional[QueryHeaderContextWrapper]], str]
 
 
 class MacroQueryStringSetter:
+    DEFAULT_QUERY_COMMENT_APPEND = False
+
     def __init__(
         self, config: AdapterRequiredConfig, query_header_context: Dict[str, Any]
     ) -> None:
@@ -95,7 +97,10 @@ class MacroQueryStringSetter:
             wrapped = QueryHeaderContextWrapper(query_header_context)
         comment_str = self.generator(name, wrapped)
 
-        append = False
-        if isinstance(self.config.query_comment, QueryComment):
+        append = self.DEFAULT_QUERY_COMMENT_APPEND
+        if (
+            isinstance(self.config.query_comment, QueryComment)
+            and self.config.query_comment.append is not None
+        ):
             append = self.config.query_comment.append
         self.comment.set(comment_str, append)
