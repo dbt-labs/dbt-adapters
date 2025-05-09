@@ -92,10 +92,6 @@ class TestIcebergIncrementalStrategies:
     append: str = f"append_{hash(time.time())}"
 
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
-
-    @pytest.fixture(scope="class")
     def seeds(self):
         return {
             "seed.csv": _SEED_INCREMENTAL_STRATEGIES,
@@ -168,9 +164,6 @@ class TestIcebergBuiltInIncrementalStrategies(TestIcebergIncrementalStrategies):
 
 
 class TestIcebergIncrementalOnSchemaChangeMutatesRelations:
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.fixture(scope="class")
     def seeds(self):

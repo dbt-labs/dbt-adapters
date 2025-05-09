@@ -106,9 +106,6 @@ class TestShowObjects(ShowObjectsBase):
 
 
 class TestShowIcebergObjects(ShowObjectsBase):
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.fixture(scope="class")
     def models(self):

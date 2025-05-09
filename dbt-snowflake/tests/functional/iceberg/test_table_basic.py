@@ -8,9 +8,6 @@ from tests.functional.iceberg import models
 
 
 class TestIcebergTableBuilds:
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -35,9 +32,6 @@ class TestIcebergTableBuilds:
 
 
 class TestIcebergTableTypeBuildsOnExistingTable:
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.mark.parametrize(
         "start_model", [models._MODEL_TABLE_BEFORE_SWAP, models._MODEL_VIEW_BEFORE_SWAP]

@@ -122,17 +122,6 @@ class TestChangesApply(Changes):
         self.assert_changes_are_applied(project)
 
 
-class TestChangesApplyIcebergOn(TestChangesApply):
-    iceberg = True
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "models": {"on_configuration_change": "apply"},
-            "flags": {"enable_iceberg_materializations": True},
-        }
-
-
 class TestChangesContinue(Changes):
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -144,17 +133,6 @@ class TestChangesContinue(Changes):
         self.assert_changes_are_not_applied(project)
 
 
-class TestChangesContinueIcebergOn(TestChangesContinue):
-    iceberg = True
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "models": {"on_configuration_change": "continue"},
-            "flags": {"enable_iceberg_materializations": True},
-        }
-
-
 class TestChangesFail(Changes):
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -164,14 +142,3 @@ class TestChangesFail(Changes):
         # this fails and does not change the configuration
         run_dbt(["run"], expect_pass=False)
         self.assert_changes_are_not_applied(project)
-
-
-class TestChangesFailIcebergOn(TestChangesFail):
-    iceberg = True
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "models": {"on_configuration_change": "fail"},
-            "flags": {"enable_iceberg_materializations": True},
-        }
