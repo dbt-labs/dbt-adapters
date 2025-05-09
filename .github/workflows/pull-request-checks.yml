@@ -23,25 +23,20 @@ jobs:
         # to prevent CI from running against public forks without us looking at the code, we will check for the presence of the proper label
         runs-on: ubuntu-latest
         steps:
-        -   name: "If the event is to synchronize, we should remove the label from the PR"
-            if: |
-                ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }} &&
-                ${{ github.event.pull_request.head.repo.full_name != github.repository }} &&
-                ${{ contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
-            run: |
-                echo "Synchronizing PR, removing `${{ env.CI_LABEL }}` label"
-                gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }}
-            env:
-                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            -   name: "If the event is to synchronize, we should remove the label from the PR"
+                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }} && github.event.pull_request.head.repo.full_name != github.repository }} && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                run: |
+                    echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
+                    gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
+                env:
+                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-        -   name: "Check that forks have the '${{ env.CI_LABEL }}' label"
-            if: |
-                ${{ github.event.pull_request.head.repo.full_name != github.repository }} &&
-                ${{ !contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
-            run: |
-                msg="Pull request is from a public fork but does not have the `${{ env.CI_LABEL }}` label.  No CI will be run."
-                echo "::error::$msg"
-                exit 1
+            -   name: "Check that forks have the '${{ env.CI_LABEL }}' label"
+                if: ${{ github.event.pull_request.head.repo.full_name != github.repository && !contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                run: |
+                    msg="Pull request is from a public fork but does not have the '${{ env.CI_LABEL }}' label.  No CI will be run."
+                    echo "::error::$msg"
+                    exit 1
 
     affected-packages:
         needs: check-run-approval
