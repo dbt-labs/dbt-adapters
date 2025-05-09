@@ -209,7 +209,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
         self._packages = parsed_model["config"].get("packages", [])
-        self._timeout = parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
+        retry = RetryFactory(credentials)
+        self._polling_retry = retry.create_polling(
+            model_timeout=parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
+        )
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -432,7 +435,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         try:
             res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
-                timeout=self._timeout
+                timeout=self._polling_retry.timeout
             )
             retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
         except TimeoutError as timeout_error:
