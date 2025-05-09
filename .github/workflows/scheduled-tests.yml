@@ -6,6 +6,9 @@ on:
     -   cron: '0 3 * * *'
     workflow_dispatch:
 
+permissions:
+    contents: read
+
 jobs:
     verify-builds:
         uses: ./.github/workflows/_verify-build.yml
@@ -53,15 +56,20 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
+            hatch-env: "ci"
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
+        permissions:
+            contents: read
+            id-token: write
         with:
             packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
         secrets: inherit
 
     notification:

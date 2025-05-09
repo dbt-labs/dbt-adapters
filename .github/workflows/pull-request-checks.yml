@@ -10,6 +10,9 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.number }}
     cancel-in-progress: true
 
+permissions:
+    contents: read
+
 jobs:
     affected-packages:
         runs-on: ubuntu-latest
@@ -47,6 +50,9 @@ jobs:
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
+        permissions:
+            contents: read
+            pull-requests: write
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
@@ -92,10 +98,14 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         needs: affected-packages
+        permissions:
+            id-token: write
+            contents: read
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
@@ -103,6 +113,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
         secrets: inherit
 
     # This job does nothing and is only used for branch protection
