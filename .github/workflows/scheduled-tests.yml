@@ -1,5 +1,5 @@
 name: "Scheduled tests"
-run-name: "Scheduled tests - ${{ github.actor }}"
+run-name: "Scheduled tests ${{ github.event_name != 'schedule' && format('- {0}', github.actor) }}"
 
 on:
     schedule:
@@ -26,8 +26,8 @@ jobs:
                 python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
@@ -49,8 +49,8 @@ jobs:
                 python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
             hatch-env: "ci"
@@ -59,8 +59,8 @@ jobs:
         uses: ./.github/workflows/_integration-tests.yml
         with:
             packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
             hatch-env: "ci"
