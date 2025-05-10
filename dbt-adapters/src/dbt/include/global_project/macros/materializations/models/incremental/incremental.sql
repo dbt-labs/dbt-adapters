@@ -11,8 +11,9 @@
 
   -- configs
   {%- set unique_key = config.get('unique_key') -%}
-  {%- set full_refresh_mode = (should_full_refresh()  or existing_relation.is_view) -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
+  {% set on_schema_change_full_refresh_bool = on_schema_change_full_refresh(on_schema_change, existing_relation) %}
+  {%- set full_refresh_mode = ((should_full_refresh()  or existing_relation.is_view) or on_schema_change_full_refresh_bool) -%}
 
   -- the temp_ and backup_ relations should not already exist in the database; get_relation
   -- will return None in that case. Otherwise, we get a relation that we can drop
@@ -22,6 +23,11 @@
   {%- set preexisting_backup_relation = load_cached_relation(backup_relation) -%}
    -- grab current tables grants config for comparision later on
   {% set grant_config = config.get('grants') %}
+
+  {% if on_schema_change_full_refresh_bool %}
+    {% set sql = sql_full_refresh %}
+  {% endif %}
+
   {{ drop_relation_if_exists(preexisting_intermediate_relation) }}
   {{ drop_relation_if_exists(preexisting_backup_relation) }}
 
