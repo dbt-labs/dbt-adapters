@@ -31,14 +31,16 @@
         A valid DDL statement which will result in a new dynamic info schema table.
 -#}
 
-create dynamic table {{ relation }}
-    target_lag = '{{ dynamic_table.target_lag }}'
-    warehouse = {{ dynamic_table.snowflake_warehouse }}
-    {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
-    {{ optional('initialize', dynamic_table.initialize) }}
-    as (
-        {{ sql }}
-    )
+    create dynamic table {{ relation }}
+        target_lag = '{{ dynamic_table.target_lag }}'
+        warehouse = {{ dynamic_table.snowflake_warehouse }}
+        {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
+        {{ optional('initialize', dynamic_table.initialize) }}
+        {{ optional('with row access policy', dynamic_table.row_access_policy, equals_char='') }}
+        {{ optional('with tag', dynamic_table.table_tag, quote_char='(', equals_char='') }}
+        as (
+            {{ sql }}
+        )
 
 {%- endmacro %}
 
@@ -62,16 +64,18 @@ create dynamic table {{ relation }}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-create dynamic iceberg table {{ relation }}
-    target_lag = '{{ dynamic_table.target_lag }}'
-    warehouse = {{ dynamic_table.snowflake_warehouse }}
-    {{ optional('external_volume', catalog_relation.external_volume, "'") }}
-    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
-    base_location = '{{ catalog_relation.base_location }}'
-    {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
-    {{ optional('initialize', dynamic_table.initialize) }}
-    as (
-        {{ sql }}
-    )
+    create dynamic iceberg table {{ relation }}
+        target_lag = '{{ dynamic_table.target_lag }}'
+        warehouse = {{ dynamic_table.snowflake_warehouse }}
+        {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+        catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
+        base_location = '{{ catalog_relation.base_location }}'
+        {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
+        {{ optional('initialize', dynamic_table.initialize) }}
+        {{ optional('row_access_policy', dynamic_table.row_access_policy) }}
+        {{ optional('table_tag', dynamic_table.table_tag) }}
+        as (
+            {{ sql }}
+        )
 
 {%- endmacro %}
