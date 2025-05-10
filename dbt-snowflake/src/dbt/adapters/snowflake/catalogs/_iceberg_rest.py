@@ -1,0 +1,90 @@
+from dataclasses import dataclass
+from typing import Optional
+
+from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.contracts.relation import RelationConfig
+
+from dbt.adapters.snowflake import parse_model
+from dbt.adapters.snowflake.constants import ICEBERG_TABLE_FORMAT
+
+
+@dataclass
+class IcebergRESTCatalogRelation:
+    """
+    Represents a Snowflake Iceberg REST or AWS Glue catalog relation:
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-aws-glue
+    """
+
+    catalog_table: str
+    catalog_name: Optional[str] = None
+    catalog_namespace: Optional[str] = None
+    external_volume: Optional[str] = None
+    replace_invalid_characters: Optional[bool] = None
+    auto_refresh: Optional[bool] = None
+    table_format: Optional[str] = ICEBERG_TABLE_FORMAT
+
+
+class IcebergRESTCatalogIntegration(CatalogIntegration):
+    """
+    Implements Snowflake's Iceberg REST Catalog Integration:
+    https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-rest
+
+    Implements Snowflake's AWS Glue Catalog Integration:
+    https://docs.snowflake.com/en/sql-reference/sql/create-catalog-integration-glue
+
+    While external volumes are a separate, but related concept in Snowflake,
+    we assume that a catalog integration is always associated with an external volume.
+
+    Attributes:
+        name (str): the name of the catalog integration, e.g. "my_iceberg_rest_catalog"
+        catalog_type (str): the type of catalog integration
+        -   must be "iceberg_rest" or "aws_glue"
+        external_volume (str): the external volume associated with the catalog integration
+        -   if left empty, the default for the database/account will be used
+        table_format (str): the table format this catalog uses
+        -   must be "iceberg"
+        allows_writes (bool): identifies whether this catalog integration supports writes
+        -   must be False
+    """
+
+    catalog_type: str = "iceberg_rest"
+    table_format: str = ICEBERG_TABLE_FORMAT
+    allows_writes: bool = False
+
+    def __init__(self, config: CatalogIntegrationConfig) -> None:
+        super().__init__(config)
+        if config.adapter_properties:
+            self.catalog_namespace = config.adapter_properties.get("catalog_namespace")
+            self.replace_invalid_characters = config.adapter_properties.get(
+                "replace_invalid_characters"
+            )
+            self.auto_refresh = config.adapter_properties.get("auto_refresh")
+        else:
+            self.catalog_namespace = None
+            self.replace_invalid_characters = None
+            self.auto_refresh = None
+
+    def build_relation(self, model: RelationConfig) -> IcebergRESTCatalogRelation:
+
+        # booleans need to be handled explicitly since False is "None-sey"
+        _replace_invalid_characters = parse_model.replace_invalid_characters(model)
+        if _replace_invalid_characters is None:
+            _replace_invalid_characters = self.replace_invalid_characters
+
+        _auto_refresh = parse_model.auto_refresh(model)
+        if _auto_refresh is None:
+            _auto_refresh = self.auto_refresh
+
+        return IcebergRESTCatalogRelation(
+            catalog_table=parse_model.catalog_table(model),
+            catalog_name=self.catalog_name,
+            catalog_namespace=parse_model.catalog_namespace(model) or self.catalog_namespace,
+            external_volume=parse_model.external_volume(model) or self.external_volume,
+            replace_invalid_characters=_replace_invalid_characters,
+            auto_refresh=_auto_refresh,
+        )
+
+
+class IcebergAWSGlueCatalogIntegration(IcebergRESTCatalogIntegration):
+    catalog_type: str = "aws_glue"
