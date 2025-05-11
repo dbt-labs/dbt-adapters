@@ -10,8 +10,36 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.number }}
     cancel-in-progress: true
 
+permissions: read-all
+
+env:
+    CI_LABEL: "ci:approve-public-fork-ci"
+
 jobs:
+    check-run-approval:
+        permissions:
+            pull-requests: write
+            contents: read
+        # to prevent CI from running against public forks without us looking at the code, we will check for the presence of the proper label
+        runs-on: ubuntu-latest
+        steps:
+            -   name: "If the event is to synchronize, we should remove the label from the PR"
+                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }} && github.event.pull_request.head.repo.full_name != github.repository }} && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                run: |
+                    echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
+                    gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
+                env:
+                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            -   name: "Check that forks have the '${{ env.CI_LABEL }}' label"
+                if: ${{ github.event.pull_request.head.repo.full_name != github.repository && !contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                run: |
+                    msg="Pull request is from a public fork but does not have the '${{ env.CI_LABEL }}' label.  No CI will be run."
+                    echo "::error::$msg"
+                    exit 1
+
     affected-packages:
+        needs: check-run-approval
         runs-on: ubuntu-latest
         outputs:
             changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
@@ -47,6 +75,9 @@ jobs:
     changelog-entry-check:
         uses: ./.github/workflows/_changelog-entry-check.yml
         needs: affected-packages
+        permissions:
+            contents: read
+            pull-requests: write
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
         strategy:
             fail-fast: false
@@ -97,6 +128,9 @@ jobs:
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
         needs: affected-packages
+        permissions:
+            id-token: write
+            contents: read
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
@@ -111,7 +145,7 @@ jobs:
     results:
         name: "Pull request checks"  # keep this name, branch protection references it
         if: ${{ !cancelled() }}
-        needs: [changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
+        needs: [check-run-approval, changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: re-actors/alls-green@release/v1
