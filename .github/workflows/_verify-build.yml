@@ -79,8 +79,7 @@ jobs:
         # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
         -   name: "psycopg2-binary check"
             if: inputs.python-version == '3.9' && inputs.os == 'macos-14'
-            run: |
-                brew install postgresql
+            run: brew install postgresql
         -   uses: pypa/hatch@install
         -   run: hatch build && hatch run build:check-all
             working-directory: ./${{ inputs.package }}
