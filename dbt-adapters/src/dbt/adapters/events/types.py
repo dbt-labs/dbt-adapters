@@ -1,5 +1,10 @@
-from dbt.adapters.events.base_types import (DebugLevel, DynamicLevel,
-                                            ErrorLevel, InfoLevel, WarnLevel)
+from dbt.adapters.events.base_types import (
+    DebugLevel,
+    DynamicLevel,
+    ErrorLevel,
+    InfoLevel,
+    WarnLevel,
+)
 from dbt_common.ui import line_wrap_message, warning_tag
 
 
