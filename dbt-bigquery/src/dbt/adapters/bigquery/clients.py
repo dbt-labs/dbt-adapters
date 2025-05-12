@@ -61,7 +61,9 @@ def _create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
         create_google_credentials(credentials),
         location=getattr(credentials, "location", None),
         client_info=ClientInfo(user_agent=f"dbt-bigquery-{dbt_version.version}"),
-        client_options=ClientOptions(quota_project_id=credentials.quota_project, api_endpoint=credentials.api_endpoint),
+        client_options=ClientOptions(
+            quota_project_id=credentials.quota_project, api_endpoint=credentials.api_endpoint
+        ),
     )
 
 
