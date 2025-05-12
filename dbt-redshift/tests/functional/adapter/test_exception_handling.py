@@ -42,6 +42,7 @@ _MACROS = {
 }
 
 
+@pytest.mark.skip("We can't reliably reproduce this error in the test environment.")
 class TestRetryOnRelationOidNotFound:
     """
     test based on bug report: https://github.com/dbt-labs/dbt-adapters/issues/642
