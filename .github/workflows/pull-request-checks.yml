@@ -10,7 +10,8 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.number }}
     cancel-in-progress: true
 
-permissions: read-all
+# ensures that no permissions are granted globally, only to the specific jobs that need them
+permissions: {}
 
 env:
     CI_LABEL: "ci:approve-public-fork-ci"
@@ -24,7 +25,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -   name: "If the event is to synchronize, we should remove the label from the PR"
-                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }} && github.event.pull_request.head.repo.full_name != github.repository }} && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
                 run: |
                     echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
                     gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
@@ -39,6 +40,8 @@ jobs:
                     exit 1
 
     affected-packages:
+        permissions:
+            contents: read
         needs: check-run-approval
         runs-on: ubuntu-latest
         outputs:
@@ -89,12 +92,16 @@ jobs:
         secrets: inherit
 
     code-quality:
+        permissions:
+            contents: read
         uses: ./.github/workflows/_code-quality.yml
+        needs: check-run-approval
         with:
             branch: ${{ github.event.pull_request.head.ref }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
     verify-build:
+        permissions: read-all
         uses: ./.github/workflows/_verify-build.yml
         needs: affected-packages
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
@@ -110,6 +117,8 @@ jobs:
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     unit-tests:
+        permissions:
+            contents: read
         uses: ./.github/workflows/_unit-tests.yml
         needs: affected-packages
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
@@ -143,6 +152,8 @@ jobs:
 
     # This job does nothing and is only used for branch protection
     results:
+        permissions:
+            actions: read
         name: "Pull request checks"  # keep this name, branch protection references it
         if: ${{ !cancelled() }}
         needs: [check-run-approval, changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
