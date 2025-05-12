@@ -122,10 +122,6 @@ alter table {{ relation }} resume recluster;
     - Iceberg does not support temporary tables (use a standard Snowflake table)
 -#}
 
-{%- if not adapter.behavior.enable_iceberg_materializations.no_warn -%}
-    {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
-{%- endif -%}
-
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
