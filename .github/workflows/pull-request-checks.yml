@@ -10,7 +10,8 @@ concurrency:
     group: ${{ github.workflow }}-${{ github.event.number }}
     cancel-in-progress: true
 
-permissions: read-all
+# ensures that no permissions are granted globally, only to the specific jobs that need them
+permissions: {}
 
 env:
     CI_LABEL: "ci:approve-public-fork-ci"
@@ -39,6 +40,8 @@ jobs:
                     exit 1
 
     affected-packages:
+        permissions:
+            contents: read
         needs: check-run-approval
         runs-on: ubuntu-latest
         outputs:
@@ -89,6 +92,8 @@ jobs:
         secrets: inherit
 
     code-quality:
+        permissions:
+            contents: read
         uses: ./.github/workflows/_code-quality.yml
         needs: check-run-approval
         with:
@@ -96,6 +101,7 @@ jobs:
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
     verify-build:
+        permissions: read-all
         uses: ./.github/workflows/_verify-build.yml
         needs: affected-packages
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
@@ -111,6 +117,8 @@ jobs:
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
     unit-tests:
+        permissions:
+            contents: read
         uses: ./.github/workflows/_unit-tests.yml
         needs: affected-packages
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
@@ -144,6 +152,8 @@ jobs:
 
     # This job does nothing and is only used for branch protection
     results:
+        permissions:
+            actions: read
         name: "Pull request checks"  # keep this name, branch protection references it
         if: ${{ !cancelled() }}
         needs: [check-run-approval, changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
