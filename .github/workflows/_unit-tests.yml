@@ -86,9 +86,8 @@ jobs:
                 echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
         # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
         -   name: "psycopg2-binary check"
-            if: inputs.python-version == '3.9' && inputs.os == 'macos-14'
-            run: |
-                brew install postgresql
+            if: inputs.python-version == '3.9' && runner.os == 'macOS'
+            run: brew install postgresql
         -   uses: pypa/hatch@install
         -   run: brew install unixodbc
             if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
