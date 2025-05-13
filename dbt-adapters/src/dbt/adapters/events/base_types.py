@@ -5,7 +5,7 @@ from dbt_common.events.base_types import ErrorLevel as CommonErrorLevel
 from dbt_common.events.base_types import InfoLevel as CommonInfoLevel
 from dbt_common.events.base_types import TestLevel as CommonTestLevel
 from dbt_common.events.base_types import WarnLevel as CommonWarnLevel
-from dbtlabs.proto.public.v1.fields import adapter_types_pb2
+from dbt.adapters.events import adapter_types_pb2
 
 
 class AdapterBaseEvent(BaseEvent):
