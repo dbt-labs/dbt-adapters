@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from io import StringIO
 from time import sleep
 
-from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING
+from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING, Dict
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -55,6 +55,7 @@ from dbt_common.ui import line_wrap_message, warning_tag
 from dbt.adapters.snowflake.record import SnowflakeRecordReplayHandle
 
 from dbt.adapters.snowflake.auth import private_key_from_file, private_key_from_string
+from dbt.adapters.snowflake.query_headers import SnowflakeMacroQueryStringSetter
 
 if TYPE_CHECKING:
     import agate
@@ -559,6 +560,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
             self._raise_cursor_not_found_error(sql)
 
         return connection, cursor
+
+    def set_query_header(self, query_header_context: Dict[str, Any]) -> None:
+        self.query_header = SnowflakeMacroQueryStringSetter(self.profile, query_header_context)
 
     def _stripped_queries(self, sql: str) -> List[str]:
         def strip_query(query):

@@ -5,7 +5,7 @@ import pytest
 
 from dbt.adapters.contracts.relation import RelationConfig
 
-from dbt.adapters.snowflake.parse_model import base_location
+from dbt.adapters.snowflake.parse_model import base_location, cluster_by
 
 
 def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
@@ -45,3 +45,15 @@ def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
 def test_base_location(config, expected):
     model = make_model(config)
     assert base_location(model) == expected
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({"cluster_by": "fake_value"}, "fake_value"),
+        ({"cluster_by": ["fake_value", "fake_value_1"]}, "fake_value, fake_value_1"),
+    ],
+)
+def test_cluster_by(config, expected):
+    model = make_model(config)
+    assert cluster_by(model) == expected
