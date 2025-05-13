@@ -564,7 +564,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.open(self.get_thread_connection())
             time.sleep(backoff)
             # return with exponential backoff
-            return retries, min(backoff * 2, 60)
+            return retries, min(max(backoff, 2) * 2, 60)
 
         def _execute_internal(
             sql: str,
@@ -618,8 +618,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InterfaceError,
             redshift_connector.InternalError,
         )
-        if self.profile.credentials.retry_all:
-            redshift_retryable_exceptions = redshift_connector.Error
 
         for query in queries:
             # Strip off comments from the current query
