@@ -98,4 +98,4 @@ class TestRetryAll:
 
     def test_running_bad_model_retries(self, project):
         result, log = run_dbt_and_capture(["run", "--log-level=debug"], expect_pass=False)
-        assert "Got a retryable error" in log
+        assert "Retrying query due to error" in log

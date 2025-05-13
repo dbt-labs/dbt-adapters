@@ -551,7 +551,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
                 raise e
             if oid_not_found_msg in str(e):
                 pass
-            elif isinstance(e, redshift_connector.Error) and retry_all:
+            elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass
             else:
                 logger.debug(f"Not retrying error: {e}")
