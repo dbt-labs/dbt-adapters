@@ -564,7 +564,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.open(self.get_thread_connection())
             time.sleep(backoff)
             # return with exponential backoff
-            return retries, min(max(backoff, 2) * 2, 60)
+            return retries, min(max(backoff * 2, 2), 60)
 
         def _execute_internal(
             sql: str,
