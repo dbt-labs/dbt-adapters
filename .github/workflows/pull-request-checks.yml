@@ -25,10 +25,14 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -   name: "If the event is to synchronize, we should remove the label from the PR"
-                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                # also triggers on reopen to avoid a user clsoing, pushing changes and then reopening the PR
+                if: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'reopened') && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
                 run: |
                     echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
                     gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
+                    msg="All pull request updates require re-approval of CI.  No CI will be run."
+                    echo "::error::$msg"
+                    exit 1
                 env:
                     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
