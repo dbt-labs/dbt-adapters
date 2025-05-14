@@ -1,5 +1,3 @@
-from dbt_common.ui import line_wrap_message, warning_tag
-
 from dbt.adapters.events.base_types import (
     DebugLevel,
     DynamicLevel,
@@ -7,6 +5,7 @@ from dbt.adapters.events.base_types import (
     InfoLevel,
     WarnLevel,
 )
+from dbt_common.ui import line_wrap_message, warning_tag
 
 
 def format_adapter_message(name, base_msg, args) -> str:
