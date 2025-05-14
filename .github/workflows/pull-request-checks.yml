@@ -56,7 +56,7 @@ jobs:
         steps:
         -   uses: actions/checkout@v4
             with:
-                ref: ${{ github.event.pull_request.head.ref }}
+                ref: ${{ github.event.pull_request.head.sha }}
                 repository: ${{ github.event.pull_request.head.repo.full_name }}
         -   id: changelog-entry-check
             uses: dorny/paths-filter@v3
@@ -101,7 +101,7 @@ jobs:
         uses: ./.github/workflows/_code-quality.yml
         needs: check-run-approval
         with:
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
     verify-build:
@@ -115,7 +115,7 @@ jobs:
                 package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -132,7 +132,7 @@ jobs:
                 package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -147,7 +147,7 @@ jobs:
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
