@@ -1,4 +1,4 @@
-kind: Features
+kind: Fixes
 body: Add support for copy_partitions when used with static partitions.
 time: 2025-05-14T18:54:07.360083-07:00
 custom:

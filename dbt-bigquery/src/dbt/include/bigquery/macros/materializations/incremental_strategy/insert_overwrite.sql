@@ -173,9 +173,9 @@
   tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, copy_partitions
   ) %}
   {%- if tmp_relation_exists is false -%}
-  {# we run temp table creation in a separated script to move to partitions copy if it doesn't already exist #}
+  {# We run temp table creation in a separated script to move to partitions copy if it doesn't already exist #}
     {%- call statement('create_tmp_relation_for_copy', language='sql') -%}
-      {{ bq_create_table_as(partition_by, true, tmp_relation, sql, 'sql')
+      {{ bq_create_table_as(partition_by, True, tmp_relation, sql, 'sql')
     }}
     {%- endcall %}
   {%- endif -%}
@@ -184,9 +184,9 @@
     from {{ tmp_relation }}
   {%- endset -%}
   {%- set partitions = run_query(partitions_sql).columns[0].values() -%}
-  {# we copy the partitions #}
+  {# We copy the partitions #}
   {%- do bq_copy_partitions(tmp_relation, target_relation, partitions, partition_by) -%}
-  -- clean up the temp table
+  -- Clean up the temp table
   drop table if exists {{ tmp_relation }}
 {% endmacro %}
 
@@ -195,7 +195,7 @@
      {{ bq_dynamic_copy_partitions_insert_overwrite_sql(tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, copy_partitions) }}
   {% else -%}
       {% set predicate -%}
-          {{ partition_by.render_wrapped(alias='dbt_internal_dest') }} in unnest(dbt_partitions_for_replacement)
+          {{ partition_by.render_wrapped(alias='DBT_INTERNAL_DEST') }} in unnest(dbt_partitions_for_replacement)
       {%- endset %}
 
       {%- set source_sql -%}
@@ -214,7 +214,7 @@
       {# have we already created the temp table to check for schema changes? #}
       {% if not tmp_relation_exists %}
        -- 1. create a temp table with model data
-        {{ bq_create_table_as(partition_by, true, tmp_relation, sql, 'sql') }}
+        {{ bq_create_table_as(partition_by, True, tmp_relation, sql, 'sql') }}
       {% else %}
         -- 1. temp table already exists, we used it to check for schema changes
       {% endif %}
@@ -223,8 +223,8 @@
       -- 2. define partitions to update
       set (dbt_partitions_for_replacement) = (
           select as struct
-              -- ignore nulls: this needs to be aligned to _dbt_max_partition, which ignores null
-              array_agg(distinct {{ partition_field }} ignore nulls)
+              -- IGNORE NULLS: this needs to be aligned to _dbt_max_partition, which ignores null
+              array_agg(distinct {{ partition_field }} IGNORE NULLS)
           from {{ tmp_relation }}
       );
 
