@@ -85,6 +85,15 @@
   {{ return(source_sql) }}
 {% endmacro %}
 
+
+{#
+  -- Static-partition + `copy_partitions=true` should inline the literals / foldable constants
+  -- supplied via the `partitions=` config.
+
+  -- The inline method will still copy (truncate) a partition even
+  -- if the incremental run produced no rows for that date, because the user
+  -- explicitly listed it in `partitions=`.
+#}
 {% macro bq_static_copy_partitions_insert_overwrite_sql(
   tmp_relation, target_relation, sql, partition_by, partitions, tmp_relation_exists
 ) %}
@@ -97,14 +106,14 @@
           {{ bq_create_table_as(partition_by, true, tmp_relation, source_sql, 'sql')
         }}
         {%- endcall %}
-      {%- endif -%}
+    {%- endif -%}
 
     {%- set partitions_sql -%}
-        select
-        {%- for partition in partitions %}
-          cast({{ partition }} as timestamp){%- if not loop.last -%},{%- endif -%}
-        {%- endfor %}
-        from {{ tmp_relation }}
+	select
+	    cast(partition_literal as timestamp) as partition_ts
+	from unnest([
+	    {{ partitions | join(', ') }}
+	]) as partition_literal
     {%- endset -%}
 
     {%- set resolved_partitions = run_query(partitions_sql).columns[0].values() -%}

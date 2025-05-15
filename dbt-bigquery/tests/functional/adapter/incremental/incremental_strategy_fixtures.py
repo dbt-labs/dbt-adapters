@@ -372,7 +372,7 @@ overwrite_copy_partitions_with_partitions_sql = """
         materialized="incremental",
         incremental_strategy='insert_overwrite',
         cluster_by="id",
-        partitions=["CAST('2020-01-02' AS DATE)","'2020-01-02'"],
+        partitions=["CAST('2020-01-01' AS DATE)","'2020-01-02'"],
         partition_by={
             "field": "date_day",
             "data_type": "date",

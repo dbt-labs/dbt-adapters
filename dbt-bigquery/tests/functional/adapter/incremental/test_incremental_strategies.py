@@ -69,10 +69,11 @@ class TestBigQueryScripting(SeedConfigBase):
     def test__bigquery_assert_incremental_configurations_apply_the_right_strategy(self, project):
         run_dbt(["seed"])
         results = run_dbt()
-        assert len(results) == 12
+        assert len(results) == 13
 
         results = run_dbt()
-        assert len(results) == 12
+        assert len(results) == 13
+
         incremental_strategies = [
             ("incremental_merge_range", "merge_expected"),
             ("incremental_merge_time", "merge_expected"),
