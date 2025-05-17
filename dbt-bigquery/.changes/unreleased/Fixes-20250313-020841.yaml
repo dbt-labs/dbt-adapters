@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix unit tests for models that use sql_header
+time: 2025-03-13T02:08:41.04605+01:00
+custom:
+    Author: Kayrnt
+    Issue: "9775"
