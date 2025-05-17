@@ -101,8 +101,10 @@
   {{ return(adapter.check_schema_exists(information_schema.database, schema)) }}
 {% endmacro %}
 
-{#-- relation-level macro is not implemented. This is handled in the CTAs statement #}
 {% macro bigquery__persist_docs(relation, model, for_relation, for_columns) -%}
+  {% if for_relation and config.persist_relation_docs() and model.description %}
+    {% do alter_relation_comment(relation, model.description) %}
+  {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
     {% do alter_column_comment(relation, model.columns) %}
   {% endif %}
@@ -110,6 +112,10 @@
 
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}
   {% do adapter.update_columns(relation, column_dict) %}
+{% endmacro %}
+
+{% macro bigquery__alter_relation_comment(relation, description) -%}
+  {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, model.description) %}
 {% endmacro %}
 
 {% macro bigquery__alter_relation_add_columns(relation, add_columns) %}
