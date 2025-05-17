@@ -1,0 +1,6 @@
+kind: Features
+body: Add row_access_policy and table_tag config for Snowflake models
+time: 2025-03-12T15:10:53.501206+01:00
+custom:
+  Author: b-per
+  Issue: "697"
