@@ -805,14 +805,14 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         actual = adapter.get_table_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
-    def test_hours_to_expiration_temporary(self):
+    def test_seconds_to_expiration_temporary(self):
         adapter = self.get_adapter("oauth")
         mock_config = create_autospec(RuntimeConfigObject)
         config = {"hours_to_expiration": 4}
         mock_config.get.side_effect = lambda name: config.get(name)
 
         expected = {
-            "expiration_timestamp": ("TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 12 hour)"),
+            "expiration_timestamp": ("TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 43200 second)"),
         }
         actual = adapter.get_table_options(mock_config, node={}, temporary=True)
         self.assertEqual(expected, actual)
