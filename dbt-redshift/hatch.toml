@@ -7,13 +7,13 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
     "pip install -e ../dbt-postgres",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "freezegun",
     "ipdb~=0.13.13",
@@ -67,13 +67,13 @@ docker-prod = "docker build -f docker/Dockerfile -t dbt-redshift ."
 
 [envs.ci]
 pre-install-commands = [
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
     "pip install -e ../dbt-postgres",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "flaky",
     "freezegun",

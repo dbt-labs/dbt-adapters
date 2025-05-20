@@ -4,6 +4,8 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
     "pip install -e ../dbt-athena",
@@ -54,6 +56,8 @@ check-sdist = [
 
 [envs.ci]
 pre-install-commands = [
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
     "pip install -e ../dbt-athena",

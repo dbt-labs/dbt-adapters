@@ -7,11 +7,11 @@ sources = ["src"]
 
 [envs.default]
 pre-install-commands = [
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
 ]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pre-commit==3.7.0",
     "pytest>=7.0,<8.0"
 ]
