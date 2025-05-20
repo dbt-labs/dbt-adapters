@@ -14,7 +14,7 @@ dependencies = [
     "moto~=5.0.13",
     "pre-commit~=3.5",
     "pyparsing~=3.1.4",
-    "pytest~=8.3",
+    "pytest>=7.0,<8.0",
     "pytest-dotenv~=0.5",
     "pytest-xdist~=3.6",
 ]
@@ -63,7 +63,7 @@ dependencies = [
     "isort~=5.13",
     "moto~=5.0.13",
     "pyparsing~=3.1.4",
-    "pytest~=8.3",
+    "pytest>=7.0,<8.0",
     "pytest-xdist~=3.6",
 ]
 [envs.ci.scripts]
@@ -78,7 +78,7 @@ dependencies = [
     "isort~=5.13",
     "moto~=5.0.13",
     "pyparsing~=3.1.4",
-    "pytest~=8.3",
+    "pytest>=7.0,<8.0",
     "pytest-xdist~=3.6",
 ]
 [envs.cd.scripts]

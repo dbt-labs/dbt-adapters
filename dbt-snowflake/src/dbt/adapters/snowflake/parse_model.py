@@ -44,11 +44,11 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
         return None
 
     fields = model.config.get("cluster_by")
+    if isinstance(fields, str):
+        return fields
     if isinstance(fields, Iterable):
         return ", ".join(fields)
-    elif isinstance(fields, str):
-        return fields
-    elif fields is not None:
+    if fields is not None:
         raise DbtConfigError(f"Unexpected cluster_by configuration: {fields}")
     return None
 
