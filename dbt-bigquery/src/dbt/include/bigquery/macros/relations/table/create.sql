@@ -187,6 +187,7 @@ import bigframes.pandas as bpd
 
 
 bpd.options.compute.extra_query_labels["bigframes-dbt-api"] = "python-model-table"
+bpd.options.bigquery.ordering_mode = "partial"
 bpd.options.bigquery.project = "{{ target.project }}"
 {% if target.location -%}
 bpd.options.bigquery.location = "{{ target.location }}"
