@@ -8,7 +8,6 @@ sources = ["src"]
 [envs.default]
 pre-install-commands = [
     "pip install -e ../dbt-adapters",
-    'pip install "git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core"',
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
@@ -69,7 +68,6 @@ docker-prod = "docker build -f docker/Dockerfile -t dbt-bigquery ."
 [envs.ci]
 pre-install-commands = [
     "pip install -e ../dbt-adapters",
-    'pip install "git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core"',
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
