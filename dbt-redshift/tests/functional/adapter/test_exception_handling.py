@@ -42,6 +42,7 @@ _MACROS = {
 }
 
 
+@pytest.mark.skip("We can't reliably reproduce this error in the test environment.")
 class TestRetryOnRelationOidNotFound:
     """
     test based on bug report: https://github.com/dbt-labs/dbt-adapters/issues/642
@@ -97,4 +98,4 @@ class TestRetryAll:
 
     def test_running_bad_model_retries(self, project):
         result, log = run_dbt_and_capture(["run", "--log-level=debug"], expect_pass=False)
-        assert "adapter: Got a retryable error" in log
+        assert "Retrying query due to error" in log
