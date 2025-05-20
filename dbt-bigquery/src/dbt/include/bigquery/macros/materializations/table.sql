@@ -142,7 +142,7 @@ df.write \
 
 {% macro bigframes_write_table(compiled_code, target_relation) %}
 import bigframes.pandas as bpd
-bpd.options.compute.extra_query_labels["bigframes-dbt-api"] = "python-model-table"
+bpd.options.bigquery.application_name = f"dbt-bigframes-{{dbt_version}}"
 bpd.options.bigquery.ordering_mode = "partial"
 bpd.options.bigquery.project = "{{ target.project }}"
 {% if target.location %}
