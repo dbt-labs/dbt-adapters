@@ -807,13 +807,14 @@ class BigQueryAdapter(BaseAdapter):
             if config.get("partition_expiration_days") is not None:
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
 
-            catalog_relation = self.build_catalog_relation(config.model)  # type: ignore[attr-defined]
-            if not isinstance(catalog_relation, BigQueryCatalogRelation):
-                raise DbtInternalError("Unexpected catalog relation")
-            if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
-                opts["table_format"] = catalog_relation.table_format
-                opts["file_format"] = catalog_relation.file_format
-                opts["storage_uri"] = catalog_relation.external_volume
+            relation_config = getattr(config, "model", None)
+            if catalog_relation := self.build_catalog_relation(relation_config):
+                if not isinstance(catalog_relation, BigQueryCatalogRelation):
+                    raise DbtInternalError("Unexpected catalog relation")
+                if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
+                    opts["table_format"] = catalog_relation.table_format
+                    opts["file_format"] = catalog_relation.file_format
+                    opts["storage_uri"] = catalog_relation.external_volume
 
         return opts
 
