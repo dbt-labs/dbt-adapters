@@ -33,6 +33,7 @@ from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
+from dbt_common.exceptions import DbtInternalError
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -53,6 +54,11 @@ from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
+from dbt.adapters.bigquery import constants
+from dbt.adapters.bigquery.catalogs import (
+    BigQueryCatalogIntegration,
+    BigQueryCatalogRelation,
+)
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
 from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
 from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
@@ -129,6 +135,7 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
+    CATALOG_INTEGRATIONS = [BigQueryCatalogIntegration]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -796,6 +803,14 @@ class BigQueryAdapter(BaseAdapter):
                 opts["require_partition_filter"] = config.get("require_partition_filter")
             if config.get("partition_expiration_days") is not None:
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
+
+            catalog_relation = self.build_catalog_relation(config.model)  # type: ignore[attr-defined]
+            if not isinstance(catalog_relation, BigQueryCatalogRelation):
+                raise DbtInternalError("Unexpected catalog relation")
+            if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
+                opts["table_format"] = catalog_relation.table_format
+                opts["file_format"] = catalog_relation.file_format
+                opts["storage_uri"] = catalog_relation.external_volume
 
         return opts
 
