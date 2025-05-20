@@ -5,7 +5,7 @@ from unittest import TestCase, mock
 
 from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt_common.clients import agate_helper
-from dbt_common.exceptions import DbtRuntimeError
+from dbt_common.exceptions import DbtRuntimeError, DbtDatabaseError
 
 from dbt.adapters.redshift import (
     Plugin as RedshiftPlugin,
@@ -111,8 +111,8 @@ class TestQuery(TestCase):
                 self.adapter.connections.profile.credentials.retries = 3
                 self.adapter.connections.profile.credentials.retry_all = True
                 mock_add_query.side_effect = [
-                    redshift_connector.InterfaceError,
-                    redshift_connector.InternalError,
+                    DbtDatabaseError("test"),
+                    DbtDatabaseError("test2"),
                     (None, cursor),
                 ]
                 with mock.patch.object(

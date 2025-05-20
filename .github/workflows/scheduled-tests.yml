@@ -1,13 +1,12 @@
 name: "Scheduled tests"
-run-name: "Scheduled tests ${{ github.event_name != 'schedule' && format('- {0}', github.actor) }}"
+run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 
 on:
     schedule:
     -   cron: '0 3 * * *'
     workflow_dispatch:
 
-permissions:
-    contents: read
+permissions: read-all
 
 jobs:
     verify-builds:
