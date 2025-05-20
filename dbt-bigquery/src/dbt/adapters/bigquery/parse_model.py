@@ -6,7 +6,8 @@ from dbt.adapters.bigquery import constants
 
 
 def catalog_name(model: RelationConfig) -> Optional[str]:
-    if not getattr(model, "config", None):
+    # while this looks equivalent to `if not getattr(model, "config", None):`, `mypy` disagrees
+    if not hasattr(model, "config") or not model.config:
         return None
 
     if _catalog := model.config.get("catalog"):
