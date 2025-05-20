@@ -48,13 +48,14 @@ from dbt.adapters.base import (
 from dbt.adapters.base.impl import FreshnessResponse
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
-from dbt.adapters.bigquery import constants
+from dbt.adapters.bigquery import constants, parse_model
 from dbt.adapters.bigquery.catalogs import (
     BigQueryCatalogIntegration,
     BigQueryCatalogRelation,
@@ -154,6 +155,8 @@ class BigQueryAdapter(BaseAdapter):
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
 
     ###
     # Implementations of abstract methods
@@ -1001,3 +1004,23 @@ class BigQueryAdapter(BaseAdapter):
         :param str sql: The sql to validate
         """
         return self.connections.dry_run(sql)
+
+    @available
+    def build_catalog_relation(self, model: RelationConfig) -> Optional[CatalogRelation]:
+        """
+        Builds a relation for a given configuration.
+
+        This method uses the provided configuration to determine the appropriate catalog
+        integration and config parser for building the relation. It defaults to the built-in Iceberg
+        catalog if none is provided in the configuration for backward compatibility.
+
+        Args:
+            model (RelationConfig): `config.model` (not `model`) from the jinja context
+
+        Returns:
+            Any: The constructed relation object generated through the catalog integration and parser
+        """
+        if catalog := parse_model.catalog_name(model):
+            catalog_integration = self.get_catalog_integration(catalog)
+            return catalog_integration.build_relation(model)
+        return None
