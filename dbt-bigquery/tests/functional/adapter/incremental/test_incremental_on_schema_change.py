@@ -1,5 +1,5 @@
 import pytest
-
+from dbt.contracts.results import RunStatus
 from dbt.tests.adapter.incremental.test_incremental_on_schema_change import (
     BaseIncrementalOnSchemaChangeSetup,
     BaseIncrementalOnSchemaChange,
@@ -9,6 +9,8 @@ from dbt.tests.adapter.incremental.fixtures import (
     _MODELS__A,
     _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
 )
+
+from dbt.tests.util import run_dbt
 
 
 class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
@@ -213,6 +215,16 @@ from source_data where id <= 3
 {% endif %}
 """
 
+_MODELS__INCREMENTAL_RESERVED_KEYWORD_TEST_INITIAL = """
+{{ config(materialized='incremental', on_schema_change='append_new_columns') }}
+select 1 as col_1
+"""
+
+_MODELS__INCREMENTAL_RESERVED_KEYWORD_TEST_UPDATE = """
+{{ config(materialized='incremental', on_schema_change='append_new_columns') }}
+select 1 as col_1, 2 as `limit`
+"""
+
 
 class TestIncrementalOnSchemaChangeBigQuerySpecific(BaseIncrementalOnSchemaChangeSetup):
     @pytest.fixture(scope="class")
@@ -224,6 +236,7 @@ class TestIncrementalOnSchemaChangeBigQuerySpecific(BaseIncrementalOnSchemaChang
             "incremental_sync_all_columns_target.sql": _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TARGET,
             "incremental_sync_all_columns_time_ingestion_partitioning.sql": _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TIME_INGESTION_PARTITIONING,
             "incremental_sync_all_columns_time_ingestion_partitioning_target.sql": _MODELS__INCREMENTAL_SYNC_ALL_COLUMNS_TIME_INGESTION_PARTITIONING_TARGET,
+            "incremental_reserved_keyword_test_initial.sql": _MODELS__INCREMENTAL_RESERVED_KEYWORD_TEST_INITIAL,
         }
 
     def test_run_incremental_sync_all_columns_dynamic_insert_overwrite(self, project):
@@ -251,3 +264,21 @@ class TestIncrementalOnSchemaChangeBigQuerySpecific(BaseIncrementalOnSchemaChang
         compare_source = "incremental_sync_all_columns_time_ingestion_partitioning"
         compare_target = "incremental_sync_all_columns_time_ingestion_partitioning_target"
         self.run_twice_and_assert(select, compare_source, compare_target, project)
+
+    def test_append_reserved_keyword_column(self, project):
+        model_name = "incremental_reserved_keyword_test_initial"
+        result = run_dbt(["run", "--select", model_name])
+        assert len(result) == 1 and result[0].status == RunStatus.Success
+
+        model_file_path = project.project_root / "models" / f"{model_name}.sql"
+        model_file_path.write_text(
+            _MODELS__INCREMENTAL_RESERVED_KEYWORD_TEST_UPDATE, encoding="utf-8"
+        )
+        result = run_dbt(["run", "--select", model_name])
+        assert len(result) == 1 and result[0].status == RunStatus.Success
+
+        model_file_path.write_text(
+            _MODELS__INCREMENTAL_RESERVED_KEYWORD_TEST_INITIAL, encoding="utf-8"
+        )
+        result = run_dbt(["run", "--select", model_name])
+        assert len(result) == 1 and result[0].status == RunStatus.Success

@@ -199,3 +199,30 @@ having count(*) > 1
   {% do adapter.upload_file(local_file_path, database, table_schema, table_name, kwargs=kwargs) %}
 
 {% endmacro %}
+
+{% macro bigquery__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
+
+  {% if add_columns is none %}
+    {% set add_columns = [] %}
+  {% endif %}
+  {% if remove_columns is none %}
+    {% set remove_columns = [] %}
+  {% endif %}
+
+  {% set sql -%}
+
+     alter {{ relation.type }} {{ relation.render() }}
+
+            {% for column in add_columns %}
+               add column {{ column.quoted }} {{ column.data_type }}{{ ',' if not loop.last }}
+            {% endfor %}{{ ',' if add_columns and remove_columns }}
+
+            {% for column in remove_columns %}
+                drop column {{ column.quoted }}{{ ',' if not loop.last }}
+            {% endfor %}
+
+  {%- endset -%}
+
+  {% do run_query(sql) %}
+
+{% endmacro %}
