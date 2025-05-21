@@ -38,6 +38,10 @@ _logger = AdapterLogger("BigQuery")
 _NETWORK_NAME = "default"
 _SUBNETWORK_NAME = "default"
 _DEFAULT_JAR_FILE_URI = "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.34.0.jar"
+# For BigFrames models, the default timeout is set to 1 hour (60 * 60 seconds).
+# This differs from other Python models because the typical 5-minute timeout
+# is insufficient for BigFrames processing.
+_DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
 
 
 class _BigQueryPythonHelper(PythonJobHelper):
@@ -205,6 +209,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
         self._packages = parsed_model["config"].get("packages", [])
+        retry = RetryFactory(credentials)
+        self._polling_retry = retry.create_polling(
+            model_timeout=parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
+        )
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
