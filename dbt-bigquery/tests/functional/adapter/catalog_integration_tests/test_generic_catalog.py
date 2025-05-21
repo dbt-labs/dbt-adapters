@@ -10,11 +10,11 @@ MODEL__INFO_SCHEMA_TABLE = """
 {{ config(materialized='table') }}
 select 1 as id
 """
-MODEL__ICEBERG_TABLE = f"""
+MODEL__MANAGED_ICEBERG_TABLE = f"""
 {{ config(
     materialized='table',
     catalog='managed_iceberg',
-    storage_uri='gs://{os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")}/table'
+    storage_uri='gs://{os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")}/managed_iceberg_table'
 ) }}
 select 1 as id
 """
@@ -26,7 +26,7 @@ class TestGenericCatalog:
         return {
             "info_schema_default.sql": MODEL__INFO_SCHEMA_DEFAULT,
             "info_schema_table.sql": MODEL__INFO_SCHEMA_TABLE,
-            "iceberg_table.sql": MODEL__ICEBERG_TABLE,
+            "managed_iceberg_table.sql": MODEL__MANAGED_ICEBERG_TABLE,
         }
 
     def test_generic_catalog(self, project):
