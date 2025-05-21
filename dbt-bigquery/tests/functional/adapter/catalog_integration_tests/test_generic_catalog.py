@@ -2,9 +2,10 @@ from datetime import datetime
 import os
 import random
 
+from dbt.tests.util import get_connection, run_dbt
 import pytest
 
-from dbt.tests.util import run_dbt
+from dbt.adapters.bigquery import BigQueryRelation
 
 
 def prefix():
@@ -99,3 +100,8 @@ class TestGenericCatalog:
         assert len(results) == 4
         results = run_dbt(["run", "--select", "managed_iceberg_incremental"])
         assert len(results) == 1
+
+        schema = BigQueryRelation.create(project.database, project.test_schema)
+        with get_connection(project.adapter):
+            relations = project.adapter.list_relations_without_caching(schema)
+        assert len(relations) == 4
