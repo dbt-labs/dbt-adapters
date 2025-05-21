@@ -1,9 +1,5 @@
 {% macro bigquery__create_table_as(temporary, relation, compiled_code, language='sql') -%}
   {%- if language == 'sql' -%}
-    {#-
-        Implements CREATE TABLE:
-        https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#create_table_statement
-    -#}
     {%- set raw_partition_by = config.get('partition_by', none) -%}
     {%- set raw_cluster_by = config.get('cluster_by', none) -%}
     {%- set sql_header = config.get('sql_header', none) -%}
@@ -39,7 +35,7 @@
     as (
       {{ compiled_code }}
     );
-    {% endif %}
+    {%- endif %}
   {%- elif language == 'python' -%}
     {#--
     N.B. Python models _can_ write to temp views HOWEVER they use a different session
@@ -47,12 +43,12 @@
 
     TODO: Deep dive into spark sessions to see if we can reuse a single session for an entire
     dbt invocation.
-    --#}
+     --#}
 
-    {#- when a user wants to change the schema of an existing relation, they must intentionally drop the table in the dataset -#}
+    {#-- when a user wants to change the schema of an existing relation, they must intentionally drop the table in the dataset --#}
     {%- set old_relation = adapter.get_relation(database=relation.database, schema=relation.schema, identifier=relation.identifier) -%}
     {%- if (old_relation.is_table and (should_full_refresh())) -%}
-      {%- do adapter.drop_relation(relation) -%}
+      {% do adapter.drop_relation(relation) %}
     {%- endif -%}
     {%- set submission_method = config.get("submission_method", "serverless") -%}
     {%- if submission_method in ("serverless", "cluster") -%}
@@ -60,15 +56,11 @@
     {%- elif submission_method == "bigframes" -%}
       {{ bigframes_write_table(compiled_code=compiled_code, target_relation=relation.quote(database=False, schema=False, identifier=False)) }}
     {%- else -%}
-      {%- do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported dataframe syntax, it got %s" % submission_method) -%} {%- endif -%}
+      {% do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported dataframe syntax, it got %s" % submission_method) %} {%- endif -%}
   {%- else -%}
     {% do exceptions.raise_compiler_error("bigquery__create_table_as macro didn't get supported language, it got %s" % language) %}
   {%- endif -%}
 
-{%- endmacro -%}
-
-
-{% macro bigquery__create_table_info_schema_sql(temporary, relation, compiled_code) -%}
 {%- endmacro -%}
 
 {% macro bigquery__create_view_as(relation, sql) -%}
