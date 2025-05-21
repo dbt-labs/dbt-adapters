@@ -23,7 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "dbt-common>=2.0,<3.0",
+    "dbt-common>=1.10,<2.0",
     "dbt-adapters>=1.14.3,<2.0",
     # lower bound pin due to CVE-2025-24794
     "snowflake-connector-python[secure-local-storage]>=3.13.1,<4.0.0",

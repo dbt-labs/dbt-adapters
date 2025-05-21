@@ -23,7 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "dbt-common>=2.0,<3.0",
+    "dbt-common>=1.10,<2.0",
     "dbt-adapters>=1.11,<2.0",
     "dbt-postgres>=1.8,<1.10",
     # dbt-redshift depends deeply on this package. it does not follow SemVer, therefore there have been breaking changes in previous patch releases
