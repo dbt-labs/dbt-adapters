@@ -2,6 +2,8 @@ import os
 
 import pytest
 
+from dbt.tests.util import run_dbt
+
 
 MODEL__INFO_SCHEMA_DEFAULT = """
 select 1 as id
@@ -10,14 +12,18 @@ MODEL__INFO_SCHEMA_TABLE = """
 {{ config(materialized='table') }}
 select 1 as id
 """
-MODEL__MANAGED_ICEBERG_TABLE = f"""
+MODEL__MANAGED_ICEBERG_TABLE = (
+    """
 {{ config(
     materialized='table',
     catalog='managed_iceberg',
-    storage_uri='gs://{os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")}/managed_iceberg_table'
+    storage_uri='gs://"""
+    + os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
+    + """/managed_iceberg_table'
 ) }}
 select 1 as id
 """
+)
 
 
 class TestGenericCatalog:
@@ -30,5 +36,5 @@ class TestGenericCatalog:
         }
 
     def test_generic_catalog(self, project):
-        results = project.run_dbt(["run"])
+        results = run_dbt(["run"])
         assert len(results) == 3

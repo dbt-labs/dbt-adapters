@@ -11,6 +11,8 @@
     {%- set columns = '(' ~ table_dest_columns_csv ~ ')' -%}
     {%- endif -%}
 
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
     {{ sql_header if sql_header is not none }}
 
     create or replace table {{ relation }}
@@ -26,6 +28,7 @@
     {{ partition_by(partition_config) }}
     {{ cluster_by(raw_cluster_by) }}
 
+    {% if catalog_relation.table_format == 'iceberg' %}with connection default{% endif %}
     {{ bigquery_table_options(config, model, temporary) }}
 
     {#-- PARTITION BY cannot be used with the AS query_statement clause.

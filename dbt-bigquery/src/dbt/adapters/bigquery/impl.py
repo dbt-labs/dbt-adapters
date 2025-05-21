@@ -812,9 +812,9 @@ class BigQueryAdapter(BaseAdapter):
                 if not isinstance(catalog_relation, BigQueryCatalogRelation):
                     raise DbtInternalError("Unexpected catalog relation")
                 if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
-                    opts["table_format"] = catalog_relation.table_format
-                    opts["file_format"] = catalog_relation.file_format
-                    opts["storage_uri"] = catalog_relation.external_volume
+                    opts["table_format"] = f"'{catalog_relation.table_format}'"
+                    opts["file_format"] = f"'{catalog_relation.file_format}'"
+                    opts["storage_uri"] = f"'{catalog_relation.external_volume}'"
 
         return opts
 
