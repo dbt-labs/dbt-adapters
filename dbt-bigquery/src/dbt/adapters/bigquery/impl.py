@@ -1012,7 +1012,7 @@ class BigQueryAdapter(BaseAdapter):
         Builds a relation for a given configuration.
 
         This method uses the provided configuration to determine the appropriate catalog
-        integration and config parser for building the relation. It defaults to the built-in Iceberg
+        integration and config parser for building the relation. It defaults to the information schema
         catalog if none is provided in the configuration for backward compatibility.
 
         Args:
