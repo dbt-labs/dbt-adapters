@@ -808,7 +808,9 @@ class BigQueryAdapter(BaseAdapter):
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
 
             relation_config = getattr(config, "model", None)
-            if catalog_relation := self.build_catalog_relation(relation_config):
+            if not temporary and (
+                catalog_relation := self.build_catalog_relation(relation_config)
+            ):
                 if not isinstance(catalog_relation, BigQueryCatalogRelation):
                     raise DbtInternalError("Unexpected catalog relation")
                 if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:

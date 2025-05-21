@@ -28,7 +28,7 @@
     {{ partition_by(partition_config) }}
     {{ cluster_by(raw_cluster_by) }}
 
-    {% if catalog_relation.table_format == 'iceberg' %}with connection default{% endif %}
+    {% if catalog_relation.table_format == 'iceberg' and not temporary %}with connection default{% endif %}
     {{ bigquery_table_options(config, model, temporary) }}
 
     {#-- PARTITION BY cannot be used with the AS query_statement clause.
