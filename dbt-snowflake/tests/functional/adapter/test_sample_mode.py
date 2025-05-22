@@ -14,6 +14,7 @@ select 3 as id, to_timestamp_tz('2025-01-03 01:32:00-0') as event_time
 """
 
 
+@pytest.mark.skip(reason="Sample mode is unsupported on 1.9")
 class TestSnowflakeSampleMode(BaseSampleModeTest):
     @pytest.fixture(scope="class")
     def input_model_sql(self) -> str:
