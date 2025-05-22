@@ -237,5 +237,6 @@ class TestEmptyModeWithPythonModel(BasePythonEmptyTests):
     pass
 
 
+@pytest.mark.skip(reason="Sample mode is unsupported on 1.9")
 class TestSampleModeWithPythonModel(BasePythonSampleTests):
     pass
