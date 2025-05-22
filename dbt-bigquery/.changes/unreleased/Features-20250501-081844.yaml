@@ -1,0 +1,6 @@
+kind: Features
+body: Make Bigquery `api_endpoint` config option available for dbt client
+time: 2025-05-01T08:18:44.483014492Z
+custom:
+    Author: OTooleMichael
+    Issue: https://github.com/dbt-labs/dbt-bigquery/pull/1017
