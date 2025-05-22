@@ -25,10 +25,14 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             -   name: "If the event is to synchronize, we should remove the label from the PR"
-                if: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+                # also triggers on reopen to avoid a user closing, pushing changes and then reopening the PR
+                if: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'reopened') && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
                 run: |
                     echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
                     gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
+                    msg="All pull request updates require re-approval of CI.  No CI will be run."
+                    echo "::error::$msg"
+                    exit 1
                 env:
                     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -52,7 +56,7 @@ jobs:
         steps:
         -   uses: actions/checkout@v4
             with:
-                ref: ${{ github.event.pull_request.head.ref }}
+                ref: ${{ github.event.pull_request.head.sha }}
                 repository: ${{ github.event.pull_request.head.repo.full_name }}
         -   id: changelog-entry-check
             uses: dorny/paths-filter@v3
@@ -97,7 +101,7 @@ jobs:
         uses: ./.github/workflows/_code-quality.yml
         needs: check-run-approval
         with:
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
 
     verify-build:
@@ -111,7 +115,7 @@ jobs:
                 package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -128,7 +132,7 @@ jobs:
                 package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -143,7 +147,7 @@ jobs:
         if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
         with:
             packages: ${{ needs.affected-packages.outputs.integration-tests }}
-            branch: ${{ github.event.pull_request.head.ref }}
+            branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}

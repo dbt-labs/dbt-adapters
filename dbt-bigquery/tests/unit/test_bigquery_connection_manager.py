@@ -99,6 +99,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             query="sql",
             job_config=MockQueryJobConfig(),
             job_id=1,
+            job_retry=None,
             timeout=self.credentials.job_creation_timeout_seconds,
         )
 

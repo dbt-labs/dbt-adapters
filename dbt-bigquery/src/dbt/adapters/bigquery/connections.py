@@ -594,7 +594,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
         query_job = client.query(
             query=sql,
             job_config=query_job_config,
-            job_id=job_id,  # note, this disables retry since the job_id will have been used
+            job_id=job_id,
+            job_retry=None,
             timeout=self._retry.create_job_creation_timeout(),
         )
         if (
