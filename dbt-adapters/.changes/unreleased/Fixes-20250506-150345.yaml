@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix an issue with snapshots in new_record mode when check columns are used.
-time: 2025-05-06T15:03:45.057076-04:00
-custom:
-    Author: peterallenwebb
-    Issue: "1068"
