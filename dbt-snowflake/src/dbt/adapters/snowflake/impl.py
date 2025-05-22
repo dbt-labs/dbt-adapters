@@ -503,7 +503,7 @@ CALL {proc_name}();
                     except (IndexError, TypeError):
                         original_val = None
 
-            # Set the QUOTED_IDENTIFIERS_IGNORE_CASE to false
+            # falsify QUOTED_IDENTIFIERS_IGNORE_CASE for execution only
             self.execute("alter session set QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE", fetch=False)
 
             show_sql = (
