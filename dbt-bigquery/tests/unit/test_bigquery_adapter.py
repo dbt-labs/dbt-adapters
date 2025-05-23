@@ -84,6 +84,14 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "priority": "batch",
                     "maximum_bytes_billed": 0,
                 },
+                "api_endpoint": {
+                    "type": "bigquery",
+                    "method": "oauth",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "api_endpoint": "https://localhost:3001",
+                },
                 "impersonate": {
                     "type": "bigquery",
                     "method": "oauth",
@@ -419,7 +427,7 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         self.assertEqual(len(list(adapter.cancel_open_connections())), 1)
 
     @patch("dbt.adapters.bigquery.clients.ClientOptions")
-    @patch("dbt.adapters.bigquery.credentials.default")
+    @patch("dbt.adapters.bigquery.credentials._create_bigquery_defaults")
     @patch("dbt.adapters.bigquery.clients.BigQueryClient")
     def test_location_user_agent(self, MockClient, mock_auth_default, MockClientOptions):
         creds = MagicMock()
@@ -438,6 +446,28 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
             client_info=HasUserAgent(),
             client_options=mock_client_options,
         )
+
+    @patch("dbt.adapters.bigquery.clients.ClientOptions")
+    @patch("dbt.adapters.bigquery.credentials._create_bigquery_defaults")
+    @patch("dbt.adapters.bigquery.clients.BigQueryClient")
+    def test_api_endpoint_settable(self, MockClient, mock_auth_default, MockClientOptions):
+        """Ensure api_endpoint is set on ClientOptions and passed to BigQueryClient."""
+
+        creds = MagicMock()
+        mock_auth_default.return_value = (creds, MagicMock())
+        mock_client_options = MockClientOptions.return_value
+
+        adapter = self.get_adapter("api_endpoint")
+        connection = adapter.acquire_connection("dummy")
+        MockClient.assert_not_called()
+        connection.handle
+
+        MockClientOptions.assert_called_once()
+        kwargs = MockClientOptions.call_args.kwargs
+        assert kwargs.get("api_endpoint") == "https://localhost:3001"
+
+        MockClient.assert_called_once()
+        assert MockClient.call_args.kwargs["client_options"] is mock_client_options
 
 
 class HasUserAgent:

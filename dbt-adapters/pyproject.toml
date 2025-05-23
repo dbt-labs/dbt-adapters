@@ -27,7 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "dbt-common>=2.0,<3.0",
+    "dbt-common>=1.13,<2.0",
     "dbt-protos>=1.0.291,<2.0",
     "pytz>=2015.7",
     # installed via dbt-common but used directly
