@@ -872,7 +872,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         # aren't always present.
         for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
             desired = column_names[column] if column_names else column
-            if desired not in names:
+            if desired and desired.lower() not in names:
                 missing.append(desired)
 
         if missing:
