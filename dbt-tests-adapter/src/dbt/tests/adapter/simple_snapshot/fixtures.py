@@ -22,7 +22,7 @@ create table {schema}.snapshot_expected (
     -- snapshotting fields
     updated_at TIMESTAMP,
     test_valid_from TIMESTAMP,
-    test_valid_to   TIMESTAMP,
+    TEST_VAILD_TO   TIMESTAMP,
     test_scd_id     TEXT,
     test_updated_at TIMESTAMP
 );
@@ -68,7 +68,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
@@ -83,7 +83,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    null::timestamp as test_valid_to,
+    null::timestamp as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
 from {schema}.seed;
@@ -100,7 +100,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VAILD_TO,
     test_updated_at,
     test_scd_id
 )
@@ -115,7 +115,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    date('2099-12-31') as test_valid_to,
+    date('2099-12-31') as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
 from {schema}.seed;
@@ -142,7 +142,7 @@ snapshots:
       strategy: timestamp
       updated_at: updated_at
       snapshot_meta_column_names:
-          dbt_valid_to: test_valid_to
+          dbt_valid_to: TEST_VALID_TO
           dbt_valid_from: test_valid_from
           dbt_scd_id: test_scd_id
           dbt_updated_at: test_updated_at
@@ -171,7 +171,7 @@ where id >= 10 and id <= 20;
 
 -- invalidate records 11 - 21
 update {schema}.snapshot_expected set
-    test_valid_to   = updated_at + interval '1 hour'
+    TEST_VALID_TO   = updated_at + interval '1 hour'
 where id >= 10 and id <= 20;
 
 """
@@ -188,7 +188,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
@@ -203,7 +203,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    null::timestamp as test_valid_to,
+    null::timestamp as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
 from {schema}.seed
@@ -220,7 +220,7 @@ snapshots:
       updated_at: updated_at
       dbt_valid_to_current: "date('2099-12-31')"
       snapshot_meta_column_names:
-          dbt_valid_to: test_valid_to
+          dbt_valid_to: TEST_VALID_TO
           dbt_valid_from: test_valid_from
           dbt_scd_id: test_scd_id
           dbt_updated_at: test_updated_at
@@ -238,7 +238,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
@@ -253,7 +253,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    date('2099-12-31') as test_valid_to,
+    date('2099-12-31') as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id || '-' || first_name || '|' || updated_at::text) as test_scd_id
 from {schema}.seed
@@ -290,7 +290,7 @@ create table {schema}.snapshot_expected (
     -- snapshotting fields
     updated_at TIMESTAMP,
     test_valid_from TIMESTAMP,
-    test_valid_to   TIMESTAMP,
+    TEST_VALID_TO   TIMESTAMP,
     test_scd_id     TEXT,
     test_updated_at TIMESTAMP
 );
@@ -335,7 +335,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
@@ -351,7 +351,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    null::timestamp as test_valid_to,
+    null::timestamp as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id1::text || '|' || id2::text || '|' || updated_at::text) as test_scd_id
 from {schema}.seed;
@@ -372,7 +372,7 @@ snapshots:
         - id1
         - id2
       snapshot_meta_column_names:
-          dbt_valid_to: test_valid_to
+          dbt_valid_to: TEST_VALID_TO
           dbt_valid_from: test_valid_from
           dbt_scd_id: test_scd_id
           dbt_updated_at: test_updated_at
@@ -388,7 +388,7 @@ where id1 >= 10 and id1 <= 20;
 
 -- invalidate records 11 - 21
 update {schema}.snapshot_expected set
-    test_valid_to   = updated_at + interval '1 hour'
+    TEST_VALID_TO   = updated_at + interval '1 hour'
 where id1 >= 10 and id1 <= 20;
 
 """
@@ -406,7 +406,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    test_valid_to,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
@@ -422,7 +422,7 @@ select
     updated_at,
     -- fields added by snapshotting
     updated_at as test_valid_from,
-    null::timestamp as test_valid_to,
+    null::timestamp as TEST_VALID_TO,
     updated_at as test_updated_at,
     md5(id1::text || '|' || id2::text || '|' || updated_at::text) as test_scd_id
 from {schema}.seed
