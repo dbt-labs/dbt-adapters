@@ -22,7 +22,7 @@ create table {schema}.snapshot_expected (
     -- snapshotting fields
     updated_at TIMESTAMP,
     test_valid_from TIMESTAMP,
-    TEST_VAILD_TO   TIMESTAMP,
+    TEST_VALID_TO   TIMESTAMP,
     test_scd_id     TEXT,
     test_updated_at TIMESTAMP
 );
@@ -100,7 +100,7 @@ insert into {schema}.snapshot_expected (
     ip_address,
     updated_at,
     test_valid_from,
-    TEST_VAILD_TO,
+    TEST_VALID_TO,
     test_updated_at,
     test_scd_id
 )
