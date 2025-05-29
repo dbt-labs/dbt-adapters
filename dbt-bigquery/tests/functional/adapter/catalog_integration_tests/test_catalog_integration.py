@@ -16,6 +16,16 @@ MODEL__SPECIFY_LOCATION_TABLE = """
                             select 1 as id
                             """
 
+MODEL__SPECIFY_URI_TABLE = (
+    """
+                            {{ config(materialized='table', catalog='basic_iceberg_catalog',
+                            storage_uri='gs://"""
+    + os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
+    + """') }}
+                            select 1 as id
+                            """
+)
+
 
 class TestGenericCatalogIntegration(BaseCatalogIntegrationValidation):
 
@@ -45,6 +55,7 @@ class TestGenericCatalogIntegration(BaseCatalogIntegrationValidation):
             "models": {
                 "basic_iceberg_table.sql": MODEL__BASIC_ICEBERG_TABLE,
                 "specify_location_table.sql": MODEL__SPECIFY_LOCATION_TABLE,
+                "specify_uri_table.sql": MODEL__SPECIFY_URI_TABLE,
             }
         }
 
