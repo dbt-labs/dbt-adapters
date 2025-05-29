@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for managed Iceberg catalogs
+time: 2025-05-19T20:46:51.087397-04:00
+custom:
+  Author: mikealfare
+  Issue: "1105"

@@ -480,3 +480,60 @@ CALL {proc_name}();
             catalog_integration = self.get_catalog_integration(catalog)
             return catalog_integration.build_relation(model)
         return None
+
+    @available
+    def describe_dynamic_table(self, relation: RelationConfig) -> Dict[str, Any]:
+        """
+        Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
+
+        Args:
+            relation (SnowflakeRelation): the relation to describe
+        """
+
+        original_val: Optional[str] = None
+        try:
+            # Store old QUOTED_IDENTIFIERS_IGNORE_CASE
+            show_param_sql = "show parameters like 'QUOTED_IDENTIFIERS_IGNORE_CASE' in SESSION"
+            show_param_res = self.execute(show_param_sql)
+            if show_param_res:
+                param_qid = show_param_res[0].query_id
+                scan_param_sql = f"SELECT * FROM TABLE(RESULT_SCAN('{param_qid}'))"
+                param_scan_res, rows = self.execute(scan_param_sql, fetch=True)
+                if param_scan_res and param_scan_res.code == "SUCCESS":
+                    try:
+                        original_val = rows[0][1]
+                    except (IndexError, TypeError):
+                        original_val = None
+
+            # falsify QUOTED_IDENTIFIERS_IGNORE_CASE for execution only
+            self.execute("alter session set QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE", fetch=False)
+
+            show_sql = (
+                f"show dynamic tables like '{relation.identifier}' "
+                f"in schema {relation.database}.{relation.schema}"
+            )
+            show_res = self.execute(show_sql)
+            if show_res:
+                query_id = show_res[0].query_id
+                scan_sql = (
+                    "select "
+                    '   "name", "schema_name", "database_name", "text", "target_lag", "warehouse", '
+                    '   "refresh_mode" '
+                    f"from TABLE(RESULT_SCAN('{query_id}'))"
+                )
+                res, dt_table = self.execute(scan_sql, fetch=True)
+                if res.code != "SUCCESS":
+                    raise DbtRuntimeError(
+                        f"Could not get dynamic query metadata: {scan_sql} failed"
+                    )
+                return {"dynamic_table": dt_table}
+
+            return {"dynamic_table": None}
+        finally:
+            if original_val is None:
+                self.execute("ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE", fetch=False)
+            else:
+                bool_str = "TRUE" if original_val.strip().lower() == "true" else "FALSE"
+                self.execute(
+                    f"ALTER SESSION SET QUOTED_IDENTIFIERS_IGNORE_CASE = {bool_str}", fetch=False
+                )
