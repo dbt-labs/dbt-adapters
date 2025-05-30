@@ -184,6 +184,25 @@ select * from {{ ref("my_seed") }}
 )
 _DDL_MODELS_DYNAMIC_TABLE_TAG_AND_ROW_ACCESS_POLICY = r"\.dynamic_table_tag_and_row_access_policy.*with row access policy always_true on \(id\).*with tag \(tag_name = 'tag_value'\)"
 
+_MODELS_ICEBERG_TABLE_TAG_AND_ROW_ACCESS_POLICY = """
+{{
+  config(
+    transient = "true",
+    materialized = "table",
+    cluster_by=['id'],
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+    table_tag = "tag_name = 'tag_value'",
+    row_access_policy = 'always_true on (id)',
+  )
+}}
+
+select * from {{ ref('table_tag') }}
+"""
+_DDL_MODELS_ICEBERG_TABLE_TAG = "with tag (tag_name = 'tag_value') "
+_DDL_MODELS_ICEBERG_TABLE_POLICY = "with row access policy always_true on (id) "
+
 
 class TestExtraConfig:
     @pytest.fixture(scope="class", autouse=True)
@@ -205,6 +224,7 @@ class TestExtraConfig:
             "table_row_access_policy.sql": _MODELS_TABLE_ROW_ACCESS_POLICY,
             "table_tag.sql": _MODELS_TABLE_TAG,
             "table_tag_and_row_access_policy.sql": _MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY,
+            "table_iceberg_tag_and_row_access_policy.sql": _MODELS_ICEBERG_TABLE_TAG_AND_ROW_ACCESS_POLICY,
             # View models
             "view_row_access_policy.sql": _MODELS_VIEW_ROW_ACCESS_POLICY,
             "view_tag.sql": _MODELS_VIEW_TAG,
@@ -219,23 +239,24 @@ class TestExtraConfig:
             "dynamic_table_tag_and_row_access_policy.sql": _MODELS_DYNAMIC_TABLE_TAG_AND_ROW_ACCESS_POLICY,
         }
 
-    def test_extra_config_table(self, project):
+    def test_extra_config(self, project):
+        run_dbt(["seed"])
         # depending on the Snowflake edition tags and row access policies are supported so we check the DDL sent
-        results = run_dbt(["run", "--select", "table_*"])
-        assert len(results) == 3
+        results = run_dbt(["run"])
+        assert len(results) == 13
 
         assert _DDL_MODELS_TABLE_ROW_ACCESS_POLICY in get_cleanded_model_ddl_from_file(
             "table_row_access_policy.sql"
         )
+        iceberg_ddl = get_cleanded_model_ddl_from_file(
+            "table_iceberg_tag_and_row_access_policy.sql"
+        )
+        assert _DDL_MODELS_ICEBERG_TABLE_POLICY in iceberg_ddl
+        assert _DDL_MODELS_ICEBERG_TABLE_TAG in iceberg_ddl
         assert _DDL_MODELS_TABLE_TAG in get_cleanded_model_ddl_from_file("table_tag.sql")
         assert _DDL_MODELS_TABLE_TAG_AND_ROW_ACCESS_POLICY in get_cleanded_model_ddl_from_file(
             "table_tag_and_row_access_policy.sql"
         )
-
-    def test_extra_config_view(self, project):
-        # Test view models with row access policy and tags
-        results = run_dbt(["run", "--select", "view_*"])
-        assert len(results) == 3
         assert _DDL_MODELS_VIEW_ROW_ACCESS_POLICY in get_cleanded_model_ddl_from_file(
             "view_row_access_policy.sql"
         )
@@ -243,11 +264,6 @@ class TestExtraConfig:
         assert _DDL_MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY in get_cleanded_model_ddl_from_file(
             "view_tag_and_row_access_policy.sql"
         )
-
-    def test_extra_config_incremental(self, project):
-        # Test incremental models with row access policy and tags
-        results = run_dbt(["run", "--select", "incremental_*"])
-        assert len(results) == 3
 
         assert _DDL_MODELS_INCREMENTAL_ROW_ACCESS_POLICY in get_cleanded_model_ddl_from_file(
             "incremental_row_access_policy.sql"
@@ -259,12 +275,6 @@ class TestExtraConfig:
             _DDL_MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY
             in get_cleanded_model_ddl_from_file("incremental_tag_and_row_access_policy.sql")
         )
-
-    def test_extra_config_dynamic_table(self, project):
-        # Test dynamic table models with row access policy and tags
-        run_dbt(["seed"])
-        results = run_dbt(["run", "--select", "dynamic_table_*"])
-        assert len(results) == 3
 
         assert re.search(
             _DDL_MODELS_DYNAMIC_TABLE_ROW_ACCESS_POLICY,
