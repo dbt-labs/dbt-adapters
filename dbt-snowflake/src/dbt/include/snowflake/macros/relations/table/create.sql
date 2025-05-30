@@ -90,7 +90,6 @@ create or replace {{ transient }}table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
     {% if copy_grants -%} copy grants {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
@@ -128,10 +127,6 @@ alter table {{ relation }} resume recluster;
     - Iceberg does not support temporary tables (use a standard Snowflake table)
 -#}
 
-{%- if not adapter.behavior.enable_iceberg_materializations.no_warn -%}
-    {%- do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') -%}
-{%- endif -%}
-
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
@@ -152,7 +147,6 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ optional('cluster by', catalog_relation.cluster_by, '(', '') }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'

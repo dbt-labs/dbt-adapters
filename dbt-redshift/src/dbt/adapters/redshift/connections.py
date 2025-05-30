@@ -1,4 +1,5 @@
 import re
+import os
 
 import time
 
@@ -28,6 +29,13 @@ if TYPE_CHECKING:
     import agate
 
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
+
+logger = AdapterLogger("Redshift")
+
+if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
+    for logger_name in ["redshift_connector"]:
+        logger.debug(f"Setting {logger_name} to DEBUG")
+        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
 
 
 class SSLConfigError(CompilationError):
@@ -514,7 +522,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InterfaceError,
         )
         if credentials.retry_all:
-            retryable_exceptions += redshift_connector.Error
+            retryable_exceptions = redshift_connector.Error
 
         open_connection = cls.retry_connection(
             connection,
@@ -543,7 +551,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
                 raise e
             if oid_not_found_msg in str(e):
                 pass
-            elif isinstance(e, redshift_connector.Error) and retry_all:
+            elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass
             else:
                 logger.debug(f"Not retrying error: {e}")
@@ -556,7 +564,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.open(self.get_thread_connection())
             time.sleep(backoff)
             # return with exponential backoff
-            return retries, min(backoff * 2, 60)
+            return retries, min(max(backoff * 2, 2), 60)
 
         def _execute_internal(
             sql: str,
@@ -610,8 +618,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.InterfaceError,
             redshift_connector.InternalError,
         )
-        if self.profile.credentials.retry_all:
-            redshift_retryable_exceptions += redshift_connector.Error
 
         for query in queries:
             # Strip off comments from the current query

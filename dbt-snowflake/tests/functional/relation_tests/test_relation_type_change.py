@@ -25,10 +25,6 @@ class Model:
         return name
 
     @property
-    def is_iceberg(self) -> bool:
-        return self.table_format == "iceberg"
-
-    @property
     def is_standard_table(self) -> bool:
         return self.relation_type == "table" and not self.is_incremental
 
@@ -45,10 +41,6 @@ class Scenario:
     @property
     def error_message(self) -> str:
         return f"Failed when migrating from: {self.initial.name} to: {self.final.name}"
-
-    @property
-    def uses_iceberg(self) -> bool:
-        return any([self.initial.is_iceberg, self.final.is_iceberg])
 
 
 relations = [
@@ -80,13 +72,10 @@ def requires_full_refresh(scenario) -> bool:
 
 
 class TestRelationTypeChange:
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": False}}
 
     @staticmethod
     def include(scenario) -> bool:
-        return not scenario.uses_iceberg and not requires_full_refresh(scenario)
+        return not requires_full_refresh(scenario)
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -125,34 +114,8 @@ class TestRelationTypeChange:
 class TestRelationTypeChangeFullRefreshRequired(TestRelationTypeChange):
     @pytest.fixture(scope="class")
     def project_config_update(self):
-        return {
-            "flags": {"enable_iceberg_materializations": False},
-            "models": {"full_refresh": True},
-        }
+        return {"models": {"full_refresh": True}}
 
     @staticmethod
     def include(scenario) -> bool:
-        return not scenario.uses_iceberg and requires_full_refresh(scenario)
-
-
-class TestRelationTypeChangeIcebergOn(TestRelationTypeChange):
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
-
-    @staticmethod
-    def include(scenario) -> bool:
-        return scenario.uses_iceberg and not requires_full_refresh(scenario)
-
-
-class TestRelationTypeChangeIcebergOnFullRefreshRequired(TestRelationTypeChange):
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "flags": {"enable_iceberg_materializations": True},
-            "models": {"full_refresh": True},
-        }
-
-    @staticmethod
-    def include(scenario) -> bool:
-        return scenario.uses_iceberg and requires_full_refresh(scenario)
+        return requires_full_refresh(scenario)
