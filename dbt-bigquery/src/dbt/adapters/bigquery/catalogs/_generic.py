@@ -3,7 +3,6 @@ from typing import Optional
 
 from dbt.adapters.catalogs import (
     CatalogIntegration,
-    CatalogIntegrationConfig,
 )
 from dbt.adapters.contracts.relation import RelationConfig
 
@@ -30,12 +29,6 @@ class BigQueryCatalogRelation:
 class BigQueryCatalogIntegration(CatalogIntegration):
     catalog_type = constants.GENERIC_CATALOG_TYPE
     allows_writes = True
-
-    def __init__(self, config: CatalogIntegrationConfig) -> None:
-        super().__init__(config)
-        self.file_format: Optional[str] = config.adapter_properties.get(
-            "file_format", constants.INFO_SCHEMA_FILE_FORMAT
-        )
 
     @property
     def storage_uri(self) -> Optional[str]:

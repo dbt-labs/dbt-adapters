@@ -6,6 +6,7 @@ from dbt.adapters.base.impl import (
     BaseAdapter,
     ConstraintSupport,
     PythonJobHelper,
+    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.base.plugin import AdapterPlugin
 from dbt.adapters.base.relation import (

@@ -4,6 +4,7 @@ from typing import Optional
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
+    CatalogRelation,
 )
 from dbt.adapters.contracts.relation import RelationConfig
 
@@ -11,12 +12,13 @@ from dbt.adapters.snowflake import constants, parse_model
 
 
 @dataclass
-class BuiltInCatalogRelation:
+class BuiltInCatalogRelation(CatalogRelation):
     base_location: Optional[str]
     catalog_type: str = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_BUILT_IN_CATALOG.name
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
     external_volume: Optional[str] = None
+    file_format: Optional[str] = None
     cluster_by: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
@@ -26,6 +28,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
     catalog_name = constants.DEFAULT_BUILT_IN_CATALOG.name
     catalog_type = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     table_format = constants.ICEBERG_TABLE_FORMAT
+    file_format = None  # no file format for built-in catalogs
     allows_writes = True
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:

@@ -1,6 +1,8 @@
 from typing import Iterable, Optional
 
 from dbt_common.exceptions import DbtConfigError
+
+from dbt.adapters.base import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants
@@ -28,7 +30,7 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
-    if _catalog := model.config.get("catalog"):
+    if _catalog := model.config.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME):
         # make catalog_name case-insensitive
         return _catalog.upper()
 
