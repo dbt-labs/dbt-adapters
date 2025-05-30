@@ -12,7 +12,7 @@ from dbt.adapters.bigquery import constants
 
 @dataclass
 class BigQueryCatalogRelation(CatalogRelation):
-    catalog_type: str = constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type
+    catalog_type: str = constants.BIGLAKE_CATALOG_TYPE
     catalog_name: Optional[str] = constants.DEFAULT_INFO_SCHEMA_CATALOG.name
     table_format: Optional[str] = constants.INFO_SCHEMA_TABLE_FORMAT
     file_format: Optional[str] = constants.INFO_SCHEMA_FILE_FORMAT
@@ -21,7 +21,7 @@ class BigQueryCatalogRelation(CatalogRelation):
 
 
 class BigQueryCatalogIntegration(CatalogIntegration):
-    catalog_type = constants.GENERIC_CATALOG_TYPE
+    catalog_type = constants.BIGLAKE_CATALOG_TYPE
     allows_writes = True
 
     def build_relation(self, model: RelationConfig) -> BigQueryCatalogRelation:
@@ -55,7 +55,7 @@ class BigQueryCatalogIntegration(CatalogIntegration):
         location_root = (
             base_location_root
             if (base_location_root := model.config.get("base_location_root"))
-            else "dbt"
+            else "_dbt"
         )
         storage_uri_base += f"/{location_root}"
         return f"{storage_uri_base}/{model.schema}/{model.name}"

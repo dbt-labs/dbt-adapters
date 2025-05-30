@@ -1,9 +1,13 @@
 import os
+from datetime import datetime as dt
 import pytest
 from dbt.tests.adapter.catalog_integrations.test_catalog_integration import (
     BaseCatalogIntegrationValidation,
 )
 from dbt.tests.util import run_dbt
+
+_BQ_BUCKET = os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
+_STATIC_URI = f"gs://{_BQ_BUCKET}/{str(dt.now())}"
 
 MODEL__BASIC_ICEBERG_TABLE = """
                             {{ config(materialized='table', catalog='basic_iceberg_catalog') }}
@@ -19,8 +23,8 @@ MODEL__SPECIFY_LOCATION_TABLE = """
 MODEL__SPECIFY_URI_TABLE = (
     """
                             {{ config(materialized='table', catalog='basic_iceberg_catalog',
-                            storage_uri='gs://"""
-    + os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
+                            storage_uri='"""
+    + _STATIC_URI
     + """') }}
                             select 1 as id
                             """
@@ -39,10 +43,10 @@ class TestGenericCatalogIntegration(BaseCatalogIntegrationValidation):
                     "write_integrations": [
                         {
                             "name": "basic_iceberg_catalog_integration",
-                            "catalog_type": "generic",
+                            "catalog_type": "biglake_metastore",
                             "file_format": "parquet",
                             "table_format": "iceberg",
-                            "external_volume": f"gs://{os.getenv('BIGQUERY_TEST_ICEBERG_BUCKET')}",
+                            "external_volume": f"gs://{_BQ_BUCKET}",
                         }
                     ],
                 },
