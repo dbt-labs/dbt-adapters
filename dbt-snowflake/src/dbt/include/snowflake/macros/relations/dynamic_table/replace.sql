@@ -50,7 +50,7 @@ create or replace dynamic table {{ relation }}
     {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
     {{ optional('initialize', dynamic_table.initialize) }}
     {{ optional('with row access policy', dynamic_table.row_access_policy, equals_char='') }}
-     {{ optional('with tag', dynamic_table.table_tag, quote_char='(', equals_char='') }}
+    {{ optional('with tag', dynamic_table.table_tag, quote_char='(', equals_char='') }}
     as (
         {{ sql }}
     )
