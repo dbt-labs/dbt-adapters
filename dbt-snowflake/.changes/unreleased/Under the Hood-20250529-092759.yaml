@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: populate file_format from top level integration config field
+time: 2025-05-29T09:27:59.155182-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1134"

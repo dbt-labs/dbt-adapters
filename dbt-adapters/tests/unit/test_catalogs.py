@@ -17,12 +17,13 @@ from dbt.adapters.contracts.relation import RelationConfig
 
 
 @dataclass
-class FakeCatalogIntegrationConfig:
+class FakeCatalogIntegrationConfig(CatalogIntegrationConfig):
     name: str
     catalog_type: str
     catalog_name: Optional[str] = None
     table_format: Optional[str] = None
     external_volume: Optional[str] = None
+    file_format: Optional[str] = None
     adapter_properties: Optional[Dict[str, Any]] = None
 
 

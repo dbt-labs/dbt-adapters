@@ -31,7 +31,7 @@ MODEL__MANAGED_ICEBERG_TABLE = (
     """
 {{ config(
     materialized='table',
-    catalog='managed_iceberg',
+    catalog_name='managed_iceberg',
     storage_uri='gs://"""
     + os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
     + """/"""
@@ -46,7 +46,7 @@ MODEL__MANAGED_ICEBERG_INCREMENTAL = (
 {{ config(
     materialized="incremental",
     unique_key="id",
-    catalog='managed_iceberg',
+    catalog_name='managed_iceberg',
     storage_uri='gs://"""
     + os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
     + """/"""
