@@ -816,7 +816,7 @@ class BigQueryAdapter(BaseAdapter):
                 if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
                     opts["table_format"] = f"'{catalog_relation.table_format}'"
                     opts["file_format"] = f"'{catalog_relation.file_format}'"
-                    opts["storage_uri"] = f"'{catalog_relation.external_volume}'"
+                    opts["storage_uri"] = f"'{catalog_relation.storage_uri}'"
 
         return opts
 

@@ -14,7 +14,3 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
         return _catalog
 
     return constants.DEFAULT_INFO_SCHEMA_CATALOG.name
-
-
-def storage_uri(model: RelationConfig) -> Optional[str]:
-    return model.config.get("storage_uri") if model.config else None
