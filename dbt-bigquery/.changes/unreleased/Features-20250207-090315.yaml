@@ -1,0 +1,6 @@
+kind: Features
+body: Leverage static partitioning in dbt-bigquery materialization strategy
+time: 2025-02-07T09:03:15.963098Z
+custom:
+    Author: borjav
+    Issue: "538"
