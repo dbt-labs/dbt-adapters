@@ -4,7 +4,6 @@ from typing import Optional
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
-    CatalogRelation,
 )
 from dbt.adapters.contracts.relation import RelationConfig
 
@@ -12,7 +11,7 @@ from dbt.adapters.snowflake import constants, parse_model
 
 
 @dataclass
-class BuiltInCatalogRelation(CatalogRelation):
+class BuiltInCatalogRelation:
     base_location: Optional[str]
     catalog_type: str = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_BUILT_IN_CATALOG.name

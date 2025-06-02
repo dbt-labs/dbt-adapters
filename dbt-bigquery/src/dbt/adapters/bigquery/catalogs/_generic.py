@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.catalogs import (
-    CatalogIntegration,
-)
+from dbt.adapters.catalogs import CatalogIntegration
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.bigquery import constants, parse_model
