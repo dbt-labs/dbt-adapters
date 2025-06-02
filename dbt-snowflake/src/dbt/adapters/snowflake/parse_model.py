@@ -2,7 +2,7 @@ from typing import Iterable, Optional
 
 from dbt_common.exceptions import DbtConfigError
 
-from dbt.adapters.base import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+from dbt.adapters.catalogs import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants

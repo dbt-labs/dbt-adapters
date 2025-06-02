@@ -107,7 +107,6 @@ from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 if TYPE_CHECKING:
     import agate
 
-CATALOG_INTEGRATION_MODEL_CONFIG_NAME = "catalog_name"
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
