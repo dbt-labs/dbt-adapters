@@ -21,9 +21,7 @@ DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
     catalog_type=GENERIC_CATALOG_TYPE,
     table_format=INFO_SCHEMA_TABLE_FORMAT,
     external_volume=None,
-    adapter_properties={
-        "file_format": INFO_SCHEMA_FILE_FORMAT,
-    },
+    file_format=INFO_SCHEMA_FILE_FORMAT,
 )
 DEFAULT_ICEBERG_CATALOG = SimpleNamespace(
     name="managed_iceberg",
@@ -31,7 +29,5 @@ DEFAULT_ICEBERG_CATALOG = SimpleNamespace(
     catalog_type=GENERIC_CATALOG_TYPE,
     table_format=ICEBERG_TABLE_FORMAT,
     external_volume=None,
-    adapter_properties={
-        "file_format": PARQUET_FILE_FORMAT,
-    },
+    file_format=PARQUET_FILE_FORMAT,
 )
