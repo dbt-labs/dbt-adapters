@@ -57,7 +57,8 @@ from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
 from dbt.adapters.bigquery import constants, parse_model
 from dbt.adapters.bigquery.catalogs import (
-    BigQueryCatalogIntegration,
+    BigLakeCatalogIntegration,
+    BigQueryInfoSchemaCatalogIntegration,
     BigQueryCatalogRelation,
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
@@ -136,7 +137,7 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
-    CATALOG_INTEGRATIONS = [BigQueryCatalogIntegration]
+    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
