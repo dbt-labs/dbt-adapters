@@ -87,7 +87,6 @@ class CatalogIntegration(abc.ABC):
         # table_format is often fixed for a catalog type, allow it to be defined at the class level
         if config.table_format is not None:
             self.table_format = config.table_format
-
         self.name: str = config.name
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume

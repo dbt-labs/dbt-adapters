@@ -28,6 +28,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
     catalog_name = constants.DEFAULT_BUILT_IN_CATALOG.name
     catalog_type = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     table_format = constants.ICEBERG_TABLE_FORMAT
+    file_format = None  # no file format for built-in catalogs
     allows_writes = True
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
