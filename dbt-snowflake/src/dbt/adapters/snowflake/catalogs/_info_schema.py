@@ -1,18 +1,14 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.catalogs import (
-    CatalogIntegration,
-    CatalogIntegrationConfig,
-    CatalogRelation,
-)
+from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
 
 
 @dataclass
-class InfoSchemaCatalogRelation(CatalogRelation):
+class InfoSchemaCatalogRelation:
     catalog_type: str = constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_INFO_SCHEMA_CATALOG.name
     table_format: Optional[str] = constants.INFO_SCHEMA_TABLE_FORMAT

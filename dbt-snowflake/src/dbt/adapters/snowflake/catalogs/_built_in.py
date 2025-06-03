@@ -1,18 +1,14 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.catalogs import (
-    CatalogIntegration,
-    CatalogIntegrationConfig,
-    CatalogRelation,
-)
+from dbt.adapters.catalogs import CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
 
 
 @dataclass
-class BuiltInCatalogRelation(CatalogRelation):
+class BuiltInCatalogRelation:
     base_location: Optional[str]
     catalog_type: str = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_BUILT_IN_CATALOG.name
@@ -24,7 +20,7 @@ class BuiltInCatalogRelation(CatalogRelation):
     is_transient: Optional[bool] = False
 
 
-class BuiltInCatalogIntegration(CatalogIntegration):
+class BuiltInCatalogIntegration:
     catalog_name = constants.DEFAULT_BUILT_IN_CATALOG.name
     catalog_type = constants.DEFAULT_BUILT_IN_CATALOG.catalog_type
     table_format = constants.ICEBERG_TABLE_FORMAT
