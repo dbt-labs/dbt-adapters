@@ -1,0 +1,6 @@
+kind: Features
+body: Added support for the connection_name parameter and associated connections.toml file when connecting to Snowflake.
+time: 2025-02-24T16:03:53.872855-05:00
+custom:
+    Author: sfc-gh-dflippo
+    Issue: "684"
