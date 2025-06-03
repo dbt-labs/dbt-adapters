@@ -6,8 +6,8 @@ from dbt.tests.adapter.catalog_integrations.test_catalog_integration import (
 )
 from dbt.tests.util import run_dbt
 
-_BQ_BUCKET = os.getenv("BIGQUERY_TEST_ICEBERG_BUCKET")
-_STATIC_URI = f"gs://{_BQ_BUCKET}/{str(dt.now())}"
+_BQ_BUCKET = f"gs://{os.getenv('BIGQUERY_TEST_ICEBERG_BUCKET')}"
+_STATIC_URI = f"{_BQ_BUCKET}/{str(dt.now())}"
 
 MODEL__BASIC_ICEBERG_TABLE = """
                             {{ config(materialized='table', catalog='basic_iceberg_catalog') }}
@@ -46,7 +46,7 @@ class TestGenericCatalogIntegration(BaseCatalogIntegrationValidation):
                             "catalog_type": "biglake_metastore",
                             "file_format": "parquet",
                             "table_format": "iceberg",
-                            "external_volume": f"gs://{_BQ_BUCKET}",
+                            "external_volume": _BQ_BUCKET,
                         }
                     ],
                 },
