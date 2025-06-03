@@ -37,5 +37,7 @@ class BigLakeCatalogIntegration(CatalogIntegration):
             return None
 
         prefix = model.config.get("base_location_root") or "_dbt"
-        suffix = "/" + model.config.get("base_location_subpath") or ""
-        return f"{self.external_volume}/{prefix}/{model.schema}/{model.name}{suffix}"
+        storage_uri = f"{self.external_volume}/{prefix}/{model.schema}/{model.name}"
+        if suffix := model.config.get("base_location_subpath"):
+            storage_uri = f"{storage_uri}/{suffix}"
+        return storage_uri

@@ -21,13 +21,13 @@ class TestBigLakeCatalogIntegration(unittest.TestCase):
 
     def test_storage_uri_no_inputs(self):
         model = MagicMock(spec=RelationConfig)
-        model.config = {}
+        model.config = {"has": "a_value"}
         model.schema = "test_schema"
         model.name = "test_model_name"
 
         expected_uri = "test_external_volume/_dbt/test_schema/test_model_name"
         result = self.integration._calculate_storage_uri(model)
-        self.assertEqual(result, expected_uri)
+        self.assertEqual(expected_uri, result)
 
     def test_storage_uri_base_location_root(self):
         model = MagicMock(spec=RelationConfig)
