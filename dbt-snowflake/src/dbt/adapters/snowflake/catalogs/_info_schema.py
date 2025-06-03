@@ -1,7 +1,10 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.catalogs import CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+)
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
