@@ -73,6 +73,9 @@ as (
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
     {{- get_assert_columns_equivalent(compiled_code) -}}
@@ -88,6 +91,8 @@ create or replace {{ transient }}table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     as (
         {%- if catalog_relation.cluster_by is not none -%}
         select * from (
@@ -126,6 +131,9 @@ alter table {{ relation }} resume recluster;
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
     {{- get_assert_columns_equivalent(compiled_code) -}}
@@ -142,6 +150,8 @@ create or replace iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}
