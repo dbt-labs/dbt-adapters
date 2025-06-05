@@ -1,0 +1,6 @@
+kind: Dependencies
+body: bump dbt-core requirement to 1.10.0rc0
+time: 2025-06-04T11:02:53.39229-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1142"
