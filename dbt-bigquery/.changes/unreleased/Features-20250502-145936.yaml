@@ -1,0 +1,6 @@
+kind: Features
+body: Support description updates for incremental BigQuery models
+time: 2025-05-02T14:59:36.239451+01:00
+custom:
+    Author: alexr-lh
+    Issue: "1059"
