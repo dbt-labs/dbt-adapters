@@ -17,6 +17,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from dbt.adapters.base.impl import log_code_execution
 from dbt.adapters.base.relation import InformationSchema
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
@@ -39,6 +40,7 @@ from dbt.adapters.spark import SparkColumn
 from dbt.adapters.spark.python_submissions import (
     JobClusterPythonJobHelper,
     AllPurposeClusterPythonJobHelper,
+    SparkMasterPythonJobHelper,
 )
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.contracts.relation import RelationType, RelationConfig
@@ -495,7 +497,31 @@ class SparkAdapter(SQLAdapter):
         return {
             "job_cluster": JobClusterPythonJobHelper,
             "all_purpose_cluster": AllPurposeClusterPythonJobHelper,
+            "spark_master": SparkMasterPythonJobHelper,
         }
+
+    @log_code_execution
+    def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
+        submission_method = parsed_model["config"].get(
+            "submission_method",
+            getattr(
+                self.connections.profile.credentials,
+                "submission_method",
+                self.default_python_submission_method,
+            ),
+        )
+        if submission_method not in self.python_submission_helpers:
+            raise NotImplementedError(
+                "Submission method {} is not supported for current adapter".format(
+                    submission_method
+                )
+            )
+        job_helper = self.python_submission_helpers[submission_method](
+            parsed_model, self.connections.profile.credentials
+        )
+        submission_result = job_helper.submit(compiled_code)
+        # process submission result to generate adapter response
+        return self.generate_python_submission_response(submission_result)
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         grants_dict: Dict[str, List[str]] = {}

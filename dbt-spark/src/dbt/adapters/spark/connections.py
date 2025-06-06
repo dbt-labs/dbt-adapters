@@ -84,6 +84,9 @@ class SparkCredentials(Credentials):
     use_ssl: bool = False
     server_side_parameters: Dict[str, str] = field(default_factory=dict)
     retry_all: bool = False
+    submission_method: Optional[str] = None
+    spark_master: Optional[str] = None
+    spark_conf: Optional[Dict[str, Any]] = field(default_factory=dict)
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
