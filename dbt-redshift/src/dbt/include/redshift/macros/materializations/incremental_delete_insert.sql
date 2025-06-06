@@ -1,4 +1,4 @@
-{% macro default__get_delete_insert_merge_sql(target, source, unique_key, dest_columns, incremental_predicates) -%}
+{% macro redshift__get_delete_insert_merge_sql(target, source, unique_key, dest_columns, incremental_predicates) -%}
     {%- set predicates = _update_predicates(target, incremental_predicates) -%}
 
     {%- set dest_cols_csv = get_quoted_csv(dest_columns | map(attribute="name")) -%}

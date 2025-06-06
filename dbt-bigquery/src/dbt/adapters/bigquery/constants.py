@@ -12,26 +12,24 @@ INFO_SCHEMA_FILE_FORMAT = "default"
 PARQUET_FILE_FORMAT = "parquet"
 
 
-GENERIC_CATALOG_TYPE = "generic"
+BIGLAKE_CATALOG_TYPE = "biglake_metastore"
 
 
 DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
     name="info_schema",
     catalog_name="info_schema",
-    catalog_type=GENERIC_CATALOG_TYPE,
+    catalog_type="INFO_SCHEMA",  # these don't show up in BigQuery; this is a dbt convention
     table_format=INFO_SCHEMA_TABLE_FORMAT,
     external_volume=None,
-    adapter_properties={
-        "file_format": INFO_SCHEMA_FILE_FORMAT,
-    },
+    file_format=INFO_SCHEMA_FILE_FORMAT,
+    adapter_properties={},
 )
 DEFAULT_ICEBERG_CATALOG = SimpleNamespace(
     name="managed_iceberg",
     catalog_name="managed_iceberg",
-    catalog_type=GENERIC_CATALOG_TYPE,
+    catalog_type=BIGLAKE_CATALOG_TYPE,
     table_format=ICEBERG_TABLE_FORMAT,
     external_volume=None,
-    adapter_properties={
-        "file_format": PARQUET_FILE_FORMAT,
-    },
+    file_format=PARQUET_FILE_FORMAT,
+    adapter_properties={},
 )
