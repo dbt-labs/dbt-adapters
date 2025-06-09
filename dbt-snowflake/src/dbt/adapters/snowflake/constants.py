@@ -15,6 +15,7 @@ DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
     name="INFO_SCHEMA",  # these don't show up in Snowflake; this is a dbt convention
     catalog_type="INFO_SCHEMA",  # these don't show up in Snowflake; this is a dbt convention
     external_volume=None,
+    file_format=None,
     adapter_properties={},
 )
 # catalog names must be uppercase since Snowflake will uppercase them in their metadata tables
@@ -23,5 +24,6 @@ DEFAULT_BUILT_IN_CATALOG = SimpleNamespace(
     catalog_type="BUILT_IN",
     # assume you are using the default volume or specify in the model
     external_volume=None,
+    file_format=None,
     adapter_properties={},
 )
