@@ -326,7 +326,7 @@ class TestIAMUserMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_explicit_workgroup_name(self):
         self.config.credentials = self.config.credentials.replace(
-            method="iam",
+            authenticator="iam",
             host="thishostshouldnotexist.test.amazonaws.com",
             access_key_id="my_access_key_id",
             secret_access_key="my_secret_access_key",
