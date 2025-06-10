@@ -1,9 +1,12 @@
 name: "Scheduled tests"
+run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 
 on:
     schedule:
     -   cron: '0 3 * * *'
     workflow_dispatch:
+
+permissions: read-all
 
 jobs:
     verify-builds:
@@ -25,8 +28,8 @@ jobs:
                 python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
 
@@ -48,23 +51,28 @@ jobs:
                 python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
         with:
             package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
+            hatch-env: "ci"
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml
+        permissions:
+            contents: read
+            id-token: write
         with:
             packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
+            branch: ${{ github.ref }}
+            repository: ${{ github.repository }}
             os: ${{ vars.DEFAULT_RUNNER }}
             python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
         secrets: inherit
 
     notification:
-        if: always()
+        if: ${{ !cancelled() }}
         needs: [verify-builds, unit-tests, integration-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
@@ -74,7 +82,7 @@ jobs:
             with:
                 jobs: ${{ toJSON(needs) }}
         -   uses: ravsamhq/notify-slack-action@v2
-            if: ${{ always() }}
+            if: always()
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}

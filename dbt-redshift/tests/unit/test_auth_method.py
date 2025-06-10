@@ -93,6 +93,7 @@ class TestInvalidMethod(AuthMethod):
                 profile="test",
                 timeout=None,
                 port=5439,
+                is_serverless=False,
                 **DEFAULT_SSL_CONFIG,
             )
 
@@ -141,6 +142,7 @@ class TestDatabaseMethod(AuthMethod):
             db_groups=[],
             timeout=None,
             region=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -160,6 +162,7 @@ class TestDatabaseMethod(AuthMethod):
             db_groups=[],
             region=None,
             timeout=None,
+            is_serverless=False,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -251,6 +254,9 @@ class TestIAMUserMethod(AuthMethod):
             db_groups=[],
             profile=None,
             port=5439,
+            is_serverless=False,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -279,6 +285,9 @@ class TestIAMUserMethod(AuthMethod):
             profile="test",
             timeout=None,
             port=5439,
+            is_serverless=False,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -308,6 +317,45 @@ class TestIAMUserMethod(AuthMethod):
             auto_create=False,
             db_groups=[],
             port=5439,
+            is_serverless=False,
+            serverless_work_group=None,
+            serverless_acct_id=None,
+            **DEFAULT_SSL_CONFIG,
+        )
+
+    @mock.patch("redshift_connector.connect", MagicMock())
+    def test_explicit_workgroup_name(self):
+        self.config.credentials = self.config.credentials.replace(
+            method="iam",
+            host="thishostshouldnotexist.test.amazonaws.com",
+            access_key_id="my_access_key_id",
+            secret_access_key="my_secret_access_key",
+            is_serverless=True,
+            region="us-east-1",
+            user="test_user",
+            serverless_work_group="my_workgroup",
+            serverless_acct_id="0123456789",
+        )
+        connection = self.adapter.acquire_connection("dummy")
+        connection.handle
+        redshift_connector.connect.assert_called_once_with(
+            iam=True,
+            host="thishostshouldnotexist.test.amazonaws.com",
+            access_key_id="my_access_key_id",
+            secret_access_key="my_secret_access_key",
+            database="redshift",
+            db_user="test_user",
+            user="",
+            password="",
+            cluster_identifier=None,
+            region="us-east-1",
+            timeout=None,
+            auto_create=False,
+            db_groups=[],
+            port=5439,
+            is_serverless=True,
+            serverless_work_group="my_workgroup",
+            serverless_acct_id="0123456789",
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -337,6 +385,40 @@ class TestIAMUserMethodServerless(AuthMethod):
             profile="test",
             timeout=None,
             port=5439,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
+            **DEFAULT_SSL_CONFIG,
+        )
+
+    @mock.patch("redshift_connector.connect", MagicMock())
+    def test_profile_explicit_serverless(self):
+        host = "doesnotexist.custom-domain.com"
+        self.config.credentials = self.config.credentials.replace(
+            method="iam",
+            iam_profile="test",
+            host=host,
+            is_serverless=True,
+        )
+        connection = self.adapter.acquire_connection("dummy")
+        connection.handle
+        redshift_connector.connect.assert_called_once_with(
+            iam=True,
+            host=host,
+            database="redshift",
+            cluster_identifier=None,
+            region=None,
+            auto_create=False,
+            db_groups=[],
+            db_user="root",
+            password="",
+            user="",
+            profile="test",
+            timeout=None,
+            port=5439,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -365,6 +447,9 @@ class TestIAMUserMethodServerless(AuthMethod):
             profile="test",
             timeout=None,
             port=5439,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -429,6 +514,9 @@ class TestIAMRoleMethod(AuthMethod):
             db_groups=[],
             port=5439,
             group_federation=True,
+            is_serverless=False,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -456,6 +544,9 @@ class TestIAMRoleMethod(AuthMethod):
             profile="test",
             port=5439,
             group_federation=True,
+            is_serverless=False,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -487,6 +578,9 @@ class TestIAMRoleMethodServerless(AuthMethod):
             timeout=None,
             port=5439,
             group_federation=False,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -515,6 +609,9 @@ class TestIAMRoleMethodServerless(AuthMethod):
             timeout=None,
             port=5439,
             group_federation=False,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -544,6 +641,9 @@ class TestIAMRoleMethodServerless(AuthMethod):
             timeout=None,
             port=5439,
             group_federation=False,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
         )
 
@@ -572,6 +672,9 @@ class TestIAMRoleMethodServerless(AuthMethod):
                 port=5439,
                 timeout=None,
                 group_federation=False,
+                is_serverless=True,
+                serverless_work_group=None,
+                serverless_acct_id=None,
                 **DEFAULT_SSL_CONFIG,
             )
         self.assertTrue("'host' must be provided" in context.exception.msg)
@@ -603,6 +706,9 @@ class TestIAMIdcBrowser(AuthMethod):
             user="",
             timeout=None,
             port=5439,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
             idp_response_timeout=0,
             idc_client_display_name="display name",
@@ -634,6 +740,9 @@ class TestIAMIdcBrowser(AuthMethod):
             user="",
             timeout=None,
             port=5439,
+            is_serverless=True,
+            serverless_work_group=None,
+            serverless_acct_id=None,
             **DEFAULT_SSL_CONFIG,
             credentials_provider="BrowserIdcAuthPlugin",
             listen_port=7890,
@@ -664,6 +773,7 @@ class TestIAMIdcBrowser(AuthMethod):
                 user="",
                 timeout=None,
                 port=5439,
+                is_serverless=True,
                 **DEFAULT_SSL_CONFIG,
                 credentials_provider="BrowserIdcAuthPlugin",
                 listen_port=1111,

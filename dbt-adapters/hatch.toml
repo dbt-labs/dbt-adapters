@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/__about__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt/adapters", "src/dbt/include"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
@@ -12,8 +8,9 @@ sources = ["src"]
 [envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
     'pre-commit==3.7.0',
-    "pytest",
+    "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",
 ]
@@ -51,3 +48,25 @@ check-sdist = [
     "pip freeze | grep dbt-adapters",
 ]
 protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
+
+[envs.ci]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "ddtrace==2.3.0",
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"

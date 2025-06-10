@@ -1,4 +1,5 @@
-name: "Unit tests"
+name: "# Unit tests"
+run-name: "Unit tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
 on:
     workflow_call:
@@ -23,6 +24,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: string
                 default: 3.9
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
     workflow_dispatch:
         inputs:
             package:
@@ -53,6 +58,10 @@ on:
                 description: "Choose the Python version to test against"
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
+            hatch-env:
+                description: "The hatch environment to run tests on"
+                type: string
+                default: "default"
 
 permissions:
     contents: read
@@ -72,6 +81,15 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
+        -   run: |
+                echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+                echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
+        # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
+        -   name: "psycopg2-binary check"
+            if: inputs.python-version == '3.9' && runner.os == 'macOS'
+            run: brew install postgresql
         -   uses: pypa/hatch@install
-        -   run: hatch run unit-tests
+        -   run: brew install unixodbc
+            if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
+        -   run: hatch run ${{ inputs.hatch-env }}:unit-tests
             working-directory: ./${{ inputs.package }}

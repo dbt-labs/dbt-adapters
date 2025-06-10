@@ -1,69 +1,213 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
-  {%- if relation.is_iceberg_format and not adapter.behavior.enable_iceberg_materializations.no_warn %}
-    {% do exceptions.raise_compiler_error('Was unable to create model as Iceberg Table Format. Please set the `enable_iceberg_materializations` behavior flag to True in your dbt_project.yml. For more information, go to https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format') %}
-  {%- endif %}
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-  {%- set materialization_prefix = relation.get_ddl_prefix_for_create(config.model.config, temporary) -%}
-  {%- set alter_prefix = relation.get_ddl_prefix_for_alter() -%}
-
-  {# Generate DDL/DML #}
-  {%- if language == 'sql' -%}
-    {%- set cluster_by_keys = config.get('cluster_by', default=none) -%}
-    {%- set enable_automatic_clustering = config.get('automatic_clustering', default=false) -%}
-    {%- set copy_grants = config.get('copy_grants', default=false) -%}
-
-    {%- if cluster_by_keys is not none and cluster_by_keys is string -%}
-      {%- set cluster_by_keys = [cluster_by_keys] -%}
-    {%- endif -%}
-    {%- if cluster_by_keys is not none -%}
-      {%- set cluster_by_string = cluster_by_keys|join(", ")-%}
-    {% else %}
-      {%- set cluster_by_string = none -%}
-    {%- endif -%}
-    {%- set sql_header = config.get('sql_header', none) -%}
-
-    {{ sql_header if sql_header is not none }}
-
-        create or replace {{ materialization_prefix }} table {{ relation }}
-        {%- if relation.is_iceberg_format %}
-          {#
-            Valid DDL in CTAS statements. Plain create statements have a different order.
-            https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table
-          #}
-          {{ relation.get_iceberg_ddl_options(config.model.config) }}
+    {%- if language == 'sql' -%}
+        {%- if temporary -%}
+            {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'INFO_SCHEMA' -%}
+            {{ snowflake__create_table_info_schema_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
+            {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
+        {%- else -%}
+            {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
 
-        {%- set contract_config = config.get('contract') -%}
-        {%- if contract_config.enforced -%}
-          {{ get_assert_columns_equivalent(sql) }}
-          {{ get_table_columns_and_constraints() }}
-          {% set compiled_code = get_select_subquery(compiled_code) %}
-        {% endif %}
-        {% if copy_grants and not temporary -%} copy grants {%- endif %} as
-        (
-          {%- if cluster_by_string is not none -%}
-            select * from (
-              {{ compiled_code }}
-              ) order by ({{ cluster_by_string }})
-          {%- else -%}
-            {{ compiled_code }}
-          {%- endif %}
-        );
-      {% if cluster_by_string is not none and not temporary -%}
-        alter {{ alter_prefix }} table {{relation}} cluster by ({{cluster_by_string}});
-      {%- endif -%}
-      {% if enable_automatic_clustering and cluster_by_string is not none and not temporary %}
-        alter {{ alter_prefix }} table {{relation}} resume recluster;
-      {%- endif -%}
+    {%- elif language == 'python' -%}
+        {%- if catalog_relation.catalog_type == 'BUILT_IN' %}
+            {% do exceptions.raise_compiler_error('Iceberg is incompatible with Python models. Please use a SQL model for the iceberg format.') %}
+        {%- else -%}
+            {{ py_write_table(compiled_code, relation) }}
+        {%- endif %}
 
-  {%- elif language == 'python' -%}
-    {%- if relation.is_iceberg_format %}
-      {% do exceptions.raise_compiler_error('Iceberg is incompatible with Python models. Please use a SQL model for the iceberg format.') %}
+    {%- else -%}
+        {% do exceptions.raise_compiler_error("snowflake__create_table_as macro didn't get supported language, it got %s" % language) %}
+
+    {%- endif -%}
+
+{% endmacro %}
+
+
+{% macro snowflake__create_table_temporary_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE TEMPORARY TABLE and CREATE TEMPORARY TABLE ... AS SELECT:
+    https://docs.snowflake.com/en/sql-reference/sql/create-table
+    https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
+-#}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace temporary table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {{ py_write_table(compiled_code=compiled_code, target_relation=relation, table_type=relation.get_ddl_prefix_for_create(config.model.config, temporary)) }}
-  {%- else -%}
-      {% do exceptions.raise_compiler_error("snowflake__create_table_as macro didn't get supported language, it got %s" % language) %}
-  {%- endif -%}
+as (
+    {{ compiled_code }}
+    )
+;
+
+{%- endmacro %}
+
+
+{% macro snowflake__create_table_info_schema_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE TABLE and CREATE TABLE ... AS SELECT:
+    https://docs.snowflake.com/en/sql-reference/sql/create-table
+    https://docs.snowflake.com/en/sql-reference/sql/create-table#create-table-as-select-also-referred-to-as-ctas
+-#}
+
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{%- if catalog_relation.is_transient -%}
+    {%- set transient='transient ' -%}
+{%- else -%}
+    {%- set transient='' -%}
+{%- endif -%}
+
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
+
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace {{ transient }}table {{ relation }}
+    {%- set contract_config = config.get('contract') -%}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
+    {%- endif %}
+    {% if copy_grants -%} copy grants {%- endif %}
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+    as (
+        {%- if catalog_relation.cluster_by is not none -%}
+        select * from (
+            {{ compiled_code }}
+        )
+        order by (
+            {{ catalog_relation.cluster_by }}
+        )
+        {%- else -%}
+        {{ compiled_code }}
+        {%- endif %}
+    )
+;
+
+{% if catalog_relation.cluster_by is not none -%}
+alter table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
+{%- endif -%}
+
+{% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
+alter table {{ relation }} resume recluster;
+{%- endif -%}
+
+{%- endmacro %}
+
+
+{% macro snowflake__create_table_built_in_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE ICEBERG TABLE and CREATE ICEBERG TABLE ... AS SELECT (Snowflake as the Iceberg catalog):
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-snowflake
+
+    Limitations:
+    - Iceberg does not support temporary tables (use a standard Snowflake table)
+-#}
+
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
+
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace iceberg table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
+    {%- endif %}
+    {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
+    base_location = '{{ catalog_relation.base_location }}'
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+    {% if copy_grants -%} copy grants {%- endif %}
+as (
+    {%- if catalog_relation.cluster_by is not none -%}
+    select * from (
+        {{ compiled_code }}
+    )
+    order by (
+        {{ catalog_relation.cluster_by }}
+    )
+    {%- else -%}
+    {{ compiled_code }}
+    {%- endif %}
+    )
+;
+
+{% if catalog_relation.cluster_by is not none -%}
+alter iceberg table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
+{%- endif -%}
+
+{% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
+alter iceberg table {{ relation }} resume recluster;
+{%- endif -%}
+
+{%- endmacro %}
+
+
+{% macro py_write_table(compiled_code, target_relation) %}
+
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{% if catalog_relation.is_transient %}
+    {%- set table_type='transient' -%}
+{% endif %}
+
+{{ compiled_code }}
+
+
+def materialize(session, df, target_relation):
+    # make sure pandas exists
+    import importlib.util
+    package_name = 'pandas'
+    if importlib.util.find_spec(package_name):
+        import pandas
+        if isinstance(df, pandas.core.frame.DataFrame):
+            session.use_database(target_relation.database)
+            session.use_schema(target_relation.schema)
+            # session.write_pandas does not have overwrite function
+            df = session.createDataFrame(df)
+    {% set target_relation_name = resolve_model_name(target_relation) %}
+    df.write.mode("overwrite").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}')
+
+
+def main(session):
+    dbt = dbtObj(session.table)
+    df = model(dbt, session)
+    materialize(session, df, dbt.this)
+    return "OK"
 
 {% endmacro %}
