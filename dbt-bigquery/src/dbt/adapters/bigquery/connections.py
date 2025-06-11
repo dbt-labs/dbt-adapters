@@ -274,6 +274,28 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 limit=limit,
             )
 
+    def raw_execute_with_comment(
+        self,
+        sql: str,
+        use_legacy_sql: bool = False,
+        limit: Optional[int] = None,
+        dry_run: bool = False,
+    ):
+        """
+        A lightweight wrapper over raw_execute that prepends the dbt query comment.
+
+        This exists as a "third way" between raw_execute (fully manual, no preprocessing)
+        and execute (postprocessing and formatting). This is useful when you need query
+        auditing but no Adapter Response.
+        """
+        sql = self._add_query_comment(sql)
+        return self.raw_execute(
+            sql,
+            use_legacy_sql=use_legacy_sql,
+            limit=limit,
+            dry_run=dry_run,
+        )
+
     def execute(
         self, sql, auto_begin=False, fetch=None, limit: Optional[int] = None
     ) -> Tuple[BigQueryAdapterResponse, "agate.Table"]:
@@ -572,7 +594,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
         query_job = client.query(
             query=sql,
             job_config=query_job_config,
-            job_id=job_id,  # note, this disables retry since the job_id will have been used
+            job_id=job_id,
+            job_retry=None,
             timeout=self._retry.create_job_creation_timeout(),
         )
         if (

@@ -40,6 +40,7 @@ class CatalogIntegrationConfig(Protocol):
     catalog_name: Optional[str]
     table_format: Optional[str]
     external_volume: Optional[str]
+    file_format: Optional[str]
     adapter_properties: Dict[str, Any]
 
 
@@ -47,6 +48,7 @@ class CatalogRelation(Protocol):
     catalog_name: Optional[str]
     table_format: Optional[str]
     external_volume: Optional[str]
+    file_format: Optional[str]
 
 
 class CatalogIntegration(abc.ABC):
@@ -78,16 +80,17 @@ class CatalogIntegration(abc.ABC):
 
     catalog_type: str
     table_format: Optional[str] = None
+    file_format: Optional[str] = None
     allows_writes: bool = False
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # table_format is often fixed for a catalog type, allow it to be defined at the class level
         if config.table_format is not None:
             self.table_format = config.table_format
-
         self.name: str = config.name
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
+        self.file_format: Optional[str] = config.file_format
 
     def build_relation(self, config: RelationConfig) -> CatalogRelation:
         """

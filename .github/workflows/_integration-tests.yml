@@ -117,6 +117,7 @@ jobs:
             BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
             BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
             BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
@@ -155,6 +156,7 @@ jobs:
             BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
             BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
             BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+            BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
@@ -209,7 +211,12 @@ jobs:
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+        -   run: |
+                echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+                echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
+        # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
+        -   if: inputs.python-version == '3.9' && runner.os == 'macOS'
+            run: brew install postgresql
         -   run: psql -f ./scripts/setup_test_database.sql
             env:
                 PGHOST: ${{ vars.POSTGRES_TEST_HOST }}
