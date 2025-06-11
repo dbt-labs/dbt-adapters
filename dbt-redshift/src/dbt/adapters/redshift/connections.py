@@ -154,6 +154,12 @@ class RedshiftCredentials(Credentials):
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
 
+    # TCP Keepalive settings
+    tcp_keepalive: bool = True
+    tcp_keepalive_idle: Optional[int] = 60
+    tcp_keepalive_interval: Optional[int] = 30
+    tcp_keepalive_count: Optional[int] = 5
+
     #
     # IAM identity center methods
     #
@@ -212,6 +218,10 @@ class RedshiftCredentials(Credentials):
             "is_serverless",
             "serverless_work_group",
             "serverless_acct_id",
+            "tcp_keepalive",
+            "tcp_keepalive_idle",
+            "tcp_keepalive_interval",
+            "tcp_keepalive_count",
         )
 
     @property
@@ -253,6 +263,10 @@ def get_connection_method(
             "timeout": credentials.connect_timeout,
             "is_serverless": is_serverless(credentials),
             **redshift_ssl_config,
+            "tcp_keepalive": credentials.tcp_keepalive,
+            "tcp_keepalive_idle": credentials.tcp_keepalive_idle,
+            "tcp_keepalive_interval": credentials.tcp_keepalive_interval,
+            "tcp_keepalive_count": credentials.tcp_keepalive_count,
         }
 
     def __iam_kwargs(credentials) -> Dict[str, Any]:
