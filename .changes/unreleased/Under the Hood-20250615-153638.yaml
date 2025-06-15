@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Move license info from classifiers to core project metadata.
+time: 2025-06-15T15:36:38.363421+00:00
+custom:
+    Author: bmos
+    Issue: "1155"
