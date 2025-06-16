@@ -505,4 +505,16 @@ CALL {proc_name}();
         if res.code != "SUCCESS":
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
-        return {"dynamic_table": dt_table}
+        return {
+            "dynamic_table": dt_table.select(
+                [
+                    "name",
+                    "schema_name",
+                    "database_name",
+                    "text",
+                    "target_lag",
+                    "warehouse",
+                    "refresh_mode",
+                ]
+            )
+        }
