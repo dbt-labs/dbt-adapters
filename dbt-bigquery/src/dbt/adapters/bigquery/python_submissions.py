@@ -20,7 +20,6 @@ from dbt.adapters.bigquery.credentials import (
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.exceptions import DbtRuntimeError
-from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
