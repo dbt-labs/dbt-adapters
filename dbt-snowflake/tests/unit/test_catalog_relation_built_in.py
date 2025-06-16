@@ -54,3 +54,35 @@ def test_iceberg_base_location_built_in(fake_integration, config, expected):
     model.config.update(config)
     relation = fake_integration.build_relation(model)
     assert relation.base_location == expected
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        (
+            {},
+            None,
+        ),
+        (
+            {"change_tracking": False},
+            "FALSE",
+        ),
+        (
+            {"change_tracking": True},
+            "TRUE",
+        ),
+        (
+            {"change_tracking": "False"},
+            "FALSE",
+        ),
+        (
+            {"change_tracking": "True"},
+            "TRUE",
+        ),
+    ],
+)
+def test_change_tracking_model_config(fake_integration, config, expected):
+    model = deepcopy(model_base)
+    model.config.update(config)
+    relation = fake_integration.build_relation(model)
+    assert relation.change_tracking == expected
