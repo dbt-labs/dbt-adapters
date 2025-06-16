@@ -107,7 +107,6 @@ from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 if TYPE_CHECKING:
     import agate
 
-
 GET_CATALOG_MACRO_NAME = "get_catalog"
 GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
@@ -872,7 +871,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         # aren't always present.
         for column in ("dbt_scd_id", "dbt_valid_from", "dbt_valid_to"):
             desired = column_names[column] if column_names else column
-            if desired not in names:
+            if desired and desired.lower() not in names:
                 missing.append(desired)
 
         if missing:
@@ -1289,7 +1288,17 @@ class BaseAdapter(metaclass=AdapterMeta):
         table = table_from_rows(
             table.rows,
             table.column_names,
-            text_only_columns=["table_database", "table_schema", "table_name"],
+            text_only_columns=[
+                "table_database",
+                "table_schema",
+                "table_name",
+                "table_type",
+                "table_comment",
+                "table_owner",
+                "column_name",
+                "column_type",
+                "column_comment",
+            ],
         )
         return table.where(_catalog_filter_schemas(used_schemas))
 

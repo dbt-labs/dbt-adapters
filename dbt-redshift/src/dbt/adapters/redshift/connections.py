@@ -1,4 +1,8 @@
 import re
+import os
+
+import time
+
 import redshift_connector
 import sqlparse
 
@@ -23,6 +27,15 @@ if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
     # Used by mypy for earlier type hints.
     import agate
+
+COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
+
+logger = AdapterLogger("Redshift")
+
+if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
+    for logger_name in ["redshift_connector"]:
+        logger.debug(f"Setting {logger_name} to DEBUG")
+        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
 
 
 class SSLConfigError(CompilationError):
@@ -134,6 +147,7 @@ class RedshiftCredentials(Credentials):
     role: Optional[str] = None
     sslmode: UserSSLMode = field(default_factory=UserSSLMode.default)
     retries: int = 1
+    retry_all: bool = False
     region: Optional[str] = None
     # opt-in by default per team deliberation on https://peps.python.org/pep-0249/#autocommit
     autocommit: Optional[bool] = True
@@ -157,6 +171,14 @@ class RedshiftCredentials(Credentials):
     #   and aws org or account Iam Idc instance
     token_endpoint: Optional[Dict[str, str]] = None
     is_serverless: Optional[bool] = None
+    serverless_work_group: Optional[str] = field(
+        default=None,
+        metadata={"description": "If using IAM auth, the name of the serverless workgroup"},
+    )
+    serverless_acct_id: Optional[str] = field(
+        default=None,
+        metadata={"description": "If using IAM auth, the AWS account id"},
+    )
 
     _ALIASES = {"dbname": "database", "pass": "password"}
 
@@ -184,9 +206,12 @@ class RedshiftCredentials(Credentials):
             "connect_timeout",
             "role",
             "retries",
+            "retry_all",
             "autocommit",
             "access_key_id",
             "is_serverless",
+            "serverless_work_group",
+            "serverless_acct_id",
         )
 
     @property
@@ -235,12 +260,20 @@ def get_connection_method(
         # iam True except for identity center methods
         iam: bool = RedshiftConnectionMethod.is_iam(credentials.method)
         cluster_identifier: Optional[str]
-        if is_serverless(credentials) or RedshiftConnectionMethod.uses_identity_center(
-            credentials.method
-        ):
+        serverless_work_group: Optional[str]
+        serverless_acct_id: Optional[str]
+        if RedshiftConnectionMethod.uses_identity_center(credentials.method):
             cluster_identifier = None
+            serverless_work_group = None
+            serverless_acct_id = None
+        elif is_serverless(credentials):
+            cluster_identifier = None
+            serverless_work_group = credentials.serverless_work_group
+            serverless_acct_id = credentials.serverless_acct_id
         elif credentials.cluster_id:
             cluster_identifier = credentials.cluster_id
+            serverless_work_group = None
+            serverless_acct_id = None
         else:
             raise FailedToConnectError(
                 "Failed to use IAM method:"
@@ -253,6 +286,8 @@ def get_connection_method(
             "user": "",
             "password": "",
             "cluster_identifier": cluster_identifier,
+            "serverless_work_group": serverless_work_group,
+            "serverless_acct_id": serverless_acct_id,
         }
 
         return __base_kwargs(credentials) | iam_specific_kwargs
@@ -486,6 +521,8 @@ class RedshiftConnectionManager(SQLConnectionManager):
             redshift_connector.DataError,
             redshift_connector.InterfaceError,
         )
+        if credentials.retry_all:
+            retryable_exceptions = redshift_connector.Error
 
         open_connection = cls.retry_connection(
             connection,
@@ -506,28 +543,86 @@ class RedshiftConnectionManager(SQLConnectionManager):
         fetch: bool = False,
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, "agate.Table"]:
-        sql = self._add_query_comment(sql)
-        _, cursor = self.add_query(sql, auto_begin)
-        response = self.get_response(cursor)
-        if fetch:
-            table = self.get_result_from_cursor(cursor, limit)
-        else:
-            from dbt_common.clients import agate_helper
+        def _handle_execute_exception(
+            e: Exception, retries: int, backoff: int, retry_all: bool
+        ) -> Tuple[int, int]:
+            oid_not_found_msg = "could not open relation with OID"
+            if retries == 0:
+                raise e
+            if oid_not_found_msg in str(e):
+                pass
+            elif isinstance(e, DbtDatabaseError) and retry_all:
+                pass
+            else:
+                logger.debug(f"Not retrying error: {e}")
+                raise e
+            logger.debug(f"Retrying query due to error: {e}")
+            retries -= 1
+            # we need to actually close and open to get a new connection
+            # otherwise no queries will succeed on this connection
+            self.close(self.get_thread_connection())
+            self.open(self.get_thread_connection())
+            time.sleep(backoff)
+            # return with exponential backoff
+            return retries, min(max(backoff * 2, 2), 60)
 
-            table = agate_helper.empty_table()
+        def _execute_internal(
+            sql: str,
+            auto_begin: bool,
+            fetch: bool,
+            limit: Optional[int],
+            retries: int,
+            backoff: int,
+            retry_all: bool,
+        ) -> Tuple[Optional[AdapterResponse], Optional["agate.Table"]]:
+            try:
+                _, cursor = self.add_query(sql, auto_begin)
+                internal_response = self.get_response(cursor)
+                if fetch:
+                    internal_table = self.get_result_from_cursor(cursor, limit)
+                else:
+                    from dbt_common.clients import agate_helper
+
+                    internal_table = agate_helper.empty_table()
+                return internal_response, internal_table
+            except Exception as e:
+                retries, backoff = _handle_execute_exception(e, retries, backoff, retry_all)
+                return _execute_internal(
+                    sql, auto_begin, fetch, limit, retries, backoff, retry_all
+                )
+
+        response, table = _execute_internal(
+            self._add_query_comment(sql),
+            auto_begin,
+            fetch,
+            limit,
+            self.profile.credentials.retries,
+            1,
+            self.profile.credentials.retry_all,
+        )
+
+        # this should never happen but mypy doesn't know that and arguably neither do we
+        if response is None or table is None:
+            conn_name = thread_conn.name if (thread_conn := self.get_if_exists()) else "<None>"
+            raise DbtRuntimeError(f"Failed to execute SQL: {sql} on connection: {conn_name}")
         return response, table
 
-    def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):
+    def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):  # type: ignore
         connection = None
         cursor = None
-
         self._initialize_sqlparse_lexer()
+
         queries = sqlparse.split(sql)
+
+        redshift_retryable_exceptions = (
+            redshift_connector.InterfaceError,
+            redshift_connector.InternalError,
+        )
 
         for query in queries:
             # Strip off comments from the current query
             without_comments = re.sub(
-                re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE),
+                COMMENT_REGEX,
                 "",
                 query,
             ).strip()
@@ -535,17 +630,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
             if without_comments == "":
                 continue
 
-            retryable_exceptions = (
-                redshift_connector.InterfaceError,
-                redshift_connector.InternalError,
-            )
-
             connection, cursor = super().add_query(
                 query,
                 auto_begin,
                 bindings=bindings,
                 abridge_sql_log=abridge_sql_log,
-                retryable_exceptions=retryable_exceptions,
+                retryable_exceptions=redshift_retryable_exceptions,
                 retry_limit=self.profile.credentials.retries,
             )
 

@@ -274,6 +274,28 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 limit=limit,
             )
 
+    def raw_execute_with_comment(
+        self,
+        sql: str,
+        use_legacy_sql: bool = False,
+        limit: Optional[int] = None,
+        dry_run: bool = False,
+    ):
+        """
+        A lightweight wrapper over raw_execute that prepends the dbt query comment.
+
+        This exists as a "third way" between raw_execute (fully manual, no preprocessing)
+        and execute (postprocessing and formatting). This is useful when you need query
+        auditing but no Adapter Response.
+        """
+        sql = self._add_query_comment(sql)
+        return self.raw_execute(
+            sql,
+            use_legacy_sql=use_legacy_sql,
+            limit=limit,
+            dry_run=dry_run,
+        )
+
     def execute(
         self, sql, auto_begin=False, fetch=None, limit: Optional[int] = None
     ) -> Tuple[BigQueryAdapterResponse, "agate.Table"]:
@@ -564,12 +586,16 @@ class BigQueryConnectionManager(BaseConnectionManager):
         limit: Optional[int] = None,
     ):
         client: Client = conn.handle
+        timeout = self._retry.create_job_execution_timeout()
+        query_job_config = QueryJobConfig(**job_params)
+        query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
         # Cannot reuse job_config if destination is set and ddl is used
         query_job = client.query(
             query=sql,
-            job_config=QueryJobConfig(**job_params),
-            job_id=job_id,  # note, this disables retry since the job_id will have been used
+            job_config=query_job_config,
+            job_id=job_id,
+            job_retry=None,
             timeout=self._retry.create_job_creation_timeout(),
         )
         if (
@@ -581,9 +607,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
             )
 
-        timeout = self._retry.create_job_execution_timeout()
         try:
-            iterator = query_job.result(max_results=limit, timeout=timeout)
+            iterator = query_job.result(max_results=limit)
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             raise TimeoutError(exc)

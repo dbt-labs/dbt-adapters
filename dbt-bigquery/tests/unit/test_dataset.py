@@ -22,7 +22,7 @@ def test_add_access_entry_to_dataset_updates_dataset():
     dataset = Dataset(dataset_ref)
     access_entry = AccessEntry(None, "table", entity)
     dataset = add_access_entry_to_dataset(dataset, access_entry)
-    assert access_entry in dataset.access_entries
+    assert is_access_entry_in_dataset(dataset, access_entry)
 
 
 def test_add_access_entry_to_dataset_updates_with_pre_existing_entries():

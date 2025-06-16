@@ -1,16 +1,17 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
+from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
 )
-from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
     TableMetadata,
@@ -22,11 +23,12 @@ from dbt_common.contracts.metadata import (
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
-from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.relation_configs import (
-    SnowflakeRelationType,
-    TableFormat,
+from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.snowflake.catalogs import (
+    BuiltInCatalogIntegration,
+    InfoSchemaCatalogIntegration,
 )
+from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -50,6 +52,8 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    row_access_policy: Optional[str] = None
+    table_tag: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -65,6 +69,10 @@ class SnowflakeAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = SnowflakeConfig
 
+    CATALOG_INTEGRATIONS = [
+        BuiltInCatalogIntegration,
+        InfoSchemaCatalogIntegration,
+    ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -83,21 +91,22 @@ class SnowflakeAdapter(SQLAdapter):
         }
     )
 
-    @property
-    def _behavior_flags(self) -> List[BehaviorFlag]:
-        return [
-            {
-                "name": "enable_iceberg_materializations",
-                "default": False,
-                "description": (
-                    "Enabling Iceberg materializations introduces latency to metadata queries, "
-                    "specifically within the list_relations_without_caching macro. Since Iceberg "
-                    "benefits only those actively using it, we've made this behavior opt-in to "
-                    "prevent unnecessary latency for other users."
-                ),
-                "docs_url": "https://docs.getdbt.com/reference/resource-configs/snowflake-configs#iceberg-table-format",
-            }
-        ]
+    def __init__(self, config, mp_context) -> None:
+        super().__init__(config, mp_context)
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+
+    def add_catalog_integration(
+        self, catalog_integration: CatalogIntegrationConfig
+    ) -> CatalogIntegration:
+        # don't mutate the object that dbt-core passes in
+        catalog_integration = deepcopy(catalog_integration)
+        catalog_integration.name = catalog_integration.name.upper()
+        return super().add_catalog_integration(catalog_integration)
+
+    def get_catalog_integration(self, name: str) -> CatalogIntegration:
+        # Snowflake uppercases everything in their metadata tables
+        return super().get_catalog_integration(name.upper())
 
     @classmethod
     def date_function(cls):
@@ -266,20 +275,12 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic"]
-        if self.behavior.enable_iceberg_materializations.no_warn:
-            columns.append("is_iceberg")
+        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
 
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        # this can be collapsed once Snowflake adds is_iceberg to show objects
-        if self.behavior.enable_iceberg_materializations.no_warn:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-        else:
-            database, schema, identifier, relation_type, is_dynamic = result
-            is_iceberg = "N"
+        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
@@ -289,7 +290,11 @@ class SnowflakeAdapter(SQLAdapter):
         if relation_type == self.Relation.Table and is_dynamic == "Y":
             relation_type = self.Relation.DynamicTable
 
-        table_format = TableFormat.ICEBERG if is_iceberg in ("Y", "YES") else TableFormat.DEFAULT
+        table_format = (
+            constants.ICEBERG_TABLE_FORMAT
+            if is_iceberg in ("Y", "YES")
+            else constants.INFO_SCHEMA_TABLE_FORMAT
+        )
 
         quote_policy = {"database": True, "schema": True, "identifier": True}
 
@@ -432,15 +437,103 @@ CALL {proc_name}();
 
     @classmethod
     def _get_adapter_specific_run_info(cls, config: RelationConfig) -> Dict[str, Any]:
-        table_format: Optional[str] = None
-        if (
-            config
-            and hasattr(config, "_extra")
-            and (relation_format := config._extra.get("table_format"))
-        ):
-            table_format = relation_format
-
-        return {
-            "adapter_type": "snowflake",
-            "table_format": table_format,
+        # `config` is not a RelationConfig!
+        run_info = {
+            "adapter_type": constants.ADAPTER_TYPE,
+            "table_format": None,
         }
+
+        if config and hasattr(config, "_extra"):
+
+            catalog = config._extra.get("catalog")
+
+            if _table_format := config._extra.get("table_format"):  # type:ignore
+                run_info["table_format"] = _table_format
+            elif not catalog:
+                # no table_format and no catalog definitely means info schema table
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type:ignore
+                # if the user happens to set the catalog to the info schema catalog, catch that
+                run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            else:  # catalog is set, and it's not the info schema catalog
+                # it's unlikely that users will set a catalog that's not Iceberg
+                run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
+
+        return run_info
+
+    @available
+    def build_catalog_relation(self, model: RelationConfig) -> Optional[CatalogRelation]:
+        """
+        Builds a relation for a given configuration.
+
+        This method uses the provided configuration to determine the appropriate catalog
+        integration and config parser for building the relation. It defaults to the built-in Iceberg
+        catalog if none is provided in the configuration for backward compatibility.
+
+        Args:
+            model (RelationConfig): `config.model` (not `model`) from the jinja context
+
+        Returns:
+            Any: The constructed relation object generated through the catalog integration and parser
+        """
+        if catalog := parse_model.catalog_name(model):
+            catalog_integration = self.get_catalog_integration(catalog)
+            return catalog_integration.build_relation(model)
+        return None
+
+    @available
+    def describe_dynamic_table(self, relation: RelationConfig) -> Dict[str, Any]:
+        """
+        Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
+
+        Args:
+            relation (SnowflakeRelation): the relation to describe
+        """
+
+        original_val: Optional[str] = None
+        try:
+            # Store old QUOTED_IDENTIFIERS_IGNORE_CASE
+            show_param_sql = "show parameters like 'QUOTED_IDENTIFIERS_IGNORE_CASE' in SESSION"
+            show_param_res = self.execute(show_param_sql)
+            if show_param_res:
+                param_qid = show_param_res[0].query_id
+                scan_param_sql = f"SELECT * FROM TABLE(RESULT_SCAN('{param_qid}'))"
+                param_scan_res, rows = self.execute(scan_param_sql, fetch=True)
+                if param_scan_res and param_scan_res.code == "SUCCESS":
+                    try:
+                        original_val = rows[0][1]
+                    except (IndexError, TypeError):
+                        original_val = None
+
+            # falsify QUOTED_IDENTIFIERS_IGNORE_CASE for execution only
+            self.execute("alter session set QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE", fetch=False)
+
+            show_sql = (
+                f"show dynamic tables like '{relation.identifier}' "
+                f"in schema {relation.database}.{relation.schema}"
+            )
+            show_res = self.execute(show_sql)
+            if show_res:
+                query_id = show_res[0].query_id
+                scan_sql = (
+                    "select "
+                    '   "name", "schema_name", "database_name", "text", "target_lag", "warehouse", '
+                    '   "refresh_mode" '
+                    f"from TABLE(RESULT_SCAN('{query_id}'))"
+                )
+                res, dt_table = self.execute(scan_sql, fetch=True)
+                if res.code != "SUCCESS":
+                    raise DbtRuntimeError(
+                        f"Could not get dynamic query metadata: {scan_sql} failed"
+                    )
+                return {"dynamic_table": dt_table}
+
+            return {"dynamic_table": None}
+        finally:
+            if original_val is None:
+                self.execute("ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE", fetch=False)
+            else:
+                bool_str = "TRUE" if original_val.strip().lower() == "true" else "FALSE"
+                self.execute(
+                    f"ALTER SESSION SET QUOTED_IDENTIFIERS_IGNORE_CASE = {bool_str}", fetch=False
+                )
