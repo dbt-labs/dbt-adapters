@@ -500,6 +500,7 @@ CALL {proc_name}();
         res, dt_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
+        # normalize column names to lower case, this still preserves column order
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
         return {
             "dynamic_table": dt_table.select(
