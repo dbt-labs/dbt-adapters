@@ -495,13 +495,9 @@ CALL {proc_name}();
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
         show_sql = (
-            f"show dynamic tables like '{relation.identifier}' " f"in schema {database}.{schema}"
+            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
         )
         res, dt_table = self.execute(show_sql, fetch=True)
-        if not res or not dt_table:
-            raise DbtRuntimeError(
-                f"Could not get dynamic query metadata: {show_sql} returned no results"
-            )
         if res.code != "SUCCESS":
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
