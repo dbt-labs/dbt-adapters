@@ -1,0 +1,6 @@
+kind: Breaking Changes
+body: rename 'catalog' model config value to 'catalog_name'
+time: 2025-05-30T15:44:38.10309-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1134"
