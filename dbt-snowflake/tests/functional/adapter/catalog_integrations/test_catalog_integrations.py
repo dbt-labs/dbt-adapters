@@ -72,7 +72,6 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         iceberg_table_with_configs_sql = get_cleaned_model_ddl_from_file(
             "iceberg_table_with_configs.sql"
         )
-        print("iceberg_table_with_configs_sql:", iceberg_table_with_configs_sql)
         assert "storage_serialization_policy = 'COMPATIBLE'" in iceberg_table_with_configs_sql
         assert "max_data_extension_time_in_days = 30" in iceberg_table_with_configs_sql
         assert "change_tracking = FALSE" in iceberg_table_with_configs_sql
