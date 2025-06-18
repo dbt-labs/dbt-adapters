@@ -10,6 +10,7 @@ from dbt.adapters.bigquery.clients import (
     create_dataproc_batch_controller_client,
     create_dataproc_job_controller_client,
     create_gcs_client,
+    create_notebook_client,
 )
 from dbt.adapters.bigquery.credentials import (
     BigQueryConnectionMethod,
@@ -19,7 +20,6 @@ from dbt.adapters.bigquery.credentials import (
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.exceptions import DbtRuntimeError
-from google.api_core.client_options import ClientOptions
 
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
@@ -201,12 +201,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self._model_name = parsed_model["alias"]
         self._connection_method = credentials.method
         self._GoogleCredentials = create_google_credentials(credentials)
-
-        # TODO(jialuo): Add a function in clients.py for it.
-        self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
-            credentials=self._GoogleCredentials,
-            client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
-        )
+        self._notebook_client = create_notebook_client(self._GoogleCredentials, self._region)
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
         self._packages = parsed_model["config"].get("packages", [])
         retry = RetryFactory(credentials)
@@ -231,7 +226,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             parent=f"projects/{self._project}/locations/{self._region}",
             filter="notebookRuntimeType = ONE_CLICK",
         )
-        page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
+        page_result = self._notebook_client.list_notebook_runtime_templates(request=request)
 
         try:
             # Check if a default runtime template is available and applicable.
@@ -280,9 +275,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_runtime_template=template,
         )
 
-        operation = self._ai_platform_client.create_notebook_runtime_template(
-            request=create_request
-        )
+        operation = self._notebook_client.create_notebook_runtime_template(request=create_request)
         response = operation.result()
 
         return self._extract_template_id(response.name)
@@ -434,10 +427,10 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
 
         try:
-            res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
+            res = self._notebook_client.create_notebook_execution_job(request=request).result(
                 timeout=self._polling_retry.timeout
             )
-            retrieved_job = self._ai_platform_client.get_notebook_execution_job(name=res.name)
+            retrieved_job = self._notebook_client.get_notebook_execution_job(name=res.name)
         except TimeoutError as timeout_error:
             raise TimeoutError(
                 f"The dbt operation encountered a timeout: {timeout_error}\n"
@@ -460,7 +453,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 f"The colab notebook execution job '{retrieved_job.name}' finished with unexpected state: {retrieved_job.job_state.name}"
             )
 
-        return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+        return self._notebook_client.get_notebook_execution_job(name=res.name)
 
 
 def _install_packages(packages: list[str]) -> None:
