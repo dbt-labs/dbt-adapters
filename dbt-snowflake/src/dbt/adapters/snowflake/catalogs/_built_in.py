@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from dbt_common.dataclass_schema import StrEnum
 from typing import Optional
 
 from dbt.adapters.catalogs import (
@@ -9,16 +8,21 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
-from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationConfig
+from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
+
+_COERCE_BOOL_TO_STR = {
+    True: "TRUE",
+    False: "FALSE",
+    "true": "TRUE",
+    "false": "FALSE",
+}
 
 
-class SnowflakeStorageSerializationOptions(StrEnum):
-    """
-    Represents the storage serialization options for Snowflake catalogs.
-    """
-
-    COMPATIBLE = "COMPATIBLE"
-    OPTIMIZED = "OPTIMIZED"
+def _validate_storage_serialization_policy(policy: str) -> None:
+    if policy.upper() not in ["COMPATIBLE", "OPTIMIZED"]:
+        raise ValueError(
+            f"Invalid storage serialization policy: {policy}. Expected 'COMPATIBLE' or 'OPTIMIZED'."
+        )
 
 
 @dataclass
@@ -64,19 +68,21 @@ class BuiltInCatalogIntegration(CatalogIntegration):
         self.external_volume: Optional[str] = config.external_volume
         if adapter_properties := config.adapter_properties:
             if storage_serialization_policy := adapter_properties.get(
-                SnowflakeIcebergTableRelationConfig.storage_serialization_policy, None
+                SnowflakeIcebergTableRelationParameters.storage_serialization_policy
             ):
-                self.storage_serialization_policy = SnowflakeStorageSerializationOptions(
-                    storage_serialization_policy
-                ).value
+                _validate_storage_serialization_policy(storage_serialization_policy)
+                self.storage_serialization_policy = storage_serialization_policy
+
             self.max_data_extension_time_in_days = adapter_properties.get(
-                SnowflakeIcebergTableRelationConfig.max_data_extension_time_in_days, None
+                SnowflakeIcebergTableRelationParameters.max_data_extension_time_in_days
             )
+
             self.change_tracking = adapter_properties.get(
-                SnowflakeIcebergTableRelationConfig.change_tracking, None
+                SnowflakeIcebergTableRelationParameters.change_tracking
             )
+
             self.data_retention_time_in_days = adapter_properties.get(
-                SnowflakeIcebergTableRelationConfig.data_retention_time_in_days, None
+                SnowflakeIcebergTableRelationParameters.data_retention_time_in_days
             )
 
     def build_relation(self, model: RelationConfig) -> BuiltInCatalogRelation:
@@ -91,11 +97,19 @@ class BuiltInCatalogIntegration(CatalogIntegration):
         )
         data_retention_time_in_days = (
             model.config.get(
-                SnowflakeIcebergTableRelationConfig.data_retention_time_in_days,
+                SnowflakeIcebergTableRelationParameters.data_retention_time_in_days,
                 self.data_retention_time_in_days,
             )
             if model.config
             else self.data_retention_time_in_days
+        )
+        storage_serialization_policy = (
+            model.config.get(
+                SnowflakeIcebergTableRelationParameters.storage_serialization_policy,
+                self.storage_serialization_policy,
+            )
+            if model.config
+            else self.storage_serialization_policy
         )
 
         return BuiltInCatalogRelation(
@@ -103,28 +117,11 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             external_volume=parse_model.external_volume(model) or self.external_volume,
             cluster_by=parse_model.cluster_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
-            storage_serialization_policy=self._resolve_storage_serialization_policy(model),
+            storage_serialization_policy=storage_serialization_policy,
             max_data_extension_time_in_days=max_data_extension_time_in_days,
             change_tracking=self._resolve_change_tracking(model),
             data_retention_time_in_days=data_retention_time_in_days,
         )
-
-    def _resolve_storage_serialization_policy(self, model: RelationConfig) -> Optional[str]:
-        """
-        Resolves the storage serialization policy for the catalog integration.
-        """
-        policy = (
-            model.config.get(
-                SnowflakeIcebergTableRelationConfig.storage_serialization_policy,
-                self.storage_serialization_policy,
-            )
-            if model.config
-            else self.storage_serialization_policy
-        )
-        if policy:
-            return SnowflakeStorageSerializationOptions(policy).value
-        else:
-            return None
 
     def _resolve_change_tracking(self, model: RelationConfig) -> Optional[str]:
         """
@@ -136,23 +133,16 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             model.config
             and (
                 change_tracking := model.config.get(
-                    SnowflakeIcebergTableRelationConfig.change_tracking, self.change_tracking
+                    SnowflakeIcebergTableRelationParameters.change_tracking, self.change_tracking
                 )
             )
             is not None
         ):
-            if isinstance(change_tracking, bool):
-                return "TRUE" if change_tracking else "FALSE"
-            elif isinstance(change_tracking, str):
-                if change_tracking.lower() in ["true", "false"]:
-                    return change_tracking.upper()
-                else:
-                    raise ValueError(
-                        f"Invalid value for change_tracking: {change_tracking}. Expected 'true' or 'false'."
-                    )
-            else:
-                raise ValueError(
-                    f"Invalid value for change_tracking: {change_tracking}. Expected a boolean."
-                )
+            if isinstance(change_tracking, str):
+                change_tracking = change_tracking.lower()
+            try:
+                return _COERCE_BOOL_TO_STR[change_tracking]
+            except KeyError:
+                raise ValueError("Invalid value for change_tracking. Expected 'true' or 'false'.")
         else:
             return None

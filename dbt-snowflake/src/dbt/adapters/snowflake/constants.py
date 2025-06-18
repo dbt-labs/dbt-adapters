@@ -24,7 +24,7 @@ DEFAULT_BUILT_IN_CATALOG = SimpleNamespace(
     adapter_properties={},
 )
 
-SnowflakeIcebergTableRelationConfig = SimpleNamespace(
+SnowflakeIcebergTableRelationParameters = SimpleNamespace(
     storage_serialization_policy="storage_serialization_policy",
     data_retention_time_in_days="data_retention_time_in_days",
     max_data_extension_time_in_days="max_data_extension_time_in_days",
