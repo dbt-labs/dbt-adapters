@@ -59,30 +59,31 @@ def test_iceberg_base_location_built_in(fake_integration, config, expected):
 @pytest.mark.parametrize(
     "config,expected",
     [
-        (
-            {},
-            None,
-        ),
-        (
-            {"change_tracking": False},
-            "FALSE",
-        ),
-        (
-            {"change_tracking": True},
-            "TRUE",
-        ),
-        (
-            {"change_tracking": "False"},
-            "FALSE",
-        ),
-        (
-            {"change_tracking": "True"},
-            "TRUE",
-        ),
+        (None, None),
+        (False, "FALSE"),
+        (True, "TRUE"),
+        ("False", "FALSE"),
+        ("True", "TRUE"),
     ],
 )
 def test_change_tracking_model_config(fake_integration, config, expected):
     model = deepcopy(model_base)
-    model.config.update(config)
+    model.config.update({"change_tracking": config})
     relation = fake_integration.build_relation(model)
     assert relation.change_tracking == expected
+
+
+@pytest.mark.parametrize(
+    "user_input",
+    [
+        "0",
+        "",
+        "None",
+    ],
+)
+def test_change_tracking_invalid_model_config(fake_integration, user_input):
+    model = deepcopy(model_base)
+    model.config.update({"change_tracking": user_input})
+    with pytest.raises(ValueError) as e:
+        fake_integration.build_relation(model)
+    assert "Invalid value for change_tracking" in str(e.value)

@@ -10,7 +10,7 @@ from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
 
-_COERCE_BOOL_TO_STR = {
+_BOOL_TO_STR_MAP = {
     True: "TRUE",
     False: "FALSE",
     "true": "TRUE",
@@ -141,7 +141,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             if isinstance(change_tracking, str):
                 change_tracking = change_tracking.lower()
             try:
-                return _COERCE_BOOL_TO_STR[change_tracking]
+                return _BOOL_TO_STR_MAP[change_tracking]
             except KeyError:
                 raise ValueError("Invalid value for change_tracking. Expected 'true' or 'false'.")
         else:
