@@ -27,6 +27,7 @@ from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
     InfoSchemaCatalogIntegration,
+    IcebergRestCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
@@ -72,6 +73,7 @@ class SnowflakeAdapter(SQLAdapter):
     CATALOG_INTEGRATIONS = [
         BuiltInCatalogIntegration,
         InfoSchemaCatalogIntegration,
+        IcebergRestCatalogIntegration,
     ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
@@ -95,6 +97,7 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_ICEBERG_REST_CATALOG)
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -455,6 +458,9 @@ CALL {proc_name}();
             elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type:ignore
                 # if the user happens to set the catalog to the info schema catalog, catch that
                 run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
+            elif catalog == constants.DEFAULT_ICEBERG_REST_CATALOG.name:  # type:ignore
+                # if the user happens to set the catalog to the iceberg rest catalog, catch that
+                run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
             else:  # catalog is set, and it's not the info schema catalog
                 # it's unlikely that users will set a catalog that's not Iceberg
                 run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
