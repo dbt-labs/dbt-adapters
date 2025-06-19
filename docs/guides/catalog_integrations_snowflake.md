@@ -150,4 +150,25 @@ You can test your catalog configuration by running a simple model:
 select 1 as test_column
 ```
 
-If the model runs successfully, your catalog integration is working correctly. 
+If the model runs successfully, your catalog integration is working correctly.
+
+### Iceberg REST Catalog Specifics
+
+When using `iceberg_rest` catalog type, dbt will generate SQL using the [`CREATE ICEBERG TABLE ... CATALOG('catalog_name')`](https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest) syntax. This enables dbt to write directly to external REST-compatible catalogs like:
+
+- **Polaris/Snowflake Open Catalog**: Use the Polaris REST API endpoint
+- **AWS Glue Data Catalog**: When configured with REST API support  
+- **Unity Catalog**: Using Databricks Unity Catalog REST API
+- **Tabular**: Commercial Iceberg catalog service
+- **Any custom REST catalog**: That implements the Apache Iceberg REST specification
+
+The generated DDL will look like:
+```sql
+CREATE OR REPLACE ICEBERG TABLE my_schema.my_table
+    EXTERNAL_VOLUME = 'my_external_volume'
+    CATALOG = 'POLARIS'
+    BASE_LOCATION = '_dbt/my_schema/my_table'
+AS (
+    SELECT 1 as test_column
+);
+``` 
