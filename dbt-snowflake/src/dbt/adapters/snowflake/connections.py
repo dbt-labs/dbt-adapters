@@ -113,6 +113,7 @@ class SnowflakeCredentials(Credentials):
     insecure_mode: Optional[bool] = False
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
+    ocsp_fail_open: Optional[bool] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -180,6 +181,7 @@ class SnowflakeCredentials(Credentials):
             "retry_all",
             "insecure_mode",
             "reuse_connections",
+            "ocsp_fail_open",
         )
 
     def auth_args(self):
@@ -378,6 +380,11 @@ class SnowflakeConnectionManager(SQLConnectionManager):
             rec_mode = get_record_mode_from_env()
             handle = None
             if rec_mode != RecorderMode.REPLAY:
+                ocsp_fail_open_arg = (
+                    {"ocsp_fail_open": creds.ocsp_fail_open}
+                    if creds.ocsp_fail_open is not None
+                    else {}
+                )
                 handle = snowflake.connector.connect(
                     account=creds.account,
                     database=creds.database,
@@ -390,6 +397,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     insecure_mode=creds.insecure_mode,
                     session_parameters=session_parameters,
                     **creds.auth_args(),
+                    **ocsp_fail_open_arg,
                 )
 
             if rec_mode is not None:
