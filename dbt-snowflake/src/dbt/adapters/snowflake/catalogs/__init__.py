@@ -1,5 +1,3 @@
-from typing import Union
-
 from dbt.adapters.snowflake.catalogs._built_in import (
     BuiltInCatalogIntegration,
     BuiltInCatalogRelation,
