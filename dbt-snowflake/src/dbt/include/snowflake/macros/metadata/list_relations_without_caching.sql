@@ -57,8 +57,10 @@
 show objects in {{ schema }}
     limit {{ max_results_per_iter }}
     {% if watermark is not none -%} from '{{ watermark }}' {%- endif %}
-;
-{%- endset -%}
+    ->> select
+        iff(equal_null("kind", 'VIEW') and "bytes" > 0, 'MATERIALIZED_VIEW', "kind") as "kind",
+        * exclude "kind"
+    from $1;{%- endset -%}
 
 {%- do return(_sql) -%}
 
