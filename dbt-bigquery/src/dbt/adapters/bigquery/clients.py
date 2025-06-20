@@ -1,10 +1,14 @@
+from typing import Optional
+
 from google.api_core.client_info import ClientInfo
 from google.api_core.client_options import ClientOptions
 from google.auth.exceptions import DefaultCredentialsError
+from google.cloud import aiplatform_v1
 from google.cloud.bigquery import Client as BigQueryClient, DEFAULT_RETRY as BQ_DEFAULT_RETRY
 from google.cloud.dataproc_v1 import BatchControllerClient, JobControllerClient
 from google.cloud.storage import Client as StorageClient
 from google.cloud.storage.retry import DEFAULT_RETRY as GCS_DEFAULT_RETRY
+from google.oauth2.credentials import Credentials as GoogleCredentials
 
 from dbt.adapters.events.logging import AdapterLogger
 
@@ -69,3 +73,15 @@ def _create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
 
 def _dataproc_endpoint(credentials: BigQueryCredentials) -> str:
     return f"{credentials.compute_region}-dataproc.googleapis.com:443"
+
+
+def create_notebook_client(
+    credentials: GoogleCredentials, region: Optional[str]
+) -> aiplatform_v1.NotebookServiceClient:
+    api_endpoint = f"{region}-aiplatform.googleapis.com"
+    notebook_client = aiplatform_v1.NotebookServiceClient(
+        credentials=credentials,
+        client_options=ClientOptions(api_endpoint),
+    )
+
+    return notebook_client
