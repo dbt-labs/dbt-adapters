@@ -1,0 +1,6 @@
+kind: Features
+body: Rename `get_limit_subquery_sql` to `get_limit_sql`
+time: 2025-04-30T13:58:48.249786-06:00
+custom:
+    Author: dbeatty10
+    Issue: "1038"
