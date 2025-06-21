@@ -52,7 +52,7 @@ class SSLConfigError(CompilationError):
 logger = AdapterLogger("Redshift")
 
 
-class RedshiftConnectionMethod(StrEnum):
+class RedshiftConnectionAuthenticator(StrEnum):
     DATABASE = "database"
     IAM = "iam"
     IAM_ROLE = "iam_role"
@@ -60,12 +60,12 @@ class RedshiftConnectionMethod(StrEnum):
     IAM_IDENTITY_CENTER_TOKEN = "oauth_token_identity_center"
 
     @classmethod
-    def uses_identity_center(cls, method: str) -> bool:
-        return method in (cls.IAM_IDENTITY_CENTER_BROWSER, cls.IAM_IDENTITY_CENTER_TOKEN)
+    def uses_identity_center(cls, authenticator: str) -> bool:
+        return authenticator in (cls.IAM_IDENTITY_CENTER_BROWSER, cls.IAM_IDENTITY_CENTER_TOKEN)
 
     @classmethod
-    def is_iam(cls, method: str) -> bool:
-        return not cls.uses_identity_center(method)
+    def is_iam(cls, authenticator: str) -> bool:
+        return not cls.uses_identity_center(authenticator)
 
 
 class UserSSLMode(StrEnum):
@@ -132,7 +132,7 @@ class RedshiftSSLConfig(dbtClassMixin, Replaceable):
 class RedshiftCredentials(Credentials):
     host: str
     port: Port
-    method: str = RedshiftConnectionMethod.DATABASE
+    authenticator: str = RedshiftConnectionAuthenticator.DATABASE
     user: Optional[str] = None
     password: Optional[str] = None
     cluster_id: Optional[str] = field(
@@ -155,7 +155,7 @@ class RedshiftCredentials(Credentials):
     secret_access_key: Optional[str] = None
 
     #
-    # IAM identity center methods
+    # IAM identity center authenticators
     #
 
     # browser
@@ -227,7 +227,7 @@ def get_connection_method(
     credentials: RedshiftCredentials,
 ) -> Callable[[], redshift_connector.Connection]:
     #
-    # Helper Methods
+    # Helper authenticators
     #
     def __validate_required_fields(method_name: str, required_fields: Tuple[str, ...]):
         missing_fields: List[str] = [
@@ -236,7 +236,7 @@ def get_connection_method(
         if missing_fields:
             fields_str: str = "', '".join(missing_fields)
             raise FailedToConnectError(
-                f"'{fields_str}' field(s) are required for '{method_name}' credentials method"
+                f"'{fields_str}' field(s) are required for '{method_name}' credentials authenticator"
             )
 
     def __base_kwargs(credentials) -> Dict[str, Any]:
@@ -257,12 +257,12 @@ def get_connection_method(
 
     def __iam_kwargs(credentials) -> Dict[str, Any]:
 
-        # iam True except for identity center methods
-        iam: bool = RedshiftConnectionMethod.is_iam(credentials.method)
+        # iam True except for identity center authenticators
+        iam: bool = RedshiftConnectionAuthenticator.is_iam(credentials.authenticator)
         cluster_identifier: Optional[str]
         serverless_work_group: Optional[str]
         serverless_acct_id: Optional[str]
-        if RedshiftConnectionMethod.uses_identity_center(credentials.method):
+        if RedshiftConnectionAuthenticator.uses_identity_center(credentials.authenticator):
             cluster_identifier = None
             serverless_work_group = None
             serverless_acct_id = None
@@ -293,7 +293,7 @@ def get_connection_method(
         return __base_kwargs(credentials) | iam_specific_kwargs
 
     def __database_kwargs(credentials) -> Dict[str, Any]:
-        logger.debug("Connecting to Redshift with 'database' credentials method")
+        logger.debug("Connecting to Redshift with 'database' credentials authenticator")
 
         __validate_required_fields("database", ("user", "password"))
 
@@ -305,7 +305,7 @@ def get_connection_method(
         return __base_kwargs(credentials) | db_credentials
 
     def __iam_user_kwargs(credentials) -> Dict[str, Any]:
-        logger.debug("Connecting to Redshift with 'iam' credentials method")
+        logger.debug("Connecting to Redshift with 'iam' credentials authenticator")
 
         iam_credentials: Dict[str, Any]
         if credentials.access_key_id and credentials.secret_access_key:
@@ -326,7 +326,7 @@ def get_connection_method(
         return __iam_kwargs(credentials) | iam_credentials
 
     def __iam_role_kwargs(credentials) -> Dict[str, Any]:
-        logger.debug("Connecting to Redshift with 'iam_role' credentials method")
+        logger.debug("Connecting to Redshift with 'iam_role' credentials authenticator")
         role_kwargs = {
             "db_user": None,
             "group_federation": not is_serverless(credentials),
@@ -338,13 +338,15 @@ def get_connection_method(
         return __iam_kwargs(credentials) | role_kwargs
 
     def __iam_idc_browser_kwargs(credentials) -> Dict[str, Any]:
-        logger.debug("Connecting to Redshift with '{credentials.method}' credentials method")
+        logger.debug(
+            "Connecting to Redshift with '{credentials.authenticator}' credentials authenticator"
+        )
 
         __IDP_TIMEOUT: int = 60
         __LISTEN_PORT_DEFAULT: int = 7890
 
         __validate_required_fields(
-            "browser_identity_center", ("method", "idc_region", "issuer_url")
+            "browser_identity_center", ("authenticator", "idc_region", "issuer_url")
         )
 
         idp_timeout: int = (
@@ -377,7 +379,9 @@ def get_connection_method(
         tested. It can be added with a presenting use-case.
         """
 
-        logger.debug("Connecting to Redshift with '{credentials.method}' credentials method")
+        logger.debug(
+            "Connecting to Redshift with '{credentials.authenticator}' credentials authenticator"
+        )
 
         __validate_required_fields("oauth_token_identity_center", ("token_endpoint",))
 
@@ -400,21 +404,23 @@ def get_connection_method(
     # Head of function execution
     #
 
-    method_to_kwargs_function = {
+    authenticator_to_kwargs_function = {
         None: __database_kwargs,
-        RedshiftConnectionMethod.DATABASE: __database_kwargs,
-        RedshiftConnectionMethod.IAM: __iam_user_kwargs,
-        RedshiftConnectionMethod.IAM_ROLE: __iam_role_kwargs,
-        RedshiftConnectionMethod.IAM_IDENTITY_CENTER_BROWSER: __iam_idc_browser_kwargs,
-        RedshiftConnectionMethod.IAM_IDENTITY_CENTER_TOKEN: __iam_idc_token_kwargs,
+        RedshiftConnectionAuthenticator.DATABASE: __database_kwargs,
+        RedshiftConnectionAuthenticator.IAM: __iam_user_kwargs,
+        RedshiftConnectionAuthenticator.IAM_ROLE: __iam_role_kwargs,
+        RedshiftConnectionAuthenticator.IAM_IDENTITY_CENTER_BROWSER: __iam_idc_browser_kwargs,
+        RedshiftConnectionAuthenticator.IAM_IDENTITY_CENTER_TOKEN: __iam_idc_token_kwargs,
     }
 
     try:
         kwargs_function: Callable[[RedshiftCredentials], Dict[str, Any]] = (
-            method_to_kwargs_function[credentials.method]
+            authenticator_to_kwargs_function[credentials.authenticator]
         )
     except KeyError:
-        raise FailedToConnectError(f"Invalid 'method' in profile: '{credentials.method}'")
+        raise FailedToConnectError(
+            f"Invalid 'authenticator' in profile: '{credentials.authenticator}'"
+        )
 
     kwargs: Dict[str, Any] = kwargs_function(credentials)
 
