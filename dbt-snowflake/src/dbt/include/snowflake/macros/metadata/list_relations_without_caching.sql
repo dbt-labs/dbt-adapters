@@ -57,17 +57,6 @@
 show objects in {{ schema }}
     limit {{ max_results_per_iter }}
     {% if watermark is not none -%} from '{{ watermark }}' {%- endif %}
-->> 
-show views in {{ schema }}
-->>
-select
-        iff(equal_null(o."kind", 'VIEW') and v."is_materialized", 'MATERIALIZED_VIEW', "kind") as "kind",
-        o.* exclude "kind"
-from $2 as o
-left join $1 as v
-    on o."database_name" = v."database_name"
-    and o."schema_name" = v."schema_name"
-    and o."name" = v."name"
 ;
 {%- endset -%}
 
