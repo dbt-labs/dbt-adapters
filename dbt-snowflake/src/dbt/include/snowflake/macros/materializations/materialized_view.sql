@@ -12,8 +12,8 @@
 
   {% if (existing_relation is none or full_refresh_mode) %}
       {% set build_sql = create_materialized_view_as(target_relation, sql, config) %}
-  {% elif existing_relation.is_view or existing_relation.is_table %}
-      {#-- Can't overwrite a view with a table - we must drop --#}
+  {% elif existing_relation.is_table or is_regular_view(existing_relation) %}
+      {#-- Can't overwrite a view or a table - we must drop --#}
       {{ log("Dropping relation " ~ target_relation ~ " because it is a " ~ existing_relation.type ~ " and this model is a materialized view.") }}
       {% do adapter.drop_relation(existing_relation) %}
       {% set build_sql = create_materialized_view_as(target_relation, sql, config) %}
@@ -38,6 +38,21 @@
   {{ return({'relations': [target_relation]}) }}
 
 {%- endmaterialization %}
+
+{% macro is_regular_view(relation) %}
+    {#-- This is a workaround for the fact that SHOW OBJECTS does not return the materialized view type --#}
+    {#-- and we need to check if the view is materialized or not --#}
+    {%- if not relation or not relation.is_view -%}
+        {% do return(false) %}
+    {%- endif -%}
+    {#-- Run a SHOW VIEWS query to check if the view is materialized --#}
+    {%- set specs_sql -%}
+      show views in "{{ relation.database }}"."{{ relation.schema }}" starts with '{{ relation.name }}' limit 1
+    {%- endset -%}
+    {% set view_specs = run_query(specs_sql) %}
+    {% set is_materialized = view_specs.columns.get('is_materialized').values()[0] == 'true' %}
+    {% do return(not is_materialized) %}
+{% endmacro %}
 
 {% macro refresh_materialized_view(relation, config) %}
     {{ return(adapter.dispatch('refresh_materialized_view')(relation, config)) }}
