@@ -521,6 +521,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         response = self.get_response(cursor)
         if fetch:
             table = self.get_result_from_cursor(cursor, limit)
+            table = table.rename(column_names=[c.lower() for c in table.column_names])
         else:
             table = empty_table()
         return response, table

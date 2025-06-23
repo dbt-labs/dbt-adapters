@@ -19,3 +19,18 @@ def dbt_profile_target():
         "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
         "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
     }
+
+
+# The profile dictionary, used to write out profiles.yml
+@pytest.fixture(scope="class")
+def dbt_profile_target_case_insensitive():
+    return {
+        "type": "snowflake",
+        "threads": 4,
+        "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
+        "user": os.getenv("SNOWFLAKE_TEST_CASE_INSENSITIVE_USER"),
+        "password": os.getenv("SNOWFLAKE_TEST_CASE_INSENSITIVE_PASSWORD"),
+        "role": os.getenv("SNOWFLAKE_TEST_ROLE"),
+        "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
+        "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
+    }

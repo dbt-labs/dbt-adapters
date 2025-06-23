@@ -1,0 +1,7 @@
+kind: Fixes
+body: normalize agate table column casing returned by dbt-snowflake AdapterResponse
+  to unblock unit testing with QUOTED_IDENTIFIERS_IGNORE_CASE = true
+time: 2025-06-23T12:58:40.282095-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "718"
