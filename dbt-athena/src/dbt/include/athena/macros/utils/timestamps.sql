@@ -1,6 +1,6 @@
-{%
+{#
     pyathena converts time zoned timestamps to strings so lets avoid them now()
-%}
+#}
 
 {% macro athena__current_timestamp() -%}
   {{ cast_timestamp('now()') }}
@@ -18,9 +18,9 @@
   {%- endif -%}
 {%- endmacro %}
 
-{%
+{#
   Macro to get the end_of_time timestamp
-%}
+#}
 
 {% macro end_of_time() -%}
   {{ return(adapter.dispatch('end_of_time')()) }}
