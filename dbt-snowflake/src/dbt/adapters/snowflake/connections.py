@@ -113,6 +113,7 @@ class SnowflakeCredentials(Credentials):
     insecure_mode: Optional[bool] = False
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
+    s3_stage_vpce_dns_name: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -180,6 +181,7 @@ class SnowflakeCredentials(Credentials):
             "retry_all",
             "insecure_mode",
             "reuse_connections",
+            "s3_stage_vpce_dns_name",
         )
 
     def auth_args(self):
@@ -370,6 +372,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
 
             if creds.query_tag:
                 session_parameters.update({"QUERY_TAG": creds.query_tag})
+
+            if creds.s3_stage_vpce_dns_name:
+                session_parameters.update({"S3_STAGE_VPCE_DNS_NAME": creds.s3_stage_vpce_dns_name})
             handle = None
 
             # In replay mode, we won't connect to a real database at all, while

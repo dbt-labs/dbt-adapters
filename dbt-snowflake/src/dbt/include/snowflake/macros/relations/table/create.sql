@@ -150,6 +150,10 @@ create or replace iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
+    {{ optional('storage_serialization_policy', catalog_relation.storage_serialization_policy, "'")}}
+    {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
+    {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
+    {{ optional('change_tracking', catalog_relation.change_tracking)}}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}

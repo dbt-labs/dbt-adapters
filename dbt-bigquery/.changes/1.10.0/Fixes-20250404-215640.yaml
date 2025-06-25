@@ -1,0 +1,6 @@
+kind: Fixes
+body: Add create_notebook_client
+time: 2025-04-04T21:56:40.174432349Z
+custom:
+    Author: jialuoo
+    Issue: "977"
