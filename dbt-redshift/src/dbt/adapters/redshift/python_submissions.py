@@ -15,7 +15,7 @@ from dbt.adapters.base import PythonJobHelper
 SUBMISSION_LANGUAGE = "python"
 
 
-class EmrServerlessJobHelper(PythonJobHelper):
+class EmrServerlessPythonJobHelper(PythonJobHelper):
     """
     An implementation of running a PySpark job on an EMR Serverless application.
     `run_spark_job` is a synchronous call and waits until the job is in the completed state.

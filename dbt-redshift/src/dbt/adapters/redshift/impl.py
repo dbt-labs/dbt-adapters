@@ -15,7 +15,7 @@ from dbt.adapters.events.logging import AdapterLogger
 import dbt_common.exceptions
 
 from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
-from dbt.adapters.redshift.python_submissions import EmrServerlessJobHelper
+from dbt.adapters.redshift.python_submissions import EmrServerlessPythonJobHelper
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -176,9 +176,7 @@ class RedshiftAdapter(SQLAdapter):
     # we can update these with Redshift-specific messages if needed
     @property
     def python_submission_helpers(self) -> Dict[str, Type[PythonJobHelper]]:
-        return {
-            "emr_serverless": EmrServerlessJobHelper,
-        }
+        return {"emr_serverless": EmrServerlessPythonJobHelper}
 
     @property
     def default_python_submission_method(self) -> str:

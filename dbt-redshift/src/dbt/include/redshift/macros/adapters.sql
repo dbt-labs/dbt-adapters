@@ -44,7 +44,8 @@
 
   {%- set contract_config = config.get('contract') -%}
   {%- if language == 'sql' -%}
-      {%- if contract_config.enforced -%}
+    {{ log("Identified SQL Model", info=true) }}
+    {%- if contract_config.enforced -%}
       create {% if temporary -%}temporary{%- endif %} table
         {{ relation.include(database=(not temporary), schema=(not temporary)) }}
         {{ get_table_columns_and_constraints() }}
@@ -61,7 +62,7 @@
         )
       ;
 
-      {%- else %}
+    {%- else %}
 
       create {% if temporary -%}temporary{%- endif %} table
         {{ relation.include(database=(not temporary), schema=(not temporary)) }}
@@ -72,8 +73,9 @@
         {{ compiled_code }}
       );
 
-      {%- endif %}
+    {%- endif %}
   {%- elif language == 'python' -%}
+    {{ log("Identified Python Model", info=true) }}
     {%- if contract_config.enforced -%}
       {{ exceptions.warn("Redshift python models don't support contract enforcement.`" ~ target_relation ~ "` table will still be created.") }}
     {%- endif %}
