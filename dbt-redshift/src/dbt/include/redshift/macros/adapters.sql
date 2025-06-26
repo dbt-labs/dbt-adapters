@@ -29,8 +29,7 @@
 {%- endmacro -%}
 
 
-{% macro redshift__create_table_as(temporary, relation, sql) -%}
-
+{% macro redshift__create_table_as(temporary, relation, compiled_code, language) -%}
   {%- set _dist = config.get('dist') -%}
   {%- set _sort_type = config.get(
           'sort_type',
@@ -44,36 +43,45 @@
   {{ sql_header if sql_header is not none }}
 
   {%- set contract_config = config.get('contract') -%}
-  {%- if contract_config.enforced -%}
+  {%- if language == 'sql' -%}
+      {%- if contract_config.enforced -%}
+      create {% if temporary -%}temporary{%- endif %} table
+        {{ relation.include(database=(not temporary), schema=(not temporary)) }}
+        {{ get_table_columns_and_constraints() }}
+        {{ get_assert_columns_equivalent(compiled_code) }}
+        {%- set compiled_code = get_select_subquery(compiled_code) %}
+        {% if backup == false -%}backup no{%- endif %}
+        {{ dist(_dist) }}
+        {{ sort(_sort_type, _sort) }}
+      ;
 
-  create {% if temporary -%}temporary{%- endif %} table
-    {{ relation.include(database=(not temporary), schema=(not temporary)) }}
-    {{ get_table_columns_and_constraints() }}
-    {{ get_assert_columns_equivalent(sql) }}
-    {%- set sql = get_select_subquery(sql) %}
-    {% if backup == false -%}backup no{%- endif %}
-    {{ dist(_dist) }}
-    {{ sort(_sort_type, _sort) }}
-  ;
+      insert into {{ relation.include(database=(not temporary), schema=(not temporary)) }}
+        (
+          {{ compiled_code }}
+        )
+      ;
 
-  insert into {{ relation.include(database=(not temporary), schema=(not temporary)) }}
-    (
-      {{ sql }}
-    )
-  ;
+      {%- else %}
 
-  {%- else %}
+      create {% if temporary -%}temporary{%- endif %} table
+        {{ relation.include(database=(not temporary), schema=(not temporary)) }}
+        {% if backup == false -%}backup no{%- endif %}
+        {{ dist(_dist) }}
+        {{ sort(_sort_type, _sort) }}
+      as (
+        {{ compiled_code }}
+      );
 
-  create {% if temporary -%}temporary{%- endif %} table
-    {{ relation.include(database=(not temporary), schema=(not temporary)) }}
-    {% if backup == false -%}backup no{%- endif %}
-    {{ dist(_dist) }}
-    {{ sort(_sort_type, _sort) }}
-  as (
-    {{ sql }}
-  );
+      {%- endif %}
+  {%- elif language == 'python' -%}
+    {%- if contract_config.enforced -%}
+      {{ exceptions.warn("Redshift python models don't support contract enforcement.`" ~ target_relation ~ "` table will still be created.") }}
+    {%- endif %}
+    {{ return(redshift__py_save_table_as(temporary, relation, compiled_code)) }}
 
-  {%- endif %}
+  {%- else -%}
+      {% do exceptions.raise_compiler_error("redshift__create_table_as macro didn't get supported language, it got %s" % language) %}
+  {%- endif -%}
 {%- endmacro %}
 
 
