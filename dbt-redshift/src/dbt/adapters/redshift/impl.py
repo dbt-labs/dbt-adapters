@@ -12,10 +12,10 @@ from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
 
-
 import dbt_common.exceptions
 
 from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
+from dbt.adapters.redshift.python_submissions import EmrServerlessJobHelper
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -176,14 +176,18 @@ class RedshiftAdapter(SQLAdapter):
     # we can update these with Redshift-specific messages if needed
     @property
     def python_submission_helpers(self) -> Dict[str, Type[PythonJobHelper]]:
-        return super().python_submission_helpers
+        return {
+            "emr_serverless": EmrServerlessJobHelper,
+        }
 
     @property
     def default_python_submission_method(self) -> str:
-        return super().default_python_submission_method
+        return "emr_serverless"
 
     def generate_python_submission_response(self, submission_result: Any) -> AdapterResponse:
-        return super().generate_python_submission_response(submission_result)
+        if not submission_result:
+            return AdapterResponse(_message="ERROR")
+        return AdapterResponse(_message="OK")
 
     def debug_query(self):
         """Override for DebugTask method"""
