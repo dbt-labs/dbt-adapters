@@ -457,14 +457,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
 
         try:
-            operation: Operation = self._notebook_client.create_notebook_execution_job(request=request)
+            operation: Operation = self._notebook_client.create_notebook_execution_job(
+                request=request
+            )
             lro_name = operation.operation.name
-            job_name = lro_name.split('/operations/')[0]
+            job_name = lro_name.split("/operations/")[0]
             retrieved_job = self._track_notebook_job_status(job_name)
         except TimeoutError as timeout_error:
-            raise TimeoutError(
-                f"The dbt operation encountered a timeout: {timeout_error}"
-            )
+            raise TimeoutError(f"The dbt operation encountered a timeout: {timeout_error}")
         except Exception as e:
             raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
