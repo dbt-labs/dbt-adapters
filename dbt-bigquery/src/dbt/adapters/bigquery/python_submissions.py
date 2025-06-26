@@ -473,7 +473,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self._process_gcs_log(gcs_log_uri)
 
         if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
-            _logger.info("Colab notebook execution finished successfully.")
+            _logger.info(
+                f"Colab notebook execution job '{retrieved_job.name}' finished successfully."
+            )
         elif retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
             raise DbtRuntimeError(
                 f"The colab notebook execution job '{retrieved_job.name}' failed."
@@ -481,7 +483,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         else:
             raise DbtRuntimeError(
                 f"The colab notebook execution job '{retrieved_job.name}' "
-                "finished with unexpected state: {retrieved_job.job_state.name}"
+                f"finished with unexpected state: {retrieved_job.job_state.name}"
             )
 
         return self._notebook_client.get_notebook_execution_job(name=job_name)
