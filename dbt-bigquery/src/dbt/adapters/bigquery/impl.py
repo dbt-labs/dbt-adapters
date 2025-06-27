@@ -783,9 +783,9 @@ class BigQueryAdapter(BaseAdapter):
         if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
-        if config.get("bq_tags"):
-            bq_tags = config.get("bq_tags", {})
-            opts["tags"] = list(bq_tags.items())  # type: ignore[assignment]
+        if config.get("resource_tags"):
+            resource_tags = config.get("resource_tags", {})
+            opts["tags"] = list(resource_tags.items())  # type: ignore[assignment]
 
         return opts
 

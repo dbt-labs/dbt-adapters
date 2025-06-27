@@ -932,11 +932,11 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         actual = adapter.get_common_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
-    def test_get_common_options_bq_tags(self):
+    def test_get_common_options_resource_tags(self):
         adapter = self.get_adapter("oauth")
         mock_config = create_autospec(RuntimeConfigObject)
         config = {
-            "bq_tags": {"test-project/env": "dev", "test-project/team": "data"},
+            "resource_tags": {"test-project/env": "dev", "test-project/team": "data"},
         }
         mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
 
@@ -945,11 +945,11 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         # Compare as sets since tag order depends on dictionary ordering
         self.assertEqual(set(actual["tags"]), set(expected["tags"]))
 
-    def test_get_common_options_bq_tags_empty(self):
+    def test_get_common_options_resource_tags_empty(self):
         adapter = self.get_adapter("oauth")
         mock_config = create_autospec(RuntimeConfigObject)
         config = {
-            "bq_tags": {},
+            "resource_tags": {},
         }
         mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
 
@@ -957,12 +957,12 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         actual = adapter.get_common_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
-    def test_get_common_options_bq_tags_and_labels(self):
+    def test_get_common_options_resource_tags_and_labels(self):
         adapter = self.get_adapter("oauth")
         mock_config = create_autospec(RuntimeConfigObject)
         config = {
             "labels": {"label_key": "label_value"},
-            "bq_tags": {"test-project/tag_key": "tag_value"},
+            "resource_tags": {"test-project/tag_key": "tag_value"},
         }
         mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
 
@@ -973,11 +973,11 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         self.assertEqual(set(actual["labels"]), set(expected_labels))
         self.assertEqual(set(actual["tags"]), set(expected_tags))
 
-    def test_get_common_options_bq_tags_none(self):
+    def test_get_common_options_resource_tags_none(self):
         adapter = self.get_adapter("oauth")
         mock_config = create_autospec(RuntimeConfigObject)
         config = {
-            "bq_tags": None,
+            "resource_tags": None,
         }
         mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
 

@@ -17,7 +17,7 @@ MY_MATERIALIZED_VIEW_WITH_TAGS = """
     cluster_by=["id", "value"],
     enable_refresh=True,
     refresh_interval_minutes=60,
-    bq_tags={"test-project/env": "test", "test-project/team": "data"}
+    resource_tags={"test-project/env": "test", "test-project/team": "data"}
 ) }}
 select
     id,
@@ -84,8 +84,8 @@ class TestBigQueryMaterializedViewTags(BigQueryMaterializedViewMixin):
         yield
         project.run_sql(f"drop schema if exists {project.test_schema} cascade")
 
-    def test_materialized_view_with_bq_tags(self, project, my_materialized_view_with_tags):
-        """Test that bq_tags are properly applied to materialized views."""
+    def test_materialized_view_with_resource_tags(self, project, my_materialized_view_with_tags):
+        """Test that resource_tags are properly applied to materialized views."""
         with get_connection(project.adapter):
             results = project.adapter.describe_relation(my_materialized_view_with_tags)
 

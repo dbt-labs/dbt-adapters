@@ -61,11 +61,11 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
         self.assertNotIn("tags", ddl_dict)
         self.assertIn("enable_refresh", ddl_dict)
 
-    def test_parse_relation_config_with_bq_tags(self):
-        """Test parse_relation_config method handles bq_tags correctly"""
+    def test_parse_relation_config_with_resource_tags(self):
+        """Test parse_relation_config method handles resource_tags correctly"""
         from unittest.mock import Mock
 
-        # Mock relation config with bq_tags
+        # Mock relation config with resource_tags
         mock_relation_config = Mock()
         mock_config = Mock()
         mock_config.extra = {
@@ -73,14 +73,14 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
             "refresh_interval_minutes": 30,
             "description": "Test view",
             "labels": {"env": "test"},
-            "bq_tags": {"test-project/team": "data", "test-project/project": "analytics"},
+            "resource_tags": {"test-project/team": "data", "test-project/project": "analytics"},
         }
         mock_config.persist_docs = True
         mock_relation_config.config = mock_config
 
         config_dict = BigQueryOptionsConfig.parse_relation_config(mock_relation_config)
 
-        # Verify bq_tags gets mapped to tags
+        # Verify resource_tags gets mapped to tags
         self.assertEqual(
             config_dict["tags"], {"test-project/team": "data", "test-project/project": "analytics"}
         )
@@ -88,11 +88,11 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
         self.assertEqual(config_dict["description"], "Test view")
         self.assertTrue(config_dict["enable_refresh"])
 
-    def test_parse_relation_config_without_bq_tags(self):
-        """Test parse_relation_config when bq_tags is not present"""
+    def test_parse_relation_config_without_resource_tags(self):
+        """Test parse_relation_config when resource_tags is not present"""
         from unittest.mock import Mock
 
-        # Mock relation config without bq_tags
+        # Mock relation config without resource_tags
         mock_relation_config = Mock()
         mock_config = Mock()
         mock_config.extra = {"enable_refresh": False, "labels": {"env": "prod"}}
@@ -101,7 +101,7 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
 
         config_dict = BigQueryOptionsConfig.parse_relation_config(mock_relation_config)
 
-        # Verify tags is not in the config_dict when bq_tags is not present
+        # Verify tags is not in the config_dict when resource_tags is not present
         self.assertNotIn("tags", config_dict)
         self.assertEqual(config_dict["labels"], {"env": "prod"})
         self.assertFalse(config_dict["enable_refresh"])

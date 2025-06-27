@@ -10,8 +10,8 @@ from dbt.adapters.contracts.relation import RelationConfig, RelationType
 
 
 class TestBigQueryRelationConfigs(unittest.TestCase):
-    def test_materialized_view_config_changeset_with_bq_tags(self):
-        """Test that materialized view config changeset handles bq_tags safely."""
+    def test_materialized_view_config_changeset_with_resource_tags(self):
+        """Test that materialized view config changeset handles resource_tags safely."""
 
         # Create mock existing materialized view config
         existing_options = BigQueryOptionsConfig(
@@ -27,7 +27,7 @@ class TestBigQueryRelationConfigs(unittest.TestCase):
             options=existing_options,
         )
 
-        # Create mock relation config with bq_tags
+        # Create mock relation config with resource_tags
         relation_config = MagicMock(spec=RelationConfig)
         relation_config.identifier = "test_table"
         relation_config.schema = "test_dataset"
@@ -36,7 +36,7 @@ class TestBigQueryRelationConfigs(unittest.TestCase):
             "enable_refresh": True,
             "refresh_interval_minutes": 30,
             "labels": {"env": "prod"},
-            "bq_tags": {
+            "resource_tags": {
                 "test-project/team": "data",
                 "test-project/owner": "analytics",
             },  # New tags

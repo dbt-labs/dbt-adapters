@@ -147,9 +147,9 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         if not relation_config.config.persist_docs:  # type:ignore
             del config_dict["description"]
 
-        # Handle bq_tags if present
-        if bq_tags := relation_config.config.extra.get("bq_tags"):  # type:ignore
-            config_dict.update({"tags": bq_tags})
+        # Handle resource_tags if present
+        if resource_tags := relation_config.config.extra.get("resource_tags"):  # type:ignore
+            config_dict.update({"tags": resource_tags})
 
         return config_dict
 
