@@ -11,7 +11,7 @@ from dbt.adapters.bigquery.relation_configs._base import BigQueryBaseRelationCon
 from dbt.adapters.bigquery.utility import bool_setting, float_setting, sql_escape
 
 
-@dataclass(frozen=True, eq=True, unsafe_hash=True)
+@dataclass(frozen=True, eq=True)
 class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     """
     This config manages materialized view options. See the following for more information:
@@ -25,6 +25,20 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
     labels: Optional[Dict[str, str]] = None
+    tags: Optional[Dict[str, str]] = None
+
+    def __hash__(self) -> int:
+        """Custom hash method to handle unhashable dict fields."""
+        hashable_fields = []
+        for field_name, field_value in self.__dict__.items():
+            if isinstance(field_value, dict):
+                # Convert dict to sorted tuple of items for hashing
+                hashable_fields.append(
+                    (field_name, tuple(sorted(field_value.items())) if field_value else None)
+                )
+            else:
+                hashable_fields.append((field_name, field_value))
+        return hash(tuple(hashable_fields))
 
     def as_ddl_dict(self) -> Dict[str, Any]:
         """
@@ -61,6 +75,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "kms_key_name": string,
             "description": escaped_string,
             "labels": array,
+            "tags": array,
         }
 
         def formatted_option(name: str) -> Optional[Any]:
@@ -88,6 +103,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "kms_key_name": None,
             "description": None,
             "labels": None,
+            "tags": None,
         }
 
         def formatted_setting(name: str) -> Any:
@@ -131,6 +147,10 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         if not relation_config.config.persist_docs:  # type:ignore
             del config_dict["description"]
 
+        # Handle bq_tags if present
+        if bq_tags := relation_config.config.extra.get("bq_tags"):  # type:ignore
+            config_dict.update({"tags": bq_tags})
+
         return config_dict
 
     @classmethod
@@ -147,12 +167,16 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         if labels := table.labels:
             config_dict.update({"labels": labels})
 
+        # Handle tags if they exist on the table
+        if hasattr(table, "tags") and table.tags:
+            config_dict.update({"tags": table.tags})
+
         if encryption_configuration := table.encryption_configuration:
             config_dict.update({"kms_key_name": encryption_configuration.kms_key_name})
         return config_dict
 
 
-@dataclass(frozen=True, eq=True, unsafe_hash=True)
+@dataclass(frozen=True, eq=True)
 class BigQueryOptionsConfigChange(RelationConfigChange):
     context: BigQueryOptionsConfig
 

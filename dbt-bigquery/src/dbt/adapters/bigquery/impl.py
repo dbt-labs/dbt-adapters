@@ -783,6 +783,10 @@ class BigQueryAdapter(BaseAdapter):
         if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
+        if config.get("bq_tags"):
+            bq_tags = config.get("bq_tags", {})
+            opts["tags"] = list(bq_tags.items())  # type: ignore[assignment]
+
         return opts
 
     @available.parse(lambda *a, **k: {})
