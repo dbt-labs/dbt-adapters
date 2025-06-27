@@ -1,0 +1,6 @@
+kind: Fixes
+body: quote columns when altering tables for incremental materialization
+time: 2025-06-26T16:12:48.423782-07:00
+custom:
+  Author: skadyan colin-rogers-dbt
+  Issue: "695"
