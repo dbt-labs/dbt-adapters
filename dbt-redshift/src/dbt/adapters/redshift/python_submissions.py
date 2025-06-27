@@ -29,7 +29,6 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
             parsed_model (Dict[Any, Any]): The parsed python model.
             credentials (RedshiftCredentials): Credentials for redshift connection.
         """
-        super().__init__(parsed_model, credentials)
         self.relation_name = parsed_model.get("relation_name", "NA")
         self.config = EmrServerlessSparkSessionConfig(
             parsed_model.get("config", {}),

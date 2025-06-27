@@ -44,7 +44,6 @@
 
   {%- set contract_config = config.get('contract') -%}
   {%- if language == 'sql' -%}
-    {{ log("Identified SQL Model", info=true) }}
     {%- if contract_config.enforced -%}
       create {% if temporary -%}temporary{%- endif %} table
         {{ relation.include(database=(not temporary), schema=(not temporary)) }}
