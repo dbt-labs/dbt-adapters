@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix Snapshot to avoid inserting redundant entries for records already marked as deleted
+time: 2025-06-26T11:26:59.01969873+02:00
+custom:
+    Author: lpillmann
+    Issue: "654"
