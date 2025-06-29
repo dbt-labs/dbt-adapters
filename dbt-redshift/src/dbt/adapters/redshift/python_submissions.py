@@ -176,7 +176,7 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
                     raise DbtRuntimeError(
                         f"No emr serverless application_id found for application name: {app_name}"
                     )
-            return ""
+            return app["emr_application_id"]
 
     def __str__(self):
         return f"EMR Serverless {self.app_type} Application: {self.application_id}"
