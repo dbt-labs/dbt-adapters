@@ -1,6 +1,5 @@
 import re
 import os
-
 import time
 
 import redshift_connector
@@ -21,7 +20,12 @@ from dbt.adapters.redshift.auth_providers import create_token_service_client
 from dbt_common.contracts.util import Replaceable
 from dbt_common.dataclass_schema import dbtClassMixin, StrEnum, ValidationError
 from dbt_common.helper_types import Port
-from dbt_common.exceptions import DbtRuntimeError, CompilationError, DbtDatabaseError
+from dbt_common.exceptions import (
+    DbtRuntimeError,
+    CompilationError,
+    DbtDatabaseError,
+    DbtInternalError,
+)
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -154,6 +158,16 @@ class RedshiftCredentials(Credentials):
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
 
+    # EMR Spark connection settings
+    s3_uri: Optional[str] = None
+    emr_job_execution_role_arn: Optional[str] = None
+    emr_application_id: Optional[str] = None
+    emr_application_name: Optional[str] = None
+    aws_session_token: Optional[str] = None
+    poll_interval: float = 1.0
+    num_retries: int = 5
+    num_boto3_retries: Optional[int] = None
+
     #
     # IAM identity center methods
     #
@@ -198,8 +212,6 @@ class RedshiftCredentials(Credentials):
             "schema",
             "sslmode",
             "region",
-            "sslmode",
-            "region",
             "autocreate",
             "db_groups",
             "ra3_node",
@@ -212,11 +224,22 @@ class RedshiftCredentials(Credentials):
             "is_serverless",
             "serverless_work_group",
             "serverless_acct_id",
+            "s3_uri",
+            "emr_job_execution_role_arn",
+            "emr_application_id",
+            "emr_application_name",
+            "poll_interval",
+            "num_retries",
+            "num_boto3_retries",
         )
 
     @property
     def unique_field(self) -> str:
         return self.host
+
+    @property
+    def effective_num_retries(self) -> int:
+        return self.num_boto3_retries or self.num_retries
 
 
 def is_serverless(credentials: RedshiftCredentials) -> bool:
@@ -664,3 +687,17 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         if hasattr(Lexer, "get_default_instance"):
             Lexer.get_default_instance()
+
+    def commit(self, ignore=False):
+        try:
+            return super().commit()
+        except DbtInternalError as e:
+            error_message = str(e)
+            if ignore and (
+                "Tried to commit transaction on connection" in error_message
+                and "but it does not have one open!" in error_message
+            ):
+                logger.warning(f"Warning: Ignoring commit error - {e}")
+                return None  # Or some other appropriate return value
+            else:
+                raise
