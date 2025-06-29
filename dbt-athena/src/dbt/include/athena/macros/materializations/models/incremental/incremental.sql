@@ -3,7 +3,7 @@
   {% set is_microbatch = raw_strategy == 'microbatch' %}
   {% set table_type = config.get('table_type', default='hive') | lower %}
   {% set model_language = model['language'] %}
-  {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
+  {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type, model_language) %}
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
   {% set versions_to_keep = config.get('versions_to_keep', 1) | as_number %}
   {% set lf_tags_config = config.get('lf_tags_config') %}
@@ -14,7 +14,6 @@
   {% set temp_schema = config.get('temp_schema') %}
   {% set target_relation = this.incorporate(type='table') %}
   {% set existing_relation = load_relation(this) %}
-  {% set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) %}
   -- If using insert_overwrite on Hive table, allow to set a unique tmp table suffix
   {% if unique_tmp_table_suffix == True and strategy == 'insert_overwrite' and table_type == 'hive' %}
     {% set tmp_table_suffix = adapter.generate_unique_temporary_table_suffix() %}
@@ -52,73 +51,20 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% set to_drop = [] %}
+  {% set build_sql = "" %}
+  {% set build_py = "" %}
+  {%- set post_handle_append_io = false -%}
+  {%- set post_handle_append = false -%}
+  {%- set post_handle_merge = false -%}
 
   -- Relation doesn't exist, do full build --
   {% if existing_relation is none %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-    {% set build_sql = "select '" ~ query_result ~ "'" -%}
-
-  -- Running in full refresh, support High Availability for Iceberg table type --
-  -- Must use s3_data_naming schema_table_unique in order to support high availability --
-  -- on a full fresh for an incremental iceberg table --
-  {%- elif (
-    should_full_refresh()
-    and table_type == 'iceberg'
-    and ('unique' not in s3_data_naming or external_location is not none)
-  ) -%}
-    -- create a new tmp_relation that has its s3 path set to the target location path
-    -- except with a unique UUID
-    -- this allows for once the fully refreshed `tmp_relation` is completed, the `rename_relation()`
-    -- macro can be used to rename the tmp_relation to the target_relation
-    {%- set tmp_relation = api.Relation.create(
-            identifier=target_relation.identifier ~ '__dbt_tmp',
-            schema=target_relation.schema,
-            database=target_relation.database,
-            s3_path_table_part=target_relation.identifier,
-            type='table'
-        )
-    -%}
-
-    -- if the existing tmp_relation exists, drop it
-    {%- if tmp_relation is not none -%}
-      {{ drop_relation(tmp_relation) }}
-    {%- endif -%}
-
-    -- create the full refresh version of the incremental iceberg table
-    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-
-    -- create a backup relation
-    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
-
-    -- if something failed in a prior run and previously created
-    -- backup migration still exists, drop it
-    {%- if relation_bkp is not none -%}
-      {{ drop_relation(relation_bkp) }}
-    {%- endif -%}
-
-    -- rename the current target_relation to a backup_relation
-    {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the new full refreshed tmp_relation to the target_relation
-    {%- do rename_relation(tmp_relation, target_relation) -%}
-    -- drop the backup_relation
-    {%- do drop_relation(relation_bkp) -%}
-
-    {% set build_sql = "select '" ~ query_result ~ "'" -%}
-
-  -- Running in full refresh, drop existing relation, and do full build --
+    {% set build_py = query_result -%}
   {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
     {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
+    {% set build_py = query_result -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -131,17 +77,21 @@
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
-    {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- set iceberg_insert_overwrite = iceberg_incremental_insert_overwrite(tmp_relation, target_relation) -%}
+    {%- set append_query = athena__py_execute_query(iceberg_insert_overwrite) -%}
+
     {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-    {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
-    {% set build_sql = incremental_insert(
-        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
-      )
-    %}
+        {%- if table_type == 'iceberg' -%}
+            {%- set build_py -%}
+                {{- query_result -}}
+                {{-"\n\n"-}}
+                {{- append_query -}}
+            {%- endset -%}
+        {%- endif -%}
+    {% else %}
+      {%- set post_handle_append_io = true -%}
+    {% endif %}
     {% do to_drop.append(tmp_relation) %}
 
   -- Append Strategy --
@@ -150,15 +100,8 @@
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
     {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-    {% set build_sql = incremental_insert(
-        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
-      )
-    %}
+    {% set build_py = query_result -%}
+    {%- set post_handle_append = true -%}
     {% do to_drop.append(tmp_relation) %}
 
   -- Iceberge Merge Stategy --
@@ -190,11 +133,38 @@
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
     {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
+    {% set build_py = query_result -%}
+    {%- set post_handle_merge = true -%}
+    {% do to_drop.append(tmp_relation) %}
+  {% endif %}
+
+  {%- call statement("main", language=model_language) -%}
+    {%- if model_language == 'sql' -%}
+      SELECT '{{ query_result }}';
+    {%- else -%}
+      {{- build_py -}}
     {%- endif -%}
+  {%- endcall -%}
+
+  {% if post_handle_append_io %}
+    -- run incremental insert overwrite append sql
+      {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
+      {% set build_sql = incremental_insert(
+          on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
+        )
+      %}
+  {% endif %}
+
+  {% if post_handle_append %}
+    -- run incremental append sql
+    {% set build_sql = incremental_insert(
+        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
+      )
+    %}
+  {% endif %}
+
+  {% if post_handle_merge %}
+    -- run incremental merge sql
     {% set build_sql = iceberg_merge(
         on_schema_change=on_schema_change,
         tmp_relation=tmp_relation,
