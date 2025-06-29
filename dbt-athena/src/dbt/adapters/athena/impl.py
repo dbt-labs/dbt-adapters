@@ -44,7 +44,10 @@ from dbt.adapters.athena.lakeformation import (
     LfTagsConfig,
     LfTagsManager,
 )
-from dbt.adapters.athena.python_submissions import AthenaPythonJobHelper
+from dbt.adapters.athena.python_submissions import (
+    AthenaPythonJobHelper,
+    EmrServerlessJobHelper,
+)
 from dbt.adapters.athena.relation import (
     AthenaRelation,
     AthenaSchemaSearchMap,
@@ -332,8 +335,8 @@ class AthenaAdapter(SQLAdapter):
                 table_prefix, schema_name, s3_path_table_part, str(uuid4())  # type:ignore
             ),
         }
-
-        return mapping[self._s3_data_naming(s3_data_naming)]
+        loc: str = mapping[self._s3_data_naming(s3_data_naming)]
+        return loc.rstrip("/")
 
     @available
     def get_glue_table(self, relation: AthenaRelation) -> Optional[GetTableResponseTypeDef]:
@@ -1035,7 +1038,9 @@ class AthenaAdapter(SQLAdapter):
         # Update table description
         if persist_relation_docs:
             # Prepare dbt description
-            clean_table_description = ellipsis_comment(clean_sql_comment(model["description"]))
+            clean_table_description = ellipsis_comment(
+                clean_sql_comment(model["description"]), 2048
+            )
             # Get current description from Glue
             glue_table_description = table.get("Description", "")
             # Get current description parameter from Glue
@@ -1146,7 +1151,10 @@ class AthenaAdapter(SQLAdapter):
 
     @property
     def python_submission_helpers(self) -> Dict[str, Type[PythonJobHelper]]:
-        return {"athena_helper": AthenaPythonJobHelper}
+        return {
+            "athena_helper": AthenaPythonJobHelper,
+            "emr_serverless": EmrServerlessJobHelper,
+        }
 
     @available
     def list_schemas(self, database: str) -> List[str]:
