@@ -30,6 +30,7 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
             credentials (RedshiftCredentials): Credentials for redshift connection.
         """
         self.relation_name = parsed_model.get("relation_name", "NA")
+        LOGGER.debug("About to Create EmrServerless SparkSession Config")
         self.config = EmrServerlessSparkSessionConfig(
             parsed_model.get("config", {}),
             polling_interval=credentials.poll_interval,
@@ -140,7 +141,7 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
             app_name = app["emr_application_name"]
             next_token = ""
             args = {
-                "maxResults": 1,
+                "maxResults": 5,
                 "states": [
                     "CREATING",
                     "CREATED",
@@ -154,7 +155,6 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
             if next_token:
                 args["nextToken"] = next_token
             found = False
-            app_id: str = ""
             while not found:
                 try:
                     response = self.emr_serverless_client.list_applications(**args)
@@ -162,11 +162,12 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
                     raise DbtRuntimeError(f"Unable to list emr applications. Got: {e}")
                 apps = response.get("applications", None)
                 if apps:
-                    app_id = next((app["id"] for app in apps if app["name"] == app_name))
-                if app_id:
-                    found = True
-                    LOGGER.debug(f"Found emr serverless application id: {app_id}")
-                    return app_id
+                    app_id_list = [app["id"] for app in apps if app["name"] == app_name]
+                    if len(app_id_list) > 0:
+                        found = True
+                        app_id = app_id_list[0]
+                        LOGGER.info(f"Found emr serverless application id: {app_id}")
+                        return app_id
                 next_token = response.get("nextToken", None)
                 if next_token:
                     args["nextToken"] = next_token
@@ -175,7 +176,7 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
                     raise DbtRuntimeError(
                         f"No emr serverless application_id found for application name: {app_name}"
                     )
-            return app_id
+            return ""
 
     def __str__(self):
         return f"EMR Serverless {self.app_type} Application: {self.application_id}"
