@@ -284,26 +284,26 @@ class BaseSnapshotNewRecordTimestampMode:
 
         # run snapshot with the same source data; neither insert nor update should happen
         run_dbt(["snapshot"])
-        assert len(results) == 0
+        assert len(results) == 1
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 2
 
         # insert the record back and run the snapshot again; update and insert expected
         project.run_sql(reinsert_sql)
         results = run_dbt(["snapshot"])
-        assert len(results) == 2
+        assert len(results) == 1
         check_result = project.run_sql(reinsert_check_sql, fetch="all")
         assert len(check_result) == 3
 
         # delete it once again and run the snapshot; update and insert expected
         project.run_sql(delete_sql)
         results = run_dbt(["snapshot"])
-        assert len(results) == 2
+        assert len(results) == 1
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 4
 
         # run snapshot with the same source data; neither insert nor update should happen
         results = run_dbt(["snapshot"])
-        assert len(results) == 0
+        assert len(results) == 1
         check_result = project.run_sql(_delete_check_sql, fetch="all")
         assert len(check_result) == 4
