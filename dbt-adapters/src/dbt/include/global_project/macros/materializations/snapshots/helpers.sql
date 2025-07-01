@@ -157,7 +157,7 @@
             {%- if strategy.hard_deletes == 'new_record' %}
             and not (
                 --avoid updating the record's valid_to if the latest entry is marked as deleted
-                snapshotted_data.{{ columns.dbt_is_deleted }}
+                snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
                 and snapshotted_data.{{ columns.dbt_valid_to }} is null
             )
             {%- endif %}
@@ -192,7 +192,7 @@
         where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
         and not (
             --avoid inserting a new record if the latest one is marked as deleted
-            snapshotted_data.{{ columns.dbt_is_deleted }}
+            snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
             and snapshotted_data.{{ columns.dbt_valid_to }} is null
             )
 
