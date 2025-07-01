@@ -425,16 +425,24 @@ class BigFramesHelper(_BigQueryPythonHelper):
         max_wait_time = self._polling_retry.timeout
         elapsed = 0
 
+        # Please see all the JobState from
+        # https://cloud.google.com/php/docs/reference/cloud-ai-platform/latest/V1.JobState.
+        terminal_states = {
+            aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED,
+            aiplatform_gapic.JobState.JOB_STATE_PARTIALLY_SUCCEEDED,
+            aiplatform_gapic.JobState.JOB_STATE_FAILED,
+            aiplatform_gapic.JobState.JOB_STATE_CANCELLED,
+            aiplatform_gapic.JobState.JOB_STATE_EXPIRED,
+        }
+
         while True:
             retrieved_job = self._notebook_client.get_notebook_execution_job(name=job_name)
             job_state = retrieved_job.job_state
 
-            if job_state in (
-                aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED,
-                aiplatform_gapic.JobState.JOB_STATE_FAILED,
-            ):
+            if job_state in terminal_states:
                 return retrieved_job
-            elif elapsed >= max_wait_time:
+
+            if elapsed >= max_wait_time:
                 raise TimeoutError(
                     "Operation did not complete within the designated timeout "
                     f"of {max_wait_time} seconds. Please cancel the related "
