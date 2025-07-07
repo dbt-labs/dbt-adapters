@@ -62,6 +62,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
+    copy_grants: Optional[bool] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -83,6 +84,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
+            "copy_grants": config_dict.get("copy_grants"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -103,6 +105,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
             "cluster_by": cluster_by(relation_config),
+            "copy_grants": relation_config.config.extra.get("copy_grants"),  # type:ignore
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore

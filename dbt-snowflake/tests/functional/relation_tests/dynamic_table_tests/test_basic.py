@@ -71,3 +71,36 @@ class TestAutoConfigDoesntFullRefresh:
             f"No configuration changes were identified on: `{model_qualified_name}`. Continuing.",
             logs,
         )
+
+
+class TestDynamicTableCopyGrants:
+    """Test copy_grants functionality specifically for dynamic tables"""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        copy_grants_model = """
+{{ config(
+    materialized='dynamic_table',
+    target_lag='1 minute',
+    snowflake_warehouse='DBT_TESTING_ALT',
+    copy_grants=true
+) }}
+
+select * from {{ ref('my_seed') }}
+"""
+        yield {
+            "my_dynamic_table_copy_grants.sql": copy_grants_model,
+        }
+
+    def test_dynamic_table_copy_grants_in_sql(self, project):
+        """Test that copy_grants appears in the generated SQL"""
+        run_dbt(["seed"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        # Check that copy grants appears in the SQL
+        assert_message_in_logs("copy grants", logs)
+        assert query_relation_type(project, "my_dynamic_table_copy_grants") == "dynamic_table"
