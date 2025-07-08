@@ -52,6 +52,8 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    row_access_policy: Optional[str] = None
+    table_tag: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -274,7 +276,9 @@ class SnowflakeAdapter(SQLAdapter):
             raise
 
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
-
+        schema_objects = schema_objects.rename(
+            column_names=[col.lower() for col in schema_objects.column_names]
+        )
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
@@ -478,3 +482,36 @@ CALL {proc_name}();
             catalog_integration = self.get_catalog_integration(catalog)
             return catalog_integration.build_relation(model)
         return None
+
+    @available
+    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """
+        Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
+
+        Args:
+            relation (SnowflakeRelation): the relation to describe
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_sql = (
+            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
+        )
+        res, dt_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
+        # normalize column names to lower case, this still preserves column order
+        dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
+        return {
+            "dynamic_table": dt_table.select(
+                [
+                    "name",
+                    "schema_name",
+                    "database_name",
+                    "text",
+                    "target_lag",
+                    "warehouse",
+                    "refresh_mode",
+                ]
+            )
+        }

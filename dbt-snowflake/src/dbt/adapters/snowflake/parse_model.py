@@ -1,13 +1,30 @@
 from typing import Iterable, Optional
 
 from dbt_common.exceptions import DbtConfigError
+
+from dbt.adapters.catalogs import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
+
+
+def max_data_extension_time_in_days(model: RelationConfig) -> Optional[int]:
+    return (
+        model.config.get(
+            SnowflakeIcebergTableRelationParameters.max_data_extension_time_in_days, False
+        )
+        if model.config
+        else None
+    )
 
 
 def automatic_clustering(model: RelationConfig) -> Optional[bool]:
-    return model.config.get("automatic_clustering", False) if model.config else None
+    return (
+        model.config.get(SnowflakeIcebergTableRelationParameters.automatic_clustering, False)
+        if model.config
+        else None
+    )
 
 
 def base_location(model: RelationConfig) -> Optional[str]:
@@ -28,7 +45,7 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
-    if _catalog := model.config.get("catalog"):
+    if _catalog := model.config.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME):
         # make catalog_name case-insensitive
         return _catalog.upper()
 
