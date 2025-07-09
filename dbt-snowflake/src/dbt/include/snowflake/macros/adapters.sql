@@ -95,15 +95,12 @@
 {% macro snowflake__alter_relation_comment(relation, relation_comment) -%}
     {%- if relation.is_dynamic_table -%}
         {%- set relation_type = 'dynamic table' -%}
+    {%- elif relation.is_iceberg_format -%}
+        {%- set relation_type = 'iceberg table' -%}
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
-
-    {%- if relation.is_iceberg_format -%}
-        alter iceberg table {{ relation.render() }} set comment = $${{ relation_comment | replace('$', '[$]') }}$$;
-    {%- else -%}
-        comment on {{ relation_type }} {{ relation.render() }} IS $${{ relation_comment | replace('$', '[$]') }}$$;
-    {%- endif -%}
+    alter {{ relation_type }} {{ relation.render() }} set comment = $${{ relation_comment | replace('$', '[$]') }}$$;
 {% endmacro %}
 
 
