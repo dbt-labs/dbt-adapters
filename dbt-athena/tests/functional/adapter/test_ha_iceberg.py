@@ -37,6 +37,24 @@ select
     'test 2' as name
 """
 
+models__incremental_full_refresh_iceberg_naming_table_unique = """
+{{ config(
+        materialized='incremental',
+        table_type='iceberg',
+        s3_data_naming='table_unique',
+        incremental_strategy='merge'
+    )
+}}
+
+select
+    1 as id,
+    'test 1' as name
+union all
+select
+    2 as id,
+    'test 2' as name
+"""
+
 
 class TestTableIcebergTableUnique:
     @pytest.fixture(scope="class")
@@ -92,3 +110,57 @@ class TestTableIcebergTable:
 
         with pytest.raises(Exception):
             run_dbt(["run", "--select", relation_name])
+
+
+class TestIncrementalIcebergFullRefresh:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "iceberg_incremental_full_refresh_table_unique.sql": models__incremental_full_refresh_iceberg_naming_table_unique
+        }
+
+    def test__table_creation(self, project, capsys):
+        relation_name = "iceberg_incremental_full_refresh_table_unique"
+        model_run_result_row_count_query = (
+            f"select count(*) as records from {project.test_schema}.{relation_name}"
+        )
+
+        fist_model_run = run_dbt(["run", "--select", relation_name])
+        first_model_run_result = fist_model_run.results[0]
+        assert first_model_run_result.status == RunStatus.Success
+
+        first_models_records_count = project.run_sql(
+            model_run_result_row_count_query, fetch="all"
+        )[0][0]
+
+        assert first_models_records_count == 2
+
+        second_model_run = run_dbt(["run", "-d", "--full-refresh", "--select", relation_name])
+        second_model_run_result = second_model_run.results[0]
+        assert second_model_run_result.status == RunStatus.Success
+
+        out, _ = capsys.readouterr()
+        # in case of 2nd run we expect that the target table is renamed to __bkp
+        bkp_alter_statement = (
+            f"alter table `{project.test_schema}`.`{relation_name}` "
+            f"rename to `{project.test_schema}`.`{relation_name}__bkp`"
+        )
+
+        # we expect the __dbt_tmp model to be renamed to the target relation
+        dbt_tmp_alter_statement = (
+            f"alter table `{project.test_schema}`.`{relation_name}__dbt_tmp` "
+            f"rename to `{project.test_schema}`.`{relation_name}`"
+        )
+
+        # the __bkp version should be removed
+        delete_bkp_table_log = f'Deleted table from glue catalog: "awsdatacatalog"."{project.test_schema}"."{relation_name}__bkp"'
+
+        assert bkp_alter_statement in out
+        assert dbt_tmp_alter_statement in out
+        assert delete_bkp_table_log in out
+
+        second_models_records_count = project.run_sql(
+            model_run_result_row_count_query, fetch="all"
+        )[0][0]
+
+        assert second_models_records_count == 2

@@ -1,6 +1,10 @@
 name: "Publish internal"
 run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
 
+permissions:
+    id-token: write
+    contents: read
+
 on:
     workflow_dispatch:
         inputs:
@@ -52,6 +56,7 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ inputs.branch }}
+            hatch-env: "ci"
 
     integration-tests:
         if: inputs.skip-integration-tests == false
@@ -59,10 +64,11 @@ jobs:
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ inputs.branch }}
+            hatch-env: "ci"
         secrets: inherit
 
     publish-internal:
-        if: always() && !failure()
+        if: ${{ !failure() && !cancelled() }}
         needs: [unit-tests, integration-tests]
         uses: ./.github/workflows/_publish-internal.yml
         with:

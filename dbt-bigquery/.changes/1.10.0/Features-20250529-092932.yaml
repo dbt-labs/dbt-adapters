@@ -1,0 +1,6 @@
+kind: Features
+body: generate storage_uri from external_volume, base_location_root and base_location_subpath
+time: 2025-05-29T09:29:32.913024-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1129"

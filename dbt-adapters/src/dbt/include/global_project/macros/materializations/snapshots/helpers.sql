@@ -109,7 +109,9 @@
         left outer join snapshotted_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
             where {{ unique_key_is_null(strategy.unique_key, "snapshotted_data") }}
-            or ({{ unique_key_is_not_null(strategy.unique_key, "snapshotted_data") }} and ({{ strategy.row_changed }})
+            or ({{ unique_key_is_not_null(strategy.unique_key, "snapshotted_data") }} and (
+               {{ strategy.row_changed }} {%- if strategy.hard_deletes == 'new_record' -%} or snapshotted_data.{{ columns.dbt_is_deleted }} = 'True' {% endif %}
+            )
 
         )
 
@@ -129,7 +131,7 @@
         join snapshotted_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
         where (
-            {{ strategy.row_changed }}
+            {{ strategy.row_changed }}  {%- if strategy.hard_deletes == 'new_record' -%} or snapshotted_data.{{ columns.dbt_is_deleted }} = 'True' {% endif %}
         )
     )
 
@@ -151,6 +153,14 @@
         left join deletes_source_data as source_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
             where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+
+            {%- if strategy.hard_deletes == 'new_record' %}
+            and not (
+                --avoid updating the record's valid_to if the latest entry is marked as deleted
+                snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
+                and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            )
+            {%- endif %}
     )
     {%- endif %}
 
@@ -180,6 +190,11 @@
         left join deletes_source_data as source_data
             on {{ unique_key_join_on(strategy.unique_key, "snapshotted_data", "source_data") }}
         where {{ unique_key_is_null(strategy.unique_key, "source_data") }}
+        and not (
+            --avoid inserting a new record if the latest one is marked as deleted
+            snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
+            and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            )
 
     )
     {%- endif %}

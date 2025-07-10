@@ -1,0 +1,6 @@
+kind: Dependencies
+body: add lower bound for google-auth in dbt-bigquery
+time: 2025-06-10T11:05:15.015069-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1149"

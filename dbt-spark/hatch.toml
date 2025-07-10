@@ -59,3 +59,46 @@ check-sdist = [
     "pip freeze | grep dbt-spark",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-spark ."
+
+[envs.ci]
+dependencies = [
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-csv~=3.0",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+]
+features=["all"]
+
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = [
+    "pip install -r dagger/requirements.txt",
+    "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}",
+]
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "ddtrace==2.3.0",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-csv~=3.0",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+]
+features=["all"]
+
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = [
+    "pip install -r dagger/requirements.txt",
+    "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}",
+]

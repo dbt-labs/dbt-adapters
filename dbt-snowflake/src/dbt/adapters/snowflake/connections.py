@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from io import StringIO
 from time import sleep
 
-from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING
+from typing import Optional, Tuple, Union, Any, List, Iterable, TYPE_CHECKING, Dict
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -55,6 +55,7 @@ from dbt_common.ui import line_wrap_message, warning_tag
 from dbt.adapters.snowflake.record import SnowflakeRecordReplayHandle
 
 from dbt.adapters.snowflake.auth import private_key_from_file, private_key_from_string
+from dbt.adapters.snowflake.query_headers import SnowflakeMacroQueryStringSetter
 
 if TYPE_CHECKING:
     import agate
@@ -112,6 +113,7 @@ class SnowflakeCredentials(Credentials):
     insecure_mode: Optional[bool] = False
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
+    s3_stage_vpce_dns_name: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -179,6 +181,7 @@ class SnowflakeCredentials(Credentials):
             "retry_all",
             "insecure_mode",
             "reuse_connections",
+            "s3_stage_vpce_dns_name",
         )
 
     def auth_args(self):
@@ -369,6 +372,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
 
             if creds.query_tag:
                 session_parameters.update({"QUERY_TAG": creds.query_tag})
+
+            if creds.s3_stage_vpce_dns_name:
+                session_parameters.update({"S3_STAGE_VPCE_DNS_NAME": creds.s3_stage_vpce_dns_name})
             handle = None
 
             # In replay mode, we won't connect to a real database at all, while
@@ -559,6 +565,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
             self._raise_cursor_not_found_error(sql)
 
         return connection, cursor
+
+    def set_query_header(self, query_header_context: Dict[str, Any]) -> None:
+        self.query_header = SnowflakeMacroQueryStringSetter(self.profile, query_header_context)
 
     def _stripped_queries(self, sql: str) -> List[str]:
         def strip_query(query):

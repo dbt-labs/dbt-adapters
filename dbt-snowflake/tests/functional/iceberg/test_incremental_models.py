@@ -42,9 +42,39 @@ where world_id > 2
 {{% endif %}}
 """
 
+_MODEL_INCREMENTAL_ICEBERG_BUILTIN_BASE = """
+{{{{
+  config(
+    materialized='incremental',
+    catalog='snowflake',
+    incremental_strategy='{strategy}',
+    unique_key="world_id",
+    external_volume = "s3_iceberg_snow",
+    on_schema_change = "sync_all_columns"
+  )
+}}}}
+select * from {{{{ ref('upstream_table') }}}}
+
+{{% if is_incremental() %}}
+where world_id > 2
+{{% endif %}}
+"""
+
+
 _MODEL_INCREMENTAL_ICEBERG_APPEND = _MODEL_INCREMENTAL_ICEBERG_BASE.format(strategy="append")
 _MODEL_INCREMENTAL_ICEBERG_MERGE = _MODEL_INCREMENTAL_ICEBERG_BASE.format(strategy="merge")
 _MODEL_INCREMENTAL_ICEBERG_DELETE_INSERT = _MODEL_INCREMENTAL_ICEBERG_BASE.format(
+    strategy="delete+insert"
+)
+
+
+_MODEL_INCREMENTAL_ICEBERG_BUILTIN_APPEND = _MODEL_INCREMENTAL_ICEBERG_BUILTIN_BASE.format(
+    strategy="append"
+)
+_MODEL_INCREMENTAL_ICEBERG_BUILTIN_MERGE = _MODEL_INCREMENTAL_ICEBERG_BUILTIN_BASE.format(
+    strategy="merge"
+)
+_MODEL_INCREMENTAL_ICEBERG_BUILTIN_DELETE_INSERT = _MODEL_INCREMENTAL_ICEBERG_BUILTIN_BASE.format(
     strategy="delete+insert"
 )
 
@@ -60,10 +90,6 @@ UPDATE {database}.{schema}.upstream_table set world_name = 'Doughnut Plains' whe
 
 class TestIcebergIncrementalStrategies:
     append: str = f"append_{hash(time.time())}"
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.fixture(scope="class")
     def seeds(self):
@@ -126,10 +152,18 @@ class TestIcebergIncrementalStrategies:
         self.__check_correct_operations("delete_insert", rows_affected=1)
 
 
-class TestIcebergIncrementalOnSchemaChangeMutatesRelations:
+class TestIcebergBuiltInIncrementalStrategies(TestIcebergIncrementalStrategies):
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
+    def models(self):
+        return {
+            "upstream_table.sql": _MODEL_BASIC_TABLE_MODEL,
+            f"{self.append}.sql": _MODEL_INCREMENTAL_ICEBERG_BUILTIN_APPEND,
+            "merge.sql": _MODEL_INCREMENTAL_ICEBERG_BUILTIN_MERGE,
+            "delete_insert.sql": _MODEL_INCREMENTAL_ICEBERG_BUILTIN_DELETE_INSERT,
+        }
+
+
+class TestIcebergIncrementalOnSchemaChangeMutatesRelations:
 
     @pytest.fixture(scope="class")
     def seeds(self):

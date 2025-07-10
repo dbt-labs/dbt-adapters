@@ -42,6 +42,10 @@ concurrency:
     group: Publish_OSS-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
 
+permissions:
+    contents: write
+    id-token: write
+
 jobs:
     work-branch:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -69,7 +73,7 @@ jobs:
         secrets: inherit
 
     generate-changelog:
-        if: always() && !failure()
+        if: ${{ !failure() && !cancelled() }}
         needs:
         -   work-branch
         -   bump-version  # bump-version may be a no-op, but the changelog should be generated for the latest version
@@ -81,7 +85,7 @@ jobs:
 
     unit-tests:
         if: |
-            always() && !failure() &&
+            !failure() && !cancelled() &&
             inputs.skip-unit-tests == false &&
             !contains(fromJSON('["dbt-tests-adapter"]'), inputs.package)
         needs:
@@ -91,10 +95,11 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
 
     integration-tests:
         if: |
-            always() && !failure() &&
+            !failure() && !cancelled() &&
             inputs.skip-integration-tests == false &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
         needs:
@@ -104,10 +109,11 @@ jobs:
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
         secrets: inherit
 
     publish:
-        if: always() && !failure()
+        if: ${{ !failure() && !cancelled() }}
         needs:
         -   work-branch
         -   bump-version
@@ -182,7 +188,7 @@ jobs:
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
 
     clean-up:
-        if: always()
+        if: ${{ !cancelled() }}
         needs:
             -   work-branch
             -   publish
