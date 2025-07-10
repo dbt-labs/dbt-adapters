@@ -16,6 +16,7 @@ class InfoSchemaCatalogRelation:
     catalog_name: Optional[str] = constants.DEFAULT_INFO_SCHEMA_CATALOG.name
     table_format: Optional[str] = constants.INFO_SCHEMA_TABLE_FORMAT
     external_volume: Optional[str] = None
+    file_format: Optional[str] = None
     cluster_by: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False

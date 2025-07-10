@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Rename and separate out info schema and biglake catalog integrations
+time: 2025-06-03T11:47:46.831408-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1129"

@@ -1,0 +1,6 @@
+kind: Dependencies
+body: update the lower bound for dbt-adapters version in dbt-snowflake to >=1.16
+time: 2025-06-09T13:56:23.849857-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1148"
