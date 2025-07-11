@@ -57,7 +57,8 @@ from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
 from dbt.adapters.bigquery import constants, parse_model
 from dbt.adapters.bigquery.catalogs import (
-    BigQueryCatalogIntegration,
+    BigLakeCatalogIntegration,
+    BigQueryInfoSchemaCatalogIntegration,
     BigQueryCatalogRelation,
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
@@ -136,7 +137,7 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
-    CATALOG_INTEGRATIONS = [BigQueryCatalogIntegration]
+    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -445,7 +446,7 @@ class BigQueryAdapter(BaseAdapter):
         :param str sql: The sql to execute.
         :return: List[BigQueryColumn]
         """
-        _, iterator = self.connections.raw_execute(sql)
+        _, iterator = self.connections.raw_execute_with_comment(sql)
         columns = [self.Column.create_from_field(field) for field in iterator.schema]
         flattened_columns = []
         for column in columns:
@@ -457,7 +458,7 @@ class BigQueryAdapter(BaseAdapter):
         try:
             conn = self.connections.get_thread_connection()
             client = conn.handle
-            query_job, iterator = self.connections.raw_execute(select_sql)
+            query_job, iterator = self.connections.raw_execute_with_comment(select_sql)
             query_table = client.get_table(query_job.destination)
             return self._get_dbt_columns_from_bq_table(query_table)
 
@@ -816,7 +817,7 @@ class BigQueryAdapter(BaseAdapter):
                 if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
                     opts["table_format"] = f"'{catalog_relation.table_format}'"
                     opts["file_format"] = f"'{catalog_relation.file_format}'"
-                    opts["storage_uri"] = f"'{catalog_relation.external_volume}'"
+                    opts["storage_uri"] = f"'{catalog_relation.storage_uri}'"
 
         return opts
 

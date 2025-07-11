@@ -52,6 +52,8 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    row_access_policy: Optional[str] = None
+    table_tag: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -120,19 +122,36 @@ class SnowflakeAdapter(SQLAdapter):
         return super()._catalog_filter_table(lowered, used_schemas)
 
     def _make_match_kwargs(self, database, schema, identifier):
+        # if any path part is already quoted then consider same casing but without quotes
         quoting = self.config.quoting
-        if identifier is not None and quoting["identifier"] is False:
+        if self._is_quoted(identifier):
+            identifier = self._strip_quotes(identifier)
+        elif identifier is not None and quoting["identifier"] is False:
             identifier = identifier.upper()
 
-        if schema is not None and quoting["schema"] is False:
+        if self._is_quoted(schema):
+            schema = self._strip_quotes(schema)
+        elif schema is not None and quoting["schema"] is False:
             schema = schema.upper()
 
-        if database is not None and quoting["database"] is False:
+        if self._is_quoted(database):
+            database = self._strip_quotes(database)
+        elif database is not None and quoting["database"] is False:
             database = database.upper()
 
         return filter_null_values(
             {"identifier": identifier, "schema": schema, "database": database}
         )
+
+    def _is_quoted(self, identifier: str) -> bool:
+        return (
+            identifier is not None
+            and identifier.startswith(self.Relation.quote_character)
+            and identifier.endswith(self.Relation.quote_character)
+        )
+
+    def _strip_quotes(self, identifier: str) -> str:
+        return identifier.strip(self.Relation.quote_character)
 
     def _get_warehouse(self) -> str:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
@@ -274,7 +293,9 @@ class SnowflakeAdapter(SQLAdapter):
             raise
 
         columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
-
+        schema_objects = schema_objects.rename(
+            column_names=[col.lower() for col in schema_objects.column_names]
+        )
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
@@ -480,58 +501,34 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: RelationConfig) -> Dict[str, Any]:
+    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
         Args:
             relation (SnowflakeRelation): the relation to describe
         """
-
-        original_val: Optional[str] = None
-        try:
-            # Store old QUOTED_IDENTIFIERS_IGNORE_CASE
-            show_param_sql = "show parameters like 'QUOTED_IDENTIFIERS_IGNORE_CASE' in SESSION"
-            show_param_res = self.execute(show_param_sql)
-            if show_param_res:
-                param_qid = show_param_res[0].query_id
-                scan_param_sql = f"SELECT * FROM TABLE(RESULT_SCAN('{param_qid}'))"
-                param_scan_res, rows = self.execute(scan_param_sql, fetch=True)
-                if param_scan_res and param_scan_res.code == "SUCCESS":
-                    try:
-                        original_val = rows[0][1]
-                    except (IndexError, TypeError):
-                        original_val = None
-
-            # falsify QUOTED_IDENTIFIERS_IGNORE_CASE for execution only
-            self.execute("alter session set QUOTED_IDENTIFIERS_IGNORE_CASE = FALSE", fetch=False)
-
-            show_sql = (
-                f"show dynamic tables like '{relation.identifier}' "
-                f"in schema {relation.database}.{relation.schema}"
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_sql = (
+            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
+        )
+        res, dt_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
+        # normalize column names to lower case, this still preserves column order
+        dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
+        return {
+            "dynamic_table": dt_table.select(
+                [
+                    "name",
+                    "schema_name",
+                    "database_name",
+                    "text",
+                    "target_lag",
+                    "warehouse",
+                    "refresh_mode",
+                ]
             )
-            show_res = self.execute(show_sql)
-            if show_res:
-                query_id = show_res[0].query_id
-                scan_sql = (
-                    "select "
-                    '   "name", "schema_name", "database_name", "text", "target_lag", "warehouse", '
-                    '   "refresh_mode" '
-                    f"from TABLE(RESULT_SCAN('{query_id}'))"
-                )
-                res, dt_table = self.execute(scan_sql, fetch=True)
-                if res.code != "SUCCESS":
-                    raise DbtRuntimeError(
-                        f"Could not get dynamic query metadata: {scan_sql} failed"
-                    )
-                return {"dynamic_table": dt_table}
-
-            return {"dynamic_table": None}
-        finally:
-            if original_val is None:
-                self.execute("ALTER SESSION UNSET QUOTED_IDENTIFIERS_IGNORE_CASE", fetch=False)
-            else:
-                bool_str = "TRUE" if original_val.strip().lower() == "true" else "FALSE"
-                self.execute(
-                    f"ALTER SESSION SET QUOTED_IDENTIFIERS_IGNORE_CASE = {bool_str}", fetch=False
-                )
+        }
