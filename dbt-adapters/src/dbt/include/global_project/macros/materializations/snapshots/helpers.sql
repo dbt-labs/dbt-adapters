@@ -8,7 +8,7 @@
 {% macro default__create_columns(relation, columns) %}
   {% for column in columns %}
     {% call statement() %}
-      alter table {{ relation.render() }} add column "{{ column.name }}" {{ column.data_type }};
+      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.data_type }};
     {% endcall %}
   {% endfor %}
 {% endmacro %}
