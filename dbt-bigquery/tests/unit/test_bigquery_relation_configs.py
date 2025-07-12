@@ -6,7 +6,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryMaterializedViewConfig,
     BigQueryOptionsConfig,
 )
-from dbt.adapters.contracts.relation import RelationConfig, RelationType
+from dbt.adapters.contracts.relation import RelationConfig
 
 
 class TestBigQueryRelationConfigs(unittest.TestCase):
