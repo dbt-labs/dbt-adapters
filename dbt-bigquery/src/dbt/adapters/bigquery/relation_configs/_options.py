@@ -1,5 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Dict, Optional
 
 from dbt.adapters.relation_configs import RelationConfigChange
@@ -24,15 +25,15 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     max_staleness: Optional[str] = None
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
-    labels: Optional[Dict[str, str]] = None
-    tags: Optional[Dict[str, str]] = None
+    labels: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
+    tags: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
 
     def __hash__(self) -> int:
         """Custom hash method to handle unhashable dict fields."""
         hashable_fields = []
         for field_name, field_value in self.__dict__.items():
-            if isinstance(field_value, dict):
-                # Convert dict to sorted tuple of items for hashing
+            if isinstance(field_value, (dict, MappingProxyType)):
+                # Convert dict/MappingProxyType to sorted tuple of items for hashing
                 hashable_fields.append(
                     (field_name, tuple(sorted(field_value.items())) if field_value else None)
                 )
