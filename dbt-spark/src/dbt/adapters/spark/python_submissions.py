@@ -3,6 +3,9 @@ import time
 import requests
 from typing import Any, Dict, Callable, Iterable
 import uuid
+import sys
+
+from spark_submit import SparkJob
 
 from dbt.adapters.base import PythonJobHelper
 from dbt_common.exceptions import DbtRuntimeError
@@ -293,3 +296,56 @@ class AllPurposeClusterPythonJobHelper(BaseDatabricksHelper):
                     )
             finally:
                 context.destroy(context_id)
+
+
+class SparkMasterPythonJobHelper(PythonJobHelper):
+    def __init__(self, parsed_model: Dict, credentials: SparkCredentials) -> None:
+        print("=== Using SparkMasterPythonJobHelper! ===")
+        sys.stdout.flush()
+
+        self.parsed_model = parsed_model
+        self.credentials = credentials
+        self.run_code_path = self.parsed_model["compiled_path"].replace("compiled", "run")
+        self.spark_app_name = f"dbt-spark-{parsed_model['unique_id'].replace('.', '_')}"
+
+        # Resources: pull from config if present
+        self.driver_memory = parsed_model["config"].get("driver_memory", "1g")
+        self.driver_cores = parsed_model["config"].get("driver_cores", 1)
+        self.executor_memory = parsed_model["config"].get("executor_memory", "1g")
+        self.executor_cores = parsed_model["config"].get("executor_cores", 1)
+        self.total_executor_cores = parsed_model["config"].get("total_executor_cores", 1)
+
+        # Merge spark_conf: global from profile + per-model overrides
+        global_conf = credentials.spark_conf or {}
+        model_conf = parsed_model["config"].get("spark_conf", {})
+        self.spark_conf = {**global_conf, **model_conf}
+
+        # Spark master + optional args
+        self.spark_master = parsed_model["config"].get(
+            "spark_master", getattr(self.credentials, "spark_master", None)
+        )
+        if not self.spark_master:
+            raise RuntimeError(
+                "No 'spark_master' configured. Set it either in profiles.yml or your model with"
+                "dbt.config(spark_master=...)"
+            )
+        self.location = parsed_model["config"].get("location", None)
+
+    def submit(self, compiled_code: str) -> None:
+        # Format conf dict as a list of "key=value" strings
+        formatted_conf = [f"{k}={v}" for k, v in self.spark_conf.items()]
+
+        job = SparkJob(
+            self.run_code_path,
+            name=self.spark_app_name,
+            master=self.spark_master,
+            main_file_args=self.location,
+            conf=formatted_conf,
+            deploy_mode="client",
+            driver_memory=self.driver_memory,
+            driver_cores=self.driver_cores,
+            executor_memory=self.executor_memory,
+            executor_cores=self.executor_cores,
+            total_executor_cores=self.total_executor_cores,
+        )
+        job.submit(poll_time=DEFAULT_POLLING_INTERVAL, timeout=DEFAULT_TIMEOUT)
