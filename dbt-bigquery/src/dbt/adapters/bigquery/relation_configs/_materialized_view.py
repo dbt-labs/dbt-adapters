@@ -122,19 +122,19 @@ class BigQueryMaterializedViewConfigChangeset:
     @property
     def requires_full_refresh(self) -> bool:
         return any(
-            [
+            {
                 self.options.requires_full_refresh if self.options else False,
                 self.partition.requires_full_refresh if self.partition else False,
                 self.cluster.requires_full_refresh if self.cluster else False,
-            ]
+            }
         )
 
     @property
     def has_changes(self) -> bool:
         return any(
-            [
+            {
                 self.options if self.options else False,
                 self.partition if self.partition else False,
                 self.cluster if self.cluster else False,
-            ]
+            }
         )

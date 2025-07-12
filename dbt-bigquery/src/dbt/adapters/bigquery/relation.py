@@ -95,33 +95,7 @@ class BigQueryRelation(BaseRelation):
         config_change_collection = BigQueryMaterializedViewConfigChangeset()
         new_materialized_view = cls.materialized_view_from_relation_config(relation_config)
 
-        # Compare options safely by converting them to comparable format
-        def _options_equal(options1, options2):
-            """Compare two BigQueryOptionsConfig objects safely."""
-            if options1 is None and options2 is None:
-                return True
-            if options1 is None or options2 is None:
-                return False
-
-            # Get all possible field names from both objects
-            all_fields = set(options1.__dict__.keys()) | set(options2.__dict__.keys())
-
-            # Compare all fields
-            for key in all_fields:
-                if key in ("labels", "tags"):
-                    # Compare dict fields separately, treating None as distinct from {}
-                    val1 = getattr(options1, key, None)
-                    val2 = getattr(options2, key, None)
-                    if val1 != val2:
-                        return False
-                else:
-                    val1 = getattr(options1, key, None)
-                    val2 = getattr(options2, key, None)
-                    if val1 != val2:
-                        return False
-            return True
-
-        if not _options_equal(new_materialized_view.options, existing_materialized_view.options):
+        if new_materialized_view.options != existing_materialized_view.options:
             config_change_collection.options = BigQueryOptionsConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.options,
@@ -153,10 +127,7 @@ class BigQueryRelation(BaseRelation):
         """
         filter = ""
         if event_time_filter.start and event_time_filter.end:
-            filter = (
-                f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}' "
-                f"and cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
-            )
+            filter = f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}' and cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
         elif event_time_filter.start:
             filter = (
                 f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}'"
