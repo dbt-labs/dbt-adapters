@@ -177,7 +177,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         return config_dict
 
 
-@dataclass(frozen=True, eq=True)
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class BigQueryOptionsConfigChange(RelationConfigChange):
     context: BigQueryOptionsConfig
 
