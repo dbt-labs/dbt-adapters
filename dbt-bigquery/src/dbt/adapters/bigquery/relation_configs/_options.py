@@ -169,8 +169,8 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             config_dict.update({"labels": labels})
 
         # Handle tags if they exist on the table
-        if hasattr(table, "tags") and table.tags:
-            config_dict.update({"tags": table.tags})
+        if hasattr(table, "resource_tags") and table.resource_tags:
+            config_dict.update({"tags": table.resource_tags})
 
         if encryption_configuration := table.encryption_configuration:
             config_dict.update({"kms_key_name": encryption_configuration.kms_key_name})
