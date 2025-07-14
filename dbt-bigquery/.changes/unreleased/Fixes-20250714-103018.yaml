@@ -3,4 +3,4 @@ body: Skip cloning objects if the target and defferal are the same
 time: 2025-07-14T10:30:18.802612-07:00
 custom:
   Author: colin-rogers-dbt
-  Issue: "994"
+  Issue: "1198"
