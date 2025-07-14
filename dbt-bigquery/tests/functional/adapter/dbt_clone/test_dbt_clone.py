@@ -1,5 +1,9 @@
 import pytest
-from dbt.tests.adapter.dbt_clone.test_dbt_clone import BaseClonePossible
+from dbt.tests.adapter.dbt_clone.test_dbt_clone import (
+    BaseClonePossible,
+    BaseCloneSameSourceAndTarget,
+    BaseCloneNotPossible,
+)
 
 
 class TestBigQueryClonePossible(BaseClonePossible):
@@ -17,4 +21,12 @@ class TestBigQueryClonePossible(BaseClonePossible):
             )
             project.adapter.drop_schema(relation)
 
+    pass
+
+
+class TestBigQueryCloneSameSourceAndTarget(BaseCloneSameSourceAndTarget):
+    pass
+
+
+class TestBigQueryCloneNotPossible(BaseCloneNotPossible):
     pass
