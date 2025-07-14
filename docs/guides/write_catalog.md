@@ -1,6 +1,4 @@
-# Implementing External Data Catalog Support in dbt Core Adapters
-
-This guide provides step-by-step instructions for dbt Core adapter maintainers to implement support for external data catalogs (such as Iceberg, Glue, Unity Catalog, etc.) in their adapters.
+# Implementing Support for Catalog Integrations in dbt Core Adapters
 
 ## Overview
 
@@ -35,12 +33,12 @@ catalogs:
 - **`name`**: Unique identifier for the catalog integration in the dbt project
 - **`active_write_integration`**: Which write integration to use (defaults to first if only one exists)
 - **`write_integrations`**: List of integration configurations
-  - **`catalog_type`**: Type of catalog (e.g., "iceberg_rest", "unity", "glue")
+  - **`catalog_type`**: Type of catalog (e.g., "iceberg_rest", "unity", "glue"), this is how you will distinguish between different types of integrations.
   - **`catalog_name`**: Name of the catalog in the data platform
   - **`table_format`**: Table format (e.g., "iceberg", "delta")
-  - **`external_volume`**: External storage volume identifier
+  - **`external_volume`**: External storage volume identifier, use this in the context of the integration (i.e. it can be an s3 path or the logical name of a drive or configuration)
   - **`file_format`**: File format (e.g., "parquet", "delta")
-  - **`adapter_properties`**: Adapter-specific properties
+  - **`adapter_properties`**: Adapter-specific properties, a dictionary of platform configuration parameters
 
 ### Usage in Models
 
@@ -149,13 +147,82 @@ class MyCatalogRelation:
         return properties
 ```
 
-### Step 3: Register Catalog Integrations in Your Adapter
+### Step 3: Define Constants for Your Catalog Integrations (Optional)
+
+Following the established pattern in existing adapters, you can optionally create a `constants.py` file to define your catalog types and default configurations. This step is recommended if you have multiple catalog integrations or platform-specific parameters, but you can use your best judgment based on your adapter's complexity:
+
+```python
+# constants.py
+from types import SimpleNamespace
+
+# Define string constants for catalog types
+INFO_SCHEMA_CATALOG_TYPE = "INFO_SCHEMA"
+ICEBERG_CATALOG_TYPE = "iceberg_rest"
+GLUE_CATALOG_TYPE = "glue"
+
+# Define table format constants
+DEFAULT_TABLE_FORMAT = "default"
+ICEBERG_TABLE_FORMAT = "iceberg"
+
+# Define file format constants
+DEFAULT_FILE_FORMAT = "default"
+PARQUET_FILE_FORMAT = "parquet"
+
+# Define default catalog integrations using SimpleNamespace
+DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
+    name="info_schema",
+    catalog_name="info_schema",
+    catalog_type=INFO_SCHEMA_CATALOG_TYPE,
+    table_format=DEFAULT_TABLE_FORMAT,
+    external_volume=None,
+    file_format=DEFAULT_FILE_FORMAT,
+    adapter_properties={},
+)
+
+DEFAULT_ICEBERG_CATALOG = SimpleNamespace(
+    name="managed_iceberg",
+    catalog_name="managed_iceberg",
+    catalog_type=ICEBERG_CATALOG_TYPE,
+    table_format=ICEBERG_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    adapter_properties={},
+)
+
+# Platform-specific parameter names (if needed)
+MyPlatformIcebergTableParameters = SimpleNamespace(
+    storage_uri="storage_uri",
+    custom_property="custom_property",
+)
+```
+
+This pattern provides several benefits:
+
+- **Consistency**: String constants ensure consistent naming across your adapter
+- **Default Configurations**: SimpleNamespace objects provide default catalog configurations
+- **Easy References**: Constants can be imported and used throughout your adapter code
+- **Platform Parameters**: Centralized location for platform-specific parameter names
+
+**When to use this pattern:**
+- You have multiple catalog integrations with different types
+- Your platform has many configuration parameters that need consistent naming
+- You want to provide default catalog configurations for common use cases
+- You're building a complex adapter with multiple files referencing the same parameters
+
+**When it might be overkill:**
+- You only have one simple catalog integration
+- Your configuration parameters are straightforward and unlikely to change
+- You prefer to define configurations inline for simplicity
+
+### Step 4: Register Catalog Integrations in Your Adapter
 
 Update your adapter's `__init__.py` to register supported catalog integrations:
 
+**With constants pattern:**
 ```python
 from dbt.adapters.base import BaseAdapter
 from .catalogs import MyIcebergCatalogIntegration, MyGlueCatalogIntegration
+from . import constants
 
 class MyAdapter(BaseAdapter):
     # ... existing code ...
@@ -167,11 +234,81 @@ class MyAdapter(BaseAdapter):
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
-        # Add any default catalog integrations
-        self.add_catalog_integration(DEFAULT_CATALOG_CONFIG)
+        # Add default catalog integrations using constants
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
 ```
 
-### Step 4: Update Materialization Macros
+**Without constants pattern (simpler approach):**
+```python
+from dbt.adapters.base import BaseAdapter
+from .catalogs import MyIcebergCatalogIntegration
+from types import SimpleNamespace
+
+class MyAdapter(BaseAdapter):
+    # ... existing code ...
+
+    CATALOG_INTEGRATIONS = [
+        MyIcebergCatalogIntegration,
+    ]
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        # Add a simple default catalog integration inline
+        default_catalog = SimpleNamespace(
+            name="default_catalog",
+            catalog_type="iceberg_rest",
+            catalog_name="default_catalog",
+            table_format="iceberg",
+            external_volume=None,
+            file_format="parquet",
+            adapter_properties={},
+        )
+        self.add_catalog_integration(default_catalog)
+```
+
+### Constants Pattern Examples
+
+Here are real examples from existing adapters:
+
+**BigQuery** ([`constants.py`](https://github.com/dbt-labs/dbt-bigquery/blob/main/dbt/adapters/bigquery/constants.py)):
+```python
+BIGLAKE_CATALOG_TYPE = "biglake_metastore"
+ICEBERG_TABLE_FORMAT = "iceberg"
+PARQUET_FILE_FORMAT = "parquet"
+
+DEFAULT_ICEBERG_CATALOG = SimpleNamespace(
+    name="managed_iceberg",
+    catalog_name="managed_iceberg",
+    catalog_type=BIGLAKE_CATALOG_TYPE,
+    table_format=ICEBERG_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    adapter_properties={},
+)
+```
+
+**Snowflake** ([`constants.py`](https://github.com/dbt-labs/dbt-snowflake/blob/main/dbt/adapters/snowflake/constants.py)):
+```python
+ICEBERG_TABLE_FORMAT = "ICEBERG"
+
+DEFAULT_BUILT_IN_CATALOG = SimpleNamespace(
+    name="SNOWFLAKE",
+    catalog_type="BUILT_IN",
+    external_volume=None,
+    file_format=None,
+    adapter_properties={},
+)
+
+SnowflakeIcebergTableRelationParameters = SimpleNamespace(
+    storage_serialization_policy="storage_serialization_policy",
+    data_retention_time_in_days="data_retention_time_in_days",
+    max_data_extension_time_in_days="max_data_extension_time_in_days",
+    change_tracking="change_tracking",
+)
+```
+
+### Step 5: Update Materialization Macros
 
 Update your materialization macros to handle catalog configurations:
 
@@ -202,10 +339,41 @@ Update your materialization macros to handle catalog configurations:
 {%- endmacro %}
 ```
 
-### Step 5: Add Catalog-Aware Model Parsing
+### Step 6: Add Catalog-Aware Model Parsing
 
 Create parsing utilities to extract catalog information from models:
 
+**With constants pattern:**
+```python
+# parse_model.py
+from typing import Optional
+from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.catalogs import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+from . import constants
+
+def catalog_name(model: RelationConfig) -> Optional[str]:
+    """Extract catalog name from model configuration"""
+    if not hasattr(model, "config") or not model.config:
+        return None
+
+    if catalog := model.config.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME):
+        return catalog
+
+    # Handle legacy 'catalog' config key
+    if catalog := model.config.get("catalog"):
+        return catalog
+
+    return constants.DEFAULT_INFO_SCHEMA_CATALOG.name
+
+def storage_uri(model: RelationConfig) -> Optional[str]:
+    """Extract storage URI from model configuration"""
+    if not hasattr(model, "config") or not model.config:
+        return None
+
+    return model.config.get(constants.MyPlatformIcebergTableParameters.storage_uri)
+```
+
+**Without constants pattern:**
 ```python
 # parse_model.py
 from typing import Optional
@@ -224,14 +392,14 @@ def catalog_name(model: RelationConfig) -> Optional[str]:
     if catalog := model.config.get("catalog"):
         return catalog
 
-    return None
+    return "default_catalog"  # Simple default
 
 def storage_uri(model: RelationConfig) -> Optional[str]:
     """Extract storage URI from model configuration"""
     if not hasattr(model, "config") or not model.config:
         return None
 
-    return model.config.get("storage_uri")
+    return model.config.get("storage_uri")  # Direct parameter name
 ```
 
 ## 4. How to Test Your Catalog Integration
@@ -376,72 +544,6 @@ class TestMyIcebergCatalogIntegration(unittest.TestCase):
         assert relation.catalog_type == "iceberg_rest"
         assert relation.table_format == "iceberg"
         assert "s3://bucket/warehouse/" in relation.storage_uri
-```
-
-## Best Practices
-
-### 1. Error Handling
-
-Implement proper error handling for catalog operations:
-
-```python
-from dbt_common.exceptions import DbtConfigError
-
-def build_relation(self, model: RelationConfig) -> MyCatalogRelation:
-    try:
-        # Build relation logic
-        return MyCatalogRelation(...)
-    except Exception as e:
-        raise DbtConfigError(
-            f"Failed to build catalog relation for model {model.name}: {str(e)}"
-        )
-```
-
-### 2. Validation
-
-Add validation for catalog configurations:
-
-```python
-def __init__(self, config: CatalogIntegrationConfig) -> None:
-    super().__init__(config)
-
-    # Validate required properties
-    if not self.external_volume:
-        raise DbtConfigError(
-            f"external_volume is required for catalog integration '{self.name}'"
-        )
-
-    # Validate adapter properties
-    if required_prop := config.adapter_properties.get("required_property"):
-        if not self._validate_property(required_prop):
-            raise DbtConfigError(f"Invalid required_property: {required_prop}")
-```
-
-### 3. Documentation
-
-Document your catalog integration configuration options:
-
-```python
-class MyIcebergCatalogIntegration(CatalogIntegration):
-    """
-    Iceberg catalog integration for MyPlatform
-
-    Supported adapter_properties:
-    - storage_uri: Base URI for table storage (required)
-    - custom_property: Custom configuration option (optional)
-
-    Example configuration:
-    ```yaml
-    catalogs:
-      - name: my_iceberg
-        write_integrations:
-          - name: iceberg_integration
-            catalog_type: iceberg_rest
-            adapter_properties:
-              storage_uri: s3://my-bucket/warehouse/
-              custom_property: value
-    ```
-    """
 ```
 
 ## Additional Resources
