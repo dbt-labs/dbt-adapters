@@ -3,17 +3,27 @@
   {%- set rel_type_object = adapter.get_glue_table_type(relation) -%}
   {%- set rel_type = none if rel_type_object == none else rel_type_object.value -%}
   {%- set natively_droppable = rel_type == 'iceberg_table' or relation.type == 'view' -%}
+  {%- set full_refresh_mode = should_full_refresh() -%}
 
   {%- if native_drop and natively_droppable -%}
     {%- do drop_relation_sql(relation) -%}
   {%- else -%}
-    {%- do drop_relation_glue(relation) -%}
+    {%- if full_refresh_mode -%}
+      {%- do drop_relation_glue_preserve_data(relation) -%}
+    {%- else -%}
+      {%- do drop_relation_glue(relation) -%}
+    {%- endif -%}
   {%- endif -%}
 {% endmacro %}
 
 {% macro drop_relation_glue(relation) -%}
   {%- do log('Dropping relation via Glue and S3 APIs') -%}
   {%- do adapter.clean_up_table(relation) -%}
+  {%- do adapter.delete_from_glue_catalog(relation) -%}
+{% endmacro %}
+
+{% macro drop_relation_glue_preserve_data(relation) -%}
+  {%- do log('Full refresh mode: Only removing from Glue catalog, preserving S3 data') -%}
   {%- do adapter.delete_from_glue_catalog(relation) -%}
 {% endmacro %}
 
