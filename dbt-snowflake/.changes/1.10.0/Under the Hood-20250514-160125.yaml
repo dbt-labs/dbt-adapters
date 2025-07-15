@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Raise the dbt-adapters pin to 1.14.3 to make dbt-adapter dependency resolution more reliable for higher versions of snowflake.
+time: 2025-05-14T16:01:25.066308-07:00
+custom:
+    Author: versusfacit
+    Issue: "1098"

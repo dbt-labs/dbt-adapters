@@ -1,0 +1,110 @@
+[version]
+path = "src/dbt/adapters/bigquery/__version__.py"
+
+[build.targets.wheel]
+packages = ["src/dbt"]
+sources = ["src"]
+
+[envs.default]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
+dependencies = [
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
+    "ipdb~=0.13.13",
+    "pre-commit==3.7.0",
+    "flaky",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-csv~=3.0",
+    "pytest-dotenv",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+    "requests",
+]
+
+[envs.default.scripts]
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+]
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
+integration-tests = "python -m pytest --profile service_account {args:tests/functional}"
+docker-dev = [
+    "docker build -f docker/dev.Dockerfile -t dbt-bigquery-dev .",
+	"docker run --rm -it --name dbt-bigquery-dev -v $(shell pwd):/opt/code dbt-bigquery-dev",
+]
+
+[envs.build]
+detached = true
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
+
+[envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_bigquery-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-bigquery",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_bigquery-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-bigquery",
+]
+docker-prod = "docker build -f docker/Dockerfile -t dbt-bigquery ."
+
+[envs.ci]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
+dependencies = [
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
+    "flaky",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-csv~=3.0",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+    "requests",
+]
+
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional --ddtrace'
+integration-tests-flaky = "python -m pytest -n1 -m flaky --profile service_account tests/functional --ddtrace"
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "dbt-tests-adapter>=1.11.0,<2.0",
+    "ddtrace==2.3.0",
+    "flaky",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-csv~=3.0",
+    "pytest-logbook~=1.2",
+    "pytest-mock",
+    "pytest-xdist",
+    "requests",
+]
+
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional --ddtrace'
+integration-tests-flaky = "python -m pytest -n1 -m flaky --profile service_account tests/functional --ddtrace"

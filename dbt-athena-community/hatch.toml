@@ -1,0 +1,86 @@
+[build.targets.wheel]
+packages = ["src/dbt/adapters"]
+sources = ["src"]
+
+[envs.default]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-athena",
+]
+dependencies = [
+    "ddtrace==2.3.0",
+    "isort~=5.13",
+    "moto~=5.0.13",
+    "pre-commit~=3.5",
+    "pyparsing~=3.1.4",
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv~=0.5",
+    "pytest-xdist~=3.6",
+]
+[envs.default.scripts]
+setup = [
+    "pre-commit install",
+]
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:../dbt-athena/tests/unit}"
+integration-tests = "python -m pytest {args:../dbt-athena/tests/functional}"
+all-tests = ["unit-tests", "integration-tests"]
+
+[envs.build]
+detached = true
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
+[envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_athena_community-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-athena-community",
+    "pip freeze | grep dbt-athena",
+]
+check-sdist = [
+    "twine check dist/*",
+    "find ./dist/dbt_athena_community-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-athena-community",
+    "pip freeze | grep dbt-athena",
+]
+
+[envs.ci]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+    "pip install -e ../dbt-athena",
+]
+dependencies = [
+    "ddtrace==2.3.0",
+    "isort~=5.13",
+    "moto~=5.0.13",
+    "pyparsing~=3.1.4",
+    "pytest>=7.0,<8.0",
+    "pytest-xdist~=3.6",
+]
+[envs.ci.scripts]
+unit-tests = "python -m pytest ../dbt-athena/tests/unit --ddtrace"
+integration-tests = "python -m pytest ../dbt-athena/tests/functional --ddtrace"
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "dbt-tests-adapter>=1.11.0,<2.0",
+    "ddtrace==2.3.0",
+    "isort~=5.13",
+    "moto~=5.0.13",
+    "pyparsing~=3.1.4",
+    "pytest>=7.0,<8.0",
+    "pytest-xdist~=3.6",
+]
+[envs.cd.scripts]
+unit-tests = "python -m pytest -n auto ../dbt-athena/tests/unit --ddtrace"
+integration-tests = "python -m pytest -n auto ../dbt-athena/tests/functional --ddtrace"

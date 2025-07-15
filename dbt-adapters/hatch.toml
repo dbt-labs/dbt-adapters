@@ -1,0 +1,72 @@
+[version]
+path = "src/dbt/adapters/__about__.py"
+
+[build.targets.wheel]
+packages = ["src/dbt/adapters", "src/dbt/include"]
+sources = ["src"]
+
+[envs.default]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
+    'pre-commit==3.7.0',
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.default.scripts]
+setup = "pre-commit install"
+code-quality = "pre-commit run --all-files"
+unit-tests = "python -m pytest {args:tests/unit}"
+workflow-code-quality = "gh workflow run _code-quality.yml --ref $(git rev-parse --abbrev-ref HEAD) -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-generate-changelog = "gh workflow run _generate-changelog.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f merge=false -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-publish-pypi = "gh workflow run _publish-pypi.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f deploy-to=test -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-unit-tests = "gh workflow run _unit-tests.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-verify-build = "gh workflow run _verify-build.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD)"
+workflow-publish = "gh workflow run publish.yml --ref $(git rev-parse --abbrev-ref HEAD) -f package=dbt-adapters -f branch=$(git rev-parse --abbrev-ref HEAD) -f deploy-to=test -f pypi-internal=false -f pypi-public=true"
+
+[envs.build]
+detached = true
+dependencies = [
+    "wheel",
+    "twine",
+    "check-wheel-contents",
+]
+[envs.build.scripts]
+check-all = [
+    "- check-wheel",
+    "- check-sdist",
+]
+check-wheel = [
+    "twine check dist/*",
+    "find ./dist/dbt_adapters-*.whl -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+check-sdist = [
+    "check-wheel-contents dist/*.whl --ignore W007,W008",
+    "find ./dist/dbt_adapters-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
+    "pip freeze | grep dbt-adapters",
+]
+protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events ./dbt/adapters/events/adapter_types.proto"
+
+[envs.ci]
+dependencies = [
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "ddtrace==2.3.0",
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "ddtrace==2.3.0",
+    "pytest>=7.0,<8.0",
+    "pytest-dotenv",
+    "pytest-xdist",
+]
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"

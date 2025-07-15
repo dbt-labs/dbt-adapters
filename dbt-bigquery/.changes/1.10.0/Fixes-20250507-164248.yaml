@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set 1 hour as default timeout in bigframes mode
+time: 2025-05-07T16:42:48.237750202Z
+custom:
+    Author: jialuoo
+    Issue: "1070"

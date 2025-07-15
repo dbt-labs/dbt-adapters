@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set job_retry to None to resolve Google Cloud warning
+time: 2025-05-13T10:52:11.119783-04:00
+custom:
+    Author: katieclaiborne-duet
+    Issue: '#1088'
