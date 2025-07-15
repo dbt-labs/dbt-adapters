@@ -308,9 +308,9 @@ SnowflakeIcebergTableRelationParameters = SimpleNamespace(
 )
 ```
 
-### Step 5: Update Materialization Macros
+### Step 5: Update Relation Macros
 
-Update your materialization macros to handle catalog configurations:
+Update your relation macros to handle catalog configurations. This will typically just be tables and materialized views but make sure to double check platform docs.
 
 ```sql
 -- macros/materializations/table.sql
@@ -443,7 +443,7 @@ class TestMyAdapterCatalogIntegration(BaseCatalogIntegrationValidation):
 
 ### Step 2: Create Test Models
 
-Create test models that use your catalog integration:
+Create test models that use your catalog integration, we recommend creating a test case for each materialization you plan on adding support for:
 
 ```python
 # Test model that uses catalog configuration
