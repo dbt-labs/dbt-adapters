@@ -17,11 +17,11 @@ class TestIcebergRestCatalogIntegration:
             catalog_name="POLARIS",
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
-            adapter_properties={"rest_endpoint": "https://example.com/api"}
+            adapter_properties={"rest_endpoint": "https://example.com/api"},
         )
-        
+
         integration = IcebergRestCatalogIntegration(config)
-        
+
         assert integration.name == "test_iceberg_rest"
         assert integration.catalog_name == "POLARIS"
         assert integration.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
@@ -37,11 +37,11 @@ class TestIcebergRestCatalogIntegration:
             catalog_name="POLARIS",
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
-            adapter_properties={"rest_endpoint": "https://example.com/api"}
+            adapter_properties={"rest_endpoint": "https://example.com/api"},
         )
-        
+
         integration = IcebergRestCatalogIntegration(config)
-        
+
         # Mock model config
         model = Mock()
         model.config = {
@@ -49,13 +49,13 @@ class TestIcebergRestCatalogIntegration:
             "base_location_subpath": "subpath",
             "external_volume": "model_volume",
             "cluster_by": ["col1", "col2"],
-            "automatic_clustering": True
+            "automatic_clustering": True,
         }
         model.schema = "test_schema"
         model.identifier = "test_table"
-        
+
         relation = integration.build_relation(model)
-        
+
         assert isinstance(relation, IcebergRestCatalogRelation)
         assert relation.catalog_name == "POLARIS"
         assert relation.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
@@ -70,20 +70,20 @@ class TestIcebergRestCatalogIntegration:
             catalog_name="POLARIS",
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
-            adapter_properties={}
+            adapter_properties={},
         )
-        
+
         integration = IcebergRestCatalogIntegration(config)
-        
+
         # Mock model with minimal config
         model = Mock()
         model.config = {}
         model.schema = "test_schema"
         model.identifier = "test_table"
-        
+
         relation = integration.build_relation(model)
-        
+
         assert isinstance(relation, IcebergRestCatalogRelation)
         assert relation.catalog_name == "POLARIS"
         assert relation.external_volume == "s3_volume"  # Should use integration's volume
-        assert relation.base_location == "_dbt/test_schema/test_table"  # Default prefix 
+        assert relation.base_location == "_dbt/test_schema/test_table"  # Default prefix

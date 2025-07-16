@@ -24,7 +24,6 @@ class IcebergRestCatalogRelation:
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
-    catalog_name = constants.DEFAULT_ICEBERG_REST_CATALOG.name
     catalog_type = constants.DEFAULT_ICEBERG_REST_CATALOG.catalog_type
     table_format = constants.ICEBERG_TABLE_FORMAT
     file_format = None  # Snowflake chooses based on stage-format
@@ -48,4 +47,4 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             external_volume=parse_model.external_volume(model) or self.external_volume,
             cluster_by=parse_model.cluster_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
-        ) 
+        )

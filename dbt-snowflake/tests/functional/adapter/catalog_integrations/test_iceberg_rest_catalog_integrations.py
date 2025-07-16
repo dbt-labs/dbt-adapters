@@ -27,10 +27,15 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
                             "catalog_type": "iceberg_rest",
                             "catalog_name": "POLARIS",
                             "table_format": "iceberg",
-                            "external_volume": os.getenv("SNOWFLAKE_TEST_ICEBERG_REST_VOLUME", "s3_iceberg_rest"),
+                            "external_volume": os.getenv(
+                                "SNOWFLAKE_TEST_ICEBERG_REST_VOLUME", "s3_iceberg_rest"
+                            ),
                             "adapter_properties": {
-                                "rest_endpoint": os.getenv("SNOWFLAKE_TEST_ICEBERG_REST_ENDPOINT", "https://polaris.endpoint")
-                            }
+                                "rest_endpoint": os.getenv(
+                                    "SNOWFLAKE_TEST_ICEBERG_REST_ENDPOINT",
+                                    "https://polaris.endpoint",
+                                )
+                            },
                         }
                     ],
                 },
@@ -47,7 +52,7 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
 
     @pytest.mark.skipif(
         not os.getenv("SNOWFLAKE_REST_TESTS"),
-        reason="Iceberg REST tests require SNOWFLAKE_REST_TESTS=1 environment variable"
+        reason="Iceberg REST tests require SNOWFLAKE_REST_TESTS=1 environment variable",
     )
     def test_basic_iceberg_rest_catalog_integration(self, project):
-        run_dbt(["run"]) 
+        run_dbt(["run"])
