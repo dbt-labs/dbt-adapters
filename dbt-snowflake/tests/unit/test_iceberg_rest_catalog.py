@@ -26,7 +26,7 @@ class TestIcebergRestCatalogIntegration:
         assert integration.catalog_name == "POLARIS"
         assert integration.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
         assert integration.external_volume == "s3_volume"
-        assert integration.adapter_properties["rest_endpoint"] == "https://example.com/api"
+        assert integration.rest_endpoint == "https://example.com/api"
         assert integration.allows_writes is True
         assert integration.table_format == constants.ICEBERG_TABLE_FORMAT
 
@@ -45,11 +45,8 @@ class TestIcebergRestCatalogIntegration:
         # Mock model config
         model = Mock()
         model.config = {
-            "base_location_root": "custom_root",
-            "base_location_subpath": "subpath",
+            "rest_endpoint": "https://example.com/api",
             "external_volume": "model_volume",
-            "cluster_by": ["col1", "col2"],
-            "automatic_clustering": True,
         }
         model.schema = "test_schema"
         model.identifier = "test_table"
@@ -61,7 +58,7 @@ class TestIcebergRestCatalogIntegration:
         assert relation.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
         assert relation.table_format == constants.ICEBERG_TABLE_FORMAT
         assert relation.external_volume == "model_volume"  # Should use model's volume
-        assert relation.base_location == "custom_root/test_schema/test_table/subpath"
+        assert relation.rest_endpoint == "https://example.com/api"
 
     def test_build_relation_with_defaults(self):
         """Test build_relation with minimal model config."""
@@ -86,4 +83,3 @@ class TestIcebergRestCatalogIntegration:
         assert isinstance(relation, IcebergRestCatalogRelation)
         assert relation.catalog_name == "POLARIS"
         assert relation.external_volume == "s3_volume"  # Should use integration's volume
-        assert relation.base_location == "_dbt/test_schema/test_table"  # Default prefix
