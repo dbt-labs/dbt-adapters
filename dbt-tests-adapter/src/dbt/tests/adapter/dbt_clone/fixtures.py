@@ -104,3 +104,50 @@ custom_can_clone_tables_false_macros_sql = """
     {{ return(False) }}
 {% endmacro %}
 """
+source_table_sql = """
+{{ config(materialized='table') }}
+select 1 as id, 'test_data' as name
+union all
+select 2 as id, 'more_data' as name
+"""
+
+source_based_model_sql = """
+{{ config(materialized='table') }}
+select * from {{ source('test_source', 'source_table') }}
+"""
+
+source_schema_yml = """
+version: 2
+sources:
+  - name: test_source
+    schema: "{{ target.schema }}"
+    tables:
+      - name: source_table
+models:
+  - name: source_based_model
+    columns:
+      - name: id
+        data_tests:
+          - not_null
+          - unique
+      - name: name
+        data_tests:
+          - not_null
+"""
+
+source_based_model_snapshot_sql = """
+{% snapshot source_based_model_snapshot %}
+
+    {{
+        config(
+            target_database=database,
+            target_schema=schema,
+            unique_key='id',
+            strategy='check',
+            check_cols=['id'],
+        )
+    }}
+    select * from {{ ref('source_based_model') }}
+
+{% endsnapshot %}
+"""

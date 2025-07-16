@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixed hard-coded quoting issue in snapshots.
+time: 2025-07-11T12:09:31.589323601-06:00
+custom:
+    Author: stevetracvc
+    Issue: "1118"

@@ -16,6 +16,13 @@
   {{ return(columns) }}
 {% endmacro %}
 
+{%- macro get_list_of_column_names(columns) -%}
+  {% set col_names = [] %}
+  {% for col in columns %}
+    {% do col_names.append(col.name) %}
+  {% endfor %}
+  {{ return(col_names) }}
+{% endmacro %}
 
 {% macro get_empty_subquery_sql(select_sql, select_sql_header=none) -%}
   {{ return(adapter.dispatch('get_empty_subquery_sql', 'dbt')(select_sql, select_sql_header)) }}

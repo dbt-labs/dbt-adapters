@@ -186,6 +186,48 @@ class BaseCloneNotPossible(BaseClone):
         assert all("no-op" in r.message.lower() for r in results)
 
 
+class BaseCloneSameSourceAndTarget(BaseClone):
+    def models(self):
+        return {
+            "source_based_model.sql": fixtures.source_based_model_sql,
+            "source_schema.yml": fixtures.source_schema_yml,
+        }
+
+    def snapshots(self):
+        return {
+            "snapshot_model.sql": fixtures.source_based_model_snapshot_sql,
+        }
+
+    def test_clone_same_source_and_target(self, project, unique_schema):
+        """Test that cloning a table to itself is handled gracefully"""
+        # Create a source table first
+        project.run_sql(f"DROP TABLE IF EXISTS {project.database}.{unique_schema}.source_table")
+        project.run_sql(
+            f"""
+            CREATE TABLE {project.database}.{unique_schema}.source_table AS
+            SELECT 1 as id, 'test_data' as name
+            UNION ALL
+            SELECT 2 as id, 'more_data' as name
+        """
+        )
+
+        # Run dbt to create the source-based model
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        # Save state
+        self.copy_state(project.project_root)
+
+        # Attempt to clone source_based_model to itself with --full-refresh
+        # This should not fail but should log a skip message
+        clone_args = ["clone", "--state", "state", "--full-refresh", "--log-level", "debug"]
+
+        _, output = run_dbt_and_capture(clone_args)
+
+        # Verify the skip message is logged
+        assert "skipping clone for relation" in output
+
+
 class TestPostgresCloneNotPossible(BaseCloneNotPossible):
     @pytest.fixture(autouse=True)
     def clean_up(self, project):
