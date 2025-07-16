@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import random
 
@@ -12,7 +12,7 @@ def connection() -> redshift_connector.Connection:
         user=os.getenv("REDSHIFT_TEST_USER"),
         password=os.getenv("REDSHIFT_TEST_PASS"),
         host=os.getenv("REDSHIFT_TEST_HOST"),
-        port=int(os.getenv("REDSHIFT_TEST_PORT")),
+        port=int(os.getenv("REDSHIFT_TEST_PORT", 5439)),
         database=os.getenv("REDSHIFT_TEST_DBNAME"),
         region=os.getenv("REDSHIFT_TEST_REGION"),
     )
@@ -20,7 +20,7 @@ def connection() -> redshift_connector.Connection:
 
 @pytest.fixture
 def schema_name(request) -> str:
-    runtime = datetime.utcnow() - datetime(1970, 1, 1, 0, 0, 0)
+    runtime = datetime.now(timezone.utc).replace(tzinfo=None) - datetime(1970, 1, 1, 0, 0, 0)
     runtime_s = int(runtime.total_seconds())
     runtime_ms = runtime.microseconds
     random_int = random.randint(0, 9999)

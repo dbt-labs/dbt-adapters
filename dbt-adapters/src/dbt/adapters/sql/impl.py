@@ -1,12 +1,14 @@
 from typing import Any, List, Optional, Tuple, Type, TYPE_CHECKING
 
 from dbt_common.events.functions import fire_event
+from dbt_common.record import record_function
 
 from dbt.adapters.base import BaseAdapter, BaseRelation, available
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.contracts.connection import AdapterResponse, Connection
 from dbt.adapters.events.types import ColTypeChange, SchemaCreation, SchemaDrop
 from dbt.adapters.exceptions import RelationTypeNullError
+from dbt.adapters.record.base import AdapterTestSqlRecord
 from dbt.adapters.sql.connections import SQLConnectionManager
 
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
@@ -75,7 +77,7 @@ class SQLAdapter(BaseAdapter):
         import agate
 
         # TODO CT-211
-        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))  # type: ignore[attr-defined]
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
         return "float8" if decimals else "integer"
 
     @classmethod
@@ -247,7 +249,7 @@ class SQLAdapter(BaseAdapter):
         # return fetched output for engines where explain plans are emitted as columnar
         # results. Any macro override that deviates from this behavior may encounter an
         # assertion error in the runtime.
-        adapter_response = result.response  # type: ignore[attr-defined]
+        adapter_response = result.response
         assert isinstance(adapter_response, AdapterResponse), (
             f"Expected AdapterResponse from validate_sql macro execution, "
             f"got {type(adapter_response)}."
@@ -255,6 +257,10 @@ class SQLAdapter(BaseAdapter):
         return adapter_response
 
     # This is for use in the test suite
+    @available
+    @record_function(
+        AdapterTestSqlRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def run_sql_for_tests(self, sql, fetch, conn):
         cursor = conn.handle.cursor()
         try:

@@ -36,7 +36,7 @@ DYNAMIC_TABLE = (
     materialized='dynamic_table',
     target_lag='1 day',
     snowflake_warehouse='"""
-    + os.getenv("SNOWFLAKE_TEST_WAREHOUSE")
+    + os.getenv("SNOWFLAKE_TEST_WAREHOUSE", "")
     + """',
 ) }}
 select * from {{ ref('my_seed') }}
@@ -52,7 +52,7 @@ _MODEL_ICEBERG = """
   )
 }}
 
-select 1
+select 1 as id
 """
 
 
@@ -106,9 +106,6 @@ class TestShowObjects(ShowObjectsBase):
 
 
 class TestShowIcebergObjects(ShowObjectsBase):
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"enable_iceberg_materializations": True}}
 
     @pytest.fixture(scope="class")
     def models(self):

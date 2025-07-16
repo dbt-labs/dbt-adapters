@@ -11,6 +11,7 @@ from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.contracts.connection import AdapterRequiredConfig, QueryComment
 
+from tests.unit.fixtures.catalog_integration import CatalogIntegrationStub
 from tests.unit.fixtures.connection_manager import ConnectionManagerStub
 from tests.unit.fixtures.credentials import CredentialsStub
 
@@ -21,6 +22,7 @@ class BaseAdapterStub(BaseAdapter):
     """
 
     ConnectionManager = ConnectionManagerStub
+    CATALOG_INTEGRATIONS = [CatalogIntegrationStub]
 
     ###
     # Abstract methods for database-specific values, attributes, and types
@@ -34,7 +36,7 @@ class BaseAdapterStub(BaseAdapter):
         return False
 
     def list_schemas(self, database: str) -> List[str]:
-        return list(self.cache.schemas)
+        return list(schema for database, schema in self.cache.schemas if isinstance(schema, str))
 
     ###
     # Abstract methods about relations

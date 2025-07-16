@@ -61,6 +61,19 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "keyfile": "/tmp/dummy-service-account.json",
                     "threads": 1,
                 },
+                "external_oauth_wif": {
+                    "type": "bigquery",
+                    "method": "external-oauth-wif",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "token_endpoint": {
+                        "type": "entra",
+                        "request_url": "https://example.com/token",
+                        "request_data": "mydata",
+                    },
+                    "audience": "https://example.com/audience",
+                },
                 "loc": {
                     "type": "bigquery",
                     "method": "oauth",
@@ -70,6 +83,14 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "location": "Luna Station",
                     "priority": "batch",
                     "maximum_bytes_billed": 0,
+                },
+                "api_endpoint": {
+                    "type": "bigquery",
+                    "method": "oauth",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "api_endpoint": "https://localhost:3001",
                 },
                 "impersonate": {
                     "type": "bigquery",
@@ -117,7 +138,7 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "schema": "dummy_schema",
                     "threads": 1,
                     "gcs_bucket": "dummy-bucket",
-                    "dataproc_region": "europe-west1",
+                    "compute_region": "europe-west1",
                     "submission_method": "serverless",
                     "dataproc_batch": {
                         "environment_config": {
@@ -142,7 +163,7 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "schema": "dummy_schema",
                     "threads": 1,
                     "gcs_bucket": "dummy-bucket",
-                    "dataproc_region": "europe-west1",
+                    "compute_region": "europe-west1",
                     "submission_method": "serverless",
                 },
             },
@@ -340,6 +361,23 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         mock_open_connection.assert_called_once()
 
     @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
+    def test_acquire_connection_external_oauth_wif_validations(self, mock_open_connection):
+        adapter = self.get_adapter("external_oauth_wif")
+        try:
+            connection = adapter.acquire_connection("dummy")
+            self.assertEqual(connection.type, "bigquery")
+
+        except dbt_common.exceptions.base.DbtValidationError as e:
+            self.fail("got DbtValidationError: {}".format(str(e)))
+
+        except BaseException:
+            raise
+
+        mock_open_connection.assert_not_called()
+        connection.handle
+        mock_open_connection.assert_called_once()
+
+    @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
     def test_acquire_connection_priority(self, mock_open_connection):
         adapter = self.get_adapter("loc")
         try:
@@ -389,7 +427,7 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         self.assertEqual(len(list(adapter.cancel_open_connections())), 1)
 
     @patch("dbt.adapters.bigquery.clients.ClientOptions")
-    @patch("dbt.adapters.bigquery.credentials.default")
+    @patch("dbt.adapters.bigquery.credentials._create_bigquery_defaults")
     @patch("dbt.adapters.bigquery.clients.BigQueryClient")
     def test_location_user_agent(self, MockClient, mock_auth_default, MockClientOptions):
         creds = MagicMock()
@@ -408,6 +446,28 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
             client_info=HasUserAgent(),
             client_options=mock_client_options,
         )
+
+    @patch("dbt.adapters.bigquery.clients.ClientOptions")
+    @patch("dbt.adapters.bigquery.credentials._create_bigquery_defaults")
+    @patch("dbt.adapters.bigquery.clients.BigQueryClient")
+    def test_api_endpoint_settable(self, MockClient, mock_auth_default, MockClientOptions):
+        """Ensure api_endpoint is set on ClientOptions and passed to BigQueryClient."""
+
+        creds = MagicMock()
+        mock_auth_default.return_value = (creds, MagicMock())
+        mock_client_options = MockClientOptions.return_value
+
+        adapter = self.get_adapter("api_endpoint")
+        connection = adapter.acquire_connection("dummy")
+        MockClient.assert_not_called()
+        connection.handle
+
+        MockClientOptions.assert_called_once()
+        kwargs = MockClientOptions.call_args.kwargs
+        assert kwargs.get("api_endpoint") == "https://localhost:3001"
+
+        MockClient.assert_called_once()
+        assert MockClient.call_args.kwargs["client_options"] is mock_client_options
 
 
 class HasUserAgent:
@@ -805,6 +865,71 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
 
         expected = {}
         actual = adapter.get_view_options(mock_config, node={})
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_merge(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": True,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("meta_label", "value2"), ("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_no_meta(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": True,
+            "meta": {},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_no_labels_from_meta(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"existing_label": "value1"},
+            "labels_from_meta": False,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_no_labels(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels_from_meta": True,
+            "meta": {"meta_label": "value2"},
+        }
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {"labels": [("meta_label", "value2")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_empty(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {}
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
 

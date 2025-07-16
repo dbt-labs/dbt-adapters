@@ -157,7 +157,7 @@ class SparkAdapter(SQLAdapter):
     def convert_datetime_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         return "timestamp"
 
-    def quote(self, identifier: str) -> str:
+    def quote(self, identifier: str) -> str:  # type:ignore
         return "`{}`".format(identifier)
 
     def _get_relation_information(self, row: "agate.Row") -> RelationInfo:
@@ -208,7 +208,9 @@ class SparkAdapter(SQLAdapter):
             _schema, name, information = relation_info_func(row)
 
             rel_type: RelationType = (
-                RelationType.View if "Type: VIEW" in information else RelationType.Table
+                RelationType.View
+                if "Type: VIEW" in information
+                else RelationType.Table  # type:ignore
             )
             is_delta: bool = "Provider: delta" in information
             is_hudi: bool = "Provider: hudi" in information

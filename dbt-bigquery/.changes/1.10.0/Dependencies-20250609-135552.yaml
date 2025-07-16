@@ -1,0 +1,6 @@
+kind: Dependencies
+body: update the lower bound for dbt-adapters version in dbt-bigquery to >=1.16
+time: 2025-06-09T13:55:52.414339-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1148"

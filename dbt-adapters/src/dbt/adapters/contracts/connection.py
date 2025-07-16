@@ -124,7 +124,7 @@ class LazyHandle:
 # and https://github.com/python/mypy/issues/5374
 # for why we have type: ignore. Maybe someday dataclasses + abstract classes
 # will work.
-@dataclass  # type: ignore
+@dataclass
 class Credentials(ExtensibleDbtClassMixin, Replaceable, metaclass=abc.ABCMeta):
     database: str
     schema: str
@@ -217,7 +217,7 @@ DEFAULT_QUERY_COMMENT = """
 @dataclass
 class QueryComment(dbtClassMixin):
     comment: str = DEFAULT_QUERY_COMMENT
-    append: bool = False
+    append: Optional[bool] = None
     job_label: bool = field(default=False, metadata={"alias": "job-label"})
 
 

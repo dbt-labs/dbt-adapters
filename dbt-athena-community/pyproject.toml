@@ -26,8 +26,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 # these versions should always match and they both should match the local version of dbt-athena
-dependencies = ["dbt-athena==1.9.1"]
-version = "1.9.1"
+dependencies = ["dbt-athena==1.9.4"]
+version = "1.9.4"
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
 Documentation = "https://docs.getdbt.com"
@@ -35,11 +35,10 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-athe
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
 
-[tool.pytest]
-testpaths = [
-    "../dbt-athena/tests/unit",
-    "../dbt-athena/tests/functional",
-]
+[tool.pytest.ini_options]
+testpaths = ["../tests/unit", "../tests/functional"]
+env_files = ["../dbt-athena/test.env"]
+addopts = "-v --color=yes -n auto"
 filterwarnings = [
     "ignore:.*'soft_unicode' has been renamed to 'soft_str'*:DeprecationWarning",
     "ignore:unclosed file .*:ResourceWarning",

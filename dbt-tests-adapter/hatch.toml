@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/tests/__about__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt/tests"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/tests"]
 sources = ["src"]
@@ -17,7 +13,7 @@ dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pre-commit==3.7.0",
-    "pytest"
+    "pytest>=7.0,<8.0"
 ]
 
 [envs.build]

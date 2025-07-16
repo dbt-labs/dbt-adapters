@@ -1,5 +1,4 @@
 import textwrap
-
 from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
@@ -16,15 +15,14 @@ from dbt.adapters.utils import classproperty
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error
 
+from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
-    SnowflakeCatalogConfigChange,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
-    TableFormat,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -33,7 +31,7 @@ from dbt.adapters.snowflake.relation_configs import (
 @dataclass(frozen=True, eq=False, repr=False)
 class SnowflakeRelation(BaseRelation):
     type: Optional[SnowflakeRelationType] = None
-    table_format: str = TableFormat.DEFAULT
+    table_format: str = constants.INFO_SCHEMA_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
     relation_configs = {
@@ -64,7 +62,7 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_iceberg_format(self) -> bool:
-        return self.table_format == TableFormat.ICEBERG
+        return self.table_format == constants.ICEBERG_TABLE_FORMAT
 
     @classproperty
     def DynamicTable(cls) -> str:
@@ -76,7 +74,7 @@ class SnowflakeRelation(BaseRelation):
 
     @classmethod
     def from_config(cls, config: RelationConfig) -> RelationConfigBase:
-        relation_type: str = config.config.materialized
+        relation_type: str = config.config.materialized  # type:ignore
 
         if relation_config := cls.relation_configs.get(relation_type):
             return relation_config.from_relation_config(config)
@@ -98,14 +96,14 @@ class SnowflakeRelation(BaseRelation):
 
         if new_dynamic_table.target_lag != existing_dynamic_table.target_lag:
             config_change_collection.target_lag = SnowflakeDynamicTableTargetLagConfigChange(
-                action=RelationConfigChangeAction.alter,
+                action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.target_lag,
             )
 
         if new_dynamic_table.snowflake_warehouse != existing_dynamic_table.snowflake_warehouse:
             config_change_collection.snowflake_warehouse = (
                 SnowflakeDynamicTableWarehouseConfigChange(
-                    action=RelationConfigChangeAction.alter,
+                    action=RelationConfigChangeAction.alter,  # type:ignore
                     context=new_dynamic_table.snowflake_warehouse,
                 )
             )
@@ -115,14 +113,8 @@ class SnowflakeRelation(BaseRelation):
             and new_dynamic_table.refresh_mode != existing_dynamic_table.refresh_mode
         ):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
-                action=RelationConfigChangeAction.create,
+                action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
-            )
-
-        if new_dynamic_table.catalog != existing_dynamic_table.catalog:
-            config_change_collection.catalog = SnowflakeCatalogConfigChange(
-                action=RelationConfigChangeAction.create,
-                context=new_dynamic_table.catalog,
             )
 
         if config_change_collection.has_changes:
@@ -132,7 +124,7 @@ class SnowflakeRelation(BaseRelation):
     def as_case_sensitive(self) -> "SnowflakeRelation":
         path_part_map = {}
 
-        for path in ComponentName:
+        for path in ComponentName:  # type:ignore
             if self.include_policy.get_part(path):
                 part = self.path.get_part(path)
                 if part:
@@ -155,18 +147,16 @@ class SnowflakeRelation(BaseRelation):
         """
         This macro renders the appropriate DDL prefix during the create_table_as
         macro. It decides based on mutually exclusive table configuration options:
-
         - TEMPORARY: Indicates a table that exists only for the duration of the session.
         - ICEBERG: A specific storage format that requires a distinct DDL layout.
         - TRANSIENT: A table similar to a permanent table but without fail-safe.
-
         Additional Caveats for Iceberg models:
         - transient=true throws a warning because Iceberg does not support transient tables
         - A temporary relation is never an Iceberg relation because Iceberg does not
           support temporary relations.
         """
 
-        transient_explicitly_set_true: bool = config.get("transient", False)
+        transient_explicitly_set_true: bool = config.get("transient", False)  # type:ignore
 
         # Temporary tables are a Snowflake feature that do not exist in the
         # Iceberg framework. We ignore the Iceberg status of the model.
@@ -191,7 +181,7 @@ class SnowflakeRelation(BaseRelation):
 
         # Always supply transient on table create DDL unless user specifically sets
         # transient to false or unset. Might as well update the object attribute too!
-        elif transient_explicitly_set_true or config.get("transient", True):
+        elif transient_explicitly_set_true or config.get("transient", True):  # type:ignore
             return "transient"
         else:
             return ""
@@ -206,14 +196,15 @@ class SnowflakeRelation(BaseRelation):
     def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
         # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
         base_location: str = (
-            f"{config.get('base_location_root', '_dbt')}/{self.schema}/{self.name}"
+            f"{config.get('base_location_root', '_dbt')}/{self.schema}/{self.name}"  # type:ignore
         )
 
-        if subpath := config.get("base_location_subpath"):
+        if subpath := config.get("base_location_subpath"):  # type:ignore
             base_location += f"/{subpath}"
 
+        external_volume = config.get("external_volume")  # type:ignore
         iceberg_ddl_predicates: str = f"""
-        external_volume = '{config.get('external_volume')}'
+        external_volume = '{external_volume}'
         catalog = 'snowflake'
         base_location = '{base_location}'
         """

@@ -152,5 +152,46 @@ class BaseStoreTestFailures(StoreTestFailuresBase):
         self.run_tests_store_failures_and_assert(project)
 
 
+class BaseStoreTestFailuresLimit(BaseStoreTestFailures):
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "people.csv": fixtures.seeds__people,
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def tests(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"_seeds.yml": fixtures.properties__seeds_yml}
+
+    def test__store_and_assert(self, project, clean_up):
+        pass
+
+    def test_store_limit(self, project, clean_up):
+        results = run_dbt(["test"], expect_pass=False)
+        # there are 9 actual failing rows, but the test `limit` config has a value of 4
+        assert results.results[0].failures == 4
+        relation_name = results.results[0].node.relation_name
+        sql_result = project.run_sql(f"select count(*) as cnt from {relation_name}", fetch="one")
+        count = sql_result[0] if sql_result is not None else None
+        # make sure the table also only has 4 rows (not 9!)
+        assert count == 4, f"The test failure count {count} doesn't match the config `limit` of 4"
+
+
 class TestStoreTestFailures(BaseStoreTestFailures):
+    pass
+
+
+class TestStoreTestFailuresLimit(BaseStoreTestFailuresLimit):
     pass

@@ -1,10 +1,6 @@
 [version]
 path = "src/dbt/adapters/postgres/__version__.py"
 
-[build.targets.sdist]
-packages = ["src/dbt/adapters", "src/dbt/include"]
-sources = ["src"]
-
 [build.targets.wheel]
 packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
@@ -25,19 +21,18 @@ dependencies = [
     "pytest-mock",
     "pytest-xdist",
 ]
-[envs.default.env-vars]
-DBT_TEST_USER_1 = "dbt_test_user_1"
-DBT_TEST_USER_2 = "dbt_test_user_2"
-DBT_TEST_USER_3 = "dbt_test_user_3"
 [envs.default.scripts]
-setup = "pre-commit install"
+setup = [
+    "pre-commit install",
+    "cp -n test.env.example test.env",
+]
 code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest {args:tests/functional}"
 docker-dev = [
     "echo Does not support integration testing, only development and unit testing. See issue https://github.com/dbt-labs/dbt-postgres/issues/99",
-	"docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
-	"docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
+    "docker build -f docker/dev.Dockerfile -t dbt-postgres-dev .",
+    "docker run --rm -it --name dbt-postgres-dev -v $(pwd):/opt/code dbt-postgres-dev",
 ]
 docker-prod = "docker build -f docker/Dockerfile -t dbt-postgres ."
 
@@ -47,6 +42,7 @@ dependencies = [
     "wheel",
     "twine",
     "check-wheel-contents",
+    "psycopg2-binary>=2.9,<3.0",
 ]
 [envs.build.scripts]
 check-all = [
@@ -63,3 +59,35 @@ check-sdist = [
     "find ./dist/dbt_postgres-*.gz -maxdepth 1 -type f | xargs python -m pip install --force-reinstall --find-links=dist/",
     "pip freeze | grep dbt-postgres",
 ]
+
+[envs.ci]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
+dependencies = [
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "ddtrace==2.3.0",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-mock",
+    "pytest-xdist",
+]
+[envs.ci.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = "python -m pytest tests/functional --ddtrace"
+
+[envs.cd]
+pre-install-commands = []
+dependencies = [
+    "dbt-tests-adapter>=1.11.0,<2.0",
+    "ddtrace==2.3.0",
+    "freezegun",
+    "pytest>=7.0,<8.0",
+    "pytest-mock",
+    "pytest-xdist",
+]
+[envs.cd.scripts]
+unit-tests = "python -m pytest tests/unit --ddtrace"
+integration-tests = "python -m pytest tests/functional --ddtrace"

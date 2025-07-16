@@ -1,0 +1,7 @@
+kind: Features
+body: Add support for optional iceberg builtin catalog relation parameters for data
+  retention/extension, storage serialization & change tracking
+time: 2025-06-16T11:10:08.169602-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1158"

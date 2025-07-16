@@ -24,7 +24,6 @@ class TestCatalogRelationTypes:
         run_dbt(["run"])
         yield run_dbt(["docs", "generate"])
 
-    @pytest.mark.flaky
     @pytest.mark.parametrize(
         "node_name,relation_type",
         [

@@ -21,6 +21,7 @@ class RelationType(StrEnum):
     Ephemeral = "ephemeral"
     # this is a "catch all" that is better than `None` == external to anything dbt is aware of
     External = "external"
+    PointerTable = "pointer_table"
 
 
 class MaterializationContract(Protocol):
@@ -58,6 +59,7 @@ class RelationConfig(Protocol):
     tags: List[str]
     quoting_dict: Dict[str, bool]
     config: Optional[MaterializationConfig]
+    catalog: Optional[str]
 
 
 class ComponentName(StrEnum):
