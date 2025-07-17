@@ -151,12 +151,10 @@ class TestOnSchemaChangeSpecialChars:
         args = ["run", "--select", relation_name, "--vars", json.dumps(vars)]
 
         # First run - creates initial table with quoted column names
-        model_run_initial = run_dbt(args)
-        assert model_run_initial.results[0].status == RunStatus.Success
+        run_dbt(args)
 
         # Second run - should append new columns with special characters
-        model_run_incremental = run_dbt(args)
-        assert model_run_incremental.results[0].status == RunStatus.Success
+        run_dbt(args)
 
         # Verify all columns including ones with special characters exist
         new_column_names = self._column_names(project, relation_name)
@@ -167,22 +165,17 @@ class TestOnSchemaChangeSpecialChars:
         ]
         assert sorted(new_column_names) == sorted(expected_columns)
 
-    @pytest.mark.parametrize(
-        "table_type", ["hive"]
-    )  # Only test hive for sync since iceberg has different behavior
-    def test__sync_all_columns_special_chars(self, project, table_type):
+    def test__sync_all_columns_special_chars(self, project):
         """Test that columns with special characters are properly quoted when synced (add/remove)"""
-        relation_name = f"{table_type}_special_chars_sync_all_columns"
-        vars = {"on_schema_change": "sync_all_columns", "table_type": table_type}
+        relation_name = "hive_special_chars_sync_all_columns"
+        vars = {"on_schema_change": "sync_all_columns", "table_type": "hive"}
         args = ["run", "--select", relation_name, "--vars", json.dumps(vars)]
 
         # First run - creates initial table
-        model_run_initial = run_dbt(args)
-        assert model_run_initial.results[0].status == RunStatus.Success
+        run_dbt(args)
 
         # Second run - should sync columns (replace all columns)
-        model_run_incremental = run_dbt(args)
-        assert model_run_incremental.results[0].status == RunStatus.Success
+        run_dbt(args)
 
         # Verify columns were properly synced
         new_column_names = self._column_names(project, relation_name)
