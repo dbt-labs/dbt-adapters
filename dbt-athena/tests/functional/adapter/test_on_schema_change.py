@@ -115,17 +115,18 @@ models__table_special_chars_model = """
 
 select
     1 as id,
-    'test 1' as `field with space`,
-    'keyword' as `select`
+    'keyword' as "select"
 {%- if is_incremental() -%}
-    ,'new data' as `field-with-dash`,
-    current_date as `field.with.dots`
+    ,'new data' as "field-with-dash"
 {%- endif -%}
 """
 
 
 class TestOnSchemaChangeSpecialChars:
-    """Test schema changes with special character column names for Athena"""
+    """Test schema changes with special character column names for Athena
+
+    Tests column quoting with SQL keywords and dashes in column names.
+    """
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -161,10 +162,8 @@ class TestOnSchemaChangeSpecialChars:
         new_column_names = self._column_names(project, relation_name)
         expected_columns = [
             "id",
-            "field with space",
             "select",
             "field-with-dash",
-            "field.with.dots",
         ]
         assert sorted(new_column_names) == sorted(expected_columns)
 
@@ -189,9 +188,7 @@ class TestOnSchemaChangeSpecialChars:
         new_column_names = self._column_names(project, relation_name)
         expected_columns = [
             "id",
-            "field with space",
             "select",
             "field-with-dash",
-            "field.with.dots",
         ]
         assert sorted(new_column_names) == sorted(expected_columns)

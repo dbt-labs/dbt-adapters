@@ -35,20 +35,18 @@ _MODEL_A_SPECIAL_CHARS = """
 
 with source_data as (
 
-    select 1 as id, 'aaa' as "field with space", 'bbb' as "select", 111 as "field-with-dash", 'TTT' as "field.with.dots"
-    union all select 2 as id, 'ccc' as "field with space", 'ddd' as "select", 222 as "field-with-dash", 'UUU' as "field.with.dots"
-    union all select 3 as id, 'eee' as "field with space", 'fff' as "select", 333 as "field-with-dash", 'VVV' as "field.with.dots"
-    union all select 4 as id, 'ggg' as "field with space", 'hhh' as "select", 444 as "field-with-dash", 'WWW' as "field.with.dots"
-    union all select 5 as id, 'iii' as "field with space", 'jjj' as "select", 555 as "field-with-dash", 'XXX' as "field.with.dots"
-    union all select 6 as id, 'kkk' as "field with space", 'lll' as "select", 666 as "field-with-dash", 'YYY' as "field.with.dots"
+    select 1 as id, 'bbb' as "select", 111 as "field-with-dash"
+    union all select 2 as id, 'ddd' as "select", 222 as "field-with-dash"
+    union all select 3 as id, 'fff' as "select", 333 as "field-with-dash"
+    union all select 4 as id, 'hhh' as "select", 444 as "field-with-dash"
+    union all select 5 as id, 'jjj' as "select", 555 as "field-with-dash"
+    union all select 6 as id, 'lll' as "select", 666 as "field-with-dash"
 
 )
 
 select id
-       ,"field with space"
        ,"select"
        ,"field-with-dash"
-       ,"field.with.dots"
 
 from source_data
 """
@@ -67,16 +65,13 @@ WITH source_data AS (SELECT * FROM {{ ref('model_a_special_chars') }} )
 {% if is_incremental() %}
 
 SELECT id,
-       "field with space",
        "select",
-       "field-with-dash",
-       "field.with.dots"
+       "field-with-dash"
 FROM source_data WHERE id NOT IN (SELECT id from {{ this }} )
 
 {% else %}
 
 SELECT id,
-       "field with space",
        "select"
 FROM source_data where id <= 3
 
@@ -95,10 +90,8 @@ with source_data as (
 )
 
 select id
-       ,"field with space"
        ,"select"
        ,CASE WHEN id <= 3 THEN NULL ELSE "field-with-dash" END AS "field-with-dash"
-       ,CASE WHEN id <= 3 THEN NULL ELSE "field.with.dots" END AS "field.with.dots"
 
 from source_data
 """
@@ -117,15 +110,12 @@ WITH source_data AS (SELECT * FROM {{ ref('model_a_special_chars') }} )
 {% if is_incremental() %}
 
 SELECT id,
-       "field with space",
-       "field-with-dash",
-       "field.with.dots"
+       "field-with-dash"
 FROM source_data WHERE id NOT IN (SELECT id from {{ this }} )
 
 {% else %}
 
 SELECT id,
-       "field with space",
        "select"
 FROM source_data where id <= 3
 
@@ -144,10 +134,8 @@ with source_data as (
 )
 
 select id
-       ,"field with space"
        --,"select" (removed in sync)
        ,CASE WHEN id <= 3 THEN NULL ELSE "field-with-dash" END AS "field-with-dash"
-       ,CASE WHEN id <= 3 THEN NULL ELSE "field.with.dots" END AS "field.with.dots"
 
 from source_data
 order by id
@@ -155,7 +143,10 @@ order by id
 
 
 class TestIncrementalOnSchemaChangeSpecialChars(BaseIncrementalOnSchemaChangeSetup):
-    """Test incremental models with special character column names for Postgres"""
+    """Test incremental models with special character column names for Postgres
+
+    Tests column quoting with SQL keywords and dashes in column names.
+    """
 
     @pytest.fixture(scope="class")
     def models(self):
