@@ -3,7 +3,10 @@ import shutil
 import os
 from copy import deepcopy
 from dbt.tests.util import run_dbt
-from dbt.tests.adapter.dbt_clone.test_dbt_clone import BaseClonePossible
+from dbt.tests.adapter.dbt_clone.test_dbt_clone import (
+    BaseClonePossible,
+    BaseCloneSameSourceAndTarget,
+)
 
 
 class TestSnowflakeClonePossible(BaseClonePossible):
@@ -80,3 +83,7 @@ class TestSnowflakeCloneTrainsentTable:
 
         results = run_dbt(clone_args)
         assert len(results) == 1
+
+
+class TestSnowflakeCloneSameSourceAndTarget(BaseCloneSameSourceAndTarget):
+    pass
