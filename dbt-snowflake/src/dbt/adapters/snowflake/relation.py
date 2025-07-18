@@ -42,6 +42,7 @@ class SnowflakeRelation(BaseRelation):
             {
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
+                SnowflakeRelationType.DynamicTable,  # type: ignore
             }
         )
     )
@@ -58,6 +59,10 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_dynamic_table(self) -> bool:
+        return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_materialized_view(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
 
     @property
