@@ -227,7 +227,7 @@ class AthenaAdapter(SQLAdapter):
         """
         helper function to cache the result of the get_work_group to avoid APIs throttling
         """
-        LOGGER.debug("get_work_group for %s", work_group)
+        LOGGER.debug(f"get_work_group for {work_group}")
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
