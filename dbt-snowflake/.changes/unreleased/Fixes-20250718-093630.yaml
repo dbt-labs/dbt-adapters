@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set models comments using `alter table` instead of `comment on ... is` notation ensuring compatibility with Iceberg tables
+time: 2025-07-18T09:36:30.302144+02:00
+custom:
+    Author: dlouseiro
+    Issue: "770"
