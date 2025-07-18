@@ -176,3 +176,155 @@ class TestConnection(TestCase):
                 self.adapter.connections.execute("select 1", auto_begin=True)
             assert "could not open relation with OID" in str(e.value)
             assert add_query_mock.call_count == 2
+
+    def test_tcp_keepalive_parameters(self):
+        test_cases = [
+            # Test default behavior (tcp_keepalive=True by default)
+            {
+                "name": "default_tcp_keepalive",
+                "tcp_keepalive": True,
+                "tcp_keepalive_idle": None,
+                "tcp_keepalive_interval": None,
+                "tcp_keepalive_count": None,
+                "expected_kwargs": {"tcp_keepalive": True},
+            },
+            # Test with tcp_keepalive disabled
+            {
+                "name": "tcp_keepalive_disabled",
+                "tcp_keepalive": False,
+                "tcp_keepalive_idle": None,
+                "tcp_keepalive_interval": None,
+                "tcp_keepalive_count": None,
+                "expected_kwargs": {},
+            },
+            # Test with all TCP keepalive parameters enabled
+            {
+                "name": "all_tcp_keepalive_params",
+                "tcp_keepalive": True,
+                "tcp_keepalive_idle": 600,
+                "tcp_keepalive_interval": 60,
+                "tcp_keepalive_count": 5,
+                "expected_kwargs": {
+                    "tcp_keepalive": True,
+                    "tcp_keepalive_idle": 600,
+                    "tcp_keepalive_interval": 60,
+                    "tcp_keepalive_count": 5,
+                },
+            },
+            # Test with partial TCP keepalive parameters
+            {
+                "name": "partial_tcp_keepalive_params",
+                "tcp_keepalive": True,
+                "tcp_keepalive_idle": 300,
+                "tcp_keepalive_interval": None,
+                "tcp_keepalive_count": None,
+                "expected_kwargs": {"tcp_keepalive": True, "tcp_keepalive_idle": 300},
+            },
+        ]
+
+        for test_case in test_cases:
+            with self.subTest(test_case["name"]):
+                tcp_keepalive = test_case["tcp_keepalive"]
+                tcp_keepalive_idle = test_case["tcp_keepalive_idle"]
+                tcp_keepalive_interval = test_case["tcp_keepalive_interval"]
+                tcp_keepalive_count = test_case["tcp_keepalive_count"]
+                expected_kwargs = test_case["expected_kwargs"]
+
+                credentials_dict = {
+                    "type": "redshift",
+                    "dbname": "redshift",
+                    "user": "root",
+                    "host": "test-host.redshift.amazonaws.com",
+                    "pass": "password",
+                    "port": 5439,
+                    "schema": "public",
+                    "tcp_keepalive": tcp_keepalive,
+                }
+
+                # Add optional parameters if they are not None
+                if tcp_keepalive_idle is not None:
+                    credentials_dict["tcp_keepalive_idle"] = tcp_keepalive_idle
+                if tcp_keepalive_interval is not None:
+                    credentials_dict["tcp_keepalive_interval"] = tcp_keepalive_interval
+                if tcp_keepalive_count is not None:
+                    credentials_dict["tcp_keepalive_count"] = tcp_keepalive_count
+
+                credentials = RedshiftCredentials.from_dict(credentials_dict)
+
+                from dbt.adapters.redshift.connections import get_connection_method
+
+                with mock.patch("redshift_connector.connect") as mock_connect:
+                    mock_connect.return_value = MagicMock()
+                    connect_method = get_connection_method(credentials)
+                    connect_method()
+                    mock_connect.assert_called_once()
+                    actual_kwargs = mock_connect.call_args[1]
+
+                    for key, value in expected_kwargs.items():
+                        self.assertIn(
+                            key, actual_kwargs, f"Expected {key} to be in connection kwargs"
+                        )
+                        self.assertEqual(
+                            actual_kwargs[key],
+                            value,
+                            f"Expected {key}={value}, got {actual_kwargs[key]}",
+                        )
+
+                    if not tcp_keepalive:
+                        tcp_keepalive_keys = [
+                            "tcp_keepalive",
+                            "tcp_keepalive_idle",
+                            "tcp_keepalive_interval",
+                            "tcp_keepalive_count",
+                        ]
+                        for key in tcp_keepalive_keys:
+                            self.assertNotIn(
+                                key,
+                                actual_kwargs,
+                                f"Unexpected {key} in connection kwargs when tcp_keepalive is False",
+                            )
+
+                    self.assertEqual(actual_kwargs["host"], "test-host.redshift.amazonaws.com")
+                    self.assertEqual(actual_kwargs["port"], 5439)
+                    self.assertEqual(actual_kwargs["database"], "redshift")
+                    self.assertEqual(actual_kwargs["auto_create"], False)
+                    self.assertEqual(actual_kwargs["is_serverless"], False)
+
+    def test_tcp_keepalive_credentials_validation(self):
+        valid_credentials = RedshiftCredentials.from_dict(
+            {
+                "type": "redshift",
+                "dbname": "redshift",
+                "user": "root",
+                "host": "test-host.redshift.amazonaws.com",
+                "pass": "password",
+                "port": 5439,
+                "schema": "public",
+                "tcp_keepalive": True,
+                "tcp_keepalive_idle": 600,
+                "tcp_keepalive_interval": 60,
+                "tcp_keepalive_count": 5,
+            }
+        )
+
+        assert valid_credentials.tcp_keepalive is True
+        assert valid_credentials.tcp_keepalive_idle == 600
+        assert valid_credentials.tcp_keepalive_interval == 60
+        assert valid_credentials.tcp_keepalive_count == 5
+
+        default_credentials = RedshiftCredentials.from_dict(
+            {
+                "type": "redshift",
+                "dbname": "redshift",
+                "user": "root",
+                "host": "test-host.redshift.amazonaws.com",
+                "pass": "password",
+                "port": 5439,
+                "schema": "public",
+            }
+        )
+
+        assert default_credentials.tcp_keepalive is True
+        assert default_credentials.tcp_keepalive_idle is None
+        assert default_credentials.tcp_keepalive_interval is None
+        assert default_credentials.tcp_keepalive_count is None

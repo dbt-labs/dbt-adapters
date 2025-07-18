@@ -1,0 +1,7 @@
+kind: Fixes
+body: 'Update dbt snapshot staging table creation to handle new source columns when
+  using hard_deletes == ''new_record'' '
+time: 2025-07-15T12:59:33.467839-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "852"
