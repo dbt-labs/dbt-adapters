@@ -214,7 +214,9 @@ class SparkAdapter(SQLAdapter):
             )
             is_delta: bool = "Provider: delta" in information
             is_hudi: bool = "Provider: hudi" in information
-            is_iceberg: bool = "Provider: iceberg" in information
+            is_iceberg: bool = (
+                "Provider: iceberg" in information or "table_type=ICEBERG" in information
+            )
 
             relation: BaseRelation = self.Relation.create(
                 schema=_schema,
