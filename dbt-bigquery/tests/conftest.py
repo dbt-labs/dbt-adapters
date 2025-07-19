@@ -31,6 +31,7 @@ def oauth_target():
         "method": "oauth",
         "threads": 4,
         "job_retries": 2,
+        "location": os.getenv("BIGQUERY_LOCATION"),
         "compute_region": os.getenv("COMPUTE_REGION") or os.getenv("DATAPROC_REGION"),
         "dataproc_cluster_name": os.getenv("DATAPROC_CLUSTER_NAME"),
         "gcs_bucket": os.getenv("GCS_BUCKET"),
@@ -48,6 +49,7 @@ def service_account_target():
         "method": "service-account-json",
         "threads": 4,
         "job_retries": 2,
+        "location": os.getenv("BIGQUERY_LOCATION"),
         "project": project_id,
         "keyfile_json": credentials,
         # following 3 for python model
