@@ -78,13 +78,13 @@
 {% endmacro %}
 
 -- here for back compat
-{% macro get_columns_in_query(select_sql) -%}
-  {{ return(adapter.dispatch('get_columns_in_query', 'dbt')(select_sql)) }}
+{% macro get_columns_in_query(select_sql, select_sql_header=none) -%}
+  {{ return(adapter.dispatch('get_columns_in_query', 'dbt')(select_sql, select_sql_header)) }}
 {% endmacro %}
 
-{% macro default__get_columns_in_query(select_sql) %}
+{% macro default__get_columns_in_query(select_sql, select_sql_header=none) %}
     {% call statement('get_columns_in_query', fetch_result=True, auto_begin=False) -%}
-        {{ get_empty_subquery_sql(select_sql) }}
+        {{ get_empty_subquery_sql(select_sql, select_sql_header) }}
     {% endcall %}
     {{ return(load_result('get_columns_in_query').table.columns | map(attribute='name') | list) }}
 {% endmacro %}
