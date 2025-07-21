@@ -107,10 +107,10 @@
 {#-- Handle both relation and column level documentation #}
 {% macro bigquery__persist_docs(relation, model, for_relation, for_columns) -%}
   {% if for_relation and config.persist_relation_docs() and model.description %}
-    {% do bigquery__alter_relation_comment(relation, model.description) %}
+    {% do alter_relation_comment(relation, model.description) %}
   {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
-    {% do bigquery__alter_column_comment(relation, model.columns) %}
+    {% do alter_column_comment(relation, model.columns) %}
   {% endif %}
 {% endmacro %}
 
