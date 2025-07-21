@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: gracefully handle null database in _catalog_filter_schemas
-time: 2025-07-21T12:08:40.503372-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1216"
