@@ -111,7 +111,7 @@
   {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
     {% do bigquery__alter_column_comment(relation, model.columns) %}
-{% endif %}
+  {% endif %}
 {% endmacro %}
 
 {% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
