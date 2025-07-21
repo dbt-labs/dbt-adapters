@@ -103,7 +103,9 @@ from dbt.adapters.exceptions import (
     UnexpectedNonTimestampError,
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
+from dbt.adapters.events.logging import AdapterLogger
 
+logger = AdapterLogger(__name__)
 if TYPE_CHECKING:
     import agate
 
@@ -153,14 +155,24 @@ def _catalog_filter_schemas(
     """Return a function that takes a row and decides if the row should be
     included in the catalog output.
     """
-    schemas = frozenset((d.lower(), s.lower()) for d, s in used_schemas)
+    schemas = frozenset(
+        (d.lower(), s.lower()) for d, s in used_schemas if d is not None and s is not None
+    )
+    if null_schemas := [d for d, s in used_schemas if d is None or s is None]:
+        logger.debug(
+            f"used_schemas contains None for either database or schema, skipping {null_schemas}"
+        )
 
     def test(row: "agate.Row") -> bool:
         table_database = _expect_row_value("table_database", row)
         table_schema = _expect_row_value("table_schema", row)
         # the schema may be present but None, which is not an error and should
         # be filtered out
+
         if table_schema is None:
+            return False
+        if table_database is None:
+            logger.debug(f"table_database is None, skipping {table_schema}")
             return False
         return (table_database.lower(), table_schema.lower()) in schemas
 
