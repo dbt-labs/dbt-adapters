@@ -1,6 +1,6 @@
 # **what?**
 # When a PR is merged, if it has the promote label, it will create
-# a new PR to promote those changes to the given branch. If it can't
+# a direct promotion of those changes to the given branch. If it can't
 # cleanly do a promotion, it will comment on the merged PR of the failure.
 #
 # Label naming convention: "promote <branch name to promote to>"
@@ -13,13 +13,16 @@
 # This automates the promotion process
 
 # **when?**
-# Once a PR is "Squash and merge"'d, by adding a promote label, this is triggered
+# When a PR is merged and has the promote label
 
-name: Promote to Stable
+name: Promote Commits
+run-name: Promote commit ${{ github.event.pull_request.merge_commit_sha }} to stable branch on dbt-adapters
+
 on:
-  pull_request:
+  pull_request_target:
     types:
       - labeled
+      - closed
 
 permissions:
   contents: write
@@ -27,15 +30,78 @@ permissions:
 
 jobs:
   promote-to-stable:
-    name: Promote
+    name: "Promote commit to stable"
     runs-on: ubuntu-latest
     # Only react to merged PRs for security reasons.
     # See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target.
     if: >
       github.event.pull_request.merged
-      && contains(github.event.label.name, 'promote')
+      && contains(github.event.label.name, 'promote stable')
     steps:
-      - uses: tibdex/backport@v2.0.4
+      - name: "Checkout ${{ github.repository }}@${{ github.ref }}"
+        uses: actions/checkout@v4
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          label_pattern: "^promote (?<base>([^ ]+))$"
+          # define this to make to obvious what repo/ref is being checked out
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0 # all history needed for merge-base
+
+      - name: "Job Setup"
+        id: setup
+        run: |
+          git config --global user.email "noreply@github.com"
+          git config --global user.name "GitHub Actions"
+
+      - name: "Get Job ID from GH API"
+        # used for error reporting
+        id: get-job-id
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          jobs=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id}}/attempts/${{ github.run_attempt }}/jobs)
+          job_id=$(echo $jobs | jq -r '.jobs[] | select(.runner_name=="${{ runner.name }}") | .id')
+          echo "job_id=$job_id" >> $GITHUB_OUTPUT
+
+      - name: "Check out stable branch"
+        id: checkout
+        run: |
+          git fetch origin stable
+          git checkout stable
+
+      - name: "Cherry-pick commit"
+        id: cherry_pick
+        run: |
+          git cherry-pick -x --mainline 1 ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: "Push to stable branch"
+        id: push
+        run: |
+          git push origin stable
+
+      - name: "Set status & Issue Comment"
+        if: always()
+        id: job_result
+        run: |
+          if [ "${{ steps.cherry_pick.outcome }}" != "success" ] || [ "${{ steps.push.outcome }}" != "success" ]; then
+            status="failure"
+            notification="❌ Promotion to stable branch failed. Please check the [promotion job](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/job/${{ steps.get-job-id.outputs.job_id }}) for details.
+
+            You will need to manually promote the changes."
+          else
+            status="success"
+            notification="✅ Promotion to stable branch was successful."
+          fi
+
+          gh issue comment --repo ${{ github.repository }} \
+            ${{ github.event.pull_request.number }} \
+            --body "${notification}"
+
+          # Set outputs after using the variables
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "notification<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$notification" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "::notice title=${status}::${notification}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
