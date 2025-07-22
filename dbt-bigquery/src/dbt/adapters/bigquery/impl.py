@@ -121,6 +121,7 @@ class BigqueryConfig(AdapterConfig):
     intermediate_format: Optional[str] = None
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
+    enable_change_history: Optional[bool] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -808,6 +809,9 @@ class BigQueryAdapter(BaseAdapter):
             if config.get("partition_expiration_days") is not None:
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
 
+            if config.get("enable_change_history") is not None:
+                opts["enable_change_history"] = config.get("enable_change_history")
+
             relation_config = getattr(config, "model", None)
             if not temporary and (
                 catalog_relation := self.build_catalog_relation(relation_config)
@@ -824,6 +828,10 @@ class BigQueryAdapter(BaseAdapter):
     @available.parse(lambda *a, **k: {})
     def get_view_options(self, config: Dict[str, Any], node: Dict[str, Any]) -> Dict[str, Any]:
         opts = self.get_common_options(config, node)
+        if config.get("enable_change_history"):
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "`enable_change_history` is not supported for views on BigQuery."
+            )
         return opts
 
     @available.parse(lambda *a, **k: True)
