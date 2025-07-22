@@ -212,7 +212,7 @@ class SnowflakeRelation(BaseRelation):
         catalog = 'snowflake'
         base_location = '{base_location}'
         """
-        if external_volume := config.get("external_volume"):
+        if external_volume := config.get("external_volume"):  # type:ignore
             iceberg_ddl_predicates += f"\nexternal_volume = '{external_volume}'"
         return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
