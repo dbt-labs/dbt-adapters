@@ -213,13 +213,15 @@ class TestPersistDocsNested(BasePersistDocsBase):
             assert level_3_column["comment"] == "level_3 column description"
 
 
-class TestPersistDocsIncremental(BasePersistDocsBase):
-"""Test to ensure incremental models support table description updates."""
 
-@pytest.fixture(scope="class")
-def models(self):
-    return {
-        "incremental_model.sql": """
+
+class TestPersistDocsIncremental(BasePersistDocsBase):
+    """Test to ensure incremental models support table description updates."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental_model.sql": """
         {{ config(
             materialized='incremental',
             persist_docs={"relation": true, "columns": true},
@@ -231,12 +233,12 @@ def models(self):
             where 1=0
         {% endif %}
         """,
-    }
+        }
 
-@pytest.fixture(scope="class")
-def properties(self):
-    return {
-        "schema.yml": """
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {
+            "schema.yml": """
         version: 2
 
         models:
@@ -248,40 +250,40 @@ def properties(self):
               - name: name
                 description: "Initial name description"
         """,
-    }
+        }
 
-@pytest.fixture(scope="class")
-def project_config_update(self):
-    return {
-        "models": {
-            "test": {
-                "+persist_docs": {
-                    "relation": True,
-                    "columns": True,
-                },
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "relation": True,
+                        "columns": True,
+                    },
+                }
             }
         }
-    }
 
-def test_incremental_table_description_update(self, project):
-    """Test that table descriptions are updated for incremental models."""
-    # First run - create table with initial description
-    run_dbt(["run"])
+    def test_incremental_table_description_update(self, project):
+        """Test that table descriptions are updated for incremental models."""
+        # First run - create table with initial description
+        run_dbt(["run"])
 
-    # Verify initial state
-    with project.adapter.connection_named("_test"):
-        client = project.adapter.connections.get_thread_connection().handle
-        table_id = "{}.{}.{}".format(
-            project.database, project.test_schema, "incremental_model"
-        )
-        bq_table = client.get_table(table_id)
+        # Verify initial state
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            table_id = "{}.{}.{}".format(
+                project.database, project.test_schema, "incremental_model"
+            )
+            bq_table = client.get_table(table_id)
 
-        assert bq_table.description == "Initial description"
+            assert bq_table.description == "Initial description"
 
-    # Update schema.yml to new description
-    updated_schema_yml = project.project_root / "models" / "schema.yml"
-    updated_schema_yml.write_text(
-        """
+        # Update schema.yml to new description
+        updated_schema_yml = project.project_root / "models" / "schema.yml"
+        updated_schema_yml.write_text(
+            """
     version: 2
 
     models:
@@ -293,25 +295,26 @@ def test_incremental_table_description_update(self, project):
           - name: name
             description: "Updated name description"
     """
-    )
-
-    # Second run - should update both table and column descriptions
-    run_dbt(["run"])
-
-    # Verify table description was updated
-    with project.adapter.connection_named("_test"):
-        client = project.adapter.connections.get_thread_connection().handle
-        table_id = "{}.{}.{}".format(
-            project.database, project.test_schema, "incremental_model"
         )
-        bq_table = client.get_table(table_id)
 
-        assert bq_table.description == "Updated description"
+        # Second run - should update both table and column descriptions
+        run_dbt(["run"])
 
-        # Column descriptions should also be updated
-        bq_schema = bq_table.schema
-        id_field = next(field for field in bq_schema if field.name == "id")
-        name_field = next(field for field in bq_schema if field.name == "name")
+        # Verify table description was updated
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            table_id = "{}.{}.{}".format(
+                project.database, project.test_schema, "incremental_model"
+            )
+            bq_table = client.get_table(table_id)
 
-        assert id_field.description == "Updated id description"
-        assert name_field.description == "Updated name description"
+            assert bq_table.description == "Updated description"
+
+            # Column descriptions should also be updated
+            bq_schema = bq_table.schema
+            id_field = next(field for field in bq_schema if field.name == "id")
+            name_field = next(field for field in bq_schema if field.name == "name")
+
+            assert id_field.description == "Updated id description"
+            assert name_field.description == "Updated name description"
+
