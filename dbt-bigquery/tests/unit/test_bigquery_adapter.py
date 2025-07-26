@@ -100,6 +100,14 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "threads": 1,
                     "impersonate_service_account": "dummyaccount@dbt.iam.gserviceaccount.com",
                 },
+                "reservation": {
+                    "type": "bigquery",
+                    "method": "oauth",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "reservation": "projects/dbt-unit-000000/locations/US/reservations/test-reservation",
+                },
                 "oauth-credentials-token": {
                     "type": "bigquery",
                     "method": "oauth-secrets",
@@ -403,6 +411,22 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
         except dbt_common.exceptions.base.DbtValidationError as e:
             self.fail("got DbtValidationError: {}".format(str(e)))
 
+        mock_open_connection.assert_not_called()
+        connection.handle
+        mock_open_connection.assert_called_once()
+
+    @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
+    def test_acquire_connection_reservation(self, mock_open_connection):
+        adapter = self.get_adapter("reservation")
+        try:
+            connection = adapter.acquire_connection("dummy")
+            self.assertEqual(connection.type, "bigquery")
+            self.assertEqual(
+                connection.credentials.reservation,
+                "projects/dbt-unit-000000/locations/US/reservations/test-reservation",
+            )
+        except dbt_common.exceptions.base.DbtValidationError as e:
+            self.fail("got DbtValidationError: {}".format(str(e)))
         mock_open_connection.assert_not_called()
         connection.handle
         mock_open_connection.assert_called_once()
