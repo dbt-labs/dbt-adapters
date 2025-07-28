@@ -47,7 +47,7 @@ _DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
 # Time interval in seconds between successive polling attempts to check the
 # notebook job's status in BigFrames mode.
 _COLAB_POLL_INTERVAL = 30
-# Suffix used by all service accounts.
+# Suffix used by service accounts.
 _SERVICE_ACCOUNT_SUFFIX = "iam.gserviceaccount.com"
 
 
