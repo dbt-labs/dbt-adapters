@@ -51,7 +51,13 @@
     {%- endcall -%}
     {% do persist_constraints(target_relation, model) %}
   {%- else -%}
-    {#-- Relation must be merged --#}
+    {#-- Relation must be merged: databricks implementation uses inline SQL, can't be used for Spark submit --#}
+    {%- set submission_method = get_submission_method() -%}
+    {% if language == 'python' and submission_method == 'spark_master' %}
+      {%- call statement('main', language=language) %}
+        {{ py_incremental(strategy, tmp_relation, target_relation, compiled_code, unique_key) }}
+      {%- endcall -%}
+    {% else %}
     {%- call statement('create_tmp_relation', language=language) -%}
       {{ create_table_as(True, tmp_relation, compiled_code, language) }}
     {%- endcall -%}
@@ -71,6 +77,7 @@
         drop table if exists {{ tmp_relation }}
       {%- endcall %}
     {%- endif -%}
+    {%- endif -%}
   {%- endif -%}
 
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode) %}
@@ -83,3 +90,96 @@
   {{ return({'relations': [target_relation]}) }}
 
 {%- endmaterialization %}
+
+{% macro py_incremental(strategy, tmp_relation, target_relation, compiled_code, unique_key) %}
+    {% if strategy == 'append' %}
+        {{ py_incremental_append(tmp_relation, target_relation, compiled_code) }}
+    {% elif strategy == 'merge' %}
+        {{ py_incremental_merge(tmp_relation, target_relation, compiled_code, unique_key) }}
+    {% else %}
+        {% do exceptions.raise_compiler_error("Python incremental strategy '" ~ strategy ~ "' is not implemented.") %}
+    {% endif %}
+{% endmacro %}
+
+{% macro py_incremental_append(tmp_relation, target_relation, compiled_code) %}
+{{ log("Running Python incremental append strategy", info=True) }}
+
+{% set language = 'python' %}
+
+import sys
+location = sys.argv[1]
+
+{{ compiled_code }}
+
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+dbt = dbtObj(spark.table)
+
+df = model(dbt, spark)
+
+location_root = "{{ config.get('location_root', '') }}"
+table_location = location_root.rstrip("/") + "/" + "{{ model["alias"] }}"
+file_format = "{{ config.get('file_format', 'delta') }}"
+write_options = {{ config.get('write_options', {}) }}
+
+if file_format in ('delta', 'hudi', 'iceberg'):
+    print(f"Appending to {file_format} table '{{ target_relation }}'")
+    writer = df.write.mode("append").format(file_format)
+    {% for key, value in config.get('write_options', {}).items() %}
+    writer = writer.option("{{ key }}", "{{ value }}")
+    {% endfor %}
+    writer.saveAsTable("{{ target_relation }}")
+else:
+    print(f"Appending to path {table_location} as {file_format}")
+    writer = df.write.mode("append").format(file_format)
+    {% for key, value in config.get('write_options', {}).items() %}
+    writer = writer.option("{{ key }}", "{{ value }}")
+    {% endfor %}
+    writer.save(table_location)
+{% endmacro %}
+
+{% macro py_incremental_merge(tmp_relation, target_relation, compiled_code, unique_key) %}
+{{ log("Running Python incremental merge strategy", info=True) }}
+
+{% set language = 'python' %}
+
+import sys
+location = sys.argv[1]
+
+{{ compiled_code }}
+
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+dbt = dbtObj(spark.table)
+
+# Generate incremental DataFrame
+df = model(dbt, spark)
+
+# Write temp data as a table in the Hive metastore
+tmp_table = "{{ tmp_relation }}"
+location_root = "{{ config.get('location_root', '') }}"
+tmp_location = location_root.rstrip("/") + "/" + tmp_table
+
+print(f"Creating temp table: {tmp_table}")
+df.write.mode("overwrite").format(file_format).option("path", tmp_location).saveAsTable(tmp_table)
+
+# Now use SQL to merge temp table into target
+merge_sql = f"""
+MERGE INTO {{ target_relation }} AS target
+USING {tmp_table} AS source
+ON {" AND ".join([f"target.{key} = source.{key}" for key in {{ unique_key }}])}
+WHEN MATCHED THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *
+"""
+
+print("Running merge SQL:")
+print(merge_sql)
+
+spark.sql(merge_sql)
+
+# Clean up
+print(f"Dropping temp table: {tmp_table}")
+spark.sql(f"DROP TABLE IF EXISTS {tmp_table} PURGE")
+{% endmacro %}
