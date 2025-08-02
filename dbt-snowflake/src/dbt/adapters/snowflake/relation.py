@@ -209,10 +209,11 @@ class SnowflakeRelation(BaseRelation):
 
         external_volume = config.get("external_volume")  # type:ignore
         iceberg_ddl_predicates: str = f"""
-        external_volume = '{external_volume}'
         catalog = 'snowflake'
         base_location = '{base_location}'
         """
+        if external_volume := config.get("external_volume"):  # type:ignore
+            iceberg_ddl_predicates += f"\nexternal_volume = '{external_volume}'"
         return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def __drop_conditions(self, old_relation: "SnowflakeRelation") -> Iterator[Tuple[bool, str]]:
