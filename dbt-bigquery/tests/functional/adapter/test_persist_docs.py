@@ -213,8 +213,6 @@ class TestPersistDocsNested(BasePersistDocsBase):
             assert level_3_column["comment"] == "level_3 column description"
 
 
-
-
 class TestPersistDocsIncremental(BasePersistDocsBase):
     """Test to ensure incremental models support table description updates."""
 
@@ -317,4 +315,3 @@ class TestPersistDocsIncremental(BasePersistDocsBase):
 
             assert id_field.description == "Updated id description"
             assert name_field.description == "Updated name description"
-
