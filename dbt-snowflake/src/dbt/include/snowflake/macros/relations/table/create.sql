@@ -9,6 +9,8 @@
             {{ snowflake__create_table_info_schema_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
             {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
+        {%- elif catalog_relation.catalog_type == 'ICEBERG_REST' -%}
+            {{ snowflake__create_table_iceberg_rest_sql(relation, compiled_code) }}
         {%- else -%}
             {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
@@ -154,6 +156,66 @@ create or replace iceberg table {{ relation }}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+    {% if copy_grants -%} copy grants {%- endif %}
+as (
+    {%- if catalog_relation.cluster_by is not none -%}
+    select * from (
+        {{ compiled_code }}
+    )
+    order by (
+        {{ catalog_relation.cluster_by }}
+    )
+    {%- else -%}
+    {{ compiled_code }}
+    {%- endif %}
+    )
+;
+
+{% if catalog_relation.cluster_by is not none -%}
+alter iceberg table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
+{%- endif -%}
+
+{% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
+alter iceberg table {{ relation }} resume recluster;
+{%- endif -%}
+
+{%- endmacro %}
+
+
+{% macro snowflake__create_table_iceberg_rest_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE ICEBERG TABLE ... CATALOG('catalog_name') (external REST catalog):
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
+
+    Limitations:
+    - Iceberg does not support temporary tables (use a standard Snowflake table)
+-#}
+
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
+
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace iceberg table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
+    {%- endif %}
+    {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    catalog = '{{ catalog_relation.catalog_name }}'  -- external REST catalog name
+    {{ optional('base_location', catalog_relation.base_location, "'") }}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}

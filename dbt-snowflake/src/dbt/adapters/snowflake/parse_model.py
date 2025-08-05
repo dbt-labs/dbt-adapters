@@ -9,6 +9,10 @@ from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
 
 
+def rest_endpoint(model: RelationConfig) -> Optional[str]:
+    return model.config.get("rest_endpoint") if model.config else None
+
+
 def max_data_extension_time_in_days(model: RelationConfig) -> Optional[int]:
     return (
         model.config.get(
