@@ -237,17 +237,17 @@ class TestPersistDocsIncremental(BasePersistDocsBase):
     def properties(self):
         return {
             "schema.yml": """
-        version: 2
+version: 2
 
-        models:
-          - name: incremental_model
-            description: "Initial description"
-            columns:
-              - name: id
-                description: "Initial id description"
-              - name: name
-                description: "Initial name description"
-        """,
+models:
+  - name: incremental_model
+    description: "Initial description"
+    columns:
+      - name: id
+        description: "Initial id description"
+      - name: name
+        description: "Initial name description"
+""",
         }
 
     @pytest.fixture(scope="class")
@@ -282,17 +282,17 @@ class TestPersistDocsIncremental(BasePersistDocsBase):
         updated_schema_yml = project.project_root / "models" / "schema.yml"
         updated_schema_yml.write_text(
             """
-    version: 2
+version: 2
 
-    models:
-      - name: incremental_model
-        description: "Updated description"
-        columns:
-          - name: id
-            description: "Updated id description"
-          - name: name
-            description: "Updated name description"
-    """
+models:
+  - name: incremental_model
+    description: "Updated description"
+    columns:
+      - name: id
+        description: "Updated id description"
+      - name: name
+        description: "Updated name description"
+"""
         )
 
         # Second run - should update both table and column descriptions
