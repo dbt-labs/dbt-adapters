@@ -158,7 +158,12 @@
             and not (
                 --avoid updating the record's valid_to if the latest entry is marked as deleted
                 snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-                and snapshotted_data.{{ columns.dbt_valid_to }} is null
+                and
+                {% if config.get('dbt_valid_to_current') -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+                {%- else -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} is null
+                {%- endif %}
             )
             {%- endif %}
     )
@@ -202,7 +207,12 @@
         and not (
             --avoid inserting a new record if the latest one is marked as deleted
             snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-            and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            and
+            {% if config.get('dbt_valid_to_current') -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+            {%- else -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} is null
+            {%- endif %}
             )
 
     )
