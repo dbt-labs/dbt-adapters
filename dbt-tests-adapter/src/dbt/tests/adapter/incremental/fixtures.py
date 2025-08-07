@@ -303,3 +303,139 @@ select id,
 
 from source_data
 """
+
+# Special Character Column Tests - Test column quoting functionality
+_MODELS__A_SPECIAL_CHARS = """
+{{
+    config(materialized='table')
+}}
+
+with source_data as (
+
+    select 1 as id, 'aaa' as {{ adapter.quote("field with space") }}, 'bbb' as {{ adapter.quote("select") }}, 111 as {{ adapter.quote("field-with-dash") }}, 'TTT' as {{ adapter.quote("field.with.dots") }}
+    union all select 2 as id, 'ccc' as {{ adapter.quote("field with space") }}, 'ddd' as {{ adapter.quote("select") }}, 222 as {{ adapter.quote("field-with-dash") }}, 'UUU' as {{ adapter.quote("field.with.dots") }}
+    union all select 3 as id, 'eee' as {{ adapter.quote("field with space") }}, 'fff' as {{ adapter.quote("select") }}, 333 as {{ adapter.quote("field-with-dash") }}, 'VVV' as {{ adapter.quote("field.with.dots") }}
+    union all select 4 as id, 'ggg' as {{ adapter.quote("field with space") }}, 'hhh' as {{ adapter.quote("select") }}, 444 as {{ adapter.quote("field-with-dash") }}, 'WWW' as {{ adapter.quote("field.with.dots") }}
+    union all select 5 as id, 'iii' as {{ adapter.quote("field with space") }}, 'jjj' as {{ adapter.quote("select") }}, 555 as {{ adapter.quote("field-with-dash") }}, 'XXX' as {{ adapter.quote("field.with.dots") }}
+    union all select 6 as id, 'kkk' as {{ adapter.quote("field with space") }}, 'lll' as {{ adapter.quote("select") }}, 666 as {{ adapter.quote("field-with-dash") }}, 'YYY' as {{ adapter.quote("field.with.dots") }}
+
+)
+
+select id
+       ,{{ adapter.quote("field with space") }}
+       ,{{ adapter.quote("select") }}
+       ,{{ adapter.quote("field-with-dash") }}
+       ,{{ adapter.quote("field.with.dots") }}
+
+from source_data
+"""
+
+_MODELS__INCREMENTAL_APPEND_NEW_SPECIAL_CHARS = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='append_new_columns'
+    )
+}}
+
+{% set string_type = dbt.type_string() %}
+
+WITH source_data AS (SELECT * FROM {{ ref('model_a_special_chars') }} )
+
+{% if is_incremental()  %}
+
+SELECT id,
+       cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }},
+       cast({{ adapter.quote("select") }} as {{string_type}}) as {{ adapter.quote("select") }},
+       cast({{ adapter.quote("field-with-dash") }} as {{string_type}}) as {{ adapter.quote("field-with-dash") }},
+       cast({{ adapter.quote("field.with.dots") }} as {{string_type}}) as {{ adapter.quote("field.with.dots") }}
+FROM source_data WHERE id NOT IN (SELECT id from {{ this }} )
+
+{% else %}
+
+SELECT id,
+       cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }},
+       cast({{ adapter.quote("select") }} as {{string_type}}) as {{ adapter.quote("select") }}
+FROM source_data where id <= 3
+
+{% endif %}
+"""
+
+_MODELS__INCREMENTAL_APPEND_NEW_SPECIAL_CHARS_TARGET = """
+{{
+    config(materialized='table')
+}}
+
+{% set string_type = dbt.type_string() %}
+
+with source_data as (
+
+    select * from {{ ref('model_a_special_chars') }}
+
+)
+
+select id
+       ,cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }}
+       ,cast({{ adapter.quote("select") }} as {{string_type}}) as {{ adapter.quote("select") }}
+       ,cast(CASE WHEN id <= 3 THEN NULL ELSE {{ adapter.quote("field-with-dash") }} END as {{string_type}}) AS {{ adapter.quote("field-with-dash") }}
+       ,cast(CASE WHEN id <= 3 THEN NULL ELSE {{ adapter.quote("field.with.dots") }} END as {{string_type}}) AS {{ adapter.quote("field.with.dots") }}
+
+from source_data
+"""
+
+_MODELS__INCREMENTAL_SYNC_ALL_SPECIAL_CHARS = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns'
+    )
+}}
+
+{% set string_type = dbt.type_string() %}
+
+WITH source_data AS (SELECT * FROM {{ ref('model_a_special_chars') }} )
+
+{% if is_incremental() %}
+
+SELECT id,
+       cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }},
+       cast({{ adapter.quote("field-with-dash") }} as {{string_type}}) as {{ adapter.quote("field-with-dash") }},
+       cast({{ adapter.quote("field.with.dots") }} as {{string_type}}) as {{ adapter.quote("field.with.dots") }}
+
+FROM source_data WHERE id NOT IN (SELECT id from {{ this }} )
+
+{% else %}
+
+select id,
+       cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }},
+       cast({{ adapter.quote("select") }} as {{string_type}}) as {{ adapter.quote("select") }}
+
+from source_data where id <= 3
+
+{% endif %}
+"""
+
+_MODELS__INCREMENTAL_SYNC_ALL_SPECIAL_CHARS_TARGET = """
+{{
+    config(materialized='table')
+}}
+
+with source_data as (
+
+    select * from {{ ref('model_a_special_chars') }}
+
+)
+
+{% set string_type = dbt.type_string() %}
+
+select id
+       ,cast({{ adapter.quote("field with space") }} as {{string_type}}) as {{ adapter.quote("field with space") }}
+       --,{{ adapter.quote("select") }} (removed in sync)
+       ,cast(case when id <= 3 then null else {{ adapter.quote("field-with-dash") }} end as {{string_type}}) as {{ adapter.quote("field-with-dash") }}
+       ,cast(case when id <= 3 then null else {{ adapter.quote("field.with.dots") }} end as {{string_type}}) as {{ adapter.quote("field.with.dots") }}
+
+from source_data
+order by id
+"""
