@@ -98,7 +98,12 @@
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
-    comment on {{ relation_type }} {{ relation.render() }} IS $${{ relation_comment | replace('$', '[$]') }}$$;
+
+    {%- if relation.is_iceberg_format -%}
+        alter iceberg table {{ relation.render() }} set comment = $${{ relation_comment | replace('$', '[$]') }}$$;
+    {%- else -%}
+        comment on {{ relation_type }} {{ relation.render() }} IS $${{ relation_comment | replace('$', '[$]') }}$$;
+    {%- endif -%}
 {% endmacro %}
 
 
