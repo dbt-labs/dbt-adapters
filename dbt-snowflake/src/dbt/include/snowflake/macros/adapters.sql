@@ -95,8 +95,6 @@
 {% macro snowflake__alter_relation_comment(relation, relation_comment) -%}
     {%- if relation.is_dynamic_table -%}
         {%- set relation_type = 'dynamic table' -%}
-    {%- elif relation.is_iceberg_format -%}
-        {%- set relation_type = 'iceberg table' -%}
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
