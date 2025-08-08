@@ -15,6 +15,7 @@ class IcebergRestCatalogRelation:
     catalog_type: str = constants.DEFAULT_ICEBERG_REST_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_ICEBERG_REST_CATALOG.name
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
+    catalog_linked_database: Optional[str] = None
     external_volume: Optional[str] = None
     rest_endpoint: Optional[str] = None
     file_format: Optional[str] = None
@@ -35,8 +36,11 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
+        self.rest_endpoint: Optional[str] = None
+        self.catalog_linked_database: Optional[str] = None
         if adapter_properties := config.adapter_properties:
             self.rest_endpoint = adapter_properties.get("rest_endpoint")
+            self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
 
     def build_relation(self, model: RelationConfig) -> IcebergRestCatalogRelation:
         """
@@ -49,4 +53,5 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             rest_endpoint=parse_model.rest_endpoint(model) or self.rest_endpoint,
             cluster_by=parse_model.cluster_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
+            catalog_linked_database=self.catalog_linked_database,
         )

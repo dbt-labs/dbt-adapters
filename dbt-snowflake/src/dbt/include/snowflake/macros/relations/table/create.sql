@@ -214,8 +214,10 @@ create or replace iceberg table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    {%- if not catalog_relation|attr('catalog_linked_database') -%}
     catalog = '{{ catalog_relation.catalog_name }}'  -- external REST catalog name
     {{ optional('base_location', catalog_relation.base_location, "'") }}
+    {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
