@@ -100,3 +100,88 @@ class TestOnSchemaChange:
 
         new_column_names = self._column_names(project, relation_name)
         assert new_column_names == ["id", "name"]
+
+
+# Test fixtures for special character column names
+models__table_special_chars_model = """
+{{
+  config(
+    materialized='incremental',
+    incremental_strategy='append',
+    on_schema_change=var("on_schema_change"),
+    table_type=var("table_type"),
+  )
+}}
+
+select
+    1 as id,
+    'keyword' as "select"
+{%- if is_incremental() -%}
+    ,'new data' as "field-with-dash"
+{%- endif -%}
+"""
+
+
+class TestOnSchemaChangeSpecialChars:
+    """Test schema changes with special character column names for Athena
+
+    Tests column quoting with SQL keywords and dashes in column names.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        models = {}
+        for table_type in ["hive", "iceberg"]:
+            for on_schema_change in ["sync_all_columns", "append_new_columns"]:
+                models[f"{table_type}_special_chars_{on_schema_change}.sql"] = (
+                    models__table_special_chars_model
+                )
+        return models
+
+    def _column_names(self, project, relation_name):
+        result = project.run_sql(f"show columns from {relation_name}", fetch="all")
+        column_names = [row[0].strip() for row in result]
+        return column_names
+
+    @pytest.mark.parametrize("table_type", ["hive", "iceberg"])
+    def test__append_new_columns_special_chars(self, project, table_type):
+        """Test that columns with special characters are properly quoted when added"""
+        relation_name = f"{table_type}_special_chars_append_new_columns"
+        vars = {"on_schema_change": "append_new_columns", "table_type": table_type}
+        args = ["run", "--select", relation_name, "--vars", json.dumps(vars)]
+
+        # First run - creates initial table with quoted column names
+        run_dbt(args)
+
+        # Second run - should append new columns with special characters
+        run_dbt(args)
+
+        # Verify all columns including ones with special characters exist
+        new_column_names = self._column_names(project, relation_name)
+        expected_columns = [
+            "id",
+            "select",
+            "field-with-dash",
+        ]
+        assert sorted(new_column_names) == sorted(expected_columns)
+
+    def test__sync_all_columns_special_chars(self, project):
+        """Test that columns with special characters are properly quoted when synced (add/remove)"""
+        relation_name = "hive_special_chars_sync_all_columns"
+        vars = {"on_schema_change": "sync_all_columns", "table_type": "hive"}
+        args = ["run", "--select", relation_name, "--vars", json.dumps(vars)]
+
+        # First run - creates initial table
+        run_dbt(args)
+
+        # Second run - should sync columns (replace all columns)
+        run_dbt(args)
+
+        # Verify columns were properly synced
+        new_column_names = self._column_names(project, relation_name)
+        expected_columns = [
+            "id",
+            "select",
+            "field-with-dash",
+        ]
+        assert sorted(new_column_names) == sorted(expected_columns)
