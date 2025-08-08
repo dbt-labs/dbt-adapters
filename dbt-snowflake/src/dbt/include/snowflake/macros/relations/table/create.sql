@@ -185,6 +185,7 @@ alter iceberg table {{ relation }} resume recluster;
 {% macro py_write_table(compiled_code, target_relation) %}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
 
 {% if catalog_relation.is_transient %}
     {%- set table_type='transient' -%}
@@ -205,7 +206,7 @@ def materialize(session, df, target_relation):
             # session.write_pandas does not have overwrite function
             df = session.createDataFrame(df)
     {% set target_relation_name = resolve_model_name(target_relation) %}
-    df.write.mode("overwrite").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}')
+    df.write.mode("overwrite").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}', copy_grants={{copy_grants}})
 
 
 def main(session):
