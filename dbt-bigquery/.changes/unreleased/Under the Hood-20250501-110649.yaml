@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Allow configuration of BigQuery location value when running tests
+time: 2025-05-01T11:06:49.845082+01:00
+custom:
+    Author: alexr-lh
+    Issue: "1046"
