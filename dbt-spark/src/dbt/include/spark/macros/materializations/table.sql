@@ -107,6 +107,8 @@ else:
 if {{ temporary }}:
   df.createOrReplaceTempView("{{ target_relation }}")
 else:
+  {# Import functions that can be used for partitioning See https://spark.apache.org/docs/3.5.5/api/python/reference/pyspark.sql/api/pyspark.sql.DataFrameWriterV2.partitionedBy.html #}
+  from pyspark.sql.functions import years, months, days, hours, bucket
   writer = df.writeTo("{{ target_relation }}") \
     .using("{{ config.get('file_format', 'delta') }}") \
     .option("overwriteSchema", "true")
@@ -122,20 +124,32 @@ else:
 
 {% macro python__partitionedBy_clause() %}
   {% if partition_cols() -%}
-    {% set partitions = (partition_cols() | trim | replace("(", "") | replace(")", "") ).split(",") %}
+    {% set partition_cols = (partition_cols() | trim) %}
+    
+    {# Remove the first character if this character is '(' #}
+    {% if partition_cols[0] == '(' %}
+      {% set partition_cols = partition_cols[1:] %}
+    {% endif %}
+
+      {# Remove the last character if this character is ')' #}
+    {% if partition_cols[-1] == ')' %}
+      {% set partition_cols = partition_cols[:-1] %}
+    {% endif %}
+    
+    {% set partitions = partition_cols.split(",") %}
     {% set partitions_quoted = [] %}
     {% for partition in partitions %}
-      {% do partitions_quoted.append("\"" ~ partition ~ "\"") %}
+      {% if not ((partition.startswith('years') or partition.startswith('months') or partition.startswith('days') or partition.startswith('hours') or partition.startswith('bucket') )) %}
+        {% do partitions_quoted.append("'" ~ partition ~ "'") %}
+      {% else%}
+        {% do partitions_quoted.append(partition) %}
+      {% endif %}
     {% endfor %}
-    {% if partitions is defined and partitions|length > 0 %}
+    {% if partitions_quoted is defined and (partitions_quoted | length) > 0 %}
   writer = writer.partitionedBy({{ partitions_quoted | join(",") }})
     {% endif %}
   {%- endif %}
 {%- endmacro -%}
-  
-{% macro quote_string(value) %}
-  {{ return ( "\"" ~ value ~ "\"" ) }}
-{% endmacro %}
 
 {% macro python__tblproperties_clause() %}
   {%- set tblproperties = config.get('tblproperties') -%}
