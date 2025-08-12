@@ -209,7 +209,7 @@ alter iceberg table {{ relation }} resume recluster;
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
-create or replace iceberg table {{ relation }}
+create iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
