@@ -7,7 +7,7 @@ sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@upgradeProtoBuf",
     "ddtrace==2.3.0",
     'pre-commit==3.7.0',
     "pytest>=7.0,<8.0",

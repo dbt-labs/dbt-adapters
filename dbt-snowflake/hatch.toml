@@ -11,8 +11,8 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@upgradeProtoBuf",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@upgradeProtoBuf#subdirectory=core",
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
     "pre-commit~=3.7.0",
@@ -68,8 +68,8 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@upgradeProtoBuf",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@upgradeProtoBuf#subdirectory=core",
     "ddtrace==2.3.0",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
