@@ -97,7 +97,6 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
-        self.add_catalog_integration(constants.DEFAULT_ICEBERG_REST_CATALOG)
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig

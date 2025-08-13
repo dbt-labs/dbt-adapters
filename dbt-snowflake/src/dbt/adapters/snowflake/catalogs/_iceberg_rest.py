@@ -5,9 +5,12 @@ from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
 )
+from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
+
+from dbt.adapters.exceptions.compilation import InvalidRelationConfigError
 
 
 @dataclass
@@ -19,7 +22,6 @@ class IcebergRestCatalogRelation:
     external_volume: Optional[str] = None
     rest_endpoint: Optional[str] = None
     file_format: Optional[str] = None
-    cluster_by: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
 
@@ -39,19 +41,32 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         self.rest_endpoint: Optional[str] = None
         self.catalog_linked_database: Optional[str] = None
         if adapter_properties := config.adapter_properties:
-            self.rest_endpoint = adapter_properties.get("rest_endpoint")
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
+            self.rest_endpoint = adapter_properties.get("rest_endpoint")
+
+        if not self.catalog_linked_database:
+            raise InvalidCatalogIntegrationConfigError(
+                config.name,
+                "adapter_properties.catalog_linked_database is currently required for iceberg rest catalog integrations with catalog linked databases",
+            )
 
     def build_relation(self, model: RelationConfig) -> IcebergRestCatalogRelation:
         """
         Args:
             model: `config.model` (not `model`) from the jinja context
         """
+        cluster_by = parse_model.cluster_by(model)
+        if cluster_by:
+            raise InvalidRelationConfigError(
+                model,
+                model.config,
+                "cluster_by is not supported for iceberg rest catalog integrations with catalog linked databases",
+            )
+
         return IcebergRestCatalogRelation(
             catalog_name=self.catalog_name,
             external_volume=parse_model.external_volume(model) or self.external_volume,
             rest_endpoint=parse_model.rest_endpoint(model) or self.rest_endpoint,
-            cluster_by=parse_model.cluster_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
             catalog_linked_database=self.catalog_linked_database,
         )

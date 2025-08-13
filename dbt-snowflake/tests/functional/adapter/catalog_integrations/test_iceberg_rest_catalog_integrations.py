@@ -55,4 +55,5 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
         }
 
     def test_basic_iceberg_rest_catalog_integration(self, project):
-        run_dbt(["run"])
+        result = run_dbt(["run"])
+        assert len(result) == 1
