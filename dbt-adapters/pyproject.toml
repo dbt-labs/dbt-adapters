@@ -33,7 +33,7 @@ dependencies = [
     # installed via dbt-common but used directly
     "agate>=1.0,<2.0",
     "mashumaro[msgpack]>=3.9,<3.15",
-    "protobuf>=5.0,<6.0",
+    "protobuf>=6.0,<7.0",
     "typing-extensions>=4.0,<5.0",
 ]
 [project.urls]
