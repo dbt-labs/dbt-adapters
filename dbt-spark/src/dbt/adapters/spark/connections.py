@@ -60,6 +60,7 @@ class SparkConnectionMethod(StrEnum):
     HTTP = "http"
     ODBC = "odbc"
     SESSION = "session"
+    LIVY = "livy"
 
 
 @dataclass
@@ -532,6 +533,45 @@ class SparkConnectionManager(SQLConnectionManager):
 
                     conn = pyodbc.connect(connection_str, autocommit=True)
                     handle = PyodbcConnectionWrapper(conn)
+                elif creds.method == SparkConnectionMethod.LIVY:
+                    cls.validate_creds(creds, ["host", "port", "schema"])
+                    
+                    # Livy connection logic
+                    import requests
+                    import json
+                    
+                    # Build Livy session URL
+                    livy_url = f"http://{creds.host}:{creds.port}/sessions"
+                    
+                    # Create Livy session
+                    session_data = {
+                        "kind": "sql",
+                        "conf": creds.server_side_parameters
+                    }
+                    
+                    if creds.user:
+                        session_data["proxyUser"] = creds.user
+                    
+                    response = requests.post(
+                        livy_url,
+                        json=session_data,
+                        headers={"Content-Type": "application/json"}
+                    )
+                    
+                    if response.status_code != 200:
+                        raise FailedToConnectError(f"Failed to create Livy session: {response.text}")
+                    
+                    session_info = response.json()
+                    session_id = session_info["id"]
+                    
+                    # Import Livy connection wrapper
+                    from .livy import LivyConnectionWrapper
+                    
+                    handle = LivyConnectionWrapper(
+                        session_id=session_id,
+                        livy_url=f"http://{creds.host}:{creds.port}",
+                        server_side_parameters=creds.server_side_parameters
+                    )
                 elif creds.method == SparkConnectionMethod.SESSION:
                     from .session import (  # noqa: F401
                         Connection,
