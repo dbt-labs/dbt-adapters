@@ -27,10 +27,6 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_name="POLARIS",
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
-            adapter_properties={
-                # intentionally omit 'catalog_linked_database'
-                "rest_endpoint": "https://example.com/api",
-            },
         )
 
         with pytest.raises(InvalidCatalogIntegrationConfigError):
@@ -44,7 +40,6 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "custom_database",
             },
         )
@@ -112,7 +107,6 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "catalog_linked_database",
             },
         )
@@ -147,7 +141,6 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_name="POLARIS",
             catalog_linked_database="custom_db",
             external_volume="test_volume",
-            rest_endpoint="https://api.test.com",
             automatic_clustering=True,
             is_transient=True,
         )
@@ -156,7 +149,6 @@ class TestIcebergRestCatalogMacroIntegration:
         assert hasattr(relation, "catalog_name")
         assert hasattr(relation, "catalog_linked_database")
         assert hasattr(relation, "external_volume")
-        assert hasattr(relation, "rest_endpoint")
         assert hasattr(relation, "automatic_clustering")
         assert hasattr(relation, "is_transient")
         assert hasattr(relation, "catalog_type")
@@ -167,6 +159,6 @@ class TestIcebergRestCatalogMacroIntegration:
         assert relation.catalog_name == "POLARIS"
         assert relation.catalog_linked_database == "custom_db"
         assert relation.external_volume == "test_volume"
-        assert relation.rest_endpoint == "https://api.test.com"
         assert relation.automatic_clustering is True
         assert relation.is_transient is True
+        assert relation.auto_refresh is None

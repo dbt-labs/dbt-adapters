@@ -20,10 +20,10 @@ class IcebergRestCatalogRelation:
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
     catalog_linked_database: Optional[str] = None
     external_volume: Optional[str] = None
-    rest_endpoint: Optional[str] = None
     file_format: Optional[str] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
+    auto_refresh: Optional[bool] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -32,17 +32,16 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     table_format = constants.ICEBERG_TABLE_FORMAT
     file_format = None  # Snowflake chooses based on stage-format
     allows_writes = True
-    rest_endpoint: Optional[str] = None
+    auto_refresh = None
+    catalog_linked_database: Optional[str] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
-        self.rest_endpoint: Optional[str] = None
-        self.catalog_linked_database: Optional[str] = None
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
-            self.rest_endpoint = adapter_properties.get("rest_endpoint")
+            self.auto_refresh = adapter_properties.get("auto_refresh")
 
         if not self.catalog_linked_database:
             raise InvalidCatalogIntegrationConfigError(
@@ -66,7 +65,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         return IcebergRestCatalogRelation(
             catalog_name=self.catalog_name,
             external_volume=parse_model.external_volume(model) or self.external_volume,
-            rest_endpoint=parse_model.rest_endpoint(model) or self.rest_endpoint,
             automatic_clustering=parse_model.automatic_clustering(model),
             catalog_linked_database=self.catalog_linked_database,
+            auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,
         )

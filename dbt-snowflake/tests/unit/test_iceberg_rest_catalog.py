@@ -19,8 +19,8 @@ class TestIcebergRestCatalogIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "custom_db",
+                "auto_refresh": True,
             },
         )
 
@@ -30,7 +30,6 @@ class TestIcebergRestCatalogIntegration:
         assert integration.catalog_name == "POLARIS"
         assert integration.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
         assert integration.external_volume == "s3_volume"
-        assert integration.rest_endpoint == "https://example.com/api"
         assert integration.allows_writes is True
         assert integration.table_format == constants.ICEBERG_TABLE_FORMAT
 
@@ -42,7 +41,6 @@ class TestIcebergRestCatalogIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "custom_db",
             },
         )
@@ -52,8 +50,8 @@ class TestIcebergRestCatalogIntegration:
         # Mock model config
         model = Mock()
         model.config = {
-            "rest_endpoint": "https://example.com/api",
             "external_volume": "model_volume",
+            "auto_refresh": True,
         }
         model.schema = "test_schema"
         model.identifier = "test_table"
@@ -65,7 +63,7 @@ class TestIcebergRestCatalogIntegration:
         assert relation.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
         assert relation.table_format == constants.ICEBERG_TABLE_FORMAT
         assert relation.external_volume == "model_volume"  # Should use model's volume
-        assert relation.rest_endpoint == "https://example.com/api"
+        assert relation.auto_refresh == True
 
     def test_build_relation_with_defaults(self):
         """Test build_relation with minimal model config."""
@@ -75,7 +73,6 @@ class TestIcebergRestCatalogIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "custom_db",
             },
         )
@@ -93,6 +90,7 @@ class TestIcebergRestCatalogIntegration:
         assert isinstance(relation, IcebergRestCatalogRelation)
         assert relation.catalog_name == "POLARIS"
         assert relation.external_volume == "s3_volume"  # Should use integration's volume
+        assert relation.auto_refresh == None
 
     def test_catalog_linked_database_initialization(self):
         """Test that catalog_linked_database is properly initialized from adapter_properties."""
@@ -102,8 +100,8 @@ class TestIcebergRestCatalogIntegration:
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
             adapter_properties={
-                "rest_endpoint": "https://example.com/api",
                 "catalog_linked_database": "custom_database",
+                "auto_refresh": False,
             },
         )
 
