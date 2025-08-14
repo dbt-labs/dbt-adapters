@@ -21,7 +21,6 @@ class IcebergRestCatalogRelation:
     catalog_linked_database: Optional[str] = None
     external_volume: Optional[str] = None
     file_format: Optional[str] = None
-    automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
     auto_refresh: Optional[bool] = None
 
@@ -65,7 +64,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         return IcebergRestCatalogRelation(
             catalog_name=self.catalog_name,
             external_volume=parse_model.external_volume(model) or self.external_volume,
-            automatic_clustering=parse_model.automatic_clustering(model),
             catalog_linked_database=self.catalog_linked_database,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,
+            is_transient=parse_model.is_transient(model),
         )

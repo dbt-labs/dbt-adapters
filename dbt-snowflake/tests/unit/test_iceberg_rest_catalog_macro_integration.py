@@ -27,6 +27,7 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_name="POLARIS",
             catalog_type="iceberg_rest",
             external_volume="s3_volume",
+            adapter_properties={},
         )
 
         with pytest.raises(InvalidCatalogIntegrationConfigError):
@@ -141,7 +142,7 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_name="POLARIS",
             catalog_linked_database="custom_db",
             external_volume="test_volume",
-            automatic_clustering=True,
+            auto_refresh=True,
             is_transient=True,
         )
 
@@ -149,7 +150,7 @@ class TestIcebergRestCatalogMacroIntegration:
         assert hasattr(relation, "catalog_name")
         assert hasattr(relation, "catalog_linked_database")
         assert hasattr(relation, "external_volume")
-        assert hasattr(relation, "automatic_clustering")
+        assert hasattr(relation, "auto_refresh")
         assert hasattr(relation, "is_transient")
         assert hasattr(relation, "catalog_type")
         assert hasattr(relation, "table_format")
@@ -159,6 +160,5 @@ class TestIcebergRestCatalogMacroIntegration:
         assert relation.catalog_name == "POLARIS"
         assert relation.catalog_linked_database == "custom_db"
         assert relation.external_volume == "test_volume"
-        assert relation.automatic_clustering is True
+        assert relation.auto_refresh is True
         assert relation.is_transient is True
-        assert relation.auto_refresh is None
