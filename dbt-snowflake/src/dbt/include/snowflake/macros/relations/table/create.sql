@@ -222,26 +222,8 @@ create iceberg table {{ relation }}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
 as (
-    {%- if catalog_relation.cluster_by is not none -%}
-    select * from (
-        {{ compiled_code }}
-    )
-    order by (
-        {{ catalog_relation.cluster_by }}
-    )
-    {%- else -%}
     {{ compiled_code }}
-    {%- endif %}
-    )
-;
-
-{% if catalog_relation.cluster_by is not none -%}
-alter iceberg table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
-{%- endif -%}
-
-{% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
-alter iceberg table {{ relation }} resume recluster;
-{%- endif -%}
+    );
 
 {%- endmacro %}
 
