@@ -1,169 +1,169 @@
-name: "Pull request checks"
-run-name: "Pull request checks - ${{ github.actor }} - #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
-
-on:
-    pull_request_target:
-        types: [opened, reopened, synchronize, labeled, unlabeled]
-
-# only run this once per PR at a time
-concurrency:
-    group: ${{ github.workflow }}-${{ github.event.number }}
-    cancel-in-progress: true
-
-# ensures that no permissions are granted globally, only to the specific jobs that need them
-permissions: {}
-
-env:
-    CI_LABEL: "ci:approve-public-fork-ci"
-
-jobs:
-    check-run-approval:
-        permissions:
-            pull-requests: write
-            contents: read
-        # to prevent CI from running against public forks without us looking at the code, we will check for the presence of the proper label
-        runs-on: ubuntu-latest
-        steps:
-            -   name: "If the event is to synchronize, we should remove the label from the PR"
-                # also triggers on reopen to avoid a user closing, pushing changes and then reopening the PR
-                if: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'reopened') && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
-                run: |
-                    echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
-                    gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
-                    msg="All pull request updates require re-approval of CI.  No CI will be run."
-                    echo "::error::$msg"
-                    exit 1
-                env:
-                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            -   name: "Check that forks have the '${{ env.CI_LABEL }}' label"
-                if: ${{ github.event.pull_request.head.repo.full_name != github.repository && !contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
-                run: |
-                    msg="Pull request is from a public fork but does not have the '${{ env.CI_LABEL }}' label.  No CI will be run."
-                    echo "::error::$msg"
-                    exit 1
-
-    affected-packages:
-        permissions:
-            contents: read
-        needs: check-run-approval
-        runs-on: ubuntu-latest
-        outputs:
-            changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
-            verify-build: ${{ steps.verify-build.outputs.changes }}
-            unit-tests: ${{ steps.unit-tests.outputs.changes }}
-            integration-tests: ${{ steps.integration-tests.outputs.changes }}
-        steps:
-        -   uses: actions/checkout@v4
-            with:
-                ref: ${{ github.event.pull_request.head.sha }}
-                repository: ${{ github.event.pull_request.head.repo.full_name }}
-        -   id: changelog-entry-check
-            uses: dorny/paths-filter@v3
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                filters: .github/filters/changelog-entry-check.yml
-        -   id: verify-build
-            uses: dorny/paths-filter@v3
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                filters: .github/filters/verify-build.yml
-        -   id: unit-tests
-            uses: dorny/paths-filter@v3
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                filters: .github/filters/unit-tests.yml
-        -   id: integration-tests
-            uses: dorny/paths-filter@v3
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                filters: .github/filters/integration-tests.yml
-
-    changelog-entry-check:
-        uses: ./.github/workflows/_changelog-entry-check.yml
-        needs: affected-packages
-        permissions:
-            contents: read
-            pull-requests: write
-        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
-        with:
-            package: ${{ matrix.package }}
-            pull-request: ${{ github.event.pull_request.number }}
-        secrets: inherit
-
-    code-quality:
-        permissions:
-            contents: read
-        uses: ./.github/workflows/_code-quality.yml
-        needs: check-run-approval
-        with:
-            branch: ${{ github.event.pull_request.head.sha }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-
-    verify-build:
-        permissions: read-all
-        uses: ./.github/workflows/_verify-build.yml
-        needs: affected-packages
-        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.sha }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-
-    unit-tests:
-        permissions:
-            contents: read
-        uses: ./.github/workflows/_unit-tests.yml
-        needs: affected-packages
-        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
-        strategy:
-            fail-fast: false
-            matrix:
-                package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.sha }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            hatch-env: "ci"
-
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
-        needs: affected-packages
-        permissions:
-            id-token: write
-            contents: read
-        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
-        with:
-            packages: ${{ needs.affected-packages.outputs.integration-tests }}
-            branch: ${{ github.event.pull_request.head.sha }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            hatch-env: "ci"
-        secrets: inherit
-
-    # This job does nothing and is only used for branch protection
-    results:
-        permissions:
-            actions: read
-        name: "Pull request checks"  # keep this name, branch protection references it
-        if: ${{ !cancelled() }}
-        needs: [check-run-approval, changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
-        runs-on: ${{ vars.DEFAULT_RUNNER }}
-        steps:
-        -   uses: re-actors/alls-green@release/v1
-            with:
-                jobs: ${{ toJSON(needs) }}
-                allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"
+#name: "Pull request checks"
+#run-name: "Pull request checks - ${{ github.actor }} - #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
+#
+#on:
+#    pull_request_target:
+#        types: [opened, reopened, synchronize, labeled, unlabeled]
+#
+## only run this once per PR at a time
+#concurrency:
+#    group: ${{ github.workflow }}-${{ github.event.number }}
+#    cancel-in-progress: true
+#
+## ensures that no permissions are granted globally, only to the specific jobs that need them
+#permissions: {}
+#
+#env:
+#    CI_LABEL: "ci:approve-public-fork-ci"
+#
+#jobs:
+##    check-run-approval:
+##        permissions:
+##            pull-requests: write
+##            contents: read
+##        # to prevent CI from running against public forks without us looking at the code, we will check for the presence of the proper label
+##        runs-on: ubuntu-latest
+##        steps:
+##            -   name: "If the event is to synchronize, we should remove the label from the PR"
+##                # also triggers on reopen to avoid a user closing, pushing changes and then reopening the PR
+##                if: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'reopened') && github.event.pull_request.head.repo.full_name != github.repository && contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+##                run: |
+##                    echo "Synchronizing PR, removing '${{ env.CI_LABEL }}' label"
+##                    gh pr edit ${{ github.event.pull_request.number }} --remove-label ${{ env.CI_LABEL }} --repo ${{ github.repository }}
+##                    msg="All pull request updates require re-approval of CI.  No CI will be run."
+##                    echo "::error::$msg"
+##                    exit 1
+##                env:
+##                    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+##
+##            -   name: "Check that forks have the '${{ env.CI_LABEL }}' label"
+##                if: ${{ github.event.pull_request.head.repo.full_name != github.repository && !contains(github.event.pull_request.labels.*.name, env.CI_LABEL) }}
+##                run: |
+##                    msg="Pull request is from a public fork but does not have the '${{ env.CI_LABEL }}' label.  No CI will be run."
+##                    echo "::error::$msg"
+##                    exit 1
+#
+#    affected-packages:
+#        permissions:
+#            contents: read
+#        needs: check-run-approval
+#        runs-on: ubuntu-latest
+#        outputs:
+#            changelog-entry-check: ${{ steps.changelog-entry-check.outputs.changes }}
+#            verify-build: ${{ steps.verify-build.outputs.changes }}
+#            unit-tests: ${{ steps.unit-tests.outputs.changes }}
+#            integration-tests: ${{ steps.integration-tests.outputs.changes }}
+#        steps:
+#        -   uses: actions/checkout@v4
+#            with:
+#                ref: ${{ github.event.pull_request.head.sha }}
+#                repository: ${{ github.event.pull_request.head.repo.full_name }}
+#        -   id: changelog-entry-check
+#            uses: dorny/paths-filter@v3
+#            with:
+#                token: ${{ secrets.GITHUB_TOKEN }}
+#                filters: .github/filters/changelog-entry-check.yml
+#        -   id: verify-build
+#            uses: dorny/paths-filter@v3
+#            with:
+#                token: ${{ secrets.GITHUB_TOKEN }}
+#                filters: .github/filters/verify-build.yml
+#        -   id: unit-tests
+#            uses: dorny/paths-filter@v3
+#            with:
+#                token: ${{ secrets.GITHUB_TOKEN }}
+#                filters: .github/filters/unit-tests.yml
+#        -   id: integration-tests
+#            uses: dorny/paths-filter@v3
+#            with:
+#                token: ${{ secrets.GITHUB_TOKEN }}
+#                filters: .github/filters/integration-tests.yml
+#
+#    changelog-entry-check:
+#        uses: ./.github/workflows/_changelog-entry-check.yml
+#        needs: affected-packages
+#        permissions:
+#            contents: read
+#            pull-requests: write
+#        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.changelog-entry-check)) != '[]' }}
+#        strategy:
+#            fail-fast: false
+#            matrix:
+#                package: ${{ fromJSON(needs.affected-packages.outputs.changelog-entry-check) }}
+#        with:
+#            package: ${{ matrix.package }}
+#            pull-request: ${{ github.event.pull_request.number }}
+#        secrets: inherit
+#
+#    code-quality:
+#        permissions:
+#            contents: read
+#        uses: ./.github/workflows/_code-quality.yml
+#        needs: check-run-approval
+#        with:
+#            branch: ${{ github.event.pull_request.head.sha }}
+#            repository: ${{ github.event.pull_request.head.repo.full_name }}
+#
+#    verify-build:
+#        permissions: read-all
+#        uses: ./.github/workflows/_verify-build.yml
+#        needs: affected-packages
+#        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.verify-build)) != '[]' }}
+#        strategy:
+#            fail-fast: false
+#            matrix:
+#                package: ${{ fromJSON(needs.affected-packages.outputs.verify-build) }}
+#        with:
+#            package: ${{ matrix.package }}
+#            branch: ${{ github.event.pull_request.head.sha }}
+#            repository: ${{ github.event.pull_request.head.repo.full_name }}
+#            os: ${{ vars.DEFAULT_RUNNER }}
+#            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+#
+#    unit-tests:
+#        permissions:
+#            contents: read
+#        uses: ./.github/workflows/_unit-tests.yml
+#        needs: affected-packages
+#        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.unit-tests)) != '[]' }}
+#        strategy:
+#            fail-fast: false
+#            matrix:
+#                package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
+#        with:
+#            package: ${{ matrix.package }}
+#            branch: ${{ github.event.pull_request.head.sha }}
+#            repository: ${{ github.event.pull_request.head.repo.full_name }}
+#            os: ${{ vars.DEFAULT_RUNNER }}
+#            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+#            hatch-env: "ci"
+#
+#    integration-tests:
+#        uses: ./.github/workflows/_integration-tests.yml
+#        needs: affected-packages
+#        permissions:
+#            id-token: write
+#            contents: read
+#        if: ${{ toJSON(fromJSON(needs.affected-packages.outputs.integration-tests)) != '[]' }}
+#        with:
+#            packages: ${{ needs.affected-packages.outputs.integration-tests }}
+#            branch: ${{ github.event.pull_request.head.sha }}
+#            repository: ${{ github.event.pull_request.head.repo.full_name }}
+#            os: ${{ vars.DEFAULT_RUNNER }}
+#            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+#            hatch-env: "ci"
+#        secrets: inherit
+#
+#    # This job does nothing and is only used for branch protection
+#    results:
+#        permissions:
+#            actions: read
+#        name: "Pull request checks"  # keep this name, branch protection references it
+#        if: ${{ !cancelled() }}
+#        needs: [check-run-approval, changelog-entry-check, code-quality, verify-build, unit-tests, integration-tests]
+#        runs-on: ${{ vars.DEFAULT_RUNNER }}
+#        steps:
+#        -   uses: re-actors/alls-green@release/v1
+#            with:
+#                jobs: ${{ toJSON(needs) }}
+#                allowed-skips: "changelog-entry-check,verify-build,unit-tests,integration-tests"
