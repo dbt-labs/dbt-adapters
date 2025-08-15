@@ -1,6 +1,0 @@
-kind: Dependencies
-body: upgrade protobuf to 6.0
-time: 2025-08-12T10:49:09.603612-07:00
-custom:
-  Author: colin-rogers-dbt
-  PR: "1259"
