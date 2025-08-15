@@ -1,0 +1,6 @@
+kind: Features
+body: Support Iceberg REST with Catalog Linked Databases in Snowflake
+time: 2025-08-12T13:08:38.473982-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1251"

@@ -9,6 +9,10 @@ from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
 
 
+def auto_refresh(model: RelationConfig) -> Optional[bool]:
+    return model.config.get("auto_refresh") if model.config else None
+
+
 def max_data_extension_time_in_days(model: RelationConfig) -> Optional[int]:
     return (
         model.config.get(
