@@ -140,7 +140,9 @@ async def test_spark(test_args):
             )
 
         elif test_args.profile == "spark_session":
-            tst_container = tst_container.with_exec(["apt-get", "install", "openjdk-17-jre", "-y"])
+            tst_container = tst_container.with_exec(
+                ["apt-get", "update", "&&", "apt-get", "install", "openjdk-17-jre", "-y"]
+            )
 
         # run the tests
         result = (
