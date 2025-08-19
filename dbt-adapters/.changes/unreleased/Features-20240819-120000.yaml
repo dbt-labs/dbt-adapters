@@ -1,0 +1,6 @@
+kind: Features
+body: Add optional unique suffixes to test failure table names for parallel execution support
+time: 2024-08-19T12:00:00-00:00
+custom:
+  Author: andtrott
+  Issue: "1276"
