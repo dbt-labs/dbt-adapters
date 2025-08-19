@@ -1,6 +1,0 @@
-kind: Fixes
-body: Correct column mapping lookup in unit test macro
-time: 2025-08-18T17:42:17.687393-05:00
-custom:
-  Author: QMalcolm
-  Issue: "1273"
