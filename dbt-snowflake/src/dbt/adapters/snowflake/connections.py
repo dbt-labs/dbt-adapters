@@ -237,14 +237,20 @@ class SnowflakeCredentials(Credentials):
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
 
-            elif self.authenticator == "workload_identity":
+            elif self.authenticator.lower() == "workload_identity":
                 result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+                if not self.workload_identity_provider:
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set if authenticator='workload_identity'!"
+                    )
+                result["workload_identity_provider"] = self.workload_identity_provider
+
                 if self.token:
                     result["token"] = self.token
-                if self.workload_identity_provider:
-                    result["workload_identity_provider"] = self.workload_identity_provider
                 if self.workload_identity_entra_resource:
-                    result["workload_identity_entra_resource"] = self.workload_identity_entra_resource
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True

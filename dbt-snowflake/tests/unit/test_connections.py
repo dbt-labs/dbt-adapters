@@ -4,6 +4,7 @@ from importlib import reload
 from unittest.mock import Mock, patch
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -85,3 +86,19 @@ def test_connnections_credentials_passes_through_wif_params():
     assert auth_args["workload_identity_provider"] == "azure"
     assert auth_args["workload_identity_entra_resource"] == "app://123"
     assert auth_args["token"] == "test_token"
+
+
+def test_connnections_credentials_wif_authenticator_fails_without_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        # Missing workload_identity_provider
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert "workload_identity_provider must be set if authenticator='workload_identity'" in str(
+        excinfo
+    )
