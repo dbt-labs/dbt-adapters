@@ -10,6 +10,47 @@
   {% if should_store_failures() %}
 
     {% set identifier = model['alias'] %}
+    
+    {# Optionally add unique suffix to test failure table names for parallel execution support #}
+    {% set store_failures_unique = config.get('store_failures_unique', false) %}
+    {% if store_failures_unique %}
+      {% set suffix_strategy = config.get('store_failures_suffix', 'invocation_id') %}
+      
+      {% if suffix_strategy == 'invocation_id' %}
+        {# Use first 8 chars of invocation_id for reasonable table name length #}
+        {% set identifier = identifier ~ '_' ~ invocation_id[:8] %}
+        
+      {% elif suffix_strategy == 'timestamp' %}
+        {# Full timestamp: YYYYMMDD_HHMMSS #}
+        {% set identifier = identifier ~ '_' ~ run_started_at.strftime('%Y%m%d_%H%M%S') %}
+        
+      {% elif suffix_strategy == 'date' %}
+        {# Date only: YYYYMMDD #}
+        {% set identifier = identifier ~ '_' ~ run_started_at.strftime('%Y%m%d') %}
+        
+      {% elif suffix_strategy == 'hour' %}
+        {# Date and hour: YYYYMMDD_HH - useful for hourly DAGs #}
+        {% set identifier = identifier ~ '_' ~ run_started_at.strftime('%Y%m%d_%H') %}
+        
+      {% else %}
+        {# Treat as literal string or Jinja template to evaluate #}
+        {# This allows for custom suffixes or var-based suffixes #}
+        {% set suffix_value = suffix_strategy %}
+        {# Handle template rendering if it contains {{ }} #}
+        {% if '{{' in suffix_value and '}}' in suffix_value %}
+          {% set suffix_value = render(suffix_value) %}
+        {% endif %}
+        {% set identifier = identifier ~ '_' ~ suffix_value %}
+      {% endif %}
+      
+      {# Ensure table name doesn't exceed platform limits (e.g., 1024 chars for BigQuery) #}
+      {# Truncate if necessary, keeping the suffix to maintain uniqueness #}
+      {% if identifier|length > 1000 %}
+        {% set prefix_max_length = 1000 - (identifier|length - model['alias']|length) %}
+        {% set identifier = model['alias'][:prefix_max_length] ~ identifier[model['alias']|length:] %}
+      {% endif %}
+    {% endif %}
+    
     {% set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) %}
 
     {% set store_failures_as = config.get('store_failures_as') %}
