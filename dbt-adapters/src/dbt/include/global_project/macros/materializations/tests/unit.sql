@@ -19,7 +19,7 @@
 
   {%- set expected_column_names_quoted = [] -%}
   {%- for column_name in tested_expected_column_names -%}
-  {%-   do expected_column_names_quoted.append(column_name_to_quoted[column_name]) -%}
+  {%-   do expected_column_names_quoted.append(column_name_to_quoted[column_name|lower]) -%}
   {%- endfor -%}
 
   {% if not expected_sql %}
