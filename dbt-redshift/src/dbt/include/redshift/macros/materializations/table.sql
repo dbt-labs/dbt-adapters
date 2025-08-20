@@ -1,5 +1,6 @@
-{% materialization table, adapter='redshift' %}
+{% materialization table, adapter='redshift', supported_languages=['sql', 'python'] %}
 
+  {%- set language = model['language'] -%}
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') %}
   {%- set intermediate_relation =  make_intermediate_relation(target_relation) -%}
@@ -27,9 +28,9 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   -- build model
-  {% call statement('main') -%}
-    {{ get_create_table_as_sql(False, intermediate_relation, sql) }}
-  {%- endcall %}
+  {%- call statement("main", language=language) -%}
+    {{ redshift__create_table_as(False, intermediate_relation, compiled_code, language) }}
+  {%- endcall -%}
 
   -- cleanup
   {% if existing_relation is not none %}
