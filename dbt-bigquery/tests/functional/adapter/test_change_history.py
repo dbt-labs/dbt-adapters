@@ -1,5 +1,5 @@
 import pytest
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, run_dbt_and_capture
 import dbt.exceptions
 
 incremental_change_history_enabled_model = """
@@ -84,7 +84,5 @@ class TestChangeHistoryFail:
         }
 
     def test_view_with_flag_fails(self, project):
-        with pytest.raises(dbt.exceptions.DbtRuntimeError) as excinfo:
-            run_dbt(["run", "--select", "view_with_flag"])
-        assert "`enable_change_history` is not supported for views" in str(excinfo.value)
-
+        _, stdout = run_dbt_and_capture(["run", "--select", "view_with_flag"], expect_pass=False)
+        assert "`enable_change_history` is not supported for views" in stdout
