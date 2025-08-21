@@ -111,3 +111,7 @@ def table_format(model: RelationConfig) -> Optional[str]:
         # make table_format case-insensitive
         return _table_format.upper()
     return None
+
+
+def target_file_size(model: RelationConfig) -> Optional[str]:
+    return model.config.get("target_file_size") if model.config else None

@@ -218,6 +218,9 @@ create iceberg table {{ relation }}
     catalog = '{{ catalog_relation.catalog_name }}'  -- external REST catalog name
     {{ optional('base_location', catalog_relation.base_location, "'") }}
     {%- endif %}
+    {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
+    {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
+    {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}

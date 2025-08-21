@@ -6,7 +6,14 @@ from dbt.tests.adapter.catalog_integrations.test_catalog_integration import (
 from dbt.tests.util import run_dbt
 
 MODEL__BASIC_ICEBERG_TABLE = """
-                            {{ config(materialized='table', catalog_name='basic_iceberg_rest_catalog') }}
+                            {{ config(materialized='table',
+                             catalog_name='basic_iceberg_rest_catalog') }}
+                            select 1 as id
+                            """
+
+MODEL__ICEBERG_TABLE_WITH_CATALOG_CONFIG = """
+                            {{ config(materialized='table', catalog_name='basic_iceberg_rest_catalog',
+                            target_file_size='16MB', max_data_extension_time_in_days=1, auto_refresh='true') }}
                             select 1 as id
                             """
 
@@ -29,6 +36,9 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
                                 "catalog_linked_database": os.getenv(
                                     "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE"
                                 ),
+                                "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
+                                "auto_refresh": "true",
                             },
                         }
                     ],
@@ -51,9 +61,10 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
         return {
             "models": {
                 "basic_iceberg_table.sql": MODEL__BASIC_ICEBERG_TABLE,
+                "iceberg_table_with_catalog_config.sql": MODEL__ICEBERG_TABLE_WITH_CATALOG_CONFIG,
             }
         }
 
     def test_basic_iceberg_rest_catalog_integration(self, project):
         result = run_dbt(["run"])
-        assert len(result) == 1
+        assert len(result) == 2
