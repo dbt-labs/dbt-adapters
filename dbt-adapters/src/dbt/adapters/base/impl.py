@@ -599,11 +599,24 @@ class BaseAdapter(metaclass=AdapterMeta):
                 )
                 futures.append(fut)
 
+            schema_futures: List[Future[List[BaseColumn]]] = []
             for future in as_completed(futures):
                 # if we can't read the relations we need to just raise anyway,
                 # so just call future.result() and let that raise on failure
                 for relation in future.result():
                     self.cache.add(relation)
+                    schema_futures.append(tpe.submit_connected(
+                        self,
+                        f"get_columns_in_relation_{relation.database}_{relation.schema}_{relation.name}",
+                        self.get_columns_in_relation,
+                        relation,
+                    ))
+
+            for future in as_completed(schema_futures):
+                try:
+                    future.result()
+                except Exception:
+                    pass
 
         # it's possible that there were no relations in some schemas. We want
         # to insert the schemas we query into the cache's `.schemas` attribute
