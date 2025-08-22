@@ -19,6 +19,7 @@ class IcebergRestCatalogRelation:
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
     catalog_linked_database: Optional[str] = None
     external_volume: Optional[str] = None
+    file_format: Optional[str] = None
     target_file_size: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     auto_refresh: Optional[bool] = None

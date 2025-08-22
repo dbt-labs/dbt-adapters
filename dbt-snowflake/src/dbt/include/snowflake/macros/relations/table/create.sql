@@ -191,6 +191,9 @@ alter iceberg table {{ relation }} resume recluster;
 
     Limitations:
     - Iceberg does not support temporary tables (use a standard Snowflake table)
+    - Iceberg REST does not support CREATE OR REPLACE
+    - Iceberg catalogs do not support table renaming operations
+    - For existing tables, we must DROP the table first before creating the new one
 -#}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
@@ -209,6 +212,17 @@ alter iceberg table {{ relation }} resume recluster;
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
+{# Check if relation exists #}
+{% set existing_relation = adapter.get_relation(database=relation.database, schema=relation.schema, identifier=relation.identifier) %}
+
+{% if existing_relation %}
+    {# Iceberg catalogs don't support table renaming, so we must drop first #}
+    {# This is less safe but the only option for Iceberg REST catalogs #}
+    drop table if exists {{ existing_relation }};
+
+{% endif %}
+
+{# Create the table (works for both new and replacement scenarios) #}
 create iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
@@ -226,7 +240,7 @@ create iceberg table {{ relation }}
     {% if copy_grants -%} copy grants {%- endif %}
 as (
     {{ compiled_code }}
-    );
+);
 
 {%- endmacro %}
 
