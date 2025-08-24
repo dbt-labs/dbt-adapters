@@ -3,6 +3,7 @@ from dbt.adapters.catalogs._exceptions import (
     DbtCatalogIntegrationAlreadyExistsError,
     DbtCatalogIntegrationNotFoundError,
     DbtCatalogIntegrationNotSupportedError,
+    InvalidCatalogIntegrationConfigError,
 )
 from dbt.adapters.catalogs._integration import (
     CatalogIntegration,

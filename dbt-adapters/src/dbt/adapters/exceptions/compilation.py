@@ -255,3 +255,15 @@ class RelationWrongTypeError(CompilationError):
         )
 
         return msg
+
+
+class InvalidRelationConfigError(CompilationError):
+    def __init__(self, relation, config, msg):
+        self.relation = relation
+        self.config = config
+        self.msg = msg
+        super().__init__(msg=self.get_message())
+
+    def get_message(self) -> str:
+        msg = f"Invalid relation config: {self.config}"
+        return msg
