@@ -8,7 +8,7 @@ from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.contracts.connection import AdapterResponse, Connection
 from dbt.adapters.events.types import ColTypeChange, SchemaCreation, SchemaDrop
 from dbt.adapters.exceptions import RelationTypeNullError
-from dbt.adapters.record.base import AdapterTestSqlRecord
+from dbt.adapters.record.base import AdapterTestSqlRecord, AdapterAddQueryRecord
 from dbt.adapters.sql.connections import SQLConnectionManager
 
 LIST_RELATIONS_MACRO_NAME = "list_relations_without_caching"
@@ -49,6 +49,9 @@ class SQLAdapter(BaseAdapter):
     connections: SQLConnectionManager
 
     @available.parse(lambda *a, **k: (None, None))
+    @record_function(
+        AdapterAddQueryRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def add_query(
         self,
         sql: str,

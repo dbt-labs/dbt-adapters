@@ -4,7 +4,7 @@ import dataclasses
 
 from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
 
-from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.contracts.connection import AdapterResponse, Connection
 from dbt.adapters.record.serialization import serialize_agate_table
 from dbt_common.record import Record, Recorder
 
@@ -160,4 +160,43 @@ class AdapterStandardizeGrantsDictResult:
 class AdapterStandardizeGrantsDictRecord(Record):
     params_cls = AdapterStandardizeGrantsDictParams
     result_cls = AdapterStandardizeGrantsDictResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class AdapterAddQueryParams:
+    thread_id: str
+    sql: str
+    auto_begin: bool = True
+    bindings: Optional[Any] = None
+    abridge_sql_log: bool = False
+
+    def _to_dict(self):
+        return {
+            "thread_id": self.thread_id,
+            "sql": self.sql,
+            "auto_begin": self.auto_begin,
+            "bindings": "bindings",
+            "abridge_sql_log": self.abridge_sql_log,
+        }
+
+
+@dataclasses.dataclass
+class AdapterAddQueryResult:
+    return_val: Tuple[AdapterResponse, Any]
+
+    def _to_dict(self):
+        adapter_response = self.return_val[0]
+        return {
+            "return_val": {
+                "adapter_response": "adapter_response",
+                "conn": "conn",
+            }
+        }
+
+
+@Recorder.register_record_type
+class AdapterAddQueryRecord(Record):
+    params_cls = AdapterAddQueryParams
+    result_cls = AdapterAddQueryResult
     group = "Available"
