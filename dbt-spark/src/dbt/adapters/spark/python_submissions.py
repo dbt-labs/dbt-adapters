@@ -306,19 +306,4 @@ class SparkSessionBasedClusterPythonJobHelper(PythonJobHelper):
     Submit python to local spark driver session.
     """
 
-    def __init__(self, parsed_model: Dict, credential: SparkCredentials) -> None:
-        self.parsed_model = parsed_model
-
-    def submit(self, compiled_code: str) -> None:
-        try:
-            from copy import deepcopy
-
-            spark = SparkSession.builder.getOrCreate()  # Local passed to compiled_code call
-            model_config = deepcopy(self.parsed_model.get("config"))
-            # When a python model with incremental_strategy: microbatch, the date code needs to be fixed,
-            # This line is inserted into python models byt the <UTC> is not valid python code config_dict = {'__dbt_internal_microbatch_event_time_start': datetime.datetime(2025, 7, 30, 0, 0, tzinfo=<UTC>), '__dbt_internal_microbatch_event_time_end': datetime.datetime(2025, 7, 30, 1, 0, tzinfo=<UTC>), 'target': {}}
-            fix_code = compiled_code.replace("<UTC>", "datetime.timezone.utc")
-            exec(fix_code, locals())
-        except Exception as e:
-            print(f"There's an issue with the Python model. See trace: {traceback.format_exc()}")
-            raise dbt.exceptions.RuntimeException(f"The Python model failed with traceback: {e}")
+    def __init__(self, parsed_model: Dict, cr
