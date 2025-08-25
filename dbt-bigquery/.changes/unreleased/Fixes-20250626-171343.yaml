@@ -1,6 +1,0 @@
-kind: Fixes
-body: Track notebook job status to avoid LRO in bigframes mode
-time: 2025-06-26T17:13:43.757335863Z
-custom:
-    Author: jialuoo
-    Issue: "1175"

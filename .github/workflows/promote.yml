@@ -33,7 +33,7 @@ jobs:
     # See https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target.
     if: >
       github.event.pull_request.merged
-      && contains(github.event.label.name, 'promote stable')
+      && contains(github.event.label.name, 'promote')
     steps:
       - uses: tibdex/backport@v2.0.4
         with:
