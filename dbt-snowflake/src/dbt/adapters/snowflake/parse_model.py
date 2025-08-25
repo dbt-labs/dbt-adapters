@@ -46,6 +46,8 @@ def base_location(model: RelationConfig) -> Optional[str]:
 
 
 def catalog_name(model: RelationConfig) -> Optional[str]:
+    if isinstance(model, dict):
+        return model.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME)
     if not model.config:
         return None
 
