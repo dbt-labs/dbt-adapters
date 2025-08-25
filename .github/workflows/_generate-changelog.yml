@@ -54,7 +54,7 @@ jobs:
             prerelease: ${{ steps.semver.outputs.pre-release }}
             is-prerelease: ${{ steps.semver.outputs.is-pre-release }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   uses: actions/setup-python@v5
@@ -76,7 +76,7 @@ jobs:
             path: ${{ steps.changelog.outputs.path }}
             exists: ${{ steps.changelog.outputs.exists }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   id: changelog
@@ -126,7 +126,7 @@ jobs:
         if: needs.changelog.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
