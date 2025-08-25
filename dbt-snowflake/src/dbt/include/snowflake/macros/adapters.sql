@@ -229,6 +229,20 @@
 
 
 
+{% macro snowflake__is_catalog_linked_database(relation) -%}
+    {#-- Helper macro to detect if we're in a catalog-linked database context --#}
+    {%- if relation and relation.catalog -%}
+        {%- set catalog_relation = adapter.get_catalog_integration(relation.catalog) -%}
+    {%- elif config is defined and config.model -%}
+      {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+    {%- endif -%}
+    {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
+        {{ return(true) }}
+    {%- else -%}
+        {{ return(false) }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% macro snowflake_dml_explicit_transaction(dml) %}
   {#
     Use this macro to wrap all INSERT, MERGE, UPDATE, DELETE, and TRUNCATE

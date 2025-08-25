@@ -23,7 +23,14 @@
        When unique_key is none, the delete+insert and microbatch strategies can use a view beacuse a
        single INSERT statement is run with no DELETES as part of the statement.
        Otherwise, play it safe by using a temporary table.
+
+       Catalog-linked databases (Iceberg tables) does not support using temporary relations.
   #} */
+
+  {#-- Always use table for catalog-linked databases (Iceberg) --#}
+  {% if snowflake__is_catalog_linked_database() %}
+    {{ return("table") }}
+  {% endif %}
 
   {% if language == "python" and tmp_relation_type is not none %}
     {% do exceptions.raise_compiler_error(
@@ -67,6 +74,8 @@
   {%- set identifier = this.name -%}
   {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
+  {%- set is_catalog_linked_db = snowflake__is_catalog_linked_database() -%}
+
   {%- set target_relation = api.Relation.create(
 	identifier=identifier,
 	schema=schema,
@@ -81,7 +90,11 @@
   {%- set unique_key = config.get('unique_key') -%}
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
   {% set tmp_relation_type = dbt_snowflake_get_tmp_relation_type(incremental_strategy, unique_key, language) %}
-  {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
+  {% if is_catalog_linked_db %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog=catalog_relation.catalog_name, is_table=true) %}
+  {% else %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
+  {% endif %}
 
   {% set grant_config = config.get('grants') %}
 
@@ -118,7 +131,11 @@
 
   {% else %}
     {#-- Create the temp relation, either as a view or as a temp table --#}
-    {% if tmp_relation_type == 'view' %}
+    {% if is_catalog_linked_db %}
+        {%- call statement('create_tmp_relation', language=language) -%}
+          {{ create_table_as(False, tmp_relation, compiled_code, language) }}
+        {%- endcall -%}
+    {% elif tmp_relation_type == 'view' %}
         {%- call statement('create_tmp_relation') -%}
           {{ snowflake__create_view_as_with_temp_flag(tmp_relation, compiled_code, True) }}
         {%- endcall -%}
@@ -146,6 +163,7 @@
       {{ strategy_sql_macro_func(strategy_arg_dict) }}
     {%- endcall -%}
   {% endif %}
+
 
   {% do drop_relation_if_exists(tmp_relation) %}
 
