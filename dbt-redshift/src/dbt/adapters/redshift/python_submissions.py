@@ -166,7 +166,6 @@ class EmrServerlessPythonJobHelper(PythonJobHelper):
                     if len(app_id_list) > 0:
                         found = True
                         app_id = app_id_list[0]
-                        LOGGER.info(f"Found emr serverless application id: {app_id}")
                         return app_id
                 next_token = response.get("nextToken", None)
                 if next_token:
