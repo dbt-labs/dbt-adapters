@@ -4,8 +4,8 @@ from typing import Dict, Optional
 import pytest
 
 from dbt.adapters.contracts.relation import RelationConfig
-
-from dbt.adapters.snowflake.parse_model import base_location, cluster_by
+from dbt.artifacts.resources.v1.saved_query import ExportConfig, ExportDestinationType
+from dbt.adapters.snowflake.parse_model import base_location, cluster_by, catalog_name
 
 
 def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
@@ -57,3 +57,14 @@ def test_base_location(config, expected):
 def test_cluster_by(config, expected):
     model = make_model(config)
     assert cluster_by(model) == expected
+
+
+def test_catalog_name():
+    model = make_model({"catalog_name": "my_catalog"})
+    assert catalog_name(model).lower() == "my_catalog"
+
+
+def test_catalog_name_with_non_model_config():
+    exported_config = ExportConfig(export_as=ExportDestinationType.TABLE)
+    model = make_model(exported_config)
+    assert catalog_name(model) == None

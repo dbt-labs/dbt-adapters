@@ -46,7 +46,7 @@ def base_location(model: RelationConfig) -> Optional[str]:
 
 
 def catalog_name(model: RelationConfig) -> Optional[str]:
-    if not model.config:
+    if not model.config or not hasattr(model.config, "get"):
         return None
 
     if _catalog := model.config.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME):

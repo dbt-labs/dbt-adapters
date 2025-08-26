@@ -11,7 +11,7 @@ from dbt.adapters.snowflake.catalogs._iceberg_rest import (
 from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
 
 
-class TestIcebergRestCatalogMacroIntegration:
+class TestIcebergRestCatalogIntegration:
     """Test integration between IcebergRestCatalog and Snowflake macros."""
 
     def setup_method(self):
@@ -143,7 +143,6 @@ class TestIcebergRestCatalogMacroIntegration:
             catalog_linked_database="custom_db",
             external_volume="test_volume",
             auto_refresh=True,
-            is_transient=True,
         )
 
         # Verify all attributes that might be used by macros
@@ -151,7 +150,6 @@ class TestIcebergRestCatalogMacroIntegration:
         assert hasattr(relation, "catalog_linked_database")
         assert hasattr(relation, "external_volume")
         assert hasattr(relation, "auto_refresh")
-        assert hasattr(relation, "is_transient")
         assert hasattr(relation, "catalog_type")
         assert hasattr(relation, "table_format")
         assert hasattr(relation, "file_format")
