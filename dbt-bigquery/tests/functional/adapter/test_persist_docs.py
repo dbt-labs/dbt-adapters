@@ -228,7 +228,8 @@ class TestPersistDocsIncremental(BasePersistDocsBase):
 
         select 1 as id, 'test' as name
         {% if is_incremental() %}
-            where 1=0
+        from {{ this }}
+        where 1=0
         {% endif %}
         """,
         }
