@@ -1,0 +1,6 @@
+kind: Fixes
+body: fix issue where incorrect varchar size is applied for iceberg table columns
+time: 2025-08-12T10:19:59.653331-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1257"
