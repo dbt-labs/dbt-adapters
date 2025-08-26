@@ -4,8 +4,8 @@ import dataclasses
 
 from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
 
-from dbt.adapters.contracts.connection import AdapterResponse, Connection
-from dbt.adapters.record.serialization import serialize_agate_table
+from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.record.serialization import serialize_agate_table, serialize_bindings
 from dbt_common.record import Record, Recorder
 
 if TYPE_CHECKING:
@@ -176,21 +176,20 @@ class AdapterAddQueryParams:
             "thread_id": self.thread_id,
             "sql": self.sql,
             "auto_begin": self.auto_begin,
-            "bindings": "bindings",
+            "bindings": serialize_bindings(self.bindings),
             "abridge_sql_log": self.abridge_sql_log,
         }
 
 
 @dataclasses.dataclass
 class AdapterAddQueryResult:
-    return_val: Tuple[AdapterResponse, Any]
+    return_val: Tuple[str, str]
 
     def _to_dict(self):
-        adapter_response = self.return_val[0]
         return {
             "return_val": {
-                "adapter_response": "adapter_response",
                 "conn": "conn",
+                "cursor": "cursor",
             }
         }
 
