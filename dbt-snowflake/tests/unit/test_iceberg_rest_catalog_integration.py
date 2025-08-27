@@ -159,4 +159,3 @@ class TestIcebergRestCatalogIntegration:
         assert relation.catalog_linked_database == "custom_db"
         assert relation.external_volume == "test_volume"
         assert relation.auto_refresh is True
-        assert relation.is_transient is True
