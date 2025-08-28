@@ -9,6 +9,6 @@
             persist_column_docs=persist_column_docs,
             skip_archive_table_version=true
          )
-    %}}
+    %}
   {% endif %}
 {% endmacro %}
