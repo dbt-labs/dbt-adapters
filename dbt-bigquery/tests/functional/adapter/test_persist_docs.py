@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, write_file
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsBase,
@@ -280,8 +280,7 @@ models:
             assert bq_table.description == "Initial description"
 
         # Update schema.yml to new description
-        updated_schema_yml = project.project_root / "models" / "schema.yml"
-        updated_schema_yml.write_text(
+        write_file(
             """
 version: 2
 
@@ -293,7 +292,10 @@ models:
         description: "Updated id description"
       - name: name
         description: "Updated name description"
-"""
+""",
+            project.project_root,
+            "model",
+            "schema.yaml",
         )
 
         # Second run - should update both table and column descriptions
