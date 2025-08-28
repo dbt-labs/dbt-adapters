@@ -294,8 +294,8 @@ models:
         description: "Updated name description"
 """,
             project.project_root,
-            "model",
-            "schema.yaml",
+            "models",
+            "schema.yml",
         )
 
         # Second run - should update both table and column descriptions
