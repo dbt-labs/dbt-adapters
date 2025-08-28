@@ -1,6 +1,6 @@
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, Dict, TYPE_CHECKING, List, Union
 
 if TYPE_CHECKING:
     from agate import Table
@@ -29,3 +29,12 @@ def serialize_agate_table(table: "Table") -> Dict[str, Any]:
         "column_types": [t.__class__.__name__ for t in table.column_types],
         "rows": rows,
     }
+
+
+def serialize_bindings(bindings: Any) -> Union[None, List[Any], str]:
+    if bindings is None:
+        return None
+    elif isinstance(bindings, list):
+        return list(map(_column_filter, bindings))
+    else:
+        return "bindings"
