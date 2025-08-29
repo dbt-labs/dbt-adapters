@@ -1,0 +1,79 @@
+name: "Run Tests"
+run-name: "Run Tests - ${{ inputs.branch }}"
+
+on:
+    workflow_call:
+        inputs:
+            branch:
+                description: "Branch to test"
+                required: true
+                type: string
+            repository:
+                description: "Repository to test"
+                required: true
+                type: string
+
+permissions: read-all
+
+jobs:
+    verify-builds:
+        uses: ./.github/workflows/_verify-build.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-tests-adapter"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
+                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+
+    unit-tests:
+        uses: ./.github/workflows/_unit-tests.yml
+        strategy:
+            fail-fast: false
+            matrix:
+                package:
+                -   "dbt-adapters"
+                -   "dbt-athena"
+                -   "dbt-athena-community"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+                os: [ubuntu-22.04, macos-14, windows-2022]
+                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+        with:
+            package: ${{ matrix.package }}
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ matrix.os }}
+            python-version: ${{ matrix.python-version }}
+            hatch-env: "ci"
+
+    integration-tests:
+        uses: ./.github/workflows/_integration-tests.yml
+        permissions:
+            contents: read
+            id-token: write
+        with:
+            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
+            branch: ${{ inputs.branch }}
+            repository: ${{ inputs.repository }}
+            os: ${{ vars.DEFAULT_RUNNER }}
+            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            hatch-env: "ci"
+        secrets: inherit
