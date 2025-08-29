@@ -56,7 +56,8 @@ on:
                 type: choice
                 options: ["3.9", "3.10", "3.11", "3.12"]
 
-permissions: read-all
+permissions:
+    contents: read
 
 defaults:
     run:
