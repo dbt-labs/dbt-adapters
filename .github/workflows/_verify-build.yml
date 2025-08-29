@@ -66,6 +66,7 @@ defaults:
 jobs:
     build:
         runs-on: ${{ inputs.os }}
+        name: "build - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
         -   uses: actions/checkout@v4
             with:
