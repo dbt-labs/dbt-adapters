@@ -6,7 +6,9 @@ on:
     -   cron: '0 3 * * *'
     workflow_dispatch:
 
-permissions: read-all
+permissions:
+    id-token: write
+    contents: read
 
 jobs:
     run-tests:
