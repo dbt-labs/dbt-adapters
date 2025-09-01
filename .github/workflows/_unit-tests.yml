@@ -74,7 +74,7 @@ jobs:
     unit-tests:
         runs-on: ${{ inputs.os }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
