@@ -229,15 +229,23 @@
 
 
 
-{% macro snowflake__is_catalog_linked_database(relation) -%}
+{% macro snowflake__is_catalog_linked_database(relation=none, catalog_relation=none) -%}
     {#-- Helper macro to detect if we're in a catalog-linked database context --#}
-    {%- if relation and relation.catalog -%}
+    {%- if catalog_relation is not none -%}
+        {#-- Direct catalog_relation object provided --#}
+        {%- if catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.catalog -%}
+        {#-- Relation with catalog attribute --#}
         {%- set catalog_relation = adapter.get_catalog_integration(relation.catalog) -%}
-    {%- elif config is defined and config.model -%}
-      {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
-    {%- endif -%}
-    {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
-        {{ return(true) }}
+        {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
     {%- else -%}
         {{ return(false) }}
     {%- endif -%}

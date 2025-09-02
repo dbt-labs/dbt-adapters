@@ -33,7 +33,7 @@
     {%- endset -%}
 
     {#-- Skip transaction wrapping for catalog-linked databases --#}
-    {% if snowflake__is_catalog_linked_database() %}
+    {% if snowflake__is_catalog_linked_database(relation=target) %}
         {% do return(dml) %}
     {% else %}
         {% do return(snowflake_dml_explicit_transaction(dml)) %}

@@ -28,7 +28,7 @@
   #} */
 
   {#-- Always use table for catalog-linked databases (Iceberg) --#}
-  {% if snowflake__is_catalog_linked_database() %}
+  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
     {{ return("table") }}
   {% endif %}
 
@@ -74,7 +74,7 @@
   {%- set identifier = this.name -%}
   {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-  {%- set is_catalog_linked_db = snowflake__is_catalog_linked_database() -%}
+  {%- set is_catalog_linked_db = snowflake__is_catalog_linked_database(relation=none, catalog_relation=catalog_relation) -%}
 
   {%- set target_relation = api.Relation.create(
 	identifier=identifier,

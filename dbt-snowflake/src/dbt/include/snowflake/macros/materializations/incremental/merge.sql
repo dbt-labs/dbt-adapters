@@ -29,7 +29,7 @@
     {%- endset -%}
 
     {#-- Skip transaction wrapping for catalog-linked databases --#}
-    {% if snowflake__is_catalog_linked_database() %}
+    {% if snowflake__is_catalog_linked_database(relation=target) %}
         {% do return(dml) %}
     {% else %}
         {% do return(snowflake_dml_explicit_transaction(dml)) %}
@@ -63,7 +63,7 @@
 {% macro snowflake__get_incremental_append_sql(get_incremental_append_sql) %}
     {% set dml = default__get_incremental_append_sql(get_incremental_append_sql) %}
     {#-- Skip transaction wrapping for catalog-linked databases --#}
-    {% if snowflake__is_catalog_linked_database() %}
+    {% if snowflake__is_catalog_linked_database(target) %}
         {% do return(dml) %}
     {% else %}
         {% do return(snowflake_dml_explicit_transaction(dml)) %}
