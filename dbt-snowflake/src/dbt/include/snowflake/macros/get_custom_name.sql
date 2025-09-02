@@ -1,6 +1,6 @@
 {% macro snowflake__generate_database_name(custom_database_name=none, node=none) -%}
     {%- if custom_database_name is none -%}
-         {%- if node is not none -%}
+         {%- if node is not none and node|attr('database') -%}
             {%- set catalog_relation = adapter.build_catalog_relation(node) -%}
         {%- elif 'config' in target -%}
             {%- set catalog_relation = adapter.build_catalog_relation(target) -%}
