@@ -209,6 +209,7 @@ class AdapterListRelationsWithoutCachingParams:
 
     def _to_dict(self):
         from dbt.adapters.record.serialization import serialize_base_relation
+
         return {
             "thread_id": self.thread_id,
             "schema_relation": serialize_base_relation(self.schema_relation),
@@ -216,6 +217,7 @@ class AdapterListRelationsWithoutCachingParams:
 
     def _from_dict(self, data: Dict[str, Any]):
         from dbt.adapters.record.serialization import deserialize_base_relation
+
         self.thread_id = data["thread_id"]
         self.schema_relation = deserialize_base_relation(data["schema_relation"])
 
@@ -226,12 +228,12 @@ class AdapterListRelationsWithoutCachingResult:
 
     def _to_dict(self):
         from dbt.adapters.record.serialization import serialize_base_relation_list
-        return {
-            "return_val": serialize_base_relation_list(self.return_val)
-        }
+
+        return {"return_val": serialize_base_relation_list(self.return_val)}
 
     def _from_dict(self, data: Dict[str, Any]):
         from dbt.adapters.record.serialization import deserialize_base_relation_list
+
         self.return_val = deserialize_base_relation_list(data["return_val"])
 
 

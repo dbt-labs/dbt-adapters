@@ -54,6 +54,7 @@ def serialize_base_relation_list(relations: List["BaseRelation"]) -> List[Dict[s
 def deserialize_base_relation(relation_dict: Dict[str, Any]) -> "BaseRelation":
     """Deserialize a BaseRelation object from a dictionary."""
     from dbt.adapters.base.relation import BaseRelation
+
     return BaseRelation.from_dict(relation_dict)
 
 
