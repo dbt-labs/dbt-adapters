@@ -1,0 +1,52 @@
+name: "Publish to PyPI"
+# Publish a custom dbt-postgres-tsw to PyPI.
+run-name: "Publish dbt-postgres-tsw to PyPI (@${{ github.actor }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+        package:
+            description: "Choose the package to publish"
+            type: choice
+            options:
+            -   "dbt-postgres"
+
+jobs:
+  build:
+    name: Build distribution 📦
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install pypa/build
+        run: python3 -m pip install build --user
+      - name: Build a binary wheel and a source tarball
+        run: cd ${{ inputs.package }} && \
+             python3 -m build
+      - name: Store the distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI 🚀
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/p/${{ inputs.package }}-tsw
+    permissions:
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+    steps:
+      - name: Download all the dists
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
