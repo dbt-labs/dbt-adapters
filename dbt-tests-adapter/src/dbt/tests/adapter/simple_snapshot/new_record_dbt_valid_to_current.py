@@ -17,7 +17,7 @@ _delete_sql = """
 delete from {database}.{schema}.seed where id = 1
 """
 
-# If the deletion worked correctly, this should return two rows (and not more), with one of them representing the deletion.
+# If the deletion worked correctly, this should return one row (and not more) where dbt_is_deleted is True
 _delete_check_sql = """
 select dbt_scd_id from {schema}.snapshot_actual where id = 1 and dbt_is_deleted = 'True'
 """
@@ -60,6 +60,7 @@ class BaseSnapshotNewRecordDbtValidToCurrent:
         for stmt in seed_new_record_mode_statements:
             project.run_sql(stmt)
 
+        # Snapshot once to get the initial snapshot
         run_dbt(["snapshot"])
 
         # Remove the record from the source data
