@@ -238,9 +238,9 @@
         {%- else -%}
             {{ return(false) }}
         {%- endif -%}
-    {%- elif relation and relation.catalog -%}
+    {%- elif relation and relation.catalog_name -%}
         {#-- Relation with catalog attribute --#}
-        {%- set catalog_relation = adapter.get_catalog_integration(relation.catalog) -%}
+        {%- set catalog_relation = adapter.get_catalog_integration(relation.catalog_name) -%}
         {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
             {{ return(true) }}
         {%- else -%}
@@ -273,6 +273,10 @@
     truncate table {{ relation.render() }}
   {% endset %}
   {% call statement('truncate_relation') -%}
-    {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% if snowflake__is_catalog_linked_database(relation=config.model.config) %}
+        {{ truncate_dml }}
+    {% else %}
+      {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% endif %}
   {%- endcall %}
 {% endmacro %}

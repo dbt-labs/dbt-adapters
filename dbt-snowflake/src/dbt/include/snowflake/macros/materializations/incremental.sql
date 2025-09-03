@@ -28,7 +28,7 @@
   #} */
 
   {#-- Always use table for catalog-linked databases (Iceberg) --#}
-  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+  {% if snowflake__is_catalog_linked_database(relation=config.model.config) %}
     {{ return("table") }}
   {% endif %}
 
@@ -91,7 +91,7 @@
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
   {% set tmp_relation_type = dbt_snowflake_get_tmp_relation_type(incremental_strategy, unique_key, language) %}
   {% if is_catalog_linked_db %}
-    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog=catalog_relation.catalog_name, is_table=true) %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog_name=catalog_relation.catalog_name, is_table=true) %}
   {% else %}
     {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
   {% endif %}

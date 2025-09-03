@@ -4,6 +4,8 @@
     {% if snowflake__is_catalog_linked_database(relation=relation) %}
         drop table if exists {{ relation }}
     {% else %}
+
+        {{ exceptions.raise_compiler_error("relation catalog: " ~ relation.catalog_name ) }}
         drop table if exists {{ relation }} cascade
     {% endif %}
 {% endmacro %}
