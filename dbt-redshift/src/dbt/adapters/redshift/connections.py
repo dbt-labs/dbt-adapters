@@ -31,18 +31,18 @@ if TYPE_CHECKING:
     import agate
 
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
-IDP_TOKEN = ""
+IDP_TOKEN = None
 
 logger = AdapterLogger("Redshift")
 
 
-def _token_expiring() -> bool:
+def is_token_expired_or_about_to_expire() -> bool:
     """
     Check if the IDP token is expiring or invalid.
     Returns True if token needs refresh, False if it's still valid.
     """
     # If token is empty or None, it needs refresh
-    if not IDP_TOKEN or IDP_TOKEN == "":
+    if IDP_TOKEN is None:
         return True
 
     try:
@@ -472,7 +472,7 @@ def get_connection_method(
         # We'll use the BrowserAzureOAuth2CredentialsProvider for initial auth
         # and BasicJwtCredentialsProvider for cached tokens
 
-        if IDP_TOKEN == "" or _token_expiring():
+        if IDP_TOKEN is None or is_token_expired_or_about_to_expire():
             # First time or token expired - use browser auth
             sso_kwargs = {
                 "iam": False,

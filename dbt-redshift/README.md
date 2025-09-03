@@ -35,6 +35,15 @@ dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-agg
 `dbt-redshift` enables dbt to work with Amazon Redshift.
 For more information on using dbt with Redshift, consult [the docs](https://docs.getdbt.com/docs/profile-redshift).
 
+## ⚠️ This is a Fork
+
+This repository is a fork of the original [dbt-redshift](https://github.com/dbt-labs/dbt-adapters) with additional SSO authentication support in dbt-redshift.
+
+### ✨ Additional Features
+
+- **Single Sign-On (SSO) Authentication**: Support for OAuth2-based authentication using Azure AD and other identity providers
+- **Token Management**: Automatic token refresh and caching for SSO sessions
+
 # Getting started
 
 Review the repository [README.md](../README.md) as most of that information pertains to `dbt-redshift`.
