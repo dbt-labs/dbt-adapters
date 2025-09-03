@@ -1,3 +1,5 @@
+import base64
+import json
 import re
 import os
 
@@ -29,8 +31,35 @@ if TYPE_CHECKING:
     import agate
 
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
+IDP_TOKEN = ""
 
 logger = AdapterLogger("Redshift")
+
+
+def _token_expiring() -> bool:
+    """
+    Check if the IDP token is expiring or invalid.
+    Returns True if token needs refresh, False if it's still valid.
+    """
+    # If token is empty or None, it needs refresh
+    if not IDP_TOKEN or IDP_TOKEN == "":
+        return True
+
+    try:
+        tolerance_seconds = 60
+        current_timestamp = int(time.time())
+        idp_token_payload = IDP_TOKEN.split(".")[1]
+        idp_token_payload += "=" * (-len(idp_token_payload) % 4)
+        idp_token_expire_time = json.loads(
+            (base64.b64decode(idp_token_payload)).decode("utf-8")
+        ).get("exp", 0)
+
+        # Return True if token is expired or will expire within tolerance
+        return idp_token_expire_time - current_timestamp <= tolerance_seconds
+    except (IndexError, ValueError, json.JSONDecodeError):
+        # If token parsing fails, consider it expired
+        return True
+
 
 if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
     for logger_name in ["redshift_connector"]:
@@ -58,6 +87,7 @@ class RedshiftConnectionMethod(StrEnum):
     IAM_ROLE = "iam_role"
     IAM_IDENTITY_CENTER_BROWSER = "browser_identity_center"
     IAM_IDENTITY_CENTER_TOKEN = "oauth_token_identity_center"
+    SSO = "sso"
 
     @classmethod
     def uses_identity_center(cls, method: str) -> bool:
@@ -186,6 +216,13 @@ class RedshiftCredentials(Credentials):
     tcp_keepalive_interval: Optional[int] = None
     tcp_keepalive_count: Optional[int] = None
 
+    #
+    # SSO (Single Sign-On) method fields
+    #
+    scope: Optional[str] = None
+    client_id: Optional[str] = None
+    idp_tenant: Optional[str] = None
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -204,8 +241,6 @@ class RedshiftCredentials(Credentials):
             "schema",
             "sslmode",
             "region",
-            "sslmode",
-            "region",
             "autocreate",
             "db_groups",
             "ra3_node",
@@ -222,6 +257,9 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_idle",
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
+            "scope",
+            "client_id",
+            "idp_tenant",
         )
 
     @property
@@ -420,6 +458,45 @@ def get_connection_method(
             "token_type": "EXT_JWT",
         }
 
+    def __sso_kwargs(credentials) -> Dict[str, Any]:
+        """
+        Handles SSO authentication using Azure OAuth2 browser flow.
+        Requires scope, client_id, and idp_tenant to be configured.
+        """
+        logger.debug("Connecting to Redshift with 'sso' credentials method")
+
+        __validate_required_fields("sso", ("scope", "client_id", "idp_tenant"))
+
+        # For SSO, we need to handle token management differently
+        # This is a special case that requires custom connection logic
+        # We'll use the BrowserAzureOAuth2CredentialsProvider for initial auth
+        # and BasicJwtCredentialsProvider for cached tokens
+
+        if IDP_TOKEN == "" or _token_expiring():
+            # First time or token expired - use browser auth
+            sso_kwargs = {
+                "iam": False,
+                "db_user": "",
+                "scope": credentials.scope,
+                "client_id": credentials.client_id,
+                "idp_tenant": credentials.idp_tenant,
+                "listen_port": 7890,
+                "credentials_provider": "redshift_connector.plugin.BrowserAzureOAuth2CredentialsProvider",
+                "user": "",
+                "password": "",
+                "idp_response_timeout": 50,
+            }
+        else:
+            # Use cached token
+            sso_kwargs = {
+                "iam": False,
+                "credentials_provider": "redshift_connector.plugin.BasicJwtCredentialsProvider",
+                "password": "",
+                "web_identity_token": IDP_TOKEN,
+            }
+
+        return __base_kwargs(credentials) | sso_kwargs
+
     #
     # Head of function execution
     #
@@ -431,6 +508,7 @@ def get_connection_method(
         RedshiftConnectionMethod.IAM_ROLE: __iam_role_kwargs,
         RedshiftConnectionMethod.IAM_IDENTITY_CENTER_BROWSER: __iam_idc_browser_kwargs,
         RedshiftConnectionMethod.IAM_IDENTITY_CENTER_TOKEN: __iam_idc_token_kwargs,
+        RedshiftConnectionMethod.SSO: __sso_kwargs,
     }
 
     try:
@@ -448,6 +526,13 @@ def get_connection_method(
             c.autocommit = True
         if credentials.role:
             c.cursor().execute(f"set role {credentials.role}")
+
+        # Handle SSO token management
+        if credentials.method == RedshiftConnectionMethod.SSO:
+            global IDP_TOKEN
+            if hasattr(c, "web_identity_token") and c.web_identity_token:
+                IDP_TOKEN = c.web_identity_token
+
         return c
 
     return connect
