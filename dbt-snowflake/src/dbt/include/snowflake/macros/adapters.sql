@@ -95,6 +95,8 @@
 {% macro snowflake__alter_relation_comment(relation, relation_comment) -%}
     {%- if relation.is_dynamic_table -%}
         {%- set relation_type = 'dynamic table' -%}
+    {% elif relation.is_semantic_view -%}
+        {%- set relation_type = 'semantic view' -%}
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
@@ -111,6 +113,8 @@
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
     {% if relation.is_dynamic_table -%}
         {% set relation_type = "table" %}
+    {% elif relation.is_semantic_view -%}
+        {%- set relation_type = "semantic view" -%}
     {% else -%}
         {% set relation_type = relation.type %}
     {% endif %}
