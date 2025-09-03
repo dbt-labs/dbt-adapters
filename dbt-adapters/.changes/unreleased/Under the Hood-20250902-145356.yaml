@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Record adapter.list_relations_without_caching as Available record
-time: 2025-09-02T14:53:56.627147-04:00
-custom:
-    Author: jasonlin45
-    Issue: "1308"
