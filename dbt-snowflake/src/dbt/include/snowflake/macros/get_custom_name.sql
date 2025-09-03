@@ -4,7 +4,8 @@
             {%- set catalog_relation = adapter.build_catalog_relation(node) -%}
         {%- elif 'config' in target -%}
             {%- set catalog_relation = adapter.build_catalog_relation(target) -%}
-
+        {%- else -%}
+            {%- set catalog_relation = none -%}
         {%- endif -%}
         {%- if catalog_relation is not none
             and catalog_relation|attr('catalog_linked_database')-%}
