@@ -73,6 +73,7 @@ defaults:
 jobs:
     unit-tests:
         runs-on: ${{ inputs.os }}
+        name: "unit-tests - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
         -   uses: actions/checkout@v4
             with:
