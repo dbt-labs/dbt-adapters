@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 dynamic = ["version"]
-name = "dbt-redshift"
+name = "dbt-redshift-tsw"
 description = "The Redshift adapter plugin for dbt"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "redshift", "aws", "amazon", "amazon web services"]
