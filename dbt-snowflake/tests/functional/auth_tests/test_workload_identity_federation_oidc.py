@@ -47,6 +47,7 @@ class TestSnowflakeWorkloadIdentityFederation:
             "user": os.getenv("SNOWFLAKE_TEST_WIF_USER"),
             "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
             "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
+            "role": os.getenv("SNOWFLAKE_TEST_ROLE"),
             "authenticator": "workload_identity",
             "workload_identity_provider": "oidc",
             "token": os.getenv("ODIC_TOKEN"),
