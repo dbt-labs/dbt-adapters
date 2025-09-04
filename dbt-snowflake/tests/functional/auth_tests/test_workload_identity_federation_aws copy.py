@@ -38,6 +38,8 @@ Prerequisites for testing WIF with AWS:
 4. **AWS Environment:**
    This test must run from within the configured EC2 environment.
    Connect to the EC2 instance using SSH or similar.
+   Clone this repository, run the setup, and execute this test e.g.
+   `hatch run pytest tests/functional/auth_tests/test_workload_identity_federation.py::test_snowflake_wif_basic_functionality`
 5. **Environment Variables:**
    Set the following environment variables for testing:
    - SNOWFLAKE_TEST_WIF_ACCOUNT: Your Snowflake account identifier
