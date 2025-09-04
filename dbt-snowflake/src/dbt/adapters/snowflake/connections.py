@@ -38,6 +38,8 @@ from snowflake.connector.errors import (
     BindUploadError,
 )
 
+from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
+
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -114,6 +116,7 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    workload_identity_provider: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -182,6 +185,7 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "workload_identity_provider",
         )
 
     def auth_args(self):
@@ -231,6 +235,15 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator.lower() == "workload_identity":
+                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+
+                if not self.workload_identity_provider:
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set if authenticator='workload_identity'!"
+                    )
+                result["workload_identity_provider"] = self.workload_identity_provider
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
