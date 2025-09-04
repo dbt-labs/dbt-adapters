@@ -40,3 +40,6 @@ jobs:
         working-directory: ./dbt-snowflake
 
       - run: hatch run python -m pytest tests/functional/auth_tests/test_workload_identity_federation_oidc.py
+        working-directory: ./dbt-snowflake
+        env:
+          ODIC_TOKEN: ${{ steps.oidc.outputs.id_token }}
