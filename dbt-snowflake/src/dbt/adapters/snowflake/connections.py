@@ -117,6 +117,7 @@ class SnowflakeCredentials(Credentials):
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
     workload_identity_provider: Optional[str] = None
+    workload_identity_entra_resource: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -186,6 +187,7 @@ class SnowflakeCredentials(Credentials):
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
+            "workload_identity_entra_resource",
         )
 
     def auth_args(self):
@@ -244,6 +246,13 @@ class SnowflakeCredentials(Credentials):
                         "workload_identity_provider must be set if authenticator='workload_identity'!"
                     )
                 result["workload_identity_provider"] = self.workload_identity_provider
+
+                if self.token:
+                    result["token"] = self.token
+                if self.workload_identity_entra_resource:
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
