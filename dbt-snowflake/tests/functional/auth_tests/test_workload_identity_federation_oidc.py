@@ -20,10 +20,52 @@ Prerequisites for testing WIF with OIDC:
 
   ```yaml
 
-  # TODO
+name: Run Snowflake Workload Identity Federation (WIF) Test
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
 
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  run-snowflake:
+    runs-on: ubuntu-latest
+    env:
+      SNOWFLAKE_TEST_ACCOUNT: <ACCOUNT_ID>
+      SNOWFLAKE_TEST_DATABASE: <DB_NAME>
+      SNOWFLAKE_TEST_WAREHOUSE: <WH_NAME>
+      SNOWFLAKE_TEST_ROLE: <ROLE_NAME>
+      SNOWFLAKE_TEST_WIF_USER: <USERNAME>
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get OIDC token for Snowflake
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken('snowflakecomputing.com');
+            core.setOutput('id_token', token);
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: pypa/hatch@install
+
+      - run: hatch run setup
+        working-directory: ./dbt-snowflake
+
+      - run: hatch run python -m pytest tests/functional/auth_tests/test_workload_identity_federation_oidc.py
+        working-directory: ./dbt-snowflake
+        env:
+          ODIC_TOKEN: ${{ steps.oidc.outputs.id_token }}
   ```
-
 
 """
 
