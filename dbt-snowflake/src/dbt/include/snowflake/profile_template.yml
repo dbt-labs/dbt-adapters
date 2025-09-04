@@ -20,6 +20,10 @@ prompts:
       authenticator:
         hint: "'externalbrowser' or a valid Okta URL"
         default: 'externalbrowser'
+    workload_identity:
+      _fixed_authenticator: workload_identity
+      workload_identity_provider:
+        hint: Must be one of the following - [OIDC, AWS, AZURE, GCP]
   role:
     hint: 'dev role'
   warehouse:
