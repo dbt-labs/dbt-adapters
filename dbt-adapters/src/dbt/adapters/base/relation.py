@@ -426,6 +426,10 @@ class BaseRelation(FakeAPIObject, Hashable):
     def is_pointer(self) -> bool:
         return self.type == RelationType.PointerTable
 
+    @property
+    def is_function(self) -> bool:
+        return self.type == RelationType.Function
+
     @classproperty
     def Table(cls) -> str:
         return str(RelationType.Table)
@@ -449,6 +453,10 @@ class BaseRelation(FakeAPIObject, Hashable):
     @classproperty
     def PointerTable(cls) -> str:
         return str(RelationType.PointerTable)
+
+    @classproperty
+    def Function(cls) -> str:
+        return str(RelationType.Function)
 
     @classproperty
     def get_relation_type(cls) -> Type[RelationType]:
