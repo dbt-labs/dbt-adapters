@@ -42,12 +42,12 @@ Prerequisites for testing WIF with AWS:
    `hatch run pytest tests/functional/auth_tests/test_workload_identity_federation_aws.py::test_snowflake_wif_basic_functionality`
 5. **Environment Variables:**
    Set the following environment variables for testing:
-   - SNOWFLAKE_TEST_WIF_ACCOUNT: Your Snowflake account identifier
+   - SNOWFLAKE_TEST_ACCOUNT: Your Snowflake account identifier
    - SNOWFLAKE_TEST_WIF_USER: The Snowflake service user created for WIF
-   - SNOWFLAKE_TEST_WIF_DATABASE: Test database name
-   - SNOWFLAKE_TEST_WIF_WAREHOUSE: Test warehouse name
-   - SNOWFLAKE_TEST_WIF_ROLE: Snowflake Role for the user (optional)
-   - SNOWFLAKE_TEST_WIF_SCHEMA: Schema for testing (optional, defaults to schema in profile)
+   - SNOWFLAKE_TEST_DATABASE: Test database name
+   - SNOWFLAKE_TEST_WAREHOUSE: Test warehouse name
+   - SNOWFLAKE_TEST_ROLE: Snowflake Role for the user (optional)
+   - SNOWFLAKE_TEST_SCHEMA: Schema for testing (optional, defaults to schema in profile)
 Note: WIF authentication relies on being in the AWS environment, so these tests can't be run locally or in the CI/CD pipeline.
 """
 
