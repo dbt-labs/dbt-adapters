@@ -36,7 +36,7 @@ jobs:
 
       - uses: pypa/hatch@install
 
-      - run: hatch build && hatch run build:check-all
+      - run: hatch run setup
         working-directory: ./dbt-snowflake
 
       - run: hatch run python -m pytest tests/functional/auth_tests/test_workload_identity_federation_oidc.py
