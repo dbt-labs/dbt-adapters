@@ -30,6 +30,7 @@ from dbt.adapters.record.base import (
     AdapterGetPartitionsMetadataRecord,
     AdapterConvertTypeRecord,
     AdapterStandardizeGrantsDictRecord,
+    AdapterListRelationsWithoutCachingRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -760,6 +761,12 @@ class BaseAdapter(metaclass=AdapterMeta):
             "`expand_target_column_types` is not implemented for this adapter!"
         )
 
+    @record_function(
+        AdapterListRelationsWithoutCachingRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
         """List relations in the given schema, bypassing the cache.
