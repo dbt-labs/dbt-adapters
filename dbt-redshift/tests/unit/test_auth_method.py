@@ -921,8 +921,6 @@ class TestSSOMethod(AuthMethod):
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_sso_method_browser_auth(self):
         """Test SSO method with browser authentication (first time or expired token)"""
-        from dbt.adapters.redshift.connections import IDP_TOKEN
-
         # Reset global token
         import dbt.adapters.redshift.connections
 
@@ -933,6 +931,7 @@ class TestSSOMethod(AuthMethod):
             scope="https://redshift.amazonaws.com/dbuser",
             client_id="test-client-id",
             idp_tenant="test-tenant-id",
+            sso_cache=False,
             host="thishostshouldnotexist.test.us-east-1",
         )
         connection = self.adapter.acquire_connection("dummy")
@@ -1070,6 +1069,7 @@ class TestSSOMethod(AuthMethod):
             scope="https://redshift.amazonaws.com/dbuser",
             client_id="test-client-id",
             idp_tenant="test-tenant-id",
+            sso_cache=False,
             host="test-workgroup.serverless.region.redshift-serverless.amazonaws.com",
         )
         connection = self.adapter.acquire_connection("dummy")
@@ -1083,6 +1083,47 @@ class TestSSOMethod(AuthMethod):
             db_groups=[],
             timeout=None,
             is_serverless=True,
+            iam=False,
+            db_user="",
+            scope="https://redshift.amazonaws.com/dbuser",
+            client_id="test-client-id",
+            idp_tenant="test-tenant-id",
+            listen_port=7890,
+            credentials_provider="redshift_connector.plugin.BrowserAzureOAuth2CredentialsProvider",
+            user="",
+            password="",
+            idp_response_timeout=50,
+            **DEFAULT_SSL_CONFIG,
+            **DEFAULT_TCP_KEEPALIVE_CONFIG,
+        )
+
+    @mock.patch("redshift_connector.connect", MagicMock())
+    def test_sso_method_cache_disabled(self):
+        """Test SSO method with caching disabled"""
+        import dbt.adapters.redshift.connections
+
+        # Reset global token
+        dbt.adapters.redshift.connections.IDP_TOKEN = None
+
+        self.config.credentials = self.config.credentials.replace(
+            method="sso",
+            scope="https://redshift.amazonaws.com/dbuser",
+            client_id="test-client-id",
+            idp_tenant="test-tenant-id",
+            sso_cache=False,
+            host="thishostshouldnotexist.test.us-east-1",
+        )
+        connection = self.adapter.acquire_connection("dummy")
+        connection.handle
+        redshift_connector.connect.assert_called_once_with(
+            host="thishostshouldnotexist.test.us-east-1",
+            port=5439,
+            database="redshift",
+            region=None,
+            auto_create=False,
+            db_groups=[],
+            timeout=None,
+            is_serverless=False,
             iam=False,
             db_user="",
             scope="https://redshift.amazonaws.com/dbuser",

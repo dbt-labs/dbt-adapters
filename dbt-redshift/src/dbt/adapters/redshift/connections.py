@@ -1,5 +1,3 @@
-import base64
-import json
 import re
 import os
 
@@ -20,6 +18,11 @@ from dbt.adapters.sql import SQLConnectionManager
 from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.redshift.auth_providers import create_token_service_client
+from dbt.adapters.redshift.token_cache import (
+    save_token_to_cache,
+    load_token_from_cache,
+    is_token_expired_or_about_to_expire,
+)
 from dbt_common.contracts.util import Replaceable
 from dbt_common.dataclass_schema import dbtClassMixin, StrEnum, ValidationError
 from dbt_common.helper_types import Port
@@ -36,29 +39,15 @@ IDP_TOKEN = None
 logger = AdapterLogger("Redshift")
 
 
-def is_token_expired_or_about_to_expire() -> bool:
+def is_global_token_expired_or_about_to_expire() -> bool:
     """
-    Check if the IDP token is expiring or invalid.
+    Check if the global IDP token is expiring or invalid.
     Returns True if token needs refresh, False if it's still valid.
     """
-    # If token is empty or None, it needs refresh
     if IDP_TOKEN is None:
         return True
 
-    try:
-        tolerance_seconds = 60
-        current_timestamp = int(time.time())
-        idp_token_payload = IDP_TOKEN.split(".")[1]
-        idp_token_payload += "=" * (-len(idp_token_payload) % 4)
-        idp_token_expire_time = json.loads(
-            (base64.b64decode(idp_token_payload)).decode("utf-8")
-        ).get("exp", 0)
-
-        # Return True if token is expired or will expire within tolerance
-        return idp_token_expire_time - current_timestamp <= tolerance_seconds
-    except (IndexError, ValueError, json.JSONDecodeError):
-        # If token parsing fails, consider it expired
-        return True
+    return is_token_expired_or_about_to_expire(IDP_TOKEN)
 
 
 if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
@@ -222,6 +211,7 @@ class RedshiftCredentials(Credentials):
     scope: Optional[str] = None
     client_id: Optional[str] = None
     idp_tenant: Optional[str] = None
+    sso_cache: bool = True
 
     _ALIASES = {"dbname": "database", "pass": "password"}
 
@@ -260,6 +250,7 @@ class RedshiftCredentials(Credentials):
             "scope",
             "client_id",
             "idp_tenant",
+            "sso_cache",
         )
 
     @property
@@ -467,13 +458,21 @@ def get_connection_method(
 
         __validate_required_fields("sso", ("scope", "client_id", "idp_tenant"))
 
+        global IDP_TOKEN
+        if credentials.sso_cache and IDP_TOKEN is None:
+            IDP_TOKEN = load_token_from_cache()
+
         # For SSO, we need to handle token management differently
         # This is a special case that requires custom connection logic
         # We'll use the BrowserAzureOAuth2CredentialsProvider for initial auth
         # and BasicJwtCredentialsProvider for cached tokens
 
-        if IDP_TOKEN is None or is_token_expired_or_about_to_expire():
-            # First time or token expired - use browser auth
+        if (
+            not credentials.sso_cache
+            or IDP_TOKEN is None
+            or is_global_token_expired_or_about_to_expire()
+        ):
+            # First time, token expired, or caching disabled - use browser auth
             sso_kwargs = {
                 "iam": False,
                 "db_user": "",
@@ -532,6 +531,8 @@ def get_connection_method(
             global IDP_TOKEN
             if hasattr(c, "web_identity_token") and c.web_identity_token:
                 IDP_TOKEN = c.web_identity_token
+                if credentials.sso_cache and IDP_TOKEN:
+                    save_token_to_cache(IDP_TOKEN)
 
         return c
 
