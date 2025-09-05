@@ -35,6 +35,29 @@ dbt is the T in ELT. Organize, cleanse, denormalize, filter, rename, and pre-agg
 `dbt-redshift` enables dbt to work with Amazon Redshift.
 For more information on using dbt with Redshift, consult [the docs](https://docs.getdbt.com/docs/profile-redshift).
 
+## ⚠️ This is a Fork
+
+This repository is a fork of the original [dbt-redshift](https://github.com/dbt-labs/dbt-adapters) with additional SSO authentication support in dbt-redshift.
+
+### Versioning of the Forked Packages
+
+To maintain compatibility with both Semantic Versioning (SemVer) and PEP 440, and to clearly indicate the relationship with the original package versions, the versioning scheme for this fork follows a modified pattern:
+
+- Versions based on original releases from the `1.9.5` series will use a major version of `19` to signify the fork, followed by the original minor and patch components. For example:
+  - An original `1.9.5` release corresponds to `19.5.0` in this fork.
+  - Subsequent patch releases on this fork will increment the last digit, e.g., `19.5.1`, `19.5.2`, etc.
+
+- When the upstream package updates to eg. `1.10.1`, this fork will correspondingly update to a major version `110` to maintain clear upstream version alignment, for example:
+  - `1.10.1` upstream → `110.1.0` forked version
+  - Further patch releases would increment, e.g., `110.1.1`, `110.1.2`, etc.
+
+This versioning approach avoids collision with expected upstream versions, provides clarity about the base upstream version, and remains fully compliant with both SemVer and PEP 440 standards.
+
+### ✨ Additional Features
+
+- **Single Sign-On (SSO) Authentication**: Support for OAuth2-based authentication using Azure AD and other identity providers
+- **Token Management**: Automatic token refresh and caching for SSO sessions
+
 # Getting started
 
 Review the repository [README.md](../README.md) as most of that information pertains to `dbt-redshift`.

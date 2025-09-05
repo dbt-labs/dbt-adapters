@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 dynamic = ["version"]
 name = "dbt-redshift-tsw"
-description = "The Redshift adapter plugin for dbt"
+description = "The Redshift adapter plugin for dbt (fork with SSO authentication support)"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "redshift", "aws", "amazon", "amazon web services"]
 requires-python = ">=3.9.0"
