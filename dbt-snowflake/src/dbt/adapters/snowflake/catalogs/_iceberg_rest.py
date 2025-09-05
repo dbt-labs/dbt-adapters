@@ -76,7 +76,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             )
 
         return IcebergRestCatalogRelation(
-            catalog_name=self.catalog_name,
+            catalog_name=self.name,
             external_volume=None,
             catalog_linked_database=self.catalog_linked_database,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,

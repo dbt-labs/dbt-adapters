@@ -238,10 +238,17 @@
         {%- else -%}
             {{ return(false) }}
         {%- endif -%}
-    {%- elif relation and relation.catalog_name -%}
-        {#-- Relation with catalog attribute --#}
-        {%- set catalog_relation = adapter.get_catalog_integration(relation.catalog_name) -%}
+    {%- elif relation and relation.config -%}
+        {%- set catalog_relation = adapter.build_catalog_relation(relation) -%}
         {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.catalog -%}
+        {#-- Relation with catalog attribute --#}
+        {%- set catalog_integration = adapter.get_catalog_integration(relation.catalog) -%}
+        {%- if catalog_integration is not none and catalog_integration|attr('catalog_linked_database') -%}
             {{ return(true) }}
         {%- else -%}
             {{ return(false) }}
@@ -273,7 +280,7 @@
     truncate table {{ relation.render() }}
   {% endset %}
   {% call statement('truncate_relation') -%}
-    {% if snowflake__is_catalog_linked_database(relation=config.model.config) %}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
         {{ truncate_dml }}
     {% else %}
       {{ snowflake_dml_explicit_transaction(truncate_dml) }}

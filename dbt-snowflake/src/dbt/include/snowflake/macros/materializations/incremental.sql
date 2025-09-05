@@ -28,7 +28,7 @@
   #} */
 
   {#-- Always use table for catalog-linked databases (Iceberg) --#}
-  {% if snowflake__is_catalog_linked_database(relation=config.model.config) %}
+  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
     {{ return("table") }}
   {% endif %}
 
@@ -81,7 +81,8 @@
 	schema=schema,
 	database=database,
 	type='table',
-	table_format=catalog_relation.table_format
+	table_format=catalog_relation.table_format,
+  catalog=config.model.catalog,
   ) -%}
 
   {% set existing_relation = load_relation(this) %}
@@ -90,8 +91,9 @@
   {%- set unique_key = config.get('unique_key') -%}
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
   {% set tmp_relation_type = dbt_snowflake_get_tmp_relation_type(incremental_strategy, unique_key, language) %}
+
   {% if is_catalog_linked_db %}
-    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog_name=catalog_relation.catalog_name, is_table=true) %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog=catalog_relation.catalog_name, is_table=true) %}
   {% else %}
     {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
   {% endif %}
@@ -157,7 +159,7 @@
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
     {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
-    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': tmp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
+    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': tmp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates, 'catalog_relation': catalog_relation }) %}
 
     {%- call statement('main') -%}
       {{ strategy_sql_macro_func(strategy_arg_dict) }}
