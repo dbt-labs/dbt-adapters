@@ -33,6 +33,22 @@ where id > 2
 {% endif %}
 """
 
+MODEL__INCREMENTAL_ICEBERG_REST_INSERT_OVERWRITE = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='basic_iceberg_rest_catalog',
+    incremental_strategy='insert_overwrite',
+    unique_key="id",
+  )
+}}
+select * from {{ ref('basic_iceberg_table') }}
+
+{% if is_incremental() %}
+where id > 2
+{% endif %}
+"""
+
 
 class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidation):
 
@@ -79,10 +95,11 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
                 "basic_iceberg_table.sql": MODEL__BASIC_ICEBERG_TABLE,
                 "iceberg_table_with_catalog_config.sql": MODEL__ICEBERG_TABLE_WITH_CATALOG_CONFIG,
                 "incremental_iceberg_rest.sql": MODEL__INCREMENTAL_ICEBERG_REST,
+                "incremental_iceberg_rest_insert_overwrite.sql": MODEL__INCREMENTAL_ICEBERG_REST_INSERT_OVERWRITE,
             }
         }
 
     def test_basic_iceberg_rest_catalog_integration(self, project):
         result = run_dbt(["run"])
-        assert len(result) == 3
+        assert len(result) == 4
         run_dbt(["run"])
