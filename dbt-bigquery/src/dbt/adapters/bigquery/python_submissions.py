@@ -332,7 +332,16 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     url="https://www.googleapis.com/oauth2/v2/userinfo",
                     headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
                 )
-                notebook_execution_job.execution_user = json.loads(response.data).get("email")
+                if response.status != 200:
+                    raise DbtRuntimeError(
+                        f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
+                    )
+                if user_email := json.loads(response.data).get("email"):
+                    notebook_execution_job.execution_user = user_email
+                else:
+                    raise DbtRuntimeError(
+                        "Authorization request to get user failed to return an email."
+                    )
         else:
             raise ValueError(
                 f"Unsupported credential method in BigFrames: '{self._connection_method}'"
