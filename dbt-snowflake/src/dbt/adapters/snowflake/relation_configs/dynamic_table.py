@@ -7,6 +7,7 @@ from dbt.adapters.contracts.relation import ComponentName
 from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard library until py3.11
 from typing_extensions import Self
 
+from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 
 if TYPE_CHECKING:
@@ -45,6 +46,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
+    - cluster_by: specifies the columns to cluster on
 
     There are currently no non-configurable parameters.
     """
@@ -59,6 +61,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    cluster_by: Optional[str | list[str]] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -79,6 +82,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
+            "cluster_by": config_dict.get("cluster_by"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -98,6 +102,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
                 "row_access_policy"
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
+            "cluster_by": cluster_by(relation_config),
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -122,6 +127,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
+            "cluster_by": dynamic_table.get("cluster_by"),
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 
