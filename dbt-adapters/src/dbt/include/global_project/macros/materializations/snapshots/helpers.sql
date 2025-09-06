@@ -158,21 +158,35 @@
             and not (
                 --avoid updating the record's valid_to if the latest entry is marked as deleted
                 snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-                and snapshotted_data.{{ columns.dbt_valid_to }} is null
+                and
+                {% if config.get('dbt_valid_to_current') -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+                {%- else -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} is null
+                {%- endif %}
             )
             {%- endif %}
     )
     {%- endif %}
 
     {%- if strategy.hard_deletes == 'new_record' %}
+        {% set snapshotted_cols = get_list_of_column_names(get_columns_in_relation(target_relation)) %}
         {% set source_sql_cols = get_column_schema_from_query(source_sql) %}
     ,
     deletion_records as (
 
         select
             'insert' as dbt_change_type,
+            {#/*
+                If a column has been added to the source it won't yet exist in the
+                snapshotted table so we insert a null value as a placeholder for the column.
+             */#}
             {%- for col in source_sql_cols -%}
+            {%- if col.name in snapshotted_cols -%}
             snapshotted_data.{{ adapter.quote(col.column) }},
+            {%- else -%}
+            NULL as {{ adapter.quote(col.column) }},
+            {%- endif -%}
             {% endfor -%}
             {%- if strategy.unique_key | is_list -%}
                 {%- for key in strategy.unique_key -%}
@@ -193,7 +207,12 @@
         and not (
             --avoid inserting a new record if the latest one is marked as deleted
             snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-            and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            and
+            {% if config.get('dbt_valid_to_current') -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+            {%- else -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} is null
+            {%- endif %}
             )
 
     )

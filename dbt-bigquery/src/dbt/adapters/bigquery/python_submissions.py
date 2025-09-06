@@ -311,13 +311,37 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
         ):
-            request = Request()
-            response = request(
-                method="GET",
-                url="https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
-            )
-            notebook_execution_job.execution_user = json.loads(response.data).get("email")
+            # If `impersonate_service_account` is configured correctly in
+            # profiles.yml, the job will run as the specified service account.
+            if hasattr(self._GoogleCredentials, "_target_principal"):
+                target_principal = self._GoogleCredentials._target_principal
+                if target_principal:
+                    notebook_execution_job.service_account = target_principal
+                else:
+                    raise ValueError(
+                        "The impersonated service account is incorrect. Please "
+                        "verify the `impersonate_service_account` setting in "
+                        "your profiles.yml configuration."
+                    )
+
+            # The job will run under the identity of the authenticated user.
+            else:
+                request = Request()
+                response = request(
+                    method="GET",
+                    url="https://www.googleapis.com/oauth2/v2/userinfo",
+                    headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
+                )
+                if response.status != 200:
+                    raise DbtRuntimeError(
+                        f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
+                    )
+                if user_email := json.loads(response.data).get("email"):
+                    notebook_execution_job.execution_user = user_email
+                else:
+                    raise DbtRuntimeError(
+                        "Authorization request to get user failed to return an email."
+                    )
         else:
             raise ValueError(
                 f"Unsupported credential method in BigFrames: '{self._connection_method}'"

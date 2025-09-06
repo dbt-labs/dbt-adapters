@@ -42,6 +42,7 @@ class SnowflakeRelation(BaseRelation):
             {
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
+                SnowflakeRelationType.DynamicTable,  # type: ignore
             }
         )
     )
@@ -58,6 +59,10 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_dynamic_table(self) -> bool:
+        return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_materialized_view(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
 
     @property
@@ -204,10 +209,11 @@ class SnowflakeRelation(BaseRelation):
 
         external_volume = config.get("external_volume")  # type:ignore
         iceberg_ddl_predicates: str = f"""
-        external_volume = '{external_volume}'
         catalog = 'snowflake'
         base_location = '{base_location}'
         """
+        if external_volume := config.get("external_volume"):  # type:ignore
+            iceberg_ddl_predicates += f"\nexternal_volume = '{external_volume}'"
         return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def __drop_conditions(self, old_relation: "SnowflakeRelation") -> Iterator[Tuple[bool, str]]:

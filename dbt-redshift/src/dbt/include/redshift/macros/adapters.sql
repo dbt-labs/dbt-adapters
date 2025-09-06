@@ -308,7 +308,7 @@
 
     {% for column in add_columns %}
       {% set sql -%}
-          alter {{ relation.type }} {{ relation }} add column {{ column.name }} {{ column.data_type }}
+          alter {{ relation.type }} {{ relation }} add column {{ column.quoted }} {{ column.data_type }}
       {% endset %}
       {% do run_query(sql) %}
     {% endfor %}
@@ -319,7 +319,7 @@
 
     {% for column in remove_columns %}
       {% set sql -%}
-          alter {{ relation.type }} {{ relation }} drop column {{ column.name }}
+          alter {{ relation.type }} {{ relation }} drop column {{ column.quoted }}
       {% endset %}
       {% do run_query(sql) %}
     {% endfor %}
