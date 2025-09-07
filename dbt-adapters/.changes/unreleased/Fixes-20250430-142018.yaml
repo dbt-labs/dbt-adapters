@@ -1,0 +1,6 @@
+kind: Fixes
+body: Limit rows using cross-database macro
+time: 2025-04-30T14:20:18.578658-06:00
+custom:
+    Author: dbeatty10
+    Issue: "1041"
