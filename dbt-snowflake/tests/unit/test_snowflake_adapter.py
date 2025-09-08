@@ -55,7 +55,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
         }
         self.config = config_from_parts_or_dicts(project_cfg, profile_cfg)
         self.assertEqual(self.config.query_comment.comment, "dbt")
-        self.assertEqual(self.config.query_comment.append, False)
+        self.assertEqual(self.config.query_comment.append, None)
 
         self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
         self.cursor = self.handle.cursor.return_value
@@ -717,6 +717,26 @@ class TestSnowflakeAdapter(unittest.TestCase):
                 )
             ]
         )
+
+    def test_get_relation_without_quotes(self):
+        with mock.patch.object(self.adapter, "list_relations") as list_relations:
+            list_relations.return_value = [
+                SnowflakeAdapter.Relation.create(
+                    database="TEST_DATABASE", schema="test_schema", identifier="TEST_TABLE"
+                )
+            ]
+            relation = self.adapter.get_relation("test_database", "test_schema", "test_table")
+            assert relation.render() == "TEST_DATABASE.test_schema.TEST_TABLE"
+
+    def test_get_relation_with_quotes(self):
+        with mock.patch.object(self.adapter, "list_relations") as list_relations:
+            list_relations.return_value = [
+                SnowflakeAdapter.Relation.create(
+                    database="test_database", schema="test_schema", identifier="test_TABLE"
+                )
+            ]
+            relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
+            assert relation.render() == "test_database.test_schema.test_TABLE"
 
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):

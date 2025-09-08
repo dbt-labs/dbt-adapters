@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Optional, Set
 
 from dbt.adapters.base import AdapterConfig, ConstraintSupport, available
@@ -40,7 +40,7 @@ class PostgresIndexConfig(dbtClassMixin):
         # the index will only be created on every other run. See
         # https://github.com/dbt-labs/dbt-core/issues/1945#issuecomment-576714925
         # for an explanation.
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
         inputs = self.columns + [relation.render(), str(self.unique), str(self.type), now]
         string = "_".join(inputs)
         return dbt_encoding.md5(string)

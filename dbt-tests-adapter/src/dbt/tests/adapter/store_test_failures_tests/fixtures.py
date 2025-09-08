@@ -88,6 +88,20 @@ models:
           - unique
 """
 
+properties__seeds_yml = """
+seeds:
+  - name: people
+    columns:
+      - name: first_name
+        tests:
+          - accepted_values:
+              values: ["Gary"]
+              config:
+                store_failures_as: table
+                # 9 actual failing rows
+                limit: 4
+"""
+
 #
 # Models
 #

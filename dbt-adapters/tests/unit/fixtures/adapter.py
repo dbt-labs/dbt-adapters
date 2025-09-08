@@ -22,7 +22,7 @@ class BaseAdapterStub(BaseAdapter):
     """
 
     ConnectionManager = ConnectionManagerStub
-    CATALOG_INTEGRATIONS = {"managed": CatalogIntegrationStub}
+    CATALOG_INTEGRATIONS = [CatalogIntegrationStub]
 
     ###
     # Abstract methods for database-specific values, attributes, and types

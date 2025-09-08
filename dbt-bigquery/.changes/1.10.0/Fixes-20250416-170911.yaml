@@ -1,0 +1,6 @@
+kind: Fixes
+body: Make location optional in bigframes
+time: 2025-04-16T17:09:11.028507794Z
+custom:
+    Author: jialuoo
+    Issue: "1001"

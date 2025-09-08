@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Permits newer versions of google-cloud-storage than 2.4.x to be used, defaults to latest
+time: 2025-03-21T20:56:08.862461642Z
+custom:
+    Author: brabster
+    PR: "931"

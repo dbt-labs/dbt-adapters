@@ -1,5 +1,6 @@
 import dataclasses
 import datetime
+import decimal
 from typing import Any, Dict, List, Mapping
 
 from dbt_common.record import Record, Recorder
@@ -37,6 +38,8 @@ class CursorFetchAllResult:
             return {"type": "date", "value": value.isoformat()}
         elif type(value) is datetime.datetime:
             return {"type": "datetime", "value": value.isoformat()}
+        elif type(value) is decimal.Decimal:
+            return float(value)
         else:
             return value
 

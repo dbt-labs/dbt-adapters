@@ -33,6 +33,7 @@ from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
+from dbt_common.exceptions import DbtInternalError
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -47,18 +48,26 @@ from dbt.adapters.base import (
 from dbt.adapters.base.impl import FreshnessResponse
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
+from dbt.adapters.bigquery import constants, parse_model
+from dbt.adapters.bigquery.catalogs import (
+    BigLakeCatalogIntegration,
+    BigQueryInfoSchemaCatalogIntegration,
+    BigQueryCatalogRelation,
+)
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
 from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
 from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
+    BigFramesHelper,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -110,6 +119,9 @@ class BigqueryConfig(AdapterConfig):
     max_staleness: Optional[str] = None
     enable_list_inference: Optional[bool] = None
     intermediate_format: Optional[str] = None
+    submission_method: Optional[str] = None
+    notebook_template_id: Optional[str] = None
+    enable_change_history: Optional[bool] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -126,6 +138,7 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
+    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -144,6 +157,8 @@ class BigQueryAdapter(BaseAdapter):
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
 
     ###
     # Implementations of abstract methods
@@ -432,7 +447,7 @@ class BigQueryAdapter(BaseAdapter):
         :param str sql: The sql to execute.
         :return: List[BigQueryColumn]
         """
-        _, iterator = self.connections.raw_execute(sql)
+        _, iterator = self.connections.raw_execute_with_comment(sql)
         columns = [self.Column.create_from_field(field) for field in iterator.schema]
         flattened_columns = []
         for column in columns:
@@ -444,7 +459,7 @@ class BigQueryAdapter(BaseAdapter):
         try:
             conn = self.connections.get_thread_connection()
             client = conn.handle
-            query_job, iterator = self.connections.raw_execute(select_sql)
+            query_job, iterator = self.connections.raw_execute_with_comment(select_sql)
             query_table = client.get_table(query_job.destination)
             return self._get_dbt_columns_from_bq_table(query_table)
 
@@ -769,6 +784,9 @@ class BigQueryAdapter(BaseAdapter):
         if labels:
             opts["labels"] = list(labels.items())  # type: ignore[assignment]
 
+        if resource_tags := config.get("resource_tags"):
+            opts["tags"] = list(resource_tags.items())  # type: ignore[assignment]
+
         return opts
 
     @available.parse(lambda *a, **k: {})
@@ -794,11 +812,29 @@ class BigQueryAdapter(BaseAdapter):
             if config.get("partition_expiration_days") is not None:
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
 
+            if config.get("enable_change_history") is not None:
+                opts["enable_change_history"] = config.get("enable_change_history")
+
+            relation_config = getattr(config, "model", None)
+            if not temporary and (
+                catalog_relation := self.build_catalog_relation(relation_config)
+            ):
+                if not isinstance(catalog_relation, BigQueryCatalogRelation):
+                    raise DbtInternalError("Unexpected catalog relation")
+                if catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT:
+                    opts["table_format"] = f"'{catalog_relation.table_format}'"
+                    opts["file_format"] = f"'{catalog_relation.file_format}'"
+                    opts["storage_uri"] = f"'{catalog_relation.storage_uri}'"
+
         return opts
 
     @available.parse(lambda *a, **k: {})
     def get_view_options(self, config: Dict[str, Any], node: Dict[str, Any]) -> Dict[str, Any]:
         opts = self.get_common_options(config, node)
+        if config.get("enable_change_history"):
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "`enable_change_history` is not supported for views on BigQuery."
+            )
         return opts
 
     @available.parse(lambda *a, **k: True)
@@ -910,6 +946,11 @@ class BigQueryAdapter(BaseAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
+        if (
+            hasattr(self.connections.profile.credentials, "submission_method")
+            and self.connections.profile.credentials.submission_method
+        ):
+            return self.connections.profile.credentials.submission_method
         return "serverless"
 
     @property
@@ -917,6 +958,7 @@ class BigQueryAdapter(BaseAdapter):
         return {
             "cluster": ClusterDataprocHelper,
             "serverless": ServerlessDataProcHelper,
+            "bigframes": BigFramesHelper,
         }
 
     @available
@@ -977,3 +1019,23 @@ class BigQueryAdapter(BaseAdapter):
         :param str sql: The sql to validate
         """
         return self.connections.dry_run(sql)
+
+    @available
+    def build_catalog_relation(self, model: RelationConfig) -> Optional[CatalogRelation]:
+        """
+        Builds a relation for a given configuration.
+
+        This method uses the provided configuration to determine the appropriate catalog
+        integration and config parser for building the relation. It defaults to the information schema
+        catalog if none is provided in the configuration for backward compatibility.
+
+        Args:
+            model (RelationConfig): `config.model` (not `model`) from the jinja context
+
+        Returns:
+            Any: The constructed relation object generated through the catalog integration and parser
+        """
+        if catalog := parse_model.catalog_name(model):
+            catalog_integration = self.get_catalog_integration(catalog)
+            return catalog_integration.build_relation(model)
+        return None

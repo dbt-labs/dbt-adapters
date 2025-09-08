@@ -217,7 +217,7 @@ DEFAULT_QUERY_COMMENT = """
 @dataclass
 class QueryComment(dbtClassMixin):
     comment: str = DEFAULT_QUERY_COMMENT
-    append: bool = False
+    append: Optional[bool] = None
     job_label: bool = field(default=False, metadata={"alias": "job-label"})
 
 

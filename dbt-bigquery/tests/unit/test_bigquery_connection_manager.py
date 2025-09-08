@@ -19,6 +19,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.credentials.job_retries = 1
         self.credentials.job_retry_deadline_seconds = 1
         self.credentials.scopes = tuple()
+        self.credentials.job_execution_timeout_seconds = 1
 
         self.mock_client = Mock(google.cloud.bigquery.Client)
 
@@ -98,6 +99,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             query="sql",
             job_config=MockQueryJobConfig(),
             job_id=1,
+            job_retry=None,
             timeout=self.credentials.job_creation_timeout_seconds,
         )
 

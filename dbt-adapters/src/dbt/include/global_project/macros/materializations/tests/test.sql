@@ -1,6 +1,11 @@
 {%- materialization test, default -%}
 
   {% set relations = [] %}
+  {% set limit = config.get('limit') %}
+
+  {% set sql_with_limit %}
+    {{ get_limit_subquery_sql(sql, limit) }}
+  {% endset %}
 
   {% if should_store_failures() %}
 
@@ -26,11 +31,12 @@
     {% endif %}
 
     {% call statement(auto_begin=True) %}
-        {{ get_create_sql(target_relation, sql) }}
+        {{ get_create_sql(target_relation, sql_with_limit) }}
     {% endcall %}
 
     {% do relations.append(target_relation) %}
 
+    {# Since the test failures have already been saved to the database, reuse that result rather than querying again #}
     {% set main_sql %}
         select *
         from {{ target_relation }}
@@ -40,18 +46,18 @@
 
   {% else %}
 
-      {% set main_sql = sql %}
+      {% set main_sql = sql_with_limit %}
 
   {% endif %}
 
-  {% set limit = config.get('limit') %}
   {% set fail_calc = config.get('fail_calc') %}
   {% set warn_if = config.get('warn_if') %}
   {% set error_if = config.get('error_if') %}
 
   {% call statement('main', fetch_result=True) -%}
 
-    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit)}}
+    {# The limit has already been included above, and we do not want to duplicate it again. We also want to be safe for macro overrides treating `limit` as a required parameter. #}
+    {{ get_test_sql(main_sql, fail_calc, warn_if, error_if, limit=none)}}
 
   {%- endcall %}
 

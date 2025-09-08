@@ -23,7 +23,8 @@ on:
             branch:
                 description: "Choose the branch to publish from"
                 type: string
-                default: "main"
+                # generally all OSS post-prod releases should be off of stable
+                default: "stable"
             version:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release) or leave empty"
                 type: string
@@ -48,6 +49,10 @@ on:
 concurrency:
     group: Publish_OSS-${{ inputs.package }}-${{ inputs.deploy-to }}
     cancel-in-progress: true
+
+permissions:
+    contents: write
+    id-token: write
 
 jobs:
     work-branch:
@@ -76,7 +81,7 @@ jobs:
         secrets: inherit
 
     generate-changelog:
-        if: always() && !failure()
+        if: ${{ !failure() && !cancelled() }}
         needs:
         -   work-branch
         -   bump-version  # bump-version may be a no-op, but the changelog should be generated for the latest version
@@ -88,7 +93,7 @@ jobs:
 
     unit-tests:
         if: |
-            always() && !failure() &&
+            !failure() && !cancelled() &&
             inputs.skip-unit-tests == false &&
             !contains(fromJSON('["dbt-tests-adapter"]'), inputs.package)
         needs:
@@ -98,10 +103,11 @@ jobs:
         with:
             package: ${{ inputs.package }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
 
     integration-tests:
         if: |
-            always() && !failure() &&
+            !failure() && !cancelled() &&
             inputs.skip-integration-tests == false &&
             !contains(fromJSON('["dbt-adapters", "dbt-tests-adapter"]'), inputs.package)
         needs:
@@ -111,10 +117,11 @@ jobs:
         with:
             packages: ${{ toJSON(inputs.package) }}
             branch: ${{ needs.work-branch.outputs.name }}
+            hatch-env: "cd"
         secrets: inherit
 
     merge-changes:
-        if: always() && !failure()
+        if: !failure() && !cancelled()
         needs:
             -   work-branch
             -   bump-version
@@ -206,7 +213,7 @@ jobs:
         secrets: inherit
 
     clean-up:
-        if: always()
+        if: ${{ !cancelled() }}
         needs:
             -   work-branch
             -   publish-pypi
