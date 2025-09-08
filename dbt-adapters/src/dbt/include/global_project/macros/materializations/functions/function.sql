@@ -4,12 +4,11 @@
 
     {{ run_hooks(pre_hooks) }}
 
-    {% set build_sql = get_udf_build_sql() %}
+    {% set build_sql = get_udf_build_sql(target_relation) %}
 
     {{ function_execute_build_sql(build_sql, existing_relation, target_relation) }}
 
     {{ run_hooks(post_hooks) }}
-
 
     {{ return({'relations': [target_relation]}) }}
 
