@@ -34,7 +34,7 @@ from dbt.adapters.contracts.connection import (
     ConnectionState,
 )
 from dbt.adapters.events.logging import AdapterLogger
-from dbt.adapters.events.types import SQLQuery
+from dbt.adapters.events.types import SQLQuery, SQLQueryStatus
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.bigquery.clients import create_bigquery_client
 from dbt.adapters.bigquery.credentials import Priority
@@ -612,6 +612,16 @@ class BigQueryConnectionManager(BaseConnectionManager):
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             raise TimeoutError(exc)
+
+        fire_event(
+            SQLQueryStatus(
+                status="OK",
+                elapsed=query_job.end_time - query_job.start_time if query_job.end_time else 0,
+                node_info=get_node_info(),
+                query_id=query_job.job_id,
+            )
+        )
+
         return query_job, iterator
 
     def _labels_from_query_comment(self, comment: str) -> Dict:
