@@ -336,6 +336,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 )
                 email = json.loads(response.data).get("email")
 
+                # In services such as Cloud Composer and Cloud Run, the authenticated user
+                # is a service account with associated Application Default Credentials.
+                # This does not require service account impersonation.
                 if email and email.endswith(_SERVICE_ACCOUNT_SUFFIX):
                     notebook_execution_job.service_account = email
                 else:
