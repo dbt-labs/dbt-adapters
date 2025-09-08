@@ -334,15 +334,23 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     url="https://www.googleapis.com/oauth2/v2/userinfo",
                     headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
                 )
-                email = json.loads(response.data).get("email")
-
-                # In services such as Cloud Composer and Cloud Run, the authenticated user
-                # is a service account with associated Application Default Credentials.
-                # This does not require service account impersonation.
-                if email and email.endswith(_SERVICE_ACCOUNT_SUFFIX):
-                    notebook_execution_job.service_account = email
+                
+                if response.status != 200:
+                    raise DbtRuntimeError(
+                        f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
+                    )
+                if user_email := json.loads(response.data).get("email"):
+                    # In services such as Cloud Composer and Cloud Run, the authenticated user
+                    # is a service account with associated Application Default Credentials.
+                    # This does not require service account impersonation.
+                    if user_email and user_email.endswith(_SERVICE_ACCOUNT_SUFFIX):
+                        notebook_execution_job.service_account = user_email
+                    else:
+                        notebook_execution_job.execution_user = user_email
                 else:
-                    notebook_execution_job.execution_user = email
+                    raise DbtRuntimeError(
+                        "Authorization request to get user failed to return an email."
+                    )
         else:
             raise ValueError(
                 f"Unsupported credential method in BigFrames: '{self._connection_method}'"
