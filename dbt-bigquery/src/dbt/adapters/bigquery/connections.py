@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 from multiprocessing.context import SpawnContext
 import re
+import time
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
@@ -607,6 +608,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
             )
 
+        pre = time.perf_counter()
         try:
             iterator = query_job.result(max_results=limit)
         except TimeoutError:
@@ -616,7 +618,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         fire_event(
             SQLQueryStatus(
                 status="OK",
-                elapsed=query_job.end_time - query_job.start_time if query_job.end_time else 0,
+                elapsed=time.perf_counter() - pre,
                 node_info=get_node_info(),
                 query_id=query_job.job_id,
             )
