@@ -35,6 +35,7 @@ on:
                 options:
                 -   "pypi"
                 -   "github"
+                -   "docker"
                 -   "all"
             skip-unit-tests:
                 description: "Skip running unit tests"
@@ -210,6 +211,18 @@ jobs:
             package: ${{ inputs.package }}
             deploy-to: ${{ inputs.deploy-to }}
             branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    publish-docker:
+        if: always() && !failure() && contains(fromJSON('["docker", "all"]'), inputs.target)
+        needs:
+        -   merge-changes
+        -   bump-version
+        uses: ./.github/workflows/_publish-docker.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            version: ${{ needs.bump-version.outputs.final }}
         secrets: inherit
 
     clean-up:
