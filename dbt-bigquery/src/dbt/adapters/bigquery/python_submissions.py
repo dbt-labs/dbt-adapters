@@ -334,7 +334,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                     url="https://www.googleapis.com/oauth2/v2/userinfo",
                     headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
                 )
-                
+
                 if response.status != 200:
                     raise DbtRuntimeError(
                         f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
