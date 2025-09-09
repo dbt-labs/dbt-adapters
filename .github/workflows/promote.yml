@@ -44,7 +44,7 @@ jobs:
           # define this to make to obvious what repo/ref is being checked out
           repository: ${{ github.repository }}
           ref: ${{ github.ref }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.FISHTOWN_BOT_PAT }}
           fetch-depth: 0 # all history needed for merge-base
 
       - name: "Job Setup"
