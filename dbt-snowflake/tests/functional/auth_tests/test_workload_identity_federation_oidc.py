@@ -38,7 +38,7 @@ jobs:
       SNOWFLAKE_TEST_DATABASE: <DB_NAME>
       SNOWFLAKE_TEST_WAREHOUSE: <WH_NAME>
       SNOWFLAKE_TEST_ROLE: <ROLE_NAME>
-      SNOWFLAKE_TEST_WIF_USER: <USERNAME>
+      SNOWFLAKE_TEST_USER: <USERNAME>
 
     steps:
       - uses: actions/checkout@v4
@@ -86,7 +86,7 @@ class TestSnowflakeWorkloadIdentityFederation:
             "type": "snowflake",
             "threads": 4,
             "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_TEST_WIF_USER"),
+            "user": os.getenv("SNOWFLAKE_TEST_USER"),
             "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
             "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
             "role": os.getenv("SNOWFLAKE_TEST_ROLE"),

@@ -99,6 +99,42 @@ def test_connnections_credentials_wif_authenticator_fails_without_provider():
     }
     with pytest.raises(DbtConfigError) as excinfo:
         connections.SnowflakeCredentials(**credentials).auth_args()
-    assert "workload_identity_provider must be set if authenticator='workload_identity'" in str(
-        excinfo
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_invalid_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "some_non_existent_cloud_provider",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_and_non_azure_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "aws",
+        "workload_identity_entra_resource": "app://123",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+        in str(excinfo)
     )

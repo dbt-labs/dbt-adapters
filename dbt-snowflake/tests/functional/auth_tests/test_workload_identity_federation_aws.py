@@ -43,7 +43,7 @@ Prerequisites for testing WIF with AWS:
 5. **Environment Variables:**
    Set the following environment variables for testing:
    - SNOWFLAKE_TEST_ACCOUNT: Your Snowflake account identifier
-   - SNOWFLAKE_TEST_WIF_USER: The Snowflake service user created for WIF
+   - SNOWFLAKE_TEST_USER: The Snowflake service user created for WIF
    - SNOWFLAKE_TEST_DATABASE: Test database name
    - SNOWFLAKE_TEST_WAREHOUSE: Test warehouse name
    - SNOWFLAKE_TEST_ROLE: Snowflake Role for the user (optional)
@@ -68,7 +68,7 @@ class TestSnowflakeWorkloadIdentityFederation:
             "type": "snowflake",
             "threads": 4,
             "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_TEST_WIF_USER"),
+            "user": os.getenv("SNOWFLAKE_TEST_USER"),
             "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
             "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
             "role": os.getenv("SNOWFLAKE_TEST_ROLE"),
