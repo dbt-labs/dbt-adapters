@@ -255,8 +255,8 @@ class SnowflakeCredentials(Credentials):
                 ):
 
                     raise DbtConfigError(
-                        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n\n"
-                        f"{'\n'.join(accepted_workload_identity_providers)}\n\n"
+                        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n"
+                        f"{', '.join(accepted_workload_identity_providers)}\n\n"
                         f"Provided workload_identity_provider was '{self.workload_identity_provider}'"
                     )
 
