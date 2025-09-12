@@ -43,6 +43,7 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
         relation_type="table",
         is_dynamic_table=False,
         is_iceberg_format=False,
+        is_semantic_view=False,
         database="test_db",
         schema="test_schema",
         identifier="test_table",
@@ -52,6 +53,7 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
         mock_relation.type = relation_type
         mock_relation.is_dynamic_table = is_dynamic_table
         mock_relation.is_iceberg_format = is_iceberg_format
+        mock_relation.is_semantic_view = is_semantic_view
         mock_relation.render.return_value = f"{database}.{schema}.{identifier}"
         return mock_relation
 
