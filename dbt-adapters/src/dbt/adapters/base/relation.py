@@ -376,12 +376,17 @@ class BaseRelation(FakeAPIObject, Hashable):
         return hash(self.render())
 
     def __str__(self) -> str:
-        rendered = self.render() if self.limit is None else self.render_limited()
+        # TODO: This function seems to have more if's than it needs to. We should see if we can simplify it.
+        if self.is_function:
+            # If it's a function we skip all special rendering logic and just return the raw render
+            rendered = self.render()
+        else:
+            rendered = self.render() if self.limit is None else self.render_limited()
 
-        # Limited subquery is wrapped by the event time filter subquery, and not the other way around.
-        # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
-        if self.event_time_filter:
-            rendered = self.render_event_time_filtered(rendered)
+            # Limited subquery is wrapped by the event time filter subquery, and not the other way around.
+            # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
+            if self.event_time_filter:
+                rendered = self.render_event_time_filtered(rendered)
 
         return rendered
 
