@@ -57,7 +57,7 @@ jobs:
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   uses: actions/setup-python@v5
@@ -80,7 +80,7 @@ jobs:
         environment:
             name: ${{ inputs.deploy-to }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   id: version
