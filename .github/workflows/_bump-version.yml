@@ -59,7 +59,7 @@ jobs:
             initial: ${{ steps.version.outputs.initial }}
             final: ${{ steps.version.outputs.final }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   uses: actions/setup-python@v5

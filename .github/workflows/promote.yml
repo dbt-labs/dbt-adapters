@@ -39,7 +39,7 @@ jobs:
       && contains(github.event.label.name, 'promote stable')
     steps:
       - name: "Checkout ${{ github.repository }}@${{ github.ref }}"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # define this to make to obvious what repo/ref is being checked out
           repository: ${{ github.repository }}
