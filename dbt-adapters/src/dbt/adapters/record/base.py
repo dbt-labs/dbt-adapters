@@ -2,7 +2,7 @@
 
 import dataclasses
 
-from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
+from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING, List
 
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.record.serialization import serialize_agate_table, serialize_bindings
@@ -10,6 +10,7 @@ from dbt_common.record import Record, Recorder
 
 if TYPE_CHECKING:
     from agate import Table
+    from dbt.adapters.base.relation import BaseRelation
 
 
 @dataclasses.dataclass
@@ -198,4 +199,48 @@ class AdapterAddQueryResult:
 class AdapterAddQueryRecord(Record):
     params_cls = AdapterAddQueryParams
     result_cls = AdapterAddQueryResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class AdapterListRelationsWithoutCachingParams:
+    thread_id: str
+    schema_relation: "BaseRelation"
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "schema_relation": serialize_base_relation(self.schema_relation),
+        }
+
+    def _from_dict(self, data: Dict[str, Any]):
+        from dbt.adapters.record.serialization import deserialize_base_relation
+
+        self.thread_id = data["thread_id"]
+        self.schema_relation = deserialize_base_relation(data["schema_relation"])
+
+
+@dataclasses.dataclass
+class AdapterListRelationsWithoutCachingResult:
+    return_val: List["BaseRelation"]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation_list
+
+        return {"return_val": serialize_base_relation_list(self.return_val)}
+
+    def _from_dict(self, data: Dict[str, Any]):
+        from dbt.adapters.record.serialization import deserialize_base_relation_list
+
+        self.return_val = deserialize_base_relation_list(data["return_val"])
+
+
+@Recorder.register_record_type
+class AdapterListRelationsWithoutCachingRecord(Record):
+    """Implements record/replay support for the BaseAdapter.list_relations_without_caching() method."""
+
+    params_cls = AdapterListRelationsWithoutCachingParams
+    result_cls = AdapterListRelationsWithoutCachingResult
     group = "Available"

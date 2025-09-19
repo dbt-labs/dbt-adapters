@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix duplicates when hard_deletes new_record is used with custom dbt_valid_to_current
+time: 2025-09-03T15:29:30.515546+12:00
+custom:
+    Author: jeremyyeo
+    Issue: "1240"

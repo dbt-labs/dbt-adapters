@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Emit SQLQueryStatus during query execution
+time: 2025-09-08T11:49:52.584547-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1327"

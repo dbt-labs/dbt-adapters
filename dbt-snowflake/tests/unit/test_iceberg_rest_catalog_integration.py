@@ -128,14 +128,6 @@ class TestIcebergRestCatalogIntegration:
         # Simulate the macro check
         assert hasattr(relation, "catalog_linked_database")
 
-        # The macro would use catalog_name when catalog_linked_database is available
-        if relation is not None and hasattr(relation, "catalog_linked_database"):
-            result = relation.catalog_name
-        else:
-            result = "target_database"
-
-        assert result == "POLARIS"
-
     def test_catalog_relation_all_attributes_present(self):
         """Test that all expected attributes are present on the catalog relation."""
         relation = IcebergRestCatalogRelation(
