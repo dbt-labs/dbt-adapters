@@ -82,10 +82,7 @@ class PostgresAdapter(SQLAdapter):
     CATALOG_BY_RELATION_SUPPORT = True
 
     _capabilities: CapabilityDict = CapabilityDict(
-        {
-            Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
-            Capability.UDFs: CapabilitySupport(support=Support.Full),
-        }
+        {Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full)}
     )
 
     @classmethod
