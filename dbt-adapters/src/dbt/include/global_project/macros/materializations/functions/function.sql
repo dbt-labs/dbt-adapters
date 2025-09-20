@@ -4,7 +4,7 @@
 
     {{ run_hooks(pre_hooks) }}
 
-    {% set function_type_macro_name = "function_aggregate" ~ language}
+    {% set function_type_macro_name = "get_scalar_function_sql" %}
     {% set function_type_macro = context[function_type_macro_name] %}
     {% set build_sql = function_type_macro(target_relation) %}
 
