@@ -11,7 +11,7 @@ pre-install-commands = [
 ]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@qmalcolm--11965-core-handles-lifecycle-of-function-nodes#subdirectory=core",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@qmalcolm--11972-function-macro#subdirectory=core",
     "pre-commit==3.7.0",
     "pytest>=7.0,<8.0"
 ]
