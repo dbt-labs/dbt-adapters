@@ -22,6 +22,7 @@ class RelationType(StrEnum):
     # this is a "catch all" that is better than `None` == external to anything dbt is aware of
     External = "external"
     PointerTable = "pointer_table"
+    Function = "function"
 
 
 class MaterializationContract(Protocol):
