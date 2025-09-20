@@ -1,10 +1,12 @@
 {% materialization function, default %}
     {% set existing_relation = load_cached_relation(this) %}
-    {% set target_relation = this.incorporate(type=this.Function) %}
+    {% set target_relation = this.incorporatetype=this.Function) %}
 
     {{ run_hooks(pre_hooks) }}
 
-    {% set build_sql = get_udf_build_sql(target_relation) %}
+    {% set function_type_macro_name = "function_aggregate" ~ language}
+    {% set function_type_macro = context[function_type_macro_name] %}
+    {% set build_sql = function_type_macro(target_relation) %}
 
     {{ function_execute_build_sql(build_sql, existing_relation, target_relation) }}
 
