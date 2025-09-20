@@ -1,8 +1,4 @@
 {% materialization function, default %}
-    {% if not adapter.supports(adapter.capability_for_string('UDFs')) %}
-        {% do exceptions.raise_not_implemented('UDFs are not supported for this adapter') %}
-    {% endif %}
-
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.Function) %}
 

@@ -24,9 +24,6 @@ class Capability(str, Enum):
     MicrobatchConcurrency = "MicrobatchConcurrency"
     """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
 
-    UDFs = "UDFs"
-    """Indicates support for creating and using UDFs."""
-
 
 class Support(str, Enum):
     Unknown = "Unknown"

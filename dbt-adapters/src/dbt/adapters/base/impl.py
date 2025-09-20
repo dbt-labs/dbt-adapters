@@ -1915,15 +1915,9 @@ class BaseAdapter(metaclass=AdapterMeta):
     def capabilities(cls) -> CapabilityDict:
         return cls._capabilities
 
-    @available
     @classmethod
     def supports(cls, capability: Capability) -> bool:
         return bool(cls.capabilities()[capability])
-
-    @available
-    @classmethod
-    def capability_for_string(cls, capability: str) -> Capability:
-        return Capability(capability)
 
     @classmethod
     def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
