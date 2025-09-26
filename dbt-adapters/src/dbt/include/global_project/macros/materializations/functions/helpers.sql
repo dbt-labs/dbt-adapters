@@ -1,4 +1,8 @@
 {% macro function_execute_build_sql(build_sql, existing_relation, target_relation) %}
+    {{ return(adapter.dispatch('function_execute_build_sql', 'dbt')(build_sql, existing_relation, target_relation)) }}
+{% endmacro %}
+
+{% macro default__function_execute_build_sql(build_sql, existing_relation, target_relation) %}
 
     {% set grant_config = config.get('grants') %}
 
@@ -17,7 +21,11 @@
 
 
 {% macro get_function_macro(function_type, function_language) %}
-    {% set macro_name = "get_" ~ function_type ~ "_function_" ~ function_language %}
+    {{ return(adapter.dispatch('get_function_macro', 'dbt')(function_type, function_language)) }}
+{% endmacro %}
+
+{% macro default__get_function_macro(function_type, function_language) %}
+    {% set macro_name = function_type ~ "_function_" ~ function_language %}
     {% if not macro_name in context %}
         {{ exceptions.raise_not_implemented(function_language ~ ' ' ~ function_type ~ ' function not implemented for adapter ' ~adapter.type()) }}
     {% endif %}
