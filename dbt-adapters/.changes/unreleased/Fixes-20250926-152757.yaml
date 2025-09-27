@@ -1,0 +1,6 @@
+kind: Fixes
+body: Update function related global macros to use `default__` naming scheme
+time: 2025-09-26T15:27:57.488721-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1356"
