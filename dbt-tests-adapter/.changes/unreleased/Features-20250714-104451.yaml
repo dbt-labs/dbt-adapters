@@ -1,6 +1,0 @@
-kind: Features
-body: Add test for scenario where soure/target relations are the same
-time: 2025-07-14T10:44:51.045547-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1198"
