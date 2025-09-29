@@ -34,5 +34,5 @@
 {% macro default__scalar_function_body_sql() %}
     $$
        {{ model.compiled_code }}
-    $$ LANGUAGE SQL;
+    $$ LANGUAGE SQL
 {% endmacro %}
