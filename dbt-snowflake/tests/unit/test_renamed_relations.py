@@ -14,5 +14,6 @@ def test_renameable_relation():
             SnowflakeRelationType.Table,
             SnowflakeRelationType.View,
             SnowflakeRelationType.DynamicTable,
+            SnowflakeRelationType.SemanticView,
         }
     )
