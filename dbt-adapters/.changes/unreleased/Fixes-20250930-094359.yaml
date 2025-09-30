@@ -1,0 +1,6 @@
+kind: Fixes
+body: Drop extraneous `;` from scalar function macro
+time: 2025-09-30T09:43:59.438605-05:00
+custom:
+  Author: QMalcolm
+  Issue: N/A
