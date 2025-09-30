@@ -36,3 +36,11 @@
        {{ model.compiled_code }}
     $$ LANGUAGE SQL
 {% endmacro %}
+
+{% macro function_volatility() %}
+    {{ return(adapter.dispatch('function_volatility', 'dbt')()) }}
+{% endmacro %}
+
+{% macro default__function_volatility() %}
+    {#-- TODO: Actually implement this. This is just a placeholder for now so redshift can do it's thing --#}
+{% endmacro %}
