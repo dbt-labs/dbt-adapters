@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix file fixtures for functions to use proper function property names
+time: 2025-10-02T11:52:59.273372-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1365"
