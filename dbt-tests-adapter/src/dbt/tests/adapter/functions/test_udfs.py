@@ -25,7 +25,6 @@ class UDFsBasic:
         assert isinstance(node, FunctionNode)
         assert node_result.node.name == "price_for_xlarge"
 
-        # TODO: use `function` instead of `ref`
         result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(100)"])
         assert len(result.results) == 1
         # The result should have an agate table with one row and one column (and thus only one value, which is our inline selection)
