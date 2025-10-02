@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix referenced function property names in function macros
-time: 2025-10-02T11:50:32.228639-05:00
-custom:
-  Author: QMalcolm
-  Issue: "1365"
