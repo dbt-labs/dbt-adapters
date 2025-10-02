@@ -8,9 +8,9 @@ functions:
     description: Calculate the price for the xlarge version of a standard item
     arguments:
       - name: price
-        type: numeric
+        data_type: numeric
         description: The price of the standard item
-    return_type:
-      type: numeric
+    returns:
+      data_type: numeric
       description: The resulting xlarge price
 """
