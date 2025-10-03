@@ -394,6 +394,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
                     session_parameters=session_parameters,
+                    client_prefetch_threads=1, # disable client prefetch because it can cause deadlock at exit, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
                     **creds.auth_args(),
                 )
 
