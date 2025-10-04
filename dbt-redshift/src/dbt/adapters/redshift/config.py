@@ -5,13 +5,9 @@ from typing import Any, Dict
 
 from botocore import config
 
-from dbt.adapters.athena.constants import (
+from dbt.adapters.redshift.constants import (
     DEFAULT_CALCULATION_TIMEOUT,
     DEFAULT_POLLING_INTERVAL,
-    DEFAULT_SPARK_COORDINATOR_DPU_SIZE,
-    DEFAULT_SPARK_EXECUTOR_DPU_SIZE,
-    DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
-    DEFAULT_SPARK_PROPERTIES,
     EMR_SERVERLESS_SPARK_PROPERTIES,
     ENFORCE_SPARK_PROPERTIES,
     LOGGER,
@@ -21,7 +17,7 @@ from dbt.adapters.athena.constants import (
 @lru_cache()
 def get_boto3_config(num_retries: int) -> config.Config:
     return config.Config(
-        user_agent_extra="dbt-athena/" + importlib.metadata.version("dbt-athena"),
+        user_agent_extra="dbt-redshift/" + importlib.metadata.version("dbt-redshift"),
         retries={"max_attempts": num_retries, "mode": "standard"},
     )
 
@@ -41,7 +37,7 @@ class SparkSessionConfig:
 
         This function retrieves the timeout value from the parsed model's configuration. If the timeout value
         is not defined, it falls back to the default timeout value. If the retrieved timeout value is less than or
-        equal to 0, a ValueError is raised as timeout must be a positive integer.
+        equal to 0, a ValueError is raised as the timeout must be a positive integer.
 
         Returns:
             int: The timeout value in seconds.
@@ -109,98 +105,6 @@ class SparkSessionConfig:
         return config
 
 
-class AthenaSparkSessionConfig(SparkSessionConfig):
-    """
-    A helper class to manage Athena Spark Session Configuration.
-    """
-
-    def set_engine_config(self) -> Dict[str, Any]:
-        """Set the engine configuration.
-
-        Returns:
-            Dict[str, Any]: The engine configuration.
-
-        Raises:
-            TypeError: If the engine configuration is not of type dict.
-            KeyError: If the keys of the engine configuration dictionary do not match the expected format.
-        """
-        table_type = self.config.get("table_type", "hive")
-        spark_encryption = self.config.get("spark_encryption", False)
-        spark_cross_account_catalog = self.config.get("spark_cross_account_catalog", False)
-        spark_requester_pays = self.config.get("spark_requester_pays", False)
-
-        default_spark_properties: Dict[str, str] = dict(
-            **(
-                DEFAULT_SPARK_PROPERTIES.get(table_type, {})
-                if table_type.lower() in ["iceberg", "hudi", "delta_lake"]
-                else {}
-            ),
-            **DEFAULT_SPARK_PROPERTIES.get("spark_encryption", {}) if spark_encryption else {},
-            **(
-                DEFAULT_SPARK_PROPERTIES.get("spark_cross_account_catalog", {})
-                if spark_cross_account_catalog
-                else {}
-            ),
-            **(
-                DEFAULT_SPARK_PROPERTIES.get("spark_requester_pays", {})
-                if spark_requester_pays
-                else {}
-            ),
-        )
-
-        default_engine_config = {
-            "CoordinatorDpuSize": DEFAULT_SPARK_COORDINATOR_DPU_SIZE,
-            "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
-            "DefaultExecutorDpuSize": DEFAULT_SPARK_EXECUTOR_DPU_SIZE,
-            "SparkProperties": default_spark_properties,
-        }
-        engine_config = self.config.get("engine_config", None)
-        engine_config = self.try_parse_json(engine_config)
-
-        if engine_config:
-            provided_spark_properties = self.config.get(
-                "spark_properties", engine_config.get("SparkProperties", None)
-            )
-            provided_spark_properties = self.try_parse_json(provided_spark_properties)
-            if provided_spark_properties:
-                default_spark_properties.update(provided_spark_properties)
-                # Enforce certain properties
-                for key in ENFORCE_SPARK_PROPERTIES:
-                    if key in default_spark_properties:
-                        default_spark_properties[key] = ENFORCE_SPARK_PROPERTIES[key]
-                default_engine_config["SparkProperties"] = default_spark_properties
-                engine_config.pop("SparkProperties", None)
-            default_engine_config.update(engine_config)
-        engine_config = default_engine_config
-
-        if not isinstance(engine_config, dict):
-            raise TypeError("Engine configuration has to be of type dict")
-
-        expected_keys = {
-            "CoordinatorDpuSize",
-            "MaxConcurrentDpus",
-            "DefaultExecutorDpuSize",
-            "SparkProperties",
-            "AdditionalConfigs",
-        }
-
-        if set(engine_config.keys()) - {
-            "CoordinatorDpuSize",
-            "MaxConcurrentDpus",
-            "DefaultExecutorDpuSize",
-            "SparkProperties",
-            "AdditionalConfigs",
-        }:
-            raise KeyError(
-                f"The engine configuration keys provided do not match the expected athena engine keys: {expected_keys}"
-            )
-
-        if engine_config["MaxConcurrentDpus"] == 1:
-            raise KeyError("The lowest value supported for MaxConcurrentDpus is 2")
-        LOGGER.debug(f"Setting engine configuration: {engine_config}")
-        return engine_config
-
-
 class EmrServerlessSparkSessionConfig(SparkSessionConfig):
     """
     A helper class to manage EMR Serverless Spark Session Configuration.
@@ -208,22 +112,22 @@ class EmrServerlessSparkSessionConfig(SparkSessionConfig):
 
     def get_s3_uri(self) -> str:
         """
-        Get the s3_staging_dir bucket for the configuration.
+        Get the s3_uri bucket for the configuration.
 
         Returns:
-            Any: The s3_staging_dir bucket value.
+            Any: The s3_uri bucket value.
 
         Raises:
-            KeyError: If the s3_staging_dir value is not found in either `self.config`
+            KeyError: If the s3_uri value is not found in either `self.config`
                 or `self.session_kwargs`.
         """
         try:
-            return self.config["s3_staging_dir"]
+            return self.config["s3_uri"]
         except KeyError:
             try:
-                return self.session_kwargs["s3_staging_dir"]
+                return self.session_kwargs["s3_uri"]
             except KeyError:
-                raise ValueError("s3_staging_dir is required configuration")
+                raise ValueError("s3_uri is required configuration for EMR jobs")
 
     def get_emr_job_execution_role_arn(self) -> str:
         """
@@ -283,7 +187,7 @@ class EmrServerlessSparkSessionConfig(SparkSessionConfig):
             **EMR_SERVERLESS_SPARK_PROPERTIES.get("default", {}),
             **(
                 EMR_SERVERLESS_SPARK_PROPERTIES.get(table_type, {})
-                if table_type.lower() in ["iceberg", "hudi", "delta_lake"]
+                if table_type.lower() in ["iceberg", "hudi", "delta_lake", "hive"]
                 else {}
             ),
             **(

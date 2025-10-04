@@ -183,6 +183,9 @@ athena:
       spark_work_group: my-spark-workgroup
       seed_s3_upload_args:
         ACL: bucket-owner-full-control
+      # Optional entry for leveraging emr serverless compute
+      emr_application_name: my-emr-serverless-application
+      emr_job_execution_role_arn: arn:aws:iam::<AWS_ACCOuNT>:role/my-spark-execution-role
 ```
 
 ### Additional information
@@ -717,14 +720,16 @@ You may find the following links useful to manage that:
 
 ## Python models
 
-The adapter supports Python models using [`spark`](https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark.html).
+The adapter supports Python models using [`spark`](https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark.html) and also can submit to aws emr_serverless for computation.
 
 ### Setup
 
 - A Spark-enabled workgroup created in Athena
-- Spark execution role granted access to Athena, Glue and S3
+- Spark execution role granted access to Athena, Glue, EMR Serverless and S3
 - The Spark workgroup is added to the `~/.dbt/profiles.yml` file and the profile to be used
   is referenced in `dbt_project.yml`
+- Create an EMR serverless application (suitable for High Volume Processing)
+- add the AWS EMR serverless config to `~/.dbt/profiles.yml` only if need emr serverless compute
 
 ### Spark-specific table configuration
 
@@ -822,6 +827,33 @@ def model(dbt, spark_session):
 
     df = spark_session.createDataFrame(data, ["A"])
 
+    return df
+```
+
+#### submit spark model to emr_serverless application
+
+```python
+def model(dbt, spark_session):
+    dbt.config(
+        tags=["athena", "monthly"],
+        materialized="incremental",
+        incremental_strategy="append",
+        submission_method="emr_serverless",  #
+        on_schema_change="append_new_columns",
+        format="parquet",
+        spark_properties={
+            "spark.executor.cores": "1",
+            "spark.executor.memory": "1g",
+            "spark.driver.cores": "1",
+            "spark.driver.memory": "1g",
+        },
+    )
+
+    # S3 path to your csv file with headers
+    data = [(1,), (2,), (3,), (4,)]
+
+    # Read the JSON file from S3
+    df = spark_session.createDataFrame(data, ["A"])
     return df
 ```
 
