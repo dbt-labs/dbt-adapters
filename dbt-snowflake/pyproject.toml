@@ -43,7 +43,7 @@ Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CH
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
-addopts = "-v --color=yes -n auto"
+addopts = "-v --color=yes"
 env_files = ["test.env"]
 filterwarnings = [
     "ignore:datetime.datetime.utcnow:DeprecationWarning",
