@@ -292,6 +292,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 ),
             ]
         )
@@ -325,6 +326,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=None,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -352,6 +354,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     insecure_mode=False,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -387,6 +390,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -421,6 +425,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -451,6 +456,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -485,6 +491,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -519,6 +526,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -553,6 +561,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -585,6 +594,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -615,6 +625,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -644,6 +655,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -678,6 +690,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
@@ -714,6 +727,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
+                    client_prefetch_threads=1,
                 )
             ]
         )
