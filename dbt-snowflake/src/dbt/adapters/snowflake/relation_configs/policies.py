@@ -10,6 +10,7 @@ class SnowflakeRelationType(StrEnum):
     CTE = "cte"
     External = "external"
     DynamicTable = "dynamic_table"
+    Function = "function"
 
 
 class SnowflakeIncludePolicy(Policy):
