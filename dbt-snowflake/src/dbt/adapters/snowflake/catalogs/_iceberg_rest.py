@@ -18,7 +18,6 @@ class IcebergRestCatalogRelation:
     catalog_name: Optional[str] = constants.DEFAULT_ICEBERG_REST_CATALOG.name
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
     catalog_linked_database: Optional[str] = None
-    catalog_linked_database_type: Optional[str] = None  # e.g., 'glue' for AWS Glue
     external_volume: Optional[str] = None
     file_format: Optional[str] = None
     target_file_size: Optional[str] = None
@@ -34,7 +33,6 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     allows_writes = True
     auto_refresh = None
     catalog_linked_database: Optional[str] = None
-    catalog_linked_database_type: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
 
@@ -45,9 +43,6 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         self.external_volume: Optional[str] = config.external_volume
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
-            self.catalog_linked_database_type = adapter_properties.get(
-                "catalog_linked_database_type"
-            )
             self.auto_refresh = adapter_properties.get("auto_refresh")
             self.target_file_size = adapter_properties.get("target_file_size")
             self.max_data_extension_time_in_days = adapter_properties.get(
@@ -84,7 +79,6 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             catalog_name=self.name,
             external_volume=None,
             catalog_linked_database=self.catalog_linked_database,
-            catalog_linked_database_type=self.catalog_linked_database_type,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,
             target_file_size=parse_model.target_file_size(model) or self.target_file_size,
             max_data_extension_time_in_days=parse_model.max_data_extension_time_in_days(model)
