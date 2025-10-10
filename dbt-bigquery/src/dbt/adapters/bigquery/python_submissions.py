@@ -225,7 +225,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         if creds.token:
             return creds.token
         else:
-            creds.refresh()
+            creds.refresh(Request())
             return creds.token
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
