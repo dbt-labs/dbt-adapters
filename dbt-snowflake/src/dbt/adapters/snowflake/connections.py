@@ -394,7 +394,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
                     session_parameters=session_parameters,
-                    ocsp_root_certs_dict_lock_timeout=10, # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
+                    ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
                     **creds.auth_args(),
                 )
 
