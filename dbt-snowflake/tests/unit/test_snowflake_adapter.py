@@ -292,7 +292,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 ),
             ]
         )
@@ -326,7 +326,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=None,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -354,7 +354,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     application="dbt",
                     insecure_mode=False,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -390,7 +390,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -425,7 +425,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -456,7 +456,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -491,7 +491,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -526,7 +526,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -561,7 +561,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -594,7 +594,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -625,7 +625,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -655,7 +655,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -690,7 +690,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -727,7 +727,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     session_parameters={},
                     reuse_connections=True,
-                    client_prefetch_threads=1,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
