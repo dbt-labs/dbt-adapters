@@ -31,6 +31,7 @@ from dbt.adapters.record.base import (
     AdapterConvertTypeRecord,
     AdapterStandardizeGrantsDictRecord,
     AdapterListRelationsWithoutCachingRecord,
+    AdapterGetColumnsInRelationRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -745,7 +746,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         raise NotImplementedError("`rename_relation` is not implemented for this adapter!")
 
-    @auto_record_function("AdapterGetColumnsInRelation", group="Available")
+    @record_function(
+        AdapterGetColumnsInRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     @available.parse_list
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:

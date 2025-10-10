@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Record all fields in subclasses of BaseColumns when recording adapter.get_columns_in_relation
+time: 2025-10-10T15:32:03.863594-04:00
+custom:
+    Author: michelleark
+    Issue: "1383"
