@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from dbt.adapters.base.relation import BaseRelation
     from dbt.adapters.base.column import Column as BaseColumn
 
+
 def _column_filter(val: Any) -> Any:
     return (
         float(val)
@@ -81,7 +82,8 @@ def deserialize_base_column(column_dict: Dict[str, Any]) -> "BaseColumn":
     # Only include fields that are present in the base column class
     params_dict = {
         field.name: column_dict[field.name]
-        for field in dataclasses.fields(BaseColumn) if field.name in column_dict
+        for field in dataclasses.fields(BaseColumn)
+        if field.name in column_dict
     }
 
     return BaseColumn(**params_dict)

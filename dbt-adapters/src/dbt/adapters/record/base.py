@@ -259,7 +259,7 @@ class AdapterGetColumnsInRelationParams:
             "thread_id": self.thread_id,
             "relation": serialize_base_relation(self.relation),
         }
-    
+
     def _from_dict(self, data: Dict[str, Any]):
         from dbt.adapters.record.serialization import deserialize_base_relation
 
