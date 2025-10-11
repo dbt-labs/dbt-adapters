@@ -10,6 +10,7 @@ from google.auth.impersonated_credentials import Credentials as ImpersonatedCred
 from google.oauth2.credentials import Credentials as GoogleCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from google.auth.identity_pool import Credentials as IdentityPoolCredentials
+from google.auth.credentials import AnonymousCredentials
 from mashumaro import pass_through
 
 from dbt_common.clients.system import run_cmd
@@ -42,6 +43,7 @@ class BigQueryConnectionMethod(StrEnum):
     SERVICE_ACCOUNT_JSON = "service-account-json"
     # WIF in this context refers to Workload Identity Federation https://cloud.google.com/iam/docs/workload-identity-federation
     EXTERNAL_OAUTH_WIF = "external-oauth-wif"
+    ANONYMOUS = "anonymous"
 
 
 @dataclass
@@ -247,6 +249,9 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
 
     elif credentials.method == BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
         creds = _create_identity_pool_credentials(credentials=credentials)
+
+    elif credentials.method == BigQueryConnectionMethod.ANONYMOUS:
+        creds = AnonymousCredentials()
 
     else:
         raise FailedToConnectError(f"Invalid `method` in profile: '{credentials.method}'")
