@@ -94,7 +94,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
@@ -130,7 +130,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
@@ -169,7 +169,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
@@ -208,7 +208,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: |
@@ -235,7 +235,7 @@ jobs:
                 working-directory: "./dbt-postgres"
         steps:
         -   uses: actions/checkout@v4
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   if: startsWith(inputs.os, 'macos')
@@ -295,7 +295,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
@@ -347,7 +347,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
@@ -383,7 +383,7 @@ jobs:
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@v6
             with:
                 python-version: ${{ inputs.python-version }}
         # TODO: update 3.10 to ${{ inputs.python-version }} once we update default python to >=3.10
