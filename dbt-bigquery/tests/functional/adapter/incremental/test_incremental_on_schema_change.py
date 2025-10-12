@@ -369,6 +369,161 @@ class TestIncrementalOnSchemaChangeSpecialChars(BaseIncrementalOnSchemaChangeSet
         )
 
 
+_MODELS__DEEPLY_NESTED_STRUCT_BASE = """
+{{
+    config(materialized='table')
+}}
+
+with source_data as (
+    select 1 as id, 
+        struct(
+            'level1' as l1_field,
+            struct(
+                'level2' as l2_field,
+                struct(
+                    'level3' as l3_field
+                ) as level3
+            ) as level2
+        ) as payload 
+    union all
+    select 2 as id,
+        struct(
+            'level1_b' as l1_field,
+            struct(
+                'level2_b' as l2_field,
+                struct(
+                    'level3_b' as l3_field
+                ) as level3
+            ) as level2
+        ) as payload
+)
+
+select * from source_data
+"""
+
+_MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='append_new_columns'
+    )
+}}
+
+with source_data as (
+    select 1 as id, 
+        struct(
+            'level1' as l1_field,
+            'new_l1' as l1_new_field,
+            struct(
+                'level2' as l2_field,
+                'new_l2' as l2_new_field,
+                struct(
+                    'level3' as l3_field,
+                    'new_l3' as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload 
+    union all
+    select 2 as id,
+        struct(
+            'level1_b' as l1_field,
+            'new_l1_b' as l1_new_field,
+            struct(
+                'level2_b' as l2_field,
+                'new_l2_b' as l2_new_field,
+                struct(
+                    'level3_b' as l3_field,
+                    'new_l3_b' as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload
+    union all
+    select 3 as id,
+        struct(
+            'level1_c' as l1_field,
+            'new_l1_c' as l1_new_field,
+            struct(
+                'level2_c' as l2_field,
+                'new_l2_c' as l2_new_field,
+                struct(
+                    'level3_c' as l3_field,
+                    'new_l3_c' as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload
+)
+
+{% if is_incremental() %}
+    select * from source_data
+{% else %}
+    select id, 
+        struct(
+            payload.l1_field as l1_field,
+            struct(
+                payload.level2.l2_field as l2_field,
+                struct(
+                    payload.level2.level3.l3_field as l3_field
+                ) as level3
+            ) as level2
+        ) as payload
+    from source_data where id <= 2
+{% endif %}
+"""
+
+_MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND_EXPECTED = """
+{{
+    config(materialized='table')
+}}
+
+with source_data as (
+    select 1 as id, 
+        struct(
+            'level1' as l1_field,
+            cast(null as string) as l1_new_field,
+            struct(
+                'level2' as l2_field,
+                cast(null as string) as l2_new_field,
+                struct(
+                    'level3' as l3_field,
+                    cast(null as string) as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload 
+    union all
+    select 2 as id,
+        struct(
+            'level1_b' as l1_field,
+            cast(null as string) as l1_new_field,
+            struct(
+                'level2_b' as l2_field,
+                cast(null as string) as l2_new_field,
+                struct(
+                    'level3_b' as l3_field,
+                    cast(null as string) as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload
+    union all
+    select 3 as id,
+        struct(
+            'level1_c' as l1_field,
+            'new_l1_c' as l1_new_field,
+            struct(
+                'level2_c' as l2_field,
+                'new_l2_c' as l2_new_field,
+                struct(
+                    'level3_c' as l3_field,
+                    'new_l3_c' as l3_new_field
+                ) as level3
+            ) as level2
+        ) as payload
+)
+
+select * from source_data
+"""
+
+
 class TestIncrementalStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
 
     @pytest.fixture(scope="class")
@@ -422,5 +577,53 @@ class TestIncrementalStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         check_relations_equal(
             project.adapter,
             ["incremental_struct_sync", "incremental_struct_sync_expected"],
+        )
+
+
+class TestIncrementalDeeplyNestedStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
+    """Test that BigQuery supports schema updates for deeply nested STRUCT columns.
+    
+    BigQuery supports arbitrary levels of nesting (soft limit ~100 levels).
+    This test verifies that the recursive implementation in _merge_nested_fields
+    correctly handles adding fields at multiple nesting levels.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "deeply_nested_struct_base.sql": _MODELS__DEEPLY_NESTED_STRUCT_BASE,
+            "incremental_deeply_nested_struct_append.sql": _MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND,
+            "incremental_deeply_nested_struct_append_expected.sql": _MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND_EXPECTED,
+        }
+
+    def test_incremental_append_deeply_nested_struct_fields(self, project):
+        """Test adding fields at multiple nesting levels (level 1, 2, and 3) simultaneously."""
+        # First run - creates initial table with 3-level nested STRUCT
+        run_dbt([
+            "run",
+            "--models",
+            "deeply_nested_struct_base incremental_deeply_nested_struct_append",
+        ])
+        
+        # Second run - should add new fields at all 3 nesting levels
+        # This tests the recursive _merge_nested_fields implementation
+        run_dbt([
+            "run",
+            "--models",
+            "deeply_nested_struct_base incremental_deeply_nested_struct_append",
+        ])
+        
+        # Verify the schema was updated correctly by comparing with expected results
+        run_dbt([
+            "run",
+            "--models",
+            "incremental_deeply_nested_struct_append_expected",
+        ])
+        
+        from dbt.tests.util import check_relations_equal
+
+        check_relations_equal(
+            project.adapter,
+            ["incremental_deeply_nested_struct_append", "incremental_deeply_nested_struct_append_expected"],
         )
 
