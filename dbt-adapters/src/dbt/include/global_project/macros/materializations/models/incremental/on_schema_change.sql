@@ -107,7 +107,7 @@
 
     {% else %}
 
-      {% set schema_changes_dict = check_for_schema_changes(source_relation, target_relation) %}
+      {% set schema_changes_dict = adapter.dispatch('check_for_schema_changes', 'dbt')(source_relation, target_relation) %}
 
       {% if schema_changes_dict['schema_changed'] %}
 
