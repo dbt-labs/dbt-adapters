@@ -60,7 +60,6 @@ class RelationConfig(Protocol):
     tags: List[str]
     quoting_dict: Dict[str, bool]
     config: Optional[MaterializationConfig]
-    catalog: Optional[str]
 
 
 class ComponentName(StrEnum):
