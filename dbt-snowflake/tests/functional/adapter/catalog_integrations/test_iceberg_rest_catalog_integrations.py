@@ -51,7 +51,6 @@ where id > 2
 
 
 class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidation):
-    """Test for non-Glue Catalog Linked Databases (e.g., Polaris) that support CTAS"""
 
     @pytest.fixture(scope="class")
     def catalogs(self):
@@ -108,19 +107,6 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
 
 
 class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValidation):
-    """Test for AWS Glue Catalog Linked Database that doesn't support CTAS
-
-    Note: AWS Glue CLDs in Snowflake have several limitations:
-    1. Require lowercase unquoted identifiers OR double-quoted identifiers
-    2. May not support SHOW SCHEMAS and other metadata operations
-    3. Require specific IAM permissions and AWS configuration
-
-    This test is skipped by default. To test Glue CLD functionality:
-    1. Set up a properly configured AWS Glue CLD in Snowflake
-    2. Ensure proper IAM roles and permissions
-    3. Manually create a schema in lowercase
-    4. Remove the @pytest.mark.skip decorator and run the test
-    """
 
     @pytest.fixture(scope="class")
     def catalogs(self):

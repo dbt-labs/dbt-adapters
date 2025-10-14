@@ -201,8 +201,6 @@ alter iceberg table {{ relation }} resume recluster;
     - For existing tables, we must DROP the table first before creating the new one
 
     Note: Iceberg REST writes only work with Catalog Linked Databases (CLD).
-    Most CLDs support CTAS. For AWS Glue CLD (which doesn't support CTAS),
-    a 4-step process is handled at the materialization level (see table.sql).
 -#}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
@@ -271,13 +269,13 @@ as (
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
-{# Check if relation exists and drop if necessary (CLD doesn't support CREATE OR REPLACE) #}
+{# Step 2a: Check if relation exists and drop if necessary (CLD doesn't support CREATE OR REPLACE) #}
 {% set existing_relation = adapter.get_relation(database=relation.database, schema=relation.schema, identifier=relation.identifier) %}
 {% if existing_relation %}
     drop table if exists {{ existing_relation }};
 {% endif %}
 
-{# Create the table with explicit column definitions #}
+{# Step 2b: Create the table with explicit column definitions #}
 create iceberg table {{ relation }} (
     {%- for column in sql_columns -%}
         {% if column.data_type == "FIXED" %}
