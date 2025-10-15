@@ -1,0 +1,6 @@
+kind: Features
+body: Added native BigQuery dataset replication configuration support
+time: 2025-10-15T16:52:42.879887-04:00
+custom:
+    Author: gavin-burns-US
+    Issue: "1392"
