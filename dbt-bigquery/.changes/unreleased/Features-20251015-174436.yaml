@@ -1,6 +1,0 @@
-kind: Features
-body: Add BigQuery dataset replication configuration support
-time: 2025-10-15T17:44:36.029445-04:00
-custom:
-    Author: gavin-burns-US
-    Issue: "1392"
