@@ -696,15 +696,19 @@ class BigQueryAdapter(BaseAdapter):
         additions: Mapping[str, Dict[str, Any]],
         prefix: str = "",
     ) -> List[Dict[str, Any]]:
+        """Merge new fields into existing STRUCT fields, appending at each nesting level.
+        
+        Note: Primarily used for field removal. For adding fields, sync_struct_columns
+        uses the source schema directly to preserve field order.
+        """
         merged_fields: List[Dict[str, Any]] = []
-
         addition_lookup = dict(additions)
 
         for field in existing_fields:
             field_name = field["name"]
             qualified_name = f"{prefix}.{field_name}" if prefix else field_name
+            
             direct_addition = addition_lookup.pop(qualified_name, None)
-
             if direct_addition is not None:
                 merged_fields.append(copy.deepcopy(direct_addition))
                 continue
@@ -719,12 +723,14 @@ class BigQueryAdapter(BaseAdapter):
                 for key in nested_additions:
                     addition_lookup.pop(key, None)
 
+                stripped_additions = {
+                    key.split(".", 1)[1]: value
+                    for key, value in nested_additions.items()
+                }
+
                 merged_children = self._merge_nested_fields(
                     field.get("fields", []) or [],
-                    {
-                        key.split(".", 1)[1]: value
-                        for key, value in nested_additions.items()
-                    },
+                    stripped_additions,
                     prefix="",
                 )
 
@@ -840,11 +846,19 @@ class BigQueryAdapter(BaseAdapter):
         if not nested_additions and not removal_paths:
             return schema_changes_dict
 
-        updated_schema = target_schema
-        if nested_additions:
-            updated_schema = self._merge_nested_fields(updated_schema, nested_additions)
-        if removal_paths:
-            updated_schema = self._remove_nested_fields(updated_schema, removal_paths)
+        # For STRUCT fields, use source schema to preserve field order (required for compatibility)
+        # BigQuery only allows appending fields to STRUCTs, not reordering them
+        # For non-STRUCT fields or when removing fields, use the merge approach
+        if nested_additions and not removal_paths:
+            # Adding nested STRUCT fields - use source schema to preserve order
+            updated_schema = source_schema
+        else:
+            # Removing fields or modifying non-STRUCT fields - use merge approach
+            updated_schema = target_schema
+            if nested_additions:
+                updated_schema = self._merge_nested_fields(updated_schema, nested_additions)
+            if removal_paths:
+                updated_schema = self._remove_nested_fields(updated_schema, removal_paths)
 
         if updated_schema != target_schema:
             try:
