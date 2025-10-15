@@ -122,6 +122,8 @@ class BigqueryConfig(AdapterConfig):
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
+    dataset_replicas: Optional[List[str]] = None
+    primary_replica: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -343,6 +345,34 @@ class BigQueryAdapter(BaseAdapter):
         self.commit_if_has_connection()
         # we can't update the cache here, as if the schema already existed we
         # don't want to (incorrectly) say that it's empty
+
+    @available.parse_none
+    def create_dataset_with_replication(
+        self,
+        relation: BigQueryRelation,
+        dataset_replicas: Optional[List[str]] = None,
+        primary_replica: Optional[str] = None,
+    ) -> None:
+        """Create dataset and apply replication configuration if specified.
+
+        This method is called from the bigquery__create_schema macro to handle
+        both dataset creation and replication configuration.
+
+        Args:
+            relation: The relation representing the schema/dataset
+            dataset_replicas: Optional list of replica locations
+            primary_replica: Optional primary replica location
+        """
+        database = relation.database
+        schema = relation.schema
+
+        # Create the dataset (this handles exists_ok internally)
+        self.connections.create_dataset(
+            database=database,
+            schema=schema,
+            dataset_replicas=dataset_replicas,
+            primary_replica=primary_replica,
+        )
 
     def drop_schema(self, relation: BigQueryRelation) -> None:
         # still use a client method, rather than SQL 'drop schema ... cascade'
