@@ -554,15 +554,45 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
 
-    def create_dataset(self, database, schema) -> Dataset:
+    def create_dataset(
+        self, database, schema, dataset_replicas=None, primary_replica=None
+    ) -> Dataset:
         conn = self.get_thread_connection()
         client: Client = conn.handle
         with self.exception_handler("create dataset"):
-            return client.create_dataset(
+            dataset = client.create_dataset(
                 dataset=self.dataset_ref(database, schema),
                 exists_ok=True,
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
+
+            # Apply replication configuration if specified and valid
+            if dataset_replicas:
+                # Basic validation to avoid malformed configs triggering DDL
+                if not isinstance(dataset_replicas, list) or not all(
+                    isinstance(loc, str) and loc for loc in dataset_replicas
+                ):
+                    logger.warning(
+                        f"Invalid dataset_replicas for {database}.{schema}: {dataset_replicas}. Skipping replication configuration."
+                    )
+                    return dataset
+                if primary_replica is not None and not isinstance(primary_replica, str):
+                    logger.warning(
+                        f"Invalid primary_replica for {database}.{schema}: {primary_replica}. Skipping primary configuration."
+                    )
+                    primary_replica = None
+
+                from dbt.adapters.bigquery.dataset import apply_dataset_replication
+
+                apply_dataset_replication(
+                    client=client,
+                    project=database,
+                    dataset=schema,
+                    desired_replicas=dataset_replicas,
+                    desired_primary=primary_replica,
+                )
+
+            return dataset
 
     def list_dataset(self, database: str):
         # The database string we get here is potentially quoted.
