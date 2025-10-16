@@ -560,6 +560,14 @@ CALL {proc_name}();
         show_indexes_sql = f"show indexes in {database}.{schema}.{relation.identifier}"
         idx_res, idx_table = self.execute(show_indexes_sql, fetch=True)
 
+        # Get column information
+        desc_sql = f"describe table {database}.{schema}.{relation.identifier}"
+        col_res, col_table = self.execute(desc_sql, fetch=True)
+
+        # Get primary key information
+        show_pk_sql = f"show primary keys in table {database}.{schema}.{relation.identifier}"
+        pk_res, pk_table = self.execute(show_pk_sql, fetch=True)
+
         # normalize column names to lower case
         ht_table = ht_table.rename(column_names=[name.lower() for name in ht_table.column_names])
 
@@ -579,5 +587,21 @@ CALL {proc_name}();
                 column_names=[name.lower() for name in idx_table.column_names]
             )
             result["indexes"] = idx_table
+
+        # Add columns if available
+        if col_res.code == "SUCCESS" and len(col_table.rows) > 0:
+            col_table = col_table.rename(
+                column_names=[name.lower() for name in col_table.column_names]
+            )
+            select_cols = [c for c in col_table.column_names if c in ("name", "type")]
+            result["columns"] = col_table.select(select_cols)
+
+        # Add primary key info if available
+        if pk_res.code == "SUCCESS" and len(pk_table.rows) > 0:
+            pk_table = pk_table.rename(
+                column_names=[name.lower() for name in pk_table.column_names]
+            )
+            select_pk = [c for c in pk_table.column_names if c == "column_name"]
+            result["primary_keys"] = pk_table.select(select_pk)
 
         return result
