@@ -63,10 +63,21 @@ if TYPE_CHECKING:
 
 logger = AdapterLogger("Snowflake")
 
-if os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+
+def setup_snowflake_logging(level: str):
     for logger_name in ["snowflake.connector", "botocore", "boto3"]:
-        logger.debug(f"Setting {logger_name} to DEBUG")
-        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
+        logger.debug(f"Setting {logger_name} to DEBUG (file logging only)")
+        logger.set_adapter_dependency_log_level(logger_name, level)
+
+
+if snowflake_level := os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+    if snowflake_level.lower() in ["INFO", "DEBUG"]:
+        setup_snowflake_logging(snowflake_level)
+    else:
+        setup_snowflake_logging("DEBUG")
+else:
+    setup_snowflake_logging("ERROR")
+
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
