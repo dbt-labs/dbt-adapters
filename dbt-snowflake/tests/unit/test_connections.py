@@ -20,9 +20,7 @@ class TestSnowflakeLogging:
         monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
         monkeypatch.setattr(os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": "true"})
 
-        # Mock logging.getLogger to capture calls
-        with patch("logging.getLogger") as mock_get_logger:
-            reload(connections)
+        reload(connections)
 
         # Verify AdapterLogger was created with correct name
         logger_mock.assert_called_once_with("Snowflake")
@@ -42,12 +40,8 @@ class TestSnowflakeLogging:
         ]
         log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
 
-        # Verify logging.getLogger was called for each dependency
-        expected_logger_calls = [call("snowflake.connector"), call("botocore"), call("boto3")]
-        mock_get_logger.assert_has_calls(expected_logger_calls)
-
-    def test_connections_sets_info_logs_when_env_var_absent(self, monkeypatch):
-        """Test that absence of DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING sets INFO level logging"""
+    def test_connections_sets_error_logs_when_env_var_absent(self, monkeypatch):
+        """Test that absence of DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING sets ERROR level logging"""
         log_mock = Mock()
         logger_mock = Mock(return_value=log_mock)
 
@@ -61,24 +55,25 @@ class TestSnowflakeLogging:
         # Verify AdapterLogger was created
         logger_mock.assert_called_once_with("Snowflake")
 
-        # Verify all three dependency loggers are configured with INFO level
+        # Verify all three dependency loggers are configured with ERROR level
         expected_debug_calls = [
-            call("Setting snowflake.connector to DEBUG (file logging only)"),
-            call("Setting botocore to DEBUG (file logging only)"),
-            call("Setting boto3 to DEBUG (file logging only)"),
+            call("Setting snowflake.connector to ERROR (file logging only)"),
+            call("Setting botocore to ERROR (file logging only)"),
+            call("Setting boto3 to ERROR (file logging only)"),
         ]
+
         log_mock.debug.assert_has_calls(expected_debug_calls)
 
         expected_level_calls = [
-            call("snowflake.connector", "INFO"),
-            call("botocore", "INFO"),
-            call("boto3", "INFO"),
+            call("snowflake.connector", "ERROR"),
+            call("botocore", "ERROR"),
+            call("boto3", "ERROR"),
         ]
         log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
 
     def test_connections_handles_various_env_var_values(self, monkeypatch):
         """Test that any truthy value for the env var enables debug logging"""
-        test_values = ["1", "True", "YES", "on", "debug"]
+        test_values = ["1", "True", "YES", "on", "random"]
 
         for value in test_values:
             log_mock = Mock()
@@ -90,7 +85,7 @@ class TestSnowflakeLogging:
             with patch("logging.getLogger"):
                 reload(connections)
 
-            # Should set DEBUG level for all loggers
+            # Should set DEBUG level for all loggers (fallback for non-INFO/DEBUG values)
             expected_level_calls = [
                 call("snowflake.connector", "DEBUG"),
                 call("botocore", "DEBUG"),
@@ -98,39 +93,36 @@ class TestSnowflakeLogging:
             ]
             log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
 
-    def test_setup_snowflake_logging_function_directly(self):
-        """Test the setup_snowflake_logging function directly"""
-        with patch("dbt.adapters.snowflake.connections.logger") as mock_logger:
-            with patch("logging.getLogger") as mock_get_logger:
-                mock_package_logger = Mock()
-                mock_get_logger.return_value = mock_package_logger
+    def test_connections_handles_case_insensitive_values(self, monkeypatch):
+        """Test that DEBUG and INFO values are case insensitive"""
+        test_cases = [
+            ("debug", "DEBUG"),
+            ("DEBUG", "DEBUG"),
+            ("info", "INFO"),
+            ("INFO", "INFO"),
+            ("Debug", "DEBUG"),
+            ("Info", "INFO"),
+        ]
 
-                # Test DEBUG level
-                connections.setup_snowflake_logging("DEBUG")
+        for env_value, expected_level in test_cases:
+            log_mock = Mock()
+            logger_mock = Mock(return_value=log_mock)
 
-                # Verify debug messages
-                expected_debug_calls = [
-                    call("Setting snowflake.connector to DEBUG (file logging only)"),
-                    call("Setting botocore to DEBUG (file logging only)"),
-                    call("Setting boto3 to DEBUG (file logging only)"),
-                ]
-                mock_logger.debug.assert_has_calls(expected_debug_calls)
+            monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
+            monkeypatch.setattr(
+                os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": env_value}
+            )
 
-                # Verify adapter dependency log level calls
-                expected_level_calls = [
-                    call("snowflake.connector", "DEBUG"),
-                    call("botocore", "DEBUG"),
-                    call("boto3", "DEBUG"),
-                ]
-                mock_logger.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
+            with patch("logging.getLogger"):
+                reload(connections)
 
-                # Verify getLogger calls
-                expected_logger_calls = [
-                    call("snowflake.connector"),
-                    call("botocore"),
-                    call("boto3"),
-                ]
-                mock_get_logger.assert_has_calls(expected_logger_calls)
+            # Should set the expected level for all loggers
+            expected_level_calls = [
+                call("snowflake.connector", expected_level),
+                call("botocore", expected_level),
+                call("boto3", expected_level),
+            ]
+            log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
 
     def test_setup_snowflake_logging_with_info_level(self):
         """Test setup_snowflake_logging with INFO level"""
@@ -142,7 +134,15 @@ class TestSnowflakeLogging:
                 # Test INFO level
                 connections.setup_snowflake_logging("INFO")
 
-                # Verify correct level is set
+                # Verify debug messages (always say "DEBUG (file logging only)")
+                expected_debug_calls = [
+                    call("Setting snowflake.connector to INFO (file logging only)"),
+                    call("Setting botocore to INFO (file logging only)"),
+                    call("Setting boto3 to INFO (file logging only)"),
+                ]
+                mock_logger.debug.assert_has_calls(expected_debug_calls)
+
+                # Verify correct level is set (INFO in this case)
                 expected_level_calls = [
                     call("snowflake.connector", "INFO"),
                     call("botocore", "INFO"),
@@ -186,7 +186,9 @@ def test_connections_does_not_set_logs_in_response_to_env_var(monkeypatch):
     reload(connections)
 
     assert log_mock.debug.call_count == 3  # Debug messages are always logged
-    assert log_mock.set_adapter_dependency_log_level.call_count == 3  # But with INFO level
+    assert (
+        log_mock.set_adapter_dependency_log_level.call_count == 3
+    )  # But with ERROR level (default)
 
 
 def test_connnections_credentials_replaces_underscores_with_hyphens():
