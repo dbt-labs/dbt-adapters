@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.contracts.relation import RelationConfig
@@ -61,7 +61,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
-    cluster_by: Optional[str | list[str]] = None
+    cluster_by: Optional[Union[str, list[str]]] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
