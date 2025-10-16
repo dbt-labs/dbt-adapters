@@ -15,7 +15,12 @@ def query_relation_type(project, name: str) -> Optional[str]:
     sql = f"""
         select
             case table_type
-                when 'BASE TABLE' then iff(is_dynamic = 'YES', 'dynamic_table', 'table')
+                when 'BASE TABLE' then
+                    case
+                        when is_hybrid = 'YES' then 'hybrid_table'
+                        when is_dynamic = 'YES' then 'dynamic_table'
+                        else 'table'
+                    end
                 when 'VIEW' then 'view'
                 when 'EXTERNAL TABLE' then 'external_table'
             end as relation_type
