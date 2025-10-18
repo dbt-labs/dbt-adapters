@@ -17,6 +17,11 @@
 
 
 {% macro check_for_schema_changes(source_relation, target_relation) %}
+  {{ return(adapter.dispatch('check_for_schema_changes', 'dbt')(source_relation, target_relation)) }}
+{% endmacro %}
+
+
+{% macro default__check_for_schema_changes(source_relation, target_relation) %}
 
   {% set schema_changed = False %}
 

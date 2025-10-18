@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing.context import SpawnContext
@@ -8,11 +9,13 @@ from typing import (
     FrozenSet,
     Iterable,
     List,
+    Mapping,
     Optional,
+    Sequence,
+    Set,
     Tuple,
     TYPE_CHECKING,
     Type,
-    Set,
     Union,
 )
 
@@ -651,19 +654,237 @@ class BigQueryAdapter(BaseAdapter):
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
-        logger.debug('Adding columns ({}) to table {}".'.format(columns, relation))
+        logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
+        self.alter_table_add_remove_columns(relation, columns, None)
 
+    @available.parse_none
+    def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
         table_ref = self.get_table_ref_from_relation(relation)
         table = client.get_table(table_ref)
 
-        new_columns = [col.column_to_bq_schema() for col in columns]
-        new_schema = table.schema + new_columns
+        schema_as_dicts = [field.to_api_repr() for field in table.schema]
 
+        if add_columns:
+            additions = self._build_nested_additions(add_columns)
+            schema_as_dicts = self._merge_nested_fields(schema_as_dicts, additions)
+
+        if remove_columns:
+            removal_paths = [column.name for column in remove_columns]
+            schema_as_dicts = self._remove_nested_fields(schema_as_dicts, removal_paths)
+
+        new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
         new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
         client.update_table(new_table, ["schema"])
+
+    def _build_nested_additions(
+        self, add_columns: Sequence[BigQueryColumn]
+    ) -> Dict[str, Dict[str, Any]]:
+        additions: Dict[str, Dict[str, Any]] = {}
+
+        for column in add_columns:
+            schema_field = column.column_to_bq_schema().to_api_repr()
+            additions[column.name] = schema_field
+
+        return additions
+
+    def _merge_nested_fields(
+        self,
+        existing_fields: Sequence[Dict[str, Any]],
+        additions: Mapping[str, Dict[str, Any]],
+        prefix: str = "",
+    ) -> List[Dict[str, Any]]:
+        merged_fields: List[Dict[str, Any]] = []
+
+        addition_lookup = dict(additions)
+
+        for field in existing_fields:
+            field_name = field["name"]
+            qualified_name = f"{prefix}.{field_name}" if prefix else field_name
+            direct_addition = addition_lookup.pop(qualified_name, None)
+
+            if direct_addition is not None:
+                merged_fields.append(copy.deepcopy(direct_addition))
+                continue
+
+            nested_additions = {
+                key: value
+                for key, value in list(addition_lookup.items())
+                if key.startswith(f"{qualified_name}.")
+            }
+
+            if nested_additions and field.get("type") == "RECORD":
+                for key in nested_additions:
+                    addition_lookup.pop(key, None)
+
+                merged_children = self._merge_nested_fields(
+                    field.get("fields", []) or [],
+                    {
+                        key.split(".", 1)[1]: value
+                        for key, value in nested_additions.items()
+                    },
+                    prefix="",
+                )
+
+                merged_field = copy.deepcopy(field)
+                merged_field["fields"] = merged_children
+                merged_fields.append(merged_field)
+            else:
+                merged_fields.append(copy.deepcopy(field))
+
+        for path, addition in addition_lookup.items():
+            if "." not in path:
+                merged_fields.append(copy.deepcopy(addition))
+
+        return merged_fields
+
+    def _remove_nested_fields(
+        self,
+        existing_fields: Sequence[Dict[str, Any]],
+        removal_paths: Sequence[str],
+        prefix: str = "",
+    ) -> List[Dict[str, Any]]:
+        removals = set(removal_paths)
+        filtered_fields: List[Dict[str, Any]] = []
+
+        for field in existing_fields:
+            field_name = field["name"]
+            qualified_name = f"{prefix}.{field_name}" if prefix else field_name
+
+            should_remove = any(
+                qualified_name == removal or qualified_name.startswith(f"{removal}.")
+                for removal in removals
+            )
+
+            if should_remove:
+                continue
+
+            copied_field = copy.deepcopy(field)
+            if copied_field.get("type") == "RECORD":
+                copied_field["fields"] = self._remove_nested_fields(
+                    copied_field.get("fields", []) or [],
+                    removal_paths,
+                    prefix=qualified_name,
+                )
+
+            filtered_fields.append(copied_field)
+
+        return filtered_fields
+
+    def _collect_field_dicts(
+        self, fields: Sequence[Dict[str, Any]], prefix: str = ""
+    ) -> Dict[str, Dict[str, Any]]:
+        collected: Dict[str, Dict[str, Any]] = {}
+        for field in fields:
+            name = field["name"]
+            path = f"{prefix}.{name}" if prefix else name
+            collected[path] = field
+            if field.get("type") == "RECORD":
+                collected.update(self._collect_field_dicts(field.get("fields", []) or [], path))
+        return collected
+
+    def _find_missing_fields(
+        self,
+        source_fields: Sequence[Dict[str, Any]],
+        target_fields: Sequence[Dict[str, Any]],
+    ) -> Dict[str, Dict[str, Any]]:
+        source_map = self._collect_field_dicts(source_fields)
+        target_map = self._collect_field_dicts(target_fields)
+        return {
+            path: copy.deepcopy(field)
+            for path, field in source_map.items()
+            if path not in target_map
+        }
+
+    def _find_missing_paths(
+        self,
+        reference_fields: Sequence[Dict[str, Any]],
+        comparison_fields: Sequence[Dict[str, Any]],
+    ) -> List[str]:
+        reference_map = self._collect_field_dicts(reference_fields)
+        comparison_map = self._collect_field_dicts(comparison_fields)
+        return [path for path in reference_map.keys() if path not in comparison_map]
+
+    @available.parse(lambda *a, **k: {})
+    def sync_struct_columns(
+        self,
+        on_schema_change: str,
+        source_relation: BigQueryRelation,
+        target_relation: BigQueryRelation,
+        schema_changes_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if on_schema_change not in ("append_new_columns", "sync_all_columns"):
+            return schema_changes_dict
+
+        conn = self.connections.get_thread_connection()
+        client = conn.handle
+
+        source_table = client.get_table(self.get_table_ref_from_relation(source_relation))
+        target_table = client.get_table(self.get_table_ref_from_relation(target_relation))
+
+        source_schema = [field.to_api_repr() for field in source_table.schema]
+        target_schema = [field.to_api_repr() for field in target_table.schema]
+
+        additions = self._find_missing_fields(source_schema, target_schema)
+        nested_additions = {
+            path: value for path, value in additions.items() if "." in path
+        }
+
+        removal_paths: List[str] = []
+        if on_schema_change == "sync_all_columns":
+            missing_paths = self._find_missing_paths(target_schema, source_schema)
+            removal_paths = [path for path in missing_paths if "." in path]
+
+        if not nested_additions and not removal_paths:
+            return schema_changes_dict
+
+        updated_schema = target_schema
+        if nested_additions:
+            updated_schema = self._merge_nested_fields(updated_schema, nested_additions)
+        if removal_paths:
+            updated_schema = self._remove_nested_fields(updated_schema, removal_paths)
+
+        if updated_schema != target_schema:
+            try:
+                table_ref = self.get_table_ref_from_relation(target_relation)
+                new_schema = [SchemaField.from_api_repr(field) for field in updated_schema]
+                new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
+                client.update_table(new_table, ["schema"])
+            except google.api_core.exceptions.BadRequest as e:
+                if removal_paths and "missing in new schema" in str(e):
+                    logger.warning(
+                        f"BigQuery limitation: Cannot remove fields from STRUCT columns. "
+                        f"Attempted to remove: {removal_paths}. "
+                        f"Consider using 'append_new_columns' mode or recreating the table."
+                    )
+                    # Don't fail the run - just skip the schema update
+                    # The subsequent MERGE/INSERT will handle any data type mismatches
+                else:
+                    raise
+
+        struct_columns_affected = {
+            path.split(".", 1)[0]
+            for path in list(nested_additions.keys()) + removal_paths
+        }
+
+        if struct_columns_affected:
+            schema_changes_dict["new_target_types"] = [
+                change
+                for change in schema_changes_dict.get("new_target_types", [])
+                if change.get("column_name") not in struct_columns_affected
+            ]
+
+        schema_changes_dict["schema_changed"] = bool(
+            schema_changes_dict.get("source_not_in_target")
+            or schema_changes_dict.get("target_not_in_source")
+            or schema_changes_dict.get("new_target_types")
+            or nested_additions
+            or removal_paths
+        )
+
+        return schema_changes_dict
 
     @available.parse_none
     def load_dataframe(

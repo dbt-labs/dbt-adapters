@@ -42,13 +42,15 @@ def service_account_target():
     if _is_base64(credentials_json_str):
         credentials_json_str = _base64_to_string(credentials_json_str)
     credentials = json.loads(credentials_json_str)
-    project_id = credentials.get("project_id")
+    project_id =  os.getenv("BIGQUERY_TEST_PROJECT") or credentials.get("project_id")
+    execution_project = os.getenv("BIGQUERY_TEST_EXECUTION_PROJECT") or project_id
     return {
         "type": "bigquery",
         "method": "service-account-json",
         "threads": 4,
         "job_retries": 2,
         "project": project_id,
+        "execution_project": execution_project,
         "keyfile_json": credentials,
         # following 3 for python model
         "compute_region": os.getenv("COMPUTE_REGION") or os.getenv("DATAPROC_REGION"),
