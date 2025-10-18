@@ -794,6 +794,162 @@ class AthenaAdapter(SQLAdapter):
         response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
         return True if "Contents" in response else False
 
+    @available
+    def get_s3_file_etags(self, relation: AthenaRelation) -> Dict[str, str]:
+        """
+        Get all S3 file names and their ETags for a given table.
+        
+        Args:
+            relation: The Athena table relation
+            
+        Returns:
+            Dictionary mapping file names (keys) to ETags (values)
+            Example: {'path/file1.parquet': 'abc123', 'path/file2.parquet': 'def456'}
+        """
+        # Step 1: Get the S3 location from Glue catalog
+        table = self.get_glue_table(relation)
+        
+        if not table:
+            LOGGER.info(f"Table {relation} does not exist yet")
+            return {}
+        
+        # Get the location from the table metadata (note the "Table" wrapper)
+        table_location = table.get("Table", {}).get("StorageDescriptor", {}).get("Location")
+        
+        if not table_location:
+            LOGGER.warning(f"No S3 location found for {relation}")
+            return {}
+        
+        s3_location = str(table_location)
+        LOGGER.info(f"Found S3 location: {s3_location}")
+        
+        # Step 2: Parse the S3 path
+        bucket_name, prefix = self._parse_s3_path(s3_location)
+        
+        # Step 3: Check if path exists
+        if not self._s3_path_exists(bucket_name, prefix):
+            LOGGER.info(f"S3 path does not contain any files: {s3_location}")
+            return {}
+        
+        # Step 4: Get boto3 S3 client
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        
+        with boto3_client_lock:
+            s3_client = client.session.client(
+                "s3",
+                region_name=client.region_name,
+                config=get_boto3_config(num_retries=creds.effective_num_retries),
+            )
+        
+        # Step 5: List all objects and collect ETags
+        etag_dict = {}
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
+        
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    file_key = obj['Key']
+                    etag = obj['ETag'].strip('"')  # Remove quotes from ETag
+                    etag_dict[file_key] = etag
+        
+        LOGGER.info(f"Found {len(etag_dict)} files in S3")
+        return etag_dict
+
+    @available
+    def delete_unchanged_s3_files(self, relation: AthenaRelation, etags_dict: Dict[str, str]) -> int:
+        """
+        Compares ETags and DELETES files with unchanged ETags from S3.
+        
+        Args:
+            relation: The Athena table relation (source table)
+            etags_dict: Dictionary of file keys to ETags captured before model run
+            
+        Returns:
+            Number of files successfully deleted
+        """
+        # Rename for clarity within the method
+        etags_before_run = etags_dict
+        
+        if not etags_before_run:
+            LOGGER.info("No ETags to compare - skipping deletion")
+            return 0
+        
+        # Step 1: Gathering ETags after model run
+        LOGGER.info("Gathering S3 ETags after model run...")
+        etags_after_run = self.get_s3_file_etags(relation)
+        
+        if not etags_after_run:
+            LOGGER.info("No files found in S3 after model run")
+            return 0
+        
+        # Step 2: Comparing ETags
+        LOGGER.info("Comparing ETags to identify unchanged files...")
+        unchanged_files = []
+        for file_key, etag_before_run in etags_before_run.items():
+            if file_key in etags_after_run:
+                etag_after_run = etags_after_run[file_key]
+                if etag_after_run == etag_before_run:
+                    # ETag unchanged - mark for deletion
+                    unchanged_files.append(file_key)
+        
+        if not unchanged_files:
+            LOGGER.info("No unchanged files to delete - all files were modified")
+            return 0
+        
+        # Step 3: Deleting files with unchanged ETags
+        LOGGER.info(f"Deleting {len(unchanged_files)} files with unchanged ETags...")
+        
+        # Get S3 client and bucket info
+        table = self.get_glue_table(relation)
+        if not table:
+            LOGGER.error(f"S3 cleanup failed: table {relation} not found")
+            return 0
+        
+        table_location = table.get("Table", {}).get("StorageDescriptor", {}).get("Location")
+        if not table_location:
+            LOGGER.error(f"S3 cleanup failed: no S3 location found for {relation}")
+            return 0
+        
+        bucket_name, prefix = self._parse_s3_path(str(table_location))
+        
+        # Safety check: ensure we're deleting from incremental sources only
+        if not prefix.startswith("increment"):
+            LOGGER.error(
+                f"S3 cleanup failed: Source location must start with 'increment' prefix to prevent accidental deletion. "
+                f"Current location: s3://{bucket_name}/{prefix}. "
+                f"Please verify 'incremental_source_name' and 'incremental_source_table_name' in your model config."
+            )
+            return 0
+        
+        # Get boto3 S3 client
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        
+        with boto3_client_lock:
+            s3_client = client.session.client(
+                "s3",
+                region_name=client.region_name,
+                config=get_boto3_config(num_retries=creds.effective_num_retries),
+            )
+        
+        # Delete files
+        deleted_count = 0
+        for file_key in unchanged_files:
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=file_key)
+                deleted_count += 1
+            except Exception as e:
+                LOGGER.error(f"S3 cleanup failed: Could not delete {file_key}: {str(e)}")
+        
+        # Step 4: Report results
+        LOGGER.info(f"Successfully deleted {deleted_count} files")
+        
+        return deleted_count
+
     def _get_one_table_for_catalog(
         self, table: TableTypeDef, database: str
     ) -> List[Dict[str, Any]]:
