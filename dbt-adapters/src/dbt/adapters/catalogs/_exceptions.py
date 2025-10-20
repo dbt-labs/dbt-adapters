@@ -30,3 +30,10 @@ class DbtCatalogIntegrationNotSupportedError(DbtConfigError):
             f"Expected one of: {', '.join(supported_catalog_types)}"
         )
         super().__init__(msg)
+
+
+class InvalidCatalogIntegrationConfigError(DbtConfigError):
+    def __init__(self, catalog_name: str, msg: str) -> None:
+        self.catalog_name = catalog_name
+        msg = f"Invalid catalog integration config: {self.catalog_name}. {msg}"
+        super().__init__(msg)
