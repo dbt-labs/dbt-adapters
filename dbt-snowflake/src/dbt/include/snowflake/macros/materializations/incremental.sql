@@ -82,7 +82,6 @@
 	database=database,
 	type='table',
 	table_format=catalog_relation.table_format,
-  catalog=config.model.catalog,
   ) -%}
 
   {% set existing_relation = load_relation(this) %}
