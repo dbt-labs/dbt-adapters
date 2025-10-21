@@ -667,17 +667,49 @@ class BigQueryAdapter(BaseAdapter):
 
         schema_as_dicts = [field.to_api_repr() for field in table.schema]
 
+        # BigQuery only supports dropping top-level columns via ALTER TABLE.
+        # Track names so nested removals can still be logged for visibility.
+        drop_candidates: List[BigQueryColumn] = []
+        nested_removals: List[str] = []
+
+        if remove_columns:
+            for column in remove_columns:
+                if "." in column.name:
+                    nested_removals.append(column.name)
+                else:
+                    drop_candidates.append(column)
+
+        if nested_removals:
+            logger.warning(
+                "BigQuery limitation: Cannot remove nested fields via schema update. "
+                "Attempted to remove: {}. Consider using 'append_new_columns' mode "
+                "or recreating the table with full_refresh.".format(nested_removals)
+            )
+
+        if drop_candidates:
+            relation_name = relation.render()
+            for column in drop_candidates:
+                drop_sql = f"ALTER TABLE {relation_name} DROP COLUMN {self.quote(column.name)}"
+                logger.debug(
+                    'Dropping column `{}` from table "{}".'.format(column.name, relation_name)
+                )
+                client.query(drop_sql).result()
+
+            # Refresh schema after drops so additions operate on the latest definition
+            table = client.get_table(table_ref)
+            schema_as_dicts = [field.to_api_repr() for field in table.schema]
+
+        apply_schema_patch = False
+
         if add_columns:
             additions = self._build_nested_additions(add_columns)
             schema_as_dicts = self._merge_nested_fields(schema_as_dicts, additions)
+            apply_schema_patch = True
 
-        if remove_columns:
-            removal_paths = [column.name for column in remove_columns]
-            schema_as_dicts = self._remove_nested_fields(schema_as_dicts, removal_paths)
-
-        new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
-        new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
-        client.update_table(new_table, ["schema"])
+        if apply_schema_patch:
+            new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
+            new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
+            client.update_table(new_table, ["schema"])
 
     def _build_nested_additions(
         self, add_columns: Sequence[BigQueryColumn]
@@ -697,7 +729,7 @@ class BigQueryAdapter(BaseAdapter):
         prefix: str = "",
     ) -> List[Dict[str, Any]]:
         """Merge new fields into existing STRUCT fields, appending at each nesting level.
-        
+
         Note: Primarily used for field removal. For adding fields, sync_struct_columns
         uses the source schema directly to preserve field order.
         """
@@ -707,7 +739,7 @@ class BigQueryAdapter(BaseAdapter):
         for field in existing_fields:
             field_name = field["name"]
             qualified_name = f"{prefix}.{field_name}" if prefix else field_name
-            
+
             direct_addition = addition_lookup.pop(qualified_name, None)
             if direct_addition is not None:
                 merged_fields.append(copy.deepcopy(direct_addition))
@@ -724,8 +756,7 @@ class BigQueryAdapter(BaseAdapter):
                     addition_lookup.pop(key, None)
 
                 stripped_additions = {
-                    key.split(".", 1)[1]: value
-                    for key, value in nested_additions.items()
+                    key.split(".", 1)[1]: value for key, value in nested_additions.items()
                 }
 
                 merged_children = self._merge_nested_fields(
@@ -745,39 +776,6 @@ class BigQueryAdapter(BaseAdapter):
                 merged_fields.append(copy.deepcopy(addition))
 
         return merged_fields
-
-    def _remove_nested_fields(
-        self,
-        existing_fields: Sequence[Dict[str, Any]],
-        removal_paths: Sequence[str],
-        prefix: str = "",
-    ) -> List[Dict[str, Any]]:
-        removals = set(removal_paths)
-        filtered_fields: List[Dict[str, Any]] = []
-
-        for field in existing_fields:
-            field_name = field["name"]
-            qualified_name = f"{prefix}.{field_name}" if prefix else field_name
-
-            should_remove = any(
-                qualified_name == removal or qualified_name.startswith(f"{removal}.")
-                for removal in removals
-            )
-
-            if should_remove:
-                continue
-
-            copied_field = copy.deepcopy(field)
-            if copied_field.get("type") == "RECORD":
-                copied_field["fields"] = self._remove_nested_fields(
-                    copied_field.get("fields", []) or [],
-                    removal_paths,
-                    prefix=qualified_name,
-                )
-
-            filtered_fields.append(copied_field)
-
-        return filtered_fields
 
     def _collect_field_dicts(
         self, fields: Sequence[Dict[str, Any]], prefix: str = ""
@@ -804,15 +802,6 @@ class BigQueryAdapter(BaseAdapter):
             if path not in target_map
         }
 
-    def _find_missing_paths(
-        self,
-        reference_fields: Sequence[Dict[str, Any]],
-        comparison_fields: Sequence[Dict[str, Any]],
-    ) -> List[str]:
-        reference_map = self._collect_field_dicts(reference_fields)
-        comparison_map = self._collect_field_dicts(comparison_fields)
-        return [path for path in reference_map.keys() if path not in comparison_map]
-
     @available.parse(lambda *a, **k: {})
     def sync_struct_columns(
         self,
@@ -824,6 +813,12 @@ class BigQueryAdapter(BaseAdapter):
         if on_schema_change not in ("append_new_columns", "sync_all_columns"):
             return schema_changes_dict
 
+        logger.debug(
+            "BigQuery STRUCT sync invoked: mode=%s target=%s",
+            on_schema_change,
+            target_relation.render(),
+        )
+
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
@@ -832,71 +827,100 @@ class BigQueryAdapter(BaseAdapter):
 
         source_schema = [field.to_api_repr() for field in source_table.schema]
         target_schema = [field.to_api_repr() for field in target_table.schema]
-
-        additions = self._find_missing_fields(source_schema, target_schema)
+        # Identify nested fields that exist in the source schema but not the target.
+        missing_fields = self._find_missing_fields(source_schema, target_schema)
         nested_additions = {
-            path: value for path, value in additions.items() if "." in path
+            path: field_def for path, field_def in missing_fields.items() if "." in path
         }
 
-        removal_paths: List[str] = []
-        if on_schema_change == "sync_all_columns":
-            missing_paths = self._find_missing_paths(target_schema, source_schema)
-            removal_paths = [path for path in missing_paths if "." in path]
+        # Also include struct columns flagged by diff_column_data_types so we cover
+        # cases where only the STRUCT signature changed.
+        struct_type_changes: Set[str] = set()
+        for change in schema_changes_dict.get("new_target_types", []):
+            column_name = change.get("column_name")
+            if not column_name:
+                continue
+            new_type = change.get("new_type", "")
+            if "STRUCT<" in new_type.upper() or "RECORD" in new_type.upper():
+                struct_type_changes.add(column_name.split(".", 1)[0])
 
-        if not nested_additions and not removal_paths:
+        struct_columns_to_update: Set[str] = {
+            path.split(".", 1)[0] for path in nested_additions.keys()
+        }
+        struct_columns_to_update.update(struct_type_changes)
+
+        logger.debug(
+            "BigQuery STRUCT sync details: target=%s nested_additions=%s struct_columns=%s",
+            target_relation.render(),
+            sorted(nested_additions.keys()),
+            sorted(struct_columns_to_update),
+        )
+
+        if not struct_columns_to_update:
             return schema_changes_dict
 
-        # For STRUCT fields, use source schema to preserve field order (required for compatibility)
-        # BigQuery only allows appending fields to STRUCTs, not reordering them
-        # For non-STRUCT fields or when removing fields, use the merge approach
-        if nested_additions and not removal_paths:
-            # Adding nested STRUCT fields - use source schema to preserve order
-            updated_schema = source_schema
-        else:
-            # Removing fields or modifying non-STRUCT fields - use merge approach
-            updated_schema = target_schema
-            if nested_additions:
-                updated_schema = self._merge_nested_fields(updated_schema, nested_additions)
-            if removal_paths:
-                updated_schema = self._remove_nested_fields(updated_schema, removal_paths)
+        updated_schema: List[Dict[str, Any]] = []
+        handled_columns: Set[str] = set()
 
-        if updated_schema != target_schema:
-            try:
-                table_ref = self.get_table_ref_from_relation(target_relation)
-                new_schema = [SchemaField.from_api_repr(field) for field in updated_schema]
-                new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
-                client.update_table(new_table, ["schema"])
-            except google.api_core.exceptions.BadRequest as e:
-                if removal_paths and "missing in new schema" in str(e):
-                    logger.warning(
-                        f"BigQuery limitation: Cannot remove fields from STRUCT columns. "
-                        f"Attempted to remove: {removal_paths}. "
-                        f"Consider using 'append_new_columns' mode or recreating the table."
-                    )
-                    # Don't fail the run - just skip the schema update
-                    # The subsequent MERGE/INSERT will handle any data type mismatches
+        for field in target_schema:
+            field_name = field["name"]
+            if field_name in struct_columns_to_update:
+                source_field = next((f for f in source_schema if f["name"] == field_name), None)
+                if source_field:
+                    updated_schema.append(copy.deepcopy(source_field))
+                    handled_columns.add(field_name)
                 else:
-                    raise
+                    logger.debug(
+                        "BigQuery STRUCT sync: unable to locate source definition for %s on %s",
+                        field_name,
+                        target_relation.render(),
+                    )
+                    updated_schema.append(copy.deepcopy(field))
+            else:
+                updated_schema.append(copy.deepcopy(field))
 
-        struct_columns_affected = {
-            path.split(".", 1)[0]
-            for path in list(nested_additions.keys()) + removal_paths
-        }
+        if not handled_columns:
+            return schema_changes_dict
 
-        if struct_columns_affected:
+        try:
+            new_schema = [SchemaField.from_api_repr(field) for field in updated_schema]
+            target_table.schema = new_schema
+            client.update_table(target_table, ["schema"])
+            logger.debug(
+                "BigQuery STRUCT sync applied for %s columns=%s",
+                target_relation.render(),
+                sorted(handled_columns),
+            )
+
+            if schema_changes_dict.get("source_not_in_target"):
+                schema_changes_dict["source_not_in_target"] = [
+                    column
+                    for column in schema_changes_dict["source_not_in_target"]
+                    if column.name.split(".", 1)[0] not in handled_columns
+                ]
+
+            schema_changes_dict["target_columns"] = [
+                BigQueryColumn.create_from_field(field) for field in new_schema
+            ]
+        except google.api_core.exceptions.BadRequest as exc:
+            logger.warning("Failed to update STRUCT column schema: %s", exc)
+            return schema_changes_dict
+
+        # Remove handled STRUCT type changes so downstream logic does not retry
+        if schema_changes_dict.get("new_target_types"):
             schema_changes_dict["new_target_types"] = [
                 change
-                for change in schema_changes_dict.get("new_target_types", [])
-                if change.get("column_name") not in struct_columns_affected
+                for change in schema_changes_dict["new_target_types"]
+                if not change.get("column_name")
+                or change.get("column_name").split(".", 1)[0] not in handled_columns
             ]
 
-        schema_changes_dict["schema_changed"] = bool(
-            schema_changes_dict.get("source_not_in_target")
-            or schema_changes_dict.get("target_not_in_source")
-            or schema_changes_dict.get("new_target_types")
-            or nested_additions
-            or removal_paths
-        )
+        if (
+            not schema_changes_dict.get("source_not_in_target")
+            and not schema_changes_dict.get("target_not_in_source")
+            and not schema_changes_dict.get("new_target_types")
+        ):
+            schema_changes_dict["schema_changed"] = False
 
         return schema_changes_dict
 
