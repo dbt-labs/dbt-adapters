@@ -375,7 +375,7 @@ _MODELS__DEEPLY_NESTED_STRUCT_BASE = """
 }}
 
 with source_data as (
-    select 1 as id, 
+    select 1 as id,
         struct(
             'level1' as l1_field,
             struct(
@@ -384,7 +384,7 @@ with source_data as (
                     'level3' as l3_field
                 ) as level3
             ) as level2
-        ) as payload 
+        ) as payload
     union all
     select 2 as id,
         struct(
@@ -411,7 +411,7 @@ _MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND = """
 }}
 
 with source_data as (
-    select 1 as id, 
+    select 1 as id,
         struct(
             'level1' as l1_field,
             'new_l1' as l1_new_field,
@@ -423,7 +423,7 @@ with source_data as (
                     'new_l3' as l3_new_field
                 ) as level3
             ) as level2
-        ) as payload 
+        ) as payload
     union all
     select 2 as id,
         struct(
@@ -456,7 +456,7 @@ with source_data as (
 
 {% if is_incremental() %}
     -- Explicitly construct STRUCT with fields in BigQuery's "append at end" order
-    select id, 
+    select id,
         struct(
             payload.l1_field as l1_field,
             struct(
@@ -471,7 +471,7 @@ with source_data as (
         ) as payload
     from source_data
 {% else %}
-    select id, 
+    select id,
         struct(
             payload.l1_field as l1_field,
             struct(
@@ -491,7 +491,7 @@ _MODELS__INCREMENTAL_DEEPLY_NESTED_STRUCT_APPEND_EXPECTED = """
 }}
 
 with source_data as (
-    select 1 as id, 
+    select 1 as id,
         struct(
             'level1' as l1_field,
             struct(
@@ -503,7 +503,7 @@ with source_data as (
                 cast(null as string) as l2_new_field
             ) as level2,
             cast(null as string) as l1_new_field
-        ) as payload 
+        ) as payload
     union all
     select 2 as id,
         struct(
@@ -551,41 +551,53 @@ class TestIncrementalStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
         }
 
     def test_incremental_append_struct_fields(self, project):
-        run_dbt([
-            "run",
-            "--models",
-            "struct_base incremental_struct_append",
-        ])
+        run_dbt(
+            [
+                "run",
+                "--models",
+                "struct_base incremental_struct_append",
+            ]
+        )
         # Second run should update the schema and succeed
-        run_dbt([
-            "run",
-            "--models",
-            "struct_base incremental_struct_append",
-        ])
+        run_dbt(
+            [
+                "run",
+                "--models",
+                "struct_base incremental_struct_append",
+            ]
+        )
         # If the model runs successfully, the schema update worked.
         # The expected model verifies the data is correct
-        run_dbt([
-            "run",
-            "--models",
-            "incremental_struct_append_expected",
-        ])
+        run_dbt(
+            [
+                "run",
+                "--models",
+                "incremental_struct_append_expected",
+            ]
+        )
 
-    @pytest.mark.skip(reason="BigQuery does not support removing fields from STRUCT columns via schema update")
+    @pytest.mark.skip(
+        reason="BigQuery does not support removing fields from STRUCT columns via schema update"
+    )
     def test_incremental_sync_struct_fields(self, project):
         # Note: This test demonstrates a BigQuery limitation.
         # BigQuery allows ADDING fields to STRUCT columns but not REMOVING them.
         # To remove fields, you would need to drop and recreate the column (losing data)
         # or recreate the entire table.
-        run_dbt([
-            "run",
-            "--models",
-            "struct_base incremental_struct_sync",
-        ])
-        run_dbt([
-            "run",
-            "--models",
-            "struct_base incremental_struct_sync",
-        ])
+        run_dbt(
+            [
+                "run",
+                "--models",
+                "struct_base incremental_struct_sync",
+            ]
+        )
+        run_dbt(
+            [
+                "run",
+                "--models",
+                "struct_base incremental_struct_sync",
+            ]
+        )
         from dbt.tests.util import check_relations_equal
 
         check_relations_equal(
@@ -596,7 +608,7 @@ class TestIncrementalStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
 
 class TestIncrementalDeeplyNestedStructOnSchemaChange(BaseIncrementalOnSchemaChangeSetup):
     """Test that BigQuery supports schema updates for deeply nested STRUCT columns.
-    
+
     BigQuery supports arbitrary levels of nesting (soft limit ~100 levels).
     This test verifies that the recursive implementation in _merge_nested_fields
     correctly handles adding fields at multiple nesting levels.
@@ -613,32 +625,32 @@ class TestIncrementalDeeplyNestedStructOnSchemaChange(BaseIncrementalOnSchemaCha
     def test_incremental_append_deeply_nested_struct_fields(self, project):
         """Test adding fields at multiple nesting levels simultaneously."""
         # First run - creates initial table with 3-level nested STRUCT
-        results = run_dbt([
-            "run",
-            "--models",
-            "deeply_nested_struct_base incremental_deeply_nested_struct_append",
-        ])
+        results = run_dbt(
+            [
+                "run",
+                "--models",
+                "deeply_nested_struct_base incremental_deeply_nested_struct_append",
+            ]
+        )
         assert len(results) == 2
-        
+
         # Second run - should add new fields at all 3 nesting levels
-        results = run_dbt([
-            "run",
-            "--models",
-            "deeply_nested_struct_base incremental_deeply_nested_struct_append",
-        ])
+        results = run_dbt(
+            [
+                "run",
+                "--models",
+                "deeply_nested_struct_base incremental_deeply_nested_struct_append",
+            ]
+        )
         assert len(results) == 2
-        
+
         # Verify row count - should have 3 rows (2 from first run, 1 new from second)
         relation = project.adapter.Relation.create(
             database=project.database,
             schema=project.test_schema,
-            identifier="incremental_deeply_nested_struct_append"
+            identifier="incremental_deeply_nested_struct_append",
         )
-        
-        result = project.run_sql(
-            f"SELECT COUNT(*) as cnt FROM {relation}",
-            fetch="one"
-        )
-        
-        assert result[0] == 3, f"Expected 3 rows, got {result[0]}"
 
+        result = project.run_sql(f"SELECT COUNT(*) as cnt FROM {relation}", fetch="one")
+
+        assert result[0] == 3, f"Expected 3 rows, got {result[0]}"

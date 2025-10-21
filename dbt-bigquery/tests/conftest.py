@@ -42,7 +42,7 @@ def service_account_target():
     if _is_base64(credentials_json_str):
         credentials_json_str = _base64_to_string(credentials_json_str)
     credentials = json.loads(credentials_json_str)
-    project_id =  os.getenv("BIGQUERY_TEST_PROJECT") or credentials.get("project_id")
+    project_id = os.getenv("BIGQUERY_TEST_PROJECT") or credentials.get("project_id")
     execution_project = os.getenv("BIGQUERY_TEST_EXECUTION_PROJECT") or project_id
     return {
         "type": "bigquery",
