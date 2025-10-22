@@ -125,13 +125,22 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    oauth_authorization_url: Optional[str] = None
+    oauth_token_request_url: Optional[str] = None
+    oauth_redirect_uri: Optional[str] = None
+    oauth_scope: Optional[str] = None
+    oauth_disable_pkce: Optional[bool] = None
+    oauth_enable_refresh_token: Optional[bool] = None
+    oauth_enable_single_use_refresh_tokens: Optional[bool] = None
 
     def __post_init__(self):
-        if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
+        if self.authenticator not in ("oauth", "OAUTH_AUTHORIZATION_CODE") and (
+            self.oauth_client_secret or self.oauth_client_id
+        ):
             # the user probably forgot to set 'authenticator' like I keep doing
             warn_or_error(
                 AdapterEventWarning(
-                    base_msg="Authenticator is not set to oauth, but an oauth-only parameter is set! Did you mean to set authenticator: oauth?"
+                    base_msg="Authenticator is not set to oauth nor OAUTH_AUTHORIZATION_CODE, but an oauth-only parameter is set! Did you mean to set authenticator: oauth? or authenticator: OAUTH_AUTHORIZATION_CODE?"
                 )
             )
 
@@ -193,6 +202,13 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "oauth_authorization_url",
+            "oauth_token_request_url",
+            "oauth_redirect_uri",
+            "oauth_scope",
+            "oauth_disable_pkce",
+            "oauth_enable_refresh_token",
+            "oauth_enable_single_use_refresh_tokens",
         )
 
     def auth_args(self):
@@ -242,6 +258,19 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator == "OAUTH_AUTHORIZATION_CODE":
+                result["oauth_client_id"] = self.oauth_client_id
+                result["oauth_client_secret"] = self.oauth_client_secret
+                result["oauth_authorization_url"] = self.oauth_authorization_url
+                result["oauth_token_request_url"] = self.oauth_token_request_url
+                result["oauth_redirect_uri"] = self.oauth_redirect_uri
+                result["oauth_scope"] = self.oauth_scope
+                result["oauth_disable_pkce"] = self.oauth_disable_pkce
+                result["oauth_enable_refresh_token"] = self.oauth_enable_refresh_token
+                result["oauth_enable_single_use_refresh_tokens"] = (
+                    self.oauth_enable_single_use_refresh_tokens
+                )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True

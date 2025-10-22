@@ -1109,3 +1109,33 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             private_key_path="/tmp/does/not/exist.p8",
         )
         self.assertRaises(FileNotFoundError, creds.auth_args)
+
+    def test_oauth_auth_code(self):
+        creds = SnowflakeCredentials(
+            account="test-account",
+            user="test_user",
+            database="test_database",
+            schema="public",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_client_id="test_oauth_client_id",
+            oauth_client_secret="test_oauth_client_secret",
+            oauth_authorization_url="test_oauth_authorization_url",
+            oauth_token_request_url="test_oauth_token_request_url",
+            oauth_redirect_uri="test_oauth_redirect_uri",
+            oauth_scope="test_oauth_scope",
+            oauth_disable_pkce="test_oauth_disable_pkce",
+            oauth_enable_refresh_token="test_oauth_enable_refresh_token",
+            oauth_enable_single_use_refresh_tokens="test_oauth_enable_single_use_refresh_tokens",
+        )
+        for key in [
+            "oauth_client_id",
+            "oauth_client_secret",
+            "oauth_authorization_url",
+            "oauth_token_request_url",
+            "oauth_redirect_uri",
+            "oauth_scope",
+            "oauth_disable_pkce",
+            "oauth_enable_refresh_token",
+            "oauth_enable_single_use_refresh_tokens",
+        ]:
+            self.assertEqual(creds.auth_args()[key], f"test_{key}")

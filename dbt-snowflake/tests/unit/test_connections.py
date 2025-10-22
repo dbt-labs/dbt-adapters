@@ -7,6 +7,7 @@ import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
+from dbt.adapters.events.types import AdapterEventWarning
 
 
 class TestSnowflakeLogging:
@@ -230,3 +231,69 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+@pytest.mark.parametrize(
+    "oauth_client_id, oauth_client_secret",
+    [(None, "test_secret"), ("test_client", None), ("test_client", "test_secret")],
+)
+def test_snowflake_oauth_authenticator_not_set_logs_warning(oauth_client_id, oauth_client_secret):
+    credentials = {
+        "account": "test_account",
+        "user": "test_user",
+        "database": "database",
+        "schema": "schema",
+        "authenticator": "not oauth or OAUTH_AUTHORIZATION_CODE",
+    }
+    if oauth_client_id is not None:
+        credentials["oauth_client_id"] = oauth_client_id
+    if oauth_client_secret is not None:
+        credentials["oauth_client_secret"] = oauth_client_secret
+
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        connections.SnowflakeCredentials(**credentials)
+
+        # Verify the warning was triggered
+        mock_warn.assert_called_once()
+        args, _ = mock_warn.call_args
+        assert isinstance(args[0], AdapterEventWarning)
+        assert "Authenticator is not set to oauth nor OAUTH_AUTHORIZATION_CODE" in args[0].base_msg
+
+
+def test_snowflake_non_oauth_authenticator_without_oauth_args_does_not_log_warnings():
+    credentials = {
+        "account": "test_account",
+        "user": "test_user",
+        "database": "database",
+        "schema": "schema",
+        "authenticator": "not oauth or OAUTH_AUTHORIZATION_CODE",
+    }
+
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        connections.SnowflakeCredentials(**credentials)
+
+        # Verify no warning was triggered
+        mock_warn.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "authenticator",
+    ["oauth", "OAUTH_AUTHORIZATION_CODE"],
+)
+def test_snowflake_oauth_with_params_does_not_log_warning(authenticator):
+    credentials = {
+        "account": "test_account",
+        "user": "test_user",
+        "database": "database",
+        "schema": "schema",
+        "authenticator": authenticator,
+        "oauth_client_id": "test_id",
+        "oauth_client_secret": "test_secret",
+    }
+    print(authenticator)
+
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        connections.SnowflakeCredentials(**credentials)
+
+        # Verify no warning was triggered
+        mock_warn.assert_not_called()
