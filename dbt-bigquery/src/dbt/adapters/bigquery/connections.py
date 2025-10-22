@@ -611,6 +611,10 @@ class BigQueryConnectionManager(BaseConnectionManager):
             iterator = query_job.result(max_results=limit)
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
+            try:
+                query_job.cancel()
+            except Exception as e:
+                logger.debug(f"Error cancelling query job: {e}")
             raise TimeoutError(exc)
         return query_job, iterator
 
