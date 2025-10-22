@@ -146,25 +146,25 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
             }
         }
 
-    @pytest.fixture(scope="class", autouse=True)
-    def setup_glue_schema(self, project):
-        """Pre-create schema with quoted lowercase identifier for Glue CLD"""
-        adapter = project.adapter
-        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
-        schema_name = project.test_schema.lower()
+    # @pytest.fixture(scope="class", autouse=True)
+    # def setup_glue_schema(self, project):
+    #     """Pre-create schema with quoted lowercase identifier for Glue CLD"""
+    #     adapter = project.adapter
+    #     glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+    #     schema_name = project.test_schema.lower()
 
-        # Create schema with quoted identifier to preserve lowercase
-        create_schema_sql = f'CREATE SCHEMA IF NOT EXISTS {glue_database}."{schema_name}"'
-        adapter.execute(create_schema_sql, fetch=False)
+    #     # Create schema with quoted identifier to preserve lowercase
+    #     create_schema_sql = f'CREATE SCHEMA IF NOT EXISTS {glue_database}."{schema_name}"'
+    #     adapter.execute(create_schema_sql, fetch=False)
 
-        yield
+    #     yield
 
-        # Cleanup: drop schema after test
-        drop_schema_sql = f'DROP SCHEMA IF EXISTS {glue_database}."{schema_name}"'
-        try:
-            adapter.execute(drop_schema_sql, fetch=False)
-        except:
-            pass  # Ignore cleanup errors
+    #     # Cleanup: drop schema after test
+    #     drop_schema_sql = f'DROP SCHEMA IF EXISTS {glue_database}."{schema_name}"'
+    #     try:
+    #         adapter.execute(drop_schema_sql, fetch=False)
+    #     except:
+    #         pass  # Ignore cleanup errors
 
     # AWS Glue requires lowercase identifiers and alphanumeric characters only
     @pytest.fixture(scope="class")
@@ -182,7 +182,7 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
         return {
             "models": {
                 "glue_basic_iceberg_table.sql": """
-                    {{ config(materialized='table',
+                    {{ config(materialized='table', schema=target.schema.upper(),
                      catalog_name='glue_iceberg_rest_catalog') }}
                     select 1 as id, 'test' as name, 1.0 as price, '2021-01-01' as test_date
                 """,
