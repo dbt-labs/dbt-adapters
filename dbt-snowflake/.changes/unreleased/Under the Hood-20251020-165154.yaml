@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Update bigquery job handling to invoke job.cancel on timeout
+time: 2025-10-20T16:51:54.73086-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1355"
