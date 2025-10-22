@@ -37,6 +37,7 @@ from snowflake.connector.errors import (
     OtherHTTPRetryableError,
     BindUploadError,
 )
+from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
 
 from dbt_common.exceptions import (
     DbtInternalError,
@@ -125,6 +126,8 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    workload_identity_provider: Optional[str] = None
+    workload_identity_entra_resource: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -135,19 +138,19 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt"]:
+        if self.authenticator not in ["oauth", "jwt", "workload_identity"]:
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
                         base_msg=(
                             "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth' or 'jwt'."
+                            "not set to 'oauth', 'jwt', or 'workload_identity'."
                         )
                     )
                 )
 
             if not self.user:
-                # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
+                # The user attribute is only optional if 'authenticator' is 'jwt', 'oauth', or 'workload_identity'
                 warn_or_error(
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
@@ -193,6 +196,8 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "workload_identity_provider",
+            "workload_identity_entra_resource",
         )
 
     def auth_args(self):
@@ -242,6 +247,21 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator.lower() == "workload_identity":
+                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+                if not self.workload_identity_provider:
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set if authenticator='workload_identity'!"
+                    )
+                result["workload_identity_provider"] = self.workload_identity_provider
+
+                if self.token:
+                    result["token"] = self.token
+                if self.workload_identity_entra_resource:
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
