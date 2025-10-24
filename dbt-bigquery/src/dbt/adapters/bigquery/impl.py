@@ -688,12 +688,14 @@ class BigQueryAdapter(BaseAdapter):
 
         if drop_candidates:
             relation_name = relation.render()
-            for column in drop_candidates:
-                drop_sql = f"ALTER TABLE {relation_name} DROP COLUMN {self.quote(column.name)}"
-                logger.debug(
-                    'Dropping column `{}` from table "{}".'.format(column.name, relation_name)
-                )
-                client.query(drop_sql).result()
+            drop_clauses = [f"DROP COLUMN {self.quote(column.name)}" for column in drop_candidates]
+            drop_sql = f"ALTER TABLE {relation_name} {', '.join(drop_clauses)}"
+            
+            column_names = [column.name for column in drop_candidates]
+            logger.debug(
+                'Dropping columns `{}` from table "{}".'.format(column_names, relation_name)
+            )
+            self.execute(drop_sql, fetch=False)
 
             # Refresh schema after drops so additions operate on the latest definition
             table = client.get_table(table_ref)
