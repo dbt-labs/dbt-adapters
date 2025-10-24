@@ -216,6 +216,18 @@ class BigFramesHelper(_BigQueryPythonHelper):
             model_timeout=parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
         )
 
+    def _get_token(self) -> str:
+        """Get a token from the credentials.
+        If a token is not supplied by the user directly it is lazily created the first time we authenticates.
+        BigFrames needs a token to determine the execution user but a call may not have
+        """
+        creds = self._GoogleCredentials
+        if creds.token:
+            return creds.token
+        else:
+            creds.refresh(Request())
+            return creds.token
+
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
         # Put all codes in one cell.
@@ -332,7 +344,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 response = request(
                     method="GET",
                     url="https://www.googleapis.com/oauth2/v2/userinfo",
-                    headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
+                    headers={"Authorization": f"Bearer {self._get_token()}"},
                 )
 
                 if response.status != 200:

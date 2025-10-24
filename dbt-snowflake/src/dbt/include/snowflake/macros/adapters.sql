@@ -229,6 +229,35 @@
 
 
 
+{% macro snowflake__is_catalog_linked_database(relation=none, catalog_relation=none) -%}
+    {#-- Helper macro to detect if we're in a catalog-linked database context --#}
+    {%- if catalog_relation is not none -%}
+        {#-- Direct catalog_relation object provided --#}
+        {%- if catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.config -%}
+        {%- set catalog_relation = adapter.build_catalog_relation(relation) -%}
+        {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.catalog -%}
+        {#-- Relation with catalog attribute --#}
+        {%- set catalog_integration = adapter.get_catalog_integration(relation.catalog) -%}
+        {%- if catalog_integration is not none and catalog_integration|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- else -%}
+        {{ return(false) }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% macro snowflake_dml_explicit_transaction(dml) %}
   {#
     Use this macro to wrap all INSERT, MERGE, UPDATE, DELETE, and TRUNCATE
@@ -251,6 +280,10 @@
     truncate table {{ relation.render() }}
   {% endset %}
   {% call statement('truncate_relation') -%}
-    {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+        {{ truncate_dml }}
+    {% else %}
+      {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% endif %}
   {%- endcall %}
 {% endmacro %}
