@@ -83,6 +83,8 @@ else:
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
+ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
+
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
@@ -131,7 +133,9 @@ class SnowflakeCredentials(Credentials):
     workload_identity_entra_resource: Optional[str] = None
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
-    platform_detection_timeout_seconds: float = 0.0
+    platform_detection_timeout_seconds: Optional[float] = (
+        None if workload_identity_provider else 0.0
+    )
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -256,22 +260,15 @@ class SnowflakeCredentials(Credentials):
             elif self.authenticator.lower() == "workload_identity":
                 result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
 
-                accepted_workload_identity_providers = [
-                    "OIDC",
-                    "AZURE",
-                    "GCP",
-                    "AWS",
-                ]
-
                 if (
                     not self.workload_identity_provider
                     or self.workload_identity_provider.upper()
-                    not in accepted_workload_identity_providers
+                    not in ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS
                 ):
 
                     raise DbtConfigError(
                         "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n"
-                        f"{', '.join(accepted_workload_identity_providers)}\n\n"
+                        f"{', '.join(ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS)}\n\n"
                         f"Provided workload_identity_provider was '{self.workload_identity_provider}'"
                     )
 
