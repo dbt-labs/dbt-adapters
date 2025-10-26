@@ -29,6 +29,13 @@ on:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release) or leave empty"
                 type: string
                 default: ""
+            target:
+                description: "Choose where to publish"
+                type: choice
+                options:
+                -   "pypi"
+                -   "github"
+                -   "all"
             skip-unit-tests:
                 description: "Skip running unit tests"
                 type: boolean
@@ -113,14 +120,39 @@ jobs:
             hatch-env: "cd"
         secrets: inherit
 
-    publish:
-        if: ${{ !failure() && !cancelled() }}
+    merge-changes:
+        if: !failure() && !cancelled()
         needs:
-        -   work-branch
-        -   bump-version
-        -   generate-changelog
-        -   unit-tests
-        -   integration-tests
+            -   work-branch
+            -   bump-version
+            -   generate-changelog
+            -   unit-tests
+            -   integration-tests
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        outputs:
+            branch: ${{ steps.branch.outputs.name }}
+        steps:
+        # merge changes before publishing to prod because we lock trusted publishing to main
+        -   uses: everlytic/branch-merge@1.1.5
+            if: inputs.deploy-to == 'prod'
+            with:
+                source_ref: ${{ needs.work-branch.outputs.name }}
+                target_branch: ${{ inputs.branch }}
+                github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
+                commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
+        -   id: branch
+            run:
+                if [[ ${{ inputs.deploy-to == 'prod' }} ]]
+                then
+                    BRANCH=${{ inputs.branch }}
+                else
+                    BRANCH=${{ needs.work-branch.outputs.name }}
+                fi
+                echo "name=$BRANCH" >> $GITHUB_OUTPUT
+
+    publish-pypi:
+        if: always() && !failure() && contains(fromJSON('["pypi", "all"]'), inputs.target)
+        needs: merge-changes
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         environment:
             name: ${{ inputs.deploy-to }}
@@ -130,27 +162,9 @@ jobs:
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
         steps:
-
-        # merge changes before publishing to prod because we lock trusted publishing to main
-        -   uses: everlytic/branch-merge@1.1.5
-            if: inputs.deploy-to == 'prod'
-            with:
-                source_ref: ${{ needs.work-branch.outputs.name }}
-                target_branch: ${{ inputs.branch }}
-                github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
-                commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
         -   uses: actions/checkout@v4
-            if: inputs.deploy-to == 'prod'
             with:
-                ref: ${{ inputs.branch }}
-
-        # if we're not publishing to prod, just check out the work branch
-        -   uses: actions/checkout@v4
-            if: inputs.deploy-to != 'prod'
-            with:
-                ref: ${{ needs.work-branch.outputs.name }}
-
-        # build and publish using whichever branch was checked out above
+                ref: ${{ needs.merge-changes.outputs.branch }}
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
@@ -188,11 +202,22 @@ jobs:
                 max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                 command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
 
+    publish-github:
+        if: always() && !failure() && contains(fromJSON('["github", "all"]'), inputs.target)
+        needs: merge-changes
+        uses: ./.github/workflows/_publish-github.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
     clean-up:
         if: ${{ !cancelled() }}
         needs:
             -   work-branch
-            -   publish
+            -   publish-pypi
+            -   publish-github
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   uses: actions/checkout@v4
