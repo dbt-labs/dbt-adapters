@@ -39,6 +39,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
         self.name: str = config.name
+        self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
@@ -75,7 +76,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             )
 
         return IcebergRestCatalogRelation(
-            catalog_name=self.catalog_name,
+            catalog_name=self.name,
             external_volume=None,
             catalog_linked_database=self.catalog_linked_database,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,

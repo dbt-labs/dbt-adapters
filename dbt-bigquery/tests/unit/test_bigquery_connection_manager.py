@@ -87,6 +87,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_query_and_results(self, MockQueryJobConfig):
+        self.mock_client.query.return_value = Mock(job_id="1")
         self.connections._query_and_results(
             self.mock_connection,
             "sql",

@@ -222,6 +222,8 @@ class AthenaCursor(Cursor):
                         self._retry_config,
                     )
                     return self
+
+                LOGGER.debug(f"Athena query failed: {query_execution.state_change_reason}")
                 raise OperationalError(query_execution.state_change_reason)
 
             return execute_with_iceberg_retries()
