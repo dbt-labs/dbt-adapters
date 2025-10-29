@@ -14,3 +14,14 @@
     {%- endfor %}
     {{ args | join(', ') }}
 {% endmacro %}
+
+{% macro redshift__scalar_function_volatility_sql() %}
+    {% if model.config.get('volatility') == 'deterministic' %}
+        IMMUTABLE
+    {% elif model.config.get('volatility') == 'stable' %}
+        STABLE
+    {% else %}
+        {# At this point, either they've set `non-deterministic` or they've set nothing. In either case, we default to VOLATILE #}
+        VOLATILE
+    {% endif %}
+{% endmacro %}
