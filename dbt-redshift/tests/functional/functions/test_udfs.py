@@ -1,9 +1,11 @@
-from dbt.artifacts.schemas.results import RunStatus
-from dbt.contracts.graph.nodes import FunctionNode
-from dbt.tests.util import run_dbt
 import pytest
 from dbt.tests.adapter.functions.files import MY_UDF_YML
-from dbt.tests.adapter.functions.test_udfs import UDFsBasic
+from dbt.tests.adapter.functions.test_udfs import (
+    UDFsBasic,
+    DeterministicUDF,
+    StableUDF,
+    NonDeterministicUDF,
+)
 from tests.functional.functions.files import MY_UDF_SQL
 
 
@@ -15,3 +17,19 @@ class TestRedshiftUDFs(UDFsBasic):
             "price_for_xlarge.sql": MY_UDF_SQL,
             "price_for_xlarge.yml": MY_UDF_YML,
         }
+
+    def check_function_volatility(self, sql: str):
+        # in redshift, if no volatility is set, we template in VOLATILE
+        assert "VOLATILE" in sql
+
+
+class TestRedshiftDeterministicUDFs(DeterministicUDF):
+    pass
+
+
+class TestRedshiftStableUDFs(StableUDF):
+    pass
+
+
+class TestRedshiftNonDeterministicUDFs(NonDeterministicUDF):
+    pass
