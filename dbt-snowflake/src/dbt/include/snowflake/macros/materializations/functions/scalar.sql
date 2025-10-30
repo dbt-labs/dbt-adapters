@@ -16,7 +16,7 @@
     {% if model.config.get('volatility') == 'deterministic' %}
         IMMUTABLE
     {% elif model.config.get('volatility') == 'stable' %}
-        {% do exceptions.raise_compiler_error("`Stable` function volatility is not supported for Snowflake") %}
+        {% do exceptions.warn("`Stable` function volatility is not supported by Snowflake, and will be ignored") %}
     {% elif model.config.get('volatility') == 'non-deterministic' %}
         VOLATILE
     {% endif %}
