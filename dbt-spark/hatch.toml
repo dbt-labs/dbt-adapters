@@ -7,10 +7,10 @@ sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@er/test-core-toml#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git@er/test-core-toml#subdirectory=dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@er/pyprojecttoml#subdirectory=core",
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
     "pre-commit==3.7.0",
@@ -61,10 +61,10 @@ docker-prod = "docker build -f docker/Dockerfile -t dbt-spark ."
 
 [envs.ci]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@er/test-core-toml#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git@er/test-core-toml#subdirectory=dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@er/pyprojecttoml#subdirectory=core",
     "ddtrace==2.3.0",
     "freezegun",
     "pytest>=7.0,<8.0",

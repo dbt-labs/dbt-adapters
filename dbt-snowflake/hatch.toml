@@ -66,7 +66,7 @@ docker-prod = "docker build -f docker/Dockerfile -t dbt-snowflake ."
 pre-install-commands = [
     "pip install git+https://github.com/dbt-labs/dbt-common.git",
     "pip install -e ../dbt-adapters",
-    "pip install git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
+    "pip install git+https://github.com/dbt-labs/dbt-core.git@er/pyprojecttoml#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
 ]
