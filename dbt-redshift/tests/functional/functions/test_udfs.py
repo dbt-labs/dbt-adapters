@@ -24,12 +24,27 @@ class TestRedshiftUDFs(UDFsBasic):
 
 
 class TestRedshiftDeterministicUDFs(DeterministicUDF):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
 
 
 class TestRedshiftStableUDFs(StableUDF):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
 
 
 class TestRedshiftNonDeterministicUDFs(NonDeterministicUDF):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
