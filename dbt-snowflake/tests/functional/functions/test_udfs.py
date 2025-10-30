@@ -54,7 +54,7 @@ class TestSnowflakeStableUDFs(StableUDF):
         # Check that the warning event was caught
         assert len(warning_event_catcher.caught_events) == 1
         assert (
-            "`Stable` function volatility is not supported by Snowflake, and will be ignored"
+            "Found `stable` volatility specified on function `price_for_xlarge`. This volatility is not supported by snowflake, and will be ignored"
             in warning_event_catcher.caught_events[0].data.msg
         )
 

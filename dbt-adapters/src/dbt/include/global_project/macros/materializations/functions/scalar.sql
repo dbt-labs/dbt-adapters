@@ -45,12 +45,25 @@
 {% endmacro %}
 
 {% macro default__scalar_function_volatility_sql() %}
-    {% if model.config.get('volatility') == 'deterministic' %}
+    {% set volatility = model.config.get('volatility') %}
+    {% if volatility == 'deterministic' %}
         IMMUTABLE
-    {% elif model.config.get('volatility') == 'stable' %}
+    {% elif volatility == 'stable' %}
         STABLE
-    {% elif model.config.get('volatility') == 'non-deterministic' %}
+    {% elif volatility == 'non-deterministic' %}
         VOLATILE
+    {% elif volatility != none %}
+        {# This shouldn't happen unless a new volatility is invented #}
+        {% do unsupported_volatility_warning(volatility) %}
     {% endif %}
     {# If no volatility is set, don't add anything and let the data warehouse default it #}
+{% endmacro %}
+
+{% macro unsupported_volatility_warning(volatility) %}
+    {{ return(adapter.dispatch('unsupported_volatility_warning', 'dbt')(volatility)) }}
+{% endmacro %}
+
+{% macro default__unsupported_volatility_warning(volatility) %}
+    {% set msg = "Found `" ~ volatility ~ "` volatility specified on function `" ~ model.name ~ "`. This volatility is not supported by " ~ adapter.type() ~ ", and will be ignored" %}
+    {% do exceptions.warn(msg) %}
 {% endmacro %}

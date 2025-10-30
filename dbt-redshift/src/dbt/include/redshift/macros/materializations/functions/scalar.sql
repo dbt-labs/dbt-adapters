@@ -14,12 +14,16 @@
 {% endmacro %}
 
 {% macro redshift__scalar_function_volatility_sql() %}
-    {% if model.config.get('volatility') == 'deterministic' %}
+    {% set volatility = model.config.get('volatility') %}
+    {% if volatility == 'deterministic' %}
         IMMUTABLE
-    {% elif model.config.get('volatility') == 'stable' %}
+    {% elif volatility == 'stable' %}
         STABLE
+    {% elif volatility == 'non-deterministic' or volatility == none %}
+        VOLATILE
     {% else %}
-        {# At this point, either they've set `non-deterministic` or they've set nothing. In either case, we default to VOLATILE #}
+        {% do unsupported_volatility_warning(volatility) %}
+        {# We're ignoring the unknown volatility. But redshift requires a volatility to be set, so we default to VOLATILE #}
         VOLATILE
     {% endif %}
 {% endmacro %}

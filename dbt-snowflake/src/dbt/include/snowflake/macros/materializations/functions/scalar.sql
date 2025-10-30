@@ -13,12 +13,13 @@
 {% endmacro %}
 
 {% macro snowflake__scalar_function_volatility_sql() %}
-    {% if model.config.get('volatility') == 'deterministic' %}
+    {% set volatility = model.config.get('volatility') %}
+    {% if volatility == 'deterministic' %}
         IMMUTABLE
-    {% elif model.config.get('volatility') == 'stable' %}
-        {% do exceptions.warn("`Stable` function volatility is not supported by Snowflake, and will be ignored") %}
-    {% elif model.config.get('volatility') == 'non-deterministic' %}
+    {% elif volatility == 'non-deterministic'%}
         VOLATILE
+    {% elif volatility == 'stable' or volatility != none %}
+        {% do unsupported_volatility_warning(volatility) %}
     {% endif %}
     {# If no volatility is set, don't add anything and let the data warehouse default it #}
 {% endmacro %}

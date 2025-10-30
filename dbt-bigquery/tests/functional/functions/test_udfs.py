@@ -56,7 +56,7 @@ class TestBigqueryDeterministicUDFs(DeterministicUDF):
         # Check that the warning event was caught
         assert len(warning_event_catcher.caught_events) == 1
         assert (
-            "`deterministic` function volatility is not supported by BigQuery, and will be ignored"
+            "Found `deterministic` volatility specified on function `price_for_xlarge`. This volatility is not supported by bigquery, and will be ignored"
             in warning_event_catcher.caught_events[0].data.msg
         )
 
@@ -101,7 +101,7 @@ class TestBigqueryStableUDFs(StableUDF):
         # Check that the warning event was caught
         assert len(warning_event_catcher.caught_events) == 1
         assert (
-            "`stable` function volatility is not supported by BigQuery, and will be ignored"
+            "Found `stable` volatility specified on function `price_for_xlarge`. This volatility is not supported by bigquery, and will be ignored"
             in warning_event_catcher.caught_events[0].data.msg
         )
 
@@ -146,7 +146,7 @@ class TestBigqueryNonDeterministicUDFs(NonDeterministicUDF):
         # Check that the warning event was caught
         assert len(warning_event_catcher.caught_events) == 1
         assert (
-            "`non-deterministic` function volatility is not supported by BigQuery, and will be ignored"
+            "Found `non-deterministic` volatility specified on function `price_for_xlarge`. This volatility is not supported by bigquery, and will be ignored"
             in warning_event_catcher.caught_events[0].data.msg
         )
 
