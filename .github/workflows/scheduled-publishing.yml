@@ -45,7 +45,7 @@ jobs:
                 REPO: "dbt-labs/dbt-mantle"
                 WORKFLOW: "open-lockfile-pr.yml"
                 PR_TITLE: "Generate new lockfile for dbt-mantle"
-        -   uses: ravsamhq/notify-slack-action@v2
+        -   uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}
