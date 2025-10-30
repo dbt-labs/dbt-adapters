@@ -13,7 +13,7 @@
 
 {% macro bigquery__scalar_function_volatility_sql() %}
     {% set volatility = model.config.get('volatility') %}
-    {% if volatility is not None %}
+    {% if volatility != None %}
         {% do exceptions.warn("`" ~ volatility ~ "` function volatility is not supported by BigQuery, and will be ignored") %}
     {% endif %}
 {% endmacro %}
