@@ -24,6 +24,13 @@ class TestBigqueryUDFs(UDFsBasic):
 
 
 class TestBigqueryDeterministicUDFs(DeterministicUDF):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
     def check_function_volatility(self, sql: str):
         assert "VOLATILE" not in sql
         assert "STABLE" not in sql
@@ -62,6 +69,13 @@ class TestBigqueryDeterministicUDFs(DeterministicUDF):
 
 
 class TestBigqueryStableUDFs(StableUDF):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
     def check_function_volatility(self, sql: str):
         assert "VOLATILE" not in sql
         assert "STABLE" not in sql
@@ -100,6 +114,13 @@ class TestBigqueryStableUDFs(StableUDF):
 
 
 class TestBigqueryNonDeterministicUDFs(NonDeterministicUDF):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
     def check_function_volatility(self, sql: str):
         assert "VOLATILE" not in sql
         assert "STABLE" not in sql
