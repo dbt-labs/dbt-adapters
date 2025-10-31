@@ -8,6 +8,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     DeterministicUDF,
     StableUDF,
     NonDeterministicUDF,
+    ErrorForUnsupportedType,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -67,4 +68,8 @@ class TestSnowflakeStableUDFs(StableUDF):
 
 
 class TestSnowflakeNonDeterministicUDFs(NonDeterministicUDF):
+    pass
+
+
+class TestSnowflakeErrorForUnsupportedType(ErrorForUnsupportedType):
     pass
