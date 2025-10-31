@@ -5,6 +5,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     DeterministicUDF,
     StableUDF,
     NonDeterministicUDF,
+    ErrorForUnsupportedType,
 )
 from tests.functional.functions.files import MY_UDF_SQL
 
@@ -42,6 +43,15 @@ class TestRedshiftStableUDFs(StableUDF):
 
 
 class TestRedshiftNonDeterministicUDFs(NonDeterministicUDF):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
+
+
+class TestRedshiftErrorForUnsupportedType(ErrorForUnsupportedType):
     @pytest.fixture(scope="class")
     def functions(self):
         return {

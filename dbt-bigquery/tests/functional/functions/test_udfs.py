@@ -8,6 +8,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     DeterministicUDF,
     StableUDF,
     NonDeterministicUDF,
+    ErrorForUnsupportedType,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -156,3 +157,12 @@ class TestBigqueryNonDeterministicUDFs(NonDeterministicUDF):
         # The result should have an agate table with one row and one column (and thus only one value, which is our inline selection)
         select_value = int(result.results[0].agate_table.rows[0].values()[0])
         assert select_value == 200  # the UDF should return 2x the input value (100 * 2 = 200)
+
+
+class TestBigqueryErrorForUnsupportedType(ErrorForUnsupportedType):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
