@@ -31,7 +31,7 @@ jobs:
                 -   threshold: 360
                     labels: 'good-first-issue,help-wanted,type:task'
         steps:
-        -   uses: actions/stale@v9
+        -   uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # actions/stale@v9
             with:
                 stale-issue-message: "This issue has been marked as Stale because it has been open for 180 days with no activity. If you would like the issue to remain open, please comment on the issue or else it will be closed in 7 days."
                 stale-pr-message: "This PR has been marked as Stale because it has been open with no activity as of late. If you would like the PR to remain open, please comment on the PR or else it will be closed in 7 days."
