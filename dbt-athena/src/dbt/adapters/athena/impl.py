@@ -1401,14 +1401,9 @@ class AthenaAdapter(SQLAdapter):
 
     @available
     def format_partition_keys(
-        self, partition_keys: List[str], relation_columns: Optional[List] = None
+        self, partition_keys: List[str], relation_columns: List[AthenaColumn]
     ) -> str:
-        """Format partition keys for SQL query.
-
-        Args:
-            partition_keys: List of partition key specifications (e.g., ['year(col)', 'truncate(col, 5)'])
-            relation_columns: Optional list of AthenaColumn objects to determine column types
-        """
+        """Format partition keys for SQL query."""
         formatted_keys = []
         for partition_key in partition_keys:
             formatted_keys.append(self.format_one_partition_key(partition_key, relation_columns))
@@ -1416,16 +1411,13 @@ class AthenaAdapter(SQLAdapter):
 
     @available
     def format_one_partition_key(
-        self, partition_key: str, relation_columns: Optional[List] = None
+        self, partition_key: str, relation_columns: List[AthenaColumn]
     ) -> str:
-        """Check if partition key uses Iceberg hidden partitioning or bucket partitioning.
+        """
+        Check if partition key uses Iceberg hidden partitioning or bucket partitioning.
 
         For truncate() on non-numeric columns, converts to substr() since truncate() only works
         for numeric types in Athena.
-
-        Args:
-            partition_key: Partition key specification (e.g., 'truncate(col, 5)')
-            relation_columns: Optional list of AthenaColumn objects to find matching column by name
         """
         hidden = re.search(r"^(hour|day|month|year)\((.+)\)", partition_key.lower())
         bucket = re.search(r"bucket\((.+),", partition_key.lower())
@@ -1439,19 +1431,15 @@ class AthenaAdapter(SQLAdapter):
             col_name = truncate_match.group(1)
             width = truncate_match.group(2)
 
-            # Find matching column by name
             column = None
-            if relation_columns:
-                for col in relation_columns:
-                    if col.name.lower() == col_name.lower():
-                        column = col
-                        break
+            for col in relation_columns:
+                if col.name.lower() == col_name.lower():
+                    column = col
+                    break
 
-            # Convert truncate to substr for non-numeric columns
             if column and not column.is_number():
                 return f"substr({col_name}, 1, {width})"
             else:
-                # Keep truncate for numeric types
                 return partition_key.lower()
         else:
             return partition_key.lower()

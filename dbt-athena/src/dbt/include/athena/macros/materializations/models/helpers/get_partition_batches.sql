@@ -3,13 +3,8 @@
     {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
 
-    {# Get column info from relation when available (for truncate->substr conversion) #}
-    {# We need column types BEFORE the query, so we get them from the relation schema #}
-    {%- set relation_columns = none -%}
-    {%- if not as_subquery -%}
-        {# sql is a relation object, we can get column info #}
-        {%- set relation_columns = adapter.get_columns_in_relation(sql) -%}
-    {%- endif -%}
+    {# Get column info from relation (for truncate->substr conversion) #}
+    {%- set relation_columns = adapter.get_columns_in_relation(sql) -%}
 
     {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by, relation_columns) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
