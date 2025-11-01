@@ -2,7 +2,11 @@
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
-    {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by) -%}
+
+    {# Get column info from relation (for truncate->substr conversion) #}
+    {%- set relation_columns = adapter.get_columns_in_relation(sql) -%}
+
+    {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by, relation_columns) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
 
     {# Retrieve distinct partitions from the given SQL #}
@@ -35,7 +39,7 @@
                 {# For non-bucketed columns, format partition key and value #}
                 {%- set column_type = adapter.convert_type(table, counter.value) -%}
                 {%- set value, comp_func = adapter.format_value_for_partition(col, column_type) -%}
-                {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value]) -%}
+                {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value], relation_columns) -%}
                 {%- do single_partition.append(partition_key_formatted + comp_func + value) -%}
             {%- endif -%}
             {# Increment the counter #}
