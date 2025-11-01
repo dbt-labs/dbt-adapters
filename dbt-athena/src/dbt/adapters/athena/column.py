@@ -44,6 +44,15 @@ class AthenaColumn(Column):
     def is_array(self) -> bool:
         return self.dtype.lower().startswith("array")
 
+    def is_integer(self) -> bool:
+        """Check if column is an integer type. Valid Athena values: int, bigint."""
+        return self.dtype.lower() in ["int", "bigint"]
+
+    def is_numeric(self) -> bool:
+        """Check if column is numeric type. Valid Athena values: int, bigint, decimal(P,S)."""
+        dtype_lower = self.dtype.lower()
+        return dtype_lower in ["int", "bigint"] or dtype_lower.startswith("decimal")
+
     @classmethod
     def string_type(cls, size: int) -> str:
         return f"varchar({size})" if size > 0 else "varchar"

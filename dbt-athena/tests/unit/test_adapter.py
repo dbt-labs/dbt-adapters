@@ -1287,27 +1287,56 @@ class TestAthenaAdapter:
         assert self.adapter._is_current_column(column) == expected
 
     @pytest.mark.parametrize(
-        "partition_keys, expected_result",
+        "partition_keys, relation_columns, expected_result",
         [
             (
                 ["year(date_col)", "bucket(col_name, 10)", "default_partition_key"],
+                [],
                 "date_trunc('year', date_col), col_name, default_partition_key",
+            ),
+            (
+                ["truncate(int_col, 1000000)", "truncate(str_col, 1)"],
+                [
+                    AthenaColumn(column="int_col", dtype="int"),
+                    AthenaColumn(column="str_col", dtype="string"),
+                ],
+                "truncate(int_col, 1000000), substr(str_col, 1, 1)",
             ),
         ],
     )
-    def test_format_partition_keys(self, partition_keys, expected_result):
-        assert self.adapter.format_partition_keys(partition_keys) == expected_result
+    def test_format_partition_keys(self, partition_keys, relation_columns, expected_result):
+        assert (
+            self.adapter.format_partition_keys(partition_keys, relation_columns) == expected_result
+        )
 
     @pytest.mark.parametrize(
-        "partition_key, expected_result",
+        "partition_key, relation_columns, expected_result",
         [
-            ("month(hidden)", "date_trunc('month', hidden)"),
-            ("bucket(bucket_col, 10)", "bucket_col"),
-            ("regular_col", "regular_col"),
+            ("month(hidden)", [], "date_trunc('month', hidden)"),
+            ("bucket(bucket_col, 10)", [], "bucket_col"),
+            ("regular_col", [], "regular_col"),
+            (
+                "truncate(int_col, 1000000)",
+                [AthenaColumn(column="int_col", dtype="int")],
+                "truncate(int_col, 1000000)",
+            ),
+            (
+                "truncate(decimal_col, 1000)",
+                [AthenaColumn(column="decimal_col", dtype="decimal(10,2)")],
+                "truncate(decimal_col, 1000)",
+            ),
+            (
+                "truncate(str_col, 1)",
+                [AthenaColumn(column="str_col", dtype="string")],
+                "substr(str_col, 1, 1)",
+            ),
         ],
     )
-    def test_format_one_partition_key(self, partition_key, expected_result):
-        assert self.adapter.format_one_partition_key(partition_key) == expected_result
+    def test_format_one_partition_key(self, partition_key, relation_columns, expected_result):
+        assert (
+            self.adapter.format_one_partition_key(partition_key, relation_columns)
+            == expected_result
+        )
 
     def test_murmur3_hash_with_int(self):
         bucket_number = self.adapter.murmur3_hash(123, 100)
