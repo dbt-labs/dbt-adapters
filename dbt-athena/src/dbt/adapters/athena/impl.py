@@ -1440,7 +1440,7 @@ class AthenaAdapter(SQLAdapter):
             if column and not column.is_numeric():
                 return f"substr({col_name}, 1, {width})"
             else:
-                return partition_key.lower()
+                return f"floor({col_name} / {width})"
         else:
             return partition_key.lower()
 
