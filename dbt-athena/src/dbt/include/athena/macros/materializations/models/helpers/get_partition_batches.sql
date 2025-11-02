@@ -3,10 +3,38 @@
     {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
 
-    {# Get column info from relation (for truncate->substr conversion) #}
+    {# Get column info from relation (for truncate transformation) #}
     {%- set relation_columns = adapter.get_columns_in_relation(sql) -%}
 
-    {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by, relation_columns) -%}
+    {# Transform truncate() partition keys to either substr() or floor() based on column types #}
+    {%- set transformed_partitioned_by = [] -%}
+    {%- for partition_key in partitioned_by -%}
+        {%- set truncate_match = modules.re.search('truncate\\((.+?),\\s*(\\d+)\\)', partition_key.lower()) -%}
+        {%- if truncate_match -%}
+            {%- set col_name = truncate_match.group(1) -%}
+            {%- set width = truncate_match.group(2) -%}
+
+            {# Find the column type #}
+            {%- set column = None -%}
+            {%- for col in relation_columns -%}
+                {%- if col.name.lower() == col_name.lower() -%}
+                    {%- set column = col -%}
+                {%- endif -%}
+            {%- endfor -%}
+
+            {# Transform based on column type #}
+            {%- if column and not column.is_numeric() -%}
+                {%- do transformed_partitioned_by.append('substr(' ~ col_name ~ ', 1, ' ~ width ~ ')') -%}
+            {%- else -%}
+                {%- do transformed_partitioned_by.append('floor(' ~ col_name ~ ' / ' ~ width ~ ')') -%}
+            {%- endif -%}
+        {%- else -%}
+            {# No transformation needed, keep original #}
+            {%- do transformed_partitioned_by.append(partition_key) -%}
+        {%- endif -%}
+    {%- endfor -%}
+
+    {%- set partitioned_keys = adapter.format_partition_keys(transformed_partitioned_by) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
 
     {# Retrieve distinct partitions from the given SQL #}
@@ -39,7 +67,7 @@
                 {# For non-bucketed columns, format partition key and value #}
                 {%- set column_type = adapter.convert_type(table, counter.value) -%}
                 {%- set value, comp_func = adapter.format_value_for_partition(col, column_type) -%}
-                {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value], relation_columns) -%}
+                {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value]) -%}
                 {%- do single_partition.append(partition_key_formatted + comp_func + value) -%}
             {%- endif -%}
             {# Increment the counter #}

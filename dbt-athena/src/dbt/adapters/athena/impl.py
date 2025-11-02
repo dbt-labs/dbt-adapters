@@ -1400,47 +1400,18 @@ class AthenaAdapter(SQLAdapter):
         return f'{{"rowcount":{cursor.rowcount},"data_scanned_in_bytes":{cursor.data_scanned_in_bytes}}}'
 
     @available
-    def format_partition_keys(
-        self, partition_keys: List[str], relation_columns: List[AthenaColumn]
-    ) -> str:
-        """Format partition keys for SQL query."""
-        formatted_keys = []
-        for partition_key in partition_keys:
-            formatted_keys.append(self.format_one_partition_key(partition_key, relation_columns))
-        return ", ".join(formatted_keys)
+    def format_partition_keys(self, partition_keys: List[str]) -> str:
+        return ", ".join([self.format_one_partition_key(k) for k in partition_keys])
 
     @available
-    def format_one_partition_key(
-        self, partition_key: str, relation_columns: List[AthenaColumn]
-    ) -> str:
-        """
-        Check if partition key uses Iceberg hidden partitioning or bucket partitioning.
-
-        For truncate() on non-numeric columns, converts to substr() since truncate() only works
-        for numeric types in Athena.
-        """
+    def format_one_partition_key(self, partition_key: str) -> str:
+        """Check if partition key uses Iceberg hidden partitioning or bucket partitioning"""
         hidden = re.search(r"^(hour|day|month|year)\((.+)\)", partition_key.lower())
         bucket = re.search(r"bucket\((.+),", partition_key.lower())
-        truncate_match = re.search(r"truncate\((.+?),\s*(\d+)\)", partition_key.lower())
-
         if hidden:
             return f"date_trunc('{hidden.group(1)}', {hidden.group(2)})"
         elif bucket:
             return bucket.group(1)
-        elif truncate_match:
-            col_name = truncate_match.group(1)
-            width = truncate_match.group(2)
-
-            column = None
-            for col in relation_columns:
-                if col.name.lower() == col_name.lower():
-                    column = col
-                    break
-
-            if column and not column.is_numeric():
-                return f"substr({col_name}, 1, {width})"
-            else:
-                return f"floor({col_name} / {width})"
         else:
             return partition_key.lower()
 
