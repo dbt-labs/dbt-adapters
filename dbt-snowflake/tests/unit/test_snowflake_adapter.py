@@ -290,6 +290,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 ),
@@ -323,6 +324,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=None,
                 )
@@ -351,6 +353,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                 )
             ]
@@ -385,6 +388,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -419,6 +423,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -449,6 +454,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -483,6 +489,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -517,6 +524,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -551,6 +559,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -583,6 +592,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -613,6 +623,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
                 )
@@ -642,6 +653,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -676,6 +688,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
@@ -712,6 +725,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
                 )
