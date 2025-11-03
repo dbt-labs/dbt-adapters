@@ -110,7 +110,7 @@
         - Primary key changes
         - Index changes
         - Column type changes
-        - Adding/removing columns
+        - Adding/removing columns (if included in key or index)
     -#}
 
     {% set _existing_hybrid_table = snowflake__describe_hybrid_table(existing_relation) %}
