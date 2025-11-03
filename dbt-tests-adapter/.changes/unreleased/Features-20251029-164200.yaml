@@ -1,0 +1,6 @@
+kind: Features
+body: Add tests for the setting of volatility for sql UDFs
+time: 2025-10-29T16:42:00.125305-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1345"

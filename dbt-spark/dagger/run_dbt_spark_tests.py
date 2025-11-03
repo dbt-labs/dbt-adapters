@@ -91,7 +91,7 @@ async def test_spark(test_args):
         # create cache volumes, these are persisted between runs saving time when developing locally
         tst_container = (
             client.container(platform=dagger.Platform("linux/amd64"))
-            .from_("python:3.9-slim")
+            .from_("python:3.10-slim")
             .with_mounted_cache("/var/cache/apt/archives", client.cache_volume("os_reqs"))
             .with_mounted_cache("/root/.cache/pip", client.cache_volume("pip"))
         )
