@@ -4,8 +4,9 @@
 
     {{ run_hooks(pre_hooks) }}
 
-    {% set function_type_macro = get_function_macro('scalar', 'sql') %}
-    {% set build_sql = function_type_macro(target_relation) %}
+    {% set function_type = model.config.get('type') %}
+    {% set function_macro = get_function_macro(function_type, 'sql') %}
+    {% set build_sql = function_macro(target_relation) %}
 
     {{ function_execute_build_sql(build_sql, existing_relation, target_relation) }}
 
