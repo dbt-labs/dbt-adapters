@@ -110,3 +110,30 @@ DYNAMIC_ICEBERG_TABLE_REPLACE = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+DYNAMIC_TABLE_CUSTOM_SCHEMA = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='30 minutes',
+    schema='custom_schema'
+) }}
+select * from {{ ref('simple_model') }}
+"""
+
+DYNAMIC_TABLE_CUSTOM_DB_SCHEMA = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='30 minutes',
+    schema='custom_schema'
+) }}
+select * from {{ ref('simple_model') }}
+"""
+
+SIMPLE_MODEL = """
+{{ config(
+    materialized='table'
+) }}
+SELECT 1 as id
+"""

@@ -35,7 +35,7 @@ class DataprocBatchConfig(ExtensibleDbtClassMixin):
         self.batch_config = batch_config
 
 
-class _BigQueryConnectionMethod(StrEnum):
+class BigQueryConnectionMethod(StrEnum):
     OAUTH = "oauth"
     OAUTH_SECRETS = "oauth-secrets"
     SERVICE_ACCOUNT = "service-account"
@@ -46,7 +46,7 @@ class _BigQueryConnectionMethod(StrEnum):
 
 @dataclass
 class BigQueryCredentials(Credentials):
-    method: _BigQueryConnectionMethod = None  # type: ignore
+    method: BigQueryConnectionMethod = None  # type: ignore
 
     # BigQuery allows an empty database / project, where it defers to the
     # environment for the project
@@ -55,6 +55,7 @@ class BigQueryCredentials(Credentials):
     execution_project: Optional[str] = None
     quota_project: Optional[str] = None
     location: Optional[str] = None
+    api_endpoint: Optional[str] = None
     priority: Optional[Priority] = None
     maximum_bytes_billed: Optional[int] = None
     impersonate_service_account: Optional[str] = None
@@ -93,9 +94,10 @@ class BigQueryCredentials(Credentials):
     #   workload identity federation service
     token_endpoint: Optional[Dict[str, str]] = None
 
-    dataproc_region: Optional[str] = None
+    compute_region: Optional[str] = None
     dataproc_cluster_name: Optional[str] = None
     gcs_bucket: Optional[str] = None
+    submission_method: Optional[str] = None
 
     dataproc_batch: Optional[DataprocBatchConfig] = field(
         metadata={
@@ -108,6 +110,7 @@ class BigQueryCredentials(Credentials):
         "https://www.googleapis.com/auth/bigquery",
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/drive",
+        "https://www.googleapis.com/auth/userinfo.email",
     )
 
     _ALIASES = {
@@ -118,6 +121,7 @@ class BigQueryCredentials(Credentials):
         "target_dataset": "target_schema",
         "retries": "job_retries",
         "timeout_seconds": "job_execution_timeout_seconds",
+        "dataproc_region": "compute_region",
     }
 
     def __post_init__(self):
@@ -156,7 +160,7 @@ class BigQueryCredentials(Credentials):
             "timeout_seconds",
             "client_id",
             "token_uri",
-            "dataproc_region",
+            "compute_region",
             "dataproc_cluster_name",
             "gcs_bucket",
             "dataproc_batch",
@@ -215,15 +219,15 @@ def _create_impersonated_credentials(credentials: BigQueryCredentials) -> Impers
 
 def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
 
-    if credentials.method == _BigQueryConnectionMethod.OAUTH:
+    if credentials.method == BigQueryConnectionMethod.OAUTH:
         creds, _ = _create_bigquery_defaults(scopes=credentials.scopes)
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT:
         creds = ServiceAccountCredentials.from_service_account_file(
             credentials.keyfile, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
+    elif credentials.method == BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON:
         details = credentials.keyfile_json
         if _is_base64(details):  # type:ignore
             details = _base64_to_string(details)
@@ -231,7 +235,7 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             details, scopes=credentials.scopes
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.OAUTH_SECRETS:
+    elif credentials.method == BigQueryConnectionMethod.OAUTH_SECRETS:
         creds = GoogleCredentials(
             token=credentials.token,
             refresh_token=credentials.refresh_token,
@@ -241,7 +245,7 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
             scopes=credentials.scopes,
         )
 
-    elif credentials.method == _BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
+    elif credentials.method == BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
         creds = _create_identity_pool_credentials(credentials=credentials)
 
     else:

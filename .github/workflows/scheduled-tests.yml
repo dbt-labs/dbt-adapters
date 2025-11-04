@@ -1,72 +1,31 @@
 name: "Scheduled tests"
-run-name: "Scheduled tests - ${{ github.actor }}"
+run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 
 on:
     schedule:
     -   cron: '0 3 * * *'
     workflow_dispatch:
 
+permissions:
+    id-token: write
+    contents: read
+
 jobs:
-    verify-builds:
-        uses: ./.github/workflows/_verify-build.yml
+    run-tests:
+        uses: ./.github/workflows/_run-tests.yml
         strategy:
             fail-fast: false
+            max-parallel: 1  # Run branches sequentially
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                branch: ["stable", "main"]
         with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
-
-    unit-tests:
-        uses: ./.github/workflows/_unit-tests.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
-
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
-        with:
-            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
-            branch: ${{ github.event.pull_request.head.ref }}
-            repository: ${{ github.event.pull_request.head.repo.full_name }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            branch: ${{ matrix.branch }}
+            repository: ${{ github.repository }}
         secrets: inherit
 
     notification:
-        if: always()
-        needs: [verify-builds, unit-tests, integration-tests]
+        if: ${{ !cancelled() }}
+        needs: [run-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
@@ -75,7 +34,7 @@ jobs:
             with:
                 jobs: ${{ toJSON(needs) }}
         -   uses: ravsamhq/notify-slack-action@v2
-            if: ${{ always() }}
+            if: always()
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 status: ${{ job.status }}

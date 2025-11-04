@@ -1,4 +1,4 @@
-from typing import Dict, Type
+from typing import Dict, Iterable, Type
 
 from dbt.adapters.catalogs._exceptions import (
     DbtCatalogIntegrationAlreadyExistsError,
@@ -26,29 +26,29 @@ class CatalogIntegrationClient:
             integration names mapped to their instances
     """
 
-    def __init__(self, supported_catalogs: Dict[str, Type[CatalogIntegration]]):
-        self.__supported_catalogs = supported_catalogs
+    def __init__(self, supported_catalogs: Iterable[Type[CatalogIntegration]]):
+        self.__supported_catalogs: Dict[str, Type[CatalogIntegration]] = {
+            catalog.catalog_type.casefold(): catalog for catalog in supported_catalogs
+        }
         self.__catalog_integrations: Dict[str, CatalogIntegration] = {}
 
-    def add(self, catalog_integration: CatalogIntegrationConfig) -> CatalogIntegration:
-        try:
-            catalog_factory = self.__supported_catalogs[catalog_integration.catalog_type]
-        except KeyError:
-            raise DbtCatalogIntegrationNotSupportedError(
-                catalog_integration.catalog_type, self.__supported_catalogs.keys()
-            )
-
-        if catalog_integration.name in self.__catalog_integrations.keys():
-            raise DbtCatalogIntegrationAlreadyExistsError(catalog_integration.name)
-
-        self.__catalog_integrations[catalog_integration.name] = catalog_factory(
-            catalog_integration
-        )
-
-        return self.get(catalog_integration.name)
+    def add(self, config: CatalogIntegrationConfig) -> CatalogIntegration:
+        factory = self.__catalog_integration_factory(config.catalog_type)
+        if config.name in self.__catalog_integrations:
+            raise DbtCatalogIntegrationAlreadyExistsError(config.name)
+        self.__catalog_integrations[config.name] = factory(config)
+        return self.get(config.name)
 
     def get(self, name: str) -> CatalogIntegration:
         try:
             return self.__catalog_integrations[name]
         except KeyError:
             raise DbtCatalogIntegrationNotFoundError(name, self.__catalog_integrations.keys())
+
+    def __catalog_integration_factory(self, catalog_type: str) -> Type[CatalogIntegration]:
+        try:
+            return self.__supported_catalogs[catalog_type.casefold()]
+        except KeyError as e:
+            raise DbtCatalogIntegrationNotSupportedError(
+                catalog_type, self.__supported_catalogs.keys()
+            ) from e

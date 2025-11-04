@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import random
 
@@ -20,7 +20,7 @@ def connection() -> redshift_connector.Connection:
 
 @pytest.fixture
 def schema_name(request) -> str:
-    runtime = datetime.utcnow() - datetime(1970, 1, 1, 0, 0, 0)
+    runtime = datetime.now(timezone.utc).replace(tzinfo=None) - datetime(1970, 1, 1, 0, 0, 0)
     runtime_s = int(runtime.total_seconds())
     runtime_ms = runtime.microseconds
     random_int = random.randint(0, 9999)
