@@ -1,0 +1,6 @@
+kind: Features
+body: Livy connection support for Spark SQL models
+time: 2025-04-11T15:28:14.947683008+05:30
+custom:
+  Author: mukeshkumarkulmi
+  Issue: "483"
