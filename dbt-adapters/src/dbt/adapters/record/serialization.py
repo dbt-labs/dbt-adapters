@@ -3,6 +3,8 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, TYPE_CHECKING, List, Union
 
+from dbt_common.record import Recorder
+
 if TYPE_CHECKING:
     from agate import Table
     from dbt.adapters.base.relation import BaseRelation
@@ -23,9 +25,13 @@ def _column_filter(val: Any) -> Any:
 
 def serialize_agate_table(table: "Table") -> Dict[str, Any]:
     rows = []
-    for row in table.rows:
-        row = list(map(_column_filter, row))
-        rows.append(row)
+
+    if Recorder.record_row_limit and len(table.rows) > Recorder.record_row_limit:
+        rows = [[f"Serialization Error: Agate table contains {len(table.rows)} rows, maximum is {Recorder.record_row_limit} rows."]]
+    else:
+        for row in table.rows:
+            row = list(map(_column_filter, row))
+            rows.append(row)
 
     return {
         "column_names": table.column_names,
