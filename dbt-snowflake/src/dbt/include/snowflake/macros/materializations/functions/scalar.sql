@@ -8,7 +8,7 @@
 
 {% macro snowflake__scalar_function_body_sql() %}
     $$
-       {{ model.compiled_code }}
+{{ model.compiled_code }}
     $$
 {% endmacro %}
 
@@ -22,4 +22,21 @@
         {% do unsupported_volatility_warning(volatility) %}
     {% endif %}
     {# If no volatility is set, don't add anything and let the data warehouse default it #}
+{% endmacro %}
+
+{% macro snowflake__scalar_function_create_replace_signature_python(target_relation) %}
+    {% set runtime_version = get_python_runtime_version() %}
+    {% set handler = get_python_entry_point() %}
+    CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
+    RETURNS {{ model.returns.data_type }}
+    LANGUAGE PYTHON
+    RUNTIME_VERSION = '{{ runtime_version }}'
+    HANDLER = '{{ handler }}'
+    {{ scalar_function_volatility_sql() }}
+    AS
+{% endmacro %}
+
+{% macro snowflake__scalar_function_python(target_relation) %}
+    {{ snowflake__scalar_function_create_replace_signature_python(target_relation) }}
+    {{ scalar_function_body_sql() }}
 {% endmacro %}

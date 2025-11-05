@@ -17,3 +17,25 @@
         {% do unsupported_volatility_warning(volatility) %}
     {% endif %}
 {% endmacro %}
+
+{% macro bigquery__scalar_function_create_replace_signature_python(target_relation) %}
+    {% set runtime_version = bigquery__get_python_runtime_version() %}
+    {% set entry_point = bigquery__get_python_entry_point() %}
+    CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
+    RETURNS {{ model.returns.data_type }}
+    LANGUAGE PYTHON
+    OPTIONS(runtime_version = "{{ get_python_runtime_version() }}", entry_point = "{{ get_python_entry_point() }}")
+    {{ scalar_function_volatility_sql() }}
+    AS
+{% endmacro %}
+
+{% macro bigquery__get_scalar_function_body_python() %}
+    r'''
+{{ model.compiled_code }}
+    '''
+{% endmacro %}
+
+{% macro bigquery__scalar_function_python(target_relation) %}
+    {{ bigquery__scalar_function_create_replace_signature_python(target_relation) }}
+    {{ bigquery__scalar_function_body_sql() }}
+{% endmacro %}

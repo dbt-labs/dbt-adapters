@@ -9,6 +9,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     StableUDF,
     NonDeterministicUDF,
     ErrorForUnsupportedType,
+    PythonUDFSupported,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -166,3 +167,7 @@ class TestBigqueryErrorForUnsupportedType(ErrorForUnsupportedType):
             "price_for_xlarge.sql": files.MY_UDF_SQL,
             "price_for_xlarge.yml": files.MY_UDF_YML,
         }
+
+
+class TestBigqueryPythonUDFSupported(PythonUDFSupported):
+    pass

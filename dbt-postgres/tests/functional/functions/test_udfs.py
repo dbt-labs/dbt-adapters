@@ -4,6 +4,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     StableUDF,
     NonDeterministicUDF,
     ErrorForUnsupportedType,
+    PythonUDFNotSupported,
 )
 
 
@@ -24,4 +25,8 @@ class TestPostgresNonDeterministicUDFs(NonDeterministicUDF):
 
 
 class TestPostgresErrorForUnsupportedType(ErrorForUnsupportedType):
+    pass
+
+
+class TestPostgresPythonUDFNotSupported(PythonUDFNotSupported):
     pass

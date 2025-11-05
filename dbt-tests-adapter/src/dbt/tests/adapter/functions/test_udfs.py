@@ -112,3 +112,36 @@ class ErrorForUnsupportedType(UDFsBasic):
             "No macro named 'table_function_sql' found within namespace"
             in run_result_error_catcher.caught_events[0].data.msg
         )
+
+
+class PythonUDFSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_YML,
+        }
+
+
+class PythonUDFNotSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_YML,
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "No macro named 'scalar_function_python' found within namespace"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
