@@ -34,7 +34,11 @@ select 1 as id
 
 
 @pytest.mark.skip_profile(
-    "spark_http_odbc", "databricks_cluster", "databricks_sql_endpoint", "spark_session"
+    "spark_http_odbc",
+    "databricks_cluster",
+    "databricks_sql_endpoint",
+    "databricks_http_cluster",
+    "spark_session",
 )
 class TestQueryTimeout:
     """Test query timeout functionality.
