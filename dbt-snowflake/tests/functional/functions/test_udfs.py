@@ -10,6 +10,8 @@ from dbt.tests.adapter.functions.test_udfs import (
     NonDeterministicUDF,
     ErrorForUnsupportedType,
     PythonUDFSupported,
+    PythonUDFRuntimeVersionRequired,
+    PythonUDFEntryPointRequired,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -77,4 +79,12 @@ class TestSnowflakeErrorForUnsupportedType(ErrorForUnsupportedType):
 
 
 class TestSnowflakePythonUDFSupported(PythonUDFSupported):
+    pass
+
+
+class TestSnowflakePythonUDFRuntimeVersionRequired(PythonUDFRuntimeVersionRequired):
+    pass
+
+
+class TestSnowflakePythonUDFEntryPointRequired(PythonUDFEntryPointRequired):
     pass

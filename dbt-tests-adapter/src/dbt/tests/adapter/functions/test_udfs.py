@@ -145,3 +145,63 @@ class PythonUDFNotSupported(UDFsBasic):
             "No macro named 'scalar_function_python' found within namespace"
             in run_result_error_catcher.caught_events[0].data.msg
         )
+
+
+class PythonUDFRuntimeVersionRequired(PythonUDFNotSupported):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+entry_point": "price_for_xlarge"},
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "A `runtime_version` is required for python functions"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
+
+
+class PythonUDFEntryPointRequired(PythonUDFRuntimeVersionRequired):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+runtime_version": "3.11"},
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "An `entry_point` is required for python functions"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )

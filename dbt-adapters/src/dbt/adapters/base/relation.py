@@ -54,6 +54,20 @@ class EventTimeFilter(FakeAPIObject):
 class FunctionConfig(RelationConfigBase, RelationConfigValidationMixin):
     language: str
     type: str
+    runtime_version: Optional[str] = None
+    entry_point: Optional[str] = None
+
+    def _validate_runtime_version(self) -> bool:
+        if self.language == "python":
+            return self.runtime_version is not None
+        else:
+            return True
+
+    def _validate_entry_point(self) -> bool:
+        if self.language == "python":
+            return self.entry_point is not None
+        else:
+            return True
 
     @property
     def validation_rules(self) -> Set[RelationConfigValidationRule]:
@@ -65,6 +79,18 @@ class FunctionConfig(RelationConfigBase, RelationConfigValidationMixin):
             RelationConfigValidationRule(
                 validation_check=self.type != "" and self.type is not None,
                 validation_error=DbtRuntimeError("A `type` is required for functions"),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.language != "python" or self.runtime_version is not None,
+                validation_error=DbtRuntimeError(
+                    "A `runtime_version` is required for python functions"
+                ),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.language != "python" or self.entry_point is not None,
+                validation_error=DbtRuntimeError(
+                    "An `entry_point` is required for python functions"
+                ),
             ),
         }
 
@@ -495,10 +521,11 @@ class BaseRelation(FakeAPIObject, Hashable):
         # TODO: We shouldn't have to check the model.resource_type here. We should be alble to do self.is_function instead.
         # However, somehow when we get here self.type is None, and thus self.is_function is False.
         if model.get("resource_type") == "function":
-            print("model.config: ", model.get("config"))
             return FunctionConfig(
                 language=model.get("language", ""),
                 type=model.get("config", {}).get("type", ""),
+                runtime_version=model.get("config", {}).get("runtime_version", None),
+                entry_point=model.get("config", {}).get("entry_point", None),
             )
         else:
             return None

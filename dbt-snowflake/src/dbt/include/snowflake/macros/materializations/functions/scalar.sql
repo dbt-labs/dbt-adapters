@@ -25,13 +25,11 @@
 {% endmacro %}
 
 {% macro snowflake__scalar_function_create_replace_signature_python(target_relation) %}
-    {% set runtime_version = get_python_runtime_version() %}
-    {% set handler = get_python_entry_point() %}
     CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
     RETURNS {{ model.returns.data_type }}
     LANGUAGE PYTHON
-    RUNTIME_VERSION = '{{ runtime_version }}'
-    HANDLER = '{{ handler }}'
+    RUNTIME_VERSION = '{{ model.config.get('runtime_version') }}'
+    HANDLER = '{{ model.config.get('entry_point') }}'
     {{ scalar_function_volatility_sql() }}
     AS
 {% endmacro %}

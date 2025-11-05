@@ -10,6 +10,8 @@ from dbt.tests.adapter.functions.test_udfs import (
     NonDeterministicUDF,
     ErrorForUnsupportedType,
     PythonUDFSupported,
+    PythonUDFRuntimeVersionRequired,
+    PythonUDFEntryPointRequired,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -170,4 +172,12 @@ class TestBigqueryErrorForUnsupportedType(ErrorForUnsupportedType):
 
 
 class TestBigqueryPythonUDFSupported(PythonUDFSupported):
+    pass
+
+
+class TestBigqueryPythonUDFRuntimeVersionRequired(PythonUDFRuntimeVersionRequired):
+    pass
+
+
+class TestBigqueryPythonUDFEntryPointRequired(PythonUDFEntryPointRequired):
     pass

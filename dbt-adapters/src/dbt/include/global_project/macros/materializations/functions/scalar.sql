@@ -67,27 +67,3 @@
     {% set msg = "Found `" ~ volatility ~ "` volatility specified on function `" ~ model.name ~ "`. This volatility is not supported by " ~ adapter.type() ~ ", and will be ignored" %}
     {% do exceptions.warn(msg) %}
 {% endmacro %}
-
-{% macro get_python_runtime_version() %}
-    {{ return(adapter.dispatch('get_python_runtime_version', 'dbt')()) }}
-{% endmacro %}
-
-{% macro default__get_python_runtime_version() %}
-    {% set runtime_version = model.config.get('runtime_version') %}
-    {% if runtime_version == none %}
-        {% do exceptions.raise_compiler_error("A `runtime_version` is required for python user defined functions") %}
-    {% endif %}
-    {{ return(runtime_version) }}
-{% endmacro %}
-
-{% macro get_python_entry_point() %}
-    {{ return(adapter.dispatch('get_python_entry_point', 'dbt')()) }}
-{% endmacro %}
-
-{% macro default__get_python_entry_point() %}
-    {% set entry_point = model.config.get('entry_point') %}
-    {% if entry_point == none %}
-        {% do exceptions.raise_compiler_error("An `entry_point` is required for python user defined functions") %}
-    {% endif %}
-    {{ return(entry_point) }}
-{% endmacro %}
