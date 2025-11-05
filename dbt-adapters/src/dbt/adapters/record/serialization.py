@@ -62,7 +62,9 @@ def serialize_base_relation_list(relations: List["BaseRelation"]) -> List[Dict[s
     """Serialize a list of BaseRelation objects for recording."""
     if len(relations) > Recorder.record_row_limit:
         return [
-            f"Recording Error: List of BaseRelation objects contains {len(relations)} objects, maximum is {Recorder.record_row_limit} objects."
+            {
+                "error": f"Recording Error: List of BaseRelation objects contains {len(relations)} objects, maximum is {Recorder.record_row_limit} objects."
+            }
         ]
     else:
         return [serialize_base_relation(relation) for relation in relations]
@@ -83,7 +85,9 @@ def deserialize_base_relation_list(relations_data: List[Dict[str, Any]]) -> List
 def serialize_base_column_list(columns: List["BaseColumn"]) -> List[Dict[str, Any]]:
     if len(columns) > Recorder.record_row_limit:
         return [
-            f"Recording Error: List of BaseColumn objects contains {len(columns)} objects, maximum is {Recorder.record_row_limit} objects."
+            {
+                "error": f"Recording Error: List of BaseColumn objects contains {len(columns)} objects, maximum is {Recorder.record_row_limit} objects."
+            }
         ]
     else:
         return [serialize_base_column(column) for column in columns]
