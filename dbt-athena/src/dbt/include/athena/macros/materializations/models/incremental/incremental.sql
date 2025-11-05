@@ -246,11 +246,13 @@
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 
   -- Delete unchanged S3 files (outside transaction - S3 operations)
-  -- Only run cleanup on whitelisted schemas (schemas starting with "anywhere")
-  {% if initial_s3_etags and target_relation.schema.startswith('anywhere') %}
+  -- Only run cleanup for main production target where source incremental models run
+  -- Other prod targets (telescope, productivity) are downstream consumers
+  {% set run_cleanup = target.name == 'prod' %}
+  {% if initial_s3_etags and run_cleanup %}
     {% set deleted_count = cleanup_s3_etags(initial_s3_etags, incremental_source_name, incremental_source_table_name) %}
   {% elif initial_s3_etags %}
-    {{ log("Skipping S3 cleanup - only 'anywhere*' schemas are whitelisted. Current schema: " ~ target_relation.schema, info=true) }}
+    {{ log("Skipping S3 cleanup for non-production target: " ~ target.name, info=true) }}
   {% endif %}
 
   {% if lf_tags_config is not none %}
