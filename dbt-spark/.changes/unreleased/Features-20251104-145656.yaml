@@ -1,0 +1,6 @@
+kind: Features
+body: add query timeout and retry handling for pyhive connections
+time: 2025-11-04T14:56:56.104282-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1419"
