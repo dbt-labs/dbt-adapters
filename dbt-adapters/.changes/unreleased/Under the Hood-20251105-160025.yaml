@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Use Recorder.record_row_limit if available when serializing agate.Table in record-mode
+time: 2025-11-05T16:00:25.434639-05:00
+custom:
+    Author: michelleark
+    Issue: "1424"
