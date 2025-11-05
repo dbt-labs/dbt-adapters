@@ -27,6 +27,11 @@ from dbt.adapters.contracts.relation import (
     RelationConfig,
     RelationType,
 )
+from dbt.adapters.relation_configs import (
+    RelationConfigBase,
+    RelationConfigValidationMixin,
+    RelationConfigValidationRule,
+)
 from dbt.adapters.exceptions import (
     ApproximateMatchError,
     MultipleDatabasesNotAllowedError,
@@ -43,6 +48,25 @@ class EventTimeFilter(FakeAPIObject):
     field_name: str
     start: Optional[datetime] = None
     end: Optional[datetime] = None
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class FunctionConfig(RelationConfigBase, RelationConfigValidationMixin):
+    language: str
+    type: str
+
+    @property
+    def validation_rules(self) -> Set[RelationConfigValidationRule]:
+        return {
+            RelationConfigValidationRule(
+                validation_check=self.language != "" and self.language is not None,
+                validation_error=DbtRuntimeError("A `language` is required for functions"),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.type != "" and self.type is not None,
+                validation_error=DbtRuntimeError("A `type` is required for functions"),
+            ),
+        }
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -466,6 +490,21 @@ class BaseRelation(FakeAPIObject, Hashable):
     @classproperty
     def get_relation_type(cls) -> Type[RelationType]:
         return RelationType
+
+    def get_function_config(self, model: Dict[str, Any]) -> Optional[FunctionConfig]:
+        # TODO: We shouldn't have to check the model.resource_type here. We should be alble to do self.is_function instead.
+        # However, somehow when we get here self.type is None, and thus self.is_function is False.
+        if model.get("resource_type") == "function":
+            print("model.config: ", model.get("config"))
+            return FunctionConfig(
+                language=model.get("language", ""),
+                type=model.get("config", {}).get("type", ""),
+            )
+        else:
+            return None
+
+    def get_function_macro_name(self, config: FunctionConfig) -> str:
+        return f"{config.type}_function_{config.language}"
 
 
 Info = TypeVar("Info", bound="InformationSchema")

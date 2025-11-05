@@ -3,7 +3,7 @@ import pytest
 from dbt.adapters.events.types import SQLQuery
 from dbt.artifacts.schemas.results import RunStatus
 from dbt.contracts.graph.nodes import FunctionNode
-from dbt.events.types import GenericExceptionOnRun
+from dbt.events.types import RunResultError
 from dbt.tests.adapter.functions import files
 from dbt.tests.util import run_dbt
 from dbt_common.events.base_types import EventMsg
@@ -99,16 +99,16 @@ class ErrorForUnsupportedType(UDFsBasic):
         }
 
     def test_udfs(self, project, sql_event_catcher):
-        generic_exception_catcher = EventCatcher(GenericExceptionOnRun)
+        run_result_error_catcher = EventCatcher(RunResultError)
         result = run_dbt(
-            ["build", "--debug"], expect_pass=False, callbacks=[generic_exception_catcher.catch]
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
         )
         assert len(result.results) == 1
         node_result = result.results[0]
         assert node_result.status == RunStatus.Error
 
-        assert len(generic_exception_catcher.caught_events) == 1
+        assert len(run_result_error_catcher.caught_events) == 1
         assert (
-            "sql table function not implemented for adapter"
-            in generic_exception_catcher.caught_events[0].data.exc
+            "No macro named 'table_function_sql' found within namespace"
+            in run_result_error_catcher.caught_events[0].data.msg
         )
