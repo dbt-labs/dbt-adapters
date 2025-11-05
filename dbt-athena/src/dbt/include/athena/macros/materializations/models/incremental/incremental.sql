@@ -252,7 +252,7 @@
   {% if initial_s3_etags and run_cleanup %}
     {% set deleted_count = cleanup_s3_etags(initial_s3_etags, incremental_source_name, incremental_source_table_name) %}
   {% elif initial_s3_etags %}
-    {{ log("Skipping S3 cleanup for non-production target: " ~ target.name, info=true) }}
+    {{ log("Skipping S3 cleanup for target: " ~ target.name, info=true) }}
   {% endif %}
 
   {% if lf_tags_config is not none %}
