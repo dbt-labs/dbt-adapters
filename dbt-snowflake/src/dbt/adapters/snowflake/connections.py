@@ -410,6 +410,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     insecure_mode=creds.insecure_mode,
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
+                    ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
                     **creds.auth_args(),
                 )
 
