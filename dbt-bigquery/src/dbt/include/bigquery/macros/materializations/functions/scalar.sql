@@ -21,7 +21,7 @@
 {% macro bigquery__scalar_function_create_replace_signature_python(target_relation) %}
     CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
     RETURNS {{ model.returns.data_type }}
-    LANGUAGE PYTHON
+    LANGUAGE python
     OPTIONS(runtime_version = "{{ model.config.get('runtime_version') }}", entry_point = "{{ model.config.get('entry_point') }}")
     {{ scalar_function_volatility_sql() }}
     AS
