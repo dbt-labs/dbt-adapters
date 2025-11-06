@@ -3,6 +3,7 @@ from dbt.contracts.graph.nodes import FunctionNode
 from dbt.contracts.results import RunStatus
 from dbt.events.types import JinjaLogWarning
 from dbt.tests.util import run_dbt
+from dbt.tests.adapter.functions.files import MY_UDF_PYTHON
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
     DeterministicUDF,
@@ -172,12 +173,27 @@ class TestBigqueryErrorForUnsupportedType(ErrorForUnsupportedType):
 
 
 class TestBigqueryPythonUDFSupported(PythonUDFSupported):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_YML,
+        }
 
 
 class TestBigqueryPythonUDFRuntimeVersionRequired(PythonUDFRuntimeVersionRequired):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
 
 
 class TestBigqueryPythonUDFEntryPointRequired(PythonUDFEntryPointRequired):
-    pass
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
