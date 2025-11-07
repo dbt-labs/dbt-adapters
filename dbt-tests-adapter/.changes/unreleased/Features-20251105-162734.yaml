@@ -1,6 +1,0 @@
-kind: Features
-body: Add test cases for checking adapter support for python UDFs
-time: 2025-11-05T16:27:34.210661-06:00
-custom:
-  Author: QMalcolm
-  Issue: "1410"
