@@ -1,0 +1,6 @@
+kind: Features
+body: Begin looking up function macro by function type and language
+time: 2025-11-05T16:27:02.924562-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1409"
