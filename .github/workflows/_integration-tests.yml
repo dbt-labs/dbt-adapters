@@ -90,7 +90,7 @@ jobs:
             DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
             DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -126,7 +126,7 @@ jobs:
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -165,7 +165,7 @@ jobs:
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -204,7 +204,7 @@ jobs:
                 ports:
                 -   ${{ vars.POSTGRES_TEST_PORT }}:5432
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -231,7 +231,7 @@ jobs:
             run:
                 working-directory: "./dbt-postgres"
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
         -   uses: actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
@@ -288,7 +288,7 @@ jobs:
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -341,7 +341,7 @@ jobs:
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
             SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
@@ -377,7 +377,7 @@ jobs:
                 -   "databricks_cluster"
                 -   "databricks_http_cluster"
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}

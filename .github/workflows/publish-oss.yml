@@ -53,7 +53,7 @@ jobs:
         outputs:
             name: ${{ steps.branch.outputs.name }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         -   id: branch
@@ -139,13 +139,13 @@ jobs:
                 target_branch: ${{ inputs.branch }}
                 github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
                 commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             if: inputs.deploy-to == 'prod'
             with:
                 ref: ${{ inputs.branch }}
 
         # if we're not publishing to prod, just check out the work branch
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             if: inputs.deploy-to != 'prod'
             with:
                 ref: ${{ needs.work-branch.outputs.name }}
@@ -195,7 +195,7 @@ jobs:
             -   publish
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
         # we should delete this regardless of whether we merged it to avoid building up stale release branches

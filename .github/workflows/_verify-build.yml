@@ -68,7 +68,7 @@ jobs:
         runs-on: ${{ inputs.os }}
         name: "build - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@v5
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
