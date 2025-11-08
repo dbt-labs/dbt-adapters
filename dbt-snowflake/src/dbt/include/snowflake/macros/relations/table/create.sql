@@ -136,6 +136,14 @@ alter table {{ relation }} resume recluster;
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {%- set partition_by_string = partition_by_keys|join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
+{{- log(partition_by_string, info=True) -}}
+
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
@@ -157,6 +165,7 @@ create or replace iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
+    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('storage_serialization_policy', catalog_relation.storage_serialization_policy, "'")}}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
@@ -210,6 +219,13 @@ alter iceberg table {{ relation }} resume recluster;
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
 
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {%- set partition_by_string = partition_by_keys|join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
+
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
     {{- get_assert_columns_equivalent(compiled_code) -}}
@@ -234,6 +250,7 @@ create iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
+    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
@@ -266,6 +283,19 @@ as (
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
 
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {# HACK: Force columns to be lowercase and quoted in glue #}
+  {%- set partition_by_keys_quotes = [] -%}
+  {%- for key in partition_by_keys -%}
+    {% set quoted_key = '"' ~ key.lower() ~ '"' %}
+    {%- do partition_by_keys_quotes.append(quoted_key) -%}
+  {%- endfor -%}
+  {%- set partition_by_string = partition_by_keys_quotes | join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
+
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
@@ -289,6 +319,7 @@ create iceberg table {{ relation }} (
         {%- if not loop.last %}, {% endif -%}
     {% endfor -%}
 )
+{% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
 {{ optional('external_volume', catalog_relation.external_volume, "'") }}
 {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
 {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
@@ -338,3 +369,11 @@ def main(session):
     return "OK"
 
 {% endmacro %}
+
+{% macro get_partition_by_keys(catalog_relation) -%}
+    {%- set partition_by_keys = catalog_relation.partition_by -%}
+    {%- if partition_by_keys and partition_by_keys is string -%}
+    {%- set partition_by_keys = [partition_by_keys] -%}
+    {%- endif -%}
+    {{ return(partition_by_keys) }}
+{%- endmacro -%}
