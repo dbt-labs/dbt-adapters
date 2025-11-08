@@ -690,7 +690,7 @@ class BigQueryAdapter(BaseAdapter):
             relation_name = relation.render()
             drop_clauses = [f"DROP COLUMN {self.quote(column.name)}" for column in drop_candidates]
             drop_sql = f"ALTER TABLE {relation_name} {', '.join(drop_clauses)}"
-            
+
             column_names = [column.name for column in drop_candidates]
             logger.debug(
                 'Dropping columns `{}` from table "{}".'.format(column_names, relation_name)
