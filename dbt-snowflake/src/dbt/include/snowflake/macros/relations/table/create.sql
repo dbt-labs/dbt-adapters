@@ -142,7 +142,6 @@ alter table {{ relation }} resume recluster;
 {% else %}
   {%- set partition_by_string = none -%}
 {%- endif -%}
-{{- log(partition_by_string, info=True) -}}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
