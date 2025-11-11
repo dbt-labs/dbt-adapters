@@ -1,0 +1,7 @@
+kind: Features
+body: Add basic support for materializing tables in a Glue Catalog Linked Database
+  with Iceberg REST
+time: 2025-10-08T17:08:01.731359-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1377"

@@ -31,7 +31,7 @@ jobs:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
         -   id: changelog
-            uses: dorny/paths-filter@v3
+            uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # dorny/paths-filter@v3
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
                 filters: |
@@ -49,7 +49,7 @@ jobs:
                 For details on how to document a change, see the [Contributing Guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md).
         steps:
         -   id: comment
-            uses: peter-evans/find-comment@v3
+            uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # peter-evans/find-comment@v3
             with:
                 issue-number: ${{ inputs.pull-request }}
                 comment-author: ${{ env.AUTHOR }}
@@ -58,6 +58,6 @@ jobs:
             run: gh issue comment ${{ inputs.pull-request }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
             env:
                 GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        -   uses: actions/github-script@v7
+        -   uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # actions/github-script@v7
             with:
                 script: core.setFailed('Changelog entry required to merge.')

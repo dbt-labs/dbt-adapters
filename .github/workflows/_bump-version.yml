@@ -59,13 +59,13 @@ jobs:
             initial: ${{ steps.version.outputs.initial }}
             final: ${{ steps.version.outputs.final }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         # bump the version or perform a no-op ("")
         -   id: version
             run: |

@@ -7,36 +7,58 @@ prompts:
     odbc:
       _fixed_method: odbc
       driver:
-        hint: 'path/to/driver'
+        hint: "path/to/driver"
       _choose_endpoint_or_cluster:
         endpoint:
           endpoint:
-            hint: 'endpoint ID'
+            hint: "endpoint ID"
         cluster:
           cluster:
-            hint: 'cluster ID'
+            hint: "cluster ID"
       token:
-        hint: 'abc123'
+        hint: "abc123"
         hide_input: true
     http:
       _fixed_method: http
       token:
-        hint: 'abc123'
+        hint: "abc123"
         hide_input: true
       connect_timeout:
         default: 10
-        type: 'int'
+        type: "int"
       connect_retries:
         default: 0
-        type: 'int'
+        type: "int"
+      poll_interval:
+        default: 5
+        type: "int"
+        hint: "seconds between polling attempts for query status"
+      query_timeout:
+        type: "int"
+        hint: "maximum seconds to wait for query completion (optional)"
+      query_retries:
+        default: 1
+        type: "int"
+        hint: "number of times to retry on connection loss during query execution"
     thrift:
       _fixed_method: thrift
+      poll_interval:
+        default: 5
+        type: "int"
+        hint: "seconds between polling attempts for query status"
+      query_timeout:
+        type: "int"
+        hint: "maximum seconds to wait for query completion (optional)"
+      query_retries:
+        default: 1
+        type: "int"
+        hint: "number of times to retry on connection loss during query execution"
   port:
     default: 443
-    type: 'int'
+    type: "int"
   schema:
-    hint: 'default schema that dbt will build objects in'
+    hint: "default schema that dbt will build objects in"
   threads:
-    hint: '1 or more'
-    type: 'int'
+    hint: "1 or more"
+    type: "int"
     default: 1
