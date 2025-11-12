@@ -80,3 +80,22 @@ SELECT 2 as id, 2 as value
 UNION ALL
 SELECT 3 as id, 3 as value
 """
+
+SUM_SQUARED_UDAF_SQL = """
+POWER(SUM(value), 2)
+"""
+
+SUM_SQUARED_UDAF_SQL_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+    arguments:
+      - name: value
+        data_type: float
+        description: The value to to agg (and in the end square the result)
+    returns:
+      data_type: float
+      description: The sum of the input values, then squared
+"""
