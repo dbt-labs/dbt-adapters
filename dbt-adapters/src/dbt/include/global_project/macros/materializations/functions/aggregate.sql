@@ -5,7 +5,7 @@
 {% endmacro %}
 
 {% macro default__get_aggregate_function_create_replace_signature(target_relation) %}
-    CREATE OR REPLACE AGGREGATE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
+    CREATE OR REPLACE AGGREGATE FUNCTION {{ target_relation.render() }} ({{ get_formatted_aggregate_function_args()}})
     RETURNS {{ model.returns.data_type }}
     {{ get_function_language_specifier() }}
     {% if model.get('language') == 'python' %}
