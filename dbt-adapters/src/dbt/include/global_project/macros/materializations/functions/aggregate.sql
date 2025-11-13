@@ -23,7 +23,7 @@
 
 {% macro default__get_formatted_aggregate_function_args() %}
     {# conveniently we can reuse the sql scalar function args #}
-    formatted_scalar_function_args_sql()
+    {{ formatted_scalar_function_args_sql() }}
 {% endmacro %}
 
 --- function language specifier dispatch + default macro ---
