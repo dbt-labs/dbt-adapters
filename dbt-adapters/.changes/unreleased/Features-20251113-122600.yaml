@@ -1,0 +1,6 @@
+kind: Features
+body: Create default signature handling macro for aggregate functions
+time: 2025-11-13T12:26:00.705222-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1432"
