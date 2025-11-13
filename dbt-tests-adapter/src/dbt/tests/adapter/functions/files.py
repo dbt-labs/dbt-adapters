@@ -93,9 +93,9 @@ functions:
       type: aggregate
     arguments:
       - name: value
-        data_type: float
+        data_type: numeric
         description: The value to to agg (and in the end square the result)
     returns:
-      data_type: float
+      data_type: numeric
       description: The sum of the input values, then squared
 """
