@@ -63,7 +63,7 @@ from dbt.adapters.athena.utils import (
     stringify_table_parameter_value,
 )
 from dbt.adapters.base import ConstraintSupport, PythonJobHelper, available
-from dbt.adapters.base.impl import AdapterConfig
+from dbt.adapters.base.impl import AdapterConfig, _catalog_filter_schemas
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
@@ -138,6 +138,18 @@ class AthenaAdapter(SQLAdapter):
     Relation = AthenaRelation
     AdapterSpecificConfigs = AthenaConfig
     Column = AthenaColumn
+
+    _CATALOG_TEXT_COLUMNS = [
+        "table_database",
+        "table_schema",
+        "table_name",
+        "table_type",
+        "table_comment",
+        "table_owner",
+        "column_name",
+        "column_type",
+        "column_comment",
+    ]
 
     quote_character: str = '"'  # Presto quote character
 
@@ -811,6 +823,18 @@ class AthenaAdapter(SQLAdapter):
             table.column_names,
             text_only_columns=["table_database", "table_schema", "table_name"],
         )
+
+    @classmethod
+    def _catalog_filter_table(
+        cls, table: "agate.Table", used_schemas: FrozenSet[Tuple[str, str]]
+    ) -> "agate.Table":
+        text_only_columns = [col for col in cls._CATALOG_TEXT_COLUMNS if col in table.column_names]
+        table = table_from_rows(
+            table.rows,
+            table.column_names,
+            text_only_columns=text_only_columns or None,
+        )
+        return table.where(_catalog_filter_schemas(used_schemas))
 
     @available
     def swap_table(self, src_relation: AthenaRelation, target_relation: AthenaRelation) -> None:
