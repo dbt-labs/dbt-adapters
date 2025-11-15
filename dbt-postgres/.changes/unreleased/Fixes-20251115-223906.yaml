@@ -1,0 +1,6 @@
+kind: Fixes
+body: Add integration test documentation to CONTRIBUTING.md
+time: 2025-11-15T22:39:06.7814256+08:00
+custom:
+    Author: godhahn
+    Issue: "843"
