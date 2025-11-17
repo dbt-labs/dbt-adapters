@@ -62,7 +62,9 @@ class TokenCache:
             with open(self.cache_file, "r") as f:
                 cache_data = json.load(f)
 
-            expires_at = datetime.fromisoformat(cache_data["expires_at"]).replace(tzinfo=timezone.utc)
+            expires_at = datetime.fromisoformat(cache_data["expires_at"]).replace(
+                tzinfo=timezone.utc
+            )
             if expires_at > datetime.now(timezone.utc):
                 return cache_data["token"]
             else:
