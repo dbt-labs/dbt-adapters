@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix timezone handling in SSO token cache
+time: 2025-11-17T13:52:20.678198+01:00
+custom:
+    Author: fstajniak
+    Issue: N/A

@@ -7,7 +7,7 @@ import json
 import stat
 import tempfile
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -35,7 +35,7 @@ class TokenCache:
             token_payload = token.split(".")[1]
             token_payload += "=" * (-len(token_payload) % 4)
             decoded_payload = json.loads(base64.b64decode(token_payload).decode("utf-8"))
-            expires_at = datetime.fromtimestamp(decoded_payload.get("exp", 0))
+            expires_at = datetime.fromtimestamp(decoded_payload.get("exp", 0), tz=timezone.utc)
 
             cache_data = {"token": token, "expires_at": expires_at.isoformat()}
 
@@ -62,8 +62,10 @@ class TokenCache:
             with open(self.cache_file, "r") as f:
                 cache_data = json.load(f)
 
-            expires_at = datetime.fromisoformat(cache_data["expires_at"])
-            if expires_at > datetime.utcnow():
+            expires_at = datetime.fromisoformat(cache_data["expires_at"]).replace(
+                tzinfo=timezone.utc
+            )
+            if expires_at > datetime.now(timezone.utc):
                 return cache_data["token"]
             else:
                 self._cleanup_expired_token()
@@ -83,7 +85,7 @@ class TokenCache:
         """
         try:
             tolerance_seconds = 60
-            current_timestamp = int(datetime.utcnow().timestamp())
+            current_timestamp = int(datetime.now(timezone.utc).timestamp())
             token_payload = token.split(".")[1]
             token_payload += "=" * (-len(token_payload) % 4)
             decoded_payload = json.loads(base64.b64decode(token_payload).decode("utf-8"))
