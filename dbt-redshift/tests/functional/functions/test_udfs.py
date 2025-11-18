@@ -6,6 +6,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     StableUDF,
     NonDeterministicUDF,
     ErrorForUnsupportedType,
+    PythonUDFNotSupported,
 )
 from tests.functional.functions.files import MY_UDF_SQL
 
@@ -58,3 +59,7 @@ class TestRedshiftErrorForUnsupportedType(ErrorForUnsupportedType):
             "price_for_xlarge.sql": MY_UDF_SQL,
             "price_for_xlarge.yml": MY_UDF_YML,
         }
+
+
+class TestRedshiftPythonUDFNotSupported(PythonUDFNotSupported):
+    pass
