@@ -57,7 +57,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.10", "3.11", "3.12"]
+                options: ["3.10", "3.11", "3.12", "3.13"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
