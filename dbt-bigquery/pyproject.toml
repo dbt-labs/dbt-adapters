@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.16,<2.0",
+    "dbt-adapters>=1.19.0,<2.0",
     # 3.20 introduced pyarrow>=3.0 under the `pandas` extra
     "google-cloud-bigquery[pandas]>=3.0,<4.0",
     "google-cloud-storage>=2.4,<3.2",
