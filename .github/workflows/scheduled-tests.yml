@@ -41,6 +41,7 @@ jobs:
                 notification_title: "{workflow} {status_message}"
                 message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
                 footer: "View run: {run_url}"
+                notify_when: "failure"
                 mention_groups: ${{ vars.SLACK_ON_CALL }}
                 mention_groups_when: "failure"
             env:
