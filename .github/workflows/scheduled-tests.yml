@@ -1,3 +1,12 @@
+# **what?**
+# Runs all test suites (verify-build, unit-tests, integration-tests) for all packages on the stable and main branches.
+
+# **why?**
+# Ensures the main branches remain healthy and catches regressions early.
+
+# **when?**
+# This workflow runs on a schedule daily at 3:00 AM UTC and can also be manually triggered via workflow_dispatch.
+
 name: "Scheduled tests"
 run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 

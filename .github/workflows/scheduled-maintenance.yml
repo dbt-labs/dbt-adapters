@@ -1,3 +1,12 @@
+# **what?**
+# Runs scheduled maintenance tasks: updates pre-commit hooks and marks stale issues/PRs.
+
+# **why?**
+# Keeps the repository healthy by keeping dependencies up to date and managing stale issues.
+
+# **when?**
+# This workflow runs on a schedule every Saturday at 1:30 AM UTC.
+
 name: "Scheduled maintenance"
 run-name: "Scheduled maintenance - ${{ github.actor }}"
 

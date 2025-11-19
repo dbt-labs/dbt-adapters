@@ -1,3 +1,12 @@
+# **what?**
+# Verifies that packages can be built successfully and pass build checks.
+
+# **why?**
+# Ensures packages can be built and distributed before running more expensive tests.
+
+# **when?**
+# This workflow is called by other workflows (like _run-tests.yml and pull-request-checks.yml) or can be manually triggered via workflow_dispatch.
+
 name: "# Verify build"
 run-name: "Verify build - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 

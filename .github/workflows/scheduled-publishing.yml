@@ -1,3 +1,12 @@
+# **what?**
+# Automatically publishes all adapter packages to the internal AWS CodeArtifact repository on a schedule.
+
+# **why?**
+# Ensures internal tools always have access to the latest versions of adapter packages.
+
+# **when?**
+# This workflow runs on a schedule every Sunday at midnight UTC.
+
 name: "Scheduled publishing"
 run-name: "Scheduled publishing - ${{ github.actor }}"
 

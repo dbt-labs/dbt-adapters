@@ -1,3 +1,12 @@
+# **what?**
+# Runs all necessary checks on pull requests: changelog entry validation, code quality, build verification, unit tests, and integration tests.
+
+# **why?**
+# Ensures pull requests meet quality standards and don't break existing functionality before merging.
+
+# **when?**
+# This workflow runs automatically when a PR is opened, reopened, synchronized, or when labels are added/removed.
+
 name: "Pull request checks"
 run-name: "Pull request checks - ${{ github.actor }} - #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.title }}"
 

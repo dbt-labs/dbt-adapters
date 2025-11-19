@@ -1,3 +1,12 @@
+# **what?**
+# Runs code quality checks using pre-commit hooks.
+
+# **why?**
+# Ensure code for dbt meets a certain quality standard.
+
+# **when?**
+# This workflow runs for all PRs, when code is pushed to main branch, and when manually triggered.
+
 name: "# Code quality"
 run-name: "Code quality - ${{ github.actor }} - branch:${{ inputs.branch }} repository:${{ inputs.repository }}"
 
@@ -30,11 +39,11 @@ jobs:
     code-quality:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-                repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
-            with:
-                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-        -   uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # pre-commit/action@v3.0.1
+            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              with:
+                  ref: ${{ inputs.branch }}
+                  repository: ${{ inputs.repository }}
+            - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+              with:
+                  python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # pre-commit/action@v3.0.1

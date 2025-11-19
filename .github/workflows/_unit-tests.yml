@@ -1,3 +1,12 @@
+# **what?**
+# Runs unit tests for adapter packages.
+
+# **why?**
+# Ensures code changes don't break existing functionality before integration testing.
+
+# **when?**
+# This workflow is called by other workflows (like _run-tests.yml and pull-request-checks.yml) or can be manually triggered via workflow_dispatch.
+
 name: "# Unit tests"
 run-name: "Unit tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
