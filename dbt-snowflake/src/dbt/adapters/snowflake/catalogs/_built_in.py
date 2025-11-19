@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -43,6 +43,7 @@ class BuiltInCatalogRelation:
     external_volume: Optional[str] = None
     file_format: Optional[str] = None
     cluster_by: Optional[str] = None
+    partition_by: Optional[Union[list[str], str]] = None
     automatic_clustering: Optional[bool] = False
     is_transient: Optional[bool] = False
     data_retention_time_in_days: Optional[int] = None
@@ -116,6 +117,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             base_location=parse_model.base_location(model),
             external_volume=parse_model.external_volume(model) or self.external_volume,
             cluster_by=parse_model.cluster_by(model),
+            partition_by=parse_model.partition_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
             storage_serialization_policy=storage_serialization_policy,
             max_data_extension_time_in_days=max_data_extension_time_in_days,

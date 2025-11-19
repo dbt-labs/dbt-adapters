@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Bump minimum dbt-common to 1.36.0
-time: 2025-11-06T11:35:38.07949-06:00
-custom:
-  Author: QMalcolm
-  PR: "1424"

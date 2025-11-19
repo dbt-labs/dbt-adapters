@@ -30,10 +30,10 @@ jobs:
         steps:
         # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
         -   id: results
-            uses: re-actors/alls-green@release/v1
+            uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # re-actors/alls-green@release/v1
             with:
                 jobs: ${{ toJSON(needs) }}
-        -   uses: ravsamhq/notify-slack-action@v2
+        -   uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
             if: always()
             with:
                 token: ${{ secrets.GITHUB_TOKEN }}
@@ -41,6 +41,7 @@ jobs:
                 notification_title: "{workflow} {status_message}"
                 message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
                 footer: "View run: {run_url}"
+                notify_when: "failure"
                 mention_groups: ${{ vars.SLACK_ON_CALL }}
                 mention_groups_when: "failure"
             env:
