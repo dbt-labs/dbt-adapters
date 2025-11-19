@@ -23,7 +23,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: string
-                default: "3.9"
+                default: "3.10"
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -49,7 +49,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.9", "3.10", "3.11", "3.12"]
+                options: ["3.10", "3.11", "3.12"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -90,16 +90,16 @@ jobs:
             DBT_TEST_ATHENA_THREADS: ${{ vars.DBT_TEST_ATHENA_THREADS }}
             DBT_TEST_ATHENA_WORK_GROUP: ${{ vars.DBT_TEST_ATHENA_WORK_GROUP }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
-        -   uses: aws-actions/configure-aws-credentials@v4
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+        -   uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # aws-actions/configure-aws-credentials@v4
             with:
                 role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.ASSUMABLE_ROLE_NAME }}
                 aws-region: ${{ vars.DBT_TEST_ATHENA_REGION_NAME }}
@@ -126,15 +126,15 @@ jobs:
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery-flaky:
@@ -165,15 +165,15 @@ jobs:
             DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
             GCS_BUCKET: ${{ vars.GCS_BUCKET }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
 
     integration-tests-postgres:
@@ -204,19 +204,16 @@ jobs:
                 ports:
                 -   ${{ vars.POSTGRES_TEST_PORT }}:5432
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: |
                 echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
                 echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
-        # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
-        -   if: inputs.python-version == '3.9' && runner.os == 'macOS'
-            run: brew install postgresql
         -   run: psql -f ./scripts/setup_test_database.sql
             env:
                 PGHOST: ${{ vars.POSTGRES_TEST_HOST }}
@@ -224,7 +221,7 @@ jobs:
                 PGUSER: postgres
                 PGPASSWORD: postgres
                 PGDATABASE: postgres
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-postgres-psycopg2-check:
@@ -234,8 +231,8 @@ jobs:
             run:
                 working-directory: "./dbt-postgres"
         steps:
-        -   uses: actions/checkout@v4
-        -   uses: actions/setup-python@v5
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   if: startsWith(inputs.os, 'macos')
@@ -291,15 +288,15 @@ jobs:
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   name: Create AWS IAM profiles
             run: |
               aws configure --profile $AWS_USER_PROFILE set aws_access_key_id $AWS_USER_ACCESS_KEY_ID
@@ -338,20 +335,21 @@ jobs:
             SNOWFLAKE_TEST_QUOTED_DATABASE: ${{ vars.SNOWFLAKE_TEST_QUOTED_DATABASE }}
             SNOWFLAKE_TEST_OAUTH_CLIENT_ID: ${{ vars.SNOWFLAKE_TEST_OAUTH_CLIENT_ID }}
             SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE: ${{ vars.SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE }}
+            SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE: ${{ vars.SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE }}
             SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET }}
             SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN: ${{ secrets.SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN }}
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
             SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
         -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-spark:
@@ -379,15 +377,13 @@ jobs:
                 -   "databricks_cluster"
                 -   "databricks_http_cluster"
         steps:
-        -   uses: actions/checkout@v4
+        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
             with:
                 ref: ${{ inputs.branch }}
                 repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
+        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
             with:
                 python-version: ${{ inputs.python-version }}
-        # TODO: update 3.10 to ${{ inputs.python-version }} once we update default python to >=3.10
-        # the version of dagger-io that we use does not support py3.9
-        -   run: echo "HATCH_PYTHON=3.10" >> $GITHUB_ENV
-        -   uses: pypa/hatch@install
+        -   run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
         -   run: hatch run ${{ inputs.hatch-env }}:integration-tests --profile ${{ matrix.profile }}

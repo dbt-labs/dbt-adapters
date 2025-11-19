@@ -8,7 +8,7 @@ name = "dbt-bigquery"
 description = "The BigQuery adapter plugin for dbt"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "bigquery", "google"]
-requires-python = ">=3.9.0"
+requires-python = ">=3.10.0"
 authors = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
 maintainers = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
 classifiers = [
@@ -17,14 +17,13 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
     "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.16,<2.0",
+    "dbt-adapters>=1.19.0,<2.0",
     # 3.20 introduced pyarrow>=3.0 under the `pandas` extra
     "google-cloud-bigquery[pandas]>=3.0,<4.0",
     "google-cloud-storage>=2.4,<3.2",
