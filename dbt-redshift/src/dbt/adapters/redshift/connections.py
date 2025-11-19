@@ -485,7 +485,15 @@ class RedshiftConnectionManager(SQLConnectionManager):
         # this function is only used for successful run, so we can just return a dummy
         rows = cursor.rowcount
         message = "SUCCESS"
-        return AdapterResponse(_message=message, rows_affected=rows)
+        query_id = cls.get_query_id(cursor)
+        return AdapterResponse(_message=message, rows_affected=rows, query_id=query_id)
+
+    @classmethod
+    def get_query_id(cls, cursor: redshift_connector.Cursor) -> str:
+        user_id_query_result = cursor.execute("select last_user_query_id()").fetchone()
+        if user_id_query_result:
+            return str(user_id_query_result[0])
+        return "-1"
 
     @contextmanager
     def exception_handler(self, sql):
