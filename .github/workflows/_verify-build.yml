@@ -39,15 +39,15 @@ on:
                 description: "Choose the package to build"
                 type: choice
                 options:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+                    - "dbt-adapters"
+                    - "dbt-tests-adapter"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
             branch:
                 description: "Choose the branch to build"
                 type: string
@@ -77,16 +77,25 @@ jobs:
         runs-on: ${{ inputs.os }}
         name: "build - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
-        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-                repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
-            with:
-                python-version: ${{ inputs.python-version }}
-        -   run: |
-                echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-                echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
-        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
-        -   run: hatch build && hatch run build:check-all
-            working-directory: ./${{ inputs.package }}
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              with:
+                  ref: ${{ inputs.branch }}
+                  repository: ${{ inputs.repository }}
+
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+              with:
+                  python-version: ${{ inputs.python-version }}
+
+            - name: "Set environment variables"
+              run: |
+                  echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+                  echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
+
+            - name: "Install hatch"
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
+            - name: "Build and verify package"
+              run: hatch build && hatch run build:check-all
+              working-directory: ./${{ inputs.package }}

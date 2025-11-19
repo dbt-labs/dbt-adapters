@@ -139,56 +139,73 @@ jobs:
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
         steps:
-            # merge changes before publishing to prod because we lock trusted publishing to main
-            - uses: everlytic/branch-merge@c4a244dc23143f824ae6c022a10732566cb8e973 # everlytic/branch-merge@1.1.5
+            - name: "[PROD] Merge work branch to target branch"
+              # merge changes before publishing to prod because we lock trusted publishing to main
+              uses: everlytic/branch-merge@c4a244dc23143f824ae6c022a10732566cb8e973 # everlytic/branch-merge@1.1.5
               if: inputs.deploy-to == 'prod'
               with:
                   source_ref: ${{ needs.work-branch.outputs.name }}
                   target_branch: ${{ inputs.branch }}
                   github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
                   commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+
+            - name: "[PROD] Checkout target branch"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               if: inputs.deploy-to == 'prod'
               with:
                   ref: ${{ inputs.branch }}
 
-            # if we're not publishing to prod, just check out the work branch
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+            - name: "[TEST] Checkout work branch"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               if: inputs.deploy-to != 'prod'
               with:
                   ref: ${{ needs.work-branch.outputs.name }}
 
-            # build and publish using whichever branch was checked out above
-            - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
               with:
                   python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            - uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
-            - run: hatch build && hatch run build:check-all
+
+            - name: "Install hatch"
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
+            - name: "Build and verify package"
+              run: hatch build && hatch run build:check-all
               working-directory: ./${{ inputs.package }}
-            - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
+
+            - name: "Publish to PyPI"
+              uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
               with:
                   repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
                   packages-dir: ./${{ inputs.package }}/dist/
-            - id: version
+
+            - name: "Get package version"
+              id: version
               run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
               working-directory: ./${{ inputs.package }}
-            - uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
+
+            - name: "Verify package on PyPI"
+              uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
               with:
                   timeout_seconds: 10
                   retry_wait_seconds: 10
                   max_attempts: 15 # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                   command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
 
-            # publish dbt-athena-community following dbt-athena
-            - if: inputs.package == 'dbt-athena'
+            - name: "Build dbt-athena-community"
+              if: inputs.package == 'dbt-athena'
               run: hatch build && hatch run build:check-all
               working-directory: ./dbt-athena-community
-            - if: inputs.package == 'dbt-athena'
+
+            - name: "Publish dbt-athena-community to PyPI"
+              if: inputs.package == 'dbt-athena'
               uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
               with:
                   repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
                   packages-dir: ./dbt-athena-community/dist/
-            - if: inputs.package == 'dbt-athena'
+
+            - name: "Verify dbt-athena-community on PyPI"
+              if: inputs.package == 'dbt-athena'
               uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
               with:
                   timeout_seconds: 10
@@ -203,9 +220,12 @@ jobs:
             - publish
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:
                   ref: ${{ inputs.branch }}
-            # we should delete this regardless of whether we merged it to avoid building up stale release branches
-            - run: git push origin -d ${{ needs.work-branch.outputs.name }}
+
+            - name: "Delete work branch"
+              # we should delete this regardless of whether we merged it to avoid building up stale release branches
+              run: git push origin -d ${{ needs.work-branch.outputs.name }}
               continue-on-error: true

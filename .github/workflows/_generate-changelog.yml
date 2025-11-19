@@ -21,10 +21,7 @@ on:
                 description: "Choose the branch to use"
                 type: string
                 default: "main"
-        outputs:
-            branch-name:
-                description: "The SHA to release"
-                value: ${{ jobs.branch.outputs.name }}
+
         secrets:
             FISHTOWN_BOT_PAT:
                 description: "Token to commit/merge changes into branches"
@@ -63,17 +60,26 @@ jobs:
             prerelease: ${{ steps.semver.outputs.pre-release }}
             is-prerelease: ${{ steps.semver.outputs.is-pre-release }}
         steps:
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:
                   ref: ${{ inputs.branch }}
-            - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
               with:
                   python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            - uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
-            - id: version
+
+            - name: "Install hatch"
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
+            - name: "Get package version"
+              id: version
               run: echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
               working-directory: ./${{ inputs.package }}
-            - id: semver
+
+            - name: "Parse semantic version"
+              id: semver
               uses: dbt-labs/actions/parse-semver@v1.1.1
               with:
                   version: ${{ steps.version.outputs.raw }}
@@ -85,11 +91,13 @@ jobs:
             path: ${{ steps.changelog.outputs.path }}
             exists: ${{ steps.changelog.outputs.exists }}
         steps:
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:
                   ref: ${{ inputs.branch }}
 
-            - id: changelog
+            - name: "Check if changelog exists"
+              id: changelog
               run: |
                   path=".changes/${{ needs.version.outputs.base }}"
                   if [[ ${{ needs.version.outputs.is-prerelease }} -eq 1 ]]
@@ -115,18 +123,25 @@ jobs:
         outputs:
             team: ${{ steps.team.outputs.team }}
         steps:
-            - id: temp-file
+            - name: "Generate temp file name"
+              id: temp-file
               run: echo "name=output_$GITHUB_RUN_ID.json" >> $GITHUB_OUTPUT
-            - run: |
+
+            - name: "Fetch core team members"
+              run: |
                   gh api -H "Accept: application/vnd.github+json" orgs/dbt-labs/teams/core-group/members > ${{ steps.temp-file.outputs.name }}
               env:
                   GH_TOKEN: ${{ secrets.IT_TEAM_MEMBERSHIP }}
-            - id: team
+
+            - name: "Parse team members"
+              id: team
               run: |
                   team_list=$(jq -r '.[].login' ${{ steps.temp-file.outputs.name }})
                   team_list_single=$(echo $team_list | tr '\n' ' ')
                   echo "team=$team_list_single" >> $GITHUB_OUTPUT
-            - run: rm ${{ steps.temp-file.outputs.name }}
+
+            - name: "Clean up temp file"
+              run: rm ${{ steps.temp-file.outputs.name }}
 
     generate-changelog:
         needs:
@@ -136,14 +151,21 @@ jobs:
         if: needs.changelog.outputs.exists == 'false'
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-            - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:
                   ref: ${{ inputs.branch }}
-            - run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
-            - run: |
+
+            - name: "Add Homebrew to PATH"
+              run: echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+
+            - name: "Install changie"
+              run: |
                   brew tap miniscruff/changie https://github.com/miniscruff/changie
                   brew install changie
-            - run: |
+
+            - name: "Generate changelog"
+              run: |
                   if [[ ${{ needs.version.outputs.is-prerelease }} -eq 1 ]]
                   then
                       changie batch ${{ needs.version.outputs.base }} --move-dir '${{ needs.version.outputs.base }}' --prerelease ${{ needs.version.outputs.prerelease }}
@@ -158,8 +180,12 @@ jobs:
               working-directory: ./${{ inputs.package }}
               env:
                   CHANGIE_CORE_TEAM: ${{ needs.dbt-membership.outputs.team }}
-            - uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # pre-commit/action@v3.0.1
+
+            - name: "Run pre-commit hooks"
+              uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # pre-commit/action@v3.0.1
               continue-on-error: true
-            - uses: ./.github/actions/bot-commit
+
+            - name: "Commit changelog"
+              uses: ./.github/actions/bot-commit
               with:
                   message: "Generate changelog for ${{ needs.version.outputs.raw }}"
