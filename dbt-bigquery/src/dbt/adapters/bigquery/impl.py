@@ -784,8 +784,8 @@ class BigQueryAdapter(BaseAdapter):
         # Track schema, identifiers of sources for lookup from batch query
         schema_identifier_to_source = {
             (
-                source.path.get_lowered_part(ComponentName.Schema),
-                source.path.get_lowered_part(ComponentName.Identifier),
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
             ): source
             for source in sources
         }
@@ -811,7 +811,7 @@ class BigQueryAdapter(BaseAdapter):
             freshness_responses[source_relation_for_result] = freshness_response
 
         return adapter_responses, freshness_responses
-    
+
     @available.parse(lambda *a, **k: {})
     def get_common_options(
         self, config: Dict[str, Any], node: Dict[str, Any], temporary: bool = False
