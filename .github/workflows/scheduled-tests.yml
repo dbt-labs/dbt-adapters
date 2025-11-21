@@ -1,9 +1,18 @@
+# **what?**
+# Runs all test suites (verify-build, unit-tests, integration-tests) for all packages on the stable and main branches.
+
+# **why?**
+# Ensures the main branches remain healthy and catches regressions early.
+
+# **when?**
+# This workflow runs on a schedule daily at 3:00 AM UTC and can also be manually triggered via workflow_dispatch.
+
 name: "Scheduled tests"
 run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 
 on:
     schedule:
-    -   cron: '0 3 * * *'
+        - cron: "0 3 * * *"
     workflow_dispatch:
 
 permissions:
@@ -15,7 +24,7 @@ jobs:
         uses: ./.github/workflows/_run-tests.yml
         strategy:
             fail-fast: false
-            max-parallel: 1  # Run branches sequentially
+            max-parallel: 1 # Run branches sequentially
             matrix:
                 branch: ["stable", "main"]
         with:
@@ -28,21 +37,23 @@ jobs:
         needs: [run-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
-        -   id: results
-            uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # re-actors/alls-green@release/v1
-            with:
-                jobs: ${{ toJSON(needs) }}
-        -   uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
-            if: always()
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                status: ${{ job.status }}
-                notification_title: "{workflow} {status_message}"
-                message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
-                footer: "View run: {run_url}"
-                notify_when: "failure"
-                mention_groups: ${{ vars.SLACK_ON_CALL }}
-                mention_groups_when: "failure"
-            env:
-                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
+            - name: "Aggregate test results for Slack Notification"
+              id: results
+              uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # re-actors/alls-green@release/v1
+              with:
+                  jobs: ${{ toJSON(needs) }}
+
+            - name: "Notify Slack on failure"
+              uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
+              if: always()
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  status: ${{ job.status }}
+                  notification_title: "{workflow} {status_message}"
+                  message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
+                  footer: "View run: {run_url}"
+                  notify_when: "failure"
+                  mention_groups: ${{ vars.SLACK_ON_CALL }}
+                  mention_groups_when: "failure"
+              env:
+                  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
