@@ -1,3 +1,12 @@
+# **what?**
+# Publishes adapter packages to PyPI (either test or production).
+
+# **why?**
+# Makes packages available publicly for users to install via pip.
+
+# **when?**
+# This workflow is called by other workflows (like publish-oss.yml) or can be manually triggered via workflow_dispatch.
+
 name: "# Publish PyPI"
 run-name: "Publish PyPI - ${{ github.actor }} - package:${{ inputs.package }} deploy-to:${{ inputs.deploy-to }} branch:${{ inputs.branch }}"
 
@@ -22,14 +31,14 @@ on:
                 description: "Choose the package to publish"
                 type: choice
                 options:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+                    - "dbt-adapters"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
             deploy-to:
                 description: "Choose whether to publish to test or prod"
                 type: environment
@@ -57,21 +66,30 @@ jobs:
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
         steps:
-        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-        -   uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
-            with:
-                python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-        -   uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
-            # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
-            # this is done via environment variables in the test environment in GitHub
-        -   run: hatch build && hatch run build:check-all
-            working-directory: ./${{ inputs.package }}
-        -   uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
-            with:
-                repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
-                packages-dir: ./${{ inputs.package }}/dist/
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              with:
+                  ref: ${{ inputs.branch }}
+
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+              with:
+                  python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+
+            - name: "Install hatch"
+              # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
+              # this is done via environment variables in the test environment in GitHub
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
+            - name: "Build and verify package"
+              run: hatch build && hatch run build:check-all
+              working-directory: ./${{ inputs.package }}
+
+            - name: "Publish to PyPI"
+              uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
+              with:
+                  repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
+                  packages-dir: ./${{ inputs.package }}/dist/
 
     verify:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
@@ -80,15 +98,20 @@ jobs:
         environment:
             name: ${{ inputs.deploy-to }}
         steps:
-        -   uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-        -   id: version
-            run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
-            working-directory: ./${{ inputs.package }}
-        -   uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
-            with:
-                timeout_seconds: 10
-                retry_wait_seconds: 10
-                max_attempts: 15  # 5 minutes: (10s timeout + 10s delay) * 15 attempts
-                command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              with:
+                  ref: ${{ inputs.branch }}
+
+            - name: "Get package version"
+              id: version
+              run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
+              working-directory: ./${{ inputs.package }}
+
+            - name: "Verify package on PyPI"
+              uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
+              with:
+                  timeout_seconds: 10
+                  retry_wait_seconds: 10
+                  max_attempts: 15 # 5 minutes: (10s timeout + 10s delay) * 15 attempts
+                  command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
