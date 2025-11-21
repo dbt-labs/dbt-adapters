@@ -1,9 +1,11 @@
 import dataclasses
 from datetime import datetime, date
 from decimal import Decimal
-from typing import Any, Dict, TYPE_CHECKING, List, Union
+from typing import Any, Dict, TYPE_CHECKING, List, Union, Optional
 
-from dbt_common.record import Recorder
+from dbt_common.record import get_record_row_limit_from_env
+
+RECORDER_ROW_LIMIT: Optional[int] = get_record_row_limit_from_env()
 
 if TYPE_CHECKING:
     from agate import Table
@@ -26,10 +28,10 @@ def _column_filter(val: Any) -> Any:
 def serialize_agate_table(table: "Table") -> Dict[str, Any]:
     rows = []
 
-    if Recorder.record_row_limit and len(table.rows) > Recorder.record_row_limit:
+    if RECORDER_ROW_LIMIT and len(table.rows) > RECORDER_ROW_LIMIT:
         rows = [
             [
-                f"Recording Error: Agate table contains {len(table.rows)} rows, maximum is {Recorder.record_row_limit} rows."
+                f"Recording Error: Agate table contains {len(table.rows)} rows, maximum is {RECORDER_ROW_LIMIT} rows."
             ]
         ]
     else:
@@ -60,10 +62,10 @@ def serialize_base_relation(relation: "BaseRelation") -> Dict[str, Any]:
 
 def serialize_base_relation_list(relations: List["BaseRelation"]) -> List[Dict[str, Any]]:
     """Serialize a list of BaseRelation objects for recording."""
-    if Recorder.record_row_limit and len(relations) > Recorder.record_row_limit:
+    if RECORDER_ROW_LIMIT and len(relations) > RECORDER_ROW_LIMIT:
         return [
             {
-                "error": f"Recording Error: List of BaseRelation objects contains {len(relations)} objects, maximum is {Recorder.record_row_limit} objects."
+                "error": f"Recording Error: List of BaseRelation objects contains {len(relations)} objects, maximum is {RECORDER_ROW_LIMIT} objects."
             }
         ]
     else:
@@ -83,10 +85,10 @@ def deserialize_base_relation_list(relations_data: List[Dict[str, Any]]) -> List
 
 
 def serialize_base_column_list(columns: List["BaseColumn"]) -> List[Dict[str, Any]]:
-    if Recorder.record_row_limit and len(columns) > Recorder.record_row_limit:
+    if RECORDER_ROW_LIMIT and len(columns) > RECORDER_ROW_LIMIT:
         return [
             {
-                "error": f"Recording Error: List of BaseColumn objects contains {len(columns)} objects, maximum is {Recorder.record_row_limit} objects."
+                "error": f"Recording Error: List of BaseColumn objects contains {len(columns)} objects, maximum is {RECORDER_ROW_LIMIT} objects."
             }
         ]
     else:
