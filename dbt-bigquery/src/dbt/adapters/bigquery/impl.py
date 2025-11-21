@@ -80,6 +80,12 @@ from dbt.adapters.bigquery.relation_configs import (
 )
 from dbt.adapters.bigquery.utility import sql_escape
 
+from dbt.adapters.bigquery.struct_utils import (
+    collect_field_dicts,
+    find_missing_fields,
+    merge_nested_fields,
+)
+
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
     # Used by mypy for earlier type hints.
@@ -705,7 +711,7 @@ class BigQueryAdapter(BaseAdapter):
 
         if add_columns:
             additions = self._build_nested_additions(add_columns)
-            schema_as_dicts = self._merge_nested_fields(schema_as_dicts, additions)
+            schema_as_dicts = merge_nested_fields(schema_as_dicts, additions)
             apply_schema_patch = True
 
         if apply_schema_patch:
@@ -723,86 +729,6 @@ class BigQueryAdapter(BaseAdapter):
             additions[column.name] = schema_field
 
         return additions
-
-    def _merge_nested_fields(
-        self,
-        existing_fields: Sequence[Dict[str, Any]],
-        additions: Mapping[str, Dict[str, Any]],
-        prefix: str = "",
-    ) -> List[Dict[str, Any]]:
-        """Merge new fields into existing STRUCT fields, appending at each nesting level.
-
-        Note: Primarily used for field removal. For adding fields, sync_struct_columns
-        uses the source schema directly to preserve field order.
-        """
-        merged_fields: List[Dict[str, Any]] = []
-        addition_lookup = dict(additions)
-
-        for field in existing_fields:
-            field_name = field["name"]
-            qualified_name = f"{prefix}.{field_name}" if prefix else field_name
-
-            direct_addition = addition_lookup.pop(qualified_name, None)
-            if direct_addition is not None:
-                merged_fields.append(copy.deepcopy(direct_addition))
-                continue
-
-            nested_additions = {
-                key: value
-                for key, value in list(addition_lookup.items())
-                if key.startswith(f"{qualified_name}.")
-            }
-
-            if nested_additions and field.get("type") == "RECORD":
-                for key in nested_additions:
-                    addition_lookup.pop(key, None)
-
-                stripped_additions = {
-                    key.split(".", 1)[1]: value for key, value in nested_additions.items()
-                }
-
-                merged_children = self._merge_nested_fields(
-                    field.get("fields", []) or [],
-                    stripped_additions,
-                    prefix="",
-                )
-
-                merged_field = copy.deepcopy(field)
-                merged_field["fields"] = merged_children
-                merged_fields.append(merged_field)
-            else:
-                merged_fields.append(copy.deepcopy(field))
-
-        for path, addition in addition_lookup.items():
-            if "." not in path:
-                merged_fields.append(copy.deepcopy(addition))
-
-        return merged_fields
-
-    def _collect_field_dicts(
-        self, fields: Sequence[Dict[str, Any]], prefix: str = ""
-    ) -> Dict[str, Dict[str, Any]]:
-        collected: Dict[str, Dict[str, Any]] = {}
-        for field in fields:
-            name = field["name"]
-            path = f"{prefix}.{name}" if prefix else name
-            collected[path] = field
-            if field.get("type") == "RECORD":
-                collected.update(self._collect_field_dicts(field.get("fields", []) or [], path))
-        return collected
-
-    def _find_missing_fields(
-        self,
-        source_fields: Sequence[Dict[str, Any]],
-        target_fields: Sequence[Dict[str, Any]],
-    ) -> Dict[str, Dict[str, Any]]:
-        source_map = self._collect_field_dicts(source_fields)
-        target_map = self._collect_field_dicts(target_fields)
-        return {
-            path: copy.deepcopy(field)
-            for path, field in source_map.items()
-            if path not in target_map
-        }
 
     @available.parse(lambda *a, **k: {})
     def sync_struct_columns(
@@ -830,7 +756,7 @@ class BigQueryAdapter(BaseAdapter):
         source_schema = [field.to_api_repr() for field in source_table.schema]
         target_schema = [field.to_api_repr() for field in target_table.schema]
         # Identify nested fields that exist in the source schema but not the target.
-        missing_fields = self._find_missing_fields(source_schema, target_schema)
+        missing_fields = find_missing_fields(source_schema, target_schema)
         nested_additions = {
             path: field_def for path, field_def in missing_fields.items() if "." in path
         }
