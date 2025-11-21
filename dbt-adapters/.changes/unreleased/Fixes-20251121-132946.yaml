@@ -1,6 +1,0 @@
-kind: Fixes
-body: safe comparison of Recorder.record_row_limit
-time: 2025-11-21T13:29:46.627826-05:00
-custom:
-    Author: michelleark
-    Issue: "1461"
