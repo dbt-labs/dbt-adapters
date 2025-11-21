@@ -1,3 +1,12 @@
+# **what?**
+# Runs integration tests for adapter packages against their respective databases.
+
+# **why?**
+# Ensures adapter packages work correctly with their target databases and data warehouses.
+
+# **when?**
+# This workflow is called by other workflows (like _run-tests.yml and pull-request-checks.yml) or can be manually triggered via workflow_dispatch.
+
 name: "# Integration tests"
 run-name: "Integration tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
@@ -65,6 +74,7 @@ env:
     DD_API_KEY: ${{ secrets.DATADOG_API_KEY }}
     DD_SITE: ${{ vars.DD_SITE }}
     DD_ENV: ${{ vars.DD_ENV }}
+    DD_SERVICE: ${{ github.event.repository.name }} # this can change per run because of forks
     DD_SERVICE: ${{ github.event.repository.name }} # this can change per run because of forks
     DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
     DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
