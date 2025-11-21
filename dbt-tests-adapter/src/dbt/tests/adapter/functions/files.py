@@ -73,6 +73,24 @@ functions:
       description: The sum of the input values, then squared
 """
 
+SUM_SQUARED_UDAF_PYTHON_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+      entry_point: SumSquared
+      runtime_version: "3.11"
+    arguments:
+      - name: value
+        data_type: float
+        description: The value to to agg (and in the end square the result)
+        default_value: 1
+    returns:
+      data_type: float
+      description: The sum of the input values, then squared
+"""
+
 BASIC_MODEL_SQL = """
 SELECT 1 as id, 1 as value
 UNION ALL
@@ -98,4 +116,35 @@ functions:
     returns:
       data_type: numeric
       description: The sum of the input values, then squared
+"""
+
+MY_UDF_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    arguments:
+      - name: price
+        data_type: float
+        description: The price of the standard item
+        default_value: 100
+    returns:
+      data_type: float
+      description: The resulting xlarge price
+"""
+
+MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    config:
+      entry_point: price_for_xlarge
+      runtime_version: "3.12"
+    arguments:
+      - name: price
+        data_type: float
+        description: The price of the standard item
+        default_value: 100
+    returns:
+      data_type: float
+      description: The resulting xlarge price
 """
