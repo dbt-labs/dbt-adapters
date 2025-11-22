@@ -1,0 +1,6 @@
+kind: Features
+body: Azure IAM/Entra ID support for Snowflake connection
+time: 2025-11-05T05:42:42.866188523Z
+custom:
+    Author: karunpoudel
+    Issue: "1423"
