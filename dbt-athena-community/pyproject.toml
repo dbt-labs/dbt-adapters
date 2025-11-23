@@ -25,8 +25,8 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 # these versions should always match and they both should match the local version of dbt-athena
-dependencies = ["dbt-athena==1.9.4"]
-version = "1.9.4"
+dependencies = ["dbt-athena==1.10.0rc1"]
+version = "1.10.0rc1"
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
 Documentation = "https://docs.getdbt.com"
