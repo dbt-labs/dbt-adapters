@@ -9,7 +9,6 @@ from typing import (
     FrozenSet,
     Iterable,
     List,
-    Mapping,
     Optional,
     Sequence,
     Set,
@@ -83,7 +82,6 @@ from dbt.adapters.bigquery.relation_configs import (
 from dbt.adapters.bigquery.utility import sql_escape
 
 from dbt.adapters.bigquery.struct_utils import (
-    collect_field_dicts,
     find_missing_fields,
     merge_nested_fields,
 )
@@ -848,7 +846,9 @@ class BigQueryAdapter(BaseAdapter):
             ]
         except google.api_core.exceptions.BadRequest as exc:
             logger.warning("Failed to update STRUCT column schema: %s", exc)
-            return schema_changes_dict
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Failed to update STRUCT schema for {target_relation.render()}: {exc}"
+            ) from exc
 
         # Remove handled STRUCT type changes so downstream logic does not retry
         if schema_changes_dict.get("new_target_types"):
