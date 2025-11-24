@@ -1,9 +1,18 @@
+# **what?**
+# Runs scheduled maintenance tasks: updates pre-commit hooks and marks stale issues/PRs.
+
+# **why?**
+# Keeps the repository healthy by keeping dependencies up to date and managing stale issues.
+
+# **when?**
+# This workflow runs on a schedule every Saturday at 1:30 AM UTC.
+
 name: "Scheduled maintenance"
 run-name: "Scheduled maintenance - ${{ github.actor }}"
 
 on:
     schedule:
-    -   cron: "30 1 * * SAT"
+        - cron: "30 1 * * SAT"
 
 permissions:
     contents: write
@@ -14,29 +23,23 @@ concurrency:
     cancel-in-progress: true
 
 jobs:
-    pre-commit-autoupdate:
-        uses: dbt-labs/actions/.github/workflows/pre-commit-autoupdate.yml
-        secrets:
-            TOKEN: ${{ secrets.FISHTOWN_BOT_PAT }}
-            SLACK_WEBHOOK_PR_URL: ${{ secrets.SLACK_DEV_ADAPTER_PULL_REQUESTS }}
-            SLACK_WEBHOOK_ALERTS_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
-
     stale:
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         strategy:
             matrix:
                 include:
-                -   threshold: 90
-                    labels: 'triage:awaiting-response'
-                -   threshold: 360
-                    labels: 'good-first-issue,help-wanted,type:task'
+                    - threshold: 90
+                      labels: "triage:awaiting-response"
+                    - threshold: 360
+                      labels: "good-first-issue,help-wanted,type:task"
         steps:
-        -   uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # actions/stale@v9
-            with:
-                stale-issue-message: "This issue has been marked as Stale because it has been open for 180 days with no activity. If you would like the issue to remain open, please comment on the issue or else it will be closed in 7 days."
-                stale-pr-message: "This PR has been marked as Stale because it has been open with no activity as of late. If you would like the PR to remain open, please comment on the PR or else it will be closed in 7 days."
-                close-issue-message: "Although we are closing this issue as stale, it's not gone forever. Issues can be reopened if there is renewed community interest. Just add a comment to notify the maintainers."
-                close-pr-message: "Although we are closing this PR as stale, it can still be reopened to continue development. Just add a comment to notify the maintainers."
-                close-issue-reason: "not_planned"
-                days-before-stale: ${{ matrix.threshold }}
-                any-of-labels: ${{ matrix.labels }}
+            - name: "Mark stale issues and PRs"
+              uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # actions/stale@v9
+              with:
+                  stale-issue-message: "This issue has been marked as Stale because it has been open for 180 days with no activity. If you would like the issue to remain open, please comment on the issue or else it will be closed in 7 days."
+                  stale-pr-message: "This PR has been marked as Stale because it has been open with no activity as of late. If you would like the PR to remain open, please comment on the PR or else it will be closed in 7 days."
+                  close-issue-message: "Although we are closing this issue as stale, it's not gone forever. Issues can be reopened if there is renewed community interest. Just add a comment to notify the maintainers."
+                  close-pr-message: "Although we are closing this PR as stale, it can still be reopened to continue development. Just add a comment to notify the maintainers."
+                  close-issue-reason: "not_planned"
+                  days-before-stale: ${{ matrix.threshold }}
+                  any-of-labels: ${{ matrix.labels }}
