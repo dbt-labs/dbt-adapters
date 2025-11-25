@@ -1,0 +1,6 @@
+kind: Features
+body: Add user agent in bigframes mode
+time: 2025-06-12T00:05:57.59845537Z
+custom:
+    Author: jialuoo
+    Issue: "1152"

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.contracts.relation import RelationConfig
@@ -7,12 +7,8 @@ from dbt.adapters.contracts.relation import ComponentName
 from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard library until py3.11
 from typing_extensions import Self
 
+from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
-from dbt.adapters.snowflake.relation_configs.catalog import (
-    SnowflakeCatalogConfig,
-    SnowflakeCatalogConfigChange,
-)
-
 
 if TYPE_CHECKING:
     import agate
@@ -50,6 +46,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
+    - cluster_by: specifies the columns to cluster on
 
     There are currently no non-configurable parameters.
     """
@@ -60,9 +57,11 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     query: str
     target_lag: str
     snowflake_warehouse: str
-    catalog: SnowflakeCatalogConfig
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
+    row_access_policy: Optional[str] = None
+    table_tag: Optional[str] = None
+    cluster_by: Optional[Union[str, list[str]]] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -79,9 +78,11 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": config_dict.get("query"),
             "target_lag": config_dict.get("target_lag"),
             "snowflake_warehouse": config_dict.get("snowflake_warehouse"),
-            "catalog": SnowflakeCatalogConfig.from_dict(config_dict["catalog"]),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
+            "row_access_policy": config_dict.get("row_access_policy"),
+            "table_tag": config_dict.get("table_tag"),
+            "cluster_by": config_dict.get("cluster_by"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -97,7 +98,11 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "catalog": SnowflakeCatalogConfig.parse_relation_config(relation_config),
+            "row_access_policy": relation_config.config.extra.get(  # type:ignore
+                "row_access_policy"
+            ),
+            "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
+            "cluster_by": cluster_by(relation_config),
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -119,8 +124,10 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": dynamic_table.get("text"),
             "target_lag": dynamic_table.get("target_lag"),
             "snowflake_warehouse": dynamic_table.get("warehouse"),
-            "catalog": SnowflakeCatalogConfig.parse_relation_results(relation_results),
             "refresh_mode": dynamic_table.get("refresh_mode"),
+            "row_access_policy": dynamic_table.get("row_access_policy"),
+            "table_tag": dynamic_table.get("table_tag"),
+            "cluster_by": dynamic_table.get("cluster_by"),
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 
@@ -159,7 +166,6 @@ class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeDynamicTableWarehouseConfigChange] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
-    catalog: Optional[SnowflakeCatalogConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
@@ -172,10 +178,9 @@ class SnowflakeDynamicTableConfigChangeset:
                     else False
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
-                self.catalog.requires_full_refresh if self.catalog else False,
             ]
         )
 
     @property
     def has_changes(self) -> bool:
-        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode, self.catalog])
+        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode])

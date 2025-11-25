@@ -11,6 +11,8 @@
     {%- set columns = '(' ~ table_dest_columns_csv ~ ')' -%}
     {%- endif -%}
 
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
     {{ sql_header if sql_header is not none }}
 
     create or replace table {{ relation }}
@@ -26,6 +28,7 @@
     {{ partition_by(partition_config) }}
     {{ cluster_by(raw_cluster_by) }}
 
+    {% if catalog_relation.table_format == 'iceberg' and not temporary %}with connection default{% endif %}
     {{ bigquery_table_options(config, model, temporary) }}
 
     {#-- PARTITION BY cannot be used with the AS query_statement clause.
@@ -101,11 +104,18 @@
   {{ return(adapter.check_schema_exists(information_schema.database, schema)) }}
 {% endmacro %}
 
-{#-- relation-level macro is not implemented. This is handled in the CTAs statement #}
+{#-- Handle both relation and column level documentation #}
 {% macro bigquery__persist_docs(relation, model, for_relation, for_columns) -%}
+  {% if for_relation and config.persist_relation_docs() and model.description %}
+    {% do alter_relation_comment(relation, model.description) %}
+  {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
     {% do alter_column_comment(relation, model.columns) %}
   {% endif %}
+{% endmacro %}
+
+{% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
+  {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
 {% endmacro %}
 
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}

@@ -16,6 +16,13 @@
   {{ return(columns) }}
 {% endmacro %}
 
+{%- macro get_list_of_column_names(columns) -%}
+  {% set col_names = [] %}
+  {% for col in columns %}
+    {% do col_names.append(col.name) %}
+  {% endfor %}
+  {{ return(col_names) }}
+{% endmacro %}
 
 {% macro get_empty_subquery_sql(select_sql, select_sql_header=none) -%}
   {{ return(adapter.dispatch('get_empty_subquery_sql', 'dbt')(select_sql, select_sql_header)) }}
@@ -123,11 +130,11 @@
      alter {{ relation.type }} {{ relation.render() }}
 
             {% for column in add_columns %}
-               add column {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+               add column {{ column.quoted }} {{ column.data_type }}{{ ',' if not loop.last }}
             {% endfor %}{{ ',' if add_columns and remove_columns }}
 
             {% for column in remove_columns %}
-                drop column {{ column.name }}{{ ',' if not loop.last }}
+                drop column {{ column.quoted }}{{ ',' if not loop.last }}
             {% endfor %}
 
   {%- endset -%}

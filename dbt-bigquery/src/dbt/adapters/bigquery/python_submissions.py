@@ -1,5 +1,7 @@
+import inspect
 import json
 import re
+import time
 from typing import Any, Dict, Optional, Union
 import uuid
 
@@ -9,6 +11,7 @@ from dbt.adapters.bigquery.clients import (
     create_dataproc_batch_controller_client,
     create_dataproc_job_controller_client,
     create_gcs_client,
+    create_notebook_client,
 )
 from dbt.adapters.bigquery.credentials import (
     BigQueryConnectionMethod,
@@ -17,10 +20,12 @@ from dbt.adapters.bigquery.credentials import (
 )
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
-from google.api_core.client_options import ClientOptions
+from dbt_common.exceptions import DbtRuntimeError
 
+from google.api_core.operation import Operation
 from google.auth.transport.requests import Request
 from google.cloud import aiplatform_v1
+from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
@@ -35,6 +40,15 @@ _logger = AdapterLogger("BigQuery")
 _NETWORK_NAME = "default"
 _SUBNETWORK_NAME = "default"
 _DEFAULT_JAR_FILE_URI = "gs://spark-lib/bigquery/spark-bigquery-with-dependencies_2.13-0.34.0.jar"
+# For BigFrames models, the default timeout is set to 1 hour (60 * 60 seconds).
+# This differs from other Python models because the typical 5-minute timeout
+# is insufficient for BigFrames processing.
+_DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
+# Time interval in seconds between successive polling attempts to check the
+# notebook job's status in BigFrames mode.
+_COLAB_POLL_INTERVAL = 30
+# Suffix used by service accounts.
+_SERVICE_ACCOUNT_SUFFIX = "iam.gserviceaccount.com"
 
 
 class _BigQueryPythonHelper(PythonJobHelper):
@@ -194,13 +208,25 @@ class BigFramesHelper(_BigQueryPythonHelper):
         self._model_name = parsed_model["alias"]
         self._connection_method = credentials.method
         self._GoogleCredentials = create_google_credentials(credentials)
-
-        # TODO(jialuo): Add a function in clients.py for it.
-        self._ai_platform_client = aiplatform_v1.NotebookServiceClient(
-            credentials=self._GoogleCredentials,
-            client_options=ClientOptions(api_endpoint=f"{self._region}-aiplatform.googleapis.com"),
-        )
+        self._notebook_client = create_notebook_client(self._GoogleCredentials, self._region)
         self._notebook_template_id = parsed_model["config"].get("notebook_template_id")
+        self._packages = parsed_model["config"].get("packages", [])
+        retry = RetryFactory(credentials)
+        self._polling_retry = retry.create_polling(
+            model_timeout=parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
+        )
+
+    def _get_token(self) -> str:
+        """Get a token from the credentials.
+        If a token is not supplied by the user directly it is lazily created the first time we authenticates.
+        BigFrames needs a token to determine the execution user but a call may not have
+        """
+        creds = self._GoogleCredentials
+        if creds.token:
+            return creds.token
+        else:
+            creds.refresh(Request())
+            return creds.token
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
@@ -219,7 +245,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             parent=f"projects/{self._project}/locations/{self._region}",
             filter="notebookRuntimeType = ONE_CLICK",
         )
-        page_result = self._ai_platform_client.list_notebook_runtime_templates(request=request)
+        page_result = self._notebook_client.list_notebook_runtime_templates(request=request)
 
         try:
             # Check if a default runtime template is available and applicable.
@@ -268,9 +294,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             notebook_runtime_template=template,
         )
 
-        operation = self._ai_platform_client.create_notebook_runtime_template(
-            request=create_request
-        )
+        operation = self._notebook_client.create_notebook_runtime_template(request=create_request)
         response = operation.result()
 
         return self._extract_template_id(response.name)
@@ -297,14 +321,48 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
         ):
             notebook_execution_job.service_account = self._GoogleCredentials._service_account_email
-        elif self._connection_method == BigQueryConnectionMethod.OAUTH:
-            request = Request()
-            response = request(
-                method="GET",
-                url="https://www.googleapis.com/oauth2/v2/userinfo",
-                headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
-            )
-            notebook_execution_job.execution_user = json.loads(response.data).get("email")
+        elif self._connection_method in (
+            BigQueryConnectionMethod.OAUTH,
+            BigQueryConnectionMethod.OAUTH_SECRETS,
+        ):
+            # If `impersonate_service_account` is configured correctly in
+            # profiles.yml, the job will run as the specified service account.
+            if hasattr(self._GoogleCredentials, "_target_principal"):
+                target_principal = self._GoogleCredentials._target_principal
+                if target_principal:
+                    notebook_execution_job.service_account = target_principal
+                else:
+                    raise ValueError(
+                        "The impersonated service account is incorrect. Please "
+                        "verify the `impersonate_service_account` setting in "
+                        "your profiles.yml configuration."
+                    )
+
+            # The job will run under the identity of the authenticated user.
+            else:
+                request = Request()
+                response = request(
+                    method="GET",
+                    url="https://www.googleapis.com/oauth2/v2/userinfo",
+                    headers={"Authorization": f"Bearer {self._get_token()}"},
+                )
+
+                if response.status != 200:
+                    raise DbtRuntimeError(
+                        f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
+                    )
+                if user_email := json.loads(response.data).get("email"):
+                    # In services such as Cloud Composer and Cloud Run, the authenticated user
+                    # is a service account with associated Application Default Credentials.
+                    # This does not require service account impersonation.
+                    if user_email and user_email.endswith(_SERVICE_ACCOUNT_SUFFIX):
+                        notebook_execution_job.service_account = user_email
+                    else:
+                        notebook_execution_job.execution_user = user_email
+                else:
+                    raise DbtRuntimeError(
+                        "Authorization request to get user failed to return an email."
+                    )
         else:
             raise ValueError(
                 f"Unsupported credential method in BigFrames: '{self._connection_method}'"
@@ -352,7 +410,14 @@ class BigFramesHelper(_BigQueryPythonHelper):
                             formatted_output += f"    {inner_key}: {inner_value}\n"
                     else:
                         formatted_output += f"    {value}\n"
+
+                    # Extract only the final error message line. Discard the
+                    # traceback details as they contain raw ANSI escape codes.
+                    if isinstance(value, str) and value.strip().lower() == "error":
+                        return formatted_output
+
             else:
+                _logger.debug("Unexpected output format of the Colab notebook.")
                 formatted_output += f"{item}\n"
 
             # Add a newline between items.
@@ -388,12 +453,50 @@ class BigFramesHelper(_BigQueryPythonHelper):
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
     def submit(self, compiled_code: str) -> None:
+        if self._packages:
+            install_code = f"_install_packages({self._packages})"
+            compiled_code = (
+                f"{inspect.getsource(_install_packages)}\n{install_code}\n{compiled_code}"
+            )
         notebook_compiled_code = self._py_to_ipynb(compiled_code)
         notebook_template_id = self._get_notebook_template_id()
 
         self._write_to_gcs(notebook_compiled_code)
 
         self._submit_bigframes_job(notebook_template_id)
+
+    def _track_notebook_job_status(self, job_name: str) -> aiplatform_v1.NotebookExecutionJob:
+        """Tracks the notebook job until it completes or times out."""
+        max_wait_time = self._polling_retry.timeout
+        elapsed = 0
+
+        # Please see all the JobState from
+        # https://cloud.google.com/php/docs/reference/cloud-ai-platform/latest/V1.JobState.
+        terminal_states = {
+            aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED,
+            aiplatform_gapic.JobState.JOB_STATE_PARTIALLY_SUCCEEDED,
+            aiplatform_gapic.JobState.JOB_STATE_FAILED,
+            aiplatform_gapic.JobState.JOB_STATE_CANCELLED,
+            aiplatform_gapic.JobState.JOB_STATE_EXPIRED,
+        }
+
+        while True:
+            retrieved_job = self._notebook_client.get_notebook_execution_job(name=job_name)
+            job_state = retrieved_job.job_state
+
+            if job_state in terminal_states:
+                return retrieved_job
+
+            if elapsed >= max_wait_time:
+                raise TimeoutError(
+                    "Operation did not complete within the designated timeout "
+                    f"of {max_wait_time} seconds. Please cancel the related "
+                    "notebook job manually via the GCP console since it might "
+                    "still be actively running."
+                )
+
+            time.sleep(_COLAB_POLL_INTERVAL)
+            elapsed += _COLAB_POLL_INTERVAL
 
     def _submit_bigframes_job(
         self, notebook_template_id: str
@@ -407,20 +510,106 @@ class BigFramesHelper(_BigQueryPythonHelper):
         )
 
         try:
-            res = self._ai_platform_client.create_notebook_execution_job(request=request).result(
-                timeout=self._polling_retry.timeout
+            operation: Operation = self._notebook_client.create_notebook_execution_job(
+                request=request
             )
+            lro_name = operation.operation.name
+            job_name = lro_name.split("/operations/")[0]
+            retrieved_job = self._track_notebook_job_status(job_name)
         except TimeoutError as timeout_error:
-            raise TimeoutError(
-                f"The dbt operation encountered a timeout: {timeout_error}\n"
-                "Please cancel the related notebook job manually via the GCP "
-                "console since it might still be actively running."
-            )
+            raise TimeoutError(f"The dbt operation encountered a timeout: {timeout_error}")
         except Exception as e:
-            raise RuntimeError(f"An unexpected error occured while executing the notebook: {e}")
+            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
 
-        job_id = res.name.split("/")[-1]
+        job_id = job_name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
         self._process_gcs_log(gcs_log_uri)
 
-        return self._ai_platform_client.get_notebook_execution_job(name=res.name)
+        if retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_SUCCEEDED:
+            _logger.info(
+                f"Colab notebook execution job '{retrieved_job.name}' finished successfully."
+            )
+        elif retrieved_job.job_state == aiplatform_gapic.JobState.JOB_STATE_FAILED:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' failed."
+            )
+        else:
+            raise DbtRuntimeError(
+                f"The colab notebook execution job '{retrieved_job.name}' "
+                f"finished with unexpected state: {retrieved_job.job_state.name}"
+            )
+
+        return self._notebook_client.get_notebook_execution_job(name=job_name)
+
+
+def _install_packages(packages: list[str]) -> None:
+    """Checks and installs packages via pip in a separate environment.
+
+    Parses requirement strings (e.g., 'pandas>=1.0', 'numpy==2.1.1') using the
+    'packaging' library to check against installed versions. It only installs
+    packages that are not already present in the environment. Existing packages
+    will not be updated, even if a different version is requested.
+
+    NOTE: This function is not intended for direct invocation. Instead, its
+    source code is extracted using inspect.getsource for execution in a separate
+    environment.
+    """
+    import sys
+    import subprocess
+    import importlib.metadata
+    from packaging.requirements import Requirement
+    from packaging.version import Version
+    from typing import Optional, Tuple
+
+    def _is_package_installed(requirement: Requirement) -> Tuple[bool, Optional[Version]]:
+        try:
+            version = importlib.metadata.version(requirement.name)
+            return True, Version(version)
+        except Exception:
+            # Unable to determine the version.
+            return False, None
+
+    # Check the installation of individual packages first.
+    packages_to_install = []
+    for package in packages:
+        requirement = Requirement(package)
+        installed, version = _is_package_installed(requirement)
+
+        if installed:
+            if version and requirement.specifier and version not in requirement.specifier:
+                print(
+                    f"Package '{requirement.name}' is already installed and cannot be updated. Skipping."
+                    f"The installed version: {version}."
+                )
+            else:
+                print(
+                    f"Package '{requirement.name}' is already installed. Skipping."
+                    f"The installed version: {version}."
+                )
+        else:
+            packages_to_install.append(package)
+
+    # All packages have been installed with certain version.
+    if not packages_to_install:
+        return
+
+    # Try to pip install the uninstalled packages.
+    pip_command = [sys.executable, "-m", "pip", "install"] + packages_to_install
+    print(f"Attempting to install the following packages: {', '.join(packages_to_install)}")
+
+    try:
+        result = subprocess.run(
+            pip_command,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+        )
+        if result.stdout:
+            print(f"pip output:\n{result.stdout.strip()}")
+        if result.stderr:
+            print(f"pip warnings/errors:\n{result.stderr.strip()}")
+        print(f"Successfully installed the following packages: {', '.join(packages_to_install)}")
+
+    except Exception as e:
+        raise RuntimeError(f"An unexpected error occurred during package installation: {e}")

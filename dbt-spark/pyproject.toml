@@ -8,7 +8,7 @@ name = "dbt-spark"
 description = "The Apache Spark adapter plugin for dbt"
 readme = "README.md"
 keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "spark"]
-requires-python = ">=3.9.0"
+requires-python = ">=3.10.0"
 authors = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
 maintainers = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
 classifiers = [
@@ -17,7 +17,6 @@ classifiers = [
     "Operating System :: MacOS :: MacOS X",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -30,14 +29,14 @@ dependencies = [
     "sqlparams>=3.0.0",
 ]
 [project.optional-dependencies]
-ODBC = ["pyodbc~=5.1.0"]
+ODBC = ["pyodbc>=5.1,<5.3"]
 PyHive = [
     "PyHive[hive_pure_sasl]~=0.7.0",
     "thrift>=0.11.0,<0.17.0",
 ]
 session = ["pyspark>=3.0.0,<4.0.0"]
 all = [
-    "pyodbc~=5.1.0",
+    "pyodbc>=5.1,<5.3",
     "PyHive[hive_pure_sasl]~=0.7.0",
     "thrift>=0.11.0,<0.17.0",
     "pyspark>=3.0.0,<4.0.0",

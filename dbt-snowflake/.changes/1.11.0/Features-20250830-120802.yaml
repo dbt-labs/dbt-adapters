@@ -1,0 +1,6 @@
+kind: Features
+body: Add cluster by config in Snowflake for dynamic tables
+time: 2025-08-30T12:08:02.458481+02:00
+custom:
+    Author: nazliander
+    Issue: "706"

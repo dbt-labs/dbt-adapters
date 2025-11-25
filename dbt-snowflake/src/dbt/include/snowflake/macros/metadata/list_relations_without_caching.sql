@@ -1,4 +1,4 @@
-{% macro snowflake__list_relations_without_caching(schema_relation, max_iter=10, max_results_per_iter=10000) %}
+{% macro snowflake__list_relations_without_caching(schema_relation, max_iter=10000, max_results_per_iter=10000) %}
 
     {%- if schema_relation is string -%}
         {%- set schema = schema_relation -%}
@@ -12,26 +12,30 @@
         dbt is currently configured to list a maximum of {{ max_results_per_iter * max_iter }} objects per schema.
         {{ schema }} exceeds this limit. If this is expected, you may configure this limit
         by setting list_relations_per_page and list_relations_page_limit in your project flags.
-        It is recommended to start by increasing list_relations_page_limit to something more than the default of 10.
+        It is recommended to start by increasing list_relations_page_limit.
     {%- endset -%}
 
-    {%- set paginated_results = [] -%}
-    {%- set watermark = none -%}
+    {%- set paginated_state = namespace(paginated_results=[], watermark=none) -%}
 
-    {%- do run_query('alter session set quoted_identifiers_ignore_case = false;') -%}
+    {#-
+        loop an extra time to catch the breach of max iterations
+        Note: while range is 0-based, loop.index starts at 1
+    -#}
+    {%- for _ in range(max_iter + 1) -%}
 
-    {#- loop an extra time to catch the breach of max iterations -#}
-    {%- for _ in range(0, max_iter + 1) -%}
-
-        {#- raise an error if we still didn't exit and we're beyond the max iterations limit -#}
-        {%- if loop.index == max_iter -%}
-            {%- do exceptions.raise_compiler_error(too_many_relations_msg) -%}
+        {#-
+            raise a warning and break if we still didn't exit and we're beyond the max iterations limit
+            Note: while range is 0-based, loop.index starts at 1
+        -#}
+        {%- if loop.index == max_iter + 1 -%}
+            {%- do exceptions.warn(too_many_relations_msg) -%}
+            {%- break -%}
         {%- endif -%}
 
-        {%- set show_objects_sql = snowflake__show_objects_sql(schema, max_results_per_iter, watermark) -%}
+        {%- set show_objects_sql = snowflake__show_objects_sql(schema, max_results_per_iter, paginated_state.watermark) -%}
         {%- set paginated_result = run_query(show_objects_sql) -%}
-        {%- do paginated_results.append(paginated_result) -%}
-        {%- set watermark = paginated_result.columns.get('name').values()[-1] -%}
+        {%- do paginated_state.paginated_results.append(paginated_result) -%}
+        {%- set paginated_state.watermark = paginated_result.columns.get('name').values()[-1] -%}
 
         {#- we got less results than the max_results_per_iter (includes 0), meaning we reached the end -#}
         {%- if (paginated_result | length) < max_results_per_iter -%}
@@ -40,11 +44,9 @@
 
     {%- endfor -%}
 
-    {%- do run_query('alter session unset quoted_identifiers_ignore_case;') -%}
-
     {#- grab the first table in the paginated results to access the `merge` method -#}
-    {%- set agate_table = paginated_results[0] -%}
-    {%- do return(agate_table.merge(paginated_results)) -%}
+    {%- set agate_table = paginated_state.paginated_results[0] -%}
+    {%- do return(agate_table.merge(paginated_state.paginated_results)) -%}
 
 {% endmacro %}
 
@@ -56,18 +58,6 @@ show objects in {{ schema }}
     limit {{ max_results_per_iter }}
     {% if watermark is not none -%} from '{{ watermark }}' {%- endif %}
 ;
-
-{#- gated for performance reasons - if you don't want iceberg, you shouldn't pay the latency penalty -#}
-{%- if adapter.behavior.enable_iceberg_materializations.no_warn %}
-select all_objects.*, all_tables.IS_ICEBERG as "is_iceberg"
-from table(result_scan(last_query_id(-1))) all_objects
-left join {{ schema.database }}.INFORMATION_SCHEMA.tables as all_tables
-on all_tables.table_name = all_objects."name"
-and all_tables.table_schema = all_objects."schema_name"
-and all_tables.table_catalog = all_objects."database_name"
-;
-{%- endif -%}
-
 {%- endset -%}
 
 {%- do return(_sql) -%}
