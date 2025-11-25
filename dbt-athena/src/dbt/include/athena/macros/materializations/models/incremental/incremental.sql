@@ -246,13 +246,13 @@
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 
   -- Delete unchanged S3 files (outside transaction - S3 operations)
-  -- Only run cleanup for main production target where source incremental models run
-  -- Other prod targets (telescope, productivity) are downstream consumers
-  {% set run_cleanup = target.name == 'prod' %}
-  {% if initial_s3_etags and run_cleanup %}
-    {% set deleted_count = cleanup_s3_etags(initial_s3_etags, incremental_source_name, incremental_source_table_name) %}
-  {% elif initial_s3_etags %}
-    {{ log("Skipping S3 cleanup for target: " ~ target.name, info=true) }}
+  -- Only run cleanup for specified target (configured in dbt_project.yml vars)
+  {% set cleanup_target = var('increment_cleanup_target_name', none) %}
+  {% if cleanup_target and target.name == cleanup_target %}
+    {% set cleanup_result = cleanup_s3_etags(initial_s3_etags, incremental_source_name, incremental_source_table_name) %}
+    {{ log("S3 cleanup result: " ~ cleanup_result['deleted'] ~ " deleted, " ~ cleanup_result['skipped'] ~ " skipped, " ~ cleanup_result['errors'] ~ " errors", info=true) }}
+  {% elif cleanup_target %}
+    {{ log("S3 cleanup skipped: current target '" ~ target.name ~ "' does not match configured target '" ~ cleanup_target ~ "'", info=true) }}
   {% endif %}
 
   {% if lf_tags_config is not none %}

@@ -8,21 +8,26 @@
       incremental_source_table_name: Source table name from config (e.g., 'applicants')
     
     Returns:
-      Number of files deleted (int)
+      Dictionary with cleanup results:
+      {
+        'deleted': Number of files deleted,
+        'skipped': Number of files skipped,
+        'errors': Number of errors
+      }
   #}
   
-  {% set deleted_count = 0 %}
+  {% set cleanup_result = {'deleted': 0, 'skipped': 0, 'errors': 0} %}
   
-  {# Only proceed if we have ETags and source config #}
-  {% if initial_etags_dict and incremental_source_name and incremental_source_table_name %}
+  {# Only proceed if source config is provided #}
+  {% if incremental_source_name and incremental_source_table_name %}
     {# Resolve source to Relation object #}
     {% set source_relation = source(incremental_source_name, incremental_source_table_name) %}
     
-    {# Call adapter method to perform deletion #}
-    {% set deleted_count = adapter.delete_unchanged_s3_files(source_relation, initial_etags_dict) %}
+    {# Call adapter method to perform deletion (it handles empty ETags) #}
+    {% set cleanup_result = adapter.delete_unchanged_s3_files(source_relation, initial_etags_dict) %}
   {% endif %}
   
-  {{ return(deleted_count) }}
+  {{ return(cleanup_result) }}
 {% endmacro %}
 
 
