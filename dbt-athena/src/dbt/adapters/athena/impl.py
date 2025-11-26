@@ -870,6 +870,8 @@ class AthenaAdapter(SQLAdapter):
             LOGGER.info(f"S3 path does not contain any files: {s3_location}")
             return {}
         
+        LOGGER.info(f"Starting S3 ETags gathering for {relation} from {s3_location}")
+        
         # Step 3: Get boto3 S3 client
         s3_client = self._get_s3_client()
         
@@ -885,7 +887,7 @@ class AthenaAdapter(SQLAdapter):
                     etag = obj['ETag'].strip('"')  # Remove quotes from ETag
                     etag_dict[file_key] = etag
         
-        LOGGER.info(f"Found {len(etag_dict)} files in S3")
+        LOGGER.info(f"Captured {len(etag_dict)} ETags for {relation}")
         return etag_dict
 
     @available
