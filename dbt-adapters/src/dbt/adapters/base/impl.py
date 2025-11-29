@@ -74,7 +74,7 @@ from dbt.adapters.base.relation import (
     AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
-from dbt.adapters.capability import Capability, CapabilityDict
+from dbt.adapters.capability import Capability, CapabilityDict, Support
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationClient,
@@ -1932,8 +1932,13 @@ class BaseAdapter(metaclass=AdapterMeta):
         return cls._capabilities
 
     @classmethod
-    def supports(cls, capability: Capability) -> bool:
-        return bool(cls.capabilities()[capability])
+    def supports(cls, capability: Capability, accept_cost: bool = False) -> bool:
+        return bool(cls.capabilities()[capability]) or (accept_cost and cls.capabilities()[capability].support == Support.FullWithCost)
+
+    
+    @classmethod
+    def supports_with_cost(cls, capability: Capability) -> bool:
+        return cls.capabilities()[capability].support == Support.FullWithCost
 
     @classmethod
     def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
