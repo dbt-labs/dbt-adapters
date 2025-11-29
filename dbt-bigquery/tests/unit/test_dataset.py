@@ -1,4 +1,8 @@
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+    needs_replication_update,
+)
 from dbt.adapters.bigquery import BigQueryRelation
 
 from google.cloud.bigquery import Dataset, AccessEntry, DatasetReference
@@ -88,3 +92,35 @@ def test_is_access_entry_in_dataset_returns_false_if_entry_not_in_dataset():
     dataset = Dataset(dataset_ref)
     access_entry = AccessEntry(None, "table", entity)
     assert not is_access_entry_in_dataset(dataset, access_entry)
+
+
+def test_needs_replication_update_returns_true_when_replicas_differ():
+    current_config = {"replicas": ["us-east1", "us-west1"], "primary": None}
+    desired_replicas = ["us-east1", "us-west1", "europe-west1"]
+    assert needs_replication_update(current_config, desired_replicas)
+
+
+def test_needs_replication_update_returns_true_when_primary_differs():
+    current_config = {"replicas": ["us-east1", "us-west1"], "primary": "us-east1"}
+    desired_replicas = ["us-east1", "us-west1"]
+    desired_primary = "us-west1"
+    assert needs_replication_update(current_config, desired_replicas, desired_primary)
+
+
+def test_needs_replication_update_returns_false_when_config_matches():
+    current_config = {"replicas": ["us-east1", "us-west1"], "primary": "us-east1"}
+    desired_replicas = ["us-east1", "us-west1"]
+    desired_primary = "us-east1"
+    assert not needs_replication_update(current_config, desired_replicas, desired_primary)
+
+
+def test_needs_replication_update_returns_false_when_replicas_match_no_primary():
+    current_config = {"replicas": ["us-east1", "us-west1"], "primary": None}
+    desired_replicas = ["us-east1", "us-west1"]
+    assert not needs_replication_update(current_config, desired_replicas)
+
+
+def test_needs_replication_update_handles_empty_current_config():
+    current_config = {"replicas": [], "primary": None}
+    desired_replicas = ["us-east1"]
+    assert needs_replication_update(current_config, desired_replicas)
