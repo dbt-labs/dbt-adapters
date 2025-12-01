@@ -1933,9 +1933,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @classmethod
     def supports(cls, capability: Capability, accept_cost: bool = False) -> bool:
-        return bool(cls.capabilities()[capability]) or (accept_cost and cls.capabilities()[capability].support == Support.FullWithCost)
+        return bool(cls.capabilities()[capability]) or (
+            accept_cost and cls.capabilities()[capability].support == Support.FullWithCost
+        )
 
-    
     @classmethod
     def supports_with_cost(cls, capability: Capability) -> bool:
         return cls.capabilities()[capability].support == Support.FullWithCost

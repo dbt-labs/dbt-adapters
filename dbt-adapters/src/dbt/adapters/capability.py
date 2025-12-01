@@ -48,6 +48,7 @@ class Support(str, Enum):
     macros needed to use it. This capability incurs a cost associated with its execution, and if a lower-cost alternative
     exists, dbt will use that instead."""
 
+
 @dataclass
 class CapabilitySupport:
     support: Support
