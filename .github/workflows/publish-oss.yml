@@ -122,7 +122,8 @@ jobs:
         secrets: inherit
 
     merge-changes:
-        if: !failure() && !cancelled()
+        if: |
+            !failure() && !cancelled()
         needs:
             -   work-branch
             -   bump-version
