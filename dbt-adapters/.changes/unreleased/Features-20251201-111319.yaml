@@ -1,0 +1,6 @@
+kind: Features
+body: Introduce Capability Support 'FullWithCost' enum
+time: 2025-12-01T11:13:19.993469-05:00
+custom:
+    Author: michelleark
+    Issue: "1457"

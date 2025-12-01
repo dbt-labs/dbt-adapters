@@ -43,6 +43,11 @@ class Support(str, Enum):
     """All versions of the DBMS supported by the adapter support this capability and the adapter has implemented any
     macros needed to use it."""
 
+    FullWithCost = "FullWithCost"
+    """All versions of the DBMS supported by the adapter support this capability and the adapter has implemented any
+    macros needed to use it. This capability incurs a cost associated with its execution, and if a lower-cost alternative
+    exists, dbt will use that instead."""
+
 
 @dataclass
 class CapabilitySupport:
