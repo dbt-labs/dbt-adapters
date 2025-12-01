@@ -46,7 +46,7 @@ env:
 
 jobs:
     publish:
-        runs-on: ubuntu-latest
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
         defaults:
             run:
                 working-directory: ./${{ inputs.package }}
