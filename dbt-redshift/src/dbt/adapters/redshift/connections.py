@@ -490,10 +490,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
     @classmethod
     def get_query_id(cls, cursor: redshift_connector.Cursor) -> str:
-        user_id_query_result = cursor.execute("select last_user_query_id()").fetchone()
-        if user_id_query_result:
-            return str(user_id_query_result[0])
-        return "-1"
+        try:
+            user_id_query_result = cursor.execute("select last_user_query_id()").fetchone()
+        except Exception as e:
+            logger.debug(f"Error getting query ID: {e}")
+            user_id_query_result = None
+        return str(user_id_query_result[0]) if user_id_query_result else "-1"
 
     @contextmanager
     def exception_handler(self, sql):
