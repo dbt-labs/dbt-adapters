@@ -1,0 +1,6 @@
+kind: Fixes
+body: ensure CLDs can do incremental mat
+time: 2025-12-02T17:42:42.676785-05:00
+custom:
+    Author: dataders
+    Issue: "1459"
