@@ -358,6 +358,9 @@ class TestBigframesModelsMerge:
         assert len(result) == 1
 
 
+# we specify the notebook template id here
+# because the default template has disabled
+# public internet access.
 models__bigframes_model_packages = f"""
 def model(dbt, session):
     dbt.config(
