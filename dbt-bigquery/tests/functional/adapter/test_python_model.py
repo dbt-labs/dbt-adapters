@@ -358,16 +358,17 @@ class TestBigframesModelsMerge:
         assert len(result) == 1
 
 
-models__bigframes_model_packages = """
+models__bigframes_model_packages = f"""
 def model(dbt, session):
     dbt.config(
         submission_method='bigframes',
         materialized='table',
         packages=['numpy<=1.1.1', 'pandas', 'mlflow'],
+        notebook_template_id='{os.getenv("BIGFRAMES_NOTEBOOK_TEMPLATE_ID", "default")}'
     )
     import mlflow
     mlflow_version = mlflow.__version__
-    data = {"id": [1, 2, 3], "values": ['a', 'b', mlflow_version]}
+    data = {{"id": [1, 2, 3], "values": ['a', 'b', mlflow_version]}}
     return bpd.DataFrame(data=data)
 """
 
