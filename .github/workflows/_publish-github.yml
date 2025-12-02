@@ -60,7 +60,10 @@ jobs:
                     ${{ vars.DEFAULT_PYTHON_VERSION }}
         -   uses: pypa/hatch@install
         -   id: version
-            run: echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
+            run: |
+                cd ./${{ inputs.package }}
+                echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
+                cd ..
         -   id: semver
             uses: dbt-labs/actions/parse-semver@main
             with:
