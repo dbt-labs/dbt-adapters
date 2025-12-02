@@ -2,6 +2,10 @@ MY_UDF_SQL = """
 price * 2
 """.strip()
 
+MY_SLIGHTLY_DIFFERENT_UDF_SQL = """
+price * 2.5
+""".strip()
+
 MY_UDF_YML = """
 functions:
   - name: price_for_xlarge
@@ -12,6 +16,19 @@ functions:
         description: The price of the standard item
     returns:
       data_type: numeric
+      description: The resulting xlarge price
+"""
+
+MY_UDF_WITH_RETURN_TYPE_CHANGED_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    arguments:
+      - name: price
+        data_type: numeric
+        description: The price of the standard item
+    returns:
+      data_type: int64
       description: The resulting xlarge price
 """
 
