@@ -1,6 +1,8 @@
 import copy
 from typing import Any, Dict, List, Mapping, Sequence
 
+from dbt.adapters.bigquery.column import BigQueryColumn
+
 
 def merge_nested_fields(
     existing_fields: Sequence[Dict[str, Any]],
@@ -79,3 +81,13 @@ def find_missing_fields(
     return {
         path: copy.deepcopy(field) for path, field in source_map.items() if path not in target_map
     }
+
+
+def build_nested_additions(add_columns: Sequence[BigQueryColumn]) -> Dict[str, Dict[str, Any]]:
+    additions: Dict[str, Dict[str, Any]] = {}
+
+    for column in add_columns:
+        schema_field = column.column_to_bq_schema().to_api_repr()
+        additions[column.name] = schema_field
+
+    return additions
