@@ -10,7 +10,6 @@ from typing import (
     Iterable,
     List,
     Optional,
-    Sequence,
     Set,
     Tuple,
     TYPE_CHECKING,
@@ -82,6 +81,7 @@ from dbt.adapters.bigquery.relation_configs import (
 from dbt.adapters.bigquery.utility import sql_escape
 
 from dbt.adapters.bigquery.struct_utils import (
+    build_nested_additions,
     find_missing_fields,
     merge_nested_fields,
 )
@@ -708,8 +708,8 @@ class BigQueryAdapter(BaseAdapter):
 
         if drop_candidates:
             relation_name = relation.render()
-            drop_clauses = [f"DROP COLUMN {self.quote(column.name)}" for column in drop_candidates]
-            drop_sql = f"ALTER TABLE {relation_name} {', '.join(drop_clauses)}"
+            drop_clauses = [f"drop column {self.quote(column.name)}" for column in drop_candidates]
+            drop_sql = f"alter table {relation_name} {', '.join(drop_clauses)}"
 
             column_names = [column.name for column in drop_candidates]
             logger.debug(
@@ -724,7 +724,7 @@ class BigQueryAdapter(BaseAdapter):
         apply_schema_patch = False
 
         if add_columns:
-            additions = self._build_nested_additions(add_columns)
+            additions = build_nested_additions(add_columns)
             schema_as_dicts = merge_nested_fields(schema_as_dicts, additions)
             apply_schema_patch = True
 
@@ -732,17 +732,6 @@ class BigQueryAdapter(BaseAdapter):
             new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
             new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
             client.update_table(new_table, ["schema"])
-
-    def _build_nested_additions(
-        self, add_columns: Sequence[BigQueryColumn]
-    ) -> Dict[str, Dict[str, Any]]:
-        additions: Dict[str, Dict[str, Any]] = {}
-
-        for column in add_columns:
-            schema_field = column.column_to_bq_schema().to_api_repr()
-            additions[column.name] = schema_field
-
-        return additions
 
     @available.parse(lambda *a, **k: {})
     def sync_struct_columns(
@@ -769,6 +758,7 @@ class BigQueryAdapter(BaseAdapter):
 
         source_schema = [field.to_api_repr() for field in source_table.schema]
         target_schema = [field.to_api_repr() for field in target_table.schema]
+
         # Identify nested fields that exist in the source schema but not the target.
         missing_fields = find_missing_fields(source_schema, target_schema)
         nested_additions = {
@@ -807,7 +797,14 @@ class BigQueryAdapter(BaseAdapter):
         for field in target_schema:
             field_name = field["name"]
             if field_name in struct_columns_to_update:
-                source_field = next((f for f in source_schema if f["name"] == field_name), None)
+                source_field = next(
+                    (
+                        _src_field
+                        for _src_field in source_schema
+                        if _src_field["name"] == field_name
+                    ),
+                    None,
+                )
                 if source_field:
                     updated_schema.append(copy.deepcopy(source_field))
                     handled_columns.add(field_name)
