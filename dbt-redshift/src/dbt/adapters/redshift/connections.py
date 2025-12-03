@@ -485,13 +485,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
         # this function is only used for successful run, so we can just return a dummy
         rows = cursor.rowcount
         message = "SUCCESS"
-        query_id = cls.get_query_id(cursor)
-        return AdapterResponse(_message=message, rows_affected=rows, query_id=query_id)
+        return AdapterResponse(_message=message, rows_affected=rows)
 
     @classmethod
     def get_query_id(cls, cursor: redshift_connector.Cursor) -> str:
         try:
-            user_id_query_result = cursor.execute("select last_user_query_id()").fetchone()
+            user_id_query_result = cursor.execute("select pg_last_query_id();").fetchone()
         except Exception as e:
             logger.debug(f"Error getting query ID: {e}")
             user_id_query_result = None
@@ -618,6 +617,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
                     from dbt_common.clients import agate_helper
 
                     internal_table = agate_helper.empty_table()
+                internal_response.query_id = self.get_query_id(cursor)
                 return internal_response, internal_table
             except Exception as e:
                 retries, backoff = _handle_execute_exception(e, retries, backoff, retry_all)
