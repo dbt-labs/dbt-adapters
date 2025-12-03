@@ -157,13 +157,8 @@ class SnowflakeCredentials(Credentials):
 
         self.account, sub_count = re.subn("_", "-", self.account)
         if sub_count:
-            warn_or_error(
-                AdapterEventWarning(
-                    base_msg=(
-                        "Underscores (_) in account name were replaced with hyphens (-) to "
-                        "form a valid Snowflake URL."
-                    )
-                )
+            logger.debug(
+                "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
             )
 
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
