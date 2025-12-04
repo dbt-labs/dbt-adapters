@@ -44,7 +44,7 @@ class TestGetLastRelationModifiedBatch:
             if result.node.name == table_name:
                 return result
         return None
-    
+
     def test_get_last_relation_modified_batch(self, project, unique_schema):
         project.run_sql(
             f"create table {unique_schema}.test_table as (select 1 as id, 'test' as name);"
