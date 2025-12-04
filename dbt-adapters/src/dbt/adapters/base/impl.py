@@ -1932,14 +1932,8 @@ class BaseAdapter(metaclass=AdapterMeta):
         return cls._capabilities
 
     @classmethod
-    def supports(cls, capability: Capability, accept_cost: bool = False) -> bool:
-        return bool(cls.capabilities()[capability]) or (
-            accept_cost and cls.capabilities()[capability].support == Support.FullWithCost
-        )
-
-    @classmethod
-    def supports_with_cost(cls, capability: Capability) -> bool:
-        return cls.capabilities()[capability].support == Support.FullWithCost
+    def supports(cls, capability: Capability) -> bool:
+        return bool(cls.capabilities()[capability])
 
     @classmethod
     def get_adapter_run_info(cls, config: RelationConfig) -> AdapterTrackingRelationInfo:
