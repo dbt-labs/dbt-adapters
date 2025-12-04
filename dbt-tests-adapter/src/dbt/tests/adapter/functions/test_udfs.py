@@ -5,7 +5,7 @@ from dbt.artifacts.schemas.results import RunStatus
 from dbt.contracts.graph.nodes import FunctionNode
 from dbt.events.types import RunResultError
 from dbt.tests.adapter.functions import files
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, write_file
 from dbt_common.events.base_types import EventMsg
 from dbt_common.events.event_catcher import EventCatcher
 
@@ -240,3 +240,46 @@ class PythonUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
             "price_for_xlarge.py": files.MY_UDF_PYTHON,
             "price_for_xlarge.yml": files.MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML,
         }
+
+
+class ImprovedFunctionUpdateStrategy(UDFsBasic):
+    original_sql = files.MY_UDF_SQL
+    original_yml = files.MY_UDF_YML
+    updated_sql = files.MY_SLIGHTLY_DIFFERENT_UDF_SQL
+    updated_yml = files.MY_UDF_WITH_RETURN_TYPE_CHANGED_YML
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": self.original_sql,
+            "price_for_xlarge.yml": self.original_yml,
+        }
+
+    def test_udfs(self, project):
+        result = run_dbt(["build", "--debug"])
+        assert len(result.results) == 1
+
+        # Change arg types of funciton
+        write_file(self.updated_yml, project.project_root, "functions", "price_for_xlarge.yml")
+
+        # Rebuild the function, if an exception is raised, then the function materialization isn't
+        # handling the signature changes correctly
+        result = run_dbt(["build", "--debug"])
+        assert len(result.results) == 1
+
+        # Change the function SQL
+        write_file(self.updated_sql, project.project_root, "functions", "price_for_xlarge.sql")
+
+        # Rebuild the function, if an exception is raised, then the function materialization isn't
+        # handling the body changes correctly
+        result = run_dbt(["build", "--debug"])
+        assert len(result.results) == 1
+
+        # Change the function SQL and YML back to original at same time
+        write_file(self.original_sql, project.project_root, "functions", "price_for_xlarge.sql")
+        write_file(self.original_yml, project.project_root, "functions", "price_for_xlarge.yml")
+
+        # Rebuild the function, if an exception is raised, then the function materialization isn't
+        # handling the body + signature changes correctly
+        result = run_dbt(["build", "--debug"])
+        assert len(result.results) == 1

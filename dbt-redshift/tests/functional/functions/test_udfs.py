@@ -8,8 +8,9 @@ from dbt.tests.adapter.functions.test_udfs import (
     ErrorForUnsupportedType,
     PythonUDFNotSupported,
     SqlUDFDefaultArgSupport,
+    ImprovedFunctionUpdateStrategy,
 )
-from tests.functional.functions.files import MY_UDF_SQL
+from tests.functional.functions.files import MY_UDF_SQL, MY_SLIGHTLY_DIFFERENT_UDF_SQL
 
 
 class TestRedshiftUDFs(UDFsBasic):
@@ -75,3 +76,8 @@ class TestRedshiftDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
             "price_for_xlarge.sql": MY_UDF_SQL,
             "price_for_xlarge.yml": MY_UDF_WITH_DEFAULT_ARG_YML,
         }
+
+
+class TestRedshiftImprovedFunctionUpdateStrategy(ImprovedFunctionUpdateStrategy):
+    original_sql = MY_UDF_SQL
+    updated_sql = MY_SLIGHTLY_DIFFERENT_UDF_SQL

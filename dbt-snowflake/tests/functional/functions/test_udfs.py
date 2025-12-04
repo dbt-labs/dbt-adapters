@@ -14,6 +14,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFEntryPointRequired,
     SqlUDFDefaultArgSupport,
     PythonUDFDefaultArgSupport,
+    ImprovedFunctionUpdateStrategy,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -105,3 +106,7 @@ class TestSnowflakeDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
 
 class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
     expect_default_arg_support = True
+
+
+class TestSnowflakeImprovedFunctionUpdateStrategy(ImprovedFunctionUpdateStrategy):
+    pass

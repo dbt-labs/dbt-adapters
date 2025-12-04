@@ -14,6 +14,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFRuntimeVersionRequired,
     PythonUDFEntryPointRequired,
     SqlUDFDefaultArgSupport,
+    ImprovedFunctionUpdateStrategy,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -209,3 +210,10 @@ class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
             "price_for_xlarge.sql": files.MY_UDF_SQL,
             "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
         }
+
+
+class TestBigqueryImprovedFunctionUpdateStrategy(ImprovedFunctionUpdateStrategy):
+    original_sql = files.MY_UDF_SQL
+    original_yml = files.MY_UDF_YML
+    updated_sql = files.MY_SLIGHTLY_DIFFERENT_UDF_SQL
+    updated_yml = files.MY_UDF_WITH_RETURN_TYPE_CHANGED_YML
