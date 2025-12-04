@@ -36,7 +36,7 @@ class UDFsBasic:
         assert "STABLE" not in sql
         assert "IMMUTABLE" not in sql
 
-    def test_udfs(self, project, sql_event_catcher):
+    def test_udfs(self, project, adapter, sql_event_catcher):
         result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
 
         assert len(result.results) == 1
@@ -240,3 +240,19 @@ class PythonUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
             "price_for_xlarge.py": files.MY_UDF_PYTHON,
             "price_for_xlarge.yml": files.MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML,
         }
+
+
+class CanFindScalarFunctionRelation(UDFsBasic):
+    def test_udfs(self, project):
+        result = run_dbt(["build", "--debug"])
+
+        assert len(result.results) == 1
+        node = result.results[0].node
+        assert isinstance(node, FunctionNode)
+
+        with project.adapter.connection_named("_test_scalar_function_relation"):
+            relation = project.adapter.get_relation(
+                database=node.database, schema=node.schema, identifier=node.name
+            )
+
+        assert relation is not None
