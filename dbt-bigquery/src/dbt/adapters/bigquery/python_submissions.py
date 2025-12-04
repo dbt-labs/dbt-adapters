@@ -47,6 +47,8 @@ _DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
 # Time interval in seconds between successive polling attempts to check the
 # notebook job's status in BigFrames mode.
 _COLAB_POLL_INTERVAL = 30
+# Suffix used by service accounts.
+_SERVICE_ACCOUNT_SUFFIX = "iam.gserviceaccount.com"
 
 
 class _BigQueryPythonHelper(PythonJobHelper):
@@ -214,6 +216,18 @@ class BigFramesHelper(_BigQueryPythonHelper):
             model_timeout=parsed_model["config"].get("timeout") or _DEFAULT_BIGFRAMES_TIMEOUT
         )
 
+    def _get_token(self) -> str:
+        """Get a token from the credentials.
+        If a token is not supplied by the user directly it is lazily created the first time we authenticates.
+        BigFrames needs a token to determine the execution user but a call may not have
+        """
+        creds = self._GoogleCredentials
+        if creds.token:
+            return creds.token
+        else:
+            creds.refresh(Request())
+            return creds.token
+
     def _py_to_ipynb(self, compiled_code: str) -> str:
         notebook = nbformat.v4.new_notebook()
         # Put all codes in one cell.
@@ -330,14 +344,21 @@ class BigFramesHelper(_BigQueryPythonHelper):
                 response = request(
                     method="GET",
                     url="https://www.googleapis.com/oauth2/v2/userinfo",
-                    headers={"Authorization": f"Bearer {self._GoogleCredentials.token}"},
+                    headers={"Authorization": f"Bearer {self._get_token()}"},
                 )
+
                 if response.status != 200:
                     raise DbtRuntimeError(
                         f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
                     )
                 if user_email := json.loads(response.data).get("email"):
-                    notebook_execution_job.execution_user = user_email
+                    # In services such as Cloud Composer and Cloud Run, the authenticated user
+                    # is a service account with associated Application Default Credentials.
+                    # This does not require service account impersonation.
+                    if user_email and user_email.endswith(_SERVICE_ACCOUNT_SUFFIX):
+                        notebook_execution_job.service_account = user_email
+                    else:
+                        notebook_execution_job.execution_user = user_email
                 else:
                     raise DbtRuntimeError(
                         "Authorization request to get user failed to return an email."

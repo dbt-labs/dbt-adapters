@@ -31,6 +31,7 @@ from dbt.adapters.record.base import (
     AdapterConvertTypeRecord,
     AdapterStandardizeGrantsDictRecord,
     AdapterListRelationsWithoutCachingRecord,
+    AdapterGetColumnsInRelationRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -79,6 +80,7 @@ from dbt.adapters.catalogs import (
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
     CatalogRelation,
+    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
@@ -335,9 +337,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._catalog_client.get(name)
 
     @available
-    def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
-        catalog = self.get_catalog_integration(config.catalog)
-        return catalog.build_relation(config)
+    def build_catalog_relation(self, config: RelationConfig) -> Optional[CatalogRelation]:
+        if not config.config:
+            return None
+
+        # "catalog" is legacy, but we support it for backward compatibility
+        if catalog_name := config.config.get(
+            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or config.config.get("catalog"):
+            catalog = self.get_catalog_integration(catalog_name)
+            return catalog.build_relation(config)
+
+        return None
 
     ###
     # Methods to set / access a macro resolver
@@ -735,7 +746,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         raise NotImplementedError("`rename_relation` is not implemented for this adapter!")
 
-    @auto_record_function("AdapterGetColumnsInRelation", group="Available")
+    @record_function(
+        AdapterGetColumnsInRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     @available.parse_list
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:

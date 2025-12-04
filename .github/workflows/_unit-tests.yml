@@ -1,3 +1,12 @@
+# **what?**
+# Runs unit tests for adapter packages.
+
+# **why?**
+# Ensures code changes don't break existing functionality before integration testing.
+
+# **when?**
+# This workflow is called by other workflows (like _run-tests.yml and pull-request-checks.yml) or can be manually triggered via workflow_dispatch.
+
 name: "# Unit tests"
 run-name: "Unit tests - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} repository:${{ inputs.repository }} os:${{ inputs.os }} python-version:${{ inputs.python-version }}"
 
@@ -23,7 +32,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: string
-                default: 3.9
+                default: "3.10"
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -34,14 +43,14 @@ on:
                 description: "Choose the package to test"
                 type: choice
                 options:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
+                    - "dbt-adapters"
+                    - "dbt-athena"
+                    - "dbt-athena-community"
+                    - "dbt-bigquery"
+                    - "dbt-postgres"
+                    - "dbt-redshift"
+                    - "dbt-snowflake"
+                    - "dbt-spark"
             branch:
                 description: "Choose the branch to test"
                 type: string
@@ -57,7 +66,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.9", "3.10", "3.11", "3.12"]
+                options: ["3.10", "3.11", "3.12", "3.13"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -75,22 +84,29 @@ jobs:
         runs-on: ${{ inputs.os }}
         name: "unit-tests - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
-        -   uses: actions/checkout@v4
-            with:
-                ref: ${{ inputs.branch }}
-                repository: ${{ inputs.repository }}
-        -   uses: actions/setup-python@v5
-            with:
-                python-version: ${{ inputs.python-version }}
-        -   run: |
-                echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
-                echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
-        # mac + 3.9 requires postgresql to be installed manually so that the psycopg2-binary wheel can be found
-        -   name: "psycopg2-binary check"
-            if: inputs.python-version == '3.9' && runner.os == 'macOS'
-            run: brew install postgresql
-        -   uses: pypa/hatch@install
-        -   run: brew install unixodbc
-            if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
-        -   run: hatch run ${{ inputs.hatch-env }}:unit-tests
-            working-directory: ./${{ inputs.package }}
+            - name: "Checkout ${{ inputs.branch }}"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              with:
+                  ref: ${{ inputs.branch }}
+                  repository: ${{ inputs.repository }}
+
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+              with:
+                  python-version: ${{ inputs.python-version }}
+
+            - name: "Set environment variables"
+              run: |
+                  echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+                  echo "PIP_ONLY_BINARY=psycopg2-binary" >> $GITHUB_ENV
+
+            - name: "Install hatch"
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
+            - name: "Install unixodbc for Spark on macOS"
+              run: brew install unixodbc
+              if: inputs.package == 'dbt-spark' && runner.os == 'macOS'
+
+            - name: "Run unit tests"
+              run: hatch run ${{ inputs.hatch-env }}:unit-tests
+              working-directory: ./${{ inputs.package }}
