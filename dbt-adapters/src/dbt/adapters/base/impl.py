@@ -74,7 +74,7 @@ from dbt.adapters.base.relation import (
     AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
-from dbt.adapters.capability import Capability, CapabilityDict, Support
+from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationClient,

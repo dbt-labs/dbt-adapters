@@ -153,7 +153,7 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(
-                support=Support.FullWithCost
+                support=Support.Full
             ),
         }
     )
