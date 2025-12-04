@@ -1,6 +1,6 @@
 import textwrap
 from dataclasses import dataclass, field
-from typing import FrozenSet, Optional, Type, Iterator, Tuple
+from typing import FrozenSet, Optional, Type, Iterator, Tuple, Dict
 
 
 from dbt.adapters.base.relation import BaseRelation
@@ -23,9 +23,15 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
+    SnowflakeHybridTableConfig,
+    SnowflakeHybridTableConfigChangeset,
+    SnowflakeHybridTablePrimaryKeyConfigChange,
+    SnowflakeHybridTableIndexConfigChange,
+    SnowflakeHybridTableColumnConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
+from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -34,8 +40,10 @@ class SnowflakeRelation(BaseRelation):
     table_format: str = constants.INFO_SCHEMA_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
-    relation_configs = {
-        SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
+    # Map materialization names to their RelationConfig classes
+    relation_configs: Dict[str, Type[SnowflakeRelationConfigBase]] = {
+        str(SnowflakeRelationType.DynamicTable): SnowflakeDynamicTableConfig,
+        str(SnowflakeRelationType.HybridTable): SnowflakeHybridTableConfig,
     }
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -43,6 +51,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.HybridTable,  # type: ignore
             }
         )
     )
@@ -51,6 +60,7 @@ class SnowflakeRelation(BaseRelation):
         default_factory=lambda: frozenset(
             {
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.HybridTable,  # type: ignore
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
             }
@@ -60,6 +70,10 @@ class SnowflakeRelation(BaseRelation):
     @property
     def is_dynamic_table(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_hybrid_table(self) -> bool:
+        return self.type == SnowflakeRelationType.HybridTable
 
     @property
     def is_materialized_view(self) -> bool:
@@ -72,6 +86,10 @@ class SnowflakeRelation(BaseRelation):
     @classproperty
     def DynamicTable(cls) -> str:
         return str(SnowflakeRelationType.DynamicTable)
+
+    @classproperty
+    def HybridTable(cls) -> str:
+        return str(SnowflakeRelationType.HybridTable)
 
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
@@ -120,6 +138,40 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
+            )
+
+        if config_change_collection.has_changes:
+            return config_change_collection
+        return None
+
+    @classmethod
+    def hybrid_table_config_changeset(
+        cls, relation_results: RelationResults, relation_config: RelationConfig
+    ) -> Optional[SnowflakeHybridTableConfigChangeset]:
+        existing_hybrid_table = SnowflakeHybridTableConfig.from_relation_results(relation_results)
+        new_hybrid_table = SnowflakeHybridTableConfig.from_relation_config(relation_config)
+
+        config_change_collection = SnowflakeHybridTableConfigChangeset()
+
+        # Check primary key changes
+        if new_hybrid_table.primary_key != existing_hybrid_table.primary_key:
+            config_change_collection.primary_key = SnowflakeHybridTablePrimaryKeyConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context=new_hybrid_table.primary_key,
+            )
+
+        # Check column changes
+        if new_hybrid_table.columns != existing_hybrid_table.columns:
+            config_change_collection.columns = SnowflakeHybridTableColumnConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context="columns modified",
+            )
+
+        # Check index changes
+        if new_hybrid_table.indexes != existing_hybrid_table.indexes:
+            config_change_collection.indexes = SnowflakeHybridTableIndexConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context="indexes modified",
             )
 
         if config_change_collection.has_changes:
