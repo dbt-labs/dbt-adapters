@@ -24,6 +24,7 @@ from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as Big
 import google.cloud.exceptions
 import pytz
 
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
@@ -45,7 +46,8 @@ from dbt.adapters.base import (
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse
+from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.relation import ComponentName
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.catalogs import CatalogRelation
@@ -90,6 +92,13 @@ WRITE_APPEND = google.cloud.bigquery.job.WriteDisposition.WRITE_APPEND
 WRITE_TRUNCATE = google.cloud.bigquery.job.WriteDisposition.WRITE_TRUNCATE
 
 CREATE_SCHEMA_MACRO_NAME = "create_schema"
+
+BIGQUERY_USE_BATCH_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_use_batch_source_freshness",
+    default=False,
+    description="Use information schema TABLE_STORAGE table to calculate source freshness in batch.",
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -151,6 +160,7 @@ class BigQueryAdapter(BaseAdapter):
         {
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
+            Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
         }
     )
 
@@ -163,6 +173,12 @@ class BigQueryAdapter(BaseAdapter):
     ###
     # Implementations of abstract methods
     ###
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [
+            BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
+        ]
 
     @classmethod
     def date_function(cls) -> str:
@@ -760,6 +776,65 @@ class BigQueryAdapter(BaseAdapter):
         )
 
         return None, freshness
+
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        """
+        Given a list of sources (BaseRelations), calculate the metadata-based freshness in batch.
+        This method should _not_ execute a warehouse query per source, but rather batch up
+        the sources into as few requests as possible to minimize the number of roundtrips required
+        to compute metadata-based freshness for each input source.
+        :param sources: The list of sources to calculate metadata-based freshness for
+        :param macro_resolver: An optional macro_resolver to use for get_relation_last_modified
+        :return: a tuple where:
+            * the first element is a list of optional AdapterResponses indicating the response
+              for each request the method made to compute the freshness for the provided sources.
+            * the second element is a dictionary mapping an input source BaseRelation to a FreshnessResponse,
+              if it was possible to calculate a FreshnessResponse for the source.
+        """
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        # Legacy behavior: use metadata-based freshness for each source
+        if not self.behavior.bigquery_use_batch_source_freshness:
+            for source in sources:
+                adapter_response, freshness_response = self.calculate_freshness_from_metadata(
+                    source, macro_resolver
+                )
+                adapter_responses.append(adapter_response)
+                freshness_responses[source] = freshness_response
+            return adapter_responses, freshness_responses
+
+        # Track schema, identifiers of sources for lookup from batch query
+        schema_identifier_to_source = {
+            (
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
+            ): source
+            for source in sources
+        }
+
+        result = self.execute_macro(
+            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+            kwargs={
+                "information_schema": None,
+                "relations": sources,
+            },
+            macro_resolver=macro_resolver,
+            needs_conn=True,
+        )
+        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+        adapter_responses.append(adapter_response)
+
+        for row in table:
+            raw_relation, freshness_response = self._parse_freshness_row(row, table)
+            source_relation_for_result = schema_identifier_to_source[raw_relation]
+            freshness_responses[source_relation_for_result] = freshness_response
+
+        return adapter_responses, freshness_responses
 
     @available.parse(lambda *a, **k: {})
     def get_common_options(

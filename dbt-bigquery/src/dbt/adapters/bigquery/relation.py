@@ -174,8 +174,8 @@ class BigQueryInformationSchema(InformationSchema):
     @classmethod
     def from_relation(cls, relation, information_schema_view):
         info_schema = super().from_relation(relation, information_schema_view)
-        if information_schema_view == "OBJECT_PRIVILEGES":
-            # OBJECT_PRIVILEGES require a location.  If the location is blank there is nothing
+        if information_schema_view in ("OBJECT_PRIVILEGES", "TABLE_STORAGE"):
+            # OBJECT_PRIVILEGES and TABLE_STORAGE require a location.  If the location is blank there is nothing
             # the user can do about it.
             if not relation.location:
                 msg = (
