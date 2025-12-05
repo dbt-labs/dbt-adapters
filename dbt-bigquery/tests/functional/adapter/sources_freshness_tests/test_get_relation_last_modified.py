@@ -38,7 +38,7 @@ class TestGetLastRelationModifiedBatch:
     @pytest.fixture(scope="class")
     def models(self):
         return {"schema.yml": files.BATCH_SCHEMA_YML}
-    
+
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -124,7 +124,7 @@ class TestGetLastRelationModifiedBatchLegacy:
     @pytest.fixture(scope="class")
     def models(self):
         return {"schema.yml": files.BATCH_SCHEMA_YML}
-    
+
     def test_get_last_relation_modified_batch(self, project, unique_schema, logs_dir):
         project.run_sql(
             f"create table {unique_schema}.test_table as (select 1 as id, 'test' as name);"

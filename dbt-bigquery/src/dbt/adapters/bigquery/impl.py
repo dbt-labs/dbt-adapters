@@ -16,7 +16,6 @@ from typing import (
     Union,
 )
 
-from dbt.cli.requires import manifest
 import google.api_core
 import google.auth
 import google.oauth2
@@ -802,7 +801,9 @@ class BigQueryAdapter(BaseAdapter):
         # Legacy behavior: use metadata-based freshness for each source
         if not self.behavior.bigquery_use_batch_source_freshness:
             for source in sources:
-                adapter_response, freshness_response = self.calculate_freshness_from_metadata(source, macro_resolver)
+                adapter_response, freshness_response = self.calculate_freshness_from_metadata(
+                    source, macro_resolver
+                )
                 adapter_responses.append(adapter_response)
                 freshness_responses[source] = freshness_response
             return adapter_responses, freshness_responses
