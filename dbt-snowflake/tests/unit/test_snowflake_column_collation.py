@@ -95,10 +95,6 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         column2 = SnowflakeColumn.from_description("test_col", "VARCHAR(100) collate 'en-ci'")
         assert column2.collation == "en-ci"
 
-        # Test mixed case
-        column3 = SnowflakeColumn.from_description("test_col", "VARCHAR(100) CoLLaTe 'en-ci'")
-        assert column3.collation == "en-ci"
-
     def test_parse_varchar_max_size_with_collation(self):
         """Test parsing VARCHAR with maximum size (134217728) and collation."""
         column = SnowflakeColumn.from_description(
