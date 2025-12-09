@@ -33,7 +33,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         column = SnowflakeColumn.from_description("test_col", "TEXT COLLATE 'es-ai'")
 
         assert column.name == "test_col"
-        assert column.dtype == "TEXT"
+        assert column.dtype == "TEXT COLLATE 'es-ai'"
         assert column.collation == "es-ai"
 
     def test_parse_character_varying_with_collation(self):
@@ -125,7 +125,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         column = SnowflakeColumn.from_description("test_col", "TEXT COLLATE 'utf8'")
 
         assert column.name == "test_col"
-        assert column.dtype == "TEXT"
+        assert column.dtype == "TEXT COLLATE 'utf8'"
         assert column.char_size is None
         assert column.collation == "utf8"
         assert "COLLATE 'utf8'" in column.data_type

@@ -31,7 +31,7 @@ select
     {% if is_incremental() %}
         'new_value' as description
     {% endif %}
-from {{ ref('seed_table') }}
+from {{ ref('base_table') }}
 """
 
 # Expected result table

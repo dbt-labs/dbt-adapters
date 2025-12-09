@@ -70,14 +70,21 @@ class SnowflakeColumn(Column):
             VARCHAR(100)
             NUMBER(38,0)
         """
+
+        # We want to pass through numeric parsing for composite types
+        if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
+            return cls(name, raw_data_type, None, None, None)
+
+        collation = None
         # Check if there's a COLLATE clause and extract it
-
-        collate_match = COLLATE_PATTERN.search(raw_data_type, re.IGNORECASE)
-
-        collation = collate_match.group(1) if collate_match else None
+        if raw_data_type.lower().startswith(
+            ("varchar", "character varying", "character", "varchar", "text")
+        ):
+            collate_match = COLLATE_PATTERN.search(raw_data_type, re.IGNORECASE)
+            collation = collate_match.group(1) if collate_match else None
 
         # Parse the base type using parent class logic
-        base_column = super(SnowflakeColumn, cls).from_description(name, raw_data_type)
+        base_column = super().from_description(name, raw_data_type)
 
         # Create a SnowflakeColumn with the parsed information plus collation
         return cls(
