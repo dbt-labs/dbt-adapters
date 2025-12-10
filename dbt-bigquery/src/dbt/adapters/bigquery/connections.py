@@ -477,6 +477,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         table_schema: List[SchemaField],
         field_delimiter: str,
         fallback_timeout: Optional[float] = None,
+        size: Optional[int] = None,
     ) -> None:
         load_config = LoadJobConfig(
             skip_leading_rows=1,
@@ -484,7 +485,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             field_delimiter=field_delimiter,
         )
         table = self.table_ref(database, schema, identifier)
-        self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
+        self._write_file_to_table(client, file_path, table, load_config, fallback_timeout, size)
 
     def write_file_to_table(
         self,
@@ -510,11 +511,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
         table: TableReference,
         config: LoadJobConfig,
         fallback_timeout: Optional[float] = None,
+        size: Optional[int] = None,
     ) -> None:
 
         with self.exception_handler("LOAD TABLE"):
             with open(file_path, "rb") as f:
-                job = client.load_table_from_file(f, table, rewind=True, job_config=config)
+                job = client.load_table_from_file(
+                    f, table, rewind=True, job_config=config, size=size
+                )
 
         response = job.result(retry=self._retry.create_retry(fallback=fallback_timeout))
 
