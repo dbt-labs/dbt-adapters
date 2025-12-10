@@ -721,14 +721,9 @@ class BigQueryAdapter(BaseAdapter):
             table = client.get_table(table_ref)
             schema_as_dicts = [field.to_api_repr() for field in table.schema]
 
-        apply_schema_patch = False
-
         if add_columns:
             additions = build_nested_additions(add_columns)
             schema_as_dicts = merge_nested_fields(schema_as_dicts, additions)
-            apply_schema_patch = True
-
-        if apply_schema_patch:
             new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
             new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
             client.update_table(new_table, ["schema"])
