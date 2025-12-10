@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import json
 from multiprocessing.context import SpawnContext
 import re
+import time
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
@@ -34,7 +35,7 @@ from dbt.adapters.contracts.connection import (
     ConnectionState,
 )
 from dbt.adapters.events.logging import AdapterLogger
-from dbt.adapters.events.types import SQLQuery
+from dbt.adapters.events.types import SQLQuery, SQLQueryStatus
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.bigquery.clients import create_bigquery_client
 from dbt.adapters.bigquery.credentials import Priority
@@ -607,11 +608,26 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
             )
 
+        pre = time.perf_counter()
         try:
             iterator = query_job.result(max_results=limit)
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
+            try:
+                query_job.cancel()
+            except Exception as e:
+                logger.debug(f"Error cancelling query job: {e}")
             raise TimeoutError(exc)
+
+        fire_event(
+            SQLQueryStatus(
+                status="OK",
+                elapsed=time.perf_counter() - pre,
+                node_info=get_node_info(),
+                query_id=query_job.job_id,
+            )
+        )
+
         return query_job, iterator
 
     def _labels_from_query_comment(self, comment: str) -> Dict:
