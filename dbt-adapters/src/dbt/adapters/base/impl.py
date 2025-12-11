@@ -32,6 +32,7 @@ from dbt.adapters.record.base import (
     AdapterStandardizeGrantsDictRecord,
     AdapterListRelationsWithoutCachingRecord,
     AdapterGetColumnsInRelationRecord,
+    SubmitPythonJobRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -1711,6 +1712,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("default_python_submission_method is not specified")
 
     @log_code_execution
+    @record_function(
+        SubmitPythonJobRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
         submission_method = parsed_model["config"].get(
             "submission_method", self.default_python_submission_method
