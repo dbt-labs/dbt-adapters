@@ -2,6 +2,7 @@ import abc
 import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
@@ -233,6 +234,14 @@ class PythonJobHelper:
 
     def submit(self, compiled_code: str) -> Any:
         raise NotImplementedError("PythonJobHelper submit function is not implemented yet")
+
+
+@dataclass
+class PythonSubmissionResult:
+    """Result from submitting a Python job."""
+
+    run_id: str
+    compiled_code: str
 
 
 class FreshnessResponse(TypedDict):

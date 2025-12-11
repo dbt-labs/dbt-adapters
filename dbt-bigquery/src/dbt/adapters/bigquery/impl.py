@@ -43,6 +43,7 @@ from dbt.adapters.base import (
     BaseRelation,
     ConstraintSupport,
     PythonJobHelper,
+    PythonSubmissionResult,
     RelationType,
     SchemaSearchMap,
     available,
@@ -71,7 +72,6 @@ from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
     BigFramesHelper,
-    PythonSubmissionResult,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
