@@ -690,6 +690,7 @@ class BigQueryAdapter(BaseAdapter):
         agate_table: "agate.Table",
         column_override: Dict[str, str],
         field_delimiter: str,
+        size: Optional[int] = None,
     ) -> None:
         connection = self.connections.get_thread_connection()
         client: Client = connection.handle
@@ -705,6 +706,7 @@ class BigQueryAdapter(BaseAdapter):
             table_schema,
             field_delimiter,
             fallback_timeout=300,
+            size=size,
         )
 
     @available.parse_none
