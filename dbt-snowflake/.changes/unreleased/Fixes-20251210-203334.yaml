@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix lookup of function relations in warehouse
+time: 2025-12-10T20:33:34.080424-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1488"
