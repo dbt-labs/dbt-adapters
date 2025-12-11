@@ -2,6 +2,7 @@ import pytest
 from dbt.tests.adapter.incremental.test_incremental_microbatch import (
     BaseMicrobatch,
 )
+from dbt.tests.util import run_dbt
 
 # Create input with UTC timestamps
 _input_model_sql = """
@@ -13,10 +14,21 @@ union all
 select 3 as id, to_timestamp_tz('2020-01-03 00:00:00-0') as event_time
 """
 
+# Create input with +1 tz timestamp
+_input_model_with_offset_sql = """
+{{ config(materialized='table', event_time='event_time') }}
+select 3 as id, '2020-01-03 00:37:00+01:00' as event_time
+"""
+
 
 # No requirement for a unique_id for snowflake microbatch!
 _microbatch_model_no_unique_id_sql = """
 {{ config(materialized='incremental', incremental_strategy='microbatch', event_time='event_time', batch_size='day', begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0)) }}
+select * from {{ ref('input_model') }}
+"""
+
+_microbatch_model_hourly_sql = """
+{{ config(materialized='incremental', incremental_strategy='microbatch', event_time='event_time', batch_size='hour', begin=modules.datetime.datetime(2020, 1, 1, 0, 0, 0)) }}
 select * from {{ ref('input_model') }}
 """
 
@@ -36,3 +48,27 @@ class TestSnowflakeMicrobatch(BaseMicrobatch):
             database=project.database, schema=project.test_schema
         )
         return f"insert into {test_schema_relation}.input_model (id, event_time) values (4, '2020-01-04 00:00:00-0'), (5, '2020-01-05 00:00:00-0')"
+
+
+class TestSnowflakeMicrobatchConvertsStartEndTimeToTimestamp(TestSnowflakeMicrobatch):
+    @pytest.fixture(scope="class")
+    def input_model_sql(self) -> str:
+        return _input_model_with_offset_sql
+
+    @pytest.fixture(scope="class")
+    def microbatch_model_sql(self) -> str:
+        return _microbatch_model_hourly_sql
+
+    def test_run_with_event_time(self, project):
+        run_dbt(
+            [
+                "run",
+                "--debug",
+                "--event-time-start",
+                "2020-01-03 00:00:00",
+                "--event-time-end",
+                "2020-01-03 01:00:00",
+            ]
+        )
+        self.assert_row_count(project, "input_model", 1)
+        self.assert_row_count(project, "microbatch_model", 0)
