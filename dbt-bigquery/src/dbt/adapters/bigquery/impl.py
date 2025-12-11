@@ -71,6 +71,7 @@ from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
     BigFramesHelper,
+    PythonSubmissionResult,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -1195,7 +1196,15 @@ class BigQueryAdapter(BaseAdapter):
         else:
             return list(res)
 
-    def generate_python_submission_response(self, submission_result) -> BigQueryAdapterResponse:
+    def generate_python_submission_response(
+        self, submission_result: PythonSubmissionResult
+    ) -> BigQueryAdapterResponse:
+        if isinstance(submission_result, PythonSubmissionResult):
+            return BigQueryAdapterResponse(
+                _message="OK",
+                job_id=submission_result.run_id,
+                code=submission_result.compiled_code,
+            )
         return BigQueryAdapterResponse(_message="OK")
 
     @property
