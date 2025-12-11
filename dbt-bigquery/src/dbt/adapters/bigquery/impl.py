@@ -42,6 +42,7 @@ from dbt.adapters.base import (
     BaseRelation,
     ConstraintSupport,
     PythonJobHelper,
+    PythonSubmissionResult,
     RelationType,
     SchemaSearchMap,
     available,
@@ -1016,7 +1017,15 @@ class BigQueryAdapter(BaseAdapter):
         else:
             return list(res)
 
-    def generate_python_submission_response(self, submission_result) -> BigQueryAdapterResponse:
+    def generate_python_submission_response(
+        self, submission_result: PythonSubmissionResult
+    ) -> BigQueryAdapterResponse:
+        if isinstance(submission_result, PythonSubmissionResult):
+            return BigQueryAdapterResponse(
+                _message="OK",
+                job_id=submission_result.run_id,
+                code=submission_result.compiled_code,
+            )
         return BigQueryAdapterResponse(_message="OK")
 
     @property
