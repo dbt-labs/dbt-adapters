@@ -38,6 +38,14 @@ on:
                 description: "Choose the version to bump to (e.g. 1.2.3rc1, patch, release) or leave empty"
                 type: string
                 default: ""
+            target:
+                description: "Choose where to publish"
+                type: choice
+                options:
+                    - "pypi"
+                    - "github"
+                    - "docker"
+                    - "all"
             skip-unit-tests:
                 description: "Skip running unit tests"
                 type: boolean
@@ -55,6 +63,7 @@ concurrency:
 permissions:
     contents: write
     id-token: write
+    packages: write
 
 jobs:
     work-branch:
@@ -122,8 +131,9 @@ jobs:
             hatch-env: "cd"
         secrets: inherit
 
-    publish:
-        if: ${{ !failure() && !cancelled() }}
+    merge-changes:
+        if: |
+            !failure() && !cancelled()
         needs:
             - work-branch
             - bump-version
@@ -131,13 +141,6 @@ jobs:
             - unit-tests
             - integration-tests
         runs-on: ${{ vars.DEFAULT_RUNNER }}
-        environment:
-            name: ${{ inputs.deploy-to }}
-            url: ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}
-        permissions:
-            # this permission is required for trusted publishing
-            # see https://github.com/marketplace/actions/pypi-publish
-            id-token: write
         steps:
             - name: "[PROD] Merge work branch to target branch"
               # merge changes before publishing to prod because we lock trusted publishing to main
@@ -149,6 +152,20 @@ jobs:
                   github_token: ${{ secrets.FISHTOWN_BOT_PAT }}
                   commit_message_template: "[Automated] Publish ${{ inputs.package }}==${{ needs.bump-version.outputs.final }}"
 
+    publish-pypi:
+        if: always() && !failure() && contains(fromJSON('["pypi", "all"]'), inputs.target)
+        needs:
+            - work-branch
+            - merge-changes
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        environment:
+            name: ${{ inputs.deploy-to }}
+            url: ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}
+        permissions:
+            # this permission is required for trusted publishing
+            # see https://github.com/marketplace/actions/pypi-publish
+            id-token: write
+        steps:
             - name: "[PROD] Checkout target branch"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               if: inputs.deploy-to == 'prod'
@@ -167,6 +184,8 @@ jobs:
                   python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
 
             - name: "Install hatch"
+              # hatch will build using test PyPI first and fall back to prod PyPI when deploying to test
+              # this is done via environment variables in the test environment in GitHub
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Build and verify package"
@@ -192,20 +211,55 @@ jobs:
                   max_attempts: 15 # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                   command: wget ${{ vars.PYPI_PROJECT_URL }}/${{ inputs.package }}/${{ steps.version.outputs.version }}
 
+    publish-pypi-athena-community:
+        if: always() && !failure() && contains(fromJSON('["pypi", "all"]'), inputs.target) && inputs.package == 'dbt-athena'
+        needs:
+            - work-branch
+            - merge-changes
+            - bump-version
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        environment:
+            name: ${{ inputs.deploy-to }}
+            url: ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community
+        permissions:
+            id-token: write
+        steps:
+            - name: "[PROD] Checkout target branch"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              if: inputs.deploy-to == 'prod'
+              with:
+                  ref: ${{ inputs.branch }}
+
+            - name: "[TEST] Checkout work branch"
+              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+              if: inputs.deploy-to != 'prod'
+              with:
+                  ref: ${{ needs.work-branch.outputs.name }}
+
+            - name: "Set up Python"
+              uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
+              with:
+                  python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+
+            - name: "Install hatch"
+              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+
             - name: "Build dbt-athena-community"
-              if: inputs.package == 'dbt-athena'
               run: hatch build && hatch run build:check-all
               working-directory: ./dbt-athena-community
 
             - name: "Publish dbt-athena-community to PyPI"
-              if: inputs.package == 'dbt-athena'
               uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # pypa/gh-action-pypi-publish@release/v1
               with:
                   repository-url: ${{ vars.PYPI_REPOSITORY_URL }}
                   packages-dir: ./dbt-athena-community/dist/
 
+            - name: "Get package version"
+              id: version
+              run: echo "version=$(hatch version)" >> $GITHUB_OUTPUT
+              working-directory: ./dbt-athena-community
+
             - name: "Verify dbt-athena-community on PyPI"
-              if: inputs.package == 'dbt-athena'
               uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08 # nick-fields/retry@v3
               with:
                   timeout_seconds: 10
@@ -213,11 +267,36 @@ jobs:
                   max_attempts: 15 # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                   command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
 
+    publish-github:
+        if: always() && !failure() && contains(fromJSON('["github", "all"]'), inputs.target)
+        needs: merge-changes
+        uses: ./.github/workflows/_publish-github.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            branch: ${{ inputs.branch }}
+        secrets: inherit
+
+    publish-docker:
+        if: always() && !failure() && contains(fromJSON('["docker", "all"]'), inputs.target)
+        needs:
+            - merge-changes
+            - bump-version
+        uses: ./.github/workflows/_publish-docker.yml
+        with:
+            package: ${{ inputs.package }}
+            deploy-to: ${{ inputs.deploy-to }}
+            version: ${{ needs.bump-version.outputs.final }}
+        secrets: inherit
+
     clean-up:
         if: ${{ !cancelled() }}
         needs:
             - work-branch
-            - publish
+            - publish-pypi
+            - publish-pypi-athena-community
+            - publish-github
+            - publish-docker
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
