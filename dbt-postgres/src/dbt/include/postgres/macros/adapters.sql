@@ -107,6 +107,14 @@
       'materialized_view' as type
     from pg_matviews
     where schemaname ilike '{{ schema_relation.schema }}'
+    union all
+    select
+     '{{ schema_relation.database }}' as database,
+     proname as name,
+     ns.nspname as schema,
+     'function' as type
+    from pg_proc
+     join pg_namespace as ns on pronamespace = ns.oid
   {% endcall %}
   {{ return(load_result('list_relations_without_caching').table) }}
 {% endmacro %}

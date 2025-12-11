@@ -14,6 +14,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFEntryPointRequired,
     SqlUDFDefaultArgSupport,
     PythonUDFDefaultArgSupport,
+    CanFindScalarFunctionRelation,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -105,3 +106,12 @@ class TestSnowflakeDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
 
 class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
     expect_default_arg_support = True
+
+
+class TestSnowflakeCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
