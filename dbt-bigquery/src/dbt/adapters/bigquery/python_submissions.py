@@ -2,11 +2,10 @@ import inspect
 import json
 import re
 import time
-from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 import uuid
 
-from dbt.adapters.base import PythonJobHelper
+from dbt.adapters.base import PythonJobHelper, PythonSubmissionResult
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery.clients import (
     create_dataproc_batch_controller_client,
@@ -33,15 +32,6 @@ from google.protobuf.json_format import ParseDict
 import nbformat
 
 _logger = AdapterLogger("BigQuery")
-
-
-# TODO: move to dbt-adapters for reuse across adapters
-@dataclass
-class PythonSubmissionResult:
-    """Result from submitting a Python job to BigQuery."""
-
-    run_id: str
-    compiled_code: str
 
 
 # Google Cloud usually automatically creates VPC Network & Subnetwork named
