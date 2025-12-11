@@ -2,6 +2,7 @@ import inspect
 import json
 import re
 import time
+from dataclasses import dataclass
 from typing import Any, Dict, Optional, Union
 import uuid
 
@@ -32,6 +33,15 @@ from google.protobuf.json_format import ParseDict
 import nbformat
 
 _logger = AdapterLogger("BigQuery")
+
+
+# TODO: move to dbt-adapters for reuse across adapters
+@dataclass
+class PythonSubmissionResult:
+    """Result from submitting a Python job to BigQuery."""
+
+    run_id: str
+    compiled_code: str
 
 
 # Google Cloud usually automatically creates VPC Network & Subnetwork named
@@ -101,7 +111,7 @@ class ClusterDataprocHelper(_BigQueryPythonHelper):
                 "Need to supply dataproc_cluster_name in profile or config to submit python job with cluster submission method"
             )
 
-    def submit(self, compiled_code: str) -> Job:
+    def submit(self, compiled_code: str) -> PythonSubmissionResult:
         _logger.debug(f"Submitting cluster job to: {self._cluster_name}")
 
         self._write_to_gcs(compiled_code)
@@ -126,7 +136,8 @@ class ClusterDataprocHelper(_BigQueryPythonHelper):
         if response.status.state == 6:
             raise ValueError(response.status.details)
 
-        return response
+        job_id = response.reference.job_id if response.reference else ""
+        return PythonSubmissionResult(run_id=job_id, compiled_code=compiled_code)
 
 
 class ServerlessDataProcHelper(_BigQueryPythonHelper):
@@ -137,24 +148,25 @@ class ServerlessDataProcHelper(_BigQueryPythonHelper):
         self._jar_file_uri = parsed_model["config"].get("jar_file_uri", _DEFAULT_JAR_FILE_URI)
         self._dataproc_batch = credentials.dataproc_batch
 
-    def submit(self, compiled_code: str) -> Batch:
+    def submit(self, compiled_code: str) -> PythonSubmissionResult:
         _logger.debug(f"Submitting batch job with id: {self._get_batch_id()}")
 
         self._write_to_gcs(compiled_code)
 
+        batch_id = self._get_batch_id()
         request = CreateBatchRequest(
             parent=f"projects/{self._project}/locations/{self._region}",
             batch=self._create_batch(),
-            batch_id=self._get_batch_id(),
+            batch_id=batch_id,
         )
 
         # submit the batch
         operation = self._batch_controller_client.create_batch(request)
 
         # wait for the batch to complete
-        response: Batch = operation.result(polling=self._polling_retry)
+        _: Batch = operation.result(polling=self._polling_retry)
 
-        return response
+        return PythonSubmissionResult(run_id=batch_id, compiled_code=compiled_code)
 
     def _create_batch(self) -> Batch:
         # create the Dataproc Serverless job config
@@ -452,7 +464,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         except Exception:
             _logger.exception(f"Failed to format the outputs from GCS: {outputs}")
 
-    def submit(self, compiled_code: str) -> None:
+    def submit(self, compiled_code: str) -> PythonSubmissionResult:
         if self._packages:
             install_code = f"_install_packages({self._packages})"
             compiled_code = (
@@ -463,7 +475,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
         self._write_to_gcs(notebook_compiled_code)
 
-        self._submit_bigframes_job(notebook_template_id)
+        job = self._submit_bigframes_job(notebook_template_id)
+        job_id = job.name.split("/")[-1] if job.name else ""
+        return PythonSubmissionResult(run_id=job_id, compiled_code=notebook_compiled_code)
 
     def _track_notebook_job_status(self, job_name: str) -> aiplatform_v1.NotebookExecutionJob:
         """Tracks the notebook job until it completes or times out."""
