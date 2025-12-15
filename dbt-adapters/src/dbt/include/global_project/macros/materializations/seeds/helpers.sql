@@ -98,6 +98,10 @@
 
   {% set statements = [] %}
 
+  {% if flags.EMPTY %}
+    {{ return("") }}
+  {% endif %}
+
   {% for chunk in agate_table.rows | batch(batch_size) %}
       {% set bindings = [] %}
 

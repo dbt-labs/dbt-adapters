@@ -11,12 +11,7 @@
 
   {%- set column_override = model['config'].get('column_types', {}) -%}
 
-  {%- set size = None -%}
-  {% if flags.EMPTY %}
-    {% set size = 0 %}
-    {% set agate_table = load_agate_table(row_limit=1) %}
-  {% endif %}
-
+  {%- set size = 0 if flags.EMPTY else None -%}
   {{ adapter.load_dataframe(model['database'], model['schema'], model['alias'],
   							agate_table, column_override, model['config']['delimiter'], size) }}
 
