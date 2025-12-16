@@ -8,7 +8,6 @@ from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import PartitionConfig
 
 
-
 @dataclasses.dataclass
 class BigQueryAdapterGetBqTableParams:
     thread_id: str
