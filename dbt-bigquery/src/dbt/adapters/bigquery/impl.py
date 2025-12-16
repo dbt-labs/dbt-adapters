@@ -36,6 +36,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
+from dbt_common.record import record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -72,6 +73,10 @@ from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
     BigFramesHelper,
+)
+from dbt.adapters.bigquery.record.record_types import (
+    BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterGetBqTableRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -574,6 +579,12 @@ class BigQueryAdapter(BaseAdapter):
         return table.clustering_fields == conf_cluster
 
     @available.parse(lambda *a, **k: True)
+    @record_function(
+        BigQueryAdapterIsReplaceableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def is_replaceable(
         self, relation, conf_partition: Optional[PartitionConfig], conf_cluster
     ) -> bool:
@@ -1093,6 +1104,12 @@ class BigQueryAdapter(BaseAdapter):
         return opts
 
     @available.parse(lambda *a, **k: True)
+    @record_function(
+        BigQueryAdapterGetBqTableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_bq_table(self, relation: BigQueryRelation) -> Optional[BigQueryTable]:
         try:
             table = self.connections.get_bq_table(
