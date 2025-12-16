@@ -7,11 +7,11 @@
     {{ adapter.drop_relation(old_relation) }}
 {% endmacro %}
 
-{% macro bigquery__load_csv_rows(model, agate_table) %}
+{% macro bigquery__load_csv_rows(model, agate_table, load_csv_rows=False) %}
 
   {%- set column_override = model['config'].get('column_types', {}) -%}
 
-  {%- set size = 0 if flags.EMPTY else None -%}
+  {%- set size = 0 if load_empty else None -%}
   {{ adapter.load_dataframe(model['database'], model['schema'], model['alias'],
   							agate_table, column_override, model['config']['delimiter'], size) }}
 

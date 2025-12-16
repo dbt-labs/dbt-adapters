@@ -12,7 +12,11 @@
 {% endmacro %}
 
 
-{% macro spark__load_csv_rows(model, agate_table) %}
+{% macro spark__load_csv_rows(model, agate_table, load_empty=False) %}
+
+  {% if load_empty %}
+    {{ return("") }}
+  {% endif %}
 
   {% set batch_size = get_batch_size() %}
   {% set column_override = model['config'].get('column_types', {}) %}
