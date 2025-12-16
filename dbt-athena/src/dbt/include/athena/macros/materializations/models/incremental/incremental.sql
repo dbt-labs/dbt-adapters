@@ -252,7 +252,7 @@
   {% if incremental_source_name and incremental_source_table_name %}
     {% if cleanup_target and target.name == cleanup_target %}
       {% set cleanup_result = cleanup_s3_etags(initial_s3_etags, incremental_source_name, incremental_source_table_name) %}
-      {{ log("S3 cleanup result: " ~ cleanup_result['deleted'] ~ " deleted, " ~ cleanup_result['skipped'] ~ " skipped, " ~ cleanup_result['errors'] ~ " errors", info=true) }}
+      {{ log("S3 cleanup result: " ~ cleanup_result['deleted'] ~ " deleted, " ~ cleanup_result['skipped'] ~ " skipped", info=true) }}
     {% elif cleanup_target %}
       {{ log("S3 cleanup skipped: current target '" ~ target.name ~ "' does not match configured target '" ~ cleanup_target ~ "'", info=true) }}
     {% endif %}

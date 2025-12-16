@@ -1757,12 +1757,11 @@ class TestAthenaAdapter:
         )
         
         # Call the method - should delete both files (ETags unchanged)
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run)
+        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
         
         # Assertions
         assert result['deleted'] == 2, f"Expected 2 files deleted, got {result['deleted']}"
-        assert result['skipped'] == 0, f"Expected 0 files skipped, got {result['skipped']}"
-        assert result['errors'] == 0, f"Expected 0 errors, got {result['errors']}"
+        assert result['skipped'] == 0, f"Expected 0 skipped, got {result['skipped']}"
         
         # Verify files were actually deleted from S3
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="increment_source/")
@@ -1813,16 +1812,15 @@ class TestAthenaAdapter:
         )
         
         # Call the method
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run)
+        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
         
         # Assertions:
-        # - file1 should be SKIPPED (ETag mismatch - modified)
+        # - file1 should be SKIPPED (ETag mismatch - PreconditionFailed)
         # - file2 should be DELETED (ETag match - unchanged)
         # - file3 should be DELETED (ETag match - unchanged)
         # - file4 is IGNORED (not in ETags dict - won't be processed at all)
         assert result['deleted'] == 2, f"Expected 2 files deleted (file2, file3), got {result['deleted']}"
-        assert result['skipped'] == 1, f"Expected 1 file skipped (file1), got {result['skipped']}"
-        assert result['errors'] == 0, f"Expected 0 errors, got {result['errors']}"
+        assert result['skipped'] == 1, f"Expected 1 skipped (file1 PreconditionFailed), got {result['skipped']}"
         
         # Verify file1 and file4 still exist (file1 modified, file4 newly added)
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="increment_source/")
@@ -1863,12 +1861,12 @@ class TestAthenaAdapter:
         )
         
         # Call the method - should REFUSE to delete (safety check)
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run)
+        # Use 'increment' as safety prefix, but table location is 'tables/' - should be blocked
+        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
         
         # Assertions - safety check should prevent deletion
         assert result['deleted'] == 0, "Safety check should prevent deletion"
         assert result['skipped'] == 0
-        assert result['errors'] == 0
         
         # Verify file still exists (not deleted)
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="tables/regular_table/")
@@ -1891,12 +1889,11 @@ class TestAthenaAdapter:
         )
         
         # Call with empty dict
-        result = self.adapter.delete_unchanged_s3_files(relation, {})
+        result = self.adapter.delete_unchanged_s3_files(relation, {}, 'increment')
         
         # Should return all zeros
         assert result['deleted'] == 0
         assert result['skipped'] == 0
-        assert result['errors'] == 0
 
     @mock_aws
     def test_delete_unchanged_s3_files_table_not_found(self, mock_aws_service):
@@ -1915,12 +1912,11 @@ class TestAthenaAdapter:
         
         # Call with some ETags
         etags = {"increment_source/file.parquet": "abc123"}
-        result = self.adapter.delete_unchanged_s3_files(relation, etags)
+        result = self.adapter.delete_unchanged_s3_files(relation, etags, 'increment')
         
         # Should return all zeros (graceful failure)
         assert result['deleted'] == 0
         assert result['skipped'] == 0
-        assert result['errors'] == 0
 
 
 class TestAthenaFilterCatalog:

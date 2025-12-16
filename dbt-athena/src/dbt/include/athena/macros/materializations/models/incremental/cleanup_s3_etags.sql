@@ -7,24 +7,29 @@
       incremental_source_name: Source name from config (e.g., 'increment_significant')
       incremental_source_table_name: Source table name from config (e.g., 'applicants')
     
+    Requires:
+      dbt_project.yml variable 'increment_source_prefix' must be defined
+    
     Returns:
-      Dictionary with cleanup results:
+      Dictionary with cleanup results (aligned with AWS delete_objects response):
       {
-        'deleted': Number of files deleted,
-        'skipped': Number of files skipped,
-        'errors': Number of errors
+        'deleted': Number of files successfully deleted,
+        'skipped': Number of files skipped
       }
   #}
   
-  {% set cleanup_result = {'deleted': 0, 'skipped': 0, 'errors': 0} %}
+  {% set cleanup_result = {'deleted': 0, 'skipped': 0} %}
   
   {# Only proceed if source config is provided #}
   {% if incremental_source_name and incremental_source_table_name %}
     {# Resolve source to Relation object #}
     {% set source_relation = source(incremental_source_name, incremental_source_table_name) %}
     
-    {# Call adapter method to perform deletion (it handles empty ETags) #}
-    {% set cleanup_result = adapter.delete_unchanged_s3_files(source_relation, initial_etags_dict) %}
+    {# Get REQUIRED safety prefix from dbt project variable (no default) #}
+    {% set safety_prefix = var('increment_source_prefix') %}
+    
+    {# Call adapter method with safety prefix #}
+    {% set cleanup_result = adapter.delete_unchanged_s3_files(source_relation, initial_etags_dict, safety_prefix) %}
   {% endif %}
   
   {{ return(cleanup_result) }}

@@ -891,81 +891,103 @@ class AthenaAdapter(SQLAdapter):
         return etag_dict
 
     @available
-    def delete_unchanged_s3_files(self, relation: AthenaRelation, etags_dict: Dict[str, str]) -> Dict[str, int]:
+    def delete_unchanged_s3_files(
+        self, 
+        relation: AthenaRelation, 
+        etags_dict: Dict[str, str],
+        safety_prefix: str
+    ) -> Dict[str, int]:
         """
-        Compares ETags and DELETES files with unchanged ETags from S3.
+        Deletes S3 files with unchanged ETags using AWS native conditional batch deletion.
+        
+        Uses S3's delete_objects API with ETag field for atomic batch conditional deletion.
+        AWS will only delete objects if their current ETag matches the provided value.
+        Processes up to 1,000 objects per API call for optimal performance.
         
         Args:
             relation: The Athena table relation (source table)
             etags_dict: Dictionary of file keys to ETags captured before model run
+            safety_prefix: REQUIRED prefix that S3 location must start with (safety check to prevent accidental deletion).
+                          Must be configured in dbt_project.yml as 'increment_source_prefix' variable.
             
         Returns:
-            Dictionary with cleanup results:
+            Dictionary with cleanup results (aligned with AWS delete_objects response):
             {
                 'deleted': Number of files successfully deleted,
-                'skipped': Number of files skipped (modified or not found),
-                'errors': Number of files that failed to delete
+                'skipped': Number of files skipped (PreconditionFailed, NoSuchKey, etc.)
             }
         """
-        # Rename for clarity within the method
         etags_before_run = etags_dict
         
         if not etags_before_run:
             LOGGER.info("No ETags to compare - skipping deletion")
-            return {'deleted': 0, 'skipped': 0, 'errors': 0}
+            return {'deleted': 0, 'skipped': 0}
         
-        LOGGER.info(f"Starting atomic S3 cleanup for {len(etags_before_run)} files...")
+        LOGGER.info(f"Starting atomic batch S3 cleanup for {len(etags_before_run)} files...")
         
         # Get S3 location components
         location_parts = self._get_s3_location_parts(relation)
         if not location_parts:
             LOGGER.error(f"S3 cleanup failed: table {relation} not found or has no S3 location")
-            return {'deleted': 0, 'skipped': 0, 'errors': 0}
+            return {'deleted': 0, 'skipped': 0}
         
         s3_location, bucket_name, prefix = location_parts
         
-        # Safety check: ensure we're deleting from incremental sources only
-        if not prefix.startswith("increment"):
+        # Safety check: ensure we're deleting from approved paths only
+        if not prefix.startswith(safety_prefix):
             LOGGER.error(
-                f"S3 cleanup failed: Source location must start with 'increment' prefix to prevent accidental deletion. "
+                f"S3 cleanup failed: Source location must start with '{safety_prefix}' prefix to prevent accidental deletion. "
                 f"Current location: s3://{bucket_name}/{prefix}. "
                 f"Please verify 'incremental_source_name' and 'incremental_source_table_name' in your model config."
             )
-            return {'deleted': 0, 'skipped': 0, 'errors': 0}
+            return {'deleted': 0, 'skipped': 0}
         
         # Get boto3 S3 client
         s3_client = self._get_s3_client()
         
-        # Atomic compare-and-delete for each file
+        # Prepare objects for batch deletion with ETag conditions
+        # AWS delete_objects API accepts up to 1,000 objects per request
         deleted_count = 0
         skipped_count = 0
-        error_count = 0
         
-        for file_key, expected_etag in etags_before_run.items():
+        # Convert dict to list of objects for batching
+        # Format: [{'Key': 'file.parquet', 'ETag': 'abc123'}, ...]
+        objects_to_delete = [
+            {'Key': file_key, 'ETag': etag}
+            for file_key, etag in etags_before_run.items()
+        ]
+        
+        # Process in batches of 1,000 (AWS limit)
+        batch_size = 1000
+        for i in range(0, len(objects_to_delete), batch_size):
+            batch = objects_to_delete[i:i + batch_size]
+            
             try:
-                # Atomic check: Get current ETag immediately before deletion
-                head_response = s3_client.head_object(Bucket=bucket_name, Key=file_key)
-                current_etag = head_response['ETag'].strip('"')
+                # AWS atomically compares ETags and deletes only matching objects
+                response = s3_client.delete_objects(
+                    Bucket=bucket_name,
+                    Delete={'Objects': batch}
+                )
                 
-                if current_etag == expected_etag:
-                    # ETag unchanged - safe to delete
-                    s3_client.delete_object(Bucket=bucket_name, Key=file_key)
-                    deleted_count += 1
-                else:
-                    # ETag changed - file was modified, skip deletion
-                    skipped_count += 1
+                # Count successfully deleted objects
+                if 'Deleted' in response:
+                    deleted_count += len(response['Deleted'])
+                
+                # Count skipped files (PreconditionFailed, NoSuchKey, AccessDenied, etc.)
+                if 'Errors' in response:
+                    skipped_count += len(response['Errors'])
+                            
             except ClientError as e:
-                if e.response['Error']['Code'] == 'NoSuchKey':
-                    # File no longer exists - already deleted or never created
-                    skipped_count += 1
-                else:
-                    error_count += 1
-                    LOGGER.error(f"S3 cleanup error for {file_key}: {e.response['Error']['Code']}")
+                # Batch-level error (e.g., permissions, network)
+                error_code = e.response['Error']['Code']
+                skipped_count += len(batch)
+                LOGGER.error(f"S3 batch cleanup error: {error_code} - {e.response['Error'].get('Message', '')}")
             except Exception as e:
-                error_count += 1
-                LOGGER.error(f"S3 cleanup error for {file_key}: {str(e)}")
+                # Unexpected error
+                skipped_count += len(batch)
+                LOGGER.error(f"S3 batch cleanup error: {str(e)}")
         
-        return {'deleted': deleted_count, 'skipped': skipped_count, 'errors': error_count}
+        return {'deleted': deleted_count, 'skipped': skipped_count}
 
     def _get_one_table_for_catalog(
         self, table: TableTypeDef, database: str
