@@ -1,0 +1,6 @@
+kind: Features
+body: Add tests to check volatility support for python UDFs + UDAFs
+time: 2025-12-17T12:39:24.875581-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1504"
