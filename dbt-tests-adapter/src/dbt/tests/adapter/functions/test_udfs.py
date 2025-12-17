@@ -240,3 +240,14 @@ class PythonUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
             "price_for_xlarge.py": files.MY_UDF_PYTHON,
             "price_for_xlarge.yml": files.MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML,
         }
+
+
+class PythonUDFVolatilitySupport(PythonUDFSupported):
+    def check_function_volatility(self, sql: str):
+        assert "VOLATILE" in sql
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+volatility": "non-deterministic"},
+        }
