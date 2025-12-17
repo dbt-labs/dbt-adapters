@@ -63,10 +63,21 @@ if TYPE_CHECKING:
 
 logger = AdapterLogger("Snowflake")
 
-if os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+
+def setup_snowflake_logging(level: str):
     for logger_name in ["snowflake.connector", "botocore", "boto3"]:
-        logger.debug(f"Setting {logger_name} to DEBUG")
-        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
+        logger.debug(f"Setting {logger_name} to {level} (file logging only)")
+        logger.set_adapter_dependency_log_level(logger_name, level)
+
+
+if snowflake_level := os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+    if snowflake_level.upper() in ["INFO", "DEBUG", "ERROR"]:
+        setup_snowflake_logging(snowflake_level.upper())
+    else:
+        setup_snowflake_logging("DEBUG")
+else:
+    setup_snowflake_logging("ERROR")
+
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
@@ -114,6 +125,9 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    # Setting this to 0.0 will disable platform detection which adds query latency
+    # this should only be set to a non-zero value if you are using WIF authentication
+    platform_detection_timeout_seconds: float = 0.0
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -141,7 +155,11 @@ class SnowflakeCredentials(Credentials):
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
 
-        self.account = self.account.replace("_", "-")
+        self.account, sub_count = re.subn("_", "-", self.account)
+        if sub_count:
+            logger.debug(
+                "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
+            )
 
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
         # having both of these set to `True` could lead to hanging open connections, so it should be opt-in behavior
@@ -182,6 +200,7 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "platform_detection_timeout_seconds",
         )
 
     def auth_args(self):
@@ -393,7 +412,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
+                    platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
+                    ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
                     **creds.auth_args(),
                 )
 

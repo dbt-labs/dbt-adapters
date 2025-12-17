@@ -1,0 +1,6 @@
+kind: Fixes
+body: dbt-postgres no longer emits two BEGIN statements
+time: 2025-03-25T18:47:39.368013692-06:00
+custom:
+    Author: rjspotter
+    Issue: "9434"

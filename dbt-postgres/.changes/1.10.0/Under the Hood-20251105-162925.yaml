@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Begin testing that python UDFs aren't supported
+time: 2025-11-05T16:29:25.921021-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1410"
