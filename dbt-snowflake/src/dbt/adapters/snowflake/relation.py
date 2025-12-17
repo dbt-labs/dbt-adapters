@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
-from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
 from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
 from dbt.adapters.relation_configs import (
@@ -197,6 +197,22 @@ class SnowflakeRelation(BaseRelation):
             return "iceberg"
         else:
             return ""
+
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}') and {event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+        elif event_time_filter.start:
+            filter = (
+                f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}')"
+            )
+        elif event_time_filter.end:
+            filter = f"{event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+
+        return filter
 
     def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
         # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
