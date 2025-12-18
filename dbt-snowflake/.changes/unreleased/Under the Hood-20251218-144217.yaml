@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Update cast macro to not include collation in cast
+time: 2025-12-18T14:42:17.258886-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1509"
