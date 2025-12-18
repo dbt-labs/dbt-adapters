@@ -1,5 +1,8 @@
 """Unit tests for SnowflakeColumn collation support."""
 
+import importlib.util
+from pathlib import Path
+import sys
 import unittest
 
 from dbt.adapters.snowflake.column import SnowflakeColumn
@@ -33,8 +36,9 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         column = SnowflakeColumn.from_description("test_col", "TEXT COLLATE 'es-ai'")
 
         assert column.name == "test_col"
-        assert column.dtype == "TEXT COLLATE 'es-ai'"
+        assert column.dtype == "TEXT"
         assert column.collation == "es-ai"
+        assert column.expanded_data_type == "TEXT COLLATE 'es-ai'"
 
     def test_parse_character_varying_with_collation(self):
         """Test parsing CHARACTER VARYING with COLLATE clause."""
@@ -58,22 +62,23 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         assert column.collation is None
 
     def test_data_type_with_collation(self):
-        """Test that data_type property includes collation for strings."""
+        """Test that expanded_data_type property includes collation for strings."""
         column = SnowflakeColumn.from_description(
             "test_col", "VARCHAR(16777216) COLLATE 'en-ci-rtrim'"
         )
 
-        # data_type should include collation
-        expected = "character varying(16777216) COLLATE 'en-ci-rtrim'"
-        assert column.data_type == expected
+        # data_type should not include collation; expanded_data_type should
+        assert column.data_type == "character varying(16777216)"
+        assert column.expanded_data_type == "character varying(16777216) COLLATE 'en-ci-rtrim'"
 
     def test_data_type_without_collation(self):
-        """Test that data_type property works without collation."""
+        """Test that expanded_data_type property works without collation."""
         column = SnowflakeColumn.from_description("test_col", "VARCHAR(100)")
 
         # data_type should not include collation
         expected = "character varying(100)"
         assert column.data_type == expected
+        assert column.expanded_data_type == expected
 
     def test_data_type_number_ignores_collation(self):
         """Test that non-string types don't include collation even if set."""
@@ -81,9 +86,10 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         # Manually set collation (shouldn't happen in practice)
         column.collation = "en-ci"
 
-        # data_type should not include collation for non-string types
+        # data_type/expanded_data_type should not include collation for non-string types
         expected = "NUMBER(10,2)"
         assert column.data_type == expected
+        assert column.expanded_data_type == expected
 
     def test_parse_collation_case_insensitive(self):
         """Test that COLLATE keyword is case-insensitive."""
@@ -107,24 +113,24 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         assert column.collation == "en-ci-rtrim"
 
     def test_data_type_preserves_collation_after_size_change(self):
-        """Test that collation is preserved when generating data type."""
+        """Test that collation is preserved when generating expanded_data_type."""
         # This simulates what happens during schema change detection
         column = SnowflakeColumn.from_description(
             "test_col", "VARCHAR(16777216) COLLATE 'en-ci-rtrim'"
         )
 
         # When dbt detects a size change, it should preserve collation
-        assert "COLLATE 'en-ci-rtrim'" in column.data_type
+        assert "COLLATE 'en-ci-rtrim'" in column.expanded_data_type
 
     def test_parse_text_without_size_with_collation(self):
         """Test parsing TEXT (no size) with collation."""
         column = SnowflakeColumn.from_description("test_col", "TEXT COLLATE 'utf8'")
 
         assert column.name == "test_col"
-        assert column.dtype == "TEXT COLLATE 'utf8'"
+        assert column.dtype == "TEXT"
         assert column.char_size is None
         assert column.collation == "utf8"
-        assert "COLLATE 'utf8'" in column.data_type
+        assert "COLLATE 'utf8'" in column.expanded_data_type
 
     def test_parse_array_type_no_collation(self):
         """Test that ARRAY types don't have collation parsing."""
@@ -141,7 +147,3 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         assert column.name == "test_col"
         assert column.dtype == "OBJECT"
         assert column.collation is None
-
-
-if __name__ == "__main__":
-    unittest.main()

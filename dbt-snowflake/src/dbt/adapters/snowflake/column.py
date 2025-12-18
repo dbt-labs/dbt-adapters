@@ -5,7 +5,7 @@ from typing import Optional
 from dbt.adapters.base.column import Column
 from dbt_common.exceptions import DbtRuntimeError
 
-COLLATE_PATTERN = re.compile(r"[COLLATE|collate]\s+'([^']+)'(\s*rtrim)?")
+COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
 
 
 @dataclass
@@ -49,13 +49,13 @@ class SnowflakeColumn(Column):
             return int(self.char_size)
 
     @property
-    def data_type(self) -> str:
-        """Override data_type property to include collation for string types."""
+    def expanded_data_type(self) -> str:
+        """Include collation clause for string types where present."""
         base_type = super().data_type
 
         # Add collation specification if present and this is a string type
         if self.collation and self.is_string():
-            return f"{base_type} COLLATE '{self.collation}'"
+            return f"{base_type} collate '{self.collation}'"
 
         return base_type
 
