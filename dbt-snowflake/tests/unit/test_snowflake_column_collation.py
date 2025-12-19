@@ -38,7 +38,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         assert column.name == "test_col"
         assert column.dtype == "TEXT"
         assert column.collation == "es-ai"
-        assert column.expanded_data_type == "TEXT COLLATE 'es-ai'"
+        assert column.expanded_data_type == "character varying(16777216) collate 'es-ai'"
 
     def test_parse_character_varying_with_collation(self):
         """Test parsing CHARACTER VARYING with COLLATE clause."""
@@ -69,7 +69,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
 
         # data_type should not include collation; expanded_data_type should
         assert column.data_type == "character varying(16777216)"
-        assert column.expanded_data_type == "character varying(16777216) COLLATE 'en-ci-rtrim'"
+        assert column.expanded_data_type == "character varying(16777216) collate 'en-ci-rtrim'"
 
     def test_data_type_without_collation(self):
         """Test that expanded_data_type property works without collation."""
@@ -120,7 +120,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         )
 
         # When dbt detects a size change, it should preserve collation
-        assert "COLLATE 'en-ci-rtrim'" in column.expanded_data_type
+        assert "collate 'en-ci-rtrim'" in column.expanded_data_type
 
     def test_parse_text_without_size_with_collation(self):
         """Test parsing TEXT (no size) with collation."""
@@ -130,7 +130,7 @@ class TestSnowflakeColumnCollation(unittest.TestCase):
         assert column.dtype == "TEXT"
         assert column.char_size is None
         assert column.collation == "utf8"
-        assert "COLLATE 'utf8'" in column.expanded_data_type
+        assert "collate 'utf8'" in column.expanded_data_type
 
     def test_parse_array_type_no_collation(self):
         """Test that ARRAY types don't have collation parsing."""

@@ -51,13 +51,10 @@ class SnowflakeColumn(Column):
     @property
     def expanded_data_type(self) -> str:
         """Include collation clause for string types where present."""
-        base_type = super().data_type
-
-        # Add collation specification if present and this is a string type
         if self.collation and self.is_string():
-            return f"{base_type} collate '{self.collation}'"
+            return f"{self.data_type} collate '{self.collation}'"
 
-        return base_type
+        return self.data_type
 
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
@@ -84,7 +81,8 @@ class SnowflakeColumn(Column):
             collation = collate_match.group(1) if collate_match else None
 
         # Parse the base type using parent class logic
-        base_column = super().from_description(name, raw_data_type)
+        raw_data_type_without_collation = COLLATE_PATTERN.sub("", raw_data_type).strip()
+        base_column = super().from_description(name, raw_data_type_without_collation)
 
         # Create a SnowflakeColumn with the parsed information plus collation
         return cls(
