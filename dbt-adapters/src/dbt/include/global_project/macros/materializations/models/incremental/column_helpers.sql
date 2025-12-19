@@ -41,8 +41,8 @@
   {% for sc in source_columns %}
     {% set tc = target_columns | selectattr("name", "equalto", sc.name) | list | first %}
     {% if tc %}
-      {% if sc.data_type != tc.data_type and not sc.can_expand_to(other_column=tc) %}
-        {{ result.append( { 'column_name': tc.name, 'new_type': sc.data_type } ) }}
+      {% if sc.expanded_data_type != tc.expanded_data_type and not sc.can_expand_to(other_column=tc) %}
+        {{ result.append( { 'column_name': tc.name, 'new_type': sc.expanded_data_type } ) }}
       {% endif %}
     {% endif %}
   {% endfor %}
