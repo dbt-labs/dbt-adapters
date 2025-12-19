@@ -1,95 +1,59 @@
+# **what?**
+# Runs all test suites (verify-build, unit-tests, integration-tests) for all packages on the stable and main branches.
+
+# **why?**
+# Ensures the main branches remain healthy and catches regressions early.
+
+# **when?**
+# This workflow runs on a schedule daily at 3:00 AM UTC and can also be manually triggered via workflow_dispatch.
+
 name: "Scheduled tests"
 run-name: "Scheduled tests ${{ (github.event_name != 'schedule' && format('- {0}', github.actor)) || '' }}"
 
 on:
     schedule:
-    -   cron: '0 3 * * *'
+        - cron: "0 3 * * *"
     workflow_dispatch:
 
-permissions: read-all
+permissions:
+    id-token: write
+    contents: read
 
 jobs:
-    verify-builds:
-        uses: ./.github/workflows/_verify-build.yml
+    run-tests:
+        uses: ./.github/workflows/_run-tests.yml
         strategy:
             fail-fast: false
+            max-parallel: 1 # Run branches sequentially
             matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                branch: ["stable", "main"]
         with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.ref }}
+            branch: ${{ matrix.branch }}
             repository: ${{ github.repository }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
-
-    unit-tests:
-        uses: ./.github/workflows/_unit-tests.yml
-        strategy:
-            fail-fast: false
-            matrix:
-                package:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
-                -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
-        with:
-            package: ${{ matrix.package }}
-            branch: ${{ github.ref }}
-            repository: ${{ github.repository }}
-            os: ${{ matrix.os }}
-            python-version: ${{ matrix.python-version }}
-            hatch-env: "ci"
-
-    integration-tests:
-        uses: ./.github/workflows/_integration-tests.yml
-        permissions:
-            contents: read
-            id-token: write
-        with:
-            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
-            branch: ${{ github.ref }}
-            repository: ${{ github.repository }}
-            os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
-            hatch-env: "ci"
         secrets: inherit
 
     notification:
         if: ${{ !cancelled() }}
-        needs: [verify-builds, unit-tests, integration-tests]
+        needs: [run-tests]
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        # This step is needed to aggregate the results of the other jobs and apply it to this job for the Slack notification
-        -   id: results
-            uses: re-actors/alls-green@release/v1
-            with:
-                jobs: ${{ toJSON(needs) }}
-        -   uses: ravsamhq/notify-slack-action@v2
-            if: always()
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                status: ${{ job.status }}
-                notification_title: "{workflow} {status_message}"
-                message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
-                footer: "View run: {run_url}"
-                mention_groups: ${{ vars.SLACK_ON_CALL }}
-                mention_groups_when: "failure"
-            env:
-                SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
+            - name: "Aggregate test results for Slack Notification"
+              id: results
+              uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # re-actors/alls-green@release/v1
+              with:
+                  jobs: ${{ toJSON(needs) }}
+
+            - name: "Notify Slack on failure"
+              uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
+              if: always()
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  status: ${{ job.status }}
+                  notification_title: "{workflow} {status_message}"
+                  message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
+                  footer: "View run: {run_url}"
+                  notify_when: "failure"
+                  mention_groups: ${{ vars.SLACK_ON_CALL }}
+                  mention_groups_when: "failure"
+              env:
+                  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}

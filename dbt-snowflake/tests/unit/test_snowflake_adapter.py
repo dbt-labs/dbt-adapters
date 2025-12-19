@@ -293,6 +293,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 ),
             ]
         )
@@ -327,6 +328,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=None,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -355,6 +357,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -391,6 +394,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -426,6 +430,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -457,6 +462,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -492,6 +498,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -527,6 +534,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -562,6 +570,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -595,6 +604,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -626,6 +636,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -656,6 +667,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -691,6 +703,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -728,9 +741,30 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
+
+    def test_get_relation_without_quotes(self):
+        with mock.patch.object(self.adapter, "list_relations") as list_relations:
+            list_relations.return_value = [
+                SnowflakeAdapter.Relation.create(
+                    database="TEST_DATABASE", schema="test_schema", identifier="TEST_TABLE"
+                )
+            ]
+            relation = self.adapter.get_relation("test_database", "test_schema", "test_table")
+            assert relation.render() == "TEST_DATABASE.test_schema.TEST_TABLE"
+
+    def test_get_relation_with_quotes(self):
+        with mock.patch.object(self.adapter, "list_relations") as list_relations:
+            list_relations.return_value = [
+                SnowflakeAdapter.Relation.create(
+                    database="test_database", schema="test_schema", identifier="test_TABLE"
+                )
+            ]
+            relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
+            assert relation.render() == "test_database.test_schema.test_TABLE"
 
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):

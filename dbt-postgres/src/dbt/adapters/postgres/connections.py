@@ -203,6 +203,9 @@ class PostgresConnectionManager(SQLConnectionManager):
 
         logger.debug("Cancel query '{}': {}".format(connection_name, res))
 
+    def add_begin_query(self):
+        pass
+
     @classmethod
     def get_credentials(cls, credentials):
         return credentials

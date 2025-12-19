@@ -24,8 +24,10 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
+    "dbt-common>=1.34.0,<2.0",
     # TODO: remove `dbt-core` dependency
     "dbt-core>=1.8.0a1",
     # `dbt-tests-adapter` will ultimately depend on the packages below

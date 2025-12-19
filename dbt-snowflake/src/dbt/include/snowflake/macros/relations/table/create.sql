@@ -10,7 +10,12 @@
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
             {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'ICEBERG_REST' -%}
-            {{ snowflake__create_table_iceberg_rest_sql(relation, compiled_code) }}
+            {%- if catalog_relation.catalog_linked_database_type is defined and
+            catalog_relation.catalog_linked_database_type == 'glue' -%}
+                {{ snowflake__create_table_iceberg_rest_with_glue(relation, compiled_code, catalog_relation) }}
+            {%- else -%}
+                {{ snowflake__create_table_iceberg_rest_sql(relation, compiled_code) }}
+            {%- endif -%}
         {%- else -%}
             {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ relation) %}
         {%- endif -%}
@@ -131,6 +136,13 @@ alter table {{ relation }} resume recluster;
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {%- set partition_by_string = partition_by_keys|join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
+
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
@@ -152,6 +164,7 @@ create or replace iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
+    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('storage_serialization_policy', catalog_relation.storage_serialization_policy, "'")}}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
@@ -186,7 +199,7 @@ alter iceberg table {{ relation }} resume recluster;
 
 {% macro snowflake__create_table_iceberg_rest_sql(relation, compiled_code) -%}
 {#-
-    Implements CREATE ICEBERG TABLE ... CATALOG('catalog_name') (external REST catalog):
+    Implements CREATE ICEBERG TABLE for Iceberg REST catalogs with Catalog Linked Databases.
     https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
 
     Limitations:
@@ -194,6 +207,8 @@ alter iceberg table {{ relation }} resume recluster;
     - Iceberg REST does not support CREATE OR REPLACE
     - Iceberg catalogs do not support table renaming operations
     - For existing tables, we must DROP the table first before creating the new one
+
+    Note: Iceberg REST writes only work with Catalog Linked Databases (CLD).
 -#}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
@@ -202,6 +217,13 @@ alter iceberg table {{ relation }} resume recluster;
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
+
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {%- set partition_by_string = partition_by_keys|join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
 
 {%- set contract_config = config.get('contract') -%}
 {%- if contract_config.enforced -%}
@@ -222,16 +244,13 @@ alter iceberg table {{ relation }} resume recluster;
 
 {% endif %}
 
-{# Create the table (works for both new and replacement scenarios) #}
+{#- All Iceberg REST writes use CLD and support CTAS (except Glue, handled in table.sql) -#}
 create iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
+    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
-    {%- if not catalog_relation|attr('catalog_linked_database') -%}
-    catalog = '{{ catalog_relation.catalog_name }}'  -- external REST catalog name
-    {{ optional('base_location', catalog_relation.base_location, "'") }}
-    {%- endif %}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
@@ -241,6 +260,77 @@ create iceberg table {{ relation }}
 as (
     {{ compiled_code }}
 );
+
+{%- endmacro %}
+
+
+{% macro snowflake__create_table_iceberg_rest_with_glue(relation, compiled_code, catalog_relation) -%}
+{#-
+    Creates an Iceberg table for Catalog Linked Databases (e.g., AWS Glue) with explicit column definitions.
+    This is used when CTAS is not supported.
+
+    This macro is specifically for CLD where we need to create the table with an explicit schema
+    because CTAS is not available.
+-#}
+
+{# Step 1: Get the schema from the compiled query #}
+{% set sql_columns = get_column_schema_from_query(compiled_code) %}
+
+{# Step 2: Create the iceberg table in the CLD with explicit column definitions #}
+
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
+{%- set row_access_policy = config.get('row_access_policy', default=none) -%}
+{%- set table_tag = config.get('table_tag', default=none) -%}
+
+{%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
+{%- if partition_by_keys -%}
+  {# HACK: Force columns to be lowercase and quoted in glue #}
+  {%- set partition_by_keys_quotes = [] -%}
+  {%- for key in partition_by_keys -%}
+    {% set quoted_key = '"' ~ key.lower() ~ '"' %}
+    {%- do partition_by_keys_quotes.append(quoted_key) -%}
+  {%- endfor -%}
+  {%- set partition_by_string = partition_by_keys_quotes | join(", ")-%}
+{% else %}
+  {%- set partition_by_string = none -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+{# Step 2a: Check if relation exists and drop if necessary (CLD doesn't support CREATE OR REPLACE) #}
+{% set existing_relation = adapter.get_relation(database=relation.database, schema=relation.schema, identifier=relation.identifier) %}
+{% if existing_relation %}
+    drop table if exists {{ existing_relation }};
+{% endif %}
+
+{# Step 2b: Create the table with explicit column definitions #}
+create iceberg table {{ relation }} (
+    {%- for column in sql_columns -%}
+        {% if column.data_type == "FIXED" %}
+            {%- set data_type = "INT" -%}
+        {% elif "character varying" in column.data_type %}
+            {%- set data_type = "STRING" -%}
+        {% else %}
+            {%- set data_type = column.data_type -%}
+        {% endif %}
+        {{ adapter.quote(column.name.lower()) }} {{ data_type }}
+        {%- if not loop.last %}, {% endif -%}
+    {% endfor -%}
+)
+{% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
+{{ optional('external_volume', catalog_relation.external_volume, "'") }}
+{{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
+{{ optional('auto_refresh', catalog_relation.auto_refresh) }}
+{{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
+{% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+{% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+{% if copy_grants -%} copy grants {%- endif %}
+;
+
+{# Step 3: Insert data from the view (in regular DB) into the table (in CLD) #}
+insert into {{ relation }}
+    {{ compiled_code }};
 
 {%- endmacro %}
 
@@ -278,3 +368,11 @@ def main(session):
     return "OK"
 
 {% endmacro %}
+
+{% macro get_partition_by_keys(catalog_relation) -%}
+    {%- set partition_by_keys = catalog_relation.partition_by -%}
+    {%- if partition_by_keys and partition_by_keys is string -%}
+    {%- set partition_by_keys = [partition_by_keys] -%}
+    {%- endif -%}
+    {{ return(partition_by_keys) }}
+{%- endmacro -%}
