@@ -5,7 +5,7 @@ from typing import Optional
 from dbt.adapters.base.column import Column
 from dbt_common.exceptions import DbtRuntimeError
 
-COLLATE_PATTERN = re.compile(r"[COLLATE|collate]\s+'([^']+)'(\s*rtrim)?")
+COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
 
 
 @dataclass
@@ -49,15 +49,12 @@ class SnowflakeColumn(Column):
             return int(self.char_size)
 
     @property
-    def data_type(self) -> str:
-        """Override data_type property to include collation for string types."""
-        base_type = super().data_type
-
-        # Add collation specification if present and this is a string type
+    def expanded_data_type(self) -> str:
+        """Include collation clause for string types where present."""
         if self.collation and self.is_string():
-            return f"{base_type} COLLATE '{self.collation}'"
+            return f"{self.data_type} collate '{self.collation}'"
 
-        return base_type
+        return self.data_type
 
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
@@ -84,7 +81,8 @@ class SnowflakeColumn(Column):
             collation = collate_match.group(1) if collate_match else None
 
         # Parse the base type using parent class logic
-        base_column = super().from_description(name, raw_data_type)
+        raw_data_type_without_collation = COLLATE_PATTERN.sub("", raw_data_type).strip()
+        base_column = super().from_description(name, raw_data_type_without_collation)
 
         # Create a SnowflakeColumn with the parsed information plus collation
         return cls(
