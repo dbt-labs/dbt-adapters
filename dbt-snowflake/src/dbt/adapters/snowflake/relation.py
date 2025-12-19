@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
-from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
 from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
 from dbt.adapters.relation_configs import (
@@ -42,6 +42,7 @@ class SnowflakeRelation(BaseRelation):
             {
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
+                SnowflakeRelationType.DynamicTable,  # type: ignore
             }
         )
     )
@@ -58,6 +59,10 @@ class SnowflakeRelation(BaseRelation):
 
     @property
     def is_dynamic_table(self) -> bool:
+        return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_materialized_view(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
 
     @property
@@ -193,6 +198,22 @@ class SnowflakeRelation(BaseRelation):
         else:
             return ""
 
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}') and {event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+        elif event_time_filter.start:
+            filter = (
+                f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}')"
+            )
+        elif event_time_filter.end:
+            filter = f"{event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+
+        return filter
+
     def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
         # If the base_location_root config is supplied, overwrite the default value ("_dbt/")
         base_location: str = (
@@ -204,10 +225,11 @@ class SnowflakeRelation(BaseRelation):
 
         external_volume = config.get("external_volume")  # type:ignore
         iceberg_ddl_predicates: str = f"""
-        external_volume = '{external_volume}'
         catalog = 'snowflake'
         base_location = '{base_location}'
         """
+        if external_volume := config.get("external_volume"):  # type:ignore
+            iceberg_ddl_predicates += f"\nexternal_volume = '{external_volume}'"
         return textwrap.indent(textwrap.dedent(iceberg_ddl_predicates), " " * 10)
 
     def __drop_conditions(self, old_relation: "SnowflakeRelation") -> Iterator[Tuple[bool, str]]:
