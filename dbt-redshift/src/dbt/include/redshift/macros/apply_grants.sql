@@ -14,9 +14,9 @@
 {%- endmacro -%}
 
 {%- macro redshift__get_revoke_sql(relation, privilege, grantees) -%}
-    revoke {{ privilege }} on {{ relation.type }} {{ relation }} from {{ quote_grantees(grantees) | join(', ') }}
+    revoke {{ privilege }} on {{ relation }} from {{ quote_grantees(grantees) | join(', ') }}
 {%- endmacro -%}
 
 {%- macro redshift__get_grant_sql(relation, privilege, grantees) -%}
-    grant {{ privilege }} on {{ relation.type }} {{ relation }} to {{ quote_grantees(grantees) | join(', ') }}
+    grant {{ privilege }} on {{ relation }} to {{ quote_grantees(grantees) | join(', ') }}
 {%- endmacro -%}
