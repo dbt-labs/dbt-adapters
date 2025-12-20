@@ -205,10 +205,10 @@
 {% endmacro %}
 
 {# Overwrite to satisfy dbt-core logic #}
-{% macro athena__load_csv_rows(model, agate_table) %}
+{% macro athena__load_csv_rows(model, agate_table, load_empty=False) %}
     {%- set seed_by_insert = config.get('seed_by_insert', False) | as_bool -%}
   {%- if seed_by_insert %}
-    {{ default__load_csv_rows(model, agate_table) }}
+    {{ default__load_csv_rows(model, agate_table, load_empty) }}
   {%- else -%}
     select 1
   {% endif %}
