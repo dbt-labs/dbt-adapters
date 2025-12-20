@@ -538,3 +538,71 @@ CALL {proc_name}();
                 ]
             )
         }
+
+    @available
+    def describe_hybrid_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """
+        Get all relevant metadata about a hybrid table to return as a dict to Agate Table row
+
+        Args:
+            relation (SnowflakeRelation): the relation to describe
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+
+        # Get hybrid table metadata
+        show_sql = f"show hybrid tables like '{relation.identifier}' in schema {database}.{schema}"
+        res, ht_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get hybrid table metadata: {show_sql} failed")
+
+        # Get index information
+        show_indexes_sql = f"show indexes in {database}.{schema}.{relation.identifier}"
+        idx_res, idx_table = self.execute(show_indexes_sql, fetch=True)
+
+        # Get column information
+        desc_sql = f"describe table {database}.{schema}.{relation.identifier}"
+        col_res, col_table = self.execute(desc_sql, fetch=True)
+
+        # Get primary key information
+        show_pk_sql = f"show primary keys in table {database}.{schema}.{relation.identifier}"
+        pk_res, pk_table = self.execute(show_pk_sql, fetch=True)
+
+        # normalize column names to lower case
+        ht_table = ht_table.rename(column_names=[name.lower() for name in ht_table.column_names])
+
+        result = {
+            "hybrid_table": ht_table.select(
+                [
+                    "name",
+                    "schema_name",
+                    "database_name",
+                ]
+            )
+        }
+
+        # Add indexes if available
+        if idx_res.code == "SUCCESS" and len(idx_table.rows) > 0:
+            idx_table = idx_table.rename(
+                column_names=[name.lower() for name in idx_table.column_names]
+            )
+            result["indexes"] = idx_table
+
+        # Add columns if available
+        if col_res.code == "SUCCESS" and len(col_table.rows) > 0:
+            col_table = col_table.rename(
+                column_names=[name.lower() for name in col_table.column_names]
+            )
+            select_cols = [c for c in col_table.column_names if c in ("name", "type")]
+            result["columns"] = col_table.select(select_cols)
+
+        # Add primary key info if available
+        if pk_res.code == "SUCCESS" and len(pk_table.rows) > 0:
+            pk_table = pk_table.rename(
+                column_names=[name.lower() for name in pk_table.column_names]
+            )
+            select_pk = [c for c in pk_table.column_names if c == "column_name"]
+            result["primary_keys"] = pk_table.select(select_pk)
+
+        return result
