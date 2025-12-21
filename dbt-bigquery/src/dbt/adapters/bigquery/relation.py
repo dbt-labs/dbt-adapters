@@ -125,6 +125,10 @@ class BigQueryRelation(BaseRelation):
         """
         Returns "" if start and end are both None
         """
+        if event_time_filter.filter_format is not None:
+            return super()._render_event_time_filtered(event_time_filter)
+
+        # For backward compatibility
         filter = ""
         if event_time_filter.start and event_time_filter.end:
             filter = f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}' and cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
