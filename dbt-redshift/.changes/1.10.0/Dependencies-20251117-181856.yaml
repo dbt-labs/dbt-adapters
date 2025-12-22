@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Bump minimum dbt-adapters to 1.19.0█
-time: 2025-11-17T18:18:56.857769-06:00
-custom:
-  Author: QMalcolm
-  PR: "1421"

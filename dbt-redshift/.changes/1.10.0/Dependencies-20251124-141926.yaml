@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Update dbt-postgres requirement to allow <2.0
-time: 2025-11-24T14:19:26.663347-06:00
-custom:
-  Author: QMalcolm
-  PR: "1420"
