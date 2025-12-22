@@ -1,6 +1,0 @@
-kind: Fixes
-body: remove retry_all from add_query and set backoff so it actually backs off
-time: 2025-05-13T10:44:30.673728-07:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1095"
