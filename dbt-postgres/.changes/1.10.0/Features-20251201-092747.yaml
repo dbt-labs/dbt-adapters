@@ -1,6 +1,0 @@
-kind: Features
-body: Add support for py3.13
-time: 2025-12-01T09:27:47.085852-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1475"
