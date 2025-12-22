@@ -1,6 +1,0 @@
-kind: Features
-body: Add support for aggregate sql functions
-time: 2025-11-12T17:30:57.715697-06:00
-custom:
-  Author: QMalcolm
-  Issue: "1432"
