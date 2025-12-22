@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Move minimum dbt-core to \`1.8.0rc1\` in order to allow for pre-releases of dbt-core
-time: 2025-10-07T12:31:29.841541-05:00
-custom:
-  Author: QMalcolm
-  PR: "1373"

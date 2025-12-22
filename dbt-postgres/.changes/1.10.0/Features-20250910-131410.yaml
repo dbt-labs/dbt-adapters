@@ -1,6 +1,0 @@
-kind: Features
-body: Initial UDF support for postgres
-time: 2025-09-10T13:14:10.926181-07:00
-custom:
-  Author: QMalcolm
-  Issue: "1268"
