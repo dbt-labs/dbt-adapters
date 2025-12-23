@@ -1725,6 +1725,89 @@ class TestAthenaAdapter:
         # Should return empty dict when table doesn't exist
         assert etags == {}
 
+    def _mock_delete_objects_response(self, s3_client, bucket, objects_to_process):
+        """
+        Mock helper to simulate AWS S3 delete_objects with ETag-based conditional deletion.
+        
+        moto doesn't support the ETag parameter in delete_objects yet, so we manually
+        simulate the behavior: for each object, check if the current ETag matches the
+        provided ETag, and only delete if they match (PreconditionFailed otherwise).
+        
+        Args:
+            s3_client: The boto3 S3 client
+            bucket: S3 bucket name
+            objects_to_process: List of dicts with 'Key' and 'ETag' keys
+        
+        Returns:
+            Dict with 'Deleted' and 'Errors' arrays (AWS delete_objects response format)
+        """
+        deleted_list = []
+        errors_list = []
+        
+        for obj in objects_to_process:
+            key = obj['Key']
+            expected_etag = obj.get('ETag')
+            
+            try:
+                # Get current ETag from S3
+                current_etag = s3_client.head_object(Bucket=bucket, Key=key)['ETag'].strip('"')
+                
+                # AWS behavior: Only delete if ETags match
+                if current_etag == expected_etag:
+                    s3_client.delete_object(Bucket=bucket, Key=key)
+                    deleted_list.append({'Key': key})
+                else:
+                    # ETag mismatch - PreconditionFailed (file was modified)
+                    errors_list.append({
+                        'Key': key,
+                        'Code': 'PreconditionFailed',
+                        'Message': 'At least one of the pre-conditions you specified did not hold'
+                    })
+            except s3_client.exceptions.NoSuchKey:
+                # File doesn't exist - NoSuchKey error
+                errors_list.append({
+                    'Key': key,
+                    'Code': 'NoSuchKey',
+                    'Message': 'The specified key does not exist'
+                })
+            except Exception as e:
+                # Unexpected error - InternalError
+                errors_list.append({
+                    'Key': key,
+                    'Code': 'InternalError',
+                    'Message': str(e)
+                })
+        
+        return {'Deleted': deleted_list, 'Errors': errors_list}
+    
+    def _patch_s3_delete_objects(self):
+        """
+        Context manager to patch the adapter's S3 client creation.
+        
+        This patches the adapter's _get_s3_client method to return a client
+        with delete_objects replaced by our mock that supports ETag-based 
+        conditional deletion.
+        
+        Usage:
+            with self._patch_s3_delete_objects():
+                result = self.adapter.delete_unchanged_s3_files(...)
+        """
+        # Save the original _get_s3_client method
+        original_get_s3_client = self.adapter._get_s3_client
+        
+        def mock_get_s3_client():
+            # Call original to get a real S3 client
+            client = original_get_s3_client()
+            
+            # Replace delete_objects with our mock
+            client.delete_objects = lambda **kw: self._mock_delete_objects_response(
+                client, kw['Bucket'], kw['Delete']['Objects']
+            )
+            
+            return client
+        
+        return patch.object(self.adapter, '_get_s3_client', mock_get_s3_client)
+
     @mock_aws
     def test_delete_unchanged_s3_files_deletes_unchanged(self, mock_aws_service):
         """Test that files with unchanged ETags are deleted"""
@@ -1756,8 +1839,10 @@ class TestAthenaAdapter:
             identifier="increment_source",
         )
         
-        # Call the method - should delete both files (ETags unchanged)
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
+        # Mock delete_objects to simulate AWS ETag-based conditional deletion
+        with self._patch_s3_delete_objects():
+            # Call the method - should delete both files (ETags unchanged)
+            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
         
         # Assertions
         assert result['deleted'] == 2, f"Expected 2 files deleted, got {result['deleted']}"
@@ -1811,8 +1896,10 @@ class TestAthenaAdapter:
             identifier="increment_source",
         )
         
-        # Call the method
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
+        # Mock delete_objects to simulate AWS ETag-based conditional deletion
+        with self._patch_s3_delete_objects():
+            # Call the method
+            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
         
         # Assertions:
         # - file1 should be SKIPPED (ETag mismatch - PreconditionFailed)
