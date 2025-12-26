@@ -164,6 +164,8 @@
 
   {{ run_hooks(post_hooks) }}
 
+  {% do adapter.manage_search_index(target_relation, config.model) %}
+
   {% set target_relation = this.incorporate(type='table') %}
 
   {% set should_revoke = should_revoke(existing_relation, full_refresh_mode) %}

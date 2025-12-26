@@ -261,7 +261,7 @@ def _update_nested_column_data_types(
 
 
 def _format_nested_data_type(
-    unformatted_nested_data_type: Optional[Union[str, Dict[str, Any]]]
+    unformatted_nested_data_type: Optional[Union[str, Dict[str, Any]]],
 ) -> Optional[str]:
     """
     Recursively format a (STRUCT) data type given an arbitrarily nested data type structure.

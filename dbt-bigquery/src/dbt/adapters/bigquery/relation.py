@@ -2,25 +2,25 @@ from dataclasses import dataclass, field
 from itertools import chain, islice
 from typing import FrozenSet, Optional, TypeVar
 
-from dbt_common.exceptions import CompilationError
-from dbt_common.utils.dict import filter_null_values
 from dbt.adapters.base.relation import (
     BaseRelation,
     ComponentName,
-    InformationSchema,
     EventTimeFilter,
+    InformationSchema,
 )
-from dbt.adapters.contracts.relation import RelationConfig, RelationType
-from dbt.adapters.relation_configs import RelationConfigChangeAction
-
 from dbt.adapters.bigquery.relation_configs import (
     BigQueryClusterConfigChange,
     BigQueryMaterializedViewConfig,
     BigQueryMaterializedViewConfigChangeset,
     BigQueryOptionsConfigChange,
     BigQueryPartitionConfigChange,
+    BigQuerySearchIndexConfig,
+    BigQuerySearchIndexConfigChange,
 )
-
+from dbt.adapters.contracts.relation import RelationConfig, RelationType
+from dbt.adapters.relation_configs import RelationConfigChangeAction
+from dbt_common.exceptions import CompilationError
+from dbt_common.utils.dict import filter_null_values
 
 Self = TypeVar("Self", bound="BigQueryRelation")
 
@@ -102,8 +102,9 @@ class BigQueryRelation(BaseRelation):
             )
 
         if new_materialized_view.partition != existing_materialized_view.partition:
-            # the existing PartitionConfig is not hashable, but since we need to do
-            # a full refresh either way, we don't need to provide a context
+            # the existing PartitionConfig is not hashable, but since we need
+            # to do a full refresh either way, we don't need to provide a
+            # context
             config_change_collection.partition = BigQueryPartitionConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
             )
@@ -118,6 +119,32 @@ class BigQueryRelation(BaseRelation):
             return config_change_collection
         return None
 
+    @classmethod
+    def search_index_from_relation_config(
+        cls, relation_config: RelationConfig
+    ) -> BigQuerySearchIndexConfig:
+        return BigQuerySearchIndexConfig.from_relation_config(relation_config)
+
+    @classmethod
+    def search_index_config_changeset(
+        cls,
+        existing_search_index: Optional[BigQuerySearchIndexConfig],
+        relation_config: RelationConfig,
+    ) -> Optional[BigQuerySearchIndexConfigChange]:
+        new_search_index = cls.search_index_from_relation_config(relation_config)
+
+        if not new_search_index.columns and not existing_search_index:
+            return None
+
+        # if it's configured now but didn't exist, or if it changed
+        if new_search_index != existing_search_index:
+            return BigQuerySearchIndexConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new_search_index,
+            )
+
+        return None
+
     def information_schema(self, identifier: Optional[str] = None) -> "BigQueryInformationSchema":
         return BigQueryInformationSchema.from_relation(self, identifier)
 
@@ -127,14 +154,21 @@ class BigQueryRelation(BaseRelation):
         """
         filter = ""
         if event_time_filter.start and event_time_filter.end:
-            filter = f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}' and cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
+            filter = (
+                f"cast({event_time_filter.field_name} as timestamp) >= "
+                f"'{event_time_filter.start}' and "
+                f"cast({event_time_filter.field_name} as timestamp) < "
+                f"'{event_time_filter.end}'"
+            )
         elif event_time_filter.start:
             filter = (
-                f"cast({event_time_filter.field_name} as timestamp) >= '{event_time_filter.start}'"
+                f"cast({event_time_filter.field_name} as timestamp) >= "
+                f"'{event_time_filter.start}'"
             )
         elif event_time_filter.end:
             filter = (
-                f"cast({event_time_filter.field_name} as timestamp) < '{event_time_filter.end}'"
+                f"cast({event_time_filter.field_name} as timestamp) < "
+                f"'{event_time_filter.end}'"
             )
 
         return filter
@@ -179,7 +213,8 @@ class BigQueryInformationSchema(InformationSchema):
             # the user can do about it.
             if not relation.location:
                 msg = (
-                    f'No location/region found when trying to retrieve "{information_schema_view}"'
+                    f"No location/region found when trying to retrieve "
+                    f'"{information_schema_view}"'
                 )
                 raise CompilationError(msg)
             info_schema = info_schema.incorporate(location=relation.location)
