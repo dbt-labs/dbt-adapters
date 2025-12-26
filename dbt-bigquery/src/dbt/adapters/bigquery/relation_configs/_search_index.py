@@ -43,13 +43,19 @@ class BigQuerySearchIndexConfig(BigQueryBaseRelationConfig):
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> Dict[str, Any]:
-        raw_config = relation_config.config.extra.get("search_index")  # type:ignore
-        if not raw_config:
+        if not relation_config.config:
             return {}
 
-        if isinstance(raw_config, bool):
-            if raw_config:
-                return {"columns": ["ALL COLUMNS"]}
+        # Strictly support the "indexes" list (dbt standard)
+        raw_config = None
+        indexes = relation_config.config.extra.get("indexes", [])
+        if isinstance(indexes, list):
+            for idx in indexes:
+                if isinstance(idx, dict) and idx.get("type", "").lower() == "search":
+                    raw_config = idx
+                    break
+
+        if not raw_config:
             return {}
 
         config_dict: Dict[str, Any] = {}
@@ -63,6 +69,13 @@ class BigQuerySearchIndexConfig(BigQueryBaseRelationConfig):
                 config_dict["columns"] = ["ALL COLUMNS"]
             else:
                 config_dict["columns"] = [columns]
+        elif isinstance(columns, list):
+            if "*" in columns or "ALL COLUMNS" in [
+                c.upper() for c in columns if isinstance(c, str)
+            ]:
+                config_dict["columns"] = ["ALL COLUMNS"]
+            else:
+                config_dict["columns"] = columns
         else:
             config_dict["columns"] = columns
 

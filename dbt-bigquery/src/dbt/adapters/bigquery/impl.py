@@ -1160,6 +1160,10 @@ class BigQueryAdapter(BaseAdapter):
             where table_name = '{relation.identifier}'
         """
         options_query = f"""
+            select *, cast(null as string) as index_column_name
+            from `{relation.project}`.{relation.dataset}.INFORMATION_SCHEMA.SEARCH_INDEX_OPTIONS
+            where table_name = '{relation.identifier}'
+            union all
             select *
             from `{relation.project}`.{relation.dataset}.INFORMATION_SCHEMA.SEARCH_INDEX_COLUMN_OPTIONS
             where table_name = '{relation.identifier}'

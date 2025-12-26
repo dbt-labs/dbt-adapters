@@ -41,27 +41,35 @@ class TestBigQuerySearchIndexConfig(unittest.TestCase):
         self.assertEqual(config.default_index_column_granularity, "COLUMN")
         self.assertEqual(config.column_options, {"col1": {"index_granularity": "GLOBAL"}})
 
-    def test_parse_relation_config_bool_true(self):
-        relation_config = MagicMock()
-        relation_config.config.extra = {"search_index": True}
-
-        config_dict = BigQuerySearchIndexConfig.parse_relation_config(relation_config)
-        self.assertEqual(config_dict, {"columns": ["ALL COLUMNS"]})
-
-    def test_parse_relation_config_dict(self):
+    def test_parse_relation_config_indexes_list(self):
         relation_config = MagicMock()
         relation_config.config.extra = {
-            "search_index": {
-                "columns": ["col1"],
-                "analyzer": "pattern_analyzer",
-                "data_types": ["string"],
-            }
+            "indexes": [
+                {
+                    "columns": ["col1"],
+                    "type": "search",
+                    "analyzer": "pattern_analyzer",
+                }
+            ]
         }
 
         config_dict = BigQuerySearchIndexConfig.parse_relation_config(relation_config)
         self.assertEqual(config_dict["columns"], ["col1"])
         self.assertEqual(config_dict["analyzer"], "PATTERN_ANALYZER")
-        self.assertEqual(config_dict["data_types"], ["STRING"])
+
+    def test_parse_relation_config_indexes_list_all_columns(self):
+        relation_config = MagicMock()
+        relation_config.config.extra = {"indexes": [{"columns": ["*"], "type": "search"}]}
+
+        config_dict = BigQuerySearchIndexConfig.parse_relation_config(relation_config)
+        self.assertEqual(config_dict["columns"], ["ALL COLUMNS"])
+
+    def test_parse_relation_config_no_search_index(self):
+        relation_config = MagicMock()
+        relation_config.config.extra = {"indexes": [{"columns": ["col1"], "type": "other"}]}
+
+        config_dict = BigQuerySearchIndexConfig.parse_relation_config(relation_config)
+        self.assertEqual(config_dict, {})
 
     def test_from_bq_results(self):
         index_row = {"index_name": "my_idx", "analyzer": "LOG_ANALYZER"}
