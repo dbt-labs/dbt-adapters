@@ -36,6 +36,8 @@
 
   {{ run_hooks(post_hooks) }}
 
+  {% do adapter.manage_search_index(target_relation, config.model) %}
+
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode=True) %}
   {% do apply_grants(target_relation, grant_config, should_revoke) %}
 

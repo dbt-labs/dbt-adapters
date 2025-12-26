@@ -1,9 +1,10 @@
 import copy
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing.context import SpawnContext
-import threading
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     FrozenSet,
@@ -12,31 +13,18 @@ from typing import (
     Optional,
     Set,
     Tuple,
-    TYPE_CHECKING,
     Type,
     Union,
 )
 
-import google.api_core
-import google.auth
-import google.oauth2
-import google.cloud.bigquery
-from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
-import google.cloud.exceptions
-import pytz
-
-from dbt_common.behavior_flags import BehaviorFlag
-from dbt_common.contracts.constraints import (
-    ColumnLevelConstraint,
-    ConstraintType,
-    ModelLevelConstraint,
-)
-from dbt_common.dataclass_schema import dbtClassMixin
-from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
-from dbt_common.exceptions import DbtInternalError
-from dbt_common.utils import filter_null_values
+import google.api_core
+import google.auth
+import google.cloud.bigquery
+import google.cloud.exceptions
+import google.oauth2
+import pytz
 from dbt.adapters.base import (
     AdapterConfig,
     BaseAdapter,
@@ -47,44 +35,74 @@ from dbt.adapters.base import (
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.impl import (
+    GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+    FreshnessResponse,
+)
 from dbt.adapters.base.relation import ComponentName
+from dbt.adapters.bigquery import constants, parse_model
+from dbt.adapters.bigquery.catalogs import (
+    BigLakeCatalogIntegration,
+    BigQueryCatalogRelation,
+    BigQueryInfoSchemaCatalogIntegration,
+)
+from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
+from dbt.adapters.bigquery.connections import (
+    BigQueryAdapterResponse,
+    BigQueryConnectionManager,
+)
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+)
+from dbt.adapters.bigquery.python_submissions import (
+    BigFramesHelper,
+    ClusterDataprocHelper,
+    ServerlessDataProcHelper,
+)
+from dbt.adapters.bigquery.relation import BigQueryRelation
+from dbt.adapters.bigquery.relation_configs import (
+    BigQueryBaseRelationConfig,
+    BigQueryMaterializedViewConfig,
+    BigQuerySearchIndexConfig,
+    BigQuerySearchIndexConfigChange,
+    PartitionConfig,
+)
+from dbt.adapters.bigquery.struct_utils import (
+    build_nested_additions,
+    find_missing_fields,
+    merge_nested_fields,
+)
+from dbt.adapters.bigquery.utility import sql_escape
 from dbt.adapters.cache import _make_ref_key_dict
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SchemaCreation, SchemaDrop
-
-from dbt.adapters.bigquery import constants, parse_model
-from dbt.adapters.bigquery.catalogs import (
-    BigLakeCatalogIntegration,
-    BigQueryInfoSchemaCatalogIntegration,
-    BigQueryCatalogRelation,
+from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.contracts.constraints import (
+    ColumnLevelConstraint,
+    ConstraintType,
+    ModelLevelConstraint,
 )
-from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
-from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
-from dbt.adapters.bigquery.python_submissions import (
-    ClusterDataprocHelper,
-    ServerlessDataProcHelper,
-    BigFramesHelper,
+from dbt_common.dataclass_schema import dbtClassMixin
+from dbt_common.events.functions import fire_event
+from dbt_common.exceptions import DbtInternalError
+from dbt_common.utils import filter_null_values
+from google.cloud.bigquery import (
+    AccessEntry,
+    Client,
+    SchemaField,
 )
-from dbt.adapters.bigquery.relation import BigQueryRelation
-from dbt.adapters.bigquery.relation_configs import (
-    BigQueryBaseRelationConfig,
-    BigQueryMaterializedViewConfig,
-    PartitionConfig,
-)
-from dbt.adapters.bigquery.utility import sql_escape
-
-from dbt.adapters.bigquery.struct_utils import (
-    build_nested_additions,
-    find_missing_fields,
-    merge_nested_fields,
-)
+from google.cloud.bigquery import Table as BigQueryTable
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -154,7 +172,10 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
-    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
+    CATALOG_INTEGRATIONS = [
+        BigLakeCatalogIntegration,
+        BigQueryInfoSchemaCatalogIntegration,
+    ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -270,7 +291,9 @@ class BigQueryAdapter(BaseAdapter):
     def get_columns_in_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
             return self._get_dbt_columns_from_bq_table(table)
 
@@ -588,7 +611,9 @@ class BigQueryAdapter(BaseAdapter):
 
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
         except google.cloud.exceptions.NotFound:
             return True
@@ -1110,12 +1135,91 @@ class BigQueryAdapter(BaseAdapter):
             parser = BigQueryMaterializedViewConfig
         else:
             raise dbt_common.exceptions.DbtRuntimeError(
-                f"The method `BigQueryAdapter.describe_relation` is not implemented "
-                f"for the relation type: {relation.type}"
+                f"The method `BigQueryAdapter.describe_relation` is not "
+                f"implemented for the relation type: {relation.type}"
             )
         if bq_table:
             return parser.from_bq_table(bq_table)
         return None
+
+    @available.parse(lambda *a, **k: {})
+    def describe_search_index(
+        self, relation: BigQueryRelation
+    ) -> Optional[BigQuerySearchIndexConfig]:
+        """
+        Fetch the current search index configuration from BigQuery INFORMATION_SCHEMA.
+        """
+        index_query = f"""
+            select *
+            from `{relation.project}`.{relation.dataset}.INFORMATION_SCHEMA.SEARCH_INDEXES
+            where table_name = '{relation.identifier}'
+        """
+        columns_query = f"""
+            select *
+            from `{relation.project}`.{relation.dataset}.INFORMATION_SCHEMA.SEARCH_INDEX_COLUMNS
+            where table_name = '{relation.identifier}'
+        """
+        options_query = f"""
+            select *
+            from `{relation.project}`.{relation.dataset}.INFORMATION_SCHEMA.SEARCH_INDEX_COLUMN_OPTIONS
+            where table_name = '{relation.identifier}'
+        """
+
+        try:
+            _, index_results = self.execute(index_query, fetch=True)
+            if len(index_results) == 0:
+                return None
+            index_row = index_results[0]
+
+            _, columns_results = self.execute(columns_query, fetch=True)
+            _, options_results = self.execute(options_query, fetch=True)
+
+            return BigQuerySearchIndexConfig.from_bq_results(
+                index_row=dict(index_row),
+                columns_rows=[dict(r) for r in columns_results],
+                options_rows=[dict(r) for r in options_results],
+            )
+        except Exception as e:
+            logger.debug(f"Error describing search index for {relation}: {e}")
+            return None
+
+    @available.parse(lambda *a, **k: None)
+    def get_search_index_config_change(
+        self,
+        relation: BigQueryRelation,
+        config: RelationConfig,
+    ) -> Optional[BigQuerySearchIndexConfigChange]:
+        existing_search_index = self.describe_search_index(relation)
+        return relation.search_index_config_changeset(existing_search_index, config)
+
+    @available.parse_none
+    def manage_search_index(self, relation: BigQueryRelation, config: RelationConfig) -> None:
+        change = self.get_search_index_config_change(relation, config)
+        if change:
+            # Drop old if exists. BigQuery only allows one index per table.
+            # To modify, DROP then CREATE.
+            self.drop_search_index(relation)
+            if change.context and change.context.columns:
+                self.create_search_index(relation, change.context)
+
+    @available.parse_none
+    def create_search_index(
+        self,
+        relation: BigQueryRelation,
+        search_index_config: BigQuerySearchIndexConfig,
+    ) -> None:
+        kwargs = {
+            "relation": relation,
+            "search_index_config": search_index_config,
+        }
+        self.execute_macro("bigquery__create_search_index", kwargs=kwargs)
+
+    @available.parse_none
+    def drop_search_index(self, relation: BigQueryRelation) -> None:
+        kwargs = {
+            "relation": relation,
+        }
+        self.execute_macro("bigquery__drop_search_index", kwargs=kwargs)
 
     @available.parse_none
     def grant_access_to(self, entity, entity_type, role, grant_target_dict) -> None:

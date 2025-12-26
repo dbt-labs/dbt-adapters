@@ -12,10 +12,14 @@ from dbt.adapters.bigquery.relation_configs._options import (
     BigQueryOptionsConfigChange,
 )
 from dbt.adapters.bigquery.relation_configs._partition import (
-    PartitionConfig,
     BigQueryPartitionConfigChange,
+    PartitionConfig,
 )
 from dbt.adapters.bigquery.relation_configs._policies import (
     BigQueryIncludePolicy,
     BigQueryQuotePolicy,
+)
+from dbt.adapters.bigquery.relation_configs._search_index import (
+    BigQuerySearchIndexConfig,
+    BigQuerySearchIndexConfigChange,
 )
