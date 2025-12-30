@@ -9,7 +9,7 @@
 select
     1 as order_id,
     'customer_1' as customer_id,
-    100.50 as amount,
+    cast(100.50 as numeric(10,2)) as amount,
     current_timestamp as order_date
 
 union all
@@ -17,7 +17,7 @@ union all
 select
     2 as order_id,
     'customer_2' as customer_id,
-    250.75 as amount,
+    cast(250.75 as numeric(10,2)) as amount,
     current_timestamp as order_date
 
 union all
@@ -25,5 +25,5 @@ union all
 select
     3 as order_id,
     'customer_1' as customer_id,
-    75.25 as amount,
+    cast(75.25 as numeric(10,2)) as amount,
     current_timestamp as order_date
