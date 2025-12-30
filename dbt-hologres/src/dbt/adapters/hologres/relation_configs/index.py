@@ -38,7 +38,7 @@ class HologresIndexConfig(dbtClassMixin):
             raise IndexConfigNotDictError(raw_index)
 
 
-@dataclass
+@dataclass(frozen=True)
 class HologresIndexConfigChange(RelationConfigChange):
     context: HologresIndexConfig
 

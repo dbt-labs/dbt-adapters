@@ -23,9 +23,9 @@ logger = AdapterLogger("Hologres")
 class HologresCredentials(Credentials):
     host: str
     user: str
+    password: str  # on hologres the password is mandatory
     # Annotated is used by mashumaro for jsonschema generation
     port: Annotated[Port, Minimum(0), Maximum(65535)] = 80
-    password: str  # on hologres the password is mandatory
     connect_timeout: int = 10
     role: Optional[str] = None
     search_path: Optional[str] = None
