@@ -1,3 +1,8 @@
+{% macro hologres__get_create_table_as_sql(temporary, relation, sql) -%}
+  {# Hologres需要在事务外执行CTAS #}
+  {{ return(hologres__create_table_as(temporary, relation, sql)) }}
+{%- endmacro %}
+
 {% macro hologres__create_table_as(temporary, relation, compiled_code, language='sql') -%}
   {%- if language == 'sql' -%}
     {%- set sql_header = config.get('sql_header', none) -%}

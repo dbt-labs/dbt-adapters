@@ -125,6 +125,9 @@ class HologresConnectionManager(SQLConnectionManager):
                 **kwargs,
             )
             
+            # Hologres需要在事务外执行CTAS，启用autocommit模式
+            handle.autocommit = True
+            
             # Set search_path if specified
             if search_path is not None and search_path != "":
                 with handle.cursor() as cursor:
