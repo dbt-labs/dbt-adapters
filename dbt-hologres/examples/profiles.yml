@@ -1,0 +1,14 @@
+hologres_example:
+  target: dev
+  outputs:
+    dev:
+      type: hologres
+      host: hgpostcn-cn-wyc4l7i67022-cn-hangzhou.hologres.aliyuncs.com
+      port: 80
+      user: BASIC$dbt_user
+      password: Leeyd#1988
+      database: from_dbt
+      schema: public
+      threads: 4
+      connect_timeout: 10
+      sslmode: disable
