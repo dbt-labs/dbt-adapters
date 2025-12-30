@@ -9,14 +9,14 @@
 
     {{ sql_header if sql_header is not none }}
 
-    create {% if temporary -%}
-      temporary
-    {%- endif %} table {{ relation }}
+    {# Hologres不支持TEMPORARY TABLE，忽略temporary参数 #}
+    create table {{ relation }}
     as (
       {{ compiled_code }}
     );
   {%- elif language == 'python' -%}
-    {{ py_write_table(compiled_code=compiled_code, target_relation=relation, temporary=temporary) }}
+    {# Python models也不使用temporary #}
+    {{ py_write_table(compiled_code=compiled_code, target_relation=relation, temporary=false) }}
   {%- else -%}
     {% do exceptions.raise_compiler_error("hologres__create_table_as macro didn't get supported language " ~ language) %}
   {%- endif -%}
@@ -132,8 +132,16 @@
 {% macro hologres__rename_relation(from_relation, to_relation) -%}
   {% set target_name = adapter.quote_as_configured(to_relation.identifier, 'identifier') %}
   {% call statement('rename_relation') -%}
-    alter table {{ from_relation }} rename to {{ target_name }}
+    {{ get_rename_sql(from_relation, target_name) }}
   {%- endcall %}
+{% endmacro %}
+
+{% macro hologres__get_rename_view_sql(relation, new_name) %}
+    alter view {{ relation }} rename to {{ new_name }}
+{% endmacro %}
+
+{% macro hologres__get_rename_table_sql(relation, new_name) %}
+    alter table {{ relation }} rename to {{ new_name }}
 {% endmacro %}
 
 {% macro hologres__get_columns_in_relation(relation) -%}
