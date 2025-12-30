@@ -8,7 +8,7 @@ hologres_example:
       user: BASIC$dbt_user
       password: Leeyd#1988
       database: from_dbt
-      schema: ""  # Empty string as default schema
+      schema: "public"  # Empty string as default schema
       threads: 4
       connect_timeout: 10
       sslmode: disable

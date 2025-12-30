@@ -26,11 +26,13 @@
   {%- endcall %}
 
   -- cleanup
-  -- move the existing view out of the way
+  {#- Drop the existing view if it exists instead of renaming to backup -#}
+  {#- This avoids issues with Hologres ALTER VIEW RENAME when schema is empty string -#}
   {% if existing_relation is not none %}
-    {% set existing_relation = load_cached_relation(existing_relation) %}
+    {#- Re-check if the relation actually exists in the database before attempting to drop it -#}
+    {% set existing_relation = adapter.get_relation(database=existing_relation.database, schema=existing_relation.schema, identifier=existing_relation.identifier) %}
     {% if existing_relation is not none %}
-        {{ adapter.rename_relation(existing_relation, backup_relation) }}
+        {{ drop_relation_if_exists(existing_relation) }}
     {% endif %}
   {% endif %}
   {{ adapter.rename_relation(intermediate_relation, target_relation) }}

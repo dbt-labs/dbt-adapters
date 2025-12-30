@@ -137,11 +137,13 @@
 {% endmacro %}
 
 {% macro hologres__get_rename_view_sql(relation, new_name) %}
-    alter view {{ relation }} rename to {{ new_name }}
+    {# Hologres does not support database-qualified names in ALTER VIEW RENAME #}
+    alter view {{ relation.include(database=False) }} rename to {{ new_name }}
 {% endmacro %}
 
 {% macro hologres__get_rename_table_sql(relation, new_name) %}
-    alter table {{ relation }} rename to {{ new_name }}
+    {# Hologres does not support database-qualified names in ALTER TABLE RENAME #}
+    alter table {{ relation.include(database=False) }} rename to {{ new_name }}
 {% endmacro %}
 
 {% macro hologres__get_columns_in_relation(relation) -%}
