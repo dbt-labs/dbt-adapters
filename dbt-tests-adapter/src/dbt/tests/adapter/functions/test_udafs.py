@@ -18,9 +18,30 @@ class UDAFBase:
     def functions(self):
         raise NotImplementedError("Test subclass must implement functions")
 
-    def test_udaf(self, project):
+    def is_function_create_event(self, event: EventMsg) -> bool:
+        return (
+            event.data.node_info.node_name == "sum_squared"
+            and "CREATE OR REPLACE AGGREGATE FUNCTION" in event.data.sql
+        )
+
+    @pytest.fixture(scope="class")
+    def sql_event_catcher(self) -> EventCatcher:
+        return EventCatcher(
+            event_to_catch=SQLQuery, predicate=lambda event: self.is_function_create_event(event)
+        )
+
+    def check_function_volatility(self, sql: str):
+        assert "VOLATILE" not in sql
+        assert "STABLE" not in sql
+        assert "IMMUTABLE" not in sql
+
+    def test_udaf(self, project, sql_event_catcher):
         # build the function
-        result = run_dbt(["build", "--debug"])
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+
+        # Check volatility
+        assert len(sql_event_catcher.caught_events) == 1
+        self.check_function_volatility(sql_event_catcher.caught_events[0].data.sql)
 
         # try using the aggregate function
         result = run_dbt(
@@ -55,18 +76,6 @@ class BasicSQLUDAF(UDAFBase):
 
 class PythonUDAFDefaultArgSupport(BasicPythonUDAF):
     expect_default_arg_support = False
-
-    def is_function_create_event(self, event: EventMsg) -> bool:
-        return (
-            event.data.node_info.node_name == "sum_squared"
-            and "CREATE OR REPLACE AGGREGATE FUNCTION" in event.data.sql
-        )
-
-    @pytest.fixture(scope="class")
-    def sql_event_catcher(self) -> EventCatcher:
-        return EventCatcher(
-            event_to_catch=SQLQuery, predicate=lambda event: self.is_function_create_event(event)
-        )
 
     @pytest.fixture(scope="class")
     def functions(self):
