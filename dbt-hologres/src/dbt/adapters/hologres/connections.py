@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
@@ -10,6 +10,7 @@ from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
 from dbt_common.events.functions import warn_or_error
 from dbt_common.helper_types import Port
 from mashumaro.jsonschema.annotations import Maximum, Minimum
+from mashumaro.types import Discriminator
 import psycopg
 from typing_extensions import Annotated
 
@@ -34,6 +35,24 @@ class HologresCredentials(Credentials):
     retries: int = 1
 
     _ALIASES = {"dbname": "database", "pass": "password"}
+
+    @classmethod
+    def __pre_deserialize__(cls, data):
+        data = super().__pre_deserialize__(data)
+        # Set default for schema if not provided
+        # Note: Although we want schema to be optional, the base class Credentials requires it
+        # So we provide a default empty string here
+        if "schema" not in data or data["schema"] is None:
+            data["schema"] = ""
+        return data
+
+    def __post_init__(self):
+        # Handle schema default value
+        if not self.schema:
+            object.__setattr__(self, 'schema', '')
+        # Set application_name with version if not provided
+        if not self.application_name:
+            object.__setattr__(self, 'application_name', f"dbt_hologres_{version}")
 
     @property
     def type(self):

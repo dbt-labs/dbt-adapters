@@ -33,7 +33,7 @@ hologres_project:
       user: BASIC$your_username
       password: your_password
       database: your_database
-      schema: public
+      schema: ""  # Use empty string if no default schema needed
       threads: 4
       connect_timeout: 10
       sslmode: disable
@@ -77,7 +77,7 @@ Supported configurations:
 | user | Yes | - | Username (case-sensitive, format: BASIC$username) |
 | password | Yes | - | Password (case-sensitive) |
 | database | Yes | - | Database name |
-| schema | No | public | Default schema |
+| schema | Yes | "" | Default schema (use empty string "" if not needed) |
 | threads | No | 1 | Number of threads for parallel execution |
 | connect_timeout | No | 10 | Connection timeout in seconds |
 | sslmode | No | disable | SSL mode (disabled by default) |
