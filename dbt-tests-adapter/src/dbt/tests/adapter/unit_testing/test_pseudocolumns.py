@@ -1,5 +1,6 @@
 import pytest
 
+from dbt.adapters.contracts.relation import Column
 from dbt.tests.util import run_dbt
 
 
@@ -37,10 +38,10 @@ unit_tests:
 """
 
 # Seed file to create the source table
-external_table_csv = """id,pseudocolumn_value
-1,seed_value_1
-2,seed_value_2
-3,seed_value_3
+external_table_csv = """id
+1
+2
+3
 """
 
 
@@ -50,15 +51,15 @@ class BasePseudocolumnUnitTest:
     Pseudocolumns are system-generated columns that can be queried but don't
     appear in the information schema (e.g., BigQuery's _FILE_NAME for external tables).
 
-    This test uses a source to represent an external table or similar construct
-    that would have pseudocolumns in a real database environment.
+    This test validates that unit tests can reference columns that don't exist in the
+    actual table by using the get_pseudocolumns_for_relation() adapter method. The test
+    injects a mock pseudocolumn via pytest fixture to simulate real pseudocolumn behavior
+    without requiring adapter-specific features.
 
-    This base test uses a generic 'pseudocolumn_value' placeholder so it can
-    run on all adapters. Adapters with actual pseudocolumn support should create
-    their own concrete tests using real pseudocolumn names.
-
-    See dbt-bigquery/tests/functional/adapter/unit_testing/test_pseudocolumns.py
-    for an example implementation using BigQuery's _FILE_NAME pseudocolumn.
+    Key validation points:
+    - The seed file does NOT contain the pseudocolumn
+    - The adapter's get_pseudocolumns_for_relation() is overridden to return it
+    - Unit tests can use the pseudocolumn in fixtures without validation errors
     """
 
     @pytest.fixture(scope="class")
@@ -76,33 +77,57 @@ class BasePseudocolumnUnitTest:
             "sources.yml": schema_sources_yml + test_my_model_yml,
         }
 
-    def test_pseudocolumn_in_unit_test(self):
+    @pytest.fixture(scope="class")
+    def setup_pseudocolumn_override(self, project):
+        """Override adapter method to inject a pseudocolumn that doesn't exist in the seed.
+
+        This simulates real pseudocolumn behavior where columns are queryable but
+        don't appear in the information schema.
+        """
+        original_method = project.adapter.get_pseudocolumns_for_relation
+
+        def mock_get_pseudocolumns(relation):
+            # Return pseudocolumn only for our test source table
+            if relation.identifier == 'external_table':
+                return [Column('pseudocolumn_value', 'text')]
+            return []
+
+        project.adapter.get_pseudocolumns_for_relation = mock_get_pseudocolumns
+        yield
+        # Restore original method after test
+        project.adapter.get_pseudocolumns_for_relation = original_method
+
+    def test_pseudocolumn_in_unit_test(self, setup_pseudocolumn_override):
         """Test that pseudocolumns can be included in unit test fixtures.
 
         This verifies that:
         1. Unit tests don't raise "Invalid column name" errors for pseudocolumns
         2. Pseudocolumn values can be provided in fixture data
         3. The unit test passes with pseudocolumn data
+
+        The fixture injects 'pseudocolumn_value' as a pseudocolumn that doesn't
+        exist in the seed file, simulating real pseudocolumn behavior.
         """
         # Seed the source table
         results = run_dbt(["seed"])
         assert len(results) == 1
 
-        # Run the model that uses the source with pseudocolumn
-        results = run_dbt(["run"])
-        assert len(results) == 1
-
-        # Run the unit test - should pass without validation errors
+        # Run the unit test - should pass because pseudocolumn is injected for unit tests
         results = run_dbt(["test", "--select", "test_type:unit"])
         assert len(results) == 1
 
 
 class TestPostgresPseudocolumnUnitTest(BasePseudocolumnUnitTest):
-    """Postgres doesn't currently have pseudocolumn support configured.
+    """Postgres test using monkey-patched pseudocolumn support.
 
-    This test will pass using the base implementation which returns
-    an empty pseudocolumn list. The 'pseudocolumn_value' is treated as
-    a regular column from the seed data.
+    This test validates the pseudocolumn feature by:
+    1. Creating a seed with only 'id' column (no pseudocolumn_value)
+    2. Injecting 'pseudocolumn_value' as a pseudocolumn via fixture
+    3. Verifying unit tests can use the pseudocolumn even though it doesn't
+       exist in the actual table
+
+    This demonstrates that the feature works correctly for columns that
+    are queryable but don't appear in information_schema.
     """
 
     pass

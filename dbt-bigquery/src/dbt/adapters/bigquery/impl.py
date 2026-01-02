@@ -278,6 +278,7 @@ class BigQueryAdapter(BaseAdapter):
             logger.debug("get_columns_in_relation error: {}".format(e))
             return []
 
+    @available.parse_list
     def get_pseudocolumns_for_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
         """Return pseudocolumns for BigQuery external tables.
 
@@ -286,9 +287,20 @@ class BigQueryAdapter(BaseAdapter):
         """
         pseudocolumns = []
 
-        # Only external tables have _FILE_NAME pseudocolumn
-        if relation.type == RelationType.External:
-            pseudocolumns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+        try:
+            # Fetch the table to check if it's external
+            table = self.connections.get_bq_table(
+                database=relation.database, schema=relation.schema, identifier=relation.identifier
+            )
+
+            # Only external tables have _FILE_NAME pseudocolumn
+            if table.table_type == "EXTERNAL":
+                pseudocolumns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+
+        except (ValueError, google.cloud.exceptions.NotFound) as e:
+            logger.debug("get_pseudocolumns_for_relation error: {}".format(e))
+            # Return empty list if table doesn't exist or can't be accessed
+            pass
 
         return pseudocolumns
 

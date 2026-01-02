@@ -758,6 +758,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
+    @available.parse_list
     def get_pseudocolumns_for_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of queryable pseudocolumns for the given relation.
 
