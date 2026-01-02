@@ -27,7 +27,7 @@
   {#-- Add pseudocolumns that are queryable but not in information schema --#}
   {% set pseudocolumns = adapter.get_pseudocolumns_for_relation(relation) %}
 
-  {#-- Merge the two lists --#}
+  {#-- Merge two lists --#}
   {% set all_columns = columns + pseudocolumns %}
 
   {{ return(all_columns) }}
