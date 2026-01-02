@@ -278,6 +278,20 @@ class BigQueryAdapter(BaseAdapter):
             logger.debug("get_columns_in_relation error: {}".format(e))
             return []
 
+    def get_pseudocolumns_for_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
+        """Return pseudocolumns for BigQuery external tables.
+
+        External tables have _FILE_NAME (STRING) pseudocolumn that contains
+        the name of the file from which the row was loaded.
+        """
+        pseudocolumns = []
+
+        # Only external tables have _FILE_NAME pseudocolumn
+        if relation.type == RelationType.External:
+            pseudocolumns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+
+        return pseudocolumns
+
     @available.parse(lambda *a, **k: [])
     def add_time_ingestion_partition_column(self, partition_by, columns) -> List[BigQueryColumn]:
         """Add time ingestion partition column to columns list"""
