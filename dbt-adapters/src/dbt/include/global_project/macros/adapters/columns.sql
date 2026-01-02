@@ -21,7 +21,7 @@
 {% endmacro %}
 
 {% macro default__get_columns_for_unit_tests(relation) -%}
-  {#-- Get regular columns from information schema --#}
+  {#-- Get native columns from information schema --#}
   {% set columns = adapter.get_columns_in_relation(relation) %}
 
   {#-- Add pseudocolumns that are queryable but not in information schema --#}
