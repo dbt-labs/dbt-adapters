@@ -112,7 +112,7 @@ class BasePseudocolumnUnitTest:
         results = run_dbt(["seed"])
         assert len(results) == 1
 
-        # Run the unit test - should pass because pseudocolumn is injected for unit tests
+        # Run the unit test
         results = run_dbt(["test", "--select", "test_type:unit"])
         assert len(results) == 1
 
