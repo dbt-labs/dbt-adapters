@@ -116,10 +116,10 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
         3. Unit tests can use _FILE_NAME in fixtures without validation errors
         4. The unit test passes with _FILE_NAME data
         """
-        # Seed the source table (without _FILE_NAME column)
+        # Seed the source table
         results = run_dbt(["seed"])
         assert len(results) == 1
 
-        # Run the unit test - should pass because pseudocolumn is available for unit tests
+        # Run the unit test
         results = run_dbt(["test", "--select", "test_type:unit"])
         assert len(results) == 1
