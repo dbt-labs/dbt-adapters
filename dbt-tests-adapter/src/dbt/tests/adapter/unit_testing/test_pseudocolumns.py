@@ -118,7 +118,7 @@ class BasePseudocolumnUnitTest:
 
 
 class TestPostgresPseudocolumnUnitTest(BasePseudocolumnUnitTest):
-    """Postgres test using monkey-patched pseudocolumn support.
+    """Postgres test using patched pseudocolumn support.
 
     This test validates the pseudocolumn feature by:
     1. Creating a seed with only 'id' column (no pseudocolumn_value)
