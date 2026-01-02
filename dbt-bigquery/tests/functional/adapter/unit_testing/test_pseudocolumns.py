@@ -56,7 +56,7 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        """Seed data - note that _FILE_NAME is NOT included."""
+        """Seed data."""
         return {
             "external_table.csv": external_table_csv,
         }
