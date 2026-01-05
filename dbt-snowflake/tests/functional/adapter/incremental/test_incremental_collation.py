@@ -145,7 +145,6 @@ class TestIncrementalCollationPreservedOnSchemaChange:
         }
 
     def test_collation_preserved_on_schema_change(self, project):
-        # First run: create seed table
         project.run_sql(
             f"""
         create or replace TABLE {project.database}.{project.test_schema}.ORDERS (
@@ -169,13 +168,12 @@ class TestIncrementalCollationPreservedOnSchemaChange:
         results = run_dbt(["run"])
         assert len(results) == 1
 
-        # Get the collation of the name column from seed table
+        # Find the 'status' column and check its type still includes collation
         sql = f"""
         describe table {project.database}.{project.test_schema}.orders
         """
         results = project.run_sql(sql, fetch="all")
 
-        # Find the 'some_string_col' column and check its type includes collation
         col_type = None
         for row in results:
             if row[0].lower() == "status":  # column name
