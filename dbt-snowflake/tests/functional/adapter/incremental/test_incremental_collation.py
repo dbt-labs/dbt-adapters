@@ -116,3 +116,72 @@ class TestIncrementalCollation:
         # Verify the data is correct
         run_dbt(["run", "--select", "expected"])
         check_relations_equal(project.adapter, ["incremental_collation", "expected"])
+
+
+_MODEL_ORDERS = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns')
+}}
+
+select * from {{ source('test', 'stg_orders') }}
+"""
+
+
+class TestIncrementalCollationPreservedOnSchemaChange:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "orders.sql": _MODEL_ORDERS,
+            "schema.yml": """
+                            sources:
+                            - name: test
+                              schema: "{{ target.schema }}"
+                              tables:
+                                - name: stg_orders
+                            """,
+        }
+
+    def test_collation_preserved_on_schema_change(self, project):
+        # First run: create seed table
+        project.run_sql(
+            f"""
+        create or replace TABLE {project.database}.{project.test_schema}.ORDERS (
+            ID VARCHAR(5),
+            ORDER_DATE DATE,
+            STATUS VARCHAR(8) COLLATE 'en-ci',
+            ORDER_ID VARCHAR(5)
+        );"""
+        )
+
+        project.run_sql(
+            f"""
+        create or replace TABLE {project.database}.{project.test_schema}.STG_ORDERS (
+            ID VARCHAR(5),
+            ORDER_DATE DATE,
+            STATUS VARCHAR(10),
+            ORDER_ID VARCHAR(5)
+        );"""
+        )
+        results = run_dbt(["run"])
+        results = run_dbt(["run"])
+        assert len(results) == 1
+
+        # Get the collation of the name column from seed table
+        sql = f"""
+        describe table {project.database}.{project.test_schema}.orders
+        """
+        results = project.run_sql(sql, fetch="all")
+
+        # Find the 'some_string_col' column and check its type includes collation
+        col_type = None
+        for row in results:
+            if row[0].lower() == "status":  # column name
+                col_type = row[1]  # column type
+                break
+
+        assert (
+            "COLLATE" in col_type.upper()
+        ), f"Collation was lost after incremental run. Got: {col_type}"

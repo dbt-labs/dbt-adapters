@@ -1,0 +1,6 @@
+kind: Fixes
+body: Avoid altering columns if collation differs
+time: 2026-01-05T10:47:44.924701-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1258"
