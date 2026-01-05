@@ -74,6 +74,8 @@ class SnowflakeColumn(Column):
         # as an "expand" scenario (it should be handled as a type change).
         if self.collation and not other_collation:
             return False
+
+        # collation can't be changed so if they are different, return False
         if self.collation and other_collation and self.collation != other_collation:
             return False
 
