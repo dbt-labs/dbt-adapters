@@ -4,9 +4,15 @@
 
 {#
   Check if a target relation can be replaced by cloning from a source relation.
-  BigQuery requires partition and clustering specs to match when using CREATE OR REPLACE.
-  Returns True if the target can be replaced directly (or doesn't exist),
-  False if it needs to be dropped first.
+
+  BigQuery has a specific limitation: CREATE OR REPLACE will fail if the existing table's
+  partition or clustering specification differs from the source table being cloned.
+  This macro checks whether the specifications match to determine if we can safely use
+  CREATE OR REPLACE, or if we need to drop the existing table first.
+
+  Returns:
+    - True if the target can be replaced directly (specs match or target doesn't exist)
+    - False if the target needs to be dropped first (specs differ)
 #}
 {% macro bigquery__is_clone_replaceable(target_relation, source_relation) %}
     {%- if not target_relation -%}
@@ -46,7 +52,7 @@
                 {%- set target_range = target_table.range_partitioning -%}
                 {%- set source_range = source_table.range_partitioning -%}
 
-                {%- if target_range.field != source_range.field or
+                {%- if target_range.field.lower() != source_range.field.lower() or
                        target_range.range_.start != source_range.range_.start or
                        target_range.range_.end != source_range.range_.end or
                        target_range.range_.interval != source_range.range_.interval -%}
@@ -55,7 +61,9 @@
             {%- endif -%}
 
             {# Check clustering fields match #}
-            {%- if is_replaceable and target_table.clustering_fields != source_table.clustering_fields -%}
+            {%- set target_clustering = target_table.clustering_fields or [] -%}
+            {%- set source_clustering = source_table.clustering_fields or [] -%}
+            {%- if is_replaceable and target_clustering != source_clustering -%}
                 {%- set is_replaceable = false -%}
             {%- endif -%}
 

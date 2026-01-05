@@ -43,7 +43,7 @@
         {{ log("Dropping relation " ~ existing_relation.render() ~ " because it is of type " ~ existing_relation.type) }}
         {{ drop_relation_if_exists(existing_relation) }}
       {% elif existing_relation is not none and not is_clone_replaceable(existing_relation, other_existing_relation) %}
-        {{ log("Dropping relation " ~ existing_relation.render() ~ " because it cannot be replaced (partition/cluster spec differs)") }}
+        {{ log("Dropping relation " ~ existing_relation.render() ~ " because partition/clustering spec differs from source (will be recreated)") }}
         {{ drop_relation_if_exists(existing_relation) }}
       {% endif %}
 

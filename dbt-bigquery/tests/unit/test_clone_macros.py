@@ -422,6 +422,97 @@ class TestCloneMacros(unittest.TestCase):
         # Should return True because field names match (case-insensitive)
         self.assertTrue(result)
 
+    def test_is_clone_replaceable_clustering_none_vs_empty_list(self):
+        """Clustering fields None and [] should be treated as equivalent"""
+        template = self.__get_template("materializations/clone.sql")
+
+        # Target has clustering_fields = None, source has clustering_fields = []
+        target_table = mock.Mock()
+        target_table.range_partitioning = None
+        target_table.time_partitioning = None
+        target_table.clustering_fields = None
+
+        source_table = mock.Mock()
+        source_table.range_partitioning = None
+        source_table.time_partitioning = None
+        source_table.clustering_fields = []
+
+        self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
+
+        result = self.__run_macro(
+            template,
+            "bigquery__is_clone_replaceable",
+            mock.Mock(),
+            mock.Mock()
+        )
+
+        # Should return True because None and [] both mean "no clustering"
+        self.assertTrue(result)
+
+    def test_is_clone_replaceable_clustering_empty_list_vs_none(self):
+        """Clustering fields [] and None should be treated as equivalent"""
+        template = self.__get_template("materializations/clone.sql")
+
+        # Target has clustering_fields = [], source has clustering_fields = None
+        target_table = mock.Mock()
+        target_table.range_partitioning = None
+        target_table.time_partitioning = None
+        target_table.clustering_fields = []
+
+        source_table = mock.Mock()
+        source_table.range_partitioning = None
+        source_table.time_partitioning = None
+        source_table.clustering_fields = None
+
+        self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
+
+        result = self.__run_macro(
+            template,
+            "bigquery__is_clone_replaceable",
+            mock.Mock(),
+            mock.Mock()
+        )
+
+        # Should return True because [] and None both mean "no clustering"
+        self.assertTrue(result)
+
+    def test_is_clone_replaceable_range_partition_case_insensitive(self):
+        """Range partition field names should be compared case-insensitively"""
+        template = self.__get_template("materializations/clone.sql")
+
+        # Target uses "ID", source uses "id" (different case)
+        target_table = mock.Mock()
+        target_table.time_partitioning = None
+        target_table.range_partitioning = mock.Mock()
+        target_table.range_partitioning.field = "ID"
+        target_table.range_partitioning.range_ = mock.Mock()
+        target_table.range_partitioning.range_.start = 1
+        target_table.range_partitioning.range_.end = 100
+        target_table.range_partitioning.range_.interval = 10
+        target_table.clustering_fields = None
+
+        source_table = mock.Mock()
+        source_table.time_partitioning = None
+        source_table.range_partitioning = mock.Mock()
+        source_table.range_partitioning.field = "id"
+        source_table.range_partitioning.range_ = mock.Mock()
+        source_table.range_partitioning.range_.start = 1
+        source_table.range_partitioning.range_.end = 100
+        source_table.range_partitioning.range_.interval = 10
+        source_table.clustering_fields = None
+
+        self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
+
+        result = self.__run_macro(
+            template,
+            "bigquery__is_clone_replaceable",
+            mock.Mock(),
+            mock.Mock()
+        )
+
+        # Should return True because field names match (case-insensitive)
+        self.assertTrue(result)
+
 
 if __name__ == "__main__":
     unittest.main()
