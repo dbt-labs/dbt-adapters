@@ -37,9 +37,27 @@ class AdapterExecuteResult:
             }
         }
 
-    def _from_dict(self, data: Dict[str, Any]):
-        # We will need this for replay, but it is not a priority at time of writing.
-        raise NotImplementedError()
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterExecuteResult":
+        """Deserialize AdapterExecuteResult from a dictionary for replay."""
+        from dbt.adapters.record.serialization import deserialize_agate_table
+
+        return_val_data = data.get("return_val", {})
+
+        # Deserialize AdapterResponse
+        adapter_response_data = return_val_data.get("adapter_response", {})
+        adapter_response = AdapterResponse(
+            _message=adapter_response_data.get("_message", ""),
+            code=adapter_response_data.get("code"),
+            rows_affected=adapter_response_data.get("rows_affected"),
+            query_id=adapter_response_data.get("query_id"),
+        )
+
+        # Deserialize agate Table
+        table_data = return_val_data.get("table", {"column_names": [], "column_types": [], "rows": []})
+        table = deserialize_agate_table(table_data)
+
+        return cls(return_val=(adapter_response, table))
 
 
 @Recorder.register_record_type
@@ -94,9 +112,14 @@ class AdapterGetPartitionsMetadataResult:
     def _to_dict(self):
         return list(map(serialize_agate_table, self.return_val))
 
-    def _from_dict(self, data: Dict[str, Any]):
-        # We will need this for replay, but it is not a priority at time of writing.
-        raise NotImplementedError()
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterGetPartitionsMetadataResult":
+        """Deserialize AdapterGetPartitionsMetadataResult from a dictionary for replay."""
+        from dbt.adapters.record.serialization import deserialize_agate_table
+
+        # data is expected to be a list of serialized tables
+        tables = tuple(deserialize_agate_table(table_data) for table_data in data)
+        return cls(return_val=tables)
 
 
 @Recorder.register_record_type
@@ -121,9 +144,16 @@ class AdapterConvertTypeParams:
             "col_idx": self.col_idx,
         }
 
-    def _from_dict(self, data: Dict[str, Any]):
-        # We will need this for replay, but it is not a priority at time of writing.
-        raise NotImplementedError()
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterConvertTypeParams":
+        """Deserialize AdapterConvertTypeParams from a dictionary for replay."""
+        from dbt.adapters.record.serialization import deserialize_agate_table
+
+        return cls(
+            thread_id=data["thread_id"],
+            table=deserialize_agate_table(data["table"]),
+            col_idx=data["col_idx"],
+        )
 
 
 @dataclasses.dataclass
@@ -148,9 +178,15 @@ class AdapterStandardizeGrantsDictParams:
     def _to_dict(self):
         return {"thread_id": self.thread_id, "table": serialize_agate_table(self.table)}
 
-    def _from_dict(self, data: Dict[str, Any]):
-        # We will need this for replay, but it is not a priority at time of writing.
-        raise NotImplementedError()
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterStandardizeGrantsDictParams":
+        """Deserialize AdapterStandardizeGrantsDictParams from a dictionary for replay."""
+        from dbt.adapters.record.serialization import deserialize_agate_table
+
+        return cls(
+            thread_id=data["thread_id"],
+            table=deserialize_agate_table(data["table"]),
+        )
 
 
 @dataclasses.dataclass
@@ -216,11 +252,40 @@ class AdapterListRelationsWithoutCachingParams:
             "schema_relation": serialize_base_relation(self.schema_relation),
         }
 
-    def _from_dict(self, data: Dict[str, Any]):
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterListRelationsWithoutCachingParams":
         from dbt.adapters.record.serialization import deserialize_base_relation
 
-        self.thread_id = data["thread_id"]
-        self.schema_relation = deserialize_base_relation(data["schema_relation"])
+        return cls(
+            thread_id=data["thread_id"],
+            schema_relation=deserialize_base_relation(data["schema_relation"]),
+        )
+
+    def __eq__(self, other):
+        """Custom equality check that compares relations by their dict representation.
+
+        This is needed because during replay, the recorded relation may be a BaseRelation
+        while the actual relation is a subclass (e.g., SnowflakeRelation). We compare
+        by dict to avoid type mismatch issues.
+        """
+        if not isinstance(other, AdapterListRelationsWithoutCachingParams):
+            return False
+        if self.thread_id != other.thread_id:
+            return False
+        # Compare relations by their dict representation, ignoring type differences
+        self_dict = self.schema_relation.to_dict(omit_none=True)
+        other_dict = other.schema_relation.to_dict(omit_none=True)
+
+        # Normalize renameable_relations and replaceable_relations to sets of strings
+        # because they may be stored as strings in recording but as enums at runtime
+        def normalize_relation_types(d):
+            d = dict(d)  # Make a copy
+            for key in ['renameable_relations', 'replaceable_relations']:
+                if key in d:
+                    d[key] = set(str(v.value if hasattr(v, 'value') else v) for v in d[key])
+            return d
+
+        return normalize_relation_types(self_dict) == normalize_relation_types(other_dict)
 
 
 @dataclasses.dataclass
@@ -232,10 +297,11 @@ class AdapterListRelationsWithoutCachingResult:
 
         return {"return_val": serialize_base_relation_list(self.return_val)}
 
-    def _from_dict(self, data: Dict[str, Any]):
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterListRelationsWithoutCachingResult":
         from dbt.adapters.record.serialization import deserialize_base_relation_list
 
-        self.return_val = deserialize_base_relation_list(data["return_val"])
+        return cls(return_val=deserialize_base_relation_list(data["return_val"]))
 
 
 @Recorder.register_record_type
@@ -260,11 +326,14 @@ class AdapterGetColumnsInRelationParams:
             "relation": serialize_base_relation(self.relation),
         }
 
-    def _from_dict(self, data: Dict[str, Any]):
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterGetColumnsInRelationParams":
         from dbt.adapters.record.serialization import deserialize_base_relation
 
-        self.thread_id = data["thread_id"]
-        self.relation = deserialize_base_relation(data["relation"])
+        return cls(
+            thread_id=data["thread_id"],
+            relation=deserialize_base_relation(data["relation"]),
+        )
 
 
 @dataclasses.dataclass
@@ -276,10 +345,11 @@ class AdapterGetColumnsInRelationResult:
 
         return {"return_val": serialize_base_column_list(self.return_val)}
 
-    def _from_dict(self, data: Dict[str, Any]):
+    @classmethod
+    def _from_dict(cls, data: Dict[str, Any]) -> "AdapterGetColumnsInRelationResult":
         from dbt.adapters.record.serialization import deserialize_base_column_list
 
-        self.return_val = deserialize_base_column_list(data["return_val"])
+        return cls(return_val=deserialize_base_column_list(data["return_val"]))
 
 
 @Recorder.register_record_type

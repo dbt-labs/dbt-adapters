@@ -46,6 +46,44 @@ def serialize_agate_table(table: "Table") -> Dict[str, Any]:
     }
 
 
+def deserialize_agate_table(data: Dict[str, Any]) -> "Table":
+    """Deserialize an agate Table from a dictionary.
+
+    This function reconstructs an agate Table from the serialized format
+    produced by serialize_agate_table().
+
+    Note: DateTime values are stored as strings during serialization via _column_filter().
+    During deserialization, we use Text type for DateTime columns since the original
+    datetime objects were converted to strings. This maintains data integrity for replay
+    purposes where the exact string representation is what matters.
+    """
+    import agate
+
+    column_names = data.get("column_names", [])
+    column_type_names = data.get("column_types", [])
+    rows = data.get("rows", [])
+
+    # Map type names to agate column types
+    # Note: DateTime and Date are stored as strings (via str() in _column_filter),
+    # so we use Text type to avoid parsing issues with timezone-aware strings
+    type_map = {
+        "Text": agate.Text(),
+        "Number": agate.Number(),
+        "Boolean": agate.Boolean(),
+        "Date": agate.Text(),  # Stored as ISO string
+        "DateTime": agate.Text(),  # Stored as ISO string with timezone
+        "TimeDelta": agate.Text(),  # Stored as string
+        # Integer is often stored as Number in agate
+        "Integer": agate.Number(),
+    }
+
+    column_types = []
+    for type_name in column_type_names:
+        column_types.append(type_map.get(type_name, agate.Text()))
+
+    return agate.Table(rows, column_names, column_types)
+
+
 def serialize_bindings(bindings: Any) -> Union[None, List[Any], str]:
     if bindings is None:
         return None

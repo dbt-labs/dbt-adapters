@@ -24,10 +24,14 @@ class CursorExecuteParams:
             "parameters": p,
         }
 
-    def _from_dict(cls, data):
-        # NOTE: This will be needed for replay, but is not needed at time
-        # of writing.
-        raise NotImplementedError()
+    @classmethod
+    def _from_dict(cls, data) -> "CursorExecuteParams":
+        """Deserialize CursorExecuteParams from a dictionary for replay."""
+        return cls(
+            connection_name=data.get("connection_name", ""),
+            operation=data.get("operation", ""),
+            parameters=data.get("parameters"),
+        )
 
 
 @Recorder.register_record_type
