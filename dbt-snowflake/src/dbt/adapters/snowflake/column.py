@@ -62,10 +62,12 @@ class SnowflakeColumn(Column):
         if not self.is_string() or not other_column.is_string():
             return False
 
-        # note on collation: collation can't be changed so if they are different, return False
+        # note on collation: collation can't be changed so if they are different, return False if source has collation
         other_collation = getattr(other_column, "collation", None)
 
-        return other_column.string_size() > self.string_size() or self.collation != other_collation
+        return (
+            other_column.string_size() > self.string_size() and self.collation == other_collation
+        )
 
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
