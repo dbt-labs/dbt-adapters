@@ -64,19 +64,9 @@ class SnowflakeColumn(Column):
 
         other_collation = getattr(other_column, "collation", None)
 
-        # If the target column already has a collation but the source column doesn't,
-        # we should not consider this a type change that warrants dropping collation.
-        # Treat it as compatible so schema change logic won't emit an ALTER COLUMN ... SET DATA TYPE.
-        if other_collation and not self.collation:
-            return True
-
-        # If the source column has a collation but the target does not, do not treat this
+        # If either the source or target column has a collation but the other does not, do not treat this
         # as an "expand" scenario (it should be handled as a type change).
-        if self.collation and not other_collation:
-            return False
-
-        # collation can't be changed so if they are different, return False
-        if self.collation and other_collation and self.collation != other_collation:
+        if (self.collation and not other_collation) or (not self.collation and other_collation):
             return False
 
         return other_column.string_size() > self.string_size()
