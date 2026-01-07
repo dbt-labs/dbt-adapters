@@ -1,7 +1,0 @@
-kind: Under the Hood
-body: Add an `expanded_data_type` field to support extra type info needed when altering
-  a column type
-time: 2025-12-18T15:51:02.107296-08:00
-custom:
-  Author: colin-rogers-dbt
-  Issue: "1510"
