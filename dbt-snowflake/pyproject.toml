@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.22.2,<2.0",
+    "dbt-adapters>=1.22.3,<2.0",
     # lower bound pin due to CVE-2025-24794
     "snowflake-connector-python[secure-local-storage]>=4.0.0,<5.0.0",
     "certifi<2025.4.26",
