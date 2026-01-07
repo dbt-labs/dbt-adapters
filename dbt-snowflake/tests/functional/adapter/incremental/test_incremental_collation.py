@@ -144,6 +144,15 @@ select * from {{ source('test', 'stg_has_collation') }}
 
 
 class TestIncrementalCollationPreservedOnSchemaChange:
+    """Test that collation is preserved during incremental runs with schema changes.
+    Tests the following scenarios:
+    - Incremental run with schema change on a column with no collation to a column with collation
+    - Incremental run with schema change on a column with different collation than source
+    - Incremental run with schema change on a column with collation to a column with no collation
+    To do this we simulate a schema change by creating the tables ahead of time and specifying the collation on the source / target tables.
+    Then when we run the models dbt will detect the schema change and apply the correct collation to the target table.
+    """
+
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -210,7 +219,7 @@ class TestIncrementalCollationPreservedOnSchemaChange:
         results = run_dbt(["run"])
         assert len(results) == 3
 
-        # Find the 'status' column and check its type still includes collation
+        # Find the various test columns and check the collation is still present
         col_type_status = _get_column_type(project, "model_stg_no_collation", "status")
 
         assert (
@@ -221,12 +230,10 @@ class TestIncrementalCollationPreservedOnSchemaChange:
             "en-ci" in col_type_status
         ), f"Collation was not set to en-ci. Got: {col_type_status}"
 
-        # Find the 'status' column and check its type still includes collation
         col_type_name = _get_column_type(project, "has_collation", "name")
 
         assert col_type_name.lower() == "varchar(12) collate 'en-cs'"
 
-        # Find the 'some_string_col' column and check its type still includes collation
         col_type_name_no_collation = _get_column_type(project, "no_collation", "name")
 
         assert col_type_name_no_collation.lower() == "varchar(12)"
