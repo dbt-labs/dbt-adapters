@@ -1,5 +1,5 @@
 kind: Fixes
-body: Avoid altering columns if collation differs
+body: Add override of diff_column_data_types to preserve collation while altering column
 time: 2026-01-05T10:47:44.924701-08:00
 custom:
   Author: colin-rogers-dbt
