@@ -36,7 +36,10 @@
 
 
 {% macro diff_column_data_types(source_columns, target_columns) %}
+  {{ return(adapter.dispatch('diff_column_data_types', 'dbt')(source_columns, target_columns)) }}
+{% endmacro %}
 
+{% macro default__diff_column_data_types(source_columns, target_columns) %}
   {% set result = [] %}
   {% for sc in source_columns %}
     {% set tc = target_columns | selectattr("name", "equalto", sc.name) | list | first %}

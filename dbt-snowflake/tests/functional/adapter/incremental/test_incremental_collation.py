@@ -47,6 +47,17 @@ select
 """
 
 
+def _get_column_type(project, table_name, column_name):
+    sql = f"""
+    describe table {project.database}.{project.test_schema}.{table_name}
+    """
+    results = project.run_sql(sql, fetch="all")
+    for row in results:
+        if row[0].lower() == column_name:
+            return row[1]
+    raise ValueError(f"Column {column_name} not found in table {table_name}")
+
+
 class TestIncrementalCollation:
     """Test that collation is preserved during incremental runs with schema changes.
     For more info on collation: https://docs.snowflake.com/en/sql-reference/collation
@@ -65,18 +76,8 @@ class TestIncrementalCollation:
         results = run_dbt(["run", "--select", "base_table"])
         assert len(results) == 1
 
-        # Get the collation of the name column from seed table
-        sql = f"""
-        describe table {project.database}.{project.test_schema}.base_table
-        """
-        results = project.run_sql(sql, fetch="all")
-
         # Find the 'some_string_col' column and check its type includes collation
-        col_type = None
-        for row in results:
-            if row[0].lower() == "some_string_col":  # column name
-                col_type = row[1]  # column type
-                break
+        col_type = _get_column_type(project, "base_table", "some_string_col")
 
         assert col_type is not None, "some_string_col column not found in base_table"
         # Verify collation is present in the type
@@ -94,18 +95,8 @@ class TestIncrementalCollation:
         assert len(results) == 1
 
         # Verify the collation is still present after the incremental run
-        sql = f"""
-        describe table {project.database}.{project.test_schema}.incremental_collation
-        """
-        results = project.run_sql(sql, fetch="all")
-
+        col_type_after = _get_column_type(project, "incremental_collation", "some_string_col")
         # Check the 'name' column still has collation
-        col_type_after = None
-        for row in results:
-            if row[0].lower() == "some_string_col":
-                col_type_after = row[1]
-                break
-
         assert (
             col_type_after is not None
         ), "some_string_col column not found in incremental_collation"
@@ -118,7 +109,7 @@ class TestIncrementalCollation:
         check_relations_equal(project.adapter, ["incremental_collation", "expected"])
 
 
-_MODEL_ORDERS = """
+_MODEL_HAS_COLLATION_STG_NO_COLLATION = """
 {{
     config(
         materialized='incremental',
@@ -126,7 +117,29 @@ _MODEL_ORDERS = """
         on_schema_change='sync_all_columns')
 }}
 
-select * from {{ source('test', 'stg_orders') }}
+select * from {{ source('test', 'stg_no_collation') }}
+"""
+
+_MODEL_HAS_COLLATION = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns')
+}}
+
+select * from {{ source('test', 'stg_has_collation') }}
+"""
+
+_MODEL_NO_COLLATION = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns')
+}}
+
+select * from {{ source('test', 'stg_has_collation') }}
 """
 
 
@@ -134,20 +147,24 @@ class TestIncrementalCollationPreservedOnSchemaChange:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "orders.sql": _MODEL_ORDERS,
+            "model_stg_no_collation.sql": _MODEL_HAS_COLLATION_STG_NO_COLLATION,
+            "has_collation.sql": _MODEL_HAS_COLLATION,
+            "no_collation.sql": _MODEL_NO_COLLATION,
             "schema.yml": """
                             sources:
                             - name: test
                               schema: "{{ target.schema }}"
                               tables:
-                                - name: stg_orders
+                                - name: stg_no_collation
+                                - name: stg_has_collation
                             """,
         }
 
     def test_collation_preserved_on_schema_change(self, project):
+        # create all the tables ahead of time so we can specify the collation on the source / target tables
         project.run_sql(
             f"""
-        create or replace TABLE {project.database}.{project.test_schema}.ORDERS (
+        create or replace TABLE {project.database}.{project.test_schema}.model_stg_no_collation (
             ID VARCHAR(5),
             ORDER_DATE DATE,
             STATUS VARCHAR(8) COLLATE 'en-ci',
@@ -157,29 +174,59 @@ class TestIncrementalCollationPreservedOnSchemaChange:
 
         project.run_sql(
             f"""
-        create or replace TABLE {project.database}.{project.test_schema}.STG_ORDERS (
+        create or replace TABLE {project.database}.{project.test_schema}.STG_NO_COLLATION (
             ID VARCHAR(5),
             ORDER_DATE DATE,
             STATUS VARCHAR(10),
             ORDER_ID VARCHAR(5)
         );"""
         )
+        project.run_sql(
+            f"""
+        create or replace TABLE {project.database}.{project.test_schema}.STG_HAS_COLLATION (
+            ID VARCHAR(5),
+            NAME VARCHAR(12) COLLATE 'en-ci',
+            AGE INT
+        );"""
+        )
+        project.run_sql(
+            f"""
+        create or replace TABLE {project.database}.{project.test_schema}.HAS_COLLATION (
+            ID VARCHAR(5),
+            NAME VARCHAR(10) COLLATE 'en-cs',
+            AGE INT
+        );"""
+        )
+        project.run_sql(
+            f"""
+        create or replace TABLE {project.database}.{project.test_schema}.NO_COLLATION (
+            ID VARCHAR(5),
+            NAME VARCHAR(10),
+            AGE INT
+        );"""
+        )
+
         results = run_dbt(["run"])
         results = run_dbt(["run"])
-        assert len(results) == 1
+        assert len(results) == 3
 
         # Find the 'status' column and check its type still includes collation
-        sql = f"""
-        describe table {project.database}.{project.test_schema}.orders
-        """
-        results = project.run_sql(sql, fetch="all")
-
-        col_type = None
-        for row in results:
-            if row[0].lower() == "status":  # column name
-                col_type = row[1]  # column type
-                break
+        col_type_status = _get_column_type(project, "model_stg_no_collation", "status")
 
         assert (
-            "COLLATE" in col_type.upper()
-        ), f"Collation was lost after incremental run. Got: {col_type}"
+            "COLLATE" in col_type_status.upper()
+        ), f"Collation was lost after incremental run. Got: {col_type_status}"
+
+        assert (
+            "en-ci" in col_type_status
+        ), f"Collation was not set to en-ci. Got: {col_type_status}"
+
+        # Find the 'status' column and check its type still includes collation
+        col_type_name = _get_column_type(project, "has_collation", "name")
+
+        assert col_type_name.lower() == "varchar(12) collate 'en-cs'"
+
+        # Find the 'some_string_col' column and check its type still includes collation
+        col_type_name_no_collation = _get_column_type(project, "no_collation", "name")
+
+        assert col_type_name_no_collation.lower() == "varchar(12)"
