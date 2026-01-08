@@ -75,8 +75,9 @@ from dbt.adapters.bigquery.python_submissions import (
     BigFramesHelper,
 )
 from dbt.adapters.bigquery.record.record_types import (
-    BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterDescribeRelationRecord,
     BigQueryAdapterGetBqTableRecord,
+    BigQueryAdapterIsReplaceableRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -1119,7 +1120,13 @@ class BigQueryAdapter(BaseAdapter):
             table = None
         return table
 
-    @available.parse(lambda *a, **k: True)
+    @available.parse(lambda *a, **k: None)
+    @record_function(
+        BigQueryAdapterDescribeRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def describe_relation(
         self, relation: BigQueryRelation
     ) -> Optional[BigQueryBaseRelationConfig]:
