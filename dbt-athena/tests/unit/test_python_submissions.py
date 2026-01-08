@@ -293,9 +293,7 @@ class TestSessionStateErrorHandling:
                 "Message": f"Session is in the {session_state} state",
             }
         }
-        client_error = botocore.exceptions.ClientError(
-            error_response, "StartCalculationExecution"
-        )
+        client_error = botocore.exceptions.ClientError(error_response, "StartCalculationExecution")
 
         start_calc_calls = [0]
 
@@ -339,9 +337,7 @@ class TestSessionStateErrorHandling:
             # Verify we made two attempts
             assert start_calc_calls[0] == 2
 
-    def test_submit_raises_for_unknown_client_error(
-        self, mock_credentials, mock_parsed_model
-    ):
+    def test_submit_raises_for_unknown_client_error(self, mock_credentials, mock_parsed_model):
         """Test that submit() raises DbtRuntimeError for unknown ClientErrors."""
         session_id = uuid.uuid4()
 
@@ -351,9 +347,7 @@ class TestSessionStateErrorHandling:
                 "Message": "Some unexpected error occurred",
             }
         }
-        client_error = botocore.exceptions.ClientError(
-            error_response, "StartCalculationExecution"
-        )
+        client_error = botocore.exceptions.ClientError(error_response, "StartCalculationExecution")
 
         with patch(
             "dbt.adapters.athena.python_submissions.AthenaSparkSessionManager"
@@ -385,9 +379,7 @@ class TestSessionStateErrorHandling:
                 "Message": "Session is in the BUSY state; needs to be IDLE to accept Calculations.",
             }
         }
-        client_error = botocore.exceptions.ClientError(
-            error_response, "StartCalculationExecution"
-        )
+        client_error = botocore.exceptions.ClientError(error_response, "StartCalculationExecution")
 
         call_count = [0]
 
@@ -424,4 +416,3 @@ class TestSessionStateErrorHandling:
             assert result == {"ResultS3Uri": "test_results_s3_uri"}
             # Verify we made two attempts (once failed with BUSY, then succeeded)
             assert call_count[0] == 2
-
