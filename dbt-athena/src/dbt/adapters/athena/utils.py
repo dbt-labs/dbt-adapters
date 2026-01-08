@@ -47,6 +47,7 @@ class AthenaCatalogType(Enum):
     GLUE = "GLUE"
     LAMBDA = "LAMBDA"
     HIVE = "HIVE"
+    FEDERATED = "FEDERATED"
 
 
 def get_catalog_type(catalog: Optional[DataCatalogTypeDef]) -> Optional[AthenaCatalogType]:
