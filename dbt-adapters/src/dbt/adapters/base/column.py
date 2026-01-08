@@ -46,6 +46,16 @@ class Column:
         else:
             return self.dtype
 
+    @property
+    def expanded_data_type(self) -> str:
+        """
+        Adapter-overridable data type string that may include adapter-specific
+        expansions (e.g. collation clauses) for use in DDL/schema comparisons.
+
+        By default, this is identical to `data_type`.
+        """
+        return self.data_type
+
     def is_string(self) -> bool:
         return self.dtype.lower() in [
             "text",

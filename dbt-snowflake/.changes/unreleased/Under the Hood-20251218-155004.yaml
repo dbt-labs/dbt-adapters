@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: leverage new expanded_data_type field to avoid impacting downstream use cases
+  for `data_type`
+time: 2025-12-18T15:50:04.760033-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1510"

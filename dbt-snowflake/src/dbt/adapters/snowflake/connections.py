@@ -173,7 +173,11 @@ class SnowflakeCredentials(Credentials):
         else:
             self._azure_cred = None
 
-        self.account = self.account.replace("_", "-")
+        self.account, sub_count = re.subn("_", "-", self.account)
+        if sub_count:
+            logger.debug(
+                "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
+            )
 
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
         # having both of these set to `True` could lead to hanging open connections, so it should be opt-in behavior

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Ensure selection time filter timezone matches the delete filter for microbatch
+time: 2025-12-10T13:34:17.328202-06:00
+custom:
+  Author: QMalcolm
+  Issue: 955 892

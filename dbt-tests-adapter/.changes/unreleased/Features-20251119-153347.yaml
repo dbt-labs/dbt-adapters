@@ -1,6 +1,0 @@
-kind: Features
-body: Add inheritable tests for testing function default argument support
-time: 2025-11-19T15:33:47.50113-06:00
-custom:
-  Author: QMalcolm
-  Issue: "1442"
