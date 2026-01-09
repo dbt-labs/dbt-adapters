@@ -917,13 +917,11 @@ class AthenaAdapter(SQLAdapter):
                 'skipped': Number of files skipped (PreconditionFailed, NoSuchKey, etc.)
             }
         """
-        etags_before_run = etags_dict
-        
-        if not etags_before_run:
+        if not etags_dict:
             LOGGER.info("No ETags to compare - skipping deletion")
             return {'deleted': 0, 'skipped': 0}
         
-        LOGGER.info(f"Starting atomic batch S3 cleanup for {len(etags_before_run)} files...")
+        LOGGER.info(f"Starting atomic batch S3 cleanup for {len(etags_dict)} files...")
         
         # Get S3 location components
         location_parts = self._get_s3_location_parts(relation)
@@ -954,7 +952,7 @@ class AthenaAdapter(SQLAdapter):
         # Format: [{'Key': 'file.parquet', 'ETag': 'abc123'}, ...]
         objects_to_delete = [
             {'Key': file_key, 'ETag': etag}
-            for file_key, etag in etags_before_run.items()
+            for file_key, etag in etags_dict.items()
         ]
         
         # Process in batches of 1,000 (AWS limit)
