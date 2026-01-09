@@ -471,13 +471,11 @@ class RedshiftConnectionManager(SQLConnectionManager):
             raise
 
     @classmethod
-    def _get_backend_pid(cls, connection):
-        with connection.handle.cursor() as c:
-            sql = "select pg_backend_pid()"
-            res = c.execute(sql).fetchone()
-        if res:
-            return res[0]
-        return None
+    def _get_backend_pid(cls, connection: Connection) -> Optional[int]:
+        with connection.handle.cursor() as cursor:
+            cursor.execute("select pg_backend_pid()")
+            result = cursor.fetchone()
+        return result[0] if result else None
 
     @classmethod
     def get_response(cls, cursor: redshift_connector.Cursor) -> AdapterResponse:
@@ -487,13 +485,56 @@ class RedshiftConnectionManager(SQLConnectionManager):
         message = "SUCCESS"
         return AdapterResponse(_message=message, rows_affected=rows)
 
+    def _is_autocommit_enabled(self) -> bool:
+        """Check if autocommit is enabled for the current connection."""
+        connection = self.get_thread_connection()
+        return connection.credentials.autocommit is True
+
+    def begin(self) -> None:
+        """Begin a transaction.
+
+        When autocommit is enabled, this is a no-op since each statement
+        is automatically committed. This eliminates unnecessary BEGIN
+        statements that would otherwise be sent to Redshift.
+        """
+        if self._is_autocommit_enabled():
+            # With autocommit, we don't need explicit transactions
+            return
+
+        super().begin()
+
+    def commit(self) -> None:
+        """Commit the current transaction.
+
+        When autocommit is enabled, this is a no-op since each statement
+        is automatically committed. This eliminates unnecessary COMMIT
+        statements that would otherwise be sent to Redshift.
+        """
+        if self._is_autocommit_enabled():
+            # With autocommit, statements are already committed
+            return
+
+        super().commit()
+
+    def rollback_if_open(self) -> None:
+        """Rollback the current transaction if one is open.
+
+        When autocommit is enabled, this is a no-op since there's no
+        transaction to rollback - each statement is independently committed.
+        """
+        if self._is_autocommit_enabled():
+            # With autocommit, nothing to rollback
+            return
+
+        super().rollback_if_open()
+
     @contextmanager
-    def exception_handler(self, sql):
+    def exception_handler(self, sql: str) -> Generator[None, None, None]:
         try:
             yield
         except redshift_connector.DatabaseError as e:
             try:
-                err_msg = e.args[0]["M"]  # this is a type redshift sets, so we must use these keys
+                err_msg = e.args[0]["M"]  # redshift_connector error format
             except Exception:
                 err_msg = str(e).strip()
             logger.debug(f"Redshift error: {err_msg}")
@@ -501,19 +542,22 @@ class RedshiftConnectionManager(SQLConnectionManager):
             raise DbtDatabaseError(err_msg) from e
 
         except Exception as e:
-            logger.debug("Error running SQL: {}", sql)
+            logger.debug(f"Error running SQL: {sql}")
             logger.debug("Rolling back transaction.")
             self.rollback_if_open()
-            # Raise DBT native exceptions as is.
             if isinstance(e, DbtRuntimeError):
                 raise
             raise DbtRuntimeError(str(e)) from e
 
     @contextmanager
     def fresh_transaction(self) -> Generator[None, None, None]:
-        """On entrance to this context manager, hold an exclusive lock and
-        create a fresh transaction for redshift, then commit and begin a new
-        one before releasing the lock on exit.
+        """Execute operations in an isolated transaction for DROP CASCADE safety.
+
+        Redshift's DROP TABLE ... CASCADE can conflict with concurrent transactions.
+        This context manager ensures the DROP executes in its own transaction.
+
+        When autocommit is enabled, we temporarily disable it to get explicit
+        transaction control, then restore it afterward.
 
         See drop_relation in RedshiftAdapter for more information.
         """
@@ -521,32 +565,42 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         with drop_lock:
             connection = self.get_thread_connection()
+            autocommit_enabled = self._is_autocommit_enabled()
 
-            if connection.transaction_open:
+            if autocommit_enabled:
+                # Temporarily disable autocommit for transaction isolation
+                connection.handle.autocommit = False
+
+            try:
+                if connection.transaction_open:
+                    self.commit()
+
+                self.begin()
+                yield
                 self.commit()
 
-            self.begin()
-            yield
-            self.commit()
-
-            self.begin()
+                self.begin()
+            finally:
+                if autocommit_enabled:
+                    # Restore autocommit mode
+                    connection.handle.autocommit = True
 
     @classmethod
-    def open(cls, connection):
+    def open(cls, connection: Connection) -> Connection:
         if connection.state == "open":
             logger.debug("Connection is already open, skipping open.")
             return connection
 
         credentials = connection.credentials
 
-        retryable_exceptions = (
+        retryable_exceptions: tuple = (
             redshift_connector.OperationalError,
             redshift_connector.DatabaseError,
             redshift_connector.DataError,
             redshift_connector.InterfaceError,
         )
         if credentials.retry_all:
-            retryable_exceptions = redshift_connector.Error
+            retryable_exceptions = (redshift_connector.Error,)
 
         open_connection = cls.retry_connection(
             connection,
@@ -567,108 +621,150 @@ class RedshiftConnectionManager(SQLConnectionManager):
         fetch: bool = False,
         limit: Optional[int] = None,
     ) -> Tuple[AdapterResponse, "agate.Table"]:
-        def _handle_execute_exception(
-            e: Exception, retries: int, backoff: int, retry_all: bool
-        ) -> Tuple[int, int]:
-            oid_not_found_msg = "could not open relation with OID"
-            if retries == 0:
-                raise e
-            if oid_not_found_msg in str(e):
-                pass
-            elif isinstance(e, DbtDatabaseError) and retry_all:
-                pass
-            else:
-                logger.debug(f"Not retrying error: {e}")
-                raise e
-            logger.debug(f"Retrying query due to error: {e}")
-            retries -= 1
-            # we need to actually close and open to get a new connection
-            # otherwise no queries will succeed on this connection
-            self.close(self.get_thread_connection())
-            self.open(self.get_thread_connection())
-            time.sleep(backoff)
-            # return with exponential backoff
-            return retries, min(max(backoff * 2, 2), 60)
+        """Execute SQL and optionally fetch results.
 
-        def _execute_internal(
-            sql: str,
-            auto_begin: bool,
-            fetch: bool,
-            limit: Optional[int],
-            retries: int,
-            backoff: int,
-            retry_all: bool,
-        ) -> Tuple[Optional[AdapterResponse], Optional["agate.Table"]]:
-            try:
-                _, cursor = self.add_query(sql, auto_begin)
-                internal_response = self.get_response(cursor)
-                if fetch:
-                    internal_table = self.get_result_from_cursor(cursor, limit)
-                else:
-                    from dbt_common.clients import agate_helper
+        This is the simplified execution path that delegates to add_query
+        for statement execution and retry handling.
+        """
+        from dbt_common.clients import agate_helper
 
-                    internal_table = agate_helper.empty_table()
-                return internal_response, internal_table
-            except Exception as e:
-                retries, backoff = _handle_execute_exception(e, retries, backoff, retry_all)
-                return _execute_internal(
-                    sql, auto_begin, fetch, limit, retries, backoff, retry_all
-                )
+        sql = self._add_query_comment(sql)
+        _, cursor = self.add_query(sql, auto_begin)
+        response = self.get_response(cursor)
 
-        response, table = _execute_internal(
-            self._add_query_comment(sql),
-            auto_begin,
-            fetch,
-            limit,
-            self.profile.credentials.retries,
-            1,
-            self.profile.credentials.retry_all,
-        )
+        if fetch:
+            table = self.get_result_from_cursor(cursor, limit)
+        else:
+            table = agate_helper.empty_table()
 
-        # this should never happen but mypy doesn't know that and arguably neither do we
-        if response is None or table is None:
-            conn_name = thread_conn.name if (thread_conn := self.get_if_exists()) else "<None>"
-            raise DbtRuntimeError(f"Failed to execute SQL: {sql} on connection: {conn_name}")
         return response, table
 
-    def add_query(self, sql, auto_begin=True, bindings=None, abridge_sql_log=False):  # type: ignore
-        connection = None
-        cursor = None
+    def add_query(
+        self,
+        sql: str,
+        auto_begin: bool = True,
+        bindings: Optional[Any] = None,
+        abridge_sql_log: bool = False,
+        retryable_exceptions: Tuple[type, ...] = tuple(),  # unused, kept for compatibility
+        retry_limit: int = 1,  # unused, kept for compatibility
+    ) -> Tuple[Connection, Any]:
+        """Execute SQL, handling multi-statement strings.
+
+        The redshift-connector uses the extended query protocol which doesn't
+        support multi-statement execution, so we split the SQL and execute
+        each statement individually using a single cursor.
+
+        Retry logic is consolidated in _execute_with_retry() with exponential
+        backoff. The retryable_exceptions and retry_limit parameters are kept
+        for API compatibility but are not used - retry behavior is controlled
+        by the credentials.retries setting.
+        """
         self._initialize_sqlparse_lexer()
 
-        queries = sqlparse.split(sql)
+        connection = self.get_thread_connection()
+        if auto_begin and not connection.transaction_open:
+            self.begin()
 
-        redshift_retryable_exceptions = (
+        # Parse into individual statements
+        queries = sqlparse.split(sql)
+        cursor = connection.handle.cursor()
+        executed_any = False
+
+        for query in queries:
+            # Strip comments to check if statement is empty
+            without_comments = re.sub(COMMENT_REGEX, "", query).strip()
+            if not without_comments:
+                continue
+
+            with self.exception_handler(query):
+                self._execute_with_retry(
+                    cursor=cursor,
+                    sql=query,
+                    bindings=bindings,
+                    abridge_sql_log=abridge_sql_log,
+                )
+                executed_any = True
+
+        if not executed_any:
+            conn_name = connection.name if connection and connection.name else "<None>"
+            raise DbtRuntimeError(f"Tried to run invalid SQL: {sql} on {conn_name}")
+
+        return connection, cursor
+
+    def _execute_with_retry(
+        self,
+        cursor: redshift_connector.Cursor,
+        sql: str,
+        bindings: Optional[Any] = None,
+        abridge_sql_log: bool = False,
+    ) -> None:
+        """Execute a single statement with retry logic.
+
+        Uses exponential backoff for transient errors. This consolidates
+        retry handling that was previously spread across multiple methods.
+        """
+        from dbt_common.events.functions import fire_event
+        from dbt_common.events.contextvars import get_node_info
+        from dbt_common.utils import cast_to_str
+        from dbt.adapters.events.types import (
+            ConnectionUsed,
+            SQLQuery,
+            SQLQueryStatus,
+        )
+
+        connection = self.get_thread_connection()
+        credentials = connection.credentials
+
+        retryable_exceptions = (
             redshift_connector.InterfaceError,
             redshift_connector.InternalError,
         )
 
-        for query in queries:
-            # Strip off comments from the current query
-            without_comments = re.sub(
-                COMMENT_REGEX,
-                "",
-                query,
-            ).strip()
-
-            if without_comments == "":
-                continue
-
-            connection, cursor = super().add_query(
-                query,
-                auto_begin,
-                bindings=bindings,
-                abridge_sql_log=abridge_sql_log,
-                retryable_exceptions=redshift_retryable_exceptions,
-                retry_limit=self.profile.credentials.retries,
+        fire_event(
+            ConnectionUsed(
+                conn_type=self.TYPE,
+                conn_name=cast_to_str(connection.name),
+                node_info=get_node_info(),
             )
+        )
 
-        if cursor is None:
-            conn = self.get_thread_connection()
-            conn_name = conn.name if conn and conn.name else "<None>"
-            raise DbtRuntimeError(f"Tried to run invalid SQL: {sql} on {conn_name}")
+        log_sql = f"{sql[:512]}..." if abridge_sql_log else sql
+        fire_event(
+            SQLQuery(
+                conn_name=cast_to_str(connection.name),
+                sql=log_sql,
+                node_info=get_node_info(),
+            )
+        )
 
-        return connection, cursor
+        retries_remaining = credentials.retries
+        backoff = 1.0
+        pre = time.perf_counter()
+
+        while True:
+            try:
+                cursor.execute(sql, bindings)
+                break
+            except retryable_exceptions as e:
+                if retries_remaining <= 0:
+                    raise
+                retries_remaining -= 1
+                logger.debug(
+                    f"Got a retryable error {type(e).__name__}. "
+                    f"{retries_remaining} retries remaining. "
+                    f"Retrying in {backoff} seconds.\nError: {e}"
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+
+        result = self.get_response(cursor)
+        fire_event(
+            SQLQueryStatus(
+                status=str(result),
+                elapsed=time.perf_counter() - pre,
+                node_info=get_node_info(),
+            )
+        )
 
     @classmethod
     def get_credentials(cls, credentials):

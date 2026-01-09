@@ -1,7 +1,10 @@
 {% macro redshift__describe_materialized_view(relation) %}
     {#-
         These need to be separate queries because redshift will not let you run queries
-        against svv_table_info and pg_views in the same query. The same is true of svv_redshift_columns.
+        against svv_table_info and pg_views in the same query.
+
+        Uses SHOW COLUMNS for column descriptors to avoid OID-based catalog queries
+        that can fail with "could not open relation with OID" errors.
     -#}
 
     {%- set _materialized_view_sql -%}
@@ -24,17 +27,19 @@
     {%- endset %}
     {% set _materialized_view = run_query(_materialized_view_sql) %}
 
+    {#-
+        SHOW COLUMNS returns dist_key (1 if distribution key, empty otherwise)
+        and sort_key_order (position in sort key, 0 if not part of sort key).
+        This replaces the OID-based pg_class/pg_attribute query.
+    -#}
     {%- set _column_descriptor_sql -%}
-        SELECT
-            a.attname as column,
-            a.attisdistkey as is_dist_key,
-            a.attsortkeyord as sort_key_position
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        WHERE
-            n.nspname ilike '{{ relation.schema }}'
-            AND c.relname LIKE 'mv_tbl__{{ relation.identifier }}__%'
+        select
+            column_name as column,
+            case when dist_key = 1 then true else false end as is_dist_key,
+            sort_key_order as sort_key_position
+        from (
+            SHOW COLUMNS FROM TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
+        )
     {%- endset %}
     {% set _column_descriptor = run_query(_column_descriptor_sql) %}
 
