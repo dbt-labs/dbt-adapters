@@ -3,9 +3,8 @@ import redshift_connector
 from multiprocessing import get_context
 from unittest import TestCase, mock
 
-from dbt.adapters.sql.connections import SQLConnectionManager
 from dbt_common.clients import agate_helper
-from dbt_common.exceptions import DbtRuntimeError, DbtDatabaseError
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.redshift import (
     Plugin as RedshiftPlugin,
@@ -53,16 +52,6 @@ class TestQuery(TestCase):
             inject_adapter(self._adapter, RedshiftPlugin)
         return self._adapter
 
-    @mock.patch.object(SQLConnectionManager, "get_thread_connection")
-    def mock_cursor(self, mock_get_thread_conn):
-        conn = mock.MagicMock
-        mock_get_thread_conn.return_value = conn
-        mock_handle = mock.MagicMock
-        conn.return_value = mock_handle
-        mock_cursor = mock.MagicMock
-        mock_handle.return_value = mock_cursor
-        return mock_cursor
-
     def test_execute_with_fetch(self):
         cursor = mock.Mock()
         table = agate_helper.empty_table()
@@ -70,7 +59,7 @@ class TestQuery(TestCase):
             mock_add_query.return_value = (
                 None,
                 cursor,
-            )  # when mock_add_query is called, it will always return None, cursor
+            )
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
                 mock_get_response.return_value = {}
                 with mock.patch.object(
@@ -88,7 +77,7 @@ class TestQuery(TestCase):
             mock_add_query.return_value = (
                 None,
                 cursor,
-            )  # when mock_add_query is called, it will always return None, cursor
+            )
             with mock.patch.object(self.adapter.connections, "get_response") as mock_get_response:
                 mock_get_response.return_value = {}
                 with mock.patch.object(
@@ -99,55 +88,119 @@ class TestQuery(TestCase):
         mock_get_result_from_cursor.assert_not_called()
         mock_get_response.assert_called_once_with(cursor)
 
-    def test_execute_with_retry_all(self):
-        cursor = mock.Mock()
-        self.adapter.connections.close = mock.MagicMock()
-        self.adapter.connections.open = mock.MagicMock()
-        with mock.patch.object(
-            self.adapter.connections, "get_thread_connection"
-        ) as mock_get_thread_connection:
-            mock_get_thread_connection.return_value = mock.MagicMock(name="test_connection")
-            with mock.patch.object(self.adapter.connections, "add_query") as mock_add_query:
-                self.adapter.connections.profile.credentials.retries = 3
-                self.adapter.connections.profile.credentials.retry_all = True
-                mock_add_query.side_effect = [
-                    DbtDatabaseError("test"),
-                    DbtDatabaseError("test2"),
-                    (None, cursor),
-                ]
-                with mock.patch.object(
-                    self.adapter.connections, "get_response"
-                ) as mock_get_response:
-                    mock_get_response.return_value = {}
-                    with mock.patch.object(
-                        self.adapter.connections, "get_result_from_cursor"
-                    ) as mock_get_result_from_cursor:
-                        mock_get_result_from_cursor.return_value = agate_helper.empty_table()
-                        self.adapter.connections.execute(sql="select * from test", fetch=True)
-        assert mock_add_query.call_count == 3
-
     def test_add_query_success(self):
-        cursor = mock.Mock()
-        with mock.patch.object(SQLConnectionManager, "add_query") as mock_add_query:
-            mock_add_query.return_value = None, cursor
-            self.adapter.connections.add_query("select * from test3")
-        mock_add_query.assert_called_once_with(
-            "select * from test3",
-            True,
-            bindings=None,
-            abridge_sql_log=False,
-            retryable_exceptions=(
-                redshift_connector.InterfaceError,
-                redshift_connector.InternalError,
-            ),
-            retry_limit=1,
-        )
+        """Test that add_query executes SQL using single cursor with retry logic."""
+        mock_cursor = mock.MagicMock()
+        mock_connection = mock.MagicMock()
+        mock_connection.handle.cursor.return_value = mock_cursor
+        mock_connection.transaction_open = False
+        mock_connection.credentials.autocommit = True
+        mock_connection.credentials.retries = 1
+        mock_connection.name = "test_connection"
 
-    def test_add_query_with_no_cursor(self):
         with mock.patch.object(
-            self.adapter.connections, "get_thread_connection"
-        ) as mock_get_thread_connection:
-            mock_get_thread_connection.return_value = None
-            with self.assertRaisesRegex(DbtRuntimeError, "Tried to run invalid SQL:  on <None>"):
-                self.adapter.connections.add_query(sql="")
-        mock_get_thread_connection.assert_called_once()
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "_initialize_sqlparse_lexer"):
+                with mock.patch.object(self.adapter.connections, "exception_handler"):
+                    with mock.patch.object(self.adapter.connections, "_execute_with_retry"):
+                        connection, cursor = self.adapter.connections.add_query(
+                            "select * from test3"
+                        )
+
+        # Verify single cursor was created
+        mock_connection.handle.cursor.assert_called_once()
+        assert cursor == mock_cursor
+
+    def test_add_query_with_empty_sql(self):
+        """Test that add_query raises error for empty SQL."""
+        mock_connection = mock.MagicMock()
+        mock_connection.handle.cursor.return_value = mock.MagicMock()
+        mock_connection.transaction_open = False
+        mock_connection.credentials.autocommit = True
+        mock_connection.name = "test_connection"
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "_initialize_sqlparse_lexer"):
+                with self.assertRaisesRegex(
+                    DbtRuntimeError, "Tried to run invalid SQL:  on test_connection"
+                ):
+                    self.adapter.connections.add_query(sql="")
+
+    def test_add_query_multi_statement(self):
+        """Test that add_query splits and executes multiple statements."""
+        mock_cursor = mock.MagicMock()
+        mock_connection = mock.MagicMock()
+        mock_connection.handle.cursor.return_value = mock_cursor
+        mock_connection.transaction_open = False
+        mock_connection.credentials.autocommit = True
+        mock_connection.credentials.retries = 1
+        mock_connection.name = "test_connection"
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "_initialize_sqlparse_lexer"):
+                with mock.patch.object(
+                    self.adapter.connections, "_execute_with_retry"
+                ) as mock_execute:
+                    self.adapter.connections.add_query("select 1; select 2")
+
+        # Both statements should be executed
+        assert mock_execute.call_count == 2
+
+    def test_execute_with_retry_uses_exponential_backoff(self):
+        """Test that _execute_with_retry uses exponential backoff on transient errors."""
+        mock_cursor = mock.MagicMock()
+        mock_connection = mock.MagicMock()
+        mock_connection.credentials.retries = 3
+        mock_connection.name = "test_connection"
+
+        # Fail twice, then succeed
+        mock_cursor.execute.side_effect = [
+            redshift_connector.InterfaceError("transient error 1"),
+            redshift_connector.InterfaceError("transient error 2"),
+            None,  # Success
+        ]
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch("time.sleep") as mock_sleep:
+                with mock.patch("time.perf_counter", return_value=0):
+                    with mock.patch("dbt_common.events.functions.fire_event"):
+                        self.adapter.connections._execute_with_retry(
+                            cursor=mock_cursor, sql="select 1"
+                        )
+
+        # Should have retried twice with exponential backoff
+        assert mock_cursor.execute.call_count == 3
+        assert mock_sleep.call_count == 2
+        # First backoff is 1s, second is 2s
+        mock_sleep.assert_any_call(1.0)
+        mock_sleep.assert_any_call(2.0)
+
+    def test_execute_with_retry_raises_after_exhausting_retries(self):
+        """Test that _execute_with_retry raises after exhausting retries."""
+        mock_cursor = mock.MagicMock()
+        mock_connection = mock.MagicMock()
+        mock_connection.credentials.retries = 2
+        mock_connection.name = "test_connection"
+
+        mock_cursor.execute.side_effect = redshift_connector.InterfaceError("persistent error")
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch("time.sleep"):
+                with mock.patch("time.perf_counter", return_value=0):
+                    with mock.patch("dbt_common.events.functions.fire_event"):
+                        with self.assertRaises(redshift_connector.InterfaceError):
+                            self.adapter.connections._execute_with_retry(
+                                cursor=mock_cursor, sql="select 1"
+                            )
+
+        # Initial attempt + 2 retries = 3 total attempts
+        assert mock_cursor.execute.call_count == 3

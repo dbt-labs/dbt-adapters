@@ -97,30 +97,32 @@ class TestConnection(TestCase):
     def test_connection_has_backend_pid(self):
         backend_pid = 42
 
-        cursor = mock.MagicMock()
-        execute = cursor().__enter__().execute
-        execute().fetchone.return_value = (backend_pid,)
-        redshift_connector.connect().cursor = cursor
+        # Mock the cursor context manager pattern used in _get_backend_pid
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (backend_pid,)
+        mock_cursor_cm = MagicMock()
+        mock_cursor_cm.__enter__ = MagicMock(return_value=mock_cursor)
+        mock_cursor_cm.__exit__ = MagicMock(return_value=False)
+        redshift_connector.connect().cursor.return_value = mock_cursor_cm
 
         connection = self.adapter.acquire_connection("dummy")
         connection.handle
         assert connection.backend_pid == backend_pid
 
-        execute.assert_has_calls(
-            [
-                call("select pg_backend_pid()"),
-            ]
-        )
+        mock_cursor.execute.assert_called_with("select pg_backend_pid()")
 
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_backend_pid_used_in_pg_terminate_backend(self):
         with mock.patch.object(self.adapter.connections, "add_query") as add_query:
             backend_pid = 42
-            query_result = (backend_pid,)
 
-            cursor = mock.MagicMock()
-            cursor().__enter__().execute().fetchone.return_value = query_result
-            redshift_connector.connect().cursor = cursor
+            # Mock the cursor context manager pattern
+            mock_cursor = MagicMock()
+            mock_cursor.fetchone.return_value = (backend_pid,)
+            mock_cursor_cm = MagicMock()
+            mock_cursor_cm.__enter__ = MagicMock(return_value=mock_cursor)
+            mock_cursor_cm.__exit__ = MagicMock(return_value=False)
+            redshift_connector.connect().cursor.return_value = mock_cursor_cm
 
             connection = self.adapter.acquire_connection("dummy")
             connection.handle
@@ -161,21 +163,6 @@ class TestConnection(TestCase):
                     self.adapter.connections.open(connection_mock)
             assert str(e.value) == "Database Error\n  retryable interface error<3>"
             assert connect_mock.call_count == 3
-
-    def test_retry_relation_could_not_open_relation_with_oid(self):
-        with mock.patch.object(self.adapter.connections, "add_query") as add_query_mock:
-            add_query_mock.side_effect = [
-                redshift_connector.ProgrammingError("could not open relation with OID"),
-                redshift_connector.ProgrammingError("could not open relation with OID"),
-                redshift_connector.ProgrammingError("could not open relation with OID"),
-            ]
-            self.adapter.connections.get_thread_connection = MagicMock()
-            self.adapter.connections.close = MagicMock()
-            self.adapter.connections.open = MagicMock()
-            with pytest.raises(Exception) as e:
-                self.adapter.connections.execute("select 1", auto_begin=True)
-            assert "could not open relation with OID" in str(e.value)
-            assert add_query_mock.call_count == 2
 
     def test_tcp_keepalive_parameters(self):
         test_cases = [
@@ -328,3 +315,129 @@ class TestConnection(TestCase):
         assert default_credentials.tcp_keepalive_idle is None
         assert default_credentials.tcp_keepalive_interval is None
         assert default_credentials.tcp_keepalive_count is None
+
+
+class TestAutocommitBehavior(TestCase):
+    """Tests for autocommit-aware transaction management."""
+
+    def setUp(self):
+        profile_cfg = {
+            "outputs": {
+                "test": {
+                    "type": "redshift",
+                    "dbname": "redshift",
+                    "user": "root",
+                    "host": "thishostshouldnotexist.test.us-east-1",
+                    "pass": "password",
+                    "port": 5439,
+                    "schema": "public",
+                    "autocommit": True,
+                }
+            },
+            "target": "test",
+        }
+
+        project_cfg = {
+            "name": "X",
+            "version": "0.1",
+            "profile": "test",
+            "project-root": "/tmp/dbt/does-not-exist",
+            "quoting": {
+                "identifier": False,
+                "schema": True,
+            },
+            "config-version": 2,
+        }
+
+        self.config = config_from_parts_or_dicts(project_cfg, profile_cfg)
+        self._adapter = None
+
+    @property
+    def adapter(self):
+        if self._adapter is None:
+            self._adapter = RedshiftAdapter(self.config, get_context("spawn"))
+            inject_adapter(self._adapter, RedshiftPlugin)
+        return self._adapter
+
+    def test_begin_is_noop_with_autocommit(self):
+        """Test that begin() doesn't send BEGIN when autocommit=True."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = False
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "add_begin_query") as mock_add_begin:
+                self.adapter.connections.begin()
+
+        # Should not have called add_begin_query
+        mock_add_begin.assert_not_called()
+
+    def test_commit_is_noop_with_autocommit(self):
+        """Test that commit() doesn't send COMMIT when autocommit=True."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = True
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(
+                self.adapter.connections, "add_commit_query"
+            ) as mock_add_commit:
+                self.adapter.connections.commit()
+
+        # Should not have called add_commit_query
+        mock_add_commit.assert_not_called()
+
+    def test_rollback_is_noop_with_autocommit(self):
+        """Test that rollback_if_open() doesn't rollback when autocommit=True."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = True
+        mock_connection.handle = MagicMock()
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            # This should be a no-op
+            self.adapter.connections.rollback_if_open()
+
+        # Should not have called rollback on the handle
+        mock_connection.handle.rollback.assert_not_called()
+
+    def test_begin_sends_begin_without_autocommit(self):
+        """Test that begin() sends BEGIN when autocommit=False."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = False
+        mock_connection.transaction_open = False
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "add_begin_query") as mock_add_begin:
+                self.adapter.connections.begin()
+
+        # Should have called add_begin_query
+        mock_add_begin.assert_called_once()
+
+    def test_fresh_transaction_toggles_autocommit(self):
+        """Test that fresh_transaction temporarily disables autocommit."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = False
+        mock_connection.handle = MagicMock()
+        mock_connection.handle.autocommit = True
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "begin"):
+                with mock.patch.object(self.adapter.connections, "commit"):
+                    with self.adapter.connections.fresh_transaction():
+                        # Inside the context, autocommit should be disabled
+                        assert mock_connection.handle.autocommit is False
+
+            # After exiting, autocommit should be restored
+            assert mock_connection.handle.autocommit is True
