@@ -137,3 +137,18 @@ SIMPLE_MODEL = """
 ) }}
 SELECT 1 as id
 """
+
+
+DYNAMIC_ICEBERG_V3_TABLE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+    iceberg_version=3,
+) }}
+select * from {{ ref('my_seed') }}
+"""

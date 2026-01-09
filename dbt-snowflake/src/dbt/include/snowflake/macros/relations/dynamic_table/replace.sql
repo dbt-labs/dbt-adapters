@@ -84,6 +84,7 @@ create or replace dynamic iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'snowflake'
     base_location = '{{ catalog_relation.base_location }}'
+    {{ optional('iceberg_version', catalog_relation.iceberg_version)}}
     {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
     {{ optional('initialize', dynamic_table.initialize) }}
     {{ optional('row_access_policy', dynamic_table.row_access_policy) }}
