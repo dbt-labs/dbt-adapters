@@ -47,6 +47,7 @@ from dbt_common.exceptions import DbtDatabaseError
 from dbt_common.record import get_record_mode_from_env, RecorderMode
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
+from dbt.adapters.snowflake.adapter_response import SnowflakeAdapterResponse
 from dbt.adapters.sql import SQLConnectionManager
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.events.functions import warn_or_error
@@ -469,17 +470,40 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         logger.debug("Cancel query '{}': {}".format(connection_name, res))
 
     @classmethod
-    def get_response(cls, cursor) -> AdapterResponse:
+    def get_response(cls, cursor) -> SnowflakeAdapterResponse:
         code = cursor.sqlstate
 
         if code is None:
             code = "SUCCESS"
         query_id = str(cursor.sfqid) if cursor.sfqid is not None else None
-        return AdapterResponse(
-            _message="{} {}".format(code, cursor.rowcount),
-            rows_affected=cursor.rowcount,
+
+        # Extract DML stats from cursor.stats if available (snowflake-connector-python >= 4.2.0)
+        rows_inserted = None
+        rows_deleted = None
+        rows_updated = None
+        rows_duplicates = None
+        if hasattr(cursor, "stats") and cursor.stats is not None:
+            stats = cursor.stats
+            rows_inserted = getattr(stats, "num_rows_inserted", None)
+            rows_deleted = getattr(stats, "num_rows_deleted", None)
+            rows_updated = getattr(stats, "num_rows_updated", None)
+            rows_duplicates = getattr(stats, "num_dml_duplicates", None)
+
+        # For CTAS and similar operations, rowcount is typically 1 (the success message row)
+        # even when many rows are inserted. Use rows_inserted from stats for accurate reporting.
+        rows_affected = cursor.rowcount
+        if rows_inserted is not None and rows_inserted > 0:
+            rows_affected = rows_inserted
+
+        return SnowflakeAdapterResponse(
+            _message="{} {}".format(code, rows_affected),
+            rows_affected=rows_affected,
             code=code,
             query_id=query_id,
+            rows_inserted=rows_inserted,
+            rows_deleted=rows_deleted,
+            rows_updated=rows_updated,
+            rows_duplicates=rows_duplicates,
         )
 
     # disable transactional logic by default on Snowflake
