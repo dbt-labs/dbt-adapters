@@ -131,5 +131,3 @@ class JavaScriptUDAFDefaultArgSupport(BasicJavaScriptUDAF):
             assert "DEFAULT 1" not in sql_event_catcher.caught_events[0].data.sql
         else:
             assert "DEFAULT 1" in sql_event_catcher.caught_events[0].data.sql
-
-

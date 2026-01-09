@@ -38,7 +38,7 @@ functions:
 
 MY_UDF_JS = """
 return PRICE * 2;
-"""
+""".strip()
 
 MY_UDF_JS_YML = """
 functions:
@@ -175,7 +175,7 @@ export function finalize(state) {
   // When we're all done, multiply the sum by itself (square it) and return that.
   return state.current_sum * state.current_sum;
 }
-"""
+""".strip()
 
 SUM_SQUARED_UDAF_JS_YML = """
 functions:
