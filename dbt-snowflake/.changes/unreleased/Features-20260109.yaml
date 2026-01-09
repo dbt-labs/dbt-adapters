@@ -1,5 +1,5 @@
 kind: Features
-body: Add tests for support for JS UDF/UDAF for BigQuery and Snowflake
+body: Add support for JS UDF/UDAF for BigQuery and Snowflake
 time: 2026-01-09T10:00:00.000000-00:00
 custom:
   Author: lbk-fishtown
