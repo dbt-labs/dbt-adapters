@@ -85,11 +85,11 @@
 {% endmacro %}
 
 
-{% macro load_csv_rows(model, agate_table) -%}
+{% macro load_csv_rows(model, agate_table, load_empty=False) -%}
   {{ adapter.dispatch('load_csv_rows', 'dbt')(model, agate_table) }}
 {%- endmacro %}
 
-{% macro default__load_csv_rows(model, agate_table) %}
+{% macro default__load_csv_rows(model, agate_table, load_empty=False) %}
 
   {% set batch_size = get_batch_size() %}
 
@@ -97,6 +97,10 @@
   {% set bindings = [] %}
 
   {% set statements = [] %}
+
+  {% if load_empty %}
+    {{ return("") }}
+  {% endif %}
 
   {% for chunk in agate_table.rows | batch(batch_size) %}
       {% set bindings = [] %}

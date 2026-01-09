@@ -26,8 +26,9 @@ class BaseTestEmpty:
         assert result[0] == expected_row_count
 
     def test_run_with_empty(self, project):
-        # create source from seed
+        # Create source from seed for run and build command testing
         run_dbt(["seed"])
+        self.assert_row_count(project, "raw_source", 1)
 
         # run without empty - 3 expected rows in output - 1 from each input
         run_dbt(["run"])
@@ -60,6 +61,27 @@ class TestEmpty(BaseTestEmpty):
     """
 
     pass
+
+
+class BaseTestEmptySeed(BaseTestEmpty):
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"raw_seed.csv": _models.raw_seed_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "model.sql": _models.model_reference_seed_sql,
+            "schema.yml": _models.UNIT_TEST_SEED_SCHEMA,
+        }
+
+    def test_run_with_empty(self, project):
+        # Test seed with --empty flag
+        run_dbt(["seed", "--empty"])
+        self.assert_row_count(project, "raw_seed", 0)
+
+        results = run_dbt(["build", "--empty"])
+        assert len(results) == 3
 
 
 class MetadataWithEmptyFlag:

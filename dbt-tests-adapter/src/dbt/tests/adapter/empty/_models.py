@@ -11,6 +11,11 @@ raw_source_csv = """id
 3
 """
 
+raw_seed_csv = """
+a,b,c,d,e,f
+3.2,3,US,2025-01-01,none,false
+4.5,4,UK,2025-01-02,2,true
+"""
 
 model_sql = """
 select *
@@ -23,6 +28,9 @@ select *
 from {{ source('seed_sources', 'raw_source') }}
 """
 
+model_reference_seed_sql = """
+select * from {{ ref('raw_seed') }}
+"""
 
 model_inline_sql = """
 select * from {{ source('seed_sources', 'raw_source') }} as raw_source
@@ -55,6 +63,21 @@ seeds:
       - name: id
         description: "This is my_seed.my_id"
 """
+
+UNIT_TEST_SEED_SCHEMA = """
+unit_tests:
+  - name: test_my_seed
+    model: model
+    given:
+      - input: ref('raw_seed')
+    expect:
+      format: csv
+      rows: |
+        a,b,c,d,e,f
+        3.2,3,US,2025-01-01,none,false
+        4.5,4,UK,2025-01-02,2,true
+"""
+
 
 CONTROL = """
 select * from {{ ref("my_seed") }}
