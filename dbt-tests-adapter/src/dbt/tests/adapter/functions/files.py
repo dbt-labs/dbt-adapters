@@ -154,10 +154,27 @@ functions:
 """
 
 SUM_SQUARED_UDAF_JS = """
-if (typeof VALUE !== 'number') {
-  return null;
-}   
-return VALUE * VALUE;
+export function initialState() {
+  // Start by keeping track of the total sum. Set it to 0 at the beginning.
+  return { current_sum: 0 };
+}
+
+export function aggregate(state, value) {
+  // Every time we get a new number, add it to our running total, but only if it's not missing.
+  if (value !== null) {
+    state.current_sum += value;
+  }
+}
+
+export function merge(state, partialState) {
+  // If there were separate parts adding up numbers, add those together too.
+  state.current_sum += partialState.current_sum;
+}
+
+export function finalize(state) {
+  // When we're all done, multiply the sum by itself (square it) and return that.
+  return state.current_sum * state.current_sum;
+}
 """
 
 SUM_SQUARED_UDAF_JS_YML = """
@@ -168,10 +185,10 @@ functions:
       type: aggregate
     arguments:
       - name: VALUE
-        data_type: float
-        description: The value to to agg (and in the end square the result). JS UDFs do not support numeric/number, only float.
+        data_type: FLOAT64
+        description: The value to to agg (and in the end square the result). BQ example, Snowflake does not support JS UDAFs.
     returns:
-      data_type: float
+      data_type: FLOAT64
       description: The sum of the input values, then squared
 """
 

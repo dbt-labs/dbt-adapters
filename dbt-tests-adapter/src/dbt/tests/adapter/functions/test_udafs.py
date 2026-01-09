@@ -112,27 +112,6 @@ class BasicJavaScriptUDAF(UDAFBase):
             "sum_squared.yml": files.SUM_SQUARED_UDAF_JS_YML,
         }
 
-    def test_udaf(self, project, sql_event_catcher):
-        # build the function
-        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
-
-        # Check volatility
-        assert len(sql_event_catcher.caught_events) == 1
-        self.check_function_volatility(sql_event_catcher.caught_events[0].data.sql)
-
-        # try using the aggregate function
-        # Note: JS UDAF test uses VALUE * VALUE (squares each value individually)
-        # so with values 1, 2, 3 we get 1 + 4 + 9 = 14 (if it's truly aggregating)
-        # but the test JS code just squares the input, so we check it runs without error
-        result = run_dbt(
-            [
-                "show",
-                "--inline",
-                "SELECT {{ function('sum_squared') }}(value) FROM {{ ref('basic_model') }}",
-            ]
-        )
-        assert len(result.results) == 1
-
 
 class JavaScriptUDAFDefaultArgSupport(BasicJavaScriptUDAF):
     expect_default_arg_support = False
@@ -153,11 +132,4 @@ class JavaScriptUDAFDefaultArgSupport(BasicJavaScriptUDAF):
         else:
             assert "DEFAULT 1" in sql_event_catcher.caught_events[0].data.sql
 
-            result = run_dbt(
-                [
-                    "show",
-                    "--inline",
-                    "SELECT {{ function('sum_squared') }}() FROM {{ ref('basic_model') }}",
-                ]
-            )
-            assert len(result.results) == 1
+
