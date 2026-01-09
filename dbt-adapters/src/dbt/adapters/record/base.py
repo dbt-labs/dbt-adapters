@@ -289,3 +289,47 @@ class AdapterGetColumnsInRelationRecord(Record):
     params_cls = AdapterGetColumnsInRelationParams
     result_cls = AdapterGetColumnsInRelationResult
     group = "Available"
+
+
+@dataclasses.dataclass
+class AdapterGetPseudocolumnsForRelationParams:
+    thread_id: str
+    relation: "BaseRelation"
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+        }
+
+    def _from_dict(self, data: Dict[str, Any]):
+        from dbt.adapters.record.serialization import deserialize_base_relation
+
+        self.thread_id = data["thread_id"]
+        self.relation = deserialize_base_relation(data["relation"])
+
+
+@dataclasses.dataclass
+class AdapterGetPseudocolumnsForRelationResult:
+    return_val: List["BaseColumn"]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_column_list
+
+        return {"return_val": serialize_base_column_list(self.return_val)}
+
+    def _from_dict(self, data: Dict[str, Any]):
+        from dbt.adapters.record.serialization import deserialize_base_column_list
+
+        self.return_val = deserialize_base_column_list(data["return_val"])
+
+
+@Recorder.register_record_type
+class AdapterGetPseudocolumnsForRelationRecord(Record):
+    """Implements record/replay support for the BaseAdapter.get_pseudocolumns_for_relation() method."""
+
+    params_cls = AdapterGetPseudocolumnsForRelationParams
+    result_cls = AdapterGetPseudocolumnsForRelationResult
+    group = "Available"
