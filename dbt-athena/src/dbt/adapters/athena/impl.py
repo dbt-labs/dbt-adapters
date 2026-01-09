@@ -908,7 +908,7 @@ class AthenaAdapter(SQLAdapter):
             relation: The Athena table relation (source table)
             etags_dict: Dictionary of file keys to ETags captured before model run
             safety_prefix: REQUIRED prefix that S3 location must start with (safety check to prevent accidental deletion).
-                          Must be configured in dbt_project.yml as 'increment_source_prefix' variable.
+                          Must be configured in dbt_project.yml as 's3_location_prefix_to_validate' variable.
             
         Returns:
             Dictionary with cleanup results (aligned with AWS delete_objects response):

@@ -8,7 +8,7 @@
       incremental_source_table_name: Source table name from config (e.g., 'applicants')
     
     Requires:
-      dbt_project.yml variable 'increment_source_prefix' must be defined
+      dbt_project.yml variable 's3_location_prefix_to_validate' must be defined
     
     Returns:
       Dictionary with cleanup results (aligned with AWS delete_objects response):
@@ -26,7 +26,7 @@
     {% set source_relation = source(incremental_source_name, incremental_source_table_name) %}
     
     {# Get REQUIRED safety prefix from dbt project variable (no default) #}
-    {% set safety_prefix = var('increment_source_prefix') %}
+    {% set safety_prefix = var('s3_location_prefix_to_validate') %}
     
     {# Call adapter method with safety prefix #}
     {% set cleanup_result = adapter.delete_unchanged_s3_files(source_relation, initial_etags_dict, safety_prefix) %}
