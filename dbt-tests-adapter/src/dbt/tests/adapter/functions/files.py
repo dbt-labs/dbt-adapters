@@ -36,6 +36,25 @@ functions:
       description: The resulting xlarge price
 """
 
+MY_UDF_JS = """
+return PRICE * 2;
+"""
+
+MY_UDF_JS_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    config:
+      entry_point: price_for_xlarge
+    arguments:
+      - name: PRICE
+        data_type: float
+        description: The price of the standard item
+    returns:
+      data_type: float
+      description: The resulting xlarge price
+"""
+
 SUM_SQUARED_UDAF_PYTHON = """
 class SumSquared:
   def __init__(self):
@@ -91,6 +110,22 @@ functions:
       description: The sum of the input values, then squared
 """
 
+SUM_SQUARED_UDAF_JS_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+    arguments:
+      - name: VALUE
+        data_type: float
+        description: The value to to agg (and in the end square the result). JS UDFs do not support numeric/number, only float.
+        default_value: 1
+    returns:
+      data_type: float
+      description: The sum of the input values, then squared
+"""
+
 BASIC_MODEL_SQL = """
 SELECT 1 as id, 1 as value
 UNION ALL
@@ -118,6 +153,28 @@ functions:
       description: The sum of the input values, then squared
 """
 
+SUM_SQUARED_UDAF_JS = """
+if (typeof VALUE !== 'number') {
+  return null;
+}   
+return VALUE * VALUE;
+"""
+
+SUM_SQUARED_UDAF_JS_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+    arguments:
+      - name: VALUE
+        data_type: float
+        description: The value to to agg (and in the end square the result). JS UDFs do not support numeric/number, only float.
+    returns:
+      data_type: float
+      description: The sum of the input values, then squared
+"""
+
 MY_UDF_WITH_DEFAULT_ARG_YML = """
 functions:
   - name: price_for_xlarge
@@ -141,6 +198,22 @@ functions:
       runtime_version: "3.12"
     arguments:
       - name: price
+        data_type: float
+        description: The price of the standard item
+        default_value: 100
+    returns:
+      data_type: float
+      description: The resulting xlarge price
+"""
+
+MY_UDF_JS_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    config:
+      entry_point: price_for_xlarge
+    arguments:
+      - name: PRICE
         data_type: float
         description: The price of the standard item
         default_value: 100
