@@ -60,6 +60,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
         self.cursor = self.handle.cursor.return_value
+        self.cursor.stats = None  # Explicitly set to None to avoid MagicMock auto-creation
         self.mock_execute = self.cursor.execute
         self.mock_execute.return_value = mock.MagicMock(sfqid="42")
         self.patcher = mock.patch("dbt.adapters.snowflake.connections.snowflake.connector.connect")
