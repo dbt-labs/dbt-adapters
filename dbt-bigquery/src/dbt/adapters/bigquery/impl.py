@@ -76,7 +76,6 @@ from dbt.adapters.bigquery.python_submissions import (
 )
 from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterDescribeRelationRecord,
-    BigQueryAdapterGetBqTableRecord,
     BigQueryAdapterIsReplaceableRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
@@ -1105,12 +1104,6 @@ class BigQueryAdapter(BaseAdapter):
         return opts
 
     @available.parse(lambda *a, **k: True)
-    @record_function(
-        BigQueryAdapterGetBqTableRecord,
-        method=True,
-        index_on_thread_id=True,
-        id_field_name="thread_id",
-    )
     def get_bq_table(self, relation: BigQueryRelation) -> Optional[BigQueryTable]:
         try:
             table = self.connections.get_bq_table(
