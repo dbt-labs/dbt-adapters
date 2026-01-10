@@ -190,3 +190,43 @@ _MODEL_TABLE_FOR_SWAP_ICEBERG = """
 }}
 select 1 as id
 """
+
+_MODEL_ICEBERG_V3_TABLE = """
+{{
+  config(
+    materialized = "table",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+    iceberg_version=3,
+  )
+}}
+select 1 as id
+"""
+
+_MODEL_ICEBERG_V3_BUILTIN_TABLE = """
+{{
+  config(
+    materialized = "table",
+    catalog="snowflake",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+    iceberg_version=3,
+  )
+}}
+select 1 as id
+"""
+
+_MODEL_DYNAMIC_TABLE_ICEBERG_V3 = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 minute',
+    refresh_mode='INCREMENTAL',
+    table_format='iceberg',
+    external_volume='s3_iceberg_snow',
+    iceberg_version=3,
+) }}
+
+select * from {{ ref('first_table') }}
+"""

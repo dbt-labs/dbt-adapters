@@ -50,6 +50,7 @@ class BuiltInCatalogRelation:
     max_data_extension_time_in_days: Optional[int] = None
     storage_serialization_policy: Optional[str] = None
     change_tracking: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
 
 class BuiltInCatalogIntegration(CatalogIntegration):
@@ -62,6 +63,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
     max_data_extension_time_in_days: Optional[int] = None
     storage_serialization_policy = None
     change_tracking = None
+    iceberg_version: Optional[int] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -84,6 +86,10 @@ class BuiltInCatalogIntegration(CatalogIntegration):
 
             self.data_retention_time_in_days = adapter_properties.get(
                 SnowflakeIcebergTableRelationParameters.data_retention_time_in_days
+            )
+
+            self.iceberg_version = adapter_properties.get(
+                SnowflakeIcebergTableRelationParameters.iceberg_version
             )
 
     def build_relation(self, model: RelationConfig) -> BuiltInCatalogRelation:
@@ -123,6 +129,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             max_data_extension_time_in_days=max_data_extension_time_in_days,
             change_tracking=self._resolve_change_tracking(model),
             data_retention_time_in_days=data_retention_time_in_days,
+            iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
         )
 
     def _resolve_change_tracking(self, model: RelationConfig) -> Optional[str]:
