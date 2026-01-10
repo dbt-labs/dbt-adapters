@@ -115,11 +115,11 @@ create or replace {{ transient }}table {{ relation }}
 ;
 
 {% if catalog_relation.cluster_by is not none -%}
-alter table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
+alter {{ relation.get_ddl_prefix_for_alter() }} table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
 {%- endif -%}
 
 {% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
-alter table {{ relation }} resume recluster;
+alter {{ relation.get_ddl_prefix_for_alter() }} table {{ relation }} resume recluster;
 {%- endif -%}
 
 {%- endmacro %}
