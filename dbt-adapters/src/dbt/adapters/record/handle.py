@@ -27,19 +27,31 @@ class RecordReplayHandle:
         return RecordReplayCursor(cursor, self.connection)
 
     def commit(self):
-        self.native_handle.commit()
+        # In replay mode, native_handle may be None - no actual commit needed
+        if self.native_handle is not None:
+            self.native_handle.commit()
 
     def rollback(self):
-        self.native_handle.rollback()
+        # In replay mode, native_handle may be None - no actual rollback needed
+        if self.native_handle is not None:
+            self.native_handle.rollback()
 
     def close(self):
-        self.native_handle.close()
+        # In replay mode, native_handle may be None - no actual close needed
+        if self.native_handle is not None:
+            self.native_handle.close()
 
     def get_backend_pid(self):
+        # In replay mode, return a dummy value
+        if self.native_handle is None:
+            return None
         return self.native_handle.get_backend_pid()
 
     @property
     def closed(self):
+        # In replay mode, consider it always closed
+        if self.native_handle is None:
+            return True
         return self.native_handle.closed
 
     def _fire_event(self, evt: BaseEvent) -> None:
@@ -52,4 +64,7 @@ class RecordReplayHandle:
                 msg=f"Unexpected attribute '{name}' accessed on {self.__class__.__name__}"
             )
         )
+        # In replay mode, native_handle may be None
+        if self.native_handle is None:
+            return None
         return getattr(self.native_handle, name)

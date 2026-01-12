@@ -3,6 +3,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, TYPE_CHECKING, List, Union, Optional
 
+from mashumaro.types import SerializationStrategy
 from dbt_common.record import get_record_row_limit_from_env
 
 RECORDER_ROW_LIMIT: Optional[int] = get_record_row_limit_from_env()
@@ -111,7 +112,23 @@ def serialize_base_relation_list(relations: List["BaseRelation"]) -> List[Dict[s
 
 
 def deserialize_base_relation(relation_dict: Dict[str, Any]) -> "BaseRelation":
-    """Deserialize a BaseRelation object from a dictionary."""
+    """Deserialize a BaseRelation object from a dictionary.
+
+    This function attempts to create the appropriate adapter-specific relation
+    based on the fields present in the dictionary. For example, if 'table_format'
+    is present, it creates a SnowflakeRelation.
+    """
+    # Check for adapter-specific fields to determine which relation class to use
+    if "table_format" in relation_dict:
+        # This is a Snowflake relation
+        try:
+            from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+            return SnowflakeRelation.from_dict(relation_dict)
+        except ImportError:
+            pass  # Fall through to BaseRelation if snowflake adapter not available
+
+    # Default to BaseRelation
     from dbt.adapters.base.relation import BaseRelation
 
     return BaseRelation.from_dict(relation_dict)
@@ -143,6 +160,8 @@ def deserialize_base_column_list(columns_data: List[Dict[str, Any]]) -> List["Ba
 
 
 def deserialize_base_column(column_dict: Dict[str, Any]) -> "BaseColumn":
+    from dbt.adapters.base.column import Column as BaseColumn
+
     # Only include fields that are present in the base column class
     params_dict = {
         field.name: column_dict[field.name]
@@ -151,3 +170,49 @@ def deserialize_base_column(column_dict: Dict[str, Any]) -> "BaseColumn":
     }
 
     return BaseColumn(**params_dict)
+
+
+# Custom serialization strategies for BaseRelation
+# These ensure proper deserialization of adapter-specific relations during replay
+class _BaseRelationSerializationStrategy(SerializationStrategy):
+    """Custom serialization strategy for BaseRelation that preserves adapter-specific types."""
+
+    def serialize(self, value: Any) -> Dict[str, Any]:
+        return value.to_dict(omit_none=True)
+
+    def deserialize(self, value: Dict[str, Any]) -> Any:
+        return deserialize_base_relation(value)
+
+
+class _OptionalBaseRelationSerializationStrategy(SerializationStrategy):
+    """Custom serialization strategy for Optional[BaseRelation]."""
+
+    def serialize(self, value: Any) -> Optional[Dict[str, Any]]:
+        if value is None:
+            return None
+        return value.to_dict(omit_none=True)
+
+    def deserialize(self, value: Optional[Dict[str, Any]]) -> Any:
+        if value is None:
+            return None
+        return deserialize_base_relation(value)
+
+
+def _register_relation_serialization_strategies():
+    """Register serialization strategies for BaseRelation types.
+
+    This is needed for auto_record_function to properly serialize/deserialize
+    relations during record/replay. Without this, relations would be deserialized
+    as BaseRelation instead of their adapter-specific types (e.g., SnowflakeRelation).
+    """
+    from dbt_common.record import Recorder
+    from dbt.adapters.base.relation import BaseRelation
+
+    Recorder.register_serialization_strategy(BaseRelation, _BaseRelationSerializationStrategy())
+    Recorder.register_serialization_strategy(
+        Optional[BaseRelation], _OptionalBaseRelationSerializationStrategy()
+    )
+
+
+# Register strategies when this module is imported
+_register_relation_serialization_strategies()
