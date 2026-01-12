@@ -1648,14 +1648,14 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("test_etag_table")
-        
+
         # Create fake S3 files with data
         s3_client = boto3.client("s3", region_name=AWS_REGION)
         s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
         s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file1.parquet", Body=b"data1")
         s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file2.parquet", Body=b"data2")
         s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file3.parquet", Body=b"data3")
-        
+
         # Setup adapter and create relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1663,16 +1663,16 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="test_etag_table",
         )
-        
+
         # Call the method we're testing
         etags = self.adapter.get_s3_file_etags(relation)
-        
+
         # Assertions
         assert len(etags) == 3, f"Expected 3 ETags, got {len(etags)}"
         assert "tables/test_etag_table/file1.parquet" in etags
         assert "tables/test_etag_table/file2.parquet" in etags
         assert "tables/test_etag_table/file3.parquet" in etags
-        
+
         # Verify all ETags are non-empty strings
         for file_key, etag in etags.items():
             assert isinstance(etag, str), f"ETag for {file_key} should be a string"
@@ -1685,11 +1685,11 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("empty_table")
-        
+
         # Create bucket but no files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
         s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
-        
+
         # Setup adapter and create relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1697,10 +1697,10 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="empty_table",
         )
-        
+
         # Call the method
         etags = self.adapter.get_s3_file_etags(relation)
-        
+
         # Should return empty dict
         assert etags == {}
 
@@ -1710,7 +1710,7 @@ class TestAthenaAdapter:
         # Setup: Create catalog and database but NOT the table
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        
+
         # Setup adapter
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1718,95 +1718,89 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="nonexistent_table",
         )
-        
+
         # Call the method
         etags = self.adapter.get_s3_file_etags(relation)
-        
+
         # Should return empty dict when table doesn't exist
         assert etags == {}
 
     def _mock_delete_objects_response(self, s3_client, bucket, objects_to_process):
         """
         Mock helper to simulate AWS S3 delete_objects with ETag-based conditional deletion.
-        
+
         moto doesn't support the ETag parameter in delete_objects yet, so we manually
         simulate the behavior: for each object, check if the current ETag matches the
         provided ETag, and only delete if they match (PreconditionFailed otherwise).
-        
+
         Args:
             s3_client: The boto3 S3 client
             bucket: S3 bucket name
             objects_to_process: List of dicts with 'Key' and 'ETag' keys
-        
+
         Returns:
             Dict with 'Deleted' and 'Errors' arrays (AWS delete_objects response format)
         """
         deleted_list = []
         errors_list = []
-        
+
         for obj in objects_to_process:
-            key = obj['Key']
-            expected_etag = obj.get('ETag')
-            
+            key = obj["Key"]
+            expected_etag = obj.get("ETag")
+
             try:
                 # Get current ETag from S3
-                current_etag = s3_client.head_object(Bucket=bucket, Key=key)['ETag'].strip('"')
-                
+                current_etag = s3_client.head_object(Bucket=bucket, Key=key)["ETag"].strip('"')
+
                 # AWS behavior: Only delete if ETags match
                 if current_etag == expected_etag:
                     s3_client.delete_object(Bucket=bucket, Key=key)
-                    deleted_list.append({'Key': key})
+                    deleted_list.append({"Key": key})
                 else:
                     # ETag mismatch - PreconditionFailed (file was modified)
-                    errors_list.append({
-                        'Key': key,
-                        'Code': 'PreconditionFailed',
-                        'Message': 'At least one of the pre-conditions you specified did not hold'
-                    })
+                    errors_list.append(
+                        {
+                            "Key": key,
+                            "Code": "PreconditionFailed",
+                            "Message": "At least one of the pre-conditions you specified did not hold",
+                        }
+                    )
             except s3_client.exceptions.NoSuchKey:
                 # File doesn't exist - NoSuchKey error
-                errors_list.append({
-                    'Key': key,
-                    'Code': 'NoSuchKey',
-                    'Message': 'The specified key does not exist'
-                })
+                errors_list.append({"Key": key, "Code": "NoSuchKey", "Message": "The specified key does not exist"})
             except Exception as e:
                 # Unexpected error - InternalError
-                errors_list.append({
-                    'Key': key,
-                    'Code': 'InternalError',
-                    'Message': str(e)
-                })
-        
-        return {'Deleted': deleted_list, 'Errors': errors_list}
-    
+                errors_list.append({"Key": key, "Code": "InternalError", "Message": str(e)})
+
+        return {"Deleted": deleted_list, "Errors": errors_list}
+
     def _patch_s3_delete_objects(self):
         """
         Context manager to patch the adapter's S3 client creation.
-        
+
         This patches the adapter's _get_s3_client method to return a client
-        with delete_objects replaced by our mock that supports ETag-based 
+        with delete_objects replaced by our mock that supports ETag-based
         conditional deletion.
-        
+
         Usage:
             with self._patch_s3_delete_objects():
                 result = self.adapter.delete_unchanged_s3_files(...)
         """
         # Save the original _get_s3_client method
         original_get_s3_client = self.adapter._get_s3_client
-        
+
         def mock_get_s3_client():
             # Call original to get a real S3 client
             client = original_get_s3_client()
-            
+
             # Replace delete_objects with our mock
             client.delete_objects = lambda **kw: self._mock_delete_objects_response(
-                client, kw['Bucket'], kw['Delete']['Objects']
+                client, kw["Bucket"], kw["Delete"]["Objects"]
             )
-            
+
             return client
-        
-        return patch.object(self.adapter, '_get_s3_client', mock_get_s3_client)
+
+        return patch.object(self.adapter, "_get_s3_client", mock_get_s3_client)
 
     @mock_aws
     def test_delete_unchanged_s3_files_deletes_unchanged(self, mock_aws_service):
@@ -1815,22 +1809,22 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
-        
+
         # Create S3 files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
         s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"data1")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file2.parquet", Body=b"data2")
-        
+
         # Capture ETags (these will be "before run" ETags)
-        etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")['ETag'].strip('"')
-        etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")['ETag'].strip('"')
-        
+        etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")["ETag"].strip('"')
+        etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")["ETag"].strip('"')
+
         etags_before_run = {
             "increment_source/file1.parquet": etag1,
             "increment_source/file2.parquet": etag2,
         }
-        
+
         # Setup adapter and relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1838,19 +1832,19 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="increment_source",
         )
-        
+
         # Mock delete_objects to simulate AWS ETag-based conditional deletion
         with self._patch_s3_delete_objects():
             # Call the method - should delete both files (ETags unchanged)
-            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
-        
+            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, "increment")
+
         # Assertions
-        assert result['deleted'] == 2, f"Expected 2 files deleted, got {result['deleted']}"
-        assert result['skipped'] == 0, f"Expected 0 skipped, got {result['skipped']}"
-        
+        assert result["deleted"] == 2, f"Expected 2 files deleted, got {result['deleted']}"
+        assert result["skipped"] == 0, f"Expected 0 skipped, got {result['skipped']}"
+
         # Verify files were actually deleted from S3
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="increment_source/")
-        assert objs.get('KeyCount', 0) == 0, "All files should be deleted"
+        assert objs.get("KeyCount", 0) == 0, "All files should be deleted"
 
     @mock_aws
     def test_delete_unchanged_s3_files_skips_modified(self, mock_aws_service):
@@ -1859,27 +1853,27 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
-        
+
         # Create S3 files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
         s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"data1")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file2.parquet", Body=b"data2")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file3.parquet", Body=b"data3")
-        
+
         # Capture OLD ETags (before modifications)
-        old_etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")['ETag'].strip('"')
-        old_etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")['ETag'].strip('"')
-        old_etag3 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file3.parquet")['ETag'].strip('"')
-        
+        old_etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")["ETag"].strip('"')
+        old_etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")["ETag"].strip('"')
+        old_etag3 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file3.parquet")["ETag"].strip('"')
+
         # Simulate race condition 1: Modify file1 (changes ETag by overwriting with new content)
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"modified_data")
-        
+
         # Simulate race condition 2: Add NEW file4 (wasn't in original ETags)
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file4.parquet", Body=b"new_file")
-        
+
         # file2 and file3 remain unchanged
-        
+
         # ETags dict with OLD values (before modifications)
         etags_before_run = {
             "increment_source/file1.parquet": old_etag1,  # Old ETag (file was modified)
@@ -1887,7 +1881,7 @@ class TestAthenaAdapter:
             "increment_source/file3.parquet": old_etag3,  # Current ETag (file unchanged)
             # file4 NOT in this dict - it was added after ETag capture!
         }
-        
+
         # Setup adapter and relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1895,25 +1889,25 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="increment_source",
         )
-        
+
         # Mock delete_objects to simulate AWS ETag-based conditional deletion
         with self._patch_s3_delete_objects():
             # Call the method
-            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
-        
+            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, "increment")
+
         # Assertions:
         # - file1 should be SKIPPED (ETag mismatch - PreconditionFailed)
         # - file2 should be DELETED (ETag match - unchanged)
         # - file3 should be DELETED (ETag match - unchanged)
         # - file4 is IGNORED (not in ETags dict - won't be processed at all)
-        assert result['deleted'] == 2, f"Expected 2 files deleted (file2, file3), got {result['deleted']}"
-        assert result['skipped'] == 1, f"Expected 1 skipped (file1 PreconditionFailed), got {result['skipped']}"
-        
+        assert result["deleted"] == 2, f"Expected 2 files deleted (file2, file3), got {result['deleted']}"
+        assert result["skipped"] == 1, f"Expected 1 skipped (file1 PreconditionFailed), got {result['skipped']}"
+
         # Verify file1 and file4 still exist (file1 modified, file4 newly added)
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="increment_source/")
-        assert objs['KeyCount'] == 2, "Modified and new files should still exist"
-        
-        remaining_files = {obj['Key'] for obj in objs['Contents']}
+        assert objs["KeyCount"] == 2, "Modified and new files should still exist"
+
+        remaining_files = {obj["Key"] for obj in objs["Contents"]}
         assert remaining_files == {
             "increment_source/file1.parquet",  # Preserved (modified)
             "increment_source/file4.parquet",  # Preserved (newly added)
@@ -1926,19 +1920,19 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("regular_table", location="s3://test-dbt-athena/tables/regular_table/")
-        
+
         # Create S3 file
         s3_client = boto3.client("s3", region_name=AWS_REGION)
         s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
         s3_client.put_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet", Body=b"data1")
-        
+
         # Capture ETag
-        etag1 = s3_client.head_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet")['ETag'].strip('"')
-        
+        etag1 = s3_client.head_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet")["ETag"].strip('"')
+
         etags_before_run = {
             "tables/regular_table/file1.parquet": etag1,
         }
-        
+
         # Setup adapter and relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1946,18 +1940,18 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="regular_table",
         )
-        
+
         # Call the method - should REFUSE to delete (safety check)
         # Use 'increment' as safety prefix, but table location is 'tables/' - should be blocked
-        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, 'increment')
-        
+        result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, "increment")
+
         # Assertions - safety check should prevent deletion
-        assert result['deleted'] == 0, "Safety check should prevent deletion"
-        assert result['skipped'] == 0
-        
+        assert result["deleted"] == 0, "Safety check should prevent deletion"
+        assert result["skipped"] == 0
+
         # Verify file still exists (not deleted)
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="tables/regular_table/")
-        assert objs['KeyCount'] == 1, "File should NOT be deleted due to safety check"
+        assert objs["KeyCount"] == 1, "File should NOT be deleted due to safety check"
 
     @mock_aws
     def test_delete_unchanged_s3_files_empty_etags(self, mock_aws_service):
@@ -1966,7 +1960,7 @@ class TestAthenaAdapter:
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
         mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
-        
+
         # Setup adapter and relation
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1974,13 +1968,13 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="increment_source",
         )
-        
+
         # Call with empty dict
-        result = self.adapter.delete_unchanged_s3_files(relation, {}, 'increment')
-        
+        result = self.adapter.delete_unchanged_s3_files(relation, {}, "increment")
+
         # Should return all zeros
-        assert result['deleted'] == 0
-        assert result['skipped'] == 0
+        assert result["deleted"] == 0
+        assert result["skipped"] == 0
 
     @mock_aws
     def test_delete_unchanged_s3_files_table_not_found(self, mock_aws_service):
@@ -1988,7 +1982,7 @@ class TestAthenaAdapter:
         # Setup: Create catalog and database but NOT the table
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        
+
         # Setup adapter
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
@@ -1996,14 +1990,14 @@ class TestAthenaAdapter:
             schema=DATABASE_NAME,
             identifier="nonexistent_table",
         )
-        
+
         # Call with some ETags
         etags = {"increment_source/file.parquet": "abc123"}
-        result = self.adapter.delete_unchanged_s3_files(relation, etags, 'increment')
-        
+        result = self.adapter.delete_unchanged_s3_files(relation, etags, "increment")
+
         # Should return all zeros (graceful failure)
-        assert result['deleted'] == 0
-        assert result['skipped'] == 0
+        assert result["deleted"] == 0
+        assert result["skipped"] == 0
 
 
 class TestAthenaFilterCatalog:

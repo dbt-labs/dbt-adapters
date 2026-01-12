@@ -794,33 +794,33 @@ class AthenaAdapter(SQLAdapter):
         response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
         return True if "Contents" in response else False
 
-    def _get_s3_client(self):
+    def _get_s3_client(self) -> Any:
         """
         Helper method to create and return a boto3 S3 client with proper configuration.
-        
+
         Returns:
             Configured boto3 S3 client
         """
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
-        
+
         with boto3_client_lock:
             s3_client = client.session.client(
                 "s3",
                 region_name=client.region_name,
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
-        
+
         return s3_client
 
     def _get_s3_location_parts(self, relation: AthenaRelation) -> Optional[Tuple[str, str, str]]:
         """
         Helper method to get S3 location components for a relation.
-        
+
         Args:
             relation: The Athena table relation
-            
+
         Returns:
             Tuple of (s3_location, bucket_name, prefix) if successful, None otherwise
             Example: ('s3://my-bucket/data/table/', 'my-bucket', 'data/table/')
@@ -830,29 +830,29 @@ class AthenaAdapter(SQLAdapter):
         if not table:
             LOGGER.debug(f"Table {relation} does not exist")
             return None
-        
+
         # Step 2: Extract S3 location from table metadata
         table_location = table.get("Table", {}).get("StorageDescriptor", {}).get("Location")
         if not table_location:
             LOGGER.debug(f"No S3 location found for {relation}")
             return None
-        
+
         s3_location = str(table_location)
         LOGGER.debug(f"Found S3 location: {s3_location}")
-        
+
         # Step 3: Parse S3 path into bucket and prefix
         bucket_name, prefix = self._parse_s3_path(s3_location)
-        
+
         return (s3_location, bucket_name, prefix)
 
     @available
     def get_s3_file_etags(self, relation: AthenaRelation) -> Dict[str, str]:
         """
         Get all S3 file names and their ETags for a given table.
-        
+
         Args:
             relation: The Athena table relation
-            
+
         Returns:
             Dictionary mapping file names (keys) to ETags (values)
             Example: {'path/file1.parquet': 'abc123', 'path/file2.parquet': 'def456'}
@@ -862,54 +862,52 @@ class AthenaAdapter(SQLAdapter):
         if not location_parts:
             LOGGER.info(f"Table {relation} does not exist or has no S3 location")
             return {}
-        
+
         s3_location, bucket_name, prefix = location_parts
-        
+
         # Step 2: Check if path exists
         if not self._s3_path_exists(bucket_name, prefix):
             LOGGER.info(f"S3 path does not contain any files: {s3_location}")
             return {}
-        
+
         LOGGER.info(f"Starting S3 ETags gathering for {relation} from {s3_location}")
-        
+
         # Step 3: Get boto3 S3 client
         s3_client = self._get_s3_client()
-        
+
         # Step 4: List all objects and collect ETags
         etag_dict = {}
-        paginator = s3_client.get_paginator('list_objects_v2')
+        paginator = s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=bucket_name, Prefix=prefix)
-        
+
         for page in pages:
-            if 'Contents' in page:
-                for obj in page['Contents']:
-                    file_key = obj['Key']
-                    etag = obj['ETag'].strip('"')  # Remove quotes from ETag
+            if "Contents" in page:
+                for obj in page["Contents"]:
+                    file_key = obj["Key"]
+                    etag = obj["ETag"].strip('"')  # Remove quotes from ETag
                     etag_dict[file_key] = etag
-        
+
         LOGGER.info(f"Captured {len(etag_dict)} ETags for {relation}")
         return etag_dict
 
     @available
     def delete_unchanged_s3_files(
-        self, 
-        relation: AthenaRelation, 
-        etags_dict: Dict[str, str],
-        safety_prefix: str
+        self, relation: AthenaRelation, etags_dict: Dict[str, str], safety_prefix: str
     ) -> Dict[str, int]:
         """
         Deletes S3 files with unchanged ETags using AWS native conditional batch deletion.
-        
+
         Uses S3's delete_objects API with ETag field for atomic batch conditional deletion.
         AWS will only delete objects if their current ETag matches the provided value.
         Processes up to 1,000 objects per API call for optimal performance.
-        
+
         Args:
             relation: The Athena table relation (source table)
             etags_dict: Dictionary of file keys to ETags captured before model run
-            safety_prefix: REQUIRED prefix that S3 location must start with (safety check to prevent accidental deletion).
-                          Must be configured in dbt_project.yml as 's3_location_prefix_to_validate' variable.
-            
+            safety_prefix: REQUIRED prefix that S3 location must start with (safety check to
+                          prevent accidental deletion). Must be configured in dbt_project.yml
+                          as 's3_location_prefix_to_validate' variable.
+
         Returns:
             Dictionary with cleanup results (aligned with AWS delete_objects response):
             {
@@ -919,73 +917,68 @@ class AthenaAdapter(SQLAdapter):
         """
         if not etags_dict:
             LOGGER.info("No ETags to compare - skipping deletion")
-            return {'deleted': 0, 'skipped': 0}
-        
+            return {"deleted": 0, "skipped": 0}
+
         LOGGER.info(f"Starting atomic batch S3 cleanup for {len(etags_dict)} files...")
-        
+
         # Get S3 location components
         location_parts = self._get_s3_location_parts(relation)
         if not location_parts:
             LOGGER.error(f"S3 cleanup failed: table {relation} not found or has no S3 location")
-            return {'deleted': 0, 'skipped': 0}
-        
+            return {"deleted": 0, "skipped": 0}
+
         s3_location, bucket_name, prefix = location_parts
-        
+
         # Safety check: ensure we're deleting from approved paths only
         if not prefix.startswith(safety_prefix):
             LOGGER.error(
-                f"S3 cleanup failed: Source location must start with '{safety_prefix}' prefix to prevent accidental deletion. "
-                f"Current location: s3://{bucket_name}/{prefix}. "
-                f"Please verify 'incremental_source_name' and 'incremental_source_table_name' in your model config."
+                f"S3 cleanup failed: Source location must start with '{safety_prefix}' prefix "
+                f"to prevent accidental deletion. Current location: s3://{bucket_name}/{prefix}. "
+                f"Please verify 'incremental_source_name' and 'incremental_source_table_name' "
+                f"in your model config."
             )
-            return {'deleted': 0, 'skipped': 0}
-        
+            return {"deleted": 0, "skipped": 0}
+
         # Get boto3 S3 client
         s3_client = self._get_s3_client()
-        
+
         # Prepare objects for batch deletion with ETag conditions
         # AWS delete_objects API accepts up to 1,000 objects per request
         deleted_count = 0
         skipped_count = 0
-        
+
         # Convert dict to list of objects for batching
         # Format: [{'Key': 'file.parquet', 'ETag': 'abc123'}, ...]
-        objects_to_delete = [
-            {'Key': file_key, 'ETag': etag}
-            for file_key, etag in etags_dict.items()
-        ]
-        
+        objects_to_delete = [{"Key": file_key, "ETag": etag} for file_key, etag in etags_dict.items()]
+
         # Process in batches of 1,000 (AWS limit)
         batch_size = 1000
         for i in range(0, len(objects_to_delete), batch_size):
-            batch = objects_to_delete[i:i + batch_size]
-            
+            batch = objects_to_delete[i : i + batch_size]
+
             try:
                 # AWS atomically compares ETags and deletes only matching objects
-                response = s3_client.delete_objects(
-                    Bucket=bucket_name,
-                    Delete={'Objects': batch}
-                )
-                
+                response = s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
+
                 # Count successfully deleted objects
-                if 'Deleted' in response:
-                    deleted_count += len(response['Deleted'])
-                
+                if "Deleted" in response:
+                    deleted_count += len(response["Deleted"])
+
                 # Count skipped files (PreconditionFailed, NoSuchKey, AccessDenied, etc.)
-                if 'Errors' in response:
-                    skipped_count += len(response['Errors'])
-                            
+                if "Errors" in response:
+                    skipped_count += len(response["Errors"])
+
             except ClientError as e:
                 # Batch-level error (e.g., permissions, network)
-                error_code = e.response['Error']['Code']
+                error_code = e.response["Error"]["Code"]
                 skipped_count += len(batch)
                 LOGGER.error(f"S3 batch cleanup error: {error_code} - {e.response['Error'].get('Message', '')}")
             except Exception as e:
                 # Unexpected error
                 skipped_count += len(batch)
                 LOGGER.error(f"S3 batch cleanup error: {str(e)}")
-        
-        return {'deleted': deleted_count, 'skipped': skipped_count}
+
+        return {"deleted": deleted_count, "skipped": skipped_count}
 
     def _get_one_table_for_catalog(
         self, table: TableTypeDef, database: str
