@@ -34,9 +34,9 @@ def aws_credentials():
     os.environ["AWS_DEFAULT_REGION"] = constants.AWS_REGION
 
 
-@patch.object(connections, "AthenaCredentials")
 @pytest.fixture(scope="class")
-def athena_credentials():
+@patch.object(connections, "AthenaCredentials")
+def athena_credentials(mock_credentials):
     return AthenaCredentials(
         database=constants.DATA_CATALOG_NAME,
         schema=constants.DATABASE_NAME,
