@@ -9,5 +9,6 @@
             if providing a SnowflakeRelation, `render` will be used to produce a fully qualified name
     Returns: templated string
     */
-    alter {{ relation.get_ddl_prefix_for_alter() }} table {{ relation }} rename to {{ new_name }}
+    {%- set ddl_prefix = relation.get_ddl_prefix_for_alter() -%}
+    alter{% if ddl_prefix %} {{ ddl_prefix }}{% endif %} table {{ relation }} rename to {{ new_name }}
 {%- endmacro -%}

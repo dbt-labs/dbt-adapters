@@ -114,12 +114,13 @@ create or replace {{ transient }}table {{ relation }}
     )
 ;
 
+{%- set ddl_prefix = relation.get_ddl_prefix_for_alter() -%}
 {% if catalog_relation.cluster_by is not none -%}
-alter {{ relation.get_ddl_prefix_for_alter() }} table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
+alter{% if ddl_prefix %} {{ ddl_prefix }}{% endif %} table {{ relation }} cluster by ({{ catalog_relation.cluster_by }});
 {%- endif -%}
 
 {% if catalog_relation.automatic_clustering and catalog_relation.cluster_by is not none %}
-alter {{ relation.get_ddl_prefix_for_alter() }} table {{ relation }} resume recluster;
+alter{% if ddl_prefix %} {{ ddl_prefix }}{% endif %} table {{ relation }} resume recluster;
 {%- endif -%}
 
 {%- endmacro %}
