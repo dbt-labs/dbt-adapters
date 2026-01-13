@@ -3,4 +3,3 @@ body: Fix infinite loop when Athena Spark session terminates unexpectedly during
 time: 2025-12-18T18:00:00.000000-08:00
 custom:
   Author: s-mcbeth
-
