@@ -456,6 +456,34 @@ def get_connection_method(
 class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
 
+    # Schema-level locks for rename operations to prevent concurrent
+    # ALTER TABLE RENAME operations on the same schema
+    _schema_locks: Dict[str, RLock] = {}
+    _schema_locks_lock: Optional[RLock] = None
+
+    @classmethod
+    def _get_schema_lock(cls, schema: str) -> RLock:
+        """Get or create a lock for a specific schema.
+
+        This ensures that rename operations on the same schema are serialized
+        to avoid concurrent transaction errors in Redshift.
+        """
+        # Normalize schema name to lowercase for consistent locking
+        schema_key = schema.lower() if schema else ""
+
+        # Initialize the meta-lock if needed (thread-safe via GIL)
+        if cls._schema_locks_lock is None:
+            import multiprocessing
+
+            cls._schema_locks_lock = multiprocessing.RLock()
+
+        with cls._schema_locks_lock:
+            if schema_key not in cls._schema_locks:
+                import multiprocessing
+
+                cls._schema_locks[schema_key] = multiprocessing.RLock()
+            return cls._schema_locks[schema_key]
+
     def cancel(self, connection: Connection):
         pid = connection.backend_pid
         sql = f"select pg_terminate_backend({pid})"
@@ -530,6 +558,22 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.commit()
 
             self.begin()
+
+    @contextmanager
+    def rename_lock(self, schema: str) -> Generator[None, None, None]:
+        """Hold an exclusive lock for rename operations on a specific schema.
+
+        In Redshift, concurrent ALTER TABLE RENAME operations on the same
+        schema can cause "concurrent transaction" errors. This lock ensures
+        that rename operations within the same schema are serialized across
+        threads while still allowing parallel operations on different schemas.
+
+        Unlike fresh_transaction(), this doesn't commit/rollback the current
+        transaction - it only provides mutual exclusion for the rename operation.
+        """
+        schema_lock = self._get_schema_lock(schema)
+        with schema_lock:
+            yield
 
     @classmethod
     def open(cls, connection):

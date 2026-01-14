@@ -1,8 +1,9 @@
 import os
 from dataclasses import dataclass
 
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import Optional, Set, Any, Dict, Type, TYPE_CHECKING
+from typing import List, Optional, Set, Any, Dict, Type, TYPE_CHECKING
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
@@ -66,6 +67,16 @@ class RedshiftAdapter(SQLAdapter):
         }
     )
 
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        return [
+            {
+                "name": "enable_rename_relation_lock",
+                "default": False,
+                "description": "Enable schema-level locking for ALTER TABLE RENAME operations to prevent concurrent transaction errors when multiple threads rename tables in the same schema simultaneously.",
+            }
+        ]
+
     @classmethod
     def date_function(cls):
         return "getdate()"
@@ -87,6 +98,25 @@ class RedshiftAdapter(SQLAdapter):
         """
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
+
+    def rename_relation(self, from_relation, to_relation):
+        """
+        In Redshift, ALTER TABLE RENAME operations can conflict when
+        multiple threads attempt to rename tables in the same schema
+        simultaneously. This can cause "concurrent transaction" errors.
+
+        When the enable_rename_relation_lock behavior flag is enabled,
+        we use a schema-level lock to ensure that rename operations
+        within the same schema are serialized across threads, while
+        still allowing parallel renames in different schemas.
+        """
+        if self.behavior.enable_rename_relation_lock:
+            # Use the schema from the from_relation for locking
+            schema = from_relation.schema or ""
+            with self.connections.rename_lock(schema):
+                return super().rename_relation(from_relation, to_relation)
+        else:
+            return super().rename_relation(from_relation, to_relation)
 
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx):
