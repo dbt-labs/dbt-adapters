@@ -2,6 +2,7 @@ import abc
 import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
@@ -32,6 +33,7 @@ from dbt.adapters.record.base import (
     AdapterStandardizeGrantsDictRecord,
     AdapterListRelationsWithoutCachingRecord,
     AdapterGetColumnsInRelationRecord,
+    SubmitPythonJobRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -232,6 +234,14 @@ class PythonJobHelper:
 
     def submit(self, compiled_code: str) -> Any:
         raise NotImplementedError("PythonJobHelper submit function is not implemented yet")
+
+
+@dataclass
+class PythonSubmissionResult:
+    """Result from submitting a Python job."""
+
+    run_id: str
+    compiled_code: str
 
 
 class FreshnessResponse(TypedDict):
@@ -1726,6 +1736,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("default_python_submission_method is not specified")
 
     @log_code_execution
+    @record_function(
+        SubmitPythonJobRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
         submission_method = parsed_model["config"].get(
             "submission_method", self.default_python_submission_method
