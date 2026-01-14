@@ -433,8 +433,9 @@ class TestAutocommitBehavior(TestCase):
         with mock.patch.object(
             self.adapter.connections, "get_thread_connection", return_value=mock_connection
         ):
-            with mock.patch.object(self.adapter.connections, "begin"):
-                with mock.patch.object(self.adapter.connections, "commit"):
+            # Mock parent class methods that fresh_transaction calls via super()
+            with mock.patch("dbt.adapters.sql.SQLConnectionManager.begin"):
+                with mock.patch("dbt.adapters.sql.SQLConnectionManager.commit"):
                     with self.adapter.connections.fresh_transaction():
                         # Inside the context, autocommit should be disabled
                         assert mock_connection.handle.autocommit is False

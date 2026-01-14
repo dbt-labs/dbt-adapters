@@ -573,13 +573,16 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             try:
                 if connection.transaction_open:
-                    self.commit()
+                    # Must use super() since we've disabled handle autocommit
+                    # but _is_autocommit_enabled() still returns True
+                    super().commit()
 
-                self.begin()
+                # Use super() to bypass our autocommit checks
+                super().begin()
                 yield
-                self.commit()
+                super().commit()
 
-                self.begin()
+                super().begin()
             finally:
                 if autocommit_enabled:
                     # Restore autocommit mode
