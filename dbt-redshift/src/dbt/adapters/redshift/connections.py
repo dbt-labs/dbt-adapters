@@ -1,5 +1,7 @@
+from multiprocessing.context import SpawnContext
 import re
 import os
+import threading
 
 import time
 
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
 
 logger = AdapterLogger("Redshift")
+
 
 if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
     for logger_name in ["redshift_connector"]:
@@ -456,10 +459,22 @@ def get_connection_method(
 class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
 
-    # Schema-level locks for rename operations to prevent concurrent
-    # ALTER TABLE RENAME operations on the same schema
+    # Schema-level locks for rename operations to prevent concurrent transaction errors
+    # when multiple threads rename tables in the same schema simultaneously.
+    # Uses a threading lock for initialization to avoid race conditions.
     _schema_locks: Dict[str, RLock] = {}
     _schema_locks_lock: Optional[RLock] = None
+    _locks_spawn_context: Optional[SpawnContext] = None
+    _locks_init_lock: threading.RLock = threading.RLock()
+
+    @classmethod
+    def _get_locks_spawn_context(cls) -> SpawnContext:
+        if cls._locks_spawn_context is None:
+            with cls._locks_init_lock:
+                if cls._locks_spawn_context is None:
+                    cls._locks_spawn_context = SpawnContext()
+
+        return cls._locks_spawn_context
 
     @classmethod
     def _get_schema_lock(cls, schema: str) -> RLock:
@@ -467,21 +482,24 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         This ensures that rename operations on the same schema are serialized
         to avoid concurrent transaction errors in Redshift.
+
+        Uses SpawnContext to create RLocks that are safe for use across
+        multiprocessing boundaries. A threading.Lock guards initialization
+        to prevent race conditions during setup.
         """
-        # Normalize schema name to lowercase for consistent locking
-        schema_key = schema.lower() if schema else ""
-
-        # Initialize the meta-lock if needed (thread-safe via GIL)
+        # Use threading lock to safely initialize SpawnContext and the main RLock
         if cls._schema_locks_lock is None:
-            import multiprocessing
+            with cls._locks_init_lock:
+                # Double-check after acquiring lock
+                if cls._schema_locks_lock is None:
+                    cls._schema_locks_lock = cls._get_locks_spawn_context().RLock()
 
-            cls._schema_locks_lock = multiprocessing.RLock()
+        ctx = cls._get_locks_spawn_context()
+        schema_key = schema.lower() if schema else ""
 
         with cls._schema_locks_lock:
             if schema_key not in cls._schema_locks:
-                import multiprocessing
-
-                cls._schema_locks[schema_key] = multiprocessing.RLock()
+                cls._schema_locks[schema_key] = ctx.RLock()
             return cls._schema_locks[schema_key]
 
     def cancel(self, connection: Connection):

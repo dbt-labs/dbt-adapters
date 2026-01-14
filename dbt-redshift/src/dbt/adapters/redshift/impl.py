@@ -105,14 +105,12 @@ class RedshiftAdapter(SQLAdapter):
         multiple threads attempt to rename tables in the same schema
         simultaneously. This can cause "concurrent transaction" errors.
 
-        When the enable_rename_relation_lock behavior flag is enabled,
-        we use a schema-level lock to ensure that rename operations
-        within the same schema are serialized across threads, while
-        still allowing parallel renames in different schemas.
+        When enabled via the behavior flag, this uses schema-level locking
+        to serialize rename operations within the same schema while still
+        allowing parallel operations on different schemas.
         """
         if self.behavior.enable_rename_relation_lock:
-            # Use the schema from the from_relation for locking
-            schema = from_relation.schema or ""
+            schema = from_relation.schema if from_relation else ""
             with self.connections.rename_lock(schema):
                 return super().rename_relation(from_relation, to_relation)
         else:

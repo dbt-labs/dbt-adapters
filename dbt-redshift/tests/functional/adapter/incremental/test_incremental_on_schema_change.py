@@ -134,6 +134,14 @@ class TestIncrementalOnSchemaChangeSpecialChars(BaseIncrementalOnSchemaChangeSet
     """
 
     @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "flags": {
+                "enable_rename_relation_lock": True,
+            }
+        }
+
+    @pytest.fixture(scope="class")
     def models(self):
         return {
             "model_a_special_chars.sql": _MODEL_A_SPECIAL_CHARS,
