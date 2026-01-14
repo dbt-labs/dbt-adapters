@@ -115,7 +115,14 @@
 {% endmacro %}
 
 {% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
-  {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
+  {%- if adapter.behavior.bigquery_noop_alter_relation_comment -%}
+    {#-
+      No-op to avoid unnecessary update calls when relation descriptions are already set
+      in DDL (e.g. OPTIONS(description=...)).
+    -#}
+  {%- else -%}
+    {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
+  {%- endif -%}
 {% endmacro %}
 
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}
