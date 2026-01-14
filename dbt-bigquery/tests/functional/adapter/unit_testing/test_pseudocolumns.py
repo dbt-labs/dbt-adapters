@@ -83,7 +83,7 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
             table = original_get_bq_table(database, schema, identifier)
 
             # If it's our test table, override the table_type to be EXTERNAL
-            if identifier == 'external_table':
+            if identifier == "external_table":
                 # Create a mock-like object that preserves the original table
                 # but returns "EXTERNAL" for table_type
                 class MockTable:
@@ -91,13 +91,13 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
                         self._original = original_table
 
                     def __getattr__(self, name):
-                        if name == 'table_type':
-                            return 'EXTERNAL'
+                        if name == "table_type":
+                            return "EXTERNAL"
                         return getattr(self._original, name)
 
                     @property
                     def table_type(self):
-                        return 'EXTERNAL'
+                        return "EXTERNAL"
 
                 return MockTable(table)
 

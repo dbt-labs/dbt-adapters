@@ -88,8 +88,8 @@ class BasePseudocolumnUnitTest:
 
         def mock_get_pseudocolumns(relation):
             # Return pseudocolumn only for our test source table
-            if relation.identifier == 'external_table':
-                return [Column('pseudocolumn_value', 'text')]
+            if relation.identifier == "external_table":
+                return [Column("pseudocolumn_value", "text")]
             return []
 
         project.adapter.get_pseudocolumns_for_relation = mock_get_pseudocolumns
