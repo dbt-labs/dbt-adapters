@@ -115,7 +115,7 @@
 {% endmacro %}
 
 {% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
-  {%- if adapter.behavior.bigquery_noop_alter_relation_comment -%}
+  {%- if adapter.behavior.bigquery_noop_alter_relation_comment.no_warn -%}
     {#-
       No-op to avoid unnecessary update calls when relation descriptions are already set
       in DDL (e.g. OPTIONS(description=...)).
