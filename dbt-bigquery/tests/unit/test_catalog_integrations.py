@@ -68,3 +68,30 @@ class TestBigLakeCatalogIntegration(unittest.TestCase):
         expected_uri = "custom_storage_uri"
         result = self.integration._calculate_storage_uri(model)
         self.assertEqual(expected_uri, result)
+
+    def test_external_volume_from_model_config(self):
+        """Model-level external_volume takes precedence over integration-level."""
+        model = MagicMock(spec=RelationConfig)
+        model.config = {"external_volume": "model_level_volume"}
+
+        result = self.integration._get_external_volume(model)
+        self.assertEqual("model_level_volume", result)
+
+    def test_external_volume_fallback_to_integration(self):
+        """Falls back to integration-level external_volume when not set on model."""
+        model = MagicMock(spec=RelationConfig)
+        model.config = {}
+
+        result = self.integration._get_external_volume(model)
+        self.assertEqual("test_external_volume", result)
+
+    def test_build_relation_with_model_external_volume(self):
+        """Model-level external_volume is used in build_relation."""
+        model = MagicMock(spec=RelationConfig)
+        model.config = {"external_volume": "gs://model-bucket"}
+        model.schema = "test_schema"
+        model.name = "test_model"
+
+        relation = self.integration.build_relation(model)
+        self.assertEqual("gs://model-bucket", relation.external_volume)
+        self.assertEqual("gs://model-bucket/_dbt/test_schema/test_model", relation.storage_uri)
