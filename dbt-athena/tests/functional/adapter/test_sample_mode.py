@@ -8,7 +8,7 @@ from dbt.tests.adapter.sample_mode.test_sample_mode import (
 )
 from dbt.tests.util import run_dbt
 
-now = datetime.datetime.now()
+now = datetime.datetime.now(datetime.timezone.utc)
 twelve_hours_ago = now - datetime.timedelta(hours=12)
 two_days_ago = now - datetime.timedelta(days=2)
 
