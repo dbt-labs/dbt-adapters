@@ -9,6 +9,7 @@ import time
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import RefreshError
 from google.cloud.bigquery import (
     Client,
@@ -77,7 +78,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if hasattr(error, "query_job"):
             logger.error(
                 cls._bq_job_link(
-                    error.query_job.location, error.query_job.project, error.query_job.job_id
+                    error.query_job.location,
+                    error.query_job.project,
+                    error.query_job.job_id,
                 )
             )
         raise DbtDatabaseError(error_msg)
@@ -136,13 +139,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 if connection is this_connection:
                     continue
 
-                if connection.handle is not None and connection.state == ConnectionState.OPEN:
+                if (
+                    connection.handle is not None
+                    and connection.state == ConnectionState.OPEN
+                ):
                     client: Client = connection.handle
                     for job_id in self.jobs_by_thread.get(thread_id, []):
                         with self.exception_handler(f"Cancel job: {job_id}"):
                             client.cancel_job(
                                 job_id,
-                                retry=self._retry.create_reopen_with_deadline(connection),
+                                retry=self._retry.create_reopen_with_deadline(
+                                    connection
+                                ),
                             )
                     self.close(connection)
 
@@ -197,7 +205,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             return connection
 
         except Exception as e:
-            logger.debug(f"""Got an error when attempting to create a bigquery " "client: '{e}'""")
+            logger.debug(
+                f"""Got an error when attempting to create a bigquery " "client: '{e}'"""
+            )
             connection.handle = None
             connection.state = ConnectionState.FAIL
             raise FailedToConnectError(str(e))
@@ -417,7 +427,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         def standard_to_legacy(table):
             return table.project + ":" + table.dataset + "." + table.identifier
 
-        legacy_sql = "SELECT * FROM [" + standard_to_legacy(table) + "$__PARTITIONS_SUMMARY__]"
+        legacy_sql = (
+            "SELECT * FROM [" + standard_to_legacy(table) + "$__PARTITIONS_SUMMARY__]"
+        )
 
         sql = self._add_query_comment(legacy_sql)
         # auto_begin is ignored on bigquery, and only included for consistency
@@ -465,7 +477,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 job_config=CopyJobConfig(write_disposition=write_disposition),
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
-            copy_job.result(timeout=self._retry.create_job_execution_timeout(fallback=300))
+            copy_job.result(
+                timeout=self._retry.create_job_execution_timeout(fallback=300)
+            )
 
     def write_dataframe_to_table(
         self,
@@ -484,7 +498,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             field_delimiter=field_delimiter,
         )
         table = self.table_ref(database, schema, identifier)
-        self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
+        self._write_file_to_table(
+            client, file_path, table, load_config, fallback_timeout
+        )
 
     def write_file_to_table(
         self,
@@ -501,7 +517,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             config["schema"] = json.load(config["schema"])
         load_config = LoadJobConfig(**config)
         table = self.table_ref(database, schema, identifier)
-        self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
+        self._write_file_to_table(
+            client, file_path, table, load_config, fallback_timeout
+        )
 
     def _write_file_to_table(
         self,
@@ -511,10 +529,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
         config: LoadJobConfig,
         fallback_timeout: Optional[float] = None,
     ) -> None:
-
         with self.exception_handler("LOAD TABLE"):
             with open(file_path, "rb") as f:
-                job = client.load_table_from_file(f, table, rewind=True, job_config=config)
+                job = client.load_table_from_file(
+                    f, table, rewind=True, job_config=config
+                )
 
         response = job.result(retry=self._retry.create_retry(fallback=fallback_timeout))
 
@@ -589,6 +608,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         client: Client = conn.handle
         timeout = self._retry.create_job_execution_timeout()
         query_job_config = QueryJobConfig(**job_params)
+        polling_timeout = timeout + 30
         query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
         # Cannot reuse job_config if destination is set and ddl is used
@@ -605,12 +625,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
             and query_job.project is not None
         ):
             logger.debug(
-                self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
+                self._bq_job_link(
+                    query_job.location, query_job.project, query_job.job_id
+                )
             )
 
         pre = time.perf_counter()
         try:
-            iterator = query_job.result(max_results=limit)
+            iterator = query_job.result(max_results=limit, timeout=polling_timeout)
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             try:
@@ -618,6 +640,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             except Exception as e:
                 logger.debug(f"Error cancelling query job: {e}")
             raise TimeoutError(exc)
+        except GoogleAPICallError as e:
+            logger.debug(f"Error polling query results: {e}")
+            raise DbtDatabaseError(str(e))
 
         fire_event(
             SQLQueryStatus(
