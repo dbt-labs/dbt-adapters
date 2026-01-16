@@ -1,5 +1,7 @@
+from multiprocessing.context import SpawnContext
 import re
 import os
+import threading
 
 import time
 
@@ -31,6 +33,7 @@ if TYPE_CHECKING:
 COMMENT_REGEX = re.compile(r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)", re.MULTILINE)
 
 logger = AdapterLogger("Redshift")
+
 
 if os.getenv("DBT_REDSHIFT_CONNECTOR_DEBUG_LOGGING"):
     for logger_name in ["redshift_connector"]:
@@ -456,6 +459,49 @@ def get_connection_method(
 class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
 
+    # Schema-level locks for rename operations to prevent concurrent transaction errors
+    # when multiple threads rename tables in the same schema simultaneously.
+    # Uses a threading lock for initialization to avoid race conditions.
+    _schema_locks: Dict[str, RLock] = {}
+    _schema_locks_lock: Optional[RLock] = None
+    _locks_spawn_context: Optional[SpawnContext] = None
+    _locks_init_lock: threading.RLock = threading.RLock()
+
+    @classmethod
+    def _get_locks_spawn_context(cls) -> SpawnContext:
+        if cls._locks_spawn_context is None:
+            with cls._locks_init_lock:
+                if cls._locks_spawn_context is None:
+                    cls._locks_spawn_context = SpawnContext()
+
+        return cls._locks_spawn_context
+
+    @classmethod
+    def _get_schema_lock(cls, schema: str) -> RLock:
+        """Get or create a lock for a specific schema.
+
+        This ensures that rename operations on the same schema are serialized
+        to avoid concurrent transaction errors in Redshift.
+
+        Uses SpawnContext to create RLocks that are safe for use across
+        multiprocessing boundaries. A threading.Lock guards initialization
+        to prevent race conditions during setup.
+        """
+        # Use threading lock to safely initialize SpawnContext and the main RLock
+        if cls._schema_locks_lock is None:
+            with cls._locks_init_lock:
+                # Double-check after acquiring lock
+                if cls._schema_locks_lock is None:
+                    cls._schema_locks_lock = cls._get_locks_spawn_context().RLock()
+
+        ctx = cls._get_locks_spawn_context()
+        schema_key = schema.lower() if schema else ""
+
+        with cls._schema_locks_lock:
+            if schema_key not in cls._schema_locks:
+                cls._schema_locks[schema_key] = ctx.RLock()
+            return cls._schema_locks[schema_key]
+
     def cancel(self, connection: Connection):
         pid = connection.backend_pid
         sql = f"select pg_terminate_backend({pid})"
@@ -530,6 +576,22 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.commit()
 
             self.begin()
+
+    @contextmanager
+    def rename_lock(self, schema: str) -> Generator[None, None, None]:
+        """Hold an exclusive lock for rename operations on a specific schema.
+
+        In Redshift, concurrent ALTER TABLE RENAME operations on the same
+        schema can cause "concurrent transaction" errors. This lock ensures
+        that rename operations within the same schema are serialized across
+        threads while still allowing parallel operations on different schemas.
+
+        Unlike fresh_transaction(), this doesn't commit/rollback the current
+        transaction - it only provides mutual exclusion for the rename operation.
+        """
+        schema_lock = self._get_schema_lock(schema)
+        with schema_lock:
+            yield
 
     @classmethod
     def open(cls, connection):
