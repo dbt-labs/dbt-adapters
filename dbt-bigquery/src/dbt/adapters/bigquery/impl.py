@@ -36,6 +36,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
+from dbt_common.record import record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -43,6 +44,7 @@ from dbt.adapters.base import (
     BaseRelation,
     ConstraintSupport,
     PythonJobHelper,
+    PythonSubmissionResult,
     RelationType,
     SchemaSearchMap,
     available,
@@ -71,6 +73,10 @@ from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
     BigFramesHelper,
+)
+from dbt.adapters.bigquery.record.record_types import (
+    BigQueryAdapterDescribeRelationRecord,
+    BigQueryAdapterIsReplaceableRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -104,6 +110,16 @@ BIGQUERY_USE_BATCH_SOURCE_FRESHNESS = BehaviorFlag(
     name="bigquery_use_batch_source_freshness",
     default=False,
     description="Use information schema TABLE_STORAGE table to calculate source freshness in batch.",
+)
+
+BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
+    name="bigquery_noop_alter_relation_comment",
+    default=False,
+    description=(
+        "Make bigquery__alter_relation_comment a no-op. This is useful when relation "
+        "descriptions are already set in DDL (e.g. via OPTIONS(description=...)) to avoid "
+        "an unnecessary update."
+    ),
 )
 
 _dataset_lock = threading.Lock()
@@ -185,6 +201,7 @@ class BigQueryAdapter(BaseAdapter):
     def _behavior_flags(self) -> list[BehaviorFlag]:
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
+            BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
         ]
 
     @classmethod
@@ -573,6 +590,12 @@ class BigQueryAdapter(BaseAdapter):
         return table.clustering_fields == conf_cluster
 
     @available.parse(lambda *a, **k: True)
+    @record_function(
+        BigQueryAdapterIsReplaceableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def is_replaceable(
         self, relation, conf_partition: Optional[PartitionConfig], conf_cluster
     ) -> bool:
@@ -1101,7 +1124,13 @@ class BigQueryAdapter(BaseAdapter):
             table = None
         return table
 
-    @available.parse(lambda *a, **k: True)
+    @available.parse(lambda *a, **k: None)
+    @record_function(
+        BigQueryAdapterDescribeRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def describe_relation(
         self, relation: BigQueryRelation
     ) -> Optional[BigQueryBaseRelationConfig]:
@@ -1195,7 +1224,15 @@ class BigQueryAdapter(BaseAdapter):
         else:
             return list(res)
 
-    def generate_python_submission_response(self, submission_result) -> BigQueryAdapterResponse:
+    def generate_python_submission_response(
+        self, submission_result: PythonSubmissionResult
+    ) -> BigQueryAdapterResponse:
+        if isinstance(submission_result, PythonSubmissionResult):
+            return BigQueryAdapterResponse(
+                _message="OK",
+                job_id=submission_result.run_id,
+                code=submission_result.compiled_code,
+            )
         return BigQueryAdapterResponse(_message="OK")
 
     @property
