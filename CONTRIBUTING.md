@@ -36,6 +36,12 @@ Make sure to take this into account when working with a specific package.
 
 ## Install a package for development
 
+> [!IMPORTANT]
+> Ensure that you're in a package directory prior to running any commands for a specific package, e.g.:
+> ```shell
+> cd dbt-postgres
+> ```
+
 ### Create a `hatch` environment
 
 ```shell
@@ -57,9 +63,6 @@ $ hatch run setup
 > 2. It names the environment predictable (e.g. `default`, `build`) instead of using a hash
 
 ### Activate a `hatch` environment
-
-> [!IMPORTANT]
-> Ensure that you're in a package directory prior to running any commands for a specific package, e.g.: `cd dbt-postgres`
 
 ```shell
 $ hatch shell
@@ -141,7 +144,7 @@ $ hatch run code-quality
 ```
 OR
 ```shell
-$ pre-commit -run --all-files
+$ pre-commit run --all-files
 ```
 
 ## Unit tests
@@ -168,9 +171,16 @@ This will vary by package; please refer to the package's `CONTRIBUTING.md` for m
 ### Configure environment variables
 
 Each adapter requires certain environment variables to connect to its platform.
-The template is contained in the respective `test.env.exmaple` file.
+The template is contained in the respective `test.env.example` file.
 If you already ran `hatch run setup` you should have a `test.env` file in the package root.
 Update the environment variables in this file with your instance's connection credentials.
+
+### Run integration tests
+
+```shell
+# run all integration tests
+$ hatch run integration-tests
+```
 
 # Documentation
 
