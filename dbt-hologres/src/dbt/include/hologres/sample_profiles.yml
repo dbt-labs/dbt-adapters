@@ -1,0 +1,26 @@
+hologres_profile:
+  target: dev
+  outputs:
+    dev:
+      type: hologres
+      host: hgpostcn-cn-xxx.hologres.aliyuncs.com
+      port: 80
+      user: BASIC$your_username
+      password: your_password
+      database: your_database
+      schema: public
+      threads: 4
+      connect_timeout: 10
+      sslmode: disable
+      
+    prod:
+      type: hologres
+      host: hgpostcn-cn-xxx.hologres.aliyuncs.com
+      port: 80
+      user: BASIC$prod_username
+      password: prod_password
+      database: prod_database
+      schema: public
+      threads: 8
+      connect_timeout: 30
+      sslmode: disable

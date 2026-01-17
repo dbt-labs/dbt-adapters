@@ -1,0 +1,27 @@
+changesDir: .changes
+unreleasedDir: unreleased
+headerPath: header.tpl.md
+versionHeaderPath: ""
+changelogPath: CHANGELOG.md
+versionExt: md
+versionFormat: '## dbt-hologres {{.Version}} - {{.Time.Format "January 02, 2006"}}'
+kindFormat: '### {{.Kind}}'
+changeFormat: '- {{.Body}} {{if .Custom.Issue}}([#{{.Custom.Issue}}](https://github.com/dbt-labs/dbt-adapters/issues/{{.Custom.Issue}})){{end}}'
+
+kinds:
+  - label: Breaking Changes
+  - label: Features
+  - label: Fixes
+  - label: Docs
+  - label: Under the Hood
+  - label: Dependencies
+  - label: Security
+
+custom:
+  - key: Author
+    label: GitHub Username(s) (separated by a single space if multiple)
+    type: string
+    minLength: 3
+  - key: Issue
+    label: GitHub Issue Number
+    type: int

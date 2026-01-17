@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+dynamic = ["version"]
+name = "dbt-hologres"
+description = "The Hologres adapter plugin for dbt"
+readme = "README.md"
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "hologres", "阿里云"]
+requires-python = ">=3.10.0"
+authors = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+maintainers = [
+    { name = "dbt Labs", email = "info@dbtlabs.com" },
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "psycopg[binary]>=3.1,<4.0",
+    "dbt-adapters>=1.19.0,<2.0",
+    # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
+    "dbt-core>=1.8.0rc1",
+    # installed via dbt-adapters but used directly
+    "dbt-common>=1.0.4,<2.0",
+    "agate>=1.0,<2.0",
+]
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-hologres"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-hologres"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-hologres/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]
