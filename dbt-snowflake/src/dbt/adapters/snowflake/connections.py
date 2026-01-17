@@ -129,6 +129,8 @@ class SnowflakeCredentials(Credentials):
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
     platform_detection_timeout_seconds: float = 0.0
+    get_token_from_azure_default_credential: Optional[bool] = None
+    azure_token_scope: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -155,6 +157,22 @@ class SnowflakeCredentials(Credentials):
                 warn_or_error(
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
+
+        if self.authenticator == "oauth" and self.get_token_from_azure_default_credential:
+            if not self.azure_token_scope:
+                raise DbtConfigError(
+                    '"azure_token_scope" is required when "get_token_from_azure_default_credential" is set to true.'
+                )
+            try:
+                from azure.identity import DefaultAzureCredential
+            except ImportError as e:
+                raise DbtConfigError(
+                    'To use "get_token_from_azure_default_credential", you must install the "azure-identity" package. '
+                    'You can do this by running "pip install dbt-snowflake[azure-identity]".'
+                ) from e
+            self._azure_cred = DefaultAzureCredential()
+        else:
+            self._azure_cred = None
 
         self.account, sub_count = re.subn("_", "-", self.account)
         if sub_count:
@@ -202,6 +220,8 @@ class SnowflakeCredentials(Credentials):
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "platform_detection_timeout_seconds",
+            "get_token_from_azure_default_credential",
+            "azure_token_scope",
         )
 
     def auth_args(self):
@@ -226,9 +246,10 @@ class SnowflakeCredentials(Credentials):
             result["authenticator"] = self.authenticator
             if self.authenticator == "oauth":
                 token = self.token
-                # if we have a client ID/client secret, the token is a refresh
-                # token, not an access token
-                if self.oauth_client_id and self.oauth_client_secret:
+                if self.get_token_from_azure_default_credential and self._azure_cred:
+                    token = self._azure_cred.get_token(self.azure_token_scope).token
+                elif self.oauth_client_id and self.oauth_client_secret:
+                    # if we have a client ID/client secret, the token is a refresh token, not an access token
                     token = self._get_access_token()
                 elif self.oauth_client_id:
                     warn_or_error(
