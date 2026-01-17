@@ -10,6 +10,7 @@ from dbt.adapters.snowflake.parse_model import (
     cluster_by,
     partition_by,
     catalog_name,
+    iceberg_version,
 )
 
 
@@ -85,3 +86,17 @@ def test_catalog_name_with_non_model_config():
     exported_config = ExportConfig(export_as=ExportDestinationType.TABLE)
     model = make_model(exported_config)
     assert catalog_name(model) == None
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({"iceberg_version": 2}, 2),
+        ({"iceberg_version": 3}, 3),
+        ({"iceberg_version": None}, None),
+        ({}, None),
+    ],
+)
+def test_iceberg_version(config, expected):
+    model = make_model(config)
+    assert iceberg_version(model) == expected
