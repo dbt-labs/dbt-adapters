@@ -113,9 +113,7 @@
     {%- set single_partition_expression = single_partition | join(' and ') -%}
     {%- do partitions.append('(' + single_partition_expression + ')') -%}
   {%- endfor -%}
-  {%- for i in range(partitions | length) %}
-    {%- do adapter.clean_up_partitions(target_relation, partitions[i]) -%}
-  {%- endfor -%}
+  {%- do adapter.clean_up_partitions(target_relation, partitions) -%}
 {%- endmacro %}
 
 {% macro remove_partitions_from_columns(columns_with_partitions, partition_keys) %}
