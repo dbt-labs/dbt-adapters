@@ -75,6 +75,7 @@ class AthenaCredentials(Credentials):
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
+    aws_tags_database: Optional[Dict[str, str]] = None
 
     @property
     def type(self) -> str:
@@ -106,6 +107,7 @@ class AthenaCredentials(Credentials):
             "debug_query_state",
             "seed_s3_upload_args",
             "lf_tags_database",
+            "aws_tags_database",
             "spark_work_group",
         )
 

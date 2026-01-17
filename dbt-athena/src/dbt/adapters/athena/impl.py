@@ -168,6 +168,35 @@ class AthenaAdapter(SQLAdapter):
         return "timestamp"
 
     @available
+    def add_aws_tags_to_database(self, relation: AthenaRelation) -> None:
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        if aws_tags := conn.credentials.aws_tags_database:
+            with boto3_client_lock:
+                sts = client.session.client(
+                    "sts",
+                    region_name=client.region_name,
+                    config=get_boto3_config(num_retries=creds.effective_num_retries),
+                )
+            account_id = sts.get_caller_identity()["Account"]
+            with boto3_client_lock:
+                glue_client =client.session.client(
+                    "glue",
+                    client.region_name,
+                    config=get_boto3_config(num_retries=creds.effective_num_retries),
+                )
+
+            try:
+                glue_client.tag_resource(
+                    ResourceArn=f"arn:aws:glue:{glue_client.meta.region_name}:{account_id}:database/{relation.schema}",
+                    TagsToAdd=aws_tags
+                )
+                LOGGER.debug(f"AWS resource tags added to database for {relation}")
+            except ClientError as e:
+                LOGGER.error(f"Failed to add AWS resource tags to database for {relation}: {e}")
+
+    @available
     def add_lf_tags_to_database(self, relation: AthenaRelation) -> None:
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
