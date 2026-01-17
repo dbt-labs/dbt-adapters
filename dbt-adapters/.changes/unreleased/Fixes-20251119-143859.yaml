@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix get_fixture_sql which always leads to a compliation error if column_name_to_data_types is not falsy
+time: 2025-11-19T14:38:59.834685+01:00
+custom:
+    Author: darkclouder
+    Issue: none
