@@ -14,6 +14,8 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFRuntimeVersionRequired,
     PythonUDFEntryPointRequired,
     SqlUDFDefaultArgSupport,
+    JavaScriptUDFSupported,
+    JavaScriptUDFDefaultArgSupport,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -209,3 +211,11 @@ class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
             "price_for_xlarge.sql": files.MY_UDF_SQL,
             "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
         }
+
+
+class TestBigqueryJavaScriptUDFSupported(JavaScriptUDFSupported):
+    pass
+
+
+class TestBigqueryJavaScriptUDFDefaultArgSupport(JavaScriptUDFDefaultArgSupport):
+    expect_default_arg_support = False
