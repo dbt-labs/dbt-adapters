@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.adapters.contracts.relation import Column
+from dbt.adapters.base import Column
 from dbt.tests.util import run_dbt
 
 
