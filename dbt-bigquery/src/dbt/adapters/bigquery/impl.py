@@ -112,6 +112,16 @@ BIGQUERY_USE_BATCH_SOURCE_FRESHNESS = BehaviorFlag(
     description="Use information schema TABLE_STORAGE table to calculate source freshness in batch.",
 )
 
+BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
+    name="bigquery_noop_alter_relation_comment",
+    default=False,
+    description=(
+        "Make bigquery__alter_relation_comment a no-op. This is useful when relation "
+        "descriptions are already set in DDL (e.g. via OPTIONS(description=...)) to avoid "
+        "an unnecessary update."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -191,6 +201,7 @@ class BigQueryAdapter(BaseAdapter):
     def _behavior_flags(self) -> list[BehaviorFlag]:
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
+            BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
         ]
 
     @classmethod
