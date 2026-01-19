@@ -5,6 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 
 class MacroReturn(Exception):
     """Exception raised to return a value from a Jinja macro"""
+
     def __init__(self, value):
         self.value = value
 
@@ -55,9 +56,7 @@ class TestCloneMacros(unittest.TestCase):
         template = self.__get_template("materializations/clone.sql")
 
         # No target relation (None)
-        result = self.__run_macro(
-            template, "bigquery__is_clone_replaceable", None, mock.Mock()
-        )
+        result = self.__run_macro(template, "bigquery__is_clone_replaceable", None, mock.Mock())
 
         self.assertTrue(result)
 
@@ -69,10 +68,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [None, mock.Mock()]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -85,10 +81,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [mock.Mock(), None]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -111,10 +104,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -141,10 +131,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -171,10 +158,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertFalse(result)
@@ -201,10 +185,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertFalse(result)
@@ -229,10 +210,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertFalse(result)
@@ -265,10 +243,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -301,10 +276,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertFalse(result)
@@ -327,10 +299,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -353,10 +322,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertFalse(result)
@@ -383,10 +349,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         self.assertTrue(result)
@@ -413,10 +376,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         # Should return True because field names match (case-insensitive)
@@ -440,10 +400,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         # Should return True because None and [] both mean "no clustering"
@@ -467,10 +424,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         # Should return True because [] and None both mean "no clustering"
@@ -504,10 +458,7 @@ class TestCloneMacros(unittest.TestCase):
         self.mock_adapter.get_bq_table.side_effect = [target_table, source_table]
 
         result = self.__run_macro(
-            template,
-            "bigquery__is_clone_replaceable",
-            mock.Mock(),
-            mock.Mock()
+            template, "bigquery__is_clone_replaceable", mock.Mock(), mock.Mock()
         )
 
         # Should return True because field names match (case-insensitive)

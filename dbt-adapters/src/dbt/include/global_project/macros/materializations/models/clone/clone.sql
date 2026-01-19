@@ -14,6 +14,8 @@
 {%- materialization clone, default -%}
 
   {%- set relations = {'relations': []} -%}
+  -- grab current tables grants config for comparison later on
+  {%- set grant_config = config.get('grants') -%}
 
   {%- if not defer_relation -%}
       -- nothing to do

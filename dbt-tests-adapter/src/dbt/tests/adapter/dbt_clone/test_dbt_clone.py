@@ -264,3 +264,27 @@ class BaseCloneSameTargetAndState(BaseClone):
 
 class TestCloneSameTargetAndState(BaseCloneSameTargetAndState):
     pass
+
+
+class BaseCloneNoDropOnFullRefresh(BaseClone):
+    """Verify that adapters with default is_clone_replaceable don't drop tables on full refresh.
+
+    This base class tests the default clone behavior where is_clone_replaceable returns True,
+    meaning the target table should NOT be dropped during a full-refresh clone operation.
+    Adapters that override is_clone_replaceable (like BigQuery) should NOT inherit from this.
+    """
+
+    def test_clone_full_refresh_no_drop(self, project, unique_schema, other_schema):
+        """Verify no drop message when cloning with --full-refresh for default adapters."""
+        project.create_test_schema(other_schema)
+        self.run_and_save_state(project.project_root)
+
+        # First clone
+        clone_args = ["clone", "--state", "state", "--target", "otherschema"]
+        run_dbt(clone_args)
+
+        # Second clone with full-refresh - should NOT drop for default adapters
+        results, output = run_dbt_and_capture([*clone_args, "--full-refresh"])
+
+        # Verify no partition/clustering drop message (default is_clone_replaceable returns True)
+        assert "partition/clustering spec differs" not in output
