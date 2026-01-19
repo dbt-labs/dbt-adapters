@@ -207,3 +207,120 @@ class TestBigQueryClonePreservesGrants(BaseGrantsBigQueryClone, BaseClone):
         # Check that the expected privilege exists on the cloned relation
         assert select_privilege in actual_grants
         assert get_test_users[0] in actual_grants[select_privilege]
+
+
+class TestBigQueryCloneGrantsAfterPartitionDrop(BaseGrantsBigQueryClone, BaseClone):
+    """Test that grants are applied after target table is dropped due to partition mismatch.
+
+    This is the critical combined test case: when a target table exists with a different
+    partition spec, it must be dropped before cloning. After the clone, grants configured
+    on the model should still be applied to the new table.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "partitioned_model.sql": fixtures.partitioned_table_model_sql,
+            "schema.yml": self.interpolate_name_overrides(
+                fixtures.partitioned_model_with_grants_schema_yml
+            ),
+        }
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {}
+
+    @pytest.fixture(scope="class")
+    def other_schema(self, unique_schema):
+        return unique_schema + "_other"
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema, other_schema):
+        outputs = {"default": dbt_profile_target, "otherschema": deepcopy(dbt_profile_target)}
+        outputs["default"]["schema"] = unique_schema
+        outputs["otherschema"]["schema"] = other_schema
+        return {"test": {"outputs": outputs, "target": "default"}}
+
+    @pytest.fixture(autouse=True)
+    def clean_up(self, project, other_schema):
+        yield
+        with project.adapter.connection_named("__test"):
+            relation = project.adapter.Relation.create(
+                database=project.database, schema=other_schema
+            )
+            project.adapter.drop_schema(relation)
+
+    def get_grants_on_relation_in_schema(self, project, relation_name, schema):
+        """Get grants on a relation in a specific schema."""
+        adapter = project.adapter
+        relation = adapter.Relation.create(
+            database=project.database,
+            schema=schema,
+            identifier=relation_name,
+        )
+        with get_connection(adapter):
+            kwargs = {"relation": relation}
+            show_grant_sql = adapter.execute_macro("get_show_grant_sql", kwargs=kwargs)
+            _, grant_table = adapter.execute(show_grant_sql, fetch=True)
+            actual_grants = adapter.standardize_grants_dict(grant_table)
+        return actual_grants
+
+    def test_clone_applies_grants_after_partition_drop(
+        self, project, unique_schema, other_schema, get_test_users
+    ):
+        """Grants should be applied after target is dropped due to partition mismatch."""
+        if len(get_test_users) == 0:
+            pytest.skip("DBT_TEST_USER_1 environment variable not set")
+
+        project.create_test_schema(other_schema)
+        select_privilege = self.privilege_grantee_name_overrides()["select"]
+
+        # Run partitioned model with grants
+        results = run_dbt(["run"])
+        assert len(results) == 1
+
+        # Verify grants on source
+        expected_grants = {select_privilege: [get_test_users[0]]}
+        self.assert_expected_grants_match_actual(project, "partitioned_model", expected_grants)
+
+        # Save state
+        self.copy_state(project.project_root)
+
+        # Create table with DIFFERENT partition in target schema (MONTH instead of DAY)
+        # This will force the clone to drop the target before recreating
+        project.run_sql(
+            f"""
+            CREATE OR REPLACE TABLE `{project.database}`.`{other_schema}`.`partitioned_model`
+            PARTITION BY DATE_TRUNC(created_at, MONTH)
+            AS SELECT current_date() as created_at, 1 as id
+        """
+        )
+
+        # Clone with full-refresh - should drop due to partition mismatch, then apply grants
+        clone_args = ["clone", "--state", "state", "--target", "otherschema", "--full-refresh"]
+        results, output = run_dbt_and_capture(clone_args)
+        assert len(results) == 1
+
+        # Verify the table was dropped due to partition mismatch
+        assert "Dropping relation" in output
+        assert "partition/clustering spec differs from source" in output
+
+        # Verify grants were applied to the cloned relation after drop
+        actual_grants = self.get_grants_on_relation_in_schema(
+            project, "partitioned_model", other_schema
+        )
+        assert select_privilege in actual_grants, (
+            f"Expected grant '{select_privilege}' not found. " f"Actual grants: {actual_grants}"
+        )
+        assert get_test_users[0] in actual_grants[select_privilege], (
+            f"Expected user '{get_test_users[0]}' not in grant. "
+            f"Actual grantees: {actual_grants[select_privilege]}"
+        )

@@ -175,3 +175,13 @@ models:
       grants:
         select: ["{{ env_var('DBT_TEST_USER_1') }}"]
 """
+
+# Schema for partitioned model with grants (for testing combined partition mismatch + grants)
+partitioned_model_with_grants_schema_yml = """
+version: 2
+models:
+  - name: partitioned_model
+    config:
+      grants:
+        select: ["{{ env_var('DBT_TEST_USER_1') }}"]
+"""
