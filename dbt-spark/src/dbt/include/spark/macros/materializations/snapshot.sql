@@ -85,7 +85,7 @@
     {%- for col in columns -%}
         {%- do entries.append("'\"" ~ col.name ~ "\": \"', " ~ snapshot_backfill_timestamp() ~ ", '\"'") -%}
     {%- endfor -%}
-    {{ return("concat(" ~ entries | join(", ', ', ") ~ ")") }}
+    {{ return("concat(" ~ (entries | join(", ', ', ")) ~ ")") }}
 {% endmacro %}
 
 

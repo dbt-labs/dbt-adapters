@@ -59,13 +59,13 @@
 {% endmacro %}
 
 
-{# Athena-specific JSON entries builder #}
+{# Athena-specific JSON entries builder - uses || concatenation #}
 {% macro athena__backfill_audit_json_entries(columns) %}
     {%- set entries = [] -%}
     {%- for col in columns -%}
         {%- do entries.append("'\"" ~ col.name ~ "\": \"' || " ~ snapshot_backfill_timestamp() ~ " || '\"'") -%}
     {%- endfor -%}
-    {{ return("concat(" ~ entries | join(", ', ', ") ~ ")") }}
+    {{ return(entries | join(" || ', ' || ")) }}
 {% endmacro %}
 
 
@@ -91,14 +91,10 @@
         {%- if audit_column %}
         {{ adapter.quote(audit_column) }} = CASE
             WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN
-                concat('{', {{ backfill_audit_json_entries(columns) }}, '}')
+                '{' || {{ backfill_audit_json_entries(columns) }} || '}'
             ELSE
-                concat(
-                    substr(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, length(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1),
-                    ', ',
-                    {{ backfill_audit_json_entries(columns) }},
-                    '}'
-                )
+                substr(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, length(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1)
+                || ', ' || {{ backfill_audit_json_entries(columns) }} || '}'
         END
         {%- endif %}
     {% endcall %}
@@ -222,7 +218,7 @@
 
   {% if not target_relation_exists %}
 
-      {% set build_sql = build_snapshot_table(strategy, model['compiled_sql']) %}
+      {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
@@ -264,7 +260,7 @@
           {% do backfill_snapshot_columns(
               target_relation,
               missing_columns,
-              model['compiled_sql'],
+              model['compiled_code'],
               unique_key,
               audit_column
           ) %}
