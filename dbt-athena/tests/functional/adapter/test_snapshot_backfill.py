@@ -3,6 +3,7 @@ Athena-specific tests for snapshot column backfill feature.
 
 Note: Athena backfill only works with Iceberg tables. Hive tables will skip backfill.
 """
+
 import pytest
 
 from dbt.tests.adapter.simple_snapshot.test_snapshot_backfill import (
@@ -36,17 +37,21 @@ ATHENA_SNAPSHOT_BACKFILL_WITH_AUDIT_SQL = """
 
 class AthenaSnapshotBackfillMixin:
     """Mixin to override snapshot SQL for Athena with Iceberg format."""
-    
+
     @pytest.fixture(scope="class")
     def snapshots(self):
         return {"snapshot.sql": ATHENA_SNAPSHOT_BACKFILL_WITH_AUDIT_SQL}
 
 
-class TestSnapshotBackfillSingleColumn(AthenaSnapshotBackfillMixin, BaseSnapshotBackfillSingleColumn):
+class TestSnapshotBackfillSingleColumn(
+    AthenaSnapshotBackfillMixin, BaseSnapshotBackfillSingleColumn
+):
     pass
 
 
-class TestSnapshotBackfillMultipleColumns(AthenaSnapshotBackfillMixin, BaseSnapshotBackfillMultipleColumns):
+class TestSnapshotBackfillMultipleColumns(
+    AthenaSnapshotBackfillMixin, BaseSnapshotBackfillMultipleColumns
+):
     pass
 
 
@@ -58,18 +63,25 @@ class TestSnapshotBackfillAuditJson(AthenaSnapshotBackfillMixin, BaseSnapshotBac
     pass
 
 
-class TestSnapshotBackfillCompositeKey(AthenaSnapshotBackfillMixin, BaseSnapshotBackfillCompositeKey):
+class TestSnapshotBackfillCompositeKey(
+    AthenaSnapshotBackfillMixin, BaseSnapshotBackfillCompositeKey
+):
     pass
 
 
 class TestSnapshotBackfillDisabled(BaseSnapshotBackfillDisabled):
     """Uses base class since backfill is disabled anyway."""
+
     pass
 
 
-class TestSnapshotBackfillNullHandling(AthenaSnapshotBackfillMixin, BaseSnapshotBackfillNullHandling):
+class TestSnapshotBackfillNullHandling(
+    AthenaSnapshotBackfillMixin, BaseSnapshotBackfillNullHandling
+):
     pass
 
 
-class TestSnapshotBackfillBehaviorFlag(AthenaSnapshotBackfillMixin, BaseSnapshotBackfillBehaviorFlag):
+class TestSnapshotBackfillBehaviorFlag(
+    AthenaSnapshotBackfillMixin, BaseSnapshotBackfillBehaviorFlag
+):
     pass

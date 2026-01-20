@@ -34,7 +34,7 @@
 {# BigQuery backfill using MERGE syntax #}
 {% macro bigquery__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
     {%- set column_names = columns | map(attribute='name') | list -%}
-    
+
     {% call statement('backfill_snapshot_columns') %}
     MERGE INTO {{ relation.render() }} AS dbt_backfill_target
     USING ({{ source_sql }}) AS dbt_backfill_source
@@ -45,10 +45,10 @@
         {%- if not loop.last or audit_column %},{% endif %}
         {%- endfor %}
         {%- if audit_column %}
-        {{ adapter.quote(audit_column) }} = CASE 
-            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN 
+        {{ adapter.quote(audit_column) }} = CASE
+            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN
                 CONCAT('{', {{ backfill_audit_json_entries(columns) }}, '}')
-            ELSE 
+            ELSE
                 CONCAT(
                     SUBSTR(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, LENGTH(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1),
                     ', ',
@@ -58,6 +58,6 @@
         END
         {%- endif %}
     {% endcall %}
-    
+
     {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
 {% endmacro %}

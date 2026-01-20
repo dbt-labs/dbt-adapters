@@ -3,6 +3,7 @@ Spark-specific tests for snapshot column backfill feature.
 
 Note: Spark requires file_format to be 'delta', 'iceberg', or 'hudi' for snapshots.
 """
+
 import pytest
 
 from dbt.tests.adapter.simple_snapshot.test_snapshot_backfill import (
@@ -36,17 +37,21 @@ SPARK_SNAPSHOT_BACKFILL_WITH_AUDIT_SQL = """
 
 class SparkSnapshotBackfillMixin:
     """Mixin to override snapshot SQL for Spark with Delta format."""
-    
+
     @pytest.fixture(scope="class")
     def snapshots(self):
         return {"snapshot.sql": SPARK_SNAPSHOT_BACKFILL_WITH_AUDIT_SQL}
 
 
-class TestSnapshotBackfillSingleColumn(SparkSnapshotBackfillMixin, BaseSnapshotBackfillSingleColumn):
+class TestSnapshotBackfillSingleColumn(
+    SparkSnapshotBackfillMixin, BaseSnapshotBackfillSingleColumn
+):
     pass
 
 
-class TestSnapshotBackfillMultipleColumns(SparkSnapshotBackfillMixin, BaseSnapshotBackfillMultipleColumns):
+class TestSnapshotBackfillMultipleColumns(
+    SparkSnapshotBackfillMixin, BaseSnapshotBackfillMultipleColumns
+):
     pass
 
 
@@ -58,18 +63,25 @@ class TestSnapshotBackfillAuditJson(SparkSnapshotBackfillMixin, BaseSnapshotBack
     pass
 
 
-class TestSnapshotBackfillCompositeKey(SparkSnapshotBackfillMixin, BaseSnapshotBackfillCompositeKey):
+class TestSnapshotBackfillCompositeKey(
+    SparkSnapshotBackfillMixin, BaseSnapshotBackfillCompositeKey
+):
     pass
 
 
 class TestSnapshotBackfillDisabled(BaseSnapshotBackfillDisabled):
     """Uses base class since backfill is disabled anyway."""
+
     pass
 
 
-class TestSnapshotBackfillNullHandling(SparkSnapshotBackfillMixin, BaseSnapshotBackfillNullHandling):
+class TestSnapshotBackfillNullHandling(
+    SparkSnapshotBackfillMixin, BaseSnapshotBackfillNullHandling
+):
     pass
 
 
-class TestSnapshotBackfillBehaviorFlag(SparkSnapshotBackfillMixin, BaseSnapshotBackfillBehaviorFlag):
+class TestSnapshotBackfillBehaviorFlag(
+    SparkSnapshotBackfillMixin, BaseSnapshotBackfillBehaviorFlag
+):
     pass

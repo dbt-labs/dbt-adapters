@@ -73,12 +73,12 @@
 {% macro athena__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
     {%- set column_names = columns | map(attribute='name') | list -%}
     {%- set table_type = config.get('table_type', 'hive') -%}
-    
+
     {% if table_type != 'iceberg' %}
         {{ log("WARNING: Snapshot backfill for Athena requires 'table_type: iceberg'. Backfill skipped for hive table '" ~ relation.identifier ~ "'.", info=true) }}
         {{ return('') }}
     {% endif %}
-    
+
     {% call statement('backfill_snapshot_columns') %}
     MERGE INTO {{ relation }} AS dbt_backfill_target
     USING ({{ source_sql }}) AS dbt_backfill_source
@@ -89,10 +89,10 @@
         {%- if not loop.last or audit_column %},{% endif %}
         {%- endfor %}
         {%- if audit_column %}
-        {{ adapter.quote(audit_column) }} = CASE 
-            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN 
+        {{ adapter.quote(audit_column) }} = CASE
+            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN
                 concat('{', {{ backfill_audit_json_entries(columns) }}, '}')
-            ELSE 
+            ELSE
                 concat(
                     substr(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, length(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1),
                     ', ',
@@ -102,7 +102,7 @@
         END
         {%- endif %}
     {% endcall %}
-    
+
     {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
 {% endmacro %}
 
@@ -111,7 +111,7 @@
 {% macro athena__ensure_backfill_audit_column(relation, audit_column) %}
     {%- set table_type = config.get('table_type', 'hive') -%}
     {%- set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute='name') | map('lower') | list -%}
-    
+
     {%- if audit_column | lower not in existing_columns -%}
         {% if table_type == 'iceberg' %}
             {% call statement('add_backfill_audit_column') %}
@@ -254,17 +254,17 @@
       {% set unique_key = config.get('unique_key') %}
       {% if missing_columns | length > 0 and snapshot_backfill_enabled() %}
           {% set audit_column = get_backfill_audit_column() %}
-          
+
           {# Add audit column if configured and doesn't exist #}
           {% if audit_column %}
               {% do ensure_backfill_audit_column(target_relation, audit_column) %}
           {% endif %}
-          
+
           {# Backfill historical rows with current source values #}
           {% do backfill_snapshot_columns(
-              target_relation, 
-              missing_columns, 
-              model['compiled_sql'], 
+              target_relation,
+              missing_columns,
+              model['compiled_sql'],
               unique_key,
               audit_column
           ) %}

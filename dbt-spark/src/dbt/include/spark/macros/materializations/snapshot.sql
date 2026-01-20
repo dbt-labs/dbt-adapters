@@ -92,7 +92,7 @@
 {# Spark backfill using MERGE syntax #}
 {% macro spark__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
     {%- set column_names = columns | map(attribute='name') | list -%}
-    
+
     {% call statement('backfill_snapshot_columns') %}
     MERGE INTO {{ relation }} AS dbt_backfill_target
     USING ({{ source_sql }}) AS dbt_backfill_source
@@ -103,10 +103,10 @@
         {%- if not loop.last or audit_column %},{% endif %}
         {%- endfor %}
         {%- if audit_column %}
-        dbt_backfill_target.`{{ audit_column }}` = CASE 
-            WHEN dbt_backfill_target.`{{ audit_column }}` IS NULL THEN 
+        dbt_backfill_target.`{{ audit_column }}` = CASE
+            WHEN dbt_backfill_target.`{{ audit_column }}` IS NULL THEN
                 concat('{', {{ backfill_audit_json_entries(columns) }}, '}')
-            ELSE 
+            ELSE
                 concat(
                     substring(dbt_backfill_target.`{{ audit_column }}`, 1, length(dbt_backfill_target.`{{ audit_column }}`) - 1),
                     ', ',
@@ -116,7 +116,7 @@
         END
         {%- endif %}
     {% endcall %}
-    
+
     {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
 {% endmacro %}
 
@@ -222,17 +222,17 @@
       {# Snapshot Column Backfill: Optionally backfill historical rows with current source values #}
       {% if missing_columns | length > 0 and snapshot_backfill_enabled() %}
           {% set audit_column = get_backfill_audit_column() %}
-          
+
           {# Add audit column if configured and doesn't exist #}
           {% if audit_column %}
               {% do ensure_backfill_audit_column(target_relation, audit_column) %}
           {% endif %}
-          
+
           {# Backfill historical rows with current source values #}
           {% do backfill_snapshot_columns(
-              target_relation, 
-              missing_columns, 
-              model['compiled_code'], 
+              target_relation,
+              missing_columns,
+              model['compiled_code'],
               unique_key,
               audit_column
           ) %}

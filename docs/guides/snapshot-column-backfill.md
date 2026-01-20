@@ -54,7 +54,7 @@ Or in the snapshot SQL:
         backfill_new_columns=true,
         backfill_audit_column='dbt_backfill_audit',
     ) }}
-    
+
     select * from {{ source('orders', 'orders') }}
 {% endsnapshot %}
 ```
@@ -88,11 +88,11 @@ The audit column accumulates entries as columns are added:
 
 ```sql
 -- Find rows where 'tier' was backfilled (Postgres/Snowflake)
-SELECT * FROM snapshot_table 
+SELECT * FROM snapshot_table
 WHERE dbt_backfill_audit::json->>'tier' IS NOT NULL;
 
 -- Simple LIKE query for any database
-SELECT * FROM snapshot_table 
+SELECT * FROM snapshot_table
 WHERE dbt_backfill_audit LIKE '%"tier"%';
 ```
 
@@ -123,11 +123,11 @@ If you need strict historical accuracy, consider a downstream model instead:
 
 ```sql
 -- downstream model that joins current values without modifying snapshot
-SELECT 
+SELECT
     s.*,
     COALESCE(s.new_col, current.new_col) as new_col_filled
 FROM {{ ref('snapshot_table') }} s
-LEFT JOIN {{ ref('current_source') }} current 
+LEFT JOIN {{ ref('current_source') }} current
     ON s.unique_key = current.unique_key
 ```
 
@@ -142,7 +142,7 @@ LEFT JOIN {{ ref('current_source') }} current
 When backfill runs, dbt emits a warning:
 
 ```
-WARNING: Backfilling 2 new column(s) [tier, region] in snapshot 'orders_snapshot'. 
-         Historical rows will be populated with CURRENT source values, not 
+WARNING: Backfilling 2 new column(s) [tier, region] in snapshot 'orders_snapshot'.
+         Historical rows will be populated with CURRENT source values, not
          point-in-time historical values.
 ```

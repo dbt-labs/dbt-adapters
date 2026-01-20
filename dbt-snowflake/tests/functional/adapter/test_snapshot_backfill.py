@@ -1,6 +1,7 @@
 """
 Snowflake-specific tests for snapshot column backfill feature.
 """
+
 from dbt.tests.adapter.simple_snapshot.test_snapshot_backfill import (
     BaseSnapshotBackfillSingleColumn,
     BaseSnapshotBackfillMultipleColumns,
