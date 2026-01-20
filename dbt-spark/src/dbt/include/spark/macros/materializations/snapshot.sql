@@ -73,6 +73,66 @@
 {% endmacro %}
 
 
+{# Spark-specific ISO8601 timestamp for backfill audit column #}
+{% macro spark__snapshot_backfill_timestamp() %}
+    {{ return("date_format(current_timestamp(), \"yyyy-MM-dd'T'HH:mm:ss'Z'\")") }}
+{% endmacro %}
+
+
+{# Spark-specific JSON entries builder #}
+{% macro spark__backfill_audit_json_entries(columns) %}
+    {%- set entries = [] -%}
+    {%- for col in columns -%}
+        {%- do entries.append("'\"" ~ col.name ~ "\": \"', " ~ snapshot_backfill_timestamp() ~ ", '\"'") -%}
+    {%- endfor -%}
+    {{ return("concat(" ~ entries | join(", ', ', ") ~ ")") }}
+{% endmacro %}
+
+
+{# Spark backfill using MERGE syntax #}
+{% macro spark__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
+    {%- set column_names = columns | map(attribute='name') | list -%}
+    
+    {% call statement('backfill_snapshot_columns') %}
+    MERGE INTO {{ relation }} AS dbt_backfill_target
+    USING ({{ source_sql }}) AS dbt_backfill_source
+    ON {{ backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
+    WHEN MATCHED THEN UPDATE SET
+        {%- for col in columns %}
+        dbt_backfill_target.`{{ col.name }}` = dbt_backfill_source.`{{ col.name }}`
+        {%- if not loop.last or audit_column %},{% endif %}
+        {%- endfor %}
+        {%- if audit_column %}
+        dbt_backfill_target.`{{ audit_column }}` = CASE 
+            WHEN dbt_backfill_target.`{{ audit_column }}` IS NULL THEN 
+                concat('{', {{ backfill_audit_json_entries(columns) }}, '}')
+            ELSE 
+                concat(
+                    substring(dbt_backfill_target.`{{ audit_column }}`, 1, length(dbt_backfill_target.`{{ audit_column }}`) - 1),
+                    ', ',
+                    {{ backfill_audit_json_entries(columns) }},
+                    '}'
+                )
+        END
+        {%- endif %}
+    {% endcall %}
+    
+    {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
+{% endmacro %}
+
+
+{# Spark-specific ensure audit column exists #}
+{% macro spark__ensure_backfill_audit_column(relation, audit_column) %}
+    {%- set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute='name') | map('lower') | list -%}
+    {%- if audit_column | lower not in existing_columns -%}
+        {% call statement('add_backfill_audit_column') %}
+            ALTER TABLE {{ relation }} ADD COLUMNS (`{{ audit_column }}` STRING);
+        {% endcall %}
+        {{ log("Added backfill audit column '" ~ audit_column ~ "' to snapshot '" ~ relation.identifier ~ "'.", info=true) }}
+    {%- endif -%}
+{% endmacro %}
+
+
 {% macro spark__create_columns(relation, columns) %}
     {% if columns|length > 0 %}
     {% call statement() %}
@@ -158,6 +218,25 @@
                                    | list %}
 
       {% do create_columns(target_relation, missing_columns) %}
+
+      {# Snapshot Column Backfill: Optionally backfill historical rows with current source values #}
+      {% if missing_columns | length > 0 and snapshot_backfill_enabled() %}
+          {% set audit_column = get_backfill_audit_column() %}
+          
+          {# Add audit column if configured and doesn't exist #}
+          {% if audit_column %}
+              {% do ensure_backfill_audit_column(target_relation, audit_column) %}
+          {% endif %}
+          
+          {# Backfill historical rows with current source values #}
+          {% do backfill_snapshot_columns(
+              target_relation, 
+              missing_columns, 
+              model['compiled_code'], 
+              unique_key,
+              audit_column
+          ) %}
+      {% endif %}
 
       {% set source_columns = adapter.get_columns_in_relation(staging_table)
                                    | rejectattr('name', 'equalto', 'dbt_change_type')
