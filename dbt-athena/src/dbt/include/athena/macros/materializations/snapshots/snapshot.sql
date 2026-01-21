@@ -70,6 +70,7 @@
 
 
 {# Athena backfill for Iceberg tables using MERGE syntax #}
+{# Note: Athena/Presto uses unquoted identifiers that are case-insensitive #}
 {% macro athena__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
     {%- set column_names = columns | map(attribute='name') | list -%}
     {%- set table_type = config.get('table_type', 'hive') -%}
@@ -82,24 +83,37 @@
     {% call statement('backfill_snapshot_columns') %}
     MERGE INTO {{ relation }} AS dbt_backfill_target
     USING ({{ source_sql }}) AS dbt_backfill_source
-    ON {{ backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
+    ON {{ athena__backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
     WHEN MATCHED THEN UPDATE SET
         {%- for col in columns %}
-        {{ adapter.quote(col.name) }} = dbt_backfill_source.{{ adapter.quote(col.name) }}
+        {{ col.name }} = dbt_backfill_source.{{ col.name }}
         {%- if not loop.last or audit_column %},{% endif %}
         {%- endfor %}
         {%- if audit_column %}
-        {{ adapter.quote(audit_column) }} = CASE
-            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN
+        {{ audit_column }} = CASE
+            WHEN dbt_backfill_target.{{ audit_column }} IS NULL THEN
                 '{' || {{ backfill_audit_json_entries(columns) }} || '}'
             ELSE
-                substr(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, length(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1)
+                substr(dbt_backfill_target.{{ audit_column }}, 1, length(dbt_backfill_target.{{ audit_column }}) - 1)
                 || ', ' || {{ backfill_audit_json_entries(columns) }} || '}'
         END
         {%- endif %}
     {% endcall %}
 
     {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
+{% endmacro %}
+
+
+{# Athena-specific unique key join - uses unquoted identifiers #}
+{% macro athena__backfill_unique_key_join(unique_key, target_alias, source_alias) %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
+            {{ target_alias }}.{{ key }} = {{ source_alias }}.{{ key }}
+            {%- if not loop.last %} AND {% endif %}
+        {% endfor %}
+    {% else %}
+        {{ target_alias }}.{{ unique_key }} = {{ source_alias }}.{{ unique_key }}
+    {% endif %}
 {% endmacro %}
 
 
@@ -111,7 +125,7 @@
     {%- if audit_column | lower not in existing_columns -%}
         {% if table_type == 'iceberg' %}
             {% call statement('add_backfill_audit_column') %}
-                ALTER TABLE {{ relation }} ADD COLUMNS ({{ adapter.quote(audit_column) }} VARCHAR);
+                ALTER TABLE {{ relation }} ADD COLUMNS ({{ audit_column }} VARCHAR);
             {% endcall %}
             {{ log("Added backfill audit column '" ~ audit_column ~ "' to snapshot '" ~ relation.identifier ~ "'.", info=true) }}
         {% else %}

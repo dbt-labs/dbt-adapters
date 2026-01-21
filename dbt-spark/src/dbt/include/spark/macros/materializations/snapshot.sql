@@ -96,7 +96,7 @@
     {% call statement('backfill_snapshot_columns') %}
     MERGE INTO {{ relation }} AS dbt_backfill_target
     USING ({{ source_sql }}) AS dbt_backfill_source
-    ON {{ backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
+    ON {{ spark__backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
     WHEN MATCHED THEN UPDATE SET
         {%- for col in columns %}
         dbt_backfill_target.`{{ col.name }}` = dbt_backfill_source.`{{ col.name }}`
@@ -118,6 +118,19 @@
     {% endcall %}
 
     {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
+{% endmacro %}
+
+
+{# Spark-specific unique key join - uses backticks consistently #}
+{% macro spark__backfill_unique_key_join(unique_key, target_alias, source_alias) %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
+            {{ target_alias }}.`{{ key }}` = {{ source_alias }}.`{{ key }}`
+            {%- if not loop.last %} AND {% endif %}
+        {% endfor %}
+    {% else %}
+        {{ target_alias }}.`{{ unique_key }}` = {{ source_alias }}.`{{ unique_key }}`
+    {% endif %}
 {% endmacro %}
 
 
