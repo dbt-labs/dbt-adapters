@@ -115,14 +115,11 @@
 {% endmacro %}
 
 {% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
-  {%- if adapter.behavior.bigquery_noop_alter_relation_comment.no_warn -%}
-    {#-
-      No-op to avoid unnecessary update calls when relation descriptions are already set
-      in DDL (e.g. OPTIONS(description=...)).
-    -#}
-  {%- else -%}
-    {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
-  {%- endif -%}
+  {#-
+    The adapter implementation only performs an update when the description differs,
+    so this is safe to call even if the description is already correct.
+  -#}
+  {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
 {% endmacro %}
 
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}

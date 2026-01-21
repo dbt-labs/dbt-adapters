@@ -21,7 +21,12 @@ import google.api_core
 import google.auth
 import google.oauth2
 import google.cloud.bigquery
-from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
+from google.cloud.bigquery import (
+    AccessEntry,
+    Client,
+    SchemaField,
+    Table as BigQueryTable,
+)
 import google.cloud.exceptions
 import pytz
 
@@ -49,10 +54,18 @@ from dbt.adapters.base import (
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.impl import (
+    FreshnessResponse,
+    GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+)
 from dbt.adapters.base.relation import ComponentName
 from dbt.adapters.cache import _make_ref_key_dict
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.catalogs import CatalogRelation
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.macros import MacroResolverProtocol
@@ -67,8 +80,14 @@ from dbt.adapters.bigquery.catalogs import (
     BigQueryCatalogRelation,
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
-from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
+from dbt.adapters.bigquery.connections import (
+    BigQueryAdapterResponse,
+    BigQueryConnectionManager,
+)
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+)
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
@@ -116,9 +135,8 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     name="bigquery_noop_alter_relation_comment",
     default=False,
     description=(
-        "Make bigquery__alter_relation_comment a no-op. This is useful when relation "
-        "descriptions are already set in DDL (e.g. via OPTIONS(description=...)) to avoid "
-        "an unnecessary update."
+        "Deprecated: bigquery__alter_relation_comment always calls update_table_description, "
+        "which only issues an update when the description differs."
     ),
 )
 
@@ -170,7 +188,10 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
-    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
+    CATALOG_INTEGRATIONS = [
+        BigLakeCatalogIntegration,
+        BigQueryInfoSchemaCatalogIntegration,
+    ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -287,7 +308,9 @@ class BigQueryAdapter(BaseAdapter):
     def get_columns_in_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
             return self._get_dbt_columns_from_bq_table(table)
 
@@ -611,7 +634,9 @@ class BigQueryAdapter(BaseAdapter):
 
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
         except google.cloud.exceptions.NotFound:
             return True
@@ -691,9 +716,11 @@ class BigQueryAdapter(BaseAdapter):
         client = conn.handle
 
         table_ref = self.connections.table_ref(database, schema, identifier)
-        table = client.get_table(table_ref)
-        table.description = description
-        client.update_table(table, ["description"])
+        table: BigQueryTable = client.get_table(table_ref)
+
+        if table.description != description:
+            table.description = description
+            client.update_table(table, ["description"])
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
@@ -1045,7 +1072,7 @@ class BigQueryAdapter(BaseAdapter):
         opts = {}
 
         if (config.get("hours_to_expiration") is not None) and (not temporary):
-            expiration = f'TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {config.get("hours_to_expiration")} hour)'
+            expiration = f"TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {config.get('hours_to_expiration')} hour)"
             opts["expiration_timestamp"] = expiration
 
         if config.persist_relation_docs() and "description" in node:  # type: ignore[attr-defined]
@@ -1163,7 +1190,7 @@ class BigQueryAdapter(BaseAdapter):
             access_entry = AccessEntry(role, entity_type, entity)
             # only perform update if access entry not in dataset
             if is_access_entry_in_dataset(dataset, access_entry):
-                logger.warning(f"Access entry {access_entry} " f"already exists in dataset")
+                logger.warning(f"Access entry {access_entry} already exists in dataset")
             else:
                 dataset = add_access_entry_to_dataset(dataset, access_entry)
                 client.update_dataset(dataset, ["access_entries"])
