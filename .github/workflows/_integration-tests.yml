@@ -115,6 +115,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Configure AWS credentials"
               uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # aws-actions/configure-aws-credentials@v4
@@ -163,6 +165,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
@@ -212,6 +216,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Run flaky integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
@@ -271,6 +277,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
@@ -364,6 +372,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Create AWS IAM profiles"
               run: |
@@ -427,6 +437,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
@@ -472,6 +484,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.12.0"
 
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests --profile ${{ matrix.profile }}
