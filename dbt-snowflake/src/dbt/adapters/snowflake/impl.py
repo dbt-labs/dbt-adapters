@@ -53,6 +53,7 @@ class SnowflakeConfig(AdapterConfig):
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
+    snowflake_initialization_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
@@ -537,6 +538,7 @@ CALL {proc_name}();
                     "text",
                     "target_lag",
                     "warehouse",
+                    "initialization_warehouse",
                     "refresh_mode",
                 ]
             )

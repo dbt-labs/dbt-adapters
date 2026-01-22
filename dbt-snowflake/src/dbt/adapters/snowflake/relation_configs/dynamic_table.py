@@ -44,6 +44,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - query: the query behind the table
     - target_lag: the maximum amount of time that the dynamic table’s content should lag behind updates to the base tables
     - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
+    - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
     - cluster_by: specifies the columns to cluster on
@@ -57,6 +58,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     query: str
     target_lag: str
     snowflake_warehouse: str
+    snowflake_initialization_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
@@ -78,6 +80,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": config_dict.get("query"),
             "target_lag": config_dict.get("target_lag"),
             "snowflake_warehouse": config_dict.get("snowflake_warehouse"),
+            "snowflake_initialization_warehouse": config_dict.get(
+                "snowflake_initialization_warehouse"
+            ),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
@@ -97,6 +102,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "target_lag": relation_config.config.extra.get("target_lag"),  # type:ignore
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
+            ),
+            "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
+                "snowflake_initialization_warehouse"
             ),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
@@ -124,6 +132,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": dynamic_table.get("text"),
             "target_lag": dynamic_table.get("target_lag"),
             "snowflake_warehouse": dynamic_table.get("warehouse"),
+            "snowflake_initialization_warehouse": dynamic_table.get("initialization_warehouse"),
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
@@ -153,6 +162,15 @@ class SnowflakeDynamicTableWarehouseConfigChange(RelationConfigChange):
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableInitializationWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
     context: Optional[str] = None
 
@@ -165,6 +183,9 @@ class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
 class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeDynamicTableWarehouseConfigChange] = None
+    snowflake_initialization_warehouse: Optional[
+        SnowflakeDynamicTableInitializationWarehouseConfigChange
+    ] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
 
     @property
@@ -177,10 +198,22 @@ class SnowflakeDynamicTableConfigChangeset:
                     if self.snowflake_warehouse
                     else False
                 ),
+                (
+                    self.snowflake_initialization_warehouse.requires_full_refresh
+                    if self.snowflake_initialization_warehouse
+                    else False
+                ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
             ]
         )
 
     @property
     def has_changes(self) -> bool:
-        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode])
+        return any(
+            [
+                self.target_lag,
+                self.snowflake_warehouse,
+                self.snowflake_initialization_warehouse,
+                self.refresh_mode,
+            ]
+        )

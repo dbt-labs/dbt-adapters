@@ -20,6 +20,7 @@ from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
+    SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
@@ -110,6 +111,17 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeDynamicTableWarehouseConfigChange(
                     action=RelationConfigChangeAction.alter,  # type:ignore
                     context=new_dynamic_table.snowflake_warehouse,
+                )
+            )
+
+        if (
+            new_dynamic_table.snowflake_initialization_warehouse
+            != existing_dynamic_table.snowflake_initialization_warehouse
+        ):
+            config_change_collection.snowflake_initialization_warehouse = (
+                SnowflakeDynamicTableInitializationWarehouseConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.snowflake_initialization_warehouse,
                 )
             )
 

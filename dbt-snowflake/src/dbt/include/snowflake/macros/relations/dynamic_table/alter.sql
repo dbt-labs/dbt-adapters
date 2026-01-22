@@ -15,10 +15,13 @@
         {%- if target_lag -%}{{- log('Applying UPDATE TARGET_LAG to: ' ~ existing_relation) -}}{%- endif -%}
         {%- set snowflake_warehouse = configuration_changes.snowflake_warehouse -%}
         {%- if snowflake_warehouse -%}{{- log('Applying UPDATE WAREHOUSE to: ' ~ existing_relation) -}}{%- endif -%}
+        {%- set snowflake_initialization_warehouse = configuration_changes.snowflake_initialization_warehouse -%}
+        {%- if snowflake_initialization_warehouse -%}{{- log('Applying UPDATE INITIALIZATION_WAREHOUSE to: ' ~ existing_relation) -}}{%- endif -%}
 
         alter dynamic table {{ existing_relation }} set
             {% if target_lag %}target_lag = '{{ target_lag.context }}'{% endif %}
             {% if snowflake_warehouse %}warehouse = {{ snowflake_warehouse.context }}{% endif %}
+            {% if snowflake_initialization_warehouse %}initialization_warehouse = {{ snowflake_initialization_warehouse.context }}{% endif %}
 
     {%- endif -%}
 

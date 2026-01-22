@@ -131,6 +131,28 @@ DYNAMIC_TABLE_CUSTOM_DB_SCHEMA = """
 select * from {{ ref('simple_model') }}
 """
 
+DYNAMIC_TABLE_WITH_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse='DBT_TESTING_ALT',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+DYNAMIC_TABLE_WITH_INIT_WAREHOUSE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
 SIMPLE_MODEL = """
 {{ config(
     materialized='table'
