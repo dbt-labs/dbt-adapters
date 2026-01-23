@@ -232,25 +232,17 @@ class BigQueryAdapter(BaseAdapter):
     def rename_relation(
         self, from_relation: BigQueryRelation, to_relation: BigQueryRelation
     ) -> None:
-        conn = self.connections.get_thread_connection()
-        client = conn.handle
-
-        from_table_ref = self.get_table_ref_from_relation(from_relation)
-        from_table = client.get_table(from_table_ref)
-        if (
-            from_table.table_type == "VIEW"
-            or from_relation.type == RelationType.View
-            or to_relation.type == RelationType.View
-        ):
+        # Views cannot be renamed in BigQuery
+        if from_relation.type == RelationType.View or to_relation.type == RelationType.View:
             raise dbt_common.exceptions.DbtRuntimeError(
                 "Renaming of views is not currently supported in BigQuery"
             )
 
-        to_table_ref = self.get_table_ref_from_relation(to_relation)
-
         self.cache_renamed(from_relation, to_relation)
-        client.copy_table(from_table_ref, to_table_ref)
-        client.delete_table(from_table_ref)
+
+        # Use DDL to rename the table - this is a single operation vs copy+delete API calls
+        rename_sql = f"ALTER TABLE {from_relation.render()} RENAME TO `{to_relation.identifier}`"
+        self.execute(rename_sql, fetch=False)
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -687,13 +679,13 @@ class BigQueryAdapter(BaseAdapter):
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
     ):
-        conn = self.connections.get_thread_connection()
-        client = conn.handle
-
-        table_ref = self.connections.table_ref(database, schema, identifier)
-        table = client.get_table(table_ref)
-        table.description = description
-        client.update_table(table, ["description"])
+        # Use DDL to update the description - single operation vs get+update API calls
+        relation = self.Relation.create(database=database, schema=schema, identifier=identifier)
+        escaped_description = sql_escape(description)
+        sql = (
+            f'ALTER TABLE {relation.render()} SET OPTIONS(description="""{escaped_description}""")'
+        )
+        self.execute(sql, fetch=False)
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
