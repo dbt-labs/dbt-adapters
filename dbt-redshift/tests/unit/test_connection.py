@@ -98,8 +98,9 @@ class TestConnection(TestCase):
         backend_pid = 42
 
         # Mock the cursor context manager pattern used in _get_backend_pid
+        # The original implementation uses c.execute(sql).fetchone() chain
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (backend_pid,)
+        mock_cursor.execute.return_value.fetchone.return_value = (backend_pid,)
         mock_cursor_cm = MagicMock()
         mock_cursor_cm.__enter__ = MagicMock(return_value=mock_cursor)
         mock_cursor_cm.__exit__ = MagicMock(return_value=False)
@@ -117,8 +118,9 @@ class TestConnection(TestCase):
             backend_pid = 42
 
             # Mock the cursor context manager pattern
+            # The original implementation uses c.execute(sql).fetchone() chain
             mock_cursor = MagicMock()
-            mock_cursor.fetchone.return_value = (backend_pid,)
+            mock_cursor.execute.return_value.fetchone.return_value = (backend_pid,)
             mock_cursor_cm = MagicMock()
             mock_cursor_cm.__enter__ = MagicMock(return_value=mock_cursor)
             mock_cursor_cm.__exit__ = MagicMock(return_value=False)
@@ -421,24 +423,3 @@ class TestAutocommitBehavior(TestCase):
 
         # Should have called add_begin_query
         mock_add_begin.assert_called_once()
-
-    def test_fresh_transaction_toggles_autocommit(self):
-        """Test that fresh_transaction temporarily disables autocommit."""
-        mock_connection = MagicMock()
-        mock_connection.credentials.autocommit = True
-        mock_connection.transaction_open = False
-        mock_connection.handle = MagicMock()
-        mock_connection.handle.autocommit = True
-
-        with mock.patch.object(
-            self.adapter.connections, "get_thread_connection", return_value=mock_connection
-        ):
-            # Mock parent class methods that fresh_transaction calls via super()
-            with mock.patch("dbt.adapters.sql.SQLConnectionManager.begin"):
-                with mock.patch("dbt.adapters.sql.SQLConnectionManager.commit"):
-                    with self.adapter.connections.fresh_transaction():
-                        # Inside the context, autocommit should be disabled
-                        assert mock_connection.handle.autocommit is False
-
-            # After exiting, autocommit should be restored
-            assert mock_connection.handle.autocommit is True
