@@ -48,6 +48,8 @@ relations = [
     Model(models.TABLE, "table", "default"),
     Model(models.INCREMENTAL_TABLE, "table", "default", is_incremental=True),
     Model(models.DYNAMIC_TABLE, "dynamic_table", "default"),
+    Model(models.HYBRID_TABLE, "hybrid_table", "default"),
+    Model(models.INCREMENTAL_HYBRID_TABLE, "hybrid_table", "default", is_incremental=True),
     Model(models.ICEBERG_TABLE, "table", "iceberg"),
     Model(models.INCREMENTAL_ICEBERG_TABLE, "table", "iceberg", is_incremental=True),
     Model(models.DYNAMIC_ICEBERG_TABLE, "dynamic_table", "iceberg"),
@@ -67,6 +69,9 @@ def requires_full_refresh(scenario) -> bool:
             and scenario.initial.table_format != scenario.final.table_format,
             # we can't swap from an incremental to a dynamic table because the materialization does not handle this case
             scenario.initial.relation_type == "dynamic_table" and scenario.final.is_incremental,
+            # hybrid tables cannot be converted to/from other relation types without full refresh
+            scenario.initial.relation_type == "hybrid_table" and scenario.final.is_incremental and scenario.final.relation_type != "hybrid_table",
+            scenario.initial.is_incremental and scenario.initial.relation_type != "hybrid_table" and scenario.final.relation_type == "hybrid_table",
         ]
     )
 

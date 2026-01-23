@@ -43,6 +43,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.HybridTable,  # type: ignore
             }
         )
     )
@@ -51,6 +52,7 @@ class SnowflakeRelation(BaseRelation):
         default_factory=lambda: frozenset(
             {
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.HybridTable,  # type: ignore
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
             }
@@ -66,12 +68,20 @@ class SnowflakeRelation(BaseRelation):
         return self.type == SnowflakeRelationType.DynamicTable
 
     @property
+    def is_hybrid_table(self) -> bool:
+        return self.type == SnowflakeRelationType.HybridTable
+
+    @property
     def is_iceberg_format(self) -> bool:
         return self.table_format == constants.ICEBERG_TABLE_FORMAT
 
     @classproperty
     def DynamicTable(cls) -> str:
         return str(SnowflakeRelationType.DynamicTable)
+
+    @classproperty
+    def HybridTable(cls) -> str:
+        return str(SnowflakeRelationType.HybridTable)
 
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
@@ -232,6 +242,29 @@ class SnowflakeRelation(BaseRelation):
             f"and target relation {self} is a default format table."
         )
 
+        drop_table_for_hybrid_message: str = (
+            f"Dropping relation {old_relation} because it is a standard table "
+            f"and target relation {self} is a hybrid table. "
+            f"Hybrid tables use a different storage engine and require PRIMARY KEY."
+        )
+
+        drop_hybrid_for_table_message: str = (
+            f"Dropping relation {old_relation} because it is a hybrid table "
+            f"and target relation {self} is a standard table."
+        )
+
+        drop_dynamic_for_hybrid_message: str = (
+            f"Dropping relation {old_relation} because it is a dynamic table "
+            f"and target relation {self} is a hybrid table. "
+            f"Cannot convert between dynamic and hybrid tables."
+        )
+
+        drop_hybrid_for_dynamic_message: str = (
+            f"Dropping relation {old_relation} because it is a hybrid table "
+            f"and target relation {self} is a dynamic table. "
+            f"Cannot convert between hybrid and dynamic tables."
+        )
+
         # An existing view must be dropped for model to build into a table".
         yield (not old_relation.is_table, drop_view_message)
         # An existing table must be dropped for model to build into an Iceberg table.
@@ -247,6 +280,34 @@ class SnowflakeRelation(BaseRelation):
             and old_relation.is_iceberg_format
             and not self.is_iceberg_format,
             drop_iceberg_for_table_message,
+        )
+        # Standard table to hybrid table conversion requires drop
+        yield (
+            old_relation.is_table
+            and not old_relation.is_hybrid_table
+            and not old_relation.is_dynamic_table
+            and self.is_hybrid_table,
+            drop_table_for_hybrid_message,
+        )
+        # Hybrid table to standard table conversion requires drop
+        yield (
+            old_relation.is_hybrid_table
+            and self.is_table
+            and not self.is_hybrid_table
+            and not self.is_dynamic_table,
+            drop_hybrid_for_table_message,
+        )
+        # Dynamic table to hybrid table conversion requires drop
+        yield (
+            old_relation.is_dynamic_table
+            and self.is_hybrid_table,
+            drop_dynamic_for_hybrid_message,
+        )
+        # Hybrid table to dynamic table conversion requires drop
+        yield (
+            old_relation.is_hybrid_table
+            and self.is_dynamic_table,
+            drop_hybrid_for_dynamic_message,
         )
 
     def needs_to_drop(self, old_relation: Optional["SnowflakeRelation"]) -> bool:

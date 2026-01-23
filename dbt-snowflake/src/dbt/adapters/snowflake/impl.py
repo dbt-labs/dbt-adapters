@@ -295,14 +295,14 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg", "is_hybrid"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
         return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+        database, schema, identifier, relation_type, is_dynamic, is_iceberg, is_hybrid = result
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
@@ -311,6 +311,8 @@ class SnowflakeAdapter(SQLAdapter):
 
         if relation_type == self.Relation.Table and is_dynamic == "Y":
             relation_type = self.Relation.DynamicTable
+        elif relation_type == self.Relation.Table and is_hybrid == "Y":
+            relation_type = self.Relation.HybridTable
 
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
