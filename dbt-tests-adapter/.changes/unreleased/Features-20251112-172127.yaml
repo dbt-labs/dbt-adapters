@@ -1,6 +1,0 @@
-kind: Features
-body: Add base test class for python aggregate functions
-time: 2025-11-12T17:21:27.183879-06:00
-custom:
-  Author: QMalcolm
-  Issue: "1432"
