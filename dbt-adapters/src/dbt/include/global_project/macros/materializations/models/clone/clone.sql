@@ -1,21 +1,6 @@
-{#
-  Default implementation for checking if a target relation can be replaced by cloning.
-  Most databases support CREATE OR REPLACE without restrictions.
-  Adapters with specific requirements (e.g., BigQuery partition specs) should override this.
-#}
-{% macro is_clone_replaceable(target_relation, source_relation) %}
-  {{ return(adapter.dispatch('is_clone_replaceable', 'dbt')(target_relation, source_relation)) }}
-{% endmacro %}
-
-{% macro default__is_clone_replaceable(target_relation, source_relation) %}
-  {{ return(True) }}
-{% endmacro %}
-
 {%- materialization clone, default -%}
 
   {%- set relations = {'relations': []} -%}
-  -- grab current tables grants config for comparison later on
-  {%- set grant_config = config.get('grants') -%}
 
   {%- if not defer_relation -%}
       -- nothing to do
@@ -37,15 +22,13 @@
   -- Otherwise, this will be a view
 
   {% set can_clone_table = can_clone_table() %}
+  {%- set grant_config = config.get('grants') -%}
 
   {%- if other_existing_relation and other_existing_relation.type == 'table' and can_clone_table -%}
 
       {%- set target_relation = this.incorporate(type='table') -%}
       {% if existing_relation is not none and not existing_relation.is_table %}
         {{ log("Dropping relation " ~ existing_relation.render() ~ " because it is of type " ~ existing_relation.type) }}
-        {{ drop_relation_if_exists(existing_relation) }}
-      {% elif existing_relation is not none and not is_clone_replaceable(existing_relation, other_existing_relation) %}
-        {{ log("Dropping relation " ~ existing_relation.render() ~ " because partition/clustering spec differs from source (will be recreated)") }}
         {{ drop_relation_if_exists(existing_relation) }}
       {% endif %}
 

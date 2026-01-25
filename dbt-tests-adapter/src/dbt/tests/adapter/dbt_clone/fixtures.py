@@ -152,15 +152,6 @@ source_based_model_snapshot_sql = """
 {% endsnapshot %}
 """
 
-# Partitioned table model for testing clone behavior with partition mismatches
-partitioned_table_model_sql = """
-{{ config(
-    materialized='table',
-    partition_by={'field': 'created_at', 'data_type': 'date'}
-) }}
-select current_date() as created_at, 1 as id
-"""
-
 # Table model with grants for testing grant preservation during clone
 table_model_with_grants_sql = """
 {{ config(materialized='table') }}
@@ -171,16 +162,6 @@ clone_model_with_grants_schema_yml = """
 version: 2
 models:
   - name: my_model
-    config:
-      grants:
-        select: ["{{ env_var('DBT_TEST_USER_1') }}"]
-"""
-
-# Schema for partitioned model with grants (for testing combined partition mismatch + grants)
-partitioned_model_with_grants_schema_yml = """
-version: 2
-models:
-  - name: partitioned_model
     config:
       grants:
         select: ["{{ env_var('DBT_TEST_USER_1') }}"]

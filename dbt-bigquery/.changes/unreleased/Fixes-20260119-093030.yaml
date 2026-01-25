@@ -1,6 +1,0 @@
-kind: Fixes
-body: Only drop before cloning if partitioning/clustering differences require it
-time: 2026-01-19T09:30:30.870861-05:00
-custom:
-    Author: katieclaiborne-duet
-    Issue: "1503"

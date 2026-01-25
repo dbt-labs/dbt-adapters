@@ -1,6 +1,0 @@
-kind: Fixes
-body: Move conditional drop logic into global clone materialization
-time: 2026-01-19T09:29:30.81923-05:00
-custom:
-    Author: katieclaiborne-duet
-    Issue: "1503"
