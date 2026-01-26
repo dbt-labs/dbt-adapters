@@ -147,4 +147,4 @@ def test_get_response_no_unexpected_access_warnings():
 
     # Verify the response was created successfully
     assert response is not None
-    assert response.code == "SUCCESS"
+    assert response.code == "00000"  # SQL success state from mock cursor
