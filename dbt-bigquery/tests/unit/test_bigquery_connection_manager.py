@@ -9,7 +9,6 @@ import google.cloud.bigquery
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
-from dbt.adapters.bigquery.retry import RetryFactory
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -24,6 +23,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.mock_client = Mock(google.cloud.bigquery.Client)
 
         self.mock_connection = MagicMock()
+        self.mock_connection.name = "test_connection"  # Must be a string for fire_event
         self.mock_connection.handle = self.mock_client
         self.mock_connection.credentials = self.credentials
 
@@ -159,3 +159,49 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             database="project", schema="dataset", identifier="table2"
         )
         self.connections.copy_bq_table(source, destination, write_disposition)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_retries_with_fresh_job_id(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+
+        def capture_job_id(*args, **kwargs):
+            job_ids_used.append(kwargs.get("job_id"))
+            if len(job_ids_used) < 2:
+                raise exceptions.ServiceUnavailable("Service unavailable")
+            mock_job = Mock(job_id=kwargs.get("job_id"), location="US", project="project")
+            mock_job.result.return_value = iter([])
+            return mock_job
+
+        self.mock_client.query.side_effect = capture_job_id
+        self.connections.raw_execute("SELECT 1")
+        self.assertEqual(self.mock_client.query.call_count, 2)
+        self.assertNotEqual(job_ids_used[0], job_ids_used[1])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_no_retry_on_non_retryable_error(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self.mock_client.query.side_effect = exceptions.BadRequest("Syntax error")
+        from dbt_common.exceptions import DbtDatabaseError
+
+        with self.assertRaises(DbtDatabaseError):
+            self.connections.raw_execute("SELECT * FORM table")
+        self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_result_failure_triggers_retry(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        call_count = {"query": 0}
+
+        def make_query_job(*args, **kwargs):
+            call_count["query"] += 1
+            mock_job = Mock(job_id=f"job_{call_count['query']}", location="US", project="project")
+            if call_count["query"] == 1:
+                mock_job.result.side_effect = exceptions.ServiceUnavailable("Service unavailable")
+            else:
+                mock_job.result.return_value = iter([])
+            return mock_job
+
+        self.mock_client.query.side_effect = make_query_job
+        self.connections.raw_execute("SELECT 1")
+        self.assertEqual(self.mock_client.query.call_count, 2)
