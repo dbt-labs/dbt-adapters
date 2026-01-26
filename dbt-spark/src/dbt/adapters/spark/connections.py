@@ -264,8 +264,11 @@ class PyhiveConnectionWrapper(SparkConnectionWrapper):
             # the connection is cancelled
             try:
                 self._cursor.cancel()
-            except EnvironmentError as exc:
-                logger.debug("Exception while cancelling query: {}".format(exc))
+            except Exception as exc:
+                if isinstance(exc, CONNECTION_LOST_EXCEPTIONS):
+                    logger.debug("Exception while cancelling query: {}".format(exc))
+                else:
+                    raise
 
     def close(self) -> None:
         if self._cursor:
@@ -273,8 +276,11 @@ class PyhiveConnectionWrapper(SparkConnectionWrapper):
             # the connection is cancelled
             try:
                 self._cursor.close()
-            except EnvironmentError as exc:
-                logger.debug("Exception while closing cursor: {}".format(exc))
+            except Exception as exc:
+                if isinstance(exc, CONNECTION_LOST_EXCEPTIONS):
+                    logger.debug("Exception while cancelling query: {}".format(exc))
+                else:
+                    raise
         self.handle.close()
 
     def rollback(self, *args: Any, **kwargs: Any) -> None:
@@ -548,6 +554,14 @@ class SparkConnectionManager(SQLConnectionManager):
                             password=creds.password,
                             configuration=creds.server_side_parameters,
                         )  # noqa
+                    # set timeout to help prevent deadlock with multi-threading
+                    # workaround until https://github.com/apache/kyuubi/pull/7300
+                    if (
+                        hasattr(conn, "_transport")
+                        and hasattr(conn._transport, "_trans")
+                        and hasattr(conn._transport._trans, "setTimeout")
+                    ):
+                        conn._transport._trans.setTimeout(creds.connect_timeout * 1000)
                     handle = PyhiveConnectionWrapper(
                         conn,
                         poll_interval=creds.poll_interval,
