@@ -1,3 +1,4 @@
+from dbt.adapters.snowflake.connections import SnowflakeConnectionManager
 from dbt.adapters.snowflake.record.cursor.cursor import SnowflakeRecordReplayCursor
 
 
@@ -120,3 +121,30 @@ def test_snowflake_record_cursor_unexpected_access():
     assert len(events) == 1
     assert events[0].__class__.__name__ == "RecordReplayIssue"
     assert "unexpected_func" in events[0].msg
+
+
+def test_get_response_no_unexpected_access_warnings():
+    """Ensure get_response() doesn't trigger any unexpected attribute access warnings.
+
+    This is a regression test. If new cursor attributes are accessed in get_response()
+    without being added to SnowflakeRecordReplayCursor, this test will fail.
+    """
+    events = []
+
+    # Test with stats present
+    mock_cursor = MockCursor(stats=MockStats())
+    recorded_cursor = SnowflakeRecordReplayCursor(mock_cursor, MockConnection())  # type: ignore
+    recorded_cursor._fire_event = events.append
+
+    # Call get_response - this is the actual code path
+    response = SnowflakeConnectionManager.get_response(recorded_cursor)
+
+    # Verify no unexpected access warnings were fired
+    assert len(events) == 0, (
+        f"Unexpected attribute access in get_response(): {[e.msg for e in events]}. "
+        "Add the missing attribute(s) to SnowflakeRecordReplayCursor."
+    )
+
+    # Verify the response was created successfully
+    assert response is not None
+    assert response.code == "SUCCESS"
