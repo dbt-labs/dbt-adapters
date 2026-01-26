@@ -278,7 +278,7 @@ class PyhiveConnectionWrapper(SparkConnectionWrapper):
                 self._cursor.close()
             except Exception as exc:
                 if isinstance(exc, (EnvironmentError, CONNECTION_LOST_EXCEPTIONS)):
-                    logger.debug("Exception while cancelling query: {}".format(exc))
+                    logger.debug("Exception while closing cursor: {}".format(exc))
                 else:
                     raise
         self.handle.close()
