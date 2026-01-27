@@ -320,7 +320,7 @@ class TestConnection(TestCase):
 
 
 class TestAutocommitBehavior(TestCase):
-    """Tests for autocommit-aware transaction management."""
+    """Tests for autocommit-aware transaction management with behavior flag."""
 
     def setUp(self):
         profile_cfg = {
@@ -361,11 +361,14 @@ class TestAutocommitBehavior(TestCase):
             inject_adapter(self._adapter, RedshiftPlugin)
         return self._adapter
 
-    def test_begin_is_noop_with_autocommit(self):
-        """Test that begin() doesn't send BEGIN when autocommit=True."""
+    def test_begin_is_noop_with_autocommit_and_behavior_flag(self):
+        """Test that begin() doesn't send BEGIN when autocommit=True and behavior flag is set."""
         mock_connection = MagicMock()
         mock_connection.credentials.autocommit = True
         mock_connection.transaction_open = False
+
+        # Enable behavior flag
+        self.adapter.connections.set_skip_transactions_checker(lambda: True)
 
         with mock.patch.object(
             self.adapter.connections, "get_thread_connection", return_value=mock_connection
@@ -376,11 +379,14 @@ class TestAutocommitBehavior(TestCase):
         # Should not have called add_begin_query
         mock_add_begin.assert_not_called()
 
-    def test_commit_is_noop_with_autocommit(self):
-        """Test that commit() doesn't send COMMIT when autocommit=True."""
+    def test_commit_is_noop_with_autocommit_and_behavior_flag(self):
+        """Test that commit() doesn't send COMMIT when autocommit=True and behavior flag is set."""
         mock_connection = MagicMock()
         mock_connection.credentials.autocommit = True
         mock_connection.transaction_open = True
+
+        # Enable behavior flag
+        self.adapter.connections.set_skip_transactions_checker(lambda: True)
 
         with mock.patch.object(
             self.adapter.connections, "get_thread_connection", return_value=mock_connection
@@ -393,12 +399,15 @@ class TestAutocommitBehavior(TestCase):
         # Should not have called add_commit_query
         mock_add_commit.assert_not_called()
 
-    def test_rollback_is_noop_with_autocommit(self):
-        """Test that rollback_if_open() doesn't rollback when autocommit=True."""
+    def test_rollback_is_noop_with_autocommit_and_behavior_flag(self):
+        """Test that rollback_if_open() doesn't rollback when autocommit=True and behavior flag is set."""
         mock_connection = MagicMock()
         mock_connection.credentials.autocommit = True
         mock_connection.transaction_open = True
         mock_connection.handle = MagicMock()
+
+        # Enable behavior flag
+        self.adapter.connections.set_skip_transactions_checker(lambda: True)
 
         with mock.patch.object(
             self.adapter.connections, "get_thread_connection", return_value=mock_connection
@@ -423,3 +432,42 @@ class TestAutocommitBehavior(TestCase):
 
         # Should have called add_begin_query
         mock_add_begin.assert_called_once()
+
+    def test_begin_sends_begin_with_autocommit_but_no_behavior_flag(self):
+        """Test that begin() sends BEGIN when autocommit=True but behavior flag is NOT set."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = False
+
+        # Behavior flag NOT set (checker returns False)
+        self.adapter.connections.set_skip_transactions_checker(lambda: False)
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(self.adapter.connections, "add_begin_query") as mock_add_begin:
+                self.adapter.connections.begin()
+
+        # Should have called add_begin_query because behavior flag is not set
+        mock_add_begin.assert_called_once()
+
+    def test_commit_sends_commit_with_autocommit_but_no_behavior_flag(self):
+        """Test that commit() sends COMMIT when autocommit=True but behavior flag is NOT set."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = True
+        mock_connection.name = "test_connection"  # Required for logging events
+
+        # Behavior flag NOT set (checker returns False)
+        self.adapter.connections.set_skip_transactions_checker(lambda: False)
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(
+                self.adapter.connections, "add_commit_query"
+            ) as mock_add_commit:
+                self.adapter.connections.commit()
+
+        # Should have called add_commit_query because behavior flag is not set
+        mock_add_commit.assert_called_once()
