@@ -33,11 +33,12 @@ GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
-    default=False,
+    default=True,
     description=(
         "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
         "since each statement is automatically committed. This reduces round-trips "
         "to the database and avoids unnecessary transaction overhead."
+        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
     ),
 )
 
