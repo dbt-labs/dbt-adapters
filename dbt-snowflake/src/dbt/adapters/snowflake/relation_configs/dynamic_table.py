@@ -125,6 +125,15 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
         dynamic_table: "agate.Row" = relation_results["dynamic_table"].rows[0]
 
+        # Snowflake returns "NONE" as a string for unset optional warehouse values
+        # Some Snowflake environments may also return empty strings
+        # We need to convert these to Python None to avoid rendering invalid SQL
+        init_warehouse = dynamic_table.get("initialization_warehouse")
+        if init_warehouse is not None and (
+            str(init_warehouse).upper() == "NONE" or str(init_warehouse).strip() == ""
+        ):
+            init_warehouse = None
+
         config_dict = {
             "name": dynamic_table.get("name"),
             "schema_name": dynamic_table.get("schema_name"),
@@ -132,7 +141,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": dynamic_table.get("text"),
             "target_lag": dynamic_table.get("target_lag"),
             "snowflake_warehouse": dynamic_table.get("warehouse"),
-            "snowflake_initialization_warehouse": dynamic_table.get("initialization_warehouse"),
+            "snowflake_initialization_warehouse": init_warehouse,
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),

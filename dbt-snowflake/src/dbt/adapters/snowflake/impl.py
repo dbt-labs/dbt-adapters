@@ -529,19 +529,24 @@ CALL {proc_name}();
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         # normalize column names to lower case, this still preserves column order
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
+
+        # Select columns that exist in the result set
+        # initialization_warehouse may not be available in all Snowflake accounts
+        base_columns = [
+            "name",
+            "schema_name",
+            "database_name",
+            "text",
+            "target_lag",
+            "warehouse",
+            "refresh_mode",
+        ]
+        available_columns = [c.lower() for c in dt_table.column_names]
+        if "initialization_warehouse" in available_columns:
+            base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+
         return {
-            "dynamic_table": dt_table.select(
-                [
-                    "name",
-                    "schema_name",
-                    "database_name",
-                    "text",
-                    "target_lag",
-                    "warehouse",
-                    "initialization_warehouse",
-                    "refresh_mode",
-                ]
-            )
+            "dynamic_table": dt_table.select(base_columns)
         }
 
     def expand_column_types(self, goal, current):
