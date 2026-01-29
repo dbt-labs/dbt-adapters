@@ -87,3 +87,19 @@ def test_change_tracking_invalid_model_config(fake_integration, user_input):
     with pytest.raises(ValueError) as e:
         fake_integration.build_relation(model)
     assert "Invalid value for change_tracking" in str(e.value)
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({}, None),
+        ({"iceberg_version": None}, None),
+        ({"iceberg_version": 2}, 2),
+        ({"iceberg_version": 3}, 3),
+    ],
+)
+def test_iceberg_version_model_config(fake_integration, config, expected):
+    model = deepcopy(model_base)
+    model.config.update(config)
+    relation = fake_integration.build_relation(model)
+    assert relation.iceberg_version == expected
