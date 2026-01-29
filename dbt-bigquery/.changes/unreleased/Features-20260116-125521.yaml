@@ -1,0 +1,6 @@
+kind: Features
+body: Add BigQuery relation naming macros to support concurrent dbt execution without relation name collisions
+time: 2026-01-16T12:55:21.490692+01:00
+custom:
+    Author: RRap0so
+    Issue: "1359"

@@ -17,6 +17,11 @@
 
 
 {% macro check_for_schema_changes(source_relation, target_relation) %}
+  {{ return(adapter.dispatch('check_for_schema_changes', 'dbt')(source_relation, target_relation)) }}
+{% endmacro %}
+
+
+{% macro default__check_for_schema_changes(source_relation, target_relation) %}
 
   {% set schema_changed = False %}
 
@@ -60,8 +65,15 @@
 
 
 {% macro sync_column_schemas(on_schema_change, target_relation, schema_changes_dict) %}
+  {{ return(adapter.dispatch('sync_column_schemas', 'dbt')(on_schema_change, target_relation, schema_changes_dict)) }}
+{% endmacro %}
+
+
+{% macro default__sync_column_schemas(on_schema_change, target_relation, schema_changes_dict) %}
 
   {%- set add_to_target_arr = schema_changes_dict['source_not_in_target'] -%}
+  {%- set remove_from_target_arr = schema_changes_dict['target_not_in_source'] -%}
+  {%- set new_target_types = schema_changes_dict['new_target_types'] -%}
 
   {%- if on_schema_change == 'append_new_columns'-%}
      {%- if add_to_target_arr | length > 0 -%}
@@ -69,8 +81,6 @@
      {%- endif -%}
 
   {% elif on_schema_change == 'sync_all_columns' %}
-     {%- set remove_from_target_arr = schema_changes_dict['target_not_in_source'] -%}
-     {%- set new_target_types = schema_changes_dict['new_target_types'] -%}
 
      {% if add_to_target_arr | length > 0 or remove_from_target_arr | length > 0 %}
        {%- do alter_relation_add_remove_columns(target_relation, add_to_target_arr, remove_from_target_arr) -%}
@@ -100,6 +110,11 @@
 
 
 {% macro process_schema_changes(on_schema_change, source_relation, target_relation) %}
+  {{ return(adapter.dispatch('process_schema_changes', 'dbt')(on_schema_change, source_relation, target_relation)) }}
+{% endmacro %}
+
+
+{% macro default__process_schema_changes(on_schema_change, source_relation, target_relation) %}
 
     {% if on_schema_change == 'ignore' %}
 
