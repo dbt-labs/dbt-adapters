@@ -1,6 +1,0 @@
-kind: Features
-body: Add base test case for sql aggregate functions
-time: 2025-11-12T17:31:27.110573-06:00
-custom:
-  Author: QMalcolm
-  Issue: "1432"

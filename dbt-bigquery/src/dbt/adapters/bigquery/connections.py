@@ -265,15 +265,19 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
         with self.exception_handler(sql):
-            job_id = self.generate_job_id()
 
-            return self._query_and_results(
-                conn,
-                sql,
-                job_params,
-                job_id,
-                limit=limit,
-            )
+            def _execute_with_retry():
+                job_id = self.generate_job_id()
+                return self._query_and_results(
+                    conn,
+                    sql,
+                    job_params,
+                    job_id,
+                    limit=limit,
+                )
+
+            retry = self._retry.create_reopen_with_deadline(conn)
+            return retry(_execute_with_retry)()
 
     def raw_execute_with_comment(
         self,
@@ -610,7 +614,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         pre = time.perf_counter()
         try:
-            iterator = query_job.result(max_results=limit)
+            iterator = query_job.result(max_results=limit, retry=self._retry.create_retry())
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             try:
