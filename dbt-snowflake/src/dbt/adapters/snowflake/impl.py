@@ -545,9 +545,7 @@ CALL {proc_name}();
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
 
-        return {
-            "dynamic_table": dt_table.select(base_columns)
-        }
+        return {"dynamic_table": dt_table.select(base_columns)}
 
     def expand_column_types(self, goal, current):
         reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
