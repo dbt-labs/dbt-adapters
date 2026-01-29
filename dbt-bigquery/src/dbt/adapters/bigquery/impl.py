@@ -122,6 +122,17 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     ),
 )
 
+BIGQUERY_USE_DDL_FOR_METADATA_OPERATIONS = BehaviorFlag(
+    name="bigquery_use_ddl_for_metadata_operations",
+    default=True,
+    description=(
+        "Use DDL statements instead of the BigQuery Python API for metadata operations "
+        "like table rename, table description, and column description updates. "
+        "DDL is more efficient as it executes in a single operation instead of multiple "
+        "API roundtrips."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -202,6 +213,7 @@ class BigQueryAdapter(BaseAdapter):
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
+            BIGQUERY_USE_DDL_FOR_METADATA_OPERATIONS,
         ]
 
     @classmethod
@@ -232,17 +244,33 @@ class BigQueryAdapter(BaseAdapter):
     def rename_relation(
         self, from_relation: BigQueryRelation, to_relation: BigQueryRelation
     ) -> None:
-        # Views cannot be renamed in BigQuery
-        if from_relation.type == RelationType.View or to_relation.type == RelationType.View:
+        conn = self.connections.get_thread_connection()
+        client = conn.handle
+
+        from_table_ref = self.get_table_ref_from_relation(from_relation)
+        from_table = client.get_table(from_table_ref)
+        if (
+            from_table.table_type == "VIEW"
+            or from_relation.type == RelationType.View
+            or to_relation.type == RelationType.View
+        ):
             raise dbt_common.exceptions.DbtRuntimeError(
                 "Renaming of views is not currently supported in BigQuery"
             )
 
         self.cache_renamed(from_relation, to_relation)
 
-        # Use DDL to rename the table - this is a single operation vs copy+delete API calls
-        rename_sql = f"ALTER TABLE {from_relation.render()} RENAME TO `{to_relation.identifier}`"
-        self.execute(rename_sql, fetch=False)
+        if self.behavior.bigquery_use_ddl_for_metadata_operations.no_warn:
+            # Use DDL to rename the table - single operation vs copy+delete API calls
+            rename_sql = (
+                f"ALTER TABLE {from_relation.render()} RENAME TO `{to_relation.identifier}`"
+            )
+            self.execute(rename_sql, fetch=False)
+        else:
+            # Legacy behavior: copy + delete via API
+            to_table_ref = self.get_table_ref_from_relation(to_relation)
+            client.copy_table(from_table_ref, to_table_ref)
+            client.delete_table(from_table_ref)
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -679,13 +707,23 @@ class BigQueryAdapter(BaseAdapter):
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
     ):
-        # Use DDL to update the description - single operation vs get+update API calls
-        relation = self.Relation.create(database=database, schema=schema, identifier=identifier)
-        escaped_description = sql_escape(description)
-        sql = (
-            f'ALTER TABLE {relation.render()} SET OPTIONS(description="""{escaped_description}""")'
-        )
-        self.execute(sql, fetch=False)
+        if self.behavior.bigquery_use_ddl_for_metadata_operations.no_warn:
+            # Use DDL to update the description - single operation vs get+update API calls
+            relation = self.Relation.create(
+                database=database, schema=schema, identifier=identifier
+            )
+            self.execute_macro(
+                "bigquery__alter_relation_description_ddl",
+                kwargs={"relation": relation, "description": description},
+            )
+        else:
+            # Legacy behavior: get + update via API
+            conn = self.connections.get_thread_connection()
+            client = conn.handle
+            table_ref = self.connections.table_ref(database, schema, identifier)
+            table = client.get_table(table_ref)
+            table.description = description
+            client.update_table(table, ["description"])
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
