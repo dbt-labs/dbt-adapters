@@ -195,14 +195,12 @@ class SnowflakeDynamicTableConfigChangeset:
                     else False
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
-                (
-                    self.immutable_where.requires_full_refresh
-                    if self.immutable_where
-                    else False
-                ),
+                self.immutable_where.requires_full_refresh if self.immutable_where else False,
             ]
         )
 
     @property
     def has_changes(self) -> bool:
-        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode, self.immutable_where])
+        return any(
+            [self.target_lag, self.snowflake_warehouse, self.refresh_mode, self.immutable_where]
+        )
