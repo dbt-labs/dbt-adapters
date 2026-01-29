@@ -1,0 +1,79 @@
+name: "# GitHub release"
+run-name: "GitHub release - ${{ github.actor }} - package:${{ inputs.package }} deploy-to:${{ inputs.deploy-to }} branch:${{ inputs.branch }}"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: string
+                required: true
+            deploy-to:
+                description: "Choose whether to publish to test or prod"
+                type: string
+                default: "prod"
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                -   "dbt-athena"
+                -   "dbt-bigquery"
+                -   "dbt-postgres"
+                -   "dbt-redshift"
+                -   "dbt-snowflake"
+                -   "dbt-spark"
+            deploy-to:
+                description: "Choose whether to publish to test or prod"
+                type: environment
+                default: "test"
+            branch:
+                description: "Choose the branch to publish"
+                type: string
+                default: "main"
+
+permissions:
+    contents: write
+
+env:
+    REPO_LINK: ${{ github.server_url }}/${{ github.repository }}
+    NOTIFICATION_PREFIX: "[GitHub Release]"
+
+jobs:
+    publish:
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        defaults:
+            run:
+                working-directory: ./${{ inputs.package }}
+        steps:
+        -   uses: actions/checkout@v4
+            with:
+                ref: ${{ inputs.branch }}
+        -   uses: actions/setup-python@v5
+            with:
+                python-version:
+                    ${{ vars.DEFAULT_PYTHON_VERSION }}
+        -   uses: pypa/hatch@install
+        -   id: version
+            run: |
+                cd ./${{ inputs.package }}
+                echo "raw=$(hatch version)" >> $GITHUB_OUTPUT
+                cd ..
+        -   id: semver
+            uses: dbt-labs/actions/parse-semver@main
+            with:
+                version: ${{ steps.version.outputs.raw }}
+        -   run: gh release create $TAG ./dist/* --title "$TITLE" --notes-file $RELEASE_NOTES --target $TARGET $PRERELEASE $DRAFT
+            env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                TAG: ${{ inputs.package }}:${{ steps.version.outputs.raw }}
+                TITLE: ${{ inputs.package }} ${{ steps.version.outputs.raw }}
+                RELEASE_NOTES: ./CHANGELOG.md
+                TARGET: ${{ inputs.branch }}
+                PRERELEASE: ${{ steps.semver.outputs.is-pre-release && '--prerelease' }}
+                DRAFT: ${{ inputs.deploy-to == 'test' }}

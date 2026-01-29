@@ -39,7 +39,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 RUN python -m pip install --upgrade "hatch==1.13.0" --no-cache-dir --compile
 
 
-FROM base AS dbt-postgres-dev
+FROM base AS dbt-postgres
 
 HEALTHCHECK CMD python --version || exit 1
 
