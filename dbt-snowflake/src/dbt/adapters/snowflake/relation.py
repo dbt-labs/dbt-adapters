@@ -23,6 +23,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
+    SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -120,6 +121,14 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
+            )
+
+        if new_dynamic_table.immutable_where != existing_dynamic_table.immutable_where:
+            config_change_collection.immutable_where = (
+                SnowflakeDynamicTableImmutableWhereConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.immutable_where,
+                )
             )
 
         if config_change_collection.has_changes:

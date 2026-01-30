@@ -59,6 +59,7 @@ class SnowflakeConfig(AdapterConfig):
     target_lag: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    immutable_where: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -538,6 +539,7 @@ CALL {proc_name}();
                     "target_lag",
                     "warehouse",
                     "refresh_mode",
+                    "immutable_where",
                 ]
             )
         }
