@@ -159,3 +159,55 @@ SIMPLE_MODEL = """
 ) }}
 SELECT 1 as id
 """
+
+
+# Immutable Where fixtures
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 100",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 50",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Immutable Where with Jinja variable substitution
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_JINJA = """
+{%- set cutoff_value = var('immutable_cutoff', 100) -%}
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < " ~ cutoff_value,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_JINJA_ALTER = """
+{%- set cutoff_value = var('immutable_cutoff', 200) -%}
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < " ~ cutoff_value,
+) }}
+select * from {{ ref('my_seed') }}
+"""

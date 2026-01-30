@@ -48,6 +48,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
     - cluster_by: specifies the columns to cluster on
+    - immutable_where: specifies an immutability constraint expression
 
     There are currently no non-configurable parameters.
     """
@@ -64,6 +65,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
+    immutable_where: Optional[str] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -88,6 +90,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
+            "immutable_where": config_dict.get("immutable_where"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -111,6 +114,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
             "cluster_by": cluster_by(relation_config),
+            "immutable_where": relation_config.config.extra.get(  # type:ignore
+                "immutable_where"
+            ),
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -146,6 +152,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
             "cluster_by": dynamic_table.get("cluster_by"),
+            "immutable_where": dynamic_table.get("immutable_where"),
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 
@@ -188,6 +195,15 @@ class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
         return True
 
 
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableImmutableWhereConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
 @dataclass
 class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
@@ -196,6 +212,7 @@ class SnowflakeDynamicTableConfigChangeset:
         SnowflakeDynamicTableInitializationWarehouseConfigChange
     ] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
+    immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
@@ -213,6 +230,7 @@ class SnowflakeDynamicTableConfigChangeset:
                     else False
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
+                self.immutable_where.requires_full_refresh if self.immutable_where else False,
             ]
         )
 
@@ -224,5 +242,6 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.snowflake_warehouse,
                 self.snowflake_initialization_warehouse,
                 self.refresh_mode,
+                self.immutable_where,
             ]
         )
