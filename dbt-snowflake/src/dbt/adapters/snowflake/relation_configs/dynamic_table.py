@@ -140,6 +140,17 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         ):
             init_warehouse = None
 
+        # Snowflake returns immutable_where as "IMMUTABLE WHERE (expression)"
+        # We need to extract just the expression to match what users configure
+        immutable_where = dynamic_table.get("immutable_where")
+        if immutable_where is not None:
+            immutable_where_str = str(immutable_where).strip()
+            if immutable_where_str.upper() == "NONE" or immutable_where_str == "":
+                immutable_where = None
+            elif immutable_where_str.upper().startswith("IMMUTABLE WHERE ("):
+                # Strip "IMMUTABLE WHERE (" prefix and ")" suffix
+                immutable_where = immutable_where_str[17:-1]  # len("IMMUTABLE WHERE (") = 17
+
         config_dict = {
             "name": dynamic_table.get("name"),
             "schema_name": dynamic_table.get("schema_name"),
@@ -152,7 +163,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
             "cluster_by": dynamic_table.get("cluster_by"),
-            "immutable_where": dynamic_table.get("immutable_where"),
+            "immutable_where": immutable_where,
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 

@@ -135,7 +135,7 @@ DYNAMIC_TABLE_WITH_INIT_WAREHOUSE = """
 {{ config(
     materialized='dynamic_table',
     snowflake_warehouse='DBT_TESTING',
-    snowflake_initialization_warehouse='DBT_TESTING_ALT',
+    snowflake_initialization_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
     target_lag='2 minutes',
     refresh_mode='INCREMENTAL',
 ) }}

@@ -1,9 +1,15 @@
+import os
+
 import pytest
 
 from dbt.tests.util import run_dbt
 
 from tests.functional.relation_tests.dynamic_table_tests import models
 from tests.functional.utils import describe_dynamic_table, update_model
+
+
+# Get the alternate warehouse from environment, default to DBT_TESTING if not set
+ALT_WAREHOUSE = os.getenv("SNOWFLAKE_TEST_ALT_WAREHOUSE", "DBT_TESTING")
 
 
 class Changes:
@@ -179,21 +185,22 @@ class TestInitializationWarehouseChanges:
         """Verify dynamic table is created with initialization_warehouse set."""
         dt = describe_dynamic_table(project, "dynamic_table_init_wh")
         assert dt.snowflake_warehouse == "DBT_TESTING"
-        assert dt.snowflake_initialization_warehouse == "DBT_TESTING_ALT"
+        # Uses ALT_WAREHOUSE - can be different from snowflake_warehouse when env var is set
+        assert dt.snowflake_initialization_warehouse == ALT_WAREHOUSE
 
     def test_alter_initialization_warehouse(self, project):
-        """Verify initialization_warehouse can be altered."""
-        # Initial state
+        """Verify initialization_warehouse can be altered to a different value."""
+        # Initial state - uses ALT_WAREHOUSE
         dt_before = describe_dynamic_table(project, "dynamic_table_init_wh")
-        assert dt_before.snowflake_initialization_warehouse == "DBT_TESTING_ALT"
+        assert dt_before.snowflake_initialization_warehouse == ALT_WAREHOUSE
 
-        # Update to new initialization_warehouse
+        # Update model (changes initialization_warehouse from ALT_WAREHOUSE to DBT_TESTING)
         update_model(
             project, "dynamic_table_init_wh", models.DYNAMIC_TABLE_WITH_INIT_WAREHOUSE_ALTER
         )
         run_dbt(["run"])
 
-        # Verify change was applied
+        # Verify initialization_warehouse was changed
         dt_after = describe_dynamic_table(project, "dynamic_table_init_wh")
         assert dt_after.snowflake_initialization_warehouse == "DBT_TESTING"
 
@@ -201,7 +208,7 @@ class TestInitializationWarehouseChanges:
         """Verify initialization_warehouse can be unset (removed)."""
         # Initial state - has initialization_warehouse
         dt_before = describe_dynamic_table(project, "dynamic_table_init_wh")
-        assert dt_before.snowflake_initialization_warehouse == "DBT_TESTING_ALT"
+        assert dt_before.snowflake_initialization_warehouse == ALT_WAREHOUSE
 
         # Update to remove initialization_warehouse
         update_model(project, "dynamic_table_init_wh", models.DYNAMIC_TABLE_WITHOUT_INIT_WAREHOUSE)
