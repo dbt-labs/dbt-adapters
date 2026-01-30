@@ -186,6 +186,10 @@ class SparkCredentials(Credentials):
             str(key): str(value) for key, value in self.server_side_parameters.items()
         }
 
+        # Disable ANSI mode to ensure compatibility with Spark v3 and v4
+        # and prevent it from being overwritten.
+        self.server_side_parameters["spark.sql.ansi.enabled"] = "false"
+
     @property
     def type(self) -> str:
         return "spark"
