@@ -87,6 +87,20 @@ class TestSnowflakeDynamicTableConfigChangeset:
 
         assert not change.requires_full_refresh
 
+    def test_initialization_warehouse_unset_change(self):
+        """Unsetting initialization_warehouse (setting to None) should be valid."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            snowflake_initialization_warehouse=SnowflakeDynamicTableInitializationWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context=None,
+            )
+        )
+
+        assert changeset.snowflake_initialization_warehouse is not None
+        assert changeset.snowflake_initialization_warehouse.context is None
+        assert changeset.has_changes
+        assert not changeset.requires_full_refresh
+
 
 class TestImmutableWhereOptional:
     """Tests to verify immutable_where is an optional parameter."""

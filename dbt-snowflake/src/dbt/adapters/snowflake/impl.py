@@ -541,7 +541,7 @@ CALL {proc_name}();
             "target_lag",
             "warehouse",
             "refresh_mode",
-            "immutable_where",          
+            "immutable_where",
         ]
         available_columns = [c.lower() for c in dt_table.column_names]
         if "initialization_warehouse" in available_columns:

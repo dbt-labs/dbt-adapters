@@ -211,3 +211,26 @@ DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_JINJA_ALTER = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+# UNSET fixtures - tables without optional fields for testing transitions from set -> unset
+DYNAMIC_TABLE_WITHOUT_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_IMMUTABLE_WHERE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
