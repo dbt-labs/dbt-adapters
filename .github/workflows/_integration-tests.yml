@@ -104,6 +104,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -152,6 +154,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -201,6 +205,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -249,6 +255,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -353,6 +361,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -416,6 +426,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -461,6 +473,8 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
+                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
