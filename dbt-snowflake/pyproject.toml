@@ -41,6 +41,9 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-snow
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-snowflake/CHANGELOG.md"
 
+[tool.hatch.build.targets.wheel]
+exclude = ["src/dbt/include/snowflake/macros"]
+
 [tool.hatch.build.targets.wheel.force-include]
 "../dbt-shared-macros/dbt-snowflake/macros" = "dbt/include/snowflake/macros"
 

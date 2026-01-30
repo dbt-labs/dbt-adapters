@@ -43,6 +43,9 @@ Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adap
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
 
+[tool.hatch.build.targets.wheel]
+exclude = ["src/dbt/include/global_project/macros"]
+
 [tool.hatch.build.targets.wheel.force-include]
 "../dbt-shared-macros/dbt-adapters/macros" = "dbt/include/global_project/macros"
 
