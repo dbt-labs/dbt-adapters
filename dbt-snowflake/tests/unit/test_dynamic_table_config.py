@@ -102,4 +102,3 @@ class TestImmutableWhereChangeset:
         assert changeset.immutable_where.context is None
         assert changeset.has_changes is True
         assert changeset.requires_full_refresh is False
-
