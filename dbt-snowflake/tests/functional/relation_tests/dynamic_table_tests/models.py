@@ -131,6 +131,28 @@ DYNAMIC_TABLE_CUSTOM_DB_SCHEMA = """
 select * from {{ ref('simple_model') }}
 """
 
+DYNAMIC_TABLE_WITH_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+DYNAMIC_TABLE_WITH_INIT_WAREHOUSE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
 SIMPLE_MODEL = """
 {{ config(
     materialized='table'
@@ -186,6 +208,29 @@ DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_JINJA_ALTER = """
     target_lag='2 minutes',
     refresh_mode='INCREMENTAL',
     immutable_where="id < " ~ cutoff_value,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# UNSET fixtures - tables without optional fields for testing transitions from set -> unset
+DYNAMIC_TABLE_WITHOUT_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_IMMUTABLE_WHERE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
 ) }}
 select * from {{ ref('my_seed') }}
 """
