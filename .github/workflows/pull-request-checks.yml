@@ -69,7 +69,6 @@ jobs:
                   ref: ${{ github.event.pull_request.head.sha }}
                   repository: ${{ github.event.pull_request.head.repo.full_name }}
                   submodules: true
-                  token: ${{ secrets.FA_ASSISTANT_CI_WORKFLOW_PAT_TOKEN }}
 
             - name: "Check changelog entry paths"
               id: changelog-entry-check
