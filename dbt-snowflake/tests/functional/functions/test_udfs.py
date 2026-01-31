@@ -15,6 +15,9 @@ from dbt.tests.adapter.functions.test_udfs import (
     SqlUDFDefaultArgSupport,
     PythonUDFDefaultArgSupport,
     PythonUDFVolatilitySupport,
+    JavaScriptUDFSupported,
+    JavaScriptUDFDefaultArgSupport,
+    JavaScriptUDFVolatilitySupport,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -109,4 +112,16 @@ class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
 
 
 class TestSnowflakePythonUDFVolatilitySupport(PythonUDFVolatilitySupport):
+    pass
+
+
+class TestSnowflakeJavaScriptUDFSupported(JavaScriptUDFSupported):
+    pass
+
+
+class TestSnowflakeJavaScriptUDFDefaultArgSupport(JavaScriptUDFDefaultArgSupport):
+    expect_default_arg_support = True
+
+
+class TestSnowflakeJavaScriptUDFVolatilitySupport(JavaScriptUDFVolatilitySupport):
     pass
