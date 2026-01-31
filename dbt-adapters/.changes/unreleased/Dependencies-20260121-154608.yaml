@@ -1,0 +1,6 @@
+kind: Dependencies
+body: 'bump mashumaro dep to include `<3.18`, unblocking py3.14 support '
+time: 2026-01-21T15:46:08.224526-08:00
+custom:
+  Author: dependabot
+  PR: "1370"
