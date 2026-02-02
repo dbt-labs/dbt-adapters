@@ -9,7 +9,6 @@ import time
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
-from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import RefreshError
 from google.cloud.bigquery import (
     Client,
@@ -626,14 +625,6 @@ class BigQueryConnectionManager(BaseConnectionManager):
             except Exception as e:
                 logger.debug(f"Error cancelling query job: {e}")
             raise TimeoutError(exc)
-        except GoogleAPICallError as e:
-            # Re-raise retryable errors so the outer retry mechanism can handle them
-            from google.cloud.bigquery.retry import _job_should_retry
-
-            if _job_should_retry(e):
-                raise
-            logger.debug(f"Error polling query results: {e}")
-            raise DbtDatabaseError(str(e))
 
         fire_event(
             SQLQueryStatus(

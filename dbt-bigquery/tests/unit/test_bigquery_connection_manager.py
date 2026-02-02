@@ -254,27 +254,6 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.assertEqual(call_kwargs["timeout"], 150)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_non_retryable_google_api_error_raises_dbt_database_error(self, MockQueryJobConfig):
-        """Test that non-retryable GoogleAPICallError is converted to DbtDatabaseError"""
-        from google.api_core.exceptions import NotFound
-        from dbt_common.exceptions import DbtDatabaseError
-
-        mock_job = Mock(job_id="test_job", location="US", project="project")
-        # NotFound is not a retryable error
-        mock_job.result.side_effect = NotFound("Table not found")
-        self.mock_client.query.return_value = mock_job
-
-        with self.assertRaises(DbtDatabaseError) as context:
-            self.connections._query_and_results(
-                self.mock_connection,
-                "SELECT 1",
-                {"dry_run": False},
-                job_id="test_job",
-            )
-
-        self.assertIn("Table not found", str(context.exception))
-
-    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_retryable_google_api_error_is_reraised(self, MockQueryJobConfig):
         """Test that retryable GoogleAPICallError is re-raised for retry mechanism"""
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
