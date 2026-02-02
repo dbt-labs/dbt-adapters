@@ -9,6 +9,7 @@ import time
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import RefreshError
 from google.cloud.bigquery import (
     Client,
@@ -593,6 +594,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         client: Client = conn.handle
         timeout = self._retry.create_job_execution_timeout()
         query_job_config = QueryJobConfig(**job_params)
+        polling_timeout = timeout + 30  # buffer for polling after job execution timeout
         query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
         # Cannot reuse job_config if destination is set and ddl is used
@@ -614,7 +616,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         pre = time.perf_counter()
         try:
-            iterator = query_job.result(max_results=limit, retry=self._retry.create_retry())
+            iterator = query_job.result(
+                max_results=limit, timeout=polling_timeout, retry=self._retry.create_retry()
+            )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             try:
@@ -622,6 +626,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
             except Exception as e:
                 logger.debug(f"Error cancelling query job: {e}")
             raise TimeoutError(exc)
+        except GoogleAPICallError as e:
+            # Re-raise retryable errors so the outer retry mechanism can handle them
+            from google.cloud.bigquery.retry import _job_should_retry
+
+            if _job_should_retry(e):
+                raise
+            logger.debug(f"Error polling query results: {e}")
+            raise DbtDatabaseError(str(e))
 
         fire_event(
             SQLQueryStatus(
