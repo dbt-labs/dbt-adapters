@@ -625,15 +625,15 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         credentials = connection.credentials
 
-        retryable_exceptions = (
-            redshift_connector.OperationalError,
-            redshift_connector.DatabaseError,
-            redshift_connector.DataError,
-            redshift_connector.InterfaceError,
-        )
         if credentials.retry_all:
-            retryable_exceptions = redshift_connector.Error
-
+            retryable_exceptions = (redshift_connector.Error,)
+        else:
+            retryable_exceptions = (
+                redshift_connector.OperationalError,
+                redshift_connector.DatabaseError,
+                redshift_connector.DataError,
+                redshift_connector.InterfaceError,
+            )
         open_connection = cls.retry_connection(
             connection,
             connect=get_connection_method(credentials),

@@ -471,3 +471,57 @@ class TestAutocommitBehavior(TestCase):
 
         # Should have called add_commit_query because behavior flag is not set
         mock_add_commit.assert_called_once()
+    @mock.patch("redshift_connector.connect", MagicMock())
+    def test_retryable_exceptions_is_tuple_when_retry_all_true(self):
+        """Test that retryable_exceptions is a proper tuple when retry_all=True.
+
+        This is a regression test for a bug where retryable_exceptions was set to
+        a single exception class instead of a tuple, causing a TypeError:
+        'type' object is not iterable when the base class called
+        tuple(retryable_exceptions).
+        """
+        from dbt.adapters.redshift.connections import RedshiftConnectionManager
+
+        connection_mock = mock_connection("model", state="closed")
+        connection_mock.credentials = RedshiftCredentials.from_dict(
+            {
+                "type": "redshift",
+                "dbname": "redshift",
+                "user": "root",
+                "host": "thishostshouldnotexist.test.us-east-1",
+                "pass": "password",
+                "port": 5439,
+                "schema": "public",
+                "retries": 1,
+                "retry_all": True,
+            }
+        )
+
+        # Mock retry_connection to capture the retryable_exceptions argument
+        captured_exceptions = {}
+
+        def capture_retry_connection(
+            connection, connect, logger, retry_limit, retryable_exceptions
+        ):
+            captured_exceptions["value"] = retryable_exceptions
+            # Return a mock connection to avoid actual connection
+            connection.state = "open"
+            connection.handle = MagicMock()
+            return connection
+
+        with mock.patch.object(
+            RedshiftConnectionManager, "retry_connection", side_effect=capture_retry_connection
+        ):
+            with mock.patch.object(
+                RedshiftConnectionManager, "_get_backend_pid", return_value=None
+            ):
+                RedshiftConnectionManager.open(connection_mock)
+
+        # Verify that retryable_exceptions is a tuple (iterable)
+        # This should not raise TypeError: 'type' object is not iterable
+        retryable = captured_exceptions["value"]
+        assert isinstance(retryable, tuple), f"Expected tuple, got {type(retryable)}"
+        # Verify it contains the expected exception type
+        assert redshift_connector.Error in retryable
+        # Verify tuple() works on it (this is what the base class does)
+        assert tuple(retryable) == retryable
