@@ -471,6 +471,7 @@ class TestAutocommitBehavior(TestCase):
 
         # Should have called add_commit_query because behavior flag is not set
         mock_add_commit.assert_called_once()
+
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_retryable_exceptions_is_tuple_when_retry_all_true(self):
         """Test that retryable_exceptions is a proper tuple when retry_all=True.

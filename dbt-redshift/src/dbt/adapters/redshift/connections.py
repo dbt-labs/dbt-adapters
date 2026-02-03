@@ -532,12 +532,11 @@ class RedshiftConnectionManager(SQLConnectionManager):
         """
         connection = self.get_thread_connection()
 
-        if self._should_skip_transaction_statements():
-            # With autocommit + behavior flag, skip BEGIN but still track transaction state
-            connection.transaction_open = True
-            return
+        if not self._should_skip_transaction_statements():
+            # Only skip BEGIN if autocommit + behavior flag is set
+            super().begin()
 
-        super().begin()
+        connection.transaction_open = True
 
     def commit(self) -> None:
         """Commit the current transaction.
@@ -549,12 +548,10 @@ class RedshiftConnectionManager(SQLConnectionManager):
         """
         connection = self.get_thread_connection()
 
-        if self._should_skip_transaction_statements():
-            # With autocommit + behavior flag, skip COMMIT but still track transaction state
-            connection.transaction_open = False
-            return
-
-        super().commit()
+        if not self._should_skip_transaction_statements():
+            # Only skip COMMIT if autocommit + behavior flag is set
+            super().commit()
+        connection.transaction_open = False
 
     def rollback_if_open(self) -> None:
         """Rollback the current transaction if one is open.
@@ -566,12 +563,10 @@ class RedshiftConnectionManager(SQLConnectionManager):
         """
         connection = self.get_thread_connection()
 
-        if self._should_skip_transaction_statements():
-            # With autocommit + behavior flag, nothing to rollback but reset transaction state
-            connection.transaction_open = False
-            return
-
-        super().rollback_if_open()
+        if not self._should_skip_transaction_statements():
+            # Only perform ROLLBACK if autocommit + behavior flag is not set
+            super().rollback_if_open()
+        connection.transaction_open = False
 
     @contextmanager
     def exception_handler(self, sql):
