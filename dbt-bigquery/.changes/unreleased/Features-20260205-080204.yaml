@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add parallel partition copying for insert_overwrite incremental strategy, significantly improving performance for tables with many partitions.'
+time: 2026-02-05T08:02:04.000000+00:00
+custom:
+    Author: AxelThevenot leohoare
+    Issue: "559"
