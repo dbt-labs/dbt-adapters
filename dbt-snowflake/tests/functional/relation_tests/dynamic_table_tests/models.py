@@ -234,3 +234,40 @@ DYNAMIC_TABLE_WITHOUT_IMMUTABLE_WHERE = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+# Transient dynamic table fixtures
+DYNAMIC_TABLE_TRANSIENT = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    transient=True,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_NON_TRANSIENT = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    transient=False,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# For testing default behavior (no explicit transient config)
+DYNAMIC_TABLE_DEFAULT_TRANSIENT = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
