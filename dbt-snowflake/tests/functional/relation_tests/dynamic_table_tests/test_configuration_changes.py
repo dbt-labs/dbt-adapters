@@ -286,3 +286,137 @@ class TestImmutableWhereChanges:
         # Verify immutable_where was unset
         dt_after = describe_dynamic_table(project, "dynamic_table_immutable")
         assert dt_after.immutable_where is None
+
+
+class TestClusterByChanges:
+    """Tests for cluster_by configuration changes."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_cluster.sql": models.DYNAMIC_TABLE_WITH_CLUSTER_BY,
+            "dynamic_table_cluster_multi.sql": models.DYNAMIC_TABLE_WITH_CLUSTER_BY_MULTI,
+            "dynamic_table_no_cluster.sql": models.DYNAMIC_TABLE_WITHOUT_CLUSTER_BY,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        # Create initial dynamic tables
+        run_dbt(["run", "--full-refresh"])
+        yield
+        # Reset models to original state
+        update_model(project, "dynamic_table_cluster", models.DYNAMIC_TABLE_WITH_CLUSTER_BY)
+        update_model(
+            project, "dynamic_table_cluster_multi", models.DYNAMIC_TABLE_WITH_CLUSTER_BY_MULTI
+        )
+        update_model(project, "dynamic_table_no_cluster", models.DYNAMIC_TABLE_WITHOUT_CLUSTER_BY)
+
+    def test_create_with_cluster_by(self, project):
+        """Verify dynamic table is created with single column cluster_by."""
+        dt = describe_dynamic_table(project, "dynamic_table_cluster")
+        # Snowflake returns cluster_by in a specific format, typically with LINEAR prefix
+        assert dt.cluster_by is not None
+        assert "ID" in dt.cluster_by.upper()
+
+    def test_create_with_cluster_by_multi_column(self, project):
+        """Verify dynamic table is created with multi-column cluster_by."""
+        dt = describe_dynamic_table(project, "dynamic_table_cluster_multi")
+        assert dt.cluster_by is not None
+        cluster_by_upper = dt.cluster_by.upper()
+        assert "ID" in cluster_by_upper
+        assert "VALUE" in cluster_by_upper
+
+    def test_alter_cluster_by(self, project):
+        """Verify cluster_by can be altered to a different column."""
+        # Initial state - clustered by 'id'
+        dt_before = describe_dynamic_table(project, "dynamic_table_cluster")
+        assert dt_before.cluster_by is not None
+        assert "ID" in dt_before.cluster_by.upper()
+
+        # Update to cluster by 'value' instead
+        update_model(project, "dynamic_table_cluster", models.DYNAMIC_TABLE_WITH_CLUSTER_BY_ALTER)
+        run_dbt(["run"])
+
+        # Verify cluster_by was changed
+        dt_after = describe_dynamic_table(project, "dynamic_table_cluster")
+        assert dt_after.cluster_by is not None
+        assert "VALUE" in dt_after.cluster_by.upper()
+
+    def test_drop_cluster_by(self, project):
+        """Verify cluster_by can be removed (DROP CLUSTERING KEY)."""
+        # Initial state - has cluster_by
+        dt_before = describe_dynamic_table(project, "dynamic_table_cluster")
+        assert dt_before.cluster_by is not None
+
+        # Update to remove cluster_by
+        update_model(project, "dynamic_table_cluster", models.DYNAMIC_TABLE_WITHOUT_CLUSTER_BY)
+        run_dbt(["run"])
+
+        # Verify cluster_by was removed
+        dt_after = describe_dynamic_table(project, "dynamic_table_cluster")
+        assert dt_after.cluster_by is None
+
+    def test_add_cluster_by(self, project):
+        """Verify cluster_by can be added to a table that didn't have one."""
+        # Initial state - no cluster_by
+        dt_before = describe_dynamic_table(project, "dynamic_table_no_cluster")
+        assert dt_before.cluster_by is None
+
+        # Update to add cluster_by
+        update_model(project, "dynamic_table_no_cluster", models.DYNAMIC_TABLE_WITH_CLUSTER_BY)
+        run_dbt(["run"])
+
+        # Verify cluster_by was added
+        dt_after = describe_dynamic_table(project, "dynamic_table_no_cluster")
+        assert dt_after.cluster_by is not None
+        assert "ID" in dt_after.cluster_by.upper()
+
+
+class TestClusterByNoneColumnName:
+    """Test clustering by a column literally named 'NONE' to ensure we don't
+    incorrectly normalize it to Python None."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed_none.csv": models.SEED_WITH_NONE_COLUMN}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_none_col.sql": models.DYNAMIC_TABLE_WITH_CLUSTER_BY_NONE_COLUMN,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def test_cluster_by_column_named_none(self, project):
+        """Verify we can cluster by a column literally named 'NONE'."""
+        run_dbt(["run", "--full-refresh"])
+
+        dt = describe_dynamic_table(project, "dynamic_table_none_col")
+        # cluster_by should NOT be None - it should contain the column name "NONE"
+        assert (
+            dt.cluster_by is not None
+        ), "cluster_by should not be Python None when clustering by a column named 'NONE'"
+        assert "NONE" in dt.cluster_by.upper()

@@ -6,6 +6,16 @@ id,value
 """.strip()
 
 
+# Seed with a column named "NONE" to test edge case where column name
+# matches the string Snowflake uses for unset values
+SEED_WITH_NONE_COLUMN = """
+id,NONE
+1,100
+2,200
+3,300
+""".strip()
+
+
 DYNAMIC_TABLE = """
 {{ config(
     materialized='dynamic_table',
@@ -233,4 +243,68 @@ DYNAMIC_TABLE_WITHOUT_IMMUTABLE_WHERE = """
     refresh_mode='INCREMENTAL',
 ) }}
 select * from {{ ref('my_seed') }}
+"""
+
+
+# Cluster By fixtures
+# Note: Snowflake requires clustered columns to be explicitly listed in the SELECT clause
+# (cannot use SELECT * with cluster_by)
+DYNAMIC_TABLE_WITH_CLUSTER_BY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by="id",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_CLUSTER_BY_MULTI = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by=["id", "value"],
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_CLUSTER_BY_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by="value",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_CLUSTER_BY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+# Test clustering by a column literally named "NONE" to ensure we don't
+# incorrectly normalize it to Python None
+DYNAMIC_TABLE_WITH_CLUSTER_BY_NONE_COLUMN = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by='"NONE"',
+) }}
+select id, "NONE" from {{ ref('my_seed_none') }}
 """
