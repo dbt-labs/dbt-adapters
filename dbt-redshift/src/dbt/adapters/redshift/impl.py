@@ -1,8 +1,10 @@
 import os
 from dataclasses import dataclass
+from multiprocessing.context import SpawnContext
 
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import Optional, Set, Any, Dict, Type, TYPE_CHECKING
+from typing import List, Optional, Set, Any, Dict, Type, TYPE_CHECKING
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
@@ -28,6 +30,17 @@ for package in packages:
     logger.set_adapter_dependency_log_level(package, level)
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
+
+REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
+    name="redshift_skip_autocommit_transaction_statements",
+    default=True,
+    description=(
+        "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
+        "since each statement is automatically committed. This reduces round-trips "
+        "to the database and avoids unnecessary transaction overhead."
+        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
+    ),
+)
 
 if TYPE_CHECKING:
     import agate
@@ -65,6 +78,17 @@ class RedshiftAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
         }
     )
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        # Pass behavior flag checker to connection manager for transaction optimization
+        self.connections.set_skip_transactions_checker(
+            lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
+        )
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        return [REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS]
 
     @classmethod
     def date_function(cls):
