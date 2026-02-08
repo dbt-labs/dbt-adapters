@@ -107,7 +107,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
     def test_copy_bq_table_appends(self):
         self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_APPEND)
         self.mock_client.copy_table.assert_called_once_with(
-            [self._table_ref("project", "dataset", "table1")],
+            self._table_ref("project", "dataset", "table1"),
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
             retry=ANY,
@@ -121,7 +121,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
         args, kwargs = self.mock_client.copy_table.call_args
         self.mock_client.copy_table.assert_called_once_with(
-            [self._table_ref("project", "dataset", "table1")],
+            self._table_ref("project", "dataset", "table1"),
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
             retry=ANY,
@@ -130,6 +130,34 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.assertEqual(
             kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
         )
+
+    def test_copy_bq_table_with_partition_ids(self):
+        """Test that copy_bq_table copies partitions in parallel when partition_ids is provided"""
+        source = BigQueryRelation.create(database="project", schema="dataset", identifier="table1")
+        destination = BigQueryRelation.create(
+            database="project", schema="dataset", identifier="table2"
+        )
+        partition_ids = ["20200101", "20200102", "20200103"]
+
+        self.connections.copy_bq_table(
+            source, destination, dbt.adapters.bigquery.impl.WRITE_TRUNCATE, partition_ids
+        )
+
+        # Should be called 3 times (once for each partition)
+        self.assertEqual(self.mock_client.copy_table.call_count, 3)
+
+        # Verify each partition was copied with the correct source and destination
+        calls = self.mock_client.copy_table.call_args_list
+        expected_partitions = ["20200101", "20200102", "20200103"]
+        for i, call in enumerate(calls):
+            args, kwargs = call
+            source_ref = str(args[0])
+            dest_ref = str(args[1])
+            self.assertIn(f"${expected_partitions[i]}", source_ref)
+            self.assertIn(f"${expected_partitions[i]}", dest_ref)
+            self.assertEqual(
+                kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
+            )
 
     def test_job_labels_valid_json(self):
         expected = {"key": "value"}
