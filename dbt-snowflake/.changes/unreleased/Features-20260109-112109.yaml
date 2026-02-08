@@ -1,0 +1,6 @@
+kind: Features
+body: Add information on number of rows in CTAS
+time: 2026-01-09T11:21:09.030153+01:00
+custom:
+    Author: b-per
+    Issue: "1531"

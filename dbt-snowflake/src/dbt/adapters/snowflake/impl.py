@@ -8,6 +8,8 @@ from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, 
 from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
+from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
@@ -20,6 +22,7 @@ from dbt_common.contracts.metadata import (
     CatalogTable,
     ColumnMetadata,
 )
+from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
@@ -50,12 +53,14 @@ class SnowflakeConfig(AdapterConfig):
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
+    snowflake_initialization_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    immutable_where: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -525,16 +530,44 @@ CALL {proc_name}();
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         # normalize column names to lower case, this still preserves column order
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
-        return {
-            "dynamic_table": dt_table.select(
-                [
-                    "name",
-                    "schema_name",
-                    "database_name",
-                    "text",
-                    "target_lag",
-                    "warehouse",
-                    "refresh_mode",
-                ]
-            )
-        }
+
+        # Select columns that exist in the result set
+        # initialization_warehouse may not be available in all Snowflake accounts
+        base_columns = [
+            "name",
+            "schema_name",
+            "database_name",
+            "text",
+            "target_lag",
+            "warehouse",
+            "refresh_mode",
+            "immutable_where",
+        ]
+        available_columns = [c.lower() for c in dt_table.column_names]
+        if "initialization_warehouse" in available_columns:
+            base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+
+        return {"dynamic_table": dt_table.select(base_columns)}
+
+    def expand_column_types(self, goal, current):
+        reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
+
+        target_columns = {c.name: c for c in self.get_columns_in_relation(current)}
+
+        for column_name, reference_column in reference_columns.items():
+            target_column = target_columns.get(column_name)
+
+            if target_column is not None and target_column.can_expand_to(reference_column):
+                col_string_size = reference_column.string_size()
+                new_type = self.Column.string_type(col_string_size)
+                if collation := target_column.collation:
+                    new_type += f"collate '{collation}'"
+                fire_event(
+                    ColTypeChange(
+                        orig_type=target_column.data_type,
+                        new_type=new_type,
+                        table=_make_ref_key_dict(current),
+                    )
+                )
+
+                self.alter_column_type(current, column_name, new_type)

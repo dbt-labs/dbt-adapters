@@ -104,6 +104,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -138,6 +139,7 @@ jobs:
             BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
             BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
             BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
+            BIGFRAMES_NOTEBOOK_TEMPLATE_ID: ${{ secrets.BIGFRAMES_NOTEBOOK_TEMPLATE_ID }}
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
@@ -151,6 +153,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -186,6 +189,7 @@ jobs:
             BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
             BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
             BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
+            BIGFRAMES_NOTEBOOK_TEMPLATE_ID: ${{ secrets.BIGFRAMES_NOTEBOOK_TEMPLATE_ID }}
             DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
             DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
             DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
@@ -199,6 +203,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -247,6 +252,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -351,6 +357,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -414,6 +421,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
@@ -459,6 +467,7 @@ jobs:
               with:
                   ref: ${{ inputs.branch }}
                   repository: ${{ inputs.repository }}
+                  submodules: true
 
             - name: "Set up Python"
               uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # actions/setup-python@v5
