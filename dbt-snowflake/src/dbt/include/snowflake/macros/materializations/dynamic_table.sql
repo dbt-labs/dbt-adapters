@@ -92,6 +92,8 @@
 
 {% macro snowflake__get_dynamic_table_configuration_changes(existing_relation, new_config) -%}
     {% set _existing_dynamic_table = snowflake__describe_dynamic_table(existing_relation) %}
-    {% set _configuration_changes = existing_relation.dynamic_table_config_changeset(_existing_dynamic_table, new_config.model) %}
+    {#- Get the default transient value based on behavior flag -#}
+    {% set _default_transient = adapter.behavior.snowflake_default_transient_dynamic_tables.no_warn %}
+    {% set _configuration_changes = existing_relation.dynamic_table_config_changeset(_existing_dynamic_table, new_config.model, _default_transient) %}
     {% do return(_configuration_changes) %}
 {%- endmacro %}

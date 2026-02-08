@@ -2,6 +2,7 @@
 Unit tests for SnowflakeDynamicTableConfig, testing:
 - snowflake_initialization_warehouse parameter
 - immutable_where parameter
+- transient parameter
 """
 
 import pytest
@@ -12,6 +13,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
+    SnowflakeDynamicTableTransientConfigChange,
 )
 
 
@@ -192,3 +194,235 @@ class TestImmutableWhereChangeset:
         assert changeset.immutable_where.context is None
         assert changeset.has_changes is True
         assert changeset.requires_full_refresh is False
+
+
+class TestTransientOptional:
+    """Tests to verify transient is an optional parameter for dynamic tables."""
+
+    def test_transient_is_optional(self):
+        """transient should be optional and default to None (use behavior flag)."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+            }
+        )
+        # None means "not explicitly set by user, use behavior flag default"
+        assert config.transient is None
+
+    def test_transient_can_be_set_true(self):
+        """transient should be settable to True."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "transient": True,
+            }
+        )
+        assert config.transient is True
+
+    def test_transient_can_be_set_false(self):
+        """transient can be explicitly set to False."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "transient": False,
+            }
+        )
+        assert config.transient is False
+
+    def test_transient_can_be_none(self):
+        """transient can be None (meaning not explicitly set by user)."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "transient": None,
+            }
+        )
+        assert config.transient is None
+
+
+class TestTransientChangeset:
+    """Tests for transient change detection in SnowflakeDynamicTableConfigChangeset."""
+
+    def test_changeset_without_transient_has_no_changes(self):
+        """A changeset with no transient change should not have changes."""
+        changeset = SnowflakeDynamicTableConfigChangeset()
+        assert changeset.transient is None
+        assert changeset.has_changes is False
+        assert changeset.requires_full_refresh is False
+
+    def test_changeset_with_transient_change(self):
+        """A changeset with transient change should have changes and require full refresh."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            transient=SnowflakeDynamicTableTransientConfigChange(
+                action=RelationConfigChangeAction.create,
+                context=True,
+            )
+        )
+        assert changeset.transient is not None
+        assert changeset.has_changes is True
+        # Transient changes REQUIRE full refresh (cannot be altered)
+        assert changeset.requires_full_refresh is True
+
+    def test_transient_change_requires_full_refresh(self):
+        """Changing transient should require a full refresh (cannot be altered in place)."""
+        change = SnowflakeDynamicTableTransientConfigChange(
+            action=RelationConfigChangeAction.create,
+            context=True,
+        )
+        assert change.requires_full_refresh is True
+
+    def test_transient_change_to_false_requires_full_refresh(self):
+        """Changing transient to False should also require full refresh."""
+        change = SnowflakeDynamicTableTransientConfigChange(
+            action=RelationConfigChangeAction.create,
+            context=False,
+        )
+        assert change.requires_full_refresh is True
+
+    def test_changeset_with_transient_and_other_changes(self):
+        """A changeset with transient and other changes should require full refresh."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            transient=SnowflakeDynamicTableTransientConfigChange(
+                action=RelationConfigChangeAction.create,
+                context=True,
+            ),
+            immutable_where=SnowflakeDynamicTableImmutableWhereConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context="id < 100",
+            ),
+        )
+        assert changeset.has_changes is True
+        # Even though immutable_where doesn't require full refresh,
+        # transient does, so the entire changeset requires full refresh
+        assert changeset.requires_full_refresh is True
+
+
+class TestTransientBehaviorFlagDefaultLogic:
+    """
+    Tests for how transient=None maps to True/False based on default_transient parameter
+    (which comes from the snowflake_default_transient_dynamic_tables behavior flag).
+
+    This tests the logic in SnowflakeRelation.dynamic_table_config_changeset().
+    """
+
+    def test_none_transient_with_default_false_matches_non_transient_existing(self):
+        """When transient=None and default_transient=False, should match existing non-transient table."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+        from unittest.mock import MagicMock
+        import agate
+
+        # Create mock relation_results with existing non-transient table
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": "1 hour",
+            "warehouse": "MY_WH",
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+            "transient": False,  # existing table is non-transient
+        }
+        dt_table = agate.Table(
+            [list(dt_row_data.values())],
+            list(dt_row_data.keys()),
+        )
+        relation_results = {"dynamic_table": dt_table}
+
+        # Create mock relation_config with transient=None (not set)
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        relation_config.config.extra = {
+            "target_lag": "1 hour",
+            "snowflake_warehouse": "MY_WH",
+            "transient": None,  # not explicitly set
+        }
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+
+        # With default_transient=False, None should be treated as False
+        # So no transient change should be detected (existing is False, effective new is False)
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config, default_transient=False
+        )
+
+        # Should have no transient change since effective values match
+        if changeset is None:
+            assert True  # No changes at all
+        else:
+            assert changeset.transient is None  # No transient change
+
+    def test_none_transient_with_default_true_triggers_change_on_non_transient_existing(self):
+        """When transient=None and default_transient=True, should trigger change on non-transient table."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+        from unittest.mock import MagicMock
+        import agate
+
+        # Create mock relation_results with existing non-transient table
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": "1 hour",
+            "warehouse": "MY_WH",
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+            "transient": False,  # existing table is non-transient
+        }
+        dt_table = agate.Table(
+            [list(dt_row_data.values())],
+            list(dt_row_data.keys()),
+        )
+        relation_results = {"dynamic_table": dt_table}
+
+        # Create mock relation_config with transient=None (not set)
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        relation_config.config.extra = {
+            "target_lag": "1 hour",
+            "snowflake_warehouse": "MY_WH",
+            "transient": None,  # not explicitly set
+        }
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+
+        # With default_transient=True, None should be treated as True
+        # So transient change should be detected (existing is False, effective new is True)
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config, default_transient=True
+        )
+
+        # Should have transient change since effective values differ
+        assert changeset is not None
+        assert changeset.transient is not None
+        assert changeset.transient.context is True
+        assert changeset.requires_full_refresh is True

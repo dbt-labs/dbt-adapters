@@ -286,3 +286,170 @@ class TestImmutableWhereChanges:
         # Verify immutable_where was unset
         dt_after = describe_dynamic_table(project, "dynamic_table_immutable")
         assert dt_after.immutable_where is None
+
+
+class TestTransientChanges:
+    """Tests for transient configuration changes on dynamic tables."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_transient.sql": models.DYNAMIC_TABLE_TRANSIENT,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        # Create initial dynamic table with transient=True
+        run_dbt(["run", "--full-refresh"])
+        yield
+        # Reset model to original state
+        update_model(project, "dynamic_table_transient", models.DYNAMIC_TABLE_TRANSIENT)
+
+    def test_create_transient_dynamic_table(self, project):
+        """Verify dynamic table is created with transient=True."""
+        dt = describe_dynamic_table(project, "dynamic_table_transient")
+        assert dt.transient is True
+
+    def test_change_transient_to_non_transient_requires_full_refresh(self, project):
+        """Verify changing transient from True to False triggers full refresh (table recreation)."""
+        # Initial state - transient
+        dt_before = describe_dynamic_table(project, "dynamic_table_transient")
+        assert dt_before.transient is True
+
+        # Update to non-transient
+        update_model(project, "dynamic_table_transient", models.DYNAMIC_TABLE_NON_TRANSIENT)
+        run_dbt(["run"])
+
+        # Verify transient was changed (requires full refresh/recreation)
+        dt_after = describe_dynamic_table(project, "dynamic_table_transient")
+        assert dt_after.transient is False
+
+
+class TestNonTransientChanges:
+    """Tests for creating non-transient dynamic tables and changing to transient."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_non_transient.sql": models.DYNAMIC_TABLE_NON_TRANSIENT,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        # Create initial dynamic table with transient=False
+        run_dbt(["run", "--full-refresh"])
+        yield
+        # Reset model to original state
+        update_model(project, "dynamic_table_non_transient", models.DYNAMIC_TABLE_NON_TRANSIENT)
+
+    def test_create_non_transient_dynamic_table(self, project):
+        """Verify dynamic table is created with transient=False."""
+        dt = describe_dynamic_table(project, "dynamic_table_non_transient")
+        assert dt.transient is False
+
+    def test_change_non_transient_to_transient_requires_full_refresh(self, project):
+        """Verify changing transient from False to True triggers full refresh."""
+        # Initial state - non-transient
+        dt_before = describe_dynamic_table(project, "dynamic_table_non_transient")
+        assert dt_before.transient is False
+
+        # Update to transient
+        update_model(project, "dynamic_table_non_transient", models.DYNAMIC_TABLE_TRANSIENT)
+        run_dbt(["run"])
+
+        # Verify transient was changed (requires full refresh/recreation)
+        dt_after = describe_dynamic_table(project, "dynamic_table_non_transient")
+        assert dt_after.transient is True
+
+
+class TestTransientBehaviorFlagDisabled:
+    """Tests for default transient behavior when behavior flag is disabled (default)."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_default.sql": models.DYNAMIC_TABLE_DEFAULT_TRANSIENT,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        # Behavior flag disabled (default) - dynamic tables should NOT be transient by default
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def test_default_is_non_transient_when_flag_disabled(self, project):
+        """When behavior flag is disabled, dynamic tables default to non-transient."""
+        run_dbt(["run", "--full-refresh"])
+        dt = describe_dynamic_table(project, "dynamic_table_default")
+        assert dt.transient is False
+
+
+class TestTransientBehaviorFlagEnabled:
+    """Tests for default transient behavior when behavior flag is enabled."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_default.sql": models.DYNAMIC_TABLE_DEFAULT_TRANSIENT,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        # Enable behavior flag - dynamic tables should be transient by default
+        return {
+            "flags": {"snowflake_default_transient_dynamic_tables": True},
+            "models": {"on_configuration_change": "apply"},
+        }
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def test_default_is_transient_when_flag_enabled(self, project):
+        """When behavior flag is enabled, dynamic tables default to transient."""
+        run_dbt(["run", "--full-refresh"])
+        dt = describe_dynamic_table(project, "dynamic_table_default")
+        assert dt.transient is True
