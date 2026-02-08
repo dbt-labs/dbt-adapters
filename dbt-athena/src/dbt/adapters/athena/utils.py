@@ -1,7 +1,7 @@
 import json
 import re
 from enum import Enum
-from typing import Any, Generator, List, Optional, TypeVar
+from typing import Any, Generator, Iterable, List, Optional, TypeVar
 
 from mypy_boto3_athena.type_defs import DataCatalogTypeDef
 
@@ -60,6 +60,18 @@ def get_chunks(lst: List[T], n: int) -> Generator[List[T], None, None]:
     """Yield successive n-sized chunks from lst."""
     for i in range(0, len(lst), n):
         yield lst[i : i + n]
+
+
+def chunk_iterable(iterable: Iterable[T], n: int) -> Generator[List[T], None, None]:
+    """Yield successive n-sized chunks from any iterable, including generators."""
+    chunk = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) >= n:
+            yield chunk
+            chunk = []
+    if chunk:
+        yield chunk
 
 
 def ellipsis_comment(s: str, max_len: int = 255) -> str:
