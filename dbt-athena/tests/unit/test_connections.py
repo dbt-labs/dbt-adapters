@@ -360,13 +360,14 @@ class TestAthenaCursor:
             cursor.execute("INSERT INTO time SELECT NOW()")
         assert str(e.value) == "ICEBERG_COMMIT_ERROR: could not commit"
 
-    THROTTLING_AND_CONCURRENCY_ERROR_NAMES = [
+    API_REQUEST_ERROR_NAMES = [
         "TooManyRequestsException",
         "ThrottlingException",
+        "InternalServerException",
     ]
 
-    @pytest.mark.parametrize("exception_name", THROTTLING_AND_CONCURRENCY_ERROR_NAMES)
-    def test_execute_retries_on_throttling_and_concurrency_errors_from_start_query_execution(
+    @pytest.mark.parametrize("exception_name", API_REQUEST_ERROR_NAMES)
+    def test_execute_retries_on_api_request_errors_from_start_query_execution(
         self, cursor, athena_client, credentials, exception_name
     ):
         client_error = botocore.exceptions.ClientError(
@@ -378,8 +379,8 @@ class TestAthenaCursor:
         cursor.execute("SELECT NOW()")
         assert athena_client.start_query_execution.call_count == credentials.num_retries + 1
 
-    @pytest.mark.parametrize("exception_name", THROTTLING_AND_CONCURRENCY_ERROR_NAMES)
-    def test_execute_fails_on_too_many_throttling_or_concurrency_errors_from_start_query_execution(
+    @pytest.mark.parametrize("exception_name", API_REQUEST_ERROR_NAMES)
+    def test_execute_fails_on_too_many_api_request_errors_from_start_query_execution(
         self, cursor, athena_client, credentials, exception_name
     ):
         client_error = botocore.exceptions.ClientError(
@@ -391,11 +392,12 @@ class TestAthenaCursor:
             cursor.execute("SELECT NOW()")
         assert exception_name in str(e.value)
 
-    def test_execute_ignores_throttling_errors_from_get_query_execution(
-        self, cursor, athena_client, credentials
+    @pytest.mark.parametrize("exception_name", API_REQUEST_ERROR_NAMES)
+    def test_execute_ignores_api_request_errors_from_get_query_execution(
+        self, cursor, athena_client, credentials, exception_name
     ):
         client_error = botocore.exceptions.ClientError(
-            {"Error": {"Code": "ThrottlingException"}}, "GetQueryExecution"
+            {"Error": {"Code": exception_name}}, "GetQueryExecution"
         )
         state_sequence = [STATE_EVENT_QUEUED]
         state_sequence += [client_error] * 3

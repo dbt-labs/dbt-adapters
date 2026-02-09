@@ -197,6 +197,13 @@ class AthenaParameterFormatter:
             raise TypeError(f"No parameter formatter found for type {type(value)}.")
 
 
+API_REQUEST_ERROR_NAMES = [
+    "TooManyRequestsException",
+    "ThrottlingException",
+    "InternalServerException",
+]
+
+
 class AthenaCursor:
     query: Optional[str]
     state: Optional[str]
@@ -220,7 +227,7 @@ class AthenaCursor:
         self._formatter = formatter
         self._with_throttling_retries = Retrying(
             retry=retry_if_exception(
-                lambda e: ("ThrottlingException" in str(e) or "TooManyRequestsException" in str(e))
+                lambda e: any(error_name in str(e) for error_name in API_REQUEST_ERROR_NAMES)
             ),
             stop=stop_after_attempt(self._credentials.num_retries + 1),
             wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
@@ -288,7 +295,7 @@ class AthenaCursor:
                 )
             except Exception as e:
                 error_code = getattr(e, "response", {}).get("Error", {}).get("Code", None)
-                if error_code == "ThrottlingException":
+                if error_code in API_REQUEST_ERROR_NAMES:
                     LOGGER.warning(
                         f"Query {self._query_execution_id} was throttled while polling status, will retry"
                     )
