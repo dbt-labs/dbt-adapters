@@ -1,10 +1,11 @@
 import json
 import re
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal
+from time import sleep
 from typing import (
     Any,
     Callable,
@@ -45,7 +46,7 @@ from dbt.adapters.contracts.connection import (
 from dbt.adapters.sql import SQLConnectionManager
 
 
-Cell: TypeAlias = Union[None, str, int, datetime]
+Cell: TypeAlias = Union[None, str, int, float, bool, date, datetime, time, bytes]
 Row: TypeAlias = Tuple[Cell, ...]
 ColumnInfo: TypeAlias = Dict[str, str]
 
@@ -142,6 +143,56 @@ class AthenaQueryFailedError(AthenaError):
         self.retryable = athena_error["Retryable"]
 
 
+class AthenaParameterFormatter:
+    def format(self, operation: str, parameters: Optional[List[str]] = None) -> str:
+        if operation is None or not operation.strip():
+            raise ValueError("Query is none or empty.")
+        elif not (parameters is None or isinstance(parameters, list)):
+            raise ValueError("Parameters must be a list.")
+
+        if operation.upper().startswith(("VACUUM", "OPTIMIZE")):
+            operation = operation.replace('"', "")
+        elif not operation.upper().startswith(("SELECT", "WITH", "INSERT")):
+            # Fixes ParseException that comes with newer version of PyAthena
+            operation = operation.replace("\n\n    ", "\n")
+
+        if parameters is not None:
+            kwargs = [self._format_value(v) for v in parameters]
+            operation = (operation % tuple(kwargs)).strip()
+
+        return operation.strip()
+
+    def _format_value(self, value: Any, force_str: bool = False) -> Union[str, int, float]:
+        if value is None:
+            return "NULL"
+        elif isinstance(value, bool):
+            return str(value).upper()
+        elif isinstance(value, int) and force_str:
+            return str(value)
+        elif isinstance(value, int):
+            return value
+        elif isinstance(value, float) and force_str:
+            return f"{value:f}"
+        elif isinstance(value, float):
+            return value
+        elif isinstance(value, Decimal) and value == int(value):
+            return f"DECIMAL '{value}'"
+        elif isinstance(value, Decimal):
+            return f"DECIMAL '{value:f}'"
+        elif isinstance(value, datetime):
+            return f"""TIMESTAMP '{value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}'"""
+        elif isinstance(value, date):
+            return f"DATE '{value:%Y-%m-%d}'"
+        elif isinstance(value, str):
+            escaped = value.replace("'", "''")
+            return f"'{escaped}'"
+        elif isinstance(value, list) or isinstance(value, set) or isinstance(value, tuple):
+            formatted = [str(self._format_value(v, True)) for v in value]
+            return f'({", ".join(formatted)})'
+        else:
+            raise TypeError(f"No parameter formatter found for type {type(value)}.")
+
+
 class AthenaCursor:
     query: Optional[str]
     state: Optional[str]
@@ -151,10 +202,26 @@ class AthenaCursor:
     STATE_CANCELLED: str = "CANCELLED"
     STATE_FAILED: str = "FAILED"
 
-    def __init__(self, athena_client: Any, credentials: AthenaCredentials) -> None:
+    def __init__(
+        self,
+        athena_client: Any,
+        credentials: AthenaCredentials,
+        formatter: AthenaParameterFormatter = AthenaParameterFormatter(),
+        poll_delay: Callable[[float], None] = sleep,
+        retry_interval_multiplier: int = 1,
+    ) -> None:
         self._client = athena_client
         self._credentials = credentials
-        self._formatter = AthenaParameterFormatter()
+        self._poll_delay = poll_delay
+        self._formatter = formatter
+        self._with_throttling_retries = Retrying(
+            retry=retry_if_exception(
+                lambda e: ("ThrottlingException" in str(e) or "TooManyRequestsException" in str(e))
+            ),
+            stop=stop_after_attempt(self._credentials.num_retries + 1),
+            wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
+            reraise=True,
+        )
         self._with_iceberg_retries = Retrying(
             retry=retry_if_exception(
                 lambda e: (
@@ -163,8 +230,8 @@ class AthenaCursor:
                     and "ICEBERG_COMMIT_ERROR" in str(e)
                 )
             ),
-            stop=stop_after_attempt(self._credentials.num_iceberg_retries),
-            wait=wait_random_exponential(max=100),
+            stop=stop_after_attempt(self._credentials.num_iceberg_retries + 1),
+            wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
             reraise=True,
         )
         self._reset()
@@ -186,9 +253,12 @@ class AthenaCursor:
         self._reset()
         self.query = self._formatter.format(operation, parameters)
         LOGGER.debug(f"Execute: {self.query}")
-        self._start_execution()
-        self._await_completion()
+        self._with_iceberg_retries(self._run_query)
         return self
+
+    def _run_query(self) -> None:
+        self._with_throttling_retries(self._start_execution)
+        self._await_completion()
 
     def _start_execution(self) -> None:
         request = {
@@ -208,10 +278,20 @@ class AthenaCursor:
 
     def _await_completion(self) -> None:
         while True:
-            time.sleep(self._credentials.poll_interval)
-            status_response = self._client.get_query_execution(
-                QueryExecutionId=self._query_execution_id
-            )
+            self._poll_delay(self._credentials.poll_interval)
+            try:
+                status_response = self._client.get_query_execution(
+                    QueryExecutionId=self._query_execution_id
+                )
+            except Exception as e:
+                error_code = getattr(e, "response", {}).get("Error", {}).get("Code", None)
+                if error_code == "ThrottlingException":
+                    LOGGER.warning(
+                        f"Query {self._query_execution_id} was throttled while polling status, will retry"
+                    )
+                    continue
+                else:
+                    raise e
             status = status_response["QueryExecution"]["Status"]
             self.state = status["State"]
             LOGGER.debug(f"Athena query {self._query_execution_id} is in state {self.state}")
@@ -290,15 +370,88 @@ class AthenaCursor:
             return None
         value = datum["VarCharValue"]
         type = column_info["Type"]
-        if type == "int" or type == "integer" or type == "bigint":
+        if (
+            type == "int"
+            or type == "integer"
+            or type == "bigint"
+            or type == "tinyint"
+            or type == "smallint"
+        ):
             return int(value)
+        elif type == "float" or type == "double":
+            return float(value)
+        elif type == "boolean":
+            return value.lower() != "false"
         elif type == "date":
-            return datetime.strptime(value, "%Y-%m-%d")
+            return datetime.strptime(value, "%Y-%m-%d").date()
         elif type == "timestamp":
-            return datetime.strptime(value, "%Y-%m-%d %H:%M:%S.%f")
+            return self._parse_timestamp(value)
+        elif type == "timestamp with time zone":
+            return self._parse_timestamp_with_time_zone(value)
+        elif type == "time":
+            return self._parse_time(value)
+        elif type == "time with time zone":
+            return self._parse_time_with_time_zone(value)
+        elif type == "varbinary":
+            return bytes.fromhex(value)
         else:
             return value
 
+    TIMESTAMP_FORMATS = [
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ]
+
+    def _parse_timestamp(self, value: str) -> datetime:
+        for fmt in AthenaCursor.TIMESTAMP_FORMATS:
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                pass
+        raise ValueError(f'Could not parse timestamp "{value}"')
+
+    def _parse_timestamp_with_time_zone(self, value: str) -> datetime:
+        try:
+            timestamp_value, tz_value = value.rsplit(" ", 1)
+            timestamp = self._parse_timestamp(timestamp_value)
+            tz = self._parse_time_zone(tz_value)
+            return timestamp.replace(tzinfo=tz)
+        except ValueError:
+            raise ValueError(f'Could not parse timestamp with time zone "{value}"')
+
+    def _parse_time_zone(self, value: str) -> tzinfo:
+        if value == "UTC":
+            return timezone.utc
+        else:
+            try:
+                return datetime.strptime(value, "%z").tzinfo
+            except ValueError:
+                try:
+                    return ZoneInfo(value)
+                except ZoneInfoNotFoundError:
+                    raise ValueError(f'Could not parse time zone "{value}"')
+
+    TIME_FORMATS = [
+        "%H:%M:%S.%f",
+        "%H:%M:%S",
+    ]
+
+    def _parse_time(self, value: str) -> time:
+        for fmt in AthenaCursor.TIME_FORMATS:
+            try:
+                return datetime.strptime(value, fmt).time()
+            except ValueError:
+                pass
+        raise ValueError(f'Could not parse time "{value}"')
+
+    def _parse_time_with_time_zone(self, value: str) -> time:
+        try:
+            parts = re.split(r"(?=[- +])", value)
+            time = self._parse_time(parts[0])
+            tz = self._parse_time_zone(parts[-1].strip())
+            return time.replace(tzinfo=tz)
+        except ValueError:
+            raise ValueError(f'Could not parse time with time zone "{value}"')
 
 class AthenaConnection(Connection):
     credentials: AthenaCredentials
@@ -423,53 +576,3 @@ class AthenaConnectionManager(SQLConnectionManager):
 
     def commit(self) -> None:
         pass
-
-
-class AthenaParameterFormatter:
-    def format(self, operation: str, parameters: Optional[List[str]] = None) -> str:
-        if operation is None or not operation.strip():
-            raise ValueError("Query is none or empty.")
-        elif not (parameters is None or isinstance(parameters, list)):
-            raise ValueError("Parameters must be a list.")
-
-        if operation.upper().startswith(("VACUUM", "OPTIMIZE")):
-            operation = operation.replace('"', "")
-        elif not operation.upper().startswith(("SELECT", "WITH", "INSERT")):
-            # Fixes ParseException that comes with newer version of PyAthena
-            operation = operation.replace("\n\n    ", "\n")
-
-        if parameters is not None:
-            kwargs = [self._format_value(v) for v in parameters]
-            operation = (operation % tuple(kwargs)).strip()
-
-        return operation.strip()
-
-    def _format_value(self, value: Any, force_str: bool = False) -> Union[str, int, float]:
-        if value is None:
-            return "NULL"
-        elif isinstance(value, bool):
-            return str(value).upper()
-        elif isinstance(value, int) and force_str:
-            return str(value)
-        elif isinstance(value, int):
-            return value
-        elif isinstance(value, float) and force_str:
-            return f"{value:f}"
-        elif isinstance(value, float):
-            return value
-        elif isinstance(value, Decimal) and value == int(value):
-            return f"DECIMAL '{value}'"
-        elif isinstance(value, Decimal):
-            return f"DECIMAL '{value:f}'"
-        elif isinstance(value, datetime):
-            return f"""TIMESTAMP '{value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}'"""
-        elif isinstance(value, date):
-            return f"DATE '{value:%Y-%m-%d}'"
-        elif isinstance(value, str):
-            escaped = value.replace("'", "''")
-            return f"'{escaped}'"
-        elif isinstance(value, list) or isinstance(value, set) or isinstance(value, tuple):
-            formatted = [str(self._format_value(v, True)) for v in value]
-            return f"({", ".join(formatted)})"
-        else:
-            raise TypeError(f"No parameter formatter found for type {type(value)}.")
