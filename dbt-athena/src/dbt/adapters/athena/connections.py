@@ -23,7 +23,7 @@ from boto3.session import Session
 from dbt_common.exceptions import ConnectionError, DbtRuntimeError
 from dbt_common.utils import md5
 from tenacity import (
-    retry,
+    Retrying,
     retry_if_exception,
     stop_after_attempt,
     wait_random_exponential,
@@ -153,6 +153,18 @@ class AthenaCursor:
         self._client = athena_client
         self._credentials = credentials
         self._formatter = AthenaParameterFormatter()
+        self._with_iceberg_retries = Retrying(
+            retry=retry_if_exception(
+                lambda e: (
+                    isinstance(e, AthenaQueryFailedError)
+                    and e.error_type == AthenaQueryFailedError.TYPE_ICEBERG_ERROR
+                    and "ICEBERG_COMMIT_ERROR" in str(e)
+                )
+            ),
+            stop=stop_after_attempt(self._credentials.num_iceberg_retries),
+            wait=wait_random_exponential(max=100),
+            reraise=True,
+        )
         self._reset()
 
     def _reset(self) -> None:
@@ -172,29 +184,8 @@ class AthenaCursor:
         self._reset()
         self.query = self._formatter.format(operation, parameters)
         LOGGER.debug(f"Execute: {self.query}")
-
-        @retry(
-            retry=retry_if_exception(
-                lambda e: (
-                    isinstance(e, AthenaQueryFailedError)
-                    and e.error_type == AthenaQueryFailedError.TYPE_ICEBERG_ERROR
-                    and "ICEBERG_COMMIT_ERROR" in str(e)
-                )
-            ),
-            stop=stop_after_attempt(self._credentials.num_iceberg_retries),
-            wait=wait_random_exponential(
-                multiplier=self._credentials.num_iceberg_retries,
-                max=100,
-                exp_base=2,
-            ),
-            reraise=True,
-        )
-        def execute_with_iceberg_commit_retries() -> None:
-            self._start_execution()
-            self._await_completion()
-
-        execute_with_iceberg_commit_retries()
-
+        self._start_execution()
+        self._await_completion()
         return self
 
     def _start_execution(self) -> None:
