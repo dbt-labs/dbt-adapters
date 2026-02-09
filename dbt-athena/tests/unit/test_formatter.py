@@ -73,6 +73,7 @@ class TestAthenaParameterFormatter:
                            AND int_field > %s
                            AND float_field > %.2f
                            AND fake_decimal_field < %s
+                           AND decimal_field > %s
                            AND str_field = %s
                            AND str_list_field IN %s
                            AND int_list_field IN %s
@@ -89,6 +90,7 @@ class TestAthenaParameterFormatter:
                 1,
                 1.23,
                 Decimal(2),
+                Decimal("0.3"),
                 "test",
                 ["a", "b"],
                 [1, 2, 3, 4],
@@ -108,6 +110,7 @@ class TestAthenaParameterFormatter:
                AND int_field > 1
                AND float_field > 1.23
                AND fake_decimal_field < DECIMAL '2'
+               AND decimal_field > DECIMAL '0.3'
                AND str_field = 'test'
                AND str_list_field IN ('a', 'b')
                AND int_list_field IN (1, 2, 3, 4)
@@ -118,3 +121,11 @@ class TestAthenaParameterFormatter:
             """
         ).strip()
         assert res == expected
+
+    def test_strips_quotes_from_vacuum(self):
+        sql = self.formatter.format('VACUUM "my_table"')
+        assert sql == "VACUUM my_table"
+
+    def test_strips_quotes_from_optimize(self):
+        sql = self.formatter.format('OPTIMIZE "my_db"."my_table" REWRITE DATA USING BIN_PACK')
+        assert sql == "OPTIMIZE my_db.my_table REWRITE DATA USING BIN_PACK"
