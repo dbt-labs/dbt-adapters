@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from decimal import Decimal
+from ipaddress import IPv4Address, IPv6Address, ip_address
 from time import sleep
 from typing import (
     Any,
@@ -18,6 +19,7 @@ from typing import (
     TypeAlias,
     Union,
 )
+from uuid import UUID
 
 from boto3.session import Session as BotoSession
 from botocore.config import Config as BotoConfig
@@ -43,7 +45,9 @@ from dbt.adapters.contracts.connection import (
 from dbt.adapters.sql import SQLConnectionManager
 
 
-Cell: TypeAlias = Union[None, str, int, float, bool, date, datetime, time, bytes]
+Cell: TypeAlias = Union[
+    None, str, int, float, bool, date, datetime, time, bytes, UUID, IPv4Address, IPv6Address, Any
+]
 Row: TypeAlias = List[Cell]
 ColumnInfo: TypeAlias = Dict[str, str]
 
@@ -386,6 +390,12 @@ class AthenaCursor:
             return self._parse_time(value)
         elif type == "varbinary":
             return bytes.fromhex(value)
+        elif type == "json":
+            return json.loads(value)
+        elif type == "uuid":
+            return UUID(value)
+        elif type == "ipaddress":
+            return ip_address(value)
         else:
             return value
 
