@@ -284,7 +284,7 @@ class AthenaCursor:
         }
         start_response = self._client.start_query_execution(**request)
         self._query_execution_id = start_response["QueryExecutionId"]
-        LOGGER.debug(f"Athena query ID {self._query_execution_id}")
+        LOGGER.debug(f"Athena query {self._query_execution_id} started")
 
     def _await_completion(self) -> None:
         while True:
@@ -297,14 +297,14 @@ class AthenaCursor:
                 error_code = getattr(e, "response", {}).get("Error", {}).get("Code", None)
                 if error_code in API_REQUEST_ERROR_NAMES:
                     LOGGER.warning(
-                        f"Query {self._query_execution_id} was throttled while polling status, will retry"
+                        f"Athena query {self._query_execution_id} got error while polling status, will retry: {e}"
                     )
                     continue
                 else:
                     raise e
             status = status_response["QueryExecution"]["Status"]
             self.state = status["State"]
-            LOGGER.debug(f"Athena query {self._query_execution_id} is in state {self.state}")
+            LOGGER.debug(f"Athena query {self._query_execution_id} has state {self.state}")
             if self.state == AthenaCursor.STATE_SUCCEEDED:
                 statistics = status_response["QueryExecution"]["Statistics"]
                 self.data_scanned_in_bytes = statistics["DataScannedInBytes"]
