@@ -7,6 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import (
     Any,
+    Callable,
     cast,
     ContextManager,
     Dict,
@@ -19,7 +20,8 @@ from typing import (
     Union,
 )
 
-from boto3.session import Session
+from boto3.session import Session as BotoSession
+from botocore.config import Config as BotoConfig
 from dbt_common.exceptions import ConnectionError, DbtRuntimeError
 from dbt_common.utils import md5
 from tenacity import (
@@ -300,19 +302,23 @@ class AthenaCursor:
 
 class AthenaConnection(Connection):
     credentials: AthenaCredentials
-    session: Session
+    session: BotoSession
     region_name: str
 
-    def __init__(self, credentials: AthenaCredentials) -> None:
+    def __init__(
+        self,
+        credentials: AthenaCredentials,
+        boto_session_factory: Callable[[Connection], BotoSession] = get_boto3_session,
+    ) -> None:
         self.credentials = credentials
         self.region_name = self.credentials.region_name
-        self.session = get_boto3_session(self)
+        self.session = boto_session_factory(self)
         self._client = None
 
-    def connect(self) -> Self:
-        config = get_boto3_config(num_retries=self.credentials.effective_num_retries)
+    def connect(self, boto_config_factory: Callable[..., BotoConfig] = get_boto3_config) -> Self:
+        boto_config = boto_config_factory(num_retries=self.credentials.effective_num_retries)
         self._client = self.session.client(
-            "athena", region_name=self.credentials.region_name, config=config
+            "athena", region_name=self.credentials.region_name, config=boto_config
         )
         return self
 
