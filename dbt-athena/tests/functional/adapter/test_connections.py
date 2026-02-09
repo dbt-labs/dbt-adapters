@@ -2,8 +2,8 @@ import datetime
 from datetime import timezone
 from zoneinfo import ZoneInfo
 import math
-# from ipaddress import ip_address
-# from uuid import UUID
+from ipaddress import ip_address
+from uuid import UUID
 
 
 class TestConnection:
@@ -52,29 +52,29 @@ class TestConnection:
         query = """
             SELECT
                 DATE '2024-07-05' AS date_value,
-                -- TIMESTAMP '2024-07-05 12:34:56' AS timestamp_value_1,
+                TIMESTAMP '2024-07-05 12:34:56' AS timestamp_value_1,
                 TIMESTAMP '2024-07-05 12:34:56.000' AS timestamp_value_2,
                 TIMESTAMP '2024-07-05 12:34:56.789' AS timestamp_value_3,
                 TIMESTAMP '2024-07-05 12:34:56.789 UTC' AS timestamp_with_time_zone_value_1,
                 TIMESTAMP '2024-07-05 12:34:56.789 America/New_York' AS timestamp_with_time_zone_value_2,
                 TIMESTAMP '2024-07-05 12:34:56.789 -00:30' AS timestamp_with_time_zone_value_3,
-                -- TIME '12:34:56' AS time_value_1,
+                TIME '12:34:56' AS time_value_1,
                 TIME '12:34:56.000' AS time_value_2,
                 TIME '12:34:56.789' AS time_value_3,
                 TIME '12:34:56.789 -00:30' AS time_with_time_zone_value_1
         """
         result = project.run_sql(query, fetch="one")
         assert result[0] == datetime.date(2024, 7, 5)
-        # assert result[1] == datetime.datetime(2024, 7, 5, 12, 34, 56)
-        assert result[1] == datetime.datetime(2024, 7, 5, 12, 34, 56, 0)
-        assert result[2] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000)
-        assert result[3] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=timezone.utc)
-        assert result[4] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=ZoneInfo("America/New_York"))
-        # assert result[5] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
-        # assert result[6] == datetime.time(12, 34, 56)
-        assert result[6] == datetime.time(12, 34, 56, 0)
-        assert result[7] == datetime.time(12, 34, 56, 789000)
-        # assert result[8] == datetime.time(12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
+        assert result[1] == datetime.datetime(2024, 7, 5, 12, 34, 56)
+        assert result[2] == datetime.datetime(2024, 7, 5, 12, 34, 56, 0)
+        assert result[3] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000)
+        assert result[4] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=timezone.utc)
+        assert result[5] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=ZoneInfo("America/New_York"))
+        assert result[6] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
+        assert result[7] == datetime.time(12, 34, 56)
+        assert result[8] == datetime.time(12, 34, 56, 0)
+        assert result[9] == datetime.time(12, 34, 56, 789000)
+        assert result[10] == datetime.time(12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
 
     def test__convert_other_scalars(self, project):
         query = """
@@ -96,9 +96,9 @@ class TestConnection:
         assert result[3] == "hello world"
         assert result[4] == "hello world"
         assert result[5] == b"hello world"
-        # assert result[6] == UUID("e50e499b-982f-4cbe-9f50-e11b1c83572e")
-        # assert result[7] == ip_address("10.0.0.1")
-        # assert result[8] == ip_address("2001:db8::1")
+        assert result[6] == UUID("e50e499b-982f-4cbe-9f50-e11b1c83572e")
+        assert result[7] == ip_address("10.0.0.1")
+        assert result[8] == ip_address("2001:db8::1")
 
     def test__convert_complex_types(self, project):
         query = """

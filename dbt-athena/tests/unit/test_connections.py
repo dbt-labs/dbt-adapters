@@ -2,7 +2,9 @@ import datetime
 from datetime import timezone
 from zoneinfo import ZoneInfo
 import math
+from ipaddress import ip_address
 from unittest import mock
+from uuid import UUID
 
 import botocore
 import pytest
@@ -769,6 +771,52 @@ class TestAthenaCursor:
         assert rows[0] == (b"hello world",)
         assert rows[1] == (b"",)
         assert rows[2] == (b"\x00",)
+
+    def test_fetch_converts_json(self, cursor, athena_client):
+        data = [
+            ["[1, 2, 3]"],
+            ['"hello world"'],
+            ['{"a": 1, "b": {"c": [3]}}'],
+        ]
+        page = self._create_page(athena_client, [("j", "json")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows == [
+            ([1, 2, 3],),
+            ("hello world",),
+            ({"a": 1, "b": {"c": [3]}},),
+        ]
+
+    def test_fetch_converts_uuids(self, cursor, athena_client):
+        data = [
+            ["e50e499b-982f-4cbe-9f50-e11b1c83572e"],
+            ["f3ee5fc5-69bb-4413-8f17-6352f259a881"],
+        ]
+        page = self._create_page(athena_client, [("u", "uuid")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows == [
+            (UUID("e50e499b-982f-4cbe-9f50-e11b1c83572e"),),
+            (UUID("f3ee5fc5-69bb-4413-8f17-6352f259a881"),),
+        ]
+
+    def test_fetch_converts_ipaddresses(self, cursor, athena_client):
+        data = [
+            ["1.1.1.1"],
+            ["2001:db8::1"],
+            ["192.168.0.0"],
+        ]
+        page = self._create_page(athena_client, [("ip", "ipaddress")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows == [
+            (ip_address("1.1.1.1"),),
+            (ip_address("2001:db8::1"),),
+            (ip_address("192.168.0.0"),),
+        ]
 
     def test_fetch_converts_null(self, cursor, athena_client):
         types = [
