@@ -408,6 +408,15 @@ class TestAthenaCursor:
         cursor.execute("SELECT NOW()")
         assert athena_client.get_query_execution.call_count == len(state_sequence)
 
+    def test_execute_fails_on_invalid_request_error(self, cursor, athena_client):
+        client_error = botocore.exceptions.ClientError(
+            {"Error": {"Code": "InvalidRequestException"}}, "StartQueryExecution"
+        )
+        athena_client.start_query_execution = mock.Mock(side_effect=client_error)
+        with pytest.raises(Exception) as e:
+            cursor.execute("SELECT NOW()")
+        assert "InvalidRequestException" in str(e.value)
+
     def test_description_loads_column_metadata(self, cursor, athena_client):
         cursor.execute("SELECT * FROM table")
         assert cursor.description == [("dt", "date"), ("str", "varchar")]
