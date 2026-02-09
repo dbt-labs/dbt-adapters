@@ -252,7 +252,6 @@ class AthenaCursor:
         self,
         operation: str,
         parameters: Optional[List[str]] = None,
-        catch_partitions_limit: bool = False,
     ) -> Self:
         self._reset()
         self.query = self._formatter.format(operation, parameters)
