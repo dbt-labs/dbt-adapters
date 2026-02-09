@@ -1,5 +1,7 @@
 import json
 import re
+from collections import deque
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone, tzinfo
@@ -12,8 +14,8 @@ from typing import (
     Callable,
     cast,
     ContextManager,
+    Deque,
     Dict,
-    Iterable,
     List,
     Optional,
     Self,
@@ -52,7 +54,7 @@ Cell: TypeAlias = Union[
     None, str, int, float, bool, date, datetime, time, bytes, UUID, IPv4Address, IPv6Address, Any
 ]
 Row: TypeAlias = Tuple[Cell, ...]
-ColumnInfo: TypeAlias = Dict[str, str]
+ColumnMetadata: TypeAlias = Tuple[str, str, None, None, None, None, None]
 
 
 @dataclass
@@ -252,8 +254,9 @@ class AthenaCursor:
         self.state = None
         self.data_scanned_in_bytes = 0
         self._update_count: Optional[int] = None
-        self._column_info: List[ColumnInfo] = []
+        self._column_info: List[ColumnMetadata] = []
         self._query_execution_id: Optional[str] = None
+        self._result_set: Optional[AthenaResultSet] = None
 
     def execute(
         self,
@@ -308,78 +311,129 @@ class AthenaCursor:
             if self.state == AthenaCursor.STATE_SUCCEEDED:
                 statistics = status_response["QueryExecution"]["Statistics"]
                 self.data_scanned_in_bytes = statistics["DataScannedInBytes"]
-                break
+                if self._query_execution_id:
+                    self._result_set = AthenaResultSet(self._client, self._query_execution_id)
+                    break
+                else:
+                    raise AthenaError("Could not create result set, query execution ID lost")
             elif self.state == AthenaCursor.STATE_FAILED:
                 raise AthenaQueryFailedError(status["AthenaError"])
             elif self.state == self.state == AthenaCursor.STATE_CANCELLED:
                 raise AthenaQueryCancelledError(status["StateChangeReason"])
 
     @property
-    def description(self) -> Optional[List[Tuple[str, str]]]:
-        if self.state == AthenaCursor.STATE_SUCCEEDED:
-            if not self._column_info:
-                self._fetch(0)
-            return [(column["Name"], column["Type"]) for column in self._column_info]
+    def description(self) -> Optional[List[ColumnMetadata]]:
+        if self._result_set:
+            return self._result_set.column_info
         else:
             return None
 
     @property
     def rowcount(self) -> int:
-        if self.state == AthenaCursor.STATE_SUCCEEDED and not self._update_count:
-            self._fetch(0)
-
-        if self._update_count is not None:
-            return self._update_count
+        if self._result_set:
+            return self._result_set.update_count
         else:
             return -1
 
     def fetchone(self) -> Optional[Row]:
-        rows = self._fetch(1)
-        return next(iter(rows), None)
+        rows = self.fetchmany(1)
+        return rows[0]
 
-    def fetchmany(self, limit: int) -> Iterable[Row]:
-        return self._fetch(limit)
+    def fetchmany(self, limit: Optional[int] = None) -> List[Row]:
+        if self._result_set:
+            if limit is None:
+                return list(self._result_set)
+            else:
+                rows = []
+                for row in self._result_set:
+                    rows.append(row)
+                    if limit is not None and len(rows) == limit:
+                        break
+                return rows
+        else:
+            raise AthenaError(f"Cannot fetch from a cursor with state {self.state}")
 
-    def fetchall(self) -> Iterable[Row]:
-        return self._fetch()
+    def fetchall(self) -> List[Row]:
+        return self.fetchmany()
 
-    def _fetch(self, limit: Optional[int] = None) -> Iterable[Row]:
-        rows = []
-        next_token = None
-        headers_skipped = False
-        while not (next_token is None and headers_skipped):
-            request: Dict[str, Any] = {"QueryExecutionId": self._query_execution_id}
-            if next_token:
-                request["NextToken"] = next_token
-            if limit is not None and limit < 1000:
-                request["MaxResults"] = limit + 1
-            results_response = self._client.get_query_results(**request)
-            next_token = results_response.get("NextToken", None)
-            page_rows = results_response["ResultSet"]["Rows"]
-            if not headers_skipped:
-                self._column_info = results_response["ResultSet"]["ResultSetMetadata"][
-                    "ColumnInfo"
-                ]
-                self._update_count = results_response.get("UpdateCount", -1)
-                page_rows = page_rows[1:]
-                headers_skipped = True
-            rows += page_rows
-            if limit and len(rows) >= limit:
-                rows = rows[0:limit]
-                break
-        return [self._convert_row(row) for row in rows]
+
+class AthenaResultSet(Iterator[Row]):
+    def __init__(
+        self, athena_client: Any, query_execution_id: str, limit: Optional[int] = None
+    ) -> None:
+        self._client = athena_client
+        self._query_execution_id = query_execution_id
+        self._limit = limit
+        self._headers_skipped = False
+        self._rows: Deque[Row] = deque()
+        self._next_token: Optional[str] = None
+        self._column_info: Optional[List[ColumnMetadata]] = None
+        self._update_count: Optional[int] = None
+        self._items = 0
+
+    def __iter__(self) -> Self:
+        return self
+
+    def __next__(self) -> Row:
+        if not self._rows and (self._next_token is not None or not self._headers_skipped):
+            self._load_page()
+        if self._rows and (self._limit is None or self._items < self._limit):
+            self._items += 1
+            return self._rows.popleft()
+        else:
+            raise StopIteration
+
+    @property
+    def column_info(self) -> List[ColumnMetadata]:
+        if not self._column_info:
+            self._load_page()
+        if self._column_info:
+            return self._column_info
+        else:
+            return []
+
+    @property
+    def update_count(self) -> int:
+        if self._update_count is None:
+            self._load_page()
+        if self._update_count:
+            return self._update_count
+        else:
+            return -1
+
+    def _load_page(self) -> None:
+        request: Dict[str, Any] = {"QueryExecutionId": self._query_execution_id}
+        if self._next_token:
+            request["NextToken"] = self._next_token
+        results_response = self._client.get_query_results(**request)
+        self._next_token = results_response.get("NextToken", None)
+        page_rows = results_response["ResultSet"]["Rows"]
+        if not self._headers_skipped:
+            page_rows = page_rows[1:]
+            self._column_info = self._convert_column_info(
+                results_response["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
+            )
+            self._update_count = results_response.get("UpdateCount", -1)
+            self._headers_skipped = True
+        self._rows += [self._convert_row(row) for row in page_rows]
+
+    def _convert_column_info(self, column_info: List[Dict[str, str]]) -> List[ColumnMetadata]:
+        return [(info["Name"], info["Type"], None, None, None, None, None) for info in column_info]
 
     def _convert_row(self, row: Dict[str, List[Dict[str, str]]]) -> Row:
-        return tuple(
-            self._convert_type(self._column_info[index], datum)
-            for index, datum in enumerate(row["Data"])
-        )
+        if self._column_info:
+            return tuple(
+                self._convert_type(self._column_info[index], datum)
+                for index, datum in enumerate(row["Data"])
+            )
+        else:
+            raise AthenaError("No column info found")
 
-    def _convert_type(self, column_info: Dict[str, str], datum: Dict[str, str]) -> Cell:
+    def _convert_type(self, column_info: ColumnMetadata, datum: Dict[str, str]) -> Cell:
         if "VarCharValue" not in datum:
             return None
         value = datum["VarCharValue"]
-        type = column_info["Type"]
+        type = column_info[1]
         if (
             type == "int"
             or type == "integer"
@@ -419,7 +473,7 @@ class AthenaCursor:
     ]
 
     def _parse_timestamp(self, value: str) -> datetime:
-        for fmt in AthenaCursor.TIMESTAMP_FORMATS:
+        for fmt in self.__class__.TIMESTAMP_FORMATS:
             try:
                 return datetime.strptime(value, fmt)
             except ValueError:
@@ -453,7 +507,7 @@ class AthenaCursor:
     ]
 
     def _parse_time(self, value: str) -> time:
-        for fmt in AthenaCursor.TIME_FORMATS:
+        for fmt in self.__class__.TIME_FORMATS:
             try:
                 return datetime.strptime(value, fmt).time()
             except ValueError:

@@ -13,6 +13,7 @@ from dbt.adapters.athena.connections import (
     AthenaConnection,
     AthenaCredentials,
     AthenaCursor,
+    AthenaError,
     AthenaQueryCancelledError,
     AthenaQueryFailedError,
 )
@@ -255,9 +256,7 @@ class TestAthenaCursor:
         )
         cursor.execute("INSERT INTO my_table SELECT * FROM other_table")
         assert cursor.rowcount == 1234
-        athena_client.get_query_results.assert_called_once_with(
-            QueryExecutionId="1234-abcd", MaxResults=1
-        )
+        athena_client.get_query_results.assert_called_once_with(QueryExecutionId="1234-abcd")
 
     def test_rowcount_does_not_fetch_when_the_update_count_has_already_been_fetched(
         self, cursor, athena_client
@@ -271,7 +270,7 @@ class TestAthenaCursor:
         cursor.execute("INSERT INTO my_table SELECT * FROM other_table")
         cursor.fetchall()
         assert cursor.rowcount == 1234
-        athena_client.get_query_results.assert_called_once_with(QueryExecutionId="1234-abcd")
+        assert athena_client.get_query_results.call_count == 1
 
     def test_rowcount_returns_negative_when_there_is_no_update_count(self, cursor):
         assert cursor.rowcount == -1
@@ -419,10 +418,30 @@ class TestAthenaCursor:
 
     def test_description_loads_column_metadata(self, cursor, athena_client):
         cursor.execute("SELECT * FROM table")
-        assert cursor.description == [("dt", "date"), ("str", "varchar")]
-        athena_client.get_query_results.assert_called_once_with(
-            QueryExecutionId="1234-abcd", MaxResults=1
-        )
+        assert cursor.description == [
+            ("dt", "date", None, None, None, None, None),
+            ("str", "varchar", None, None, None, None, None),
+        ]
+        athena_client.get_query_results.assert_called_once_with(QueryExecutionId="1234-abcd")
+
+    def test_description_does_not_load_column_metadata_when_already_loaded_by_fetch(
+        self, cursor, athena_client
+    ):
+        cursor.execute("SELECT * FROM table")
+        list(cursor.fetchall())
+        assert cursor.description == [
+            ("dt", "date", None, None, None, None, None),
+            ("str", "varchar", None, None, None, None, None),
+        ]
+        assert athena_client.get_query_results.call_count == 1
+
+    def test_description_does_not_load_column_metadata_when_already_loaded_by_a_previous_call(
+        self, cursor, athena_client
+    ):
+        cursor.execute("SELECT * FROM table")
+        assert cursor.description is not None
+        assert cursor.description is not None
+        assert athena_client.get_query_results.call_count == 1
 
     def test_description_returns_none_on_failure(self, cursor, athena_client):
         athena_client.get_query_execution = mock.Mock(return_value=STATE_EVENT_GENERIC_ERROR)
@@ -459,7 +478,7 @@ class TestAthenaCursor:
         page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
         athena_client.get_query_results = mock.Mock(return_value=page)
         cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchmany(10))
+        rows = cursor.fetchmany(10)
         assert len(rows) == 10
         assert rows[0] == (datetime.date(2024, 1, 1), 0)
         assert rows[1] == (datetime.date(2024, 1, 2), 1)
@@ -471,18 +490,6 @@ class TestAthenaCursor:
         athena_client.get_query_results = mock.Mock(return_value=page)
         cursor.execute("SELECT * FROM table")
         cursor.fetchmany(10)
-        athena_client.get_query_results.assert_called_once_with(
-            QueryExecutionId="1234-abcd", MaxResults=11
-        )
-
-    def test_fetchmany_loads_full_pages_when_the_limit_is_larger_than_a_page(
-        self, cursor, athena_client
-    ):
-        data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
-        page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
-        athena_client.get_query_results = mock.Mock(return_value=page)
-        cursor.execute("SELECT * FROM table")
-        cursor.fetchmany(1111)
         athena_client.get_query_results.assert_called_once_with(QueryExecutionId="1234-abcd")
 
     def test_fetchmany_returns_fewer_rows_than_requested_when_there_are_no_more_rows(
@@ -492,7 +499,7 @@ class TestAthenaCursor:
         page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
         athena_client.get_query_results = mock.Mock(return_value=page)
         cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchmany(10))
+        rows = cursor.fetchmany(10)
         assert len(rows) == 5
         assert rows[0] == (datetime.date(2024, 1, 1), 0)
         assert rows[-1] == (datetime.date(2024, 1, 5), 4)
@@ -504,7 +511,7 @@ class TestAthenaCursor:
         page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
         athena_client.get_query_results = mock.Mock(return_value=page)
         cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchmany(5))
+        rows = cursor.fetchmany(5)
         assert len(rows) == 5
         assert rows[0] == (datetime.date(2024, 1, 1), 0)
         assert rows[-1] == (datetime.date(2024, 1, 5), 4)
@@ -525,7 +532,7 @@ class TestAthenaCursor:
         )
         athena_client.get_query_results = mock.Mock(side_effect=[page1, page2, page3, page4])
         cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchmany(3333))
+        rows = cursor.fetchmany(3333)
         assert len(rows) == 3333
         assert rows[0] == (0,)
         assert rows[-1] == (3332,)
@@ -537,17 +544,6 @@ class TestAthenaCursor:
                 mock.call(QueryExecutionId="1234-abcd", NextToken="p4"),
             ]
         )
-
-    def test_fetchall_loads_one_page_and_skips_the_header_row(self, cursor, athena_client):
-        data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
-        page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
-        athena_client.get_query_results = mock.Mock(return_value=page)
-        cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchall())
-        assert len(rows) == 10
-        assert rows[0] == (datetime.date(2024, 1, 1), 0)
-        assert rows[1] == (datetime.date(2024, 1, 2), 1)
-        assert rows[9] == (datetime.date(2024, 1, 10), 9)
 
     def test_fetchall_loads_more_pages_as_needed(self, cursor, athena_client):
         data = [[f"{n}"] for n in range(3999)]
@@ -565,7 +561,43 @@ class TestAthenaCursor:
         )
         athena_client.get_query_results = mock.Mock(side_effect=[page1, page2, page3, page4])
         cursor.execute("SELECT * FROM table")
-        rows = list(cursor.fetchall())
+        cursor.fetchmany(1)
+        assert athena_client.get_query_results.call_count == 1
+        cursor.fetchmany(1000)
+        assert athena_client.get_query_results.call_count == 2
+        cursor.fetchmany(1500)
+        assert athena_client.get_query_results.call_count == 3
+        cursor.fetchmany(500)
+        assert athena_client.get_query_results.call_count == 4
+
+    def test_fetchall_loads_one_page_and_skips_the_header_row(self, cursor, athena_client):
+        data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
+        page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = cursor.fetchall()
+        assert len(rows) == 10
+        assert rows[0] == (datetime.date(2024, 1, 1), 0)
+        assert rows[1] == (datetime.date(2024, 1, 2), 1)
+        assert rows[9] == (datetime.date(2024, 1, 10), 9)
+
+    def test_fetchall_loads_all_pages(self, cursor, athena_client):
+        data = [[f"{n}"] for n in range(3999)]
+        page1 = self._create_page(
+            athena_client, [("n", "int")], data[0:999], include_header=True, next_token="p2"
+        )
+        page2 = self._create_page(
+            athena_client, [("n", "int")], data[999:1999], include_header=False, next_token="p3"
+        )
+        page3 = self._create_page(
+            athena_client, [("n", "int")], data[1999:2999], include_header=False, next_token="p4"
+        )
+        page4 = self._create_page(
+            athena_client, [("n", "int")], data[2999:], include_header=False, next_token=None
+        )
+        athena_client.get_query_results = mock.Mock(side_effect=[page1, page2, page3, page4])
+        cursor.execute("SELECT * FROM table")
+        rows = cursor.fetchall()
         assert len(rows) == 3999
         assert rows[0] == (0,)
         assert rows[-1] == (3998,)
@@ -577,6 +609,76 @@ class TestAthenaCursor:
                 mock.call(QueryExecutionId="1234-abcd", NextToken="p4"),
             ]
         )
+
+    def test_fetchone_fetchmany_fetchall(self, cursor, athena_client):
+        data = [[f"{n}"] for n in range(1500)]
+        page1 = self._create_page(
+            athena_client, [("n", "int")], data[0:999], include_header=True, next_token="p2"
+        )
+        page2 = self._create_page(
+            athena_client, [("n", "int")], data[999:], include_header=False, next_token=None
+        )
+        athena_client.get_query_results = mock.Mock(side_effect=[page1, page2])
+        cursor.execute("SELECT * FROM table")
+        rows = [
+            cursor.fetchone(),
+            cursor.fetchone(),
+            cursor.fetchone(),
+        ]
+        rows += cursor.fetchmany(1000)
+        rows.append(cursor.fetchone())
+        rows.append(cursor.fetchone())
+        rows += cursor.fetchall()
+        assert len(rows) == 1500
+        assert rows[0] == (0,)
+        assert rows[1499] == (1499,)
+
+    def test_fetchone_fetchmany_fetchall_cannot_be_called_before_execute(self, cursor):
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchone()
+        assert "Cannot fetch from a cursor with state None" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchmany(100)
+        assert "Cannot fetch from a cursor with state None" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchall()
+        assert "Cannot fetch from a cursor with state None" in str(e)
+
+    def test_fetchone_fetchmany_fetchall_cannot_be_called_on_failed_cursor(
+        self, cursor, athena_client
+    ):
+        athena_client.get_query_execution = mock.Mock(
+            side_effect=[STATE_EVENT_QUEUED, STATE_EVENT_GENERIC_ERROR]
+        )
+        with pytest.raises(AthenaError):
+            cursor.execute("SELECT NOW()")
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchone()
+        assert "Cannot fetch from a cursor with state FAILED" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchmany(100)
+        assert "Cannot fetch from a cursor with state FAILED" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchall()
+        assert "Cannot fetch from a cursor with state FAILED" in str(e)
+
+    def test_fetchone_fetchmany_fetchall_cannot_be_called_on_cancelled_cursor(
+        self, cursor, athena_client
+    ):
+        athena_client.get_query_execution = mock.Mock(
+            side_effect=[STATE_EVENT_QUEUED, STATE_EVENT_CANCELLED]
+        )
+        with pytest.raises(AthenaError):
+            cursor.execute("SELECT NOW()")
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchone()
+        assert "Cannot fetch from a cursor with state CANCELLED" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchmany(100)
+        assert "Cannot fetch from a cursor with state CANCELLED" in str(e)
+        with pytest.raises(AthenaError) as e:
+            cursor.fetchall()
+        assert "Cannot fetch from a cursor with state CANCELLED" in str(e)
 
     def test_fetch_converts_tinyints(self, cursor, athena_client):
         data = [
