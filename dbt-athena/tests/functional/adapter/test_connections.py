@@ -11,6 +11,10 @@ class TestConnection:
         result = project.run_sql("SELECT 1", fetch="all")
         assert result == [(1,)]
 
+    def test__run_ddl_query(self, project):
+        result = project.run_sql("EXPLAIN SELECT 1", fetch="one")
+        assert result == ("Query Plan",)
+
     def test__run_query_with_multiple_rows_and_columns(self, project):
         query = """
             SELECT

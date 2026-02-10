@@ -39,14 +39,7 @@ class TestAthenaConnection:
         client.start_query_execution = mock.Mock(
             return_value={"QueryExecutionId": "query-execution-id"}
         )
-        client.get_query_execution = mock.Mock(
-            return_value={
-                "QueryExecution": {
-                    "Status": {"State": "SUCCEEDED"},
-                    "Statistics": {"DataScannedInBytes": 123},
-                },
-            }
-        )
+        client.get_query_execution = mock.Mock(return_value=STATE_EVENT_SUCCEEDED)
         return client
 
     @pytest.fixture
@@ -89,7 +82,12 @@ class TestAthenaConnection:
 STATE_EVENT_QUEUED = {"QueryExecution": {"Status": {"State": "QUEUED"}}}
 STATE_EVENT_RUNNING = {"QueryExecution": {"Status": {"State": "RUNNING"}}}
 STATE_EVENT_SUCCEEDED = {
-    "QueryExecution": {"Status": {"State": "SUCCEEDED"}, "Statistics": {"DataScannedInBytes": 123}}
+    "QueryExecution": {
+        "Status": {"State": "SUCCEEDED"},
+        "Statistics": {"DataScannedInBytes": 123},
+        "StatementType": "DML",
+        "SubstatementType": "SELECT",
+    }
 }
 STATE_EVENT_CANCELLED = {
     "QueryExecution": {
@@ -129,14 +127,7 @@ class TestAthenaCursor:
     def athena_client(self):
         client = mock.Mock()
         client.start_query_execution = mock.Mock(return_value={"QueryExecutionId": "1234-abcd"})
-        client.get_query_execution = mock.Mock(
-            return_value={
-                "QueryExecution": {
-                    "Status": {"State": "SUCCEEDED"},
-                    "Statistics": {"DataScannedInBytes": 123},
-                },
-            }
-        )
+        client.get_query_execution = mock.Mock(return_value=STATE_EVENT_SUCCEEDED)
         client.get_query_results = mock.Mock(
             return_value={
                 "ResultSet": {
@@ -473,6 +464,40 @@ class TestAthenaCursor:
             response["NextToken"] = next_token
         return response
 
+    DDL_AND_UTILITY_QUERIES = [
+        ["UTILITY", "SHOW_COLUMNS", "SHOW COLUMNS IN some_table"],
+        ["UTILITY", "DESCRIBE_TABLE", "DESCRIBE some_table"],
+        ["DDL", "ALTER_TABLE_ADD_COLUMNS", "ALTER TABLE some_table ADD COLUMNS (col99 string)"],
+        ["DML", "EXPLAIN", "EXPLAIN SELECT 1"],
+    ]
+
+    def _utility_query_execution(self, statement_type, statement_subtype):
+        return mock.Mock(
+            return_value={
+                "QueryExecution": {
+                    "Status": {"State": "SUCCEEDED"},
+                    "Statistics": {"DataScannedInBytes": 0},
+                    "StatementType": statement_type,
+                    "SubstatementType": statement_subtype,
+                }
+            }
+        )
+
+    @pytest.mark.parametrize("query", DDL_AND_UTILITY_QUERIES)
+    def test_fetchone_does_not_skip_the_first_row_of_utility_query_results(
+        self, cursor, athena_client, query
+    ):
+        statement_type, statement_subtype, query_string = query
+        data = [[f"row{n}"] for n in range(3)]
+        page = self._create_page(athena_client, [("_", "string")], data, include_header=False)
+        athena_client.get_query_execution = self._utility_query_execution(
+            statement_type, statement_subtype
+        )
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute(query_string)
+        row = cursor.fetchone()
+        assert row == ("row0",)
+
     def test_fetchmany_loads_one_page_and_skips_the_header_row(self, cursor, athena_client):
         data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
         page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
@@ -483,6 +508,21 @@ class TestAthenaCursor:
         assert rows[0] == (datetime.date(2024, 1, 1), 0)
         assert rows[1] == (datetime.date(2024, 1, 2), 1)
         assert rows[-1] == (datetime.date(2024, 1, 10), 9)
+
+    @pytest.mark.parametrize("query", DDL_AND_UTILITY_QUERIES)
+    def test_fetchmany_does_not_skip_the_first_row_of_utility_query_results(
+        self, cursor, athena_client, query
+    ):
+        statement_type, statement_subtype, query_string = query
+        data = [[f"row{n}"] for n in range(3)]
+        page = self._create_page(athena_client, [("_", "string")], data, include_header=False)
+        athena_client.get_query_execution = self._utility_query_execution(
+            statement_type, statement_subtype
+        )
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute(query_string)
+        rows = cursor.fetchmany(2)
+        assert rows == [("row0",), ("row1",)]
 
     def test_fetchmany_loads_only_as_many_rows_as_needed(self, cursor, athena_client):
         data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
@@ -580,6 +620,21 @@ class TestAthenaCursor:
         assert rows[0] == (datetime.date(2024, 1, 1), 0)
         assert rows[1] == (datetime.date(2024, 1, 2), 1)
         assert rows[9] == (datetime.date(2024, 1, 10), 9)
+
+    @pytest.mark.parametrize("query", DDL_AND_UTILITY_QUERIES)
+    def test_fetchall_does_not_skip_the_first_row_of_utility_query_results(
+        self, cursor, athena_client, query
+    ):
+        statement_type, statement_subtype, query_string = query
+        data = [[f"row{n}"] for n in range(3)]
+        page = self._create_page(athena_client, [("_", "string")], data, include_header=False)
+        athena_client.get_query_execution = self._utility_query_execution(
+            statement_type, statement_subtype
+        )
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute(query_string)
+        rows = cursor.fetchall()
+        assert rows == [("row0",), ("row1",), ("row2",)]
 
     def test_fetchall_loads_all_pages(self, cursor, athena_client):
         data = [[f"{n}"] for n in range(3999)]

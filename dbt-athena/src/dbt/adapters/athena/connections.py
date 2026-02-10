@@ -312,7 +312,10 @@ class AthenaCursor:
                 statistics = status_response["QueryExecution"]["Statistics"]
                 self.data_scanned_in_bytes = statistics["DataScannedInBytes"]
                 if self._query_execution_id:
-                    self._result_set = AthenaResultSet(self._client, self._query_execution_id)
+                    plain_text = self._is_plain_text_result(status_response)
+                    self._result_set = AthenaResultSet(
+                        self._client, self._query_execution_id, plain_text
+                    )
                     break
                 else:
                     raise AthenaError("Could not create result set, query execution ID lost")
@@ -320,6 +323,16 @@ class AthenaCursor:
                 raise AthenaQueryFailedError(status["AthenaError"])
             elif self.state == self.state == AthenaCursor.STATE_CANCELLED:
                 raise AthenaQueryCancelledError(status["StateChangeReason"])
+
+    def _is_plain_text_result(self, status_response: Dict[str, Any]) -> bool:
+        query_execution = status_response["QueryExecution"]
+        statement_type = query_execution["StatementType"]
+        statement_subtype = query_execution["SubstatementType"]
+        return (
+            statement_type == "DDL"
+            or statement_type == "UTILITY"
+            or statement_subtype == "EXPLAIN"
+        )
 
     @property
     def description(self) -> Optional[List[ColumnMetadata]]:
@@ -359,12 +372,17 @@ class AthenaCursor:
 
 class AthenaResultSet(Iterator[Row]):
     def __init__(
-        self, athena_client: Any, query_execution_id: str, limit: Optional[int] = None
+        self,
+        athena_client: Any,
+        query_execution_id: str,
+        is_plain_text: bool,
+        limit: Optional[int] = None,
     ) -> None:
         self._client = athena_client
         self._query_execution_id = query_execution_id
         self._limit = limit
         self._headers_skipped = False
+        self._is_plain_text = is_plain_text
         self._rows: Deque[Row] = deque()
         self._next_token: Optional[str] = None
         self._column_info: Optional[List[ColumnMetadata]] = None
@@ -409,7 +427,8 @@ class AthenaResultSet(Iterator[Row]):
         self._next_token = results_response.get("NextToken", None)
         page_rows = results_response["ResultSet"]["Rows"]
         if not self._headers_skipped:
-            page_rows = page_rows[1:]
+            if not self._is_plain_text:
+                page_rows = page_rows[1:]
             self._column_info = self._convert_column_info(
                 results_response["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
             )
