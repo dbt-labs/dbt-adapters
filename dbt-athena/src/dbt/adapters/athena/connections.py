@@ -159,7 +159,6 @@ class AthenaParameterFormatter:
         if operation.upper().startswith(("VACUUM", "OPTIMIZE")):
             operation = operation.replace('"', "")
         elif not operation.upper().startswith(("SELECT", "WITH", "INSERT")):
-            # Fixes ParseException that comes with newer version of PyAthena
             operation = operation.replace("\n\n    ", "\n")
 
         if parameters is not None:
