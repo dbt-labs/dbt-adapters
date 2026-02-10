@@ -192,6 +192,32 @@ class TestAthenaCursor:
             },
         )
 
+    def test_execute_does_not_send_result_configuration_without_output_location(
+        self, athena_client, poll_delay, formatter
+    ):
+        credentials = AthenaCredentials(
+            database="my_database",
+            schema="my_schema",
+            region_name=AWS_REGION,
+            work_group=ATHENA_WORKGROUP,
+        )
+        cursor = AthenaCursor(
+            athena_client,
+            credentials,
+            poll_delay=poll_delay,
+            formatter=formatter,
+            retry_interval_multiplier=0,
+        )
+        cursor.execute("SELECT NOW()")
+        athena_client.start_query_execution.assert_called_once_with(
+            QueryString="SELECT NOW()",
+            WorkGroup=ATHENA_WORKGROUP,
+            QueryExecutionContext={
+                "Catalog": "my_database",
+                "Database": "my_schema",
+            },
+        )
+
     def test_execute_formats_the_query(self, cursor, formatter, athena_client):
         formatter.format = mock.Mock(return_value="SELECT 'hello world' || '!'")
         cursor.execute("SELECT %s", ["hello world"])

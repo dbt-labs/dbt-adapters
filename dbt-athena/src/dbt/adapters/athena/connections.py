@@ -64,8 +64,8 @@ class AthenaAdapterResponse(AdapterResponse):
 
 @dataclass
 class AthenaCredentials(Credentials):
-    s3_staging_dir: str
     region_name: str
+    s3_staging_dir: Optional[str] = None
     endpoint_url: Optional[str] = None
     work_group: Optional[str] = None
     skip_workgroup_check: bool = False
@@ -277,14 +277,15 @@ class AthenaCursor:
         request = {
             "QueryString": self.query,
             "WorkGroup": self._credentials.work_group,
-            "ResultConfiguration": {
-                "OutputLocation": self._credentials.s3_staging_dir,
-            },
             "QueryExecutionContext": {
                 "Catalog": self._credentials.database,
                 "Database": self._credentials.schema,
             },
         }
+        if self._credentials.s3_staging_dir is not None:
+            request["ResultConfiguration"] = {
+                "OutputLocation": self._credentials.s3_staging_dir,
+            }
         start_response = self._client.start_query_execution(**request)
         self._query_execution_id = start_response["QueryExecutionId"]
         LOGGER.debug(f"Athena query {self._query_execution_id} started")
