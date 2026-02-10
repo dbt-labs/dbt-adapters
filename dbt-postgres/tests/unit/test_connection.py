@@ -386,16 +386,18 @@ class TestAutocommitBehavior(TestCase):
 
         connection = MagicMock()
         connection.state = "closed"
-        connection.credentials = PostgresCredentials.from_dict({
-            "type": "postgres",
-            "dbname": "postgres",
-            "user": "root",
-            "host": "localhost",
-            "pass": "password",
-            "port": 5432,
-            "schema": "public",
-            "autocommit": True,
-        })
+        connection.credentials = PostgresCredentials.from_dict(
+            {
+                "type": "postgres",
+                "dbname": "postgres",
+                "user": "root",
+                "host": "localhost",
+                "pass": "password",
+                "port": 5432,
+                "schema": "public",
+                "autocommit": True,
+            }
+        )
         connection.credentials.retries = 1
 
         with mock.patch.object(
@@ -415,13 +417,15 @@ class TestAutocommitBehavior(TestCase):
 
     def test_autocommit_default_is_false(self):
         """Test that autocommit defaults to False."""
-        credentials = PostgresCredentials.from_dict({
-            "type": "postgres",
-            "dbname": "postgres",
-            "user": "root",
-            "host": "localhost",
-            "pass": "password",
-            "port": 5432,
-            "schema": "public",
-        })
+        credentials = PostgresCredentials.from_dict(
+            {
+                "type": "postgres",
+                "dbname": "postgres",
+                "user": "root",
+                "host": "localhost",
+                "pass": "password",
+                "port": 5432,
+                "schema": "public",
+            }
+        )
         assert credentials.autocommit is False
