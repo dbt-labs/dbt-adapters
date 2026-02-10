@@ -48,7 +48,7 @@ Extends `SQLAdapter` with Athena-specific features:
 
 ### AthenaConnectionManager (`connections.py`)
 
-Uses `pyathena` driver with support for:
+Implements an Athena client with support for:
 
 - AWS credentials (access key, profile, role)
 - Workgroup configuration
@@ -224,7 +224,7 @@ changie new
 | File | Purpose |
 |------|---------|
 | `impl.py` | Main adapter with S3, Glue integration |
-| `connections.py` | PyAthena connection handling |
+| `connections.py` | Athena connection handling |
 | `relation.py` | S3 location, partition configs |
 | `column.py` | Athena SQL type handling |
 | `s3.py` | S3 operations (delete, list) |
@@ -241,7 +241,6 @@ changie new
 
 ## Dependencies
 
-- **pyathena** - Athena Python driver
 - **boto3** - AWS SDK for S3, Glue operations
 - **dbt-adapters**, **dbt-common**, **dbt-core** - Core dbt packages
 
