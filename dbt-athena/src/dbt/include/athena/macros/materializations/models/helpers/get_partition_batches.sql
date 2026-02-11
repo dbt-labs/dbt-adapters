@@ -49,39 +49,53 @@
         {%- endif -%}
     {%- endfor -%}
 
-    {# Calculate total batches based on bucketing and partitioning #}
-    {%- if ns.is_bucketed -%}
-        {%- set total_batches = ns.partitions | length * ns.bucket_numbers | length -%}
-    {%- else -%}
-        {%- set total_batches = ns.partitions | length -%}
-    {%- endif -%}
-    {% do log('TOTAL PARTITIONS TO PROCESS: ' ~ total_batches) %}
-
-    {# Determine the number of batches per partition limit #}
-    {%- set batches_per_partition_limit = (total_batches // athena_partitions_limit) + (total_batches % athena_partitions_limit > 0) -%}
-
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
-    {%- for i in range(batches_per_partition_limit) -%}
-        {%- set batch_conditions = [] -%}
-        {%- if ns.is_bucketed -%}
-            {# Combine partition and bucket conditions for each batch #}
-            {%- for partition_expression in ns.partitions -%}
-                {%- for bucket_num in ns.bucket_numbers -%}
-                    {%- set bucket_condition = ns.bucket_column + " IN (" + ns.bucket_conditions[bucket_num] | join(", ") + ")" -%}
-                    {%- set combined_condition = "(" + partition_expression + ' and ' + bucket_condition + ")" -%}
-                    {%- do batch_conditions.append(combined_condition) -%}
-                {%- endfor -%}
+    {%- if ns.is_bucketed -%}
+        {%- set max_in_bytes = 200000 -%}
+
+        {# Group partition conditions into batches respecting athena_partitions_limit #}
+        {%- set partition_batches = [] -%}
+        {%- if ns.partitions | length > 0 -%}
+            {%- for i in range(0, ns.partitions | length, athena_partitions_limit) -%}
+                {%- set batch = ns.partitions[i:i + athena_partitions_limit] -%}
+                {%- do partition_batches.append(batch | join(' or ')) -%}
             {%- endfor -%}
-        {%- else -%}
-            {# Extend batch conditions with partitions for non-bucketed columns #}
-            {%- do batch_conditions.extend(ns.partitions) -%}
         {%- endif -%}
-        {# Calculate batch start and end index and append batch conditions #}
-        {%- set start_index = i * athena_partitions_limit -%}
-        {%- set end_index = start_index + athena_partitions_limit -%}
-        {%- do partitions_batches.append(batch_conditions[start_index:end_index] | join(' or ')) -%}
-    {%- endfor -%}
+
+        {# For each bucket, chunk the IN clause values and combine with partition batches #}
+        {%- for bucket_num in ns.bucket_numbers -%}
+            {%- set values = ns.bucket_conditions[bucket_num] -%}
+            {%- set values_total_len = values | join(', ') | length -%}
+            {%- if values_total_len > max_in_bytes -%}
+                {%- set num_chunks = (values_total_len // max_in_bytes) + (1 if values_total_len % max_in_bytes > 0 else 0) -%}
+            {%- else -%}
+                {%- set num_chunks = 1 -%}
+            {%- endif -%}
+            {%- set chunk_size = (values | length // num_chunks) + (1 if values | length % num_chunks > 0 else 0) -%}
+
+            {%- for ci in range(num_chunks) -%}
+                {%- set chunk = values[ci * chunk_size : (ci + 1) * chunk_size] -%}
+                {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
+
+                {%- if partition_batches | length > 0 -%}
+                    {%- for pb in partition_batches -%}
+                        {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
+                    {%- endfor -%}
+                {%- else -%}
+                    {# Bucket-only case (no non-bucket partition columns) #}
+                    {%- do partitions_batches.append(bucket_cond) -%}
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endfor -%}
+    {%- else -%}
+        {# Non-bucketed: batch partitions respecting athena_partitions_limit #}
+        {%- for i in range(0, ns.partitions | length, athena_partitions_limit) -%}
+            {%- set batch = ns.partitions[i:i + athena_partitions_limit] -%}
+            {%- do partitions_batches.append(batch | join(' or ')) -%}
+        {%- endfor -%}
+    {%- endif -%}
+    {% do log('TOTAL PARTITIONS TO PROCESS: ' ~ partitions_batches | length) %}
 
     {{ return(partitions_batches) }}
 
