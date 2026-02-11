@@ -975,11 +975,9 @@ class BigQueryAdapter(BaseAdapter):
         identifier = source.identifier
         if identifier and "*" in identifier:
             raise dbt_common.exceptions.DbtRuntimeError(
-                f"Source freshness cannot be calculated using metadata for wildcard table "
-                f"'{source}'. BigQuery resolves wildcard tables to a temporary table whose "
-                f"modification timestamp is the current time, not the actual freshness of "
-                f"the underlying tables. Please set 'loaded_at_field' on this source to "
-                f"use a query-based freshness check instead."
+                f"Metadata-based source freshness is not supported for wildcard table "
+                f"'{source}'. Please set 'loaded_at_field' on this source to use a "
+                f"query-based freshness check instead."
             )
 
     def calculate_freshness_from_metadata(
