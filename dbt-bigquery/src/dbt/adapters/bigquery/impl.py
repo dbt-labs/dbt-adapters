@@ -959,11 +959,36 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    @staticmethod
+    def _check_for_wildcard_identifier(source: BaseRelation) -> None:
+        """Raise an error if the source identifier contains a wildcard character.
+
+        When ``client.get_table()`` is called with a wildcard identifier
+        (e.g. ``events_*``), BigQuery creates a temporary table that unions all
+        matching tables.  The ``modified`` timestamp on this temp table reflects
+        the current time, not the actual modification time of the underlying
+        tables — causing metadata-based freshness checks to report an age of
+        ~0 seconds.
+
+        See: https://github.com/googleapis/python-bigquery/issues/2035
+        """
+        identifier = source.identifier
+        if identifier and "*" in identifier:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Source freshness cannot be calculated using metadata for wildcard table "
+                f"'{source}'. BigQuery resolves wildcard tables to a temporary table whose "
+                f"modification timestamp is the current time, not the actual freshness of "
+                f"the underlying tables. Please set 'loaded_at_field' on this source to "
+                f"use a query-based freshness check instead."
+            )
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
+        self._check_for_wildcard_identifier(source)
+
         conn = self.connections.get_thread_connection()
         client: Client = conn.handle
 
@@ -999,6 +1024,9 @@ class BigQueryAdapter(BaseAdapter):
         """
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for source in sources:
+            self._check_for_wildcard_identifier(source)
 
         # Legacy behavior: use metadata-based freshness for each source
         if not self.behavior.bigquery_use_batch_source_freshness:
