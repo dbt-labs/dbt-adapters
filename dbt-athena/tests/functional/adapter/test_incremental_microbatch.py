@@ -16,12 +16,27 @@ select 3 as id, CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as ti
 """
 
 _iceberg_input_model_sql = """
-{{ config(materialized='table', event_time='event_time', table_type='iceberg') }}
-select 1 as id, CAST(from_iso8601_timestamp('2020-01-01T00:00:00.000000Z') as timestamp(6)) as event_time
+{{ config(
+    materialized='table',
+    event_time='event_time',
+    table_type='iceberg',
+    force_batch=true,
+    partitioned_by=['truncate(string_partition,2)', 'month(date_partition)']
+) }}
+select 1 as id,
+       CAST(from_iso8601_timestamp('2020-01-01T00:00:00.000000Z') as timestamp(6)) as event_time,
+       'aa' as string_partition,
+       date('2020-01-01') as date_partition
 union all
-select 2 as id, CAST(from_iso8601_timestamp('2020-01-02T00:00:00.000000Z') as timestamp(6)) as event_time
+select 2 as id,
+       CAST(from_iso8601_timestamp('2020-01-02T00:00:00.000000Z') as timestamp(6)) as event_time,
+       'bb' as string_partition,
+       date('2020-01-02') as date_partition
 union all
-select 3 as id, CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as timestamp(6)) as event_time
+select 3 as id,
+       CAST(from_iso8601_timestamp('2020-01-03T00:00:00.000000Z') as timestamp(6)) as event_time,
+       'cc' as string_partition,
+       date('2020-01-03') as date_partition
 """
 
 _hive_microbatch_model_sql = """
