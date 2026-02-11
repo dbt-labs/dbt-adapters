@@ -54,11 +54,12 @@
     {%- if ns.is_bucketed -%}
         {%- set max_in_bytes = 200000 -%}
 
-        {# Group partition conditions into batches respecting athena_partitions_limit #}
+        {# Group non-empty partition conditions into batches respecting athena_partitions_limit #}
         {%- set partition_batches = [] -%}
-        {%- if ns.partitions | length > 0 -%}
-            {%- for i in range(0, ns.partitions | length, athena_partitions_limit) -%}
-                {%- set batch = ns.partitions[i:i + athena_partitions_limit] -%}
+        {%- set non_empty_partitions = ns.partitions | select | list -%}
+        {%- if non_empty_partitions | length > 0 -%}
+            {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
+                {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
                 {%- do partition_batches.append(batch | join(' or ')) -%}
             {%- endfor -%}
         {%- endif -%}

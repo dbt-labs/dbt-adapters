@@ -25,9 +25,10 @@ BATCH_BUILDING_TEMPLATE = """\
     {%- set max_in_bytes = max_in_bytes_override if max_in_bytes_override is defined else 200000 -%}
 
     {%- set partition_batches = [] -%}
-    {%- if ns_partitions | length > 0 -%}
-        {%- for i in range(0, ns_partitions | length, athena_partitions_limit) -%}
-            {%- set batch = ns_partitions[i:i + athena_partitions_limit] -%}
+    {%- set non_empty_partitions = ns_partitions | select | list -%}
+    {%- if non_empty_partitions | length > 0 -%}
+        {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
+            {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
             {%- do partition_batches.append(batch | join(' or ')) -%}
         {%- endfor -%}
     {%- endif -%}
@@ -132,6 +133,24 @@ class TestBucketOnlyBatching:
         )
         assert len(result) == 1
         assert result[0] == "user_id IN ('val1', 'val2', 'val3')"
+
+    def test_bucket_only_with_empty_partition_string(self):
+        """Bucket-only case where ns.partitions contains an empty string (real-world behavior).
+
+        When all partition columns are bucket columns, single_partition is empty
+        and single_partition_expression becomes ''. This must be filtered out
+        to avoid generating WHERE () AND col IN (...).
+        """
+        result = _render_batches(
+            partitions=[""],
+            is_bucketed=True,
+            bucket_conditions={0: ["'val1'", "'val2'"]},
+            bucket_numbers=[0],
+            bucket_column="user_id",
+            athena_partitions_limit=100,
+        )
+        assert len(result) == 1
+        assert result[0] == "user_id IN ('val1', 'val2')"
 
     def test_bucket_only_multiple_buckets(self):
         result = _render_batches(
