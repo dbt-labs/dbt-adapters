@@ -48,8 +48,9 @@ BATCH_BUILDING_TEMPLATE = """\
         {%- endfor -%}
     {%- endfor -%}
 {%- else -%}
-    {%- for i in range(0, ns_partitions | length, athena_partitions_limit) -%}
-        {%- set batch = ns_partitions[i:i + athena_partitions_limit] -%}
+    {%- set non_empty_partitions = ns_partitions | select | list -%}
+    {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
+        {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
         {%- do partitions_batches.append(batch | join(' or ')) -%}
     {%- endfor -%}
 {%- endif -%}

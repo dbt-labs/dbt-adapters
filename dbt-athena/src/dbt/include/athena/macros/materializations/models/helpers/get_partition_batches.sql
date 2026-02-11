@@ -82,8 +82,9 @@
         {%- endfor -%}
     {%- else -%}
         {# Non-bucketed: batch partitions respecting athena_partitions_limit #}
-        {%- for i in range(0, ns.partitions | length, athena_partitions_limit) -%}
-            {%- set batch = ns.partitions[i:i + athena_partitions_limit] -%}
+        {%- set non_empty_partitions = ns.partitions | select | list -%}
+        {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
+            {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
             {%- do partitions_batches.append(batch | join(' or ')) -%}
         {%- endfor -%}
     {%- endif -%}
