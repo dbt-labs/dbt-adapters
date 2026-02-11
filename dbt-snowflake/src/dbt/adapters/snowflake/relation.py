@@ -23,6 +23,9 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
+    SnowflakeHybridTableConfig,
+    SnowflakeHybridTableConfigChangeset,
+    build_hybrid_table_changeset,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -36,6 +39,7 @@ class SnowflakeRelation(BaseRelation):
     require_alias: bool = False
     relation_configs = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
+        SnowflakeRelationType.HybridTable: SnowflakeHybridTableConfig,
     }
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -134,6 +138,21 @@ class SnowflakeRelation(BaseRelation):
 
         if config_change_collection.has_changes:
             return config_change_collection
+        return None
+
+    @classmethod
+    def hybrid_table_config_changeset(
+        cls, relation_results: RelationResults, relation_config: RelationConfig
+    ) -> Optional[SnowflakeHybridTableConfigChangeset]:
+        existing_hybrid_table = SnowflakeHybridTableConfig.from_relation_results(
+            relation_results
+        )
+        new_hybrid_table = SnowflakeHybridTableConfig.from_relation_config(relation_config)
+
+        config_changes = build_hybrid_table_changeset(existing_hybrid_table, new_hybrid_table)
+
+        if config_changes.has_changes:
+            return config_changes
         return None
 
     def as_case_sensitive(self) -> "SnowflakeRelation":

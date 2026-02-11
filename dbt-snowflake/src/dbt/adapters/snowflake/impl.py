@@ -544,6 +544,17 @@ CALL {proc_name}();
             )
         }
 
+    @available
+    def describe_hybrid_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        describe_sql = f"describe table {relation.render()}"
+        res, table = self.execute(describe_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not describe hybrid table: {describe_sql} failed")
+        normalized_table = table.rename(
+            column_names=[column.lower() for column in table.column_names]
+        )
+        return {"columns": normalized_table}
+
     def expand_column_types(self, goal, current):
         reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
 
