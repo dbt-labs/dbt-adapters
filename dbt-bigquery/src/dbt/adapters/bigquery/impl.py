@@ -696,6 +696,18 @@ class BigQueryAdapter(BaseAdapter):
         client.update_table(table, ["description"])
 
     @available.parse_none
+    def update_dataset_description(self, database: str, schema: str, description: str):
+        conn = self.connections.get_thread_connection()
+        client = conn.handle
+
+        with _dataset_lock:
+            dataset_ref = self.connections.dataset_ref(database, schema)
+            dataset = client.get_dataset(dataset_ref)
+            if dataset.description != description:
+                dataset.description = description
+                client.update_dataset(dataset, ["description"])
+
+    @available.parse_none
     def alter_table_add_columns(self, relation, columns):
         logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
         self.alter_table_add_remove_columns(relation, columns, None)

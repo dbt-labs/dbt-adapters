@@ -104,13 +104,19 @@
   {{ return(adapter.check_schema_exists(information_schema.database, schema)) }}
 {% endmacro %}
 
-{#-- Handle both relation and column level documentation #}
+{#-- Handle relation, column, and dataset level documentation #}
 {% macro bigquery__persist_docs(relation, model, for_relation, for_columns) -%}
   {% if for_relation and config.persist_relation_docs() and model.description %}
     {% do alter_relation_comment(relation, model.description) %}
   {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
     {% do alter_column_comment(relation, model.columns) %}
+  {% endif %}
+
+  {#-- Dataset (schema) description support #}
+  {% set dataset_description = config.get('dataset_description') %}
+  {% if dataset_description %}
+    {% do adapter.update_dataset_description(relation.database, relation.schema, dataset_description) %}
   {% endif %}
 {% endmacro %}
 

@@ -213,6 +213,99 @@ class TestPersistDocsNested(BasePersistDocsBase):
             assert level_3_column["comment"] == "level_3 column description"
 
 
+class TestPersistDocsDatasetDescription(BasePersistDocsBase):
+    """Test to ensure dataset (schema) descriptions can be persisted."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "table_model.sql": """
+        {{ config(materialized='table') }}
+        select 1 as id, 'test' as name
+        """,
+        }
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {
+            "schema.yml": """
+version: 2
+
+models:
+  - name: table_model
+    description: "Table model description"
+    columns:
+      - name: id
+        description: "id column"
+""",
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "relation": True,
+                        "columns": True,
+                    },
+                    "+dataset_description": "Test dataset description",
+                }
+            }
+        }
+
+    def test_dataset_description(self, project):
+        """Test that dataset descriptions are persisted when configured."""
+        run_dbt(["run"])
+
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            dataset_ref = project.adapter.connections.dataset_ref(
+                project.database, project.test_schema
+            )
+            dataset = client.get_dataset(dataset_ref)
+
+            assert dataset.description == "Test dataset description"
+
+    def test_dataset_description_update(self, project):
+        """Test that dataset descriptions are updated on subsequent runs."""
+        run_dbt(["run"])
+
+        # Verify initial description
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            dataset_ref = project.adapter.connections.dataset_ref(
+                project.database, project.test_schema
+            )
+            dataset = client.get_dataset(dataset_ref)
+            assert dataset.description == "Test dataset description"
+
+        # Update the model to use a new dataset description
+        write_file(
+            """
+        {{ config(
+            materialized='table',
+            dataset_description='Updated dataset description'
+        ) }}
+        select 1 as id, 'test' as name
+        """,
+            project.project_root,
+            "models",
+            "table_model.sql",
+        )
+
+        run_dbt(["run"])
+
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            dataset_ref = project.adapter.connections.dataset_ref(
+                project.database, project.test_schema
+            )
+            dataset = client.get_dataset(dataset_ref)
+
+            assert dataset.description == "Updated dataset description"
+
+
 class TestPersistDocsIncremental(BasePersistDocsBase):
     """Test to ensure incremental models support table description updates."""
 
