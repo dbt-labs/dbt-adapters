@@ -351,6 +351,11 @@ jobs:
             REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            # Iceberg/Glue catalog testing
+            REDSHIFT_ICEBERG_EXTERNAL_SCHEMA: ${{ vars.REDSHIFT_ICEBERG_EXTERNAL_SCHEMA }}
+            REDSHIFT_ICEBERG_S3_BUCKET: ${{ vars.REDSHIFT_ICEBERG_S3_BUCKET }}
+            REDSHIFT_ICEBERG_IAM_ROLE: ${{ secrets.REDSHIFT_ICEBERG_IAM_ROLE }}
+            REDSHIFT_ICEBERG_GLUE_DATABASE: ${{ vars.REDSHIFT_ICEBERG_GLUE_DATABASE }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
