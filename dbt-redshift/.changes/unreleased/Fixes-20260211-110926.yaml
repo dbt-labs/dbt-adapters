@@ -1,0 +1,6 @@
+kind: Fixes
+body: Adding friendlier error message when dist is not string for redshift
+time: 2026-02-11T11:09:26.802148+05:30
+custom:
+    Author: tauhid621
+    Issue: "651"
