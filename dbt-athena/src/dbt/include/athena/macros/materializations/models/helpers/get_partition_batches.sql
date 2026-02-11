@@ -52,8 +52,6 @@
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
     {%- if ns.is_bucketed -%}
-        {%- set max_in_bytes = 200000 -%}
-
         {# Group non-empty partition conditions into batches respecting athena_partitions_limit #}
         {%- set partition_batches = [] -%}
         {%- set non_empty_partitions = ns.partitions | select | list -%}
@@ -64,19 +62,12 @@
             {%- endfor -%}
         {%- endif -%}
 
-        {# For each bucket, chunk the IN clause values and combine with partition batches #}
+        {# For each bucket, chunk the IN clause values by athena_partitions_limit and combine with partition batches #}
         {%- for bucket_num in ns.bucket_numbers -%}
             {%- set values = ns.bucket_conditions[bucket_num] -%}
-            {%- set values_total_len = values | join(', ') | length -%}
-            {%- if values_total_len > max_in_bytes -%}
-                {%- set num_chunks = (values_total_len // max_in_bytes) + (1 if values_total_len % max_in_bytes > 0 else 0) -%}
-            {%- else -%}
-                {%- set num_chunks = 1 -%}
-            {%- endif -%}
-            {%- set chunk_size = (values | length // num_chunks) + (1 if values | length % num_chunks > 0 else 0) -%}
 
-            {%- for ci in range(num_chunks) -%}
-                {%- set chunk = values[ci * chunk_size : (ci + 1) * chunk_size] -%}
+            {%- for ci in range(0, values | length, athena_partitions_limit) -%}
+                {%- set chunk = values[ci:ci + athena_partitions_limit] -%}
                 {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
 
                 {%- if partition_batches | length > 0 -%}

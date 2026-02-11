@@ -2,7 +2,7 @@
 Unit tests for the batch-building logic in get_partition_batches.sql macro.
 
 Since the macro relies heavily on dbt context (config, adapter, statement, etc.),
-we extract and test the batch construction logic (lines 52-97) in isolation
+we extract and test the batch construction logic (lines 52-93) in isolation
 using Jinja2 directly. This validates the core splitting algorithm without
 requiring a full dbt rendering environment.
 """
@@ -22,8 +22,6 @@ BATCH_BUILDING_TEMPLATE = """\
 
 {%- set partitions_batches = [] -%}
 {%- if ns_is_bucketed -%}
-    {%- set max_in_bytes = max_in_bytes_override if max_in_bytes_override is defined else 200000 -%}
-
     {%- set partition_batches = [] -%}
     {%- set non_empty_partitions = ns_partitions | select | list -%}
     {%- if non_empty_partitions | length > 0 -%}
@@ -35,16 +33,9 @@ BATCH_BUILDING_TEMPLATE = """\
 
     {%- for bucket_num in ns_bucket_numbers -%}
         {%- set values = ns_bucket_conditions[bucket_num] -%}
-        {%- set values_total_len = values | join(', ') | length -%}
-        {%- if values_total_len > max_in_bytes -%}
-            {%- set num_chunks = (values_total_len // max_in_bytes) + (1 if values_total_len % max_in_bytes > 0 else 0) -%}
-        {%- else -%}
-            {%- set num_chunks = 1 -%}
-        {%- endif -%}
-        {%- set chunk_size = (values | length // num_chunks) + (1 if values | length % num_chunks > 0 else 0) -%}
 
-        {%- for ci in range(num_chunks) -%}
-            {%- set chunk = values[ci * chunk_size : (ci + 1) * chunk_size] -%}
+        {%- for ci in range(0, values | length, athena_partitions_limit) -%}
+            {%- set chunk = values[ci:ci + athena_partitions_limit] -%}
             {%- set bucket_cond = ns_bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
 
             {%- if partition_batches | length > 0 -%}
@@ -170,6 +161,22 @@ class TestBucketOnlyBatching:
         assert result[1] == "col IN ('c')"
         assert result[2] == "col IN ('d', 'e', 'f')"
 
+    def test_bucket_values_exceeding_limit(self):
+        """Bucket values exceeding athena_partitions_limit should be chunked."""
+        values = [f"'{i}'" for i in range(5)]
+        result = _render_batches(
+            partitions=[],
+            is_bucketed=True,
+            bucket_conditions={0: values},
+            bucket_numbers=[0],
+            bucket_column="c",
+            athena_partitions_limit=2,
+        )
+        assert len(result) == 3
+        assert result[0] == "c IN ('0', '1')"
+        assert result[1] == "c IN ('2', '3')"
+        assert result[2] == "c IN ('4')"
+
 
 class TestBucketWithPartitionsBatching:
     """Tests for bucket + non-bucket partition columns (AND structure)."""
@@ -228,50 +235,10 @@ class TestBucketWithPartitionsBatching:
         assert result[4] == "(d='2' or d='3') and c IN ('y')"
         assert result[5] == "(d='4') and c IN ('y')"
 
-
-class TestINClauseChunking:
-    """Tests for IN clause chunking when values exceed max_in_bytes."""
-
-    def test_no_chunking_when_under_limit(self):
-        """Small IN clause should not be split."""
-        values = ["'v1'", "'v2'", "'v3'"]
-        result = _render_batches(
-            partitions=["d='1'"],
-            is_bucketed=True,
-            bucket_conditions={0: values},
-            bucket_numbers=[0],
-            bucket_column="c",
-            athena_partitions_limit=100,
-            max_in_bytes_override=1000,
-        )
-        assert len(result) == 1
-        assert result[0] == "(d='1') and c IN ('v1', 'v2', 'v3')"
-
-    def test_chunking_splits_large_in_clause(self):
-        """IN clause exceeding max_in_bytes should be split into chunks."""
-        # 10 values of 5 chars each, joined with ", " → 68 chars total.
-        # max_in_bytes=30 → ceil(68/30)=3 chunks, chunk_size=ceil(10/3)=4.
-        values = [f"'{i:03d}'" for i in range(10)]
-        result = _render_batches(
-            partitions=["d='1'"],
-            is_bucketed=True,
-            bucket_conditions={0: values},
-            bucket_numbers=[0],
-            bucket_column="c",
-            athena_partitions_limit=100,
-            max_in_bytes_override=30,
-        )
-        assert len(result) == 3
-        assert result[0] == "(d='1') and c IN ('000', '001', '002', '003')"
-        assert result[1] == "(d='1') and c IN ('004', '005', '006', '007')"
-        assert result[2] == "(d='1') and c IN ('008', '009')"
-
-    def test_chunking_with_multiple_partition_batches(self):
-        """Chunked IN clause combined with multiple partition batches."""
+    def test_both_partitions_and_bucket_values_exceeding_limit(self):
+        """Both partitions and bucket values exceed the limit."""
         partitions = [f"d='{i}'" for i in range(4)]
-        # 10 values × 5 chars + 9 separators × 2 chars = 68 chars.
-        # max 30 → 3 chunks, chunk_size=4.
-        values = [f"'{i:03d}'" for i in range(10)]
+        values = [f"'{i}'" for i in range(5)]
         result = _render_batches(
             partitions=partitions,
             is_bucketed=True,
@@ -279,61 +246,35 @@ class TestINClauseChunking:
             bucket_numbers=[0],
             bucket_column="c",
             athena_partitions_limit=2,
-            max_in_bytes_override=30,
         )
-        # 2 partition_batches (ceil(4/2)) × 1 bucket × 3 chunks = 6 batches
+        # 2 partition_batches (ceil(4/2)) × 3 bucket_chunks (ceil(5/2)) = 6 batches
         assert len(result) == 6
-        # chunk 0 × partition_batch 0, 1
-        assert result[0] == "(d='0' or d='1') and c IN ('000', '001', '002', '003')"
-        assert result[1] == "(d='2' or d='3') and c IN ('000', '001', '002', '003')"
-        # chunk 1 × partition_batch 0, 1
-        assert result[2] == "(d='0' or d='1') and c IN ('004', '005', '006', '007')"
-        assert result[3] == "(d='2' or d='3') and c IN ('004', '005', '006', '007')"
-        # chunk 2 × partition_batch 0, 1
-        assert result[4] == "(d='0' or d='1') and c IN ('008', '009')"
-        assert result[5] == "(d='2' or d='3') and c IN ('008', '009')"
+        assert result[0] == "(d='0' or d='1') and c IN ('0', '1')"
+        assert result[1] == "(d='2' or d='3') and c IN ('0', '1')"
+        assert result[2] == "(d='0' or d='1') and c IN ('2', '3')"
+        assert result[3] == "(d='2' or d='3') and c IN ('2', '3')"
+        assert result[4] == "(d='0' or d='1') and c IN ('4')"
+        assert result[5] == "(d='2' or d='3') and c IN ('4')"
 
-    def test_chunking_with_multiple_buckets(self):
-        """Multiple buckets each with different chunk counts."""
-        # bucket 0: 6 values of 3 chars, joined = "'a', 'b', 'c', 'd', 'e', 'f'" = 29 chars
-        #   max 20 → ceil(29/20)=2 chunks, chunk_size=ceil(6/2)=3
-        # bucket 1: 2 values, joined = "'x', 'y'" = 8 chars → 1 chunk
+    def test_multiple_buckets_with_different_value_counts(self):
+        """Multiple buckets each with different value counts exceeding the limit."""
         result = _render_batches(
             partitions=["d='1'"],
             is_bucketed=True,
             bucket_conditions={
-                0: ["'a'", "'b'", "'c'", "'d'", "'e'", "'f'"],
+                0: ["'a'", "'b'", "'c'", "'d'", "'e'"],
                 1: ["'x'", "'y'"],
             },
             bucket_numbers=[0, 1],
             bucket_column="col",
-            athena_partitions_limit=100,
-            max_in_bytes_override=20,
+            athena_partitions_limit=3,
         )
-        # bucket 0: 2 chunks × 1 partition_batch = 2
-        # bucket 1: 1 chunk × 1 partition_batch = 1
+        # bucket 0: ceil(5/3) = 2 chunks × 1 partition_batch = 2
+        # bucket 1: ceil(2/3) = 1 chunk × 1 partition_batch = 1
         assert len(result) == 3
         assert result[0] == "(d='1') and col IN ('a', 'b', 'c')"
-        assert result[1] == "(d='1') and col IN ('d', 'e', 'f')"
+        assert result[1] == "(d='1') and col IN ('d', 'e')"
         assert result[2] == "(d='1') and col IN ('x', 'y')"
-
-    def test_bucket_only_with_chunking(self):
-        """Bucket-only case (no partitions) with IN clause chunking."""
-        # 10 values × 5 chars + 9 × 2 separators = 68 chars. max 30 → 3 chunks of 4.
-        values = [f"'{i:03d}'" for i in range(10)]
-        result = _render_batches(
-            partitions=[],
-            is_bucketed=True,
-            bucket_conditions={0: values},
-            bucket_numbers=[0],
-            bucket_column="c",
-            athena_partitions_limit=100,
-            max_in_bytes_override=30,
-        )
-        assert len(result) == 3
-        assert result[0] == "c IN ('000', '001', '002', '003')"
-        assert result[1] == "c IN ('004', '005', '006', '007')"
-        assert result[2] == "c IN ('008', '009')"
 
 
 class TestRealisticScenario:
@@ -343,9 +284,9 @@ class TestRealisticScenario:
         """365 dates × 3 buckets, partition limit 100."""
         partitions = [f"date_col=DATE'{2024}-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}'" for i in range(365)]
         bucket_conditions = {
-            0: [f"'{i}'" for i in range(100)],
-            1: [f"'{i}'" for i in range(100, 200)],
-            2: [f"'{i}'" for i in range(200, 250)],
+            0: [f"'{i}'" for i in range(50)],
+            1: [f"'{i}'" for i in range(100, 150)],
+            2: [f"'{i}'" for i in range(200, 230)],
         }
         result = _render_batches(
             partitions=partitions,
@@ -356,6 +297,9 @@ class TestRealisticScenario:
             athena_partitions_limit=100,
         )
         # partition_batches: ceil(365/100) = 4
+        # bucket 0: ceil(50/100) = 1 chunk
+        # bucket 1: ceil(50/100) = 1 chunk
+        # bucket 2: ceil(30/100) = 1 chunk
         # 3 buckets × 1 chunk each × 4 partition_batches = 12
         assert len(result) == 12
 
