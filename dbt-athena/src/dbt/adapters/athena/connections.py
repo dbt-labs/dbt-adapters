@@ -13,22 +13,31 @@ from typing import (
     Any,
     Callable,
     cast,
-    ContextManager,
     Deque,
     Dict,
     List,
     Optional,
-    Self,
     Tuple,
     TypeAlias,
     Union,
 )
+from typing_extensions import Self
 from uuid import UUID
 
 from boto3.session import Session as BotoSession
 from botocore.config import Config as BotoConfig
+from mypy_boto3_athena.client import AthenaClient
+from mypy_boto3_athena.type_defs import (
+    AthenaErrorTypeDef,
+    ColumnInfoTypeDef,
+    GetQueryResultsInputTypeDef,
+    DatumTypeDef,
+    QueryExecutionTypeDef,
+    RowTypeDef,
+)
 from dbt_common.exceptions import ConnectionError, DbtRuntimeError
-from dbt_common.utils import md5
+from dbt_common.utils.encoding import md5
+
 from tenacity import (
     Retrying,
     retry_if_exception,
@@ -47,7 +56,7 @@ from dbt.adapters.contracts.connection import (
     ConnectionState,
     Credentials,
 )
-from dbt.adapters.sql import SQLConnectionManager
+from dbt.adapters.sql.connections import SQLConnectionManager
 
 
 Cell: TypeAlias = Union[
@@ -138,19 +147,19 @@ class AthenaQueryFailedError(AthenaError):
 
     TYPE_ICEBERG_ERROR = 233
 
-    error_category: int
-    error_type: int
-    retryable: bool
+    error_category: Optional[int]
+    error_type: Optional[int]
+    retryable: Optional[bool]
 
-    def __init__(self, athena_error: Dict[str, Any]) -> None:
-        super().__init__(athena_error["ErrorMessage"])
-        self.error_category = athena_error["ErrorCategory"]
-        self.error_type = athena_error["ErrorType"]
-        self.retryable = athena_error["Retryable"]
+    def __init__(self, athena_error: AthenaErrorTypeDef) -> None:
+        super().__init__(athena_error.get("ErrorMessage", None))
+        self.error_category = athena_error.get("ErrorCategory", None)
+        self.error_type = athena_error.get("ErrorType", None)
+        self.retryable = athena_error.get("Retryable", None)
 
 
 class AthenaParameterFormatter:
-    def format(self, operation: str, parameters: Optional[List[str]] = None) -> str:
+    def format(self, operation: str, parameters: Optional[List[Any]] = None) -> str:
         if operation is None or not operation.strip():
             raise ValueError("Query is none or empty.")
         elif not (parameters is None or isinstance(parameters, list)):
@@ -216,7 +225,7 @@ class AthenaCursor:
 
     def __init__(
         self,
-        athena_client: Any,
+        athena_client: AthenaClient,
         credentials: AthenaCredentials,
         formatter: AthenaParameterFormatter = AthenaParameterFormatter(),
         poll_delay: Callable[[float], None] = sleep,
@@ -290,6 +299,8 @@ class AthenaCursor:
         LOGGER.debug(f"Athena query {self._query_execution_id} started")
 
     def _await_completion(self) -> None:
+        if self._query_execution_id is None:
+            return
         while True:
             self._poll_delay(self._credentials.poll_interval)
             try:
@@ -305,14 +316,15 @@ class AthenaCursor:
                     continue
                 else:
                     raise e
-            status = status_response["QueryExecution"]["Status"]
-            self.state = status["State"]
+            query_execution = status_response.get("QueryExecution", {})
+            status = query_execution.get("Status", {})
+            self.state = status.get("State", None)
             LOGGER.debug(f"Athena query {self._query_execution_id} has state {self.state}")
             if self.state == AthenaCursor.STATE_SUCCEEDED:
-                statistics = status_response["QueryExecution"]["Statistics"]
-                self.data_scanned_in_bytes = statistics["DataScannedInBytes"]
+                statistics = status_response.get("QueryExecution", {}).get("Statistics", {})
+                self.data_scanned_in_bytes = statistics.get("DataScannedInBytes", 0)
                 if self._query_execution_id:
-                    plain_text = self._is_plain_text_result(status_response)
+                    plain_text = self._is_plain_text_result(query_execution)
                     self._result_set = AthenaResultSet(
                         self._client, self._query_execution_id, plain_text
                     )
@@ -320,14 +332,13 @@ class AthenaCursor:
                 else:
                     raise AthenaError("Could not create result set, query execution ID lost")
             elif self.state == AthenaCursor.STATE_FAILED:
-                raise AthenaQueryFailedError(status["AthenaError"])
+                raise AthenaQueryFailedError(status.get("AthenaError", {}))
             elif self.state == self.state == AthenaCursor.STATE_CANCELLED:
-                raise AthenaQueryCancelledError(status["StateChangeReason"])
+                raise AthenaQueryCancelledError(status.get("StateChangeReason", None))
 
-    def _is_plain_text_result(self, status_response: Dict[str, Any]) -> bool:
-        query_execution = status_response["QueryExecution"]
-        statement_type = query_execution["StatementType"]
-        statement_subtype = query_execution["SubstatementType"]
+    def _is_plain_text_result(self, query_execution: QueryExecutionTypeDef) -> bool:
+        statement_type = query_execution.get("StatementType", None)
+        statement_subtype = query_execution.get("SubstatementType", None)
         return (
             statement_type == "DDL"
             or statement_type == "UTILITY"
@@ -373,7 +384,7 @@ class AthenaCursor:
 class AthenaResultSet(Iterator[Row]):
     def __init__(
         self,
-        athena_client: Any,
+        athena_client: AthenaClient,
         query_execution_id: str,
         is_plain_text: bool,
         limit: Optional[int] = None,
@@ -420,35 +431,36 @@ class AthenaResultSet(Iterator[Row]):
             return -1
 
     def _load_page(self) -> None:
-        request: Dict[str, Any] = {"QueryExecutionId": self._query_execution_id}
+        request: GetQueryResultsInputTypeDef = {"QueryExecutionId": self._query_execution_id}
         if self._next_token:
             request["NextToken"] = self._next_token
         results_response = self._client.get_query_results(**request)
         self._next_token = results_response.get("NextToken", None)
-        page_rows = results_response["ResultSet"]["Rows"]
+        result_set = results_response.get("ResultSet", {})
+        page_rows = result_set.get("Rows", [])
         if not self._headers_skipped:
             if not self._is_plain_text:
                 page_rows = page_rows[1:]
             self._column_info = self._convert_column_info(
-                results_response["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
+                result_set.get("ResultSetMetadata", {}).get("ColumnInfo", [])
             )
             self._update_count = results_response.get("UpdateCount", -1)
             self._headers_skipped = True
         self._rows += [self._convert_row(row) for row in page_rows]
 
-    def _convert_column_info(self, column_info: List[Dict[str, str]]) -> List[ColumnMetadata]:
+    def _convert_column_info(self, column_info: List[ColumnInfoTypeDef]) -> List[ColumnMetadata]:
         return [(info["Name"], info["Type"], None, None, None, None, None) for info in column_info]
 
-    def _convert_row(self, row: Dict[str, List[Dict[str, str]]]) -> Row:
+    def _convert_row(self, row: RowTypeDef) -> Row:
         if self._column_info:
             return tuple(
                 self._convert_type(self._column_info[index], datum)
-                for index, datum in enumerate(row["Data"])
+                for index, datum in enumerate(row.get("Data", []))
             )
         else:
             raise AthenaError("No column info found")
 
-    def _convert_type(self, column_info: ColumnMetadata, datum: Dict[str, str]) -> Cell:
+    def _convert_type(self, column_info: ColumnMetadata, datum: DatumTypeDef) -> Cell:
         if "VarCharValue" not in datum:
             return None
         value = datum["VarCharValue"]
@@ -543,7 +555,6 @@ class AthenaResultSet(Iterator[Row]):
             raise ValueError(f'Could not parse time with time zone "{value}"')
 
 class AthenaConnection(Connection):
-    credentials: AthenaCredentials
     session: BotoSession
     region_name: str
 
@@ -552,20 +563,25 @@ class AthenaConnection(Connection):
         credentials: AthenaCredentials,
         boto_session_factory: Callable[[Connection], BotoSession] = get_boto3_session,
     ) -> None:
-        self.credentials = credentials
-        self.region_name = self.credentials.region_name
+        self.credentials = self._athena_credentials = credentials
         self.session = boto_session_factory(self)
+        self.region_name = self.credentials.region_name
         self._client = None
 
     def connect(self, boto_config_factory: Callable[..., BotoConfig] = get_boto3_config) -> Self:
-        boto_config = boto_config_factory(num_retries=self.credentials.effective_num_retries)
+        boto_config = boto_config_factory(
+            num_retries=self._athena_credentials.effective_num_retries
+        )
         self._client = self.session.client(
-            "athena", region_name=self.credentials.region_name, config=boto_config
+            "athena", region_name=self.region_name, config=boto_config
         )
         return self
 
     def cursor(self) -> AthenaCursor:
-        return AthenaCursor(self._client, self.credentials)
+        if self._client is not None:
+            return AthenaCursor(self._client, self._athena_credentials)
+        else:
+            raise ConnectionError("Not connected")
 
 
 class AthenaConnectionManager(SQLConnectionManager):
@@ -584,8 +600,8 @@ class AthenaConnectionManager(SQLConnectionManager):
         """
         return str(type_code).split("(")[0].split("<")[0].upper()
 
-    @contextmanager  # type: ignore
-    def exception_handler(self, sql: str) -> ContextManager:  # type: ignore
+    @contextmanager
+    def exception_handler(self, sql: str) -> Iterator[None]:
         try:
             yield
         except Exception as e:

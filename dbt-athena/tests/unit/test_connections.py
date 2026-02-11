@@ -6,8 +6,10 @@ from ipaddress import ip_address
 from unittest import mock
 from uuid import UUID
 
-import botocore
+from botocore.exceptions import ClientError
 import pytest
+
+from dbt_common.exceptions import ConnectionError
 
 from dbt.adapters.athena.connections import (
     AthenaConnection,
@@ -77,6 +79,11 @@ class TestAthenaConnection:
         cursor = connection.cursor()
         cursor.execute("SELECT NOW()")
         athena_client.start_query_execution.assert_called_once()
+
+    def test_cursor_raises_when_not_connected(self, credentials, session_factory):
+        connection = AthenaConnection(credentials, boto_session_factory=session_factory)
+        with pytest.raises(ConnectionError):
+            connection.cursor()
 
 
 STATE_EVENT_QUEUED = {"QueryExecution": {"Status": {"State": "QUEUED"}}}
@@ -386,9 +393,7 @@ class TestAthenaCursor:
     def test_execute_retries_on_api_request_errors_from_start_query_execution(
         self, cursor, athena_client, credentials, exception_name
     ):
-        client_error = botocore.exceptions.ClientError(
-            {"Error": {"Code": exception_name}}, "StartQueryExecution"
-        )
+        client_error = ClientError({"Error": {"Code": exception_name}}, "StartQueryExecution")
         result_sequence = [client_error] * credentials.num_retries
         result_sequence += [{"QueryExecutionId": "1234-abcd"}]
         athena_client.start_query_execution = mock.Mock(side_effect=result_sequence)
@@ -399,9 +404,7 @@ class TestAthenaCursor:
     def test_execute_fails_on_too_many_api_request_errors_from_start_query_execution(
         self, cursor, athena_client, credentials, exception_name
     ):
-        client_error = botocore.exceptions.ClientError(
-            {"Error": {"Code": exception_name}}, "StartQueryExecution"
-        )
+        client_error = ClientError({"Error": {"Code": exception_name}}, "StartQueryExecution")
         result_sequence = [client_error] * (credentials.num_retries + 1)
         athena_client.start_query_execution = mock.Mock(side_effect=result_sequence)
         with pytest.raises(Exception) as e:
@@ -412,9 +415,7 @@ class TestAthenaCursor:
     def test_execute_ignores_api_request_errors_from_get_query_execution(
         self, cursor, athena_client, credentials, exception_name
     ):
-        client_error = botocore.exceptions.ClientError(
-            {"Error": {"Code": exception_name}}, "GetQueryExecution"
-        )
+        client_error = ClientError({"Error": {"Code": exception_name}}, "GetQueryExecution")
         state_sequence = [STATE_EVENT_QUEUED]
         state_sequence += [client_error] * 3
         state_sequence += [STATE_EVENT_RUNNING]
@@ -425,7 +426,7 @@ class TestAthenaCursor:
         assert athena_client.get_query_execution.call_count == len(state_sequence)
 
     def test_execute_fails_on_invalid_request_error(self, cursor, athena_client):
-        client_error = botocore.exceptions.ClientError(
+        client_error = ClientError(
             {"Error": {"Code": "InvalidRequestException"}}, "StartQueryExecution"
         )
         athena_client.start_query_execution = mock.Mock(side_effect=client_error)
