@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix incorrect source freshness for wildcard table names (e.g. events_*). Metadata-based freshness checks now raise a clear error for wildcard tables.
+time: 2026-02-11T16:39:30.016513+05:30
+custom:
+    Author: aahel
+    Issue: "536"
