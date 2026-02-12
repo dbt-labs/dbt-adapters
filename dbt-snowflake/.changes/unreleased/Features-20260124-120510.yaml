@@ -1,0 +1,6 @@
+kind: Features
+body: Add immutable_where parameter for dynamic tables
+time: 2026-01-24T12:05:10.320161-08:00
+custom:
+    Author: ibelianski
+    Issue: none

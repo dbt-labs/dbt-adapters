@@ -1,4 +1,3 @@
-
 {% macro dist(dist) %}
   {%- if dist is not none -%}
       {%- set dist = dist.strip().lower() -%}
