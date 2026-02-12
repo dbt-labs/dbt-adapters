@@ -22,6 +22,7 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
+from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
@@ -633,7 +634,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             iterator = query_job.result(
                 max_results=limit,
                 timeout=polling_timeout,
-                retry=self._retry.create_retry(fallback=timeout),
+                retry=DEFAULT_JOB_RETRY.with_timeout(timeout),
             )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
