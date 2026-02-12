@@ -70,12 +70,12 @@ class DuplicateMacroInPackageError(CompilationError):
         # this is the result :(
         msg = line_wrap_message(
             f"""\
-            dbt found two macros named "{self.macro.name}" in the project
+            dbt found multiple macros named "{self.macro.name}" in the project
             "{self.macro.package_name}".
 
 
-            To fix this error, rename or remove one of the following
-            macros:
+            To fix this error, rename or remove one of the following macros.
+            They can be found in these files:
 
                 - {self.macro.original_file_path}
 
