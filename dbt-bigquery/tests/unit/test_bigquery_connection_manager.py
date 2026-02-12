@@ -333,3 +333,24 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # Clear timeout
         self.connections.clear_model_timeout()
         self.assertIsNone(self.connections.get_model_timeout())
+
+    def test_copy_bq_table_respects_model_timeout(self):
+        """Test that copy_bq_table uses the model-level timeout when set"""
+        mock_copy_job = Mock()
+        self.mock_client.copy_table.return_value = mock_copy_job
+
+        # Set a model-level timeout
+        self.connections.set_model_timeout(45)
+
+        source = BigQueryRelation.create(database="project", schema="dataset", identifier="table1")
+        destination = BigQueryRelation.create(
+            database="project", schema="dataset", identifier="table2"
+        )
+        self.connections.copy_bq_table(
+            source, destination, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
+        )
+
+        # Verify copy_job.result was called with the model timeout
+        mock_copy_job.result.assert_called_once_with(timeout=45)
+
+        self.connections.clear_model_timeout()
