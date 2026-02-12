@@ -149,12 +149,11 @@ class TestNonBucketedBatching:
             rows=[["2024-01-01"], ["2024-01-02"], ["2024-01-03"]],
             column_types=["date"],
         )
-        assert len(result) == 1
-        assert result[0] == (
+        assert result == [
             "\"date_col\"=DATE'2024-01-01' or "
             "\"date_col\"=DATE'2024-01-02' or "
-            "\"date_col\"=DATE'2024-01-03'"
-        )
+            "\"date_col\"=DATE'2024-01-03'",
+        ]
 
     def test_partitions_exceeding_limit(self):
         result = _render_macro(
@@ -162,10 +161,11 @@ class TestNonBucketedBatching:
             rows=[[f"2024-01-{i:02d}"] for i in range(1, 6)],
             column_types=["date"],
         )
-        assert len(result) == 3
-        assert result[0] == "\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02'"
-        assert result[1] == "\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04'"
-        assert result[2] == "\"date_col\"=DATE'2024-01-05'"
+        assert result == [
+            "\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02'",
+            "\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04'",
+            "\"date_col\"=DATE'2024-01-05'",
+        ]
 
     def test_multi_column_partition(self):
         result = _render_macro(
@@ -176,11 +176,10 @@ class TestNonBucketedBatching:
             ],
             column_types=["date", "varchar"],
         )
-        assert len(result) == 1
-        assert result[0] == (
+        assert result == [
             "\"date_col\"=DATE'2024-01-01' and \"region\"='us-east-1' or "
-            "\"date_col\"=DATE'2024-01-01' and \"region\"='eu-west-1'"
-        )
+            "\"date_col\"=DATE'2024-01-01' and \"region\"='eu-west-1'",
+        ]
 
 
 class TestBucketOnlyBatching:
