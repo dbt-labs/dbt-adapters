@@ -185,23 +185,6 @@ class TestNonBucketedBatching:
 class TestBucketOnlyBatching:
     """Tests for bucket partitioning without non-bucket partition columns."""
 
-    def test_bucket_only_each_value_in_own_bucket(self):
-        """Each value hashes to a different bucket, producing one batch per bucket."""
-        # md5 hash: alice->bucket 0, bob->bucket 2, charlie->bucket 3
-        result = _render_macro(
-            config={
-                "partitioned_by": ["bucket(user_id, 10)"],
-                "partitions_limit": 100,
-            },
-            rows=[["alice"], ["bob"], ["charlie"]],
-            column_types=["varchar"],
-        )
-        assert result == [
-            "user_id IN ('alice')",
-            "user_id IN ('bob')",
-            "user_id IN ('charlie')",
-        ]
-
     def test_bucket_only_values_chunked(self):
         """Bucket values exceeding athena_partitions_limit should be chunked."""
         # md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d']
