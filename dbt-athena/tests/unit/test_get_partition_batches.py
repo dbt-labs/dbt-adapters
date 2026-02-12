@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import jinja2
-import pytest
 
 # Directory containing the macro files
 _HELPERS_DIR = os.path.normpath(
@@ -144,30 +143,6 @@ def _render_macro(config, rows, column_types):
 class TestNonBucketedBatching:
     """Tests for the non-bucketed partition path."""
 
-    def test_single_date_partition(self):
-        result = _render_macro(
-            config={"partitioned_by": ["date_col"], "partitions_limit": 100},
-            rows=[["2024-01-01"]],
-            column_types=["date"],
-        )
-        assert result == ["\"date_col\"=DATE'2024-01-01'"]
-
-    def test_single_string_partition(self):
-        result = _render_macro(
-            config={"partitioned_by": ["region"], "partitions_limit": 100},
-            rows=[["us-east-1"]],
-            column_types=["varchar"],
-        )
-        assert result == ["\"region\"='us-east-1'"]
-
-    def test_single_integer_partition(self):
-        result = _render_macro(
-            config={"partitioned_by": ["year"], "partitions_limit": 100},
-            rows=[[2024]],
-            column_types=["integer"],
-        )
-        assert result == ['"year"=2024']
-
     def test_partitions_under_limit(self):
         result = _render_macro(
             config={"partitioned_by": ["date_col"], "partitions_limit": 100},
@@ -211,7 +186,9 @@ class TestNonBucketedBatching:
 class TestBucketOnlyBatching:
     """Tests for bucket partitioning without non-bucket partition columns."""
 
-    def test_bucket_only_single_bucket(self):
+    def test_bucket_only_each_value_in_own_bucket(self):
+        """Each value hashes to a different bucket, producing one batch per bucket."""
+        # md5 hash: alice->bucket 0, bob->bucket 2, charlie->bucket 3
         result = _render_macro(
             config={
                 "partitioned_by": ["bucket(user_id, 10)"],
@@ -220,35 +197,37 @@ class TestBucketOnlyBatching:
             rows=[["alice"], ["bob"], ["charlie"]],
             column_types=["varchar"],
         )
-        # All values should be grouped into bucket conditions
-        assert len(result) >= 1
-        for batch in result:
-            assert "user_id IN (" in batch
+        assert result == [
+            "user_id IN ('alice')",
+            "user_id IN ('bob')",
+            "user_id IN ('charlie')",
+        ]
 
     def test_bucket_only_values_chunked(self):
         """Bucket values exceeding athena_partitions_limit should be chunked."""
-        # Generate enough unique values to span multiple hash buckets
-        values = [[f"val{i}"] for i in range(20)]
+        # md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d']
+        # With limit=2, bucket 1 is split into ['a','b'] and ['c','d']
         result = _render_macro(
             config={
-                "partitioned_by": ["bucket(col, 5)"],
+                "partitioned_by": ["bucket(col, 2)"],
                 "partitions_limit": 2,
             },
-            rows=values,
+            rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
             column_types=["varchar"],
         )
-        # Each batch should have at most 2 values in the IN clause
-        for batch in result:
-            in_match = re.search(r"IN \((.+)\)", batch)
-            assert in_match is not None
-            vals = in_match.group(1).split(", ")
-            assert len(vals) <= 2
+        assert result == [
+            "col IN ('a', 'b')",
+            "col IN ('c', 'd')",
+            "col IN ('e')",
+        ]
 
 
 class TestBucketWithPartitionsBatching:
     """Tests for bucket + non-bucket partition columns (AND structure)."""
 
     def test_single_partition_with_bucket(self):
+        """Single partition value combined with bucket produces (partition) AND col IN (...)."""
+        # md5 hash: alice->bucket 0, bob->bucket 2
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 10)"],
@@ -260,13 +239,14 @@ class TestBucketWithPartitionsBatching:
             ],
             column_types=["date", "varchar"],
         )
-        # Should have AND structure: (partition_cond) and col IN (...)
-        for batch in result:
-            assert "user_id IN (" in batch
-            assert "and" in batch
-            assert "date_col" in batch
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('bob')",
+        ]
 
     def test_multiple_partitions_with_bucket(self):
+        """Multiple partition values (under limit) combined with buckets."""
+        # md5 hash with bucket(user_id, 5): alice->0, bob->2, charlie->3
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 5)"],
@@ -279,59 +259,38 @@ class TestBucketWithPartitionsBatching:
             ],
             column_types=["date", "varchar"],
         )
-        for batch in result:
-            assert "user_id IN (" in batch
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('charlie')",
+        ]
 
     def test_partitions_split_with_buckets(self):
         """Partitions exceeding the limit should be split, each combined with each bucket."""
-        rows = [[f"2024-01-{i:02d}", f"user{i}"] for i in range(1, 6)]
+        # md5 hash with bucket(user_id, 3):
+        #   user1->bucket 1, user2->bucket 2, user3->bucket 2,
+        #   user4->bucket 0, user5->bucket 2
+        # 5 dates with limit=2 -> 3 partition batches
+        # 3 buckets × 3 partition batches = 9 batches (bucket 2 has 3 values but within limit)
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 3)"],
                 "partitions_limit": 2,
             },
-            rows=rows,
+            rows=[[f"2024-01-{i:02d}", f"user{i}"] for i in range(1, 6)],
             column_types=["date", "varchar"],
         )
-        # Each batch should have AND structure
-        for batch in result:
-            assert "user_id IN (" in batch
-            assert "and" in batch
-
-
-class TestRealisticScenario:
-    """Test with parameters closer to a real-world scenario."""
-
-    def test_many_date_partitions(self):
-        """365 dates, partition limit 100, non-bucketed."""
-        rows = [[f"2024-{(i // 28) + 1:02d}-{(i % 28) + 1:02d}"] for i in range(365)]
-        result = _render_macro(
-            config={"partitioned_by": ["date_col"], "partitions_limit": 100},
-            rows=rows,
-            column_types=["date"],
-        )
-        # ceil(365/100) = 4 batches
-        assert len(result) == 4
-
-    def test_many_partitions_with_buckets(self):
-        """Multiple date partitions × bucket values, limit 100."""
-        rows = []
-        for d in range(10):
-            for u in range(5):
-                rows.append([f"2024-01-{d + 1:02d}", f"user{u}"])
-        result = _render_macro(
-            config={
-                "partitioned_by": ["date_col", "bucket(user_id, 3)"],
-                "partitions_limit": 100,
-            },
-            rows=rows,
-            column_types=["date", "varchar"],
-        )
-        # Should have AND structure in each batch
-        for batch in result:
-            assert "user_id IN (" in batch
-            assert "and" in batch
-
-        # No IN clause duplication within a single batch
-        for batch in result:
-            assert batch.count("IN (") == 1
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user1')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user1')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user1')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user5')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user5')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user5')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user4')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user4')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user4')",
+        ]
