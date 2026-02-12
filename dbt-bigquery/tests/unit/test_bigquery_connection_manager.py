@@ -301,8 +301,8 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.connections.clear_model_timeout()
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_query_and_results_falls_back_to_credentials_timeout(self, MockQueryJobConfig):
-        """Test that _query_and_results falls back to credentials-level timeout when no model timeout"""
+    def test_query_and_results_falls_back_to_profile_timeout(self, MockQueryJobConfig):
+        """Test that _query_and_results falls back to profile-level timeout when no model timeout"""
         mock_job = Mock(job_id="test_job", location="US", project="project")
         mock_job.result.return_value = iter([])
         self.mock_client.query.return_value = mock_job
@@ -318,7 +318,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         )
 
         call_kwargs = mock_job.result.call_args[1]
-        # credentials timeout is 1, so polling timeout = 1 + 30 = 31
+        # profile timeout is 1, so polling timeout = 1 + 30 = 31
         self.assertEqual(call_kwargs["timeout"], 31)
 
     def test_model_timeout_lifecycle(self):
