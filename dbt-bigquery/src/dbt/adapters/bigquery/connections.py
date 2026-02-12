@@ -483,7 +483,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 job_config=CopyJobConfig(write_disposition=write_disposition),
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
-            copy_job.result(timeout=self._retry.create_job_execution_timeout(fallback=300))
+            model_timeout = self.get_model_timeout()
+            copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
+            copy_job.result(timeout=copy_timeout)
 
     def write_dataframe_to_table(
         self,
