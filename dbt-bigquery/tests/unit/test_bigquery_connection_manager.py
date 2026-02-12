@@ -271,3 +271,65 @@ class TestBigQueryConnectionManager(unittest.TestCase):
                 {"dry_run": False},
                 job_id="test_job",
             )
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_uses_model_timeout(self, MockQueryJobConfig):
+        """Test that _query_and_results uses model-level timeout when set"""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        # Set a model-level timeout of 60 seconds
+        self.connections.set_model_timeout(60)
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        # polling timeout should be model timeout (60) + 30 second buffer = 90
+        self.assertEqual(call_kwargs["timeout"], 90)
+
+        # job_timeout_ms should be model timeout in milliseconds
+        mock_config_instance = MockQueryJobConfig.return_value
+        self.assertEqual(mock_config_instance.job_timeout_ms, 60000)
+
+        # Clean up
+        self.connections.clear_model_timeout()
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_falls_back_to_credentials_timeout(self, MockQueryJobConfig):
+        """Test that _query_and_results falls back to credentials-level timeout when no model timeout"""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        # Ensure no model-level timeout is set
+        self.connections.clear_model_timeout()
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        # credentials timeout is 1, so polling timeout = 1 + 30 = 31
+        self.assertEqual(call_kwargs["timeout"], 31)
+
+    def test_model_timeout_lifecycle(self):
+        """Test set/get/clear model timeout methods"""
+        # Initially no timeout set
+        self.assertIsNone(self.connections.get_model_timeout())
+
+        # Set timeout
+        self.connections.set_model_timeout(120)
+        self.assertEqual(self.connections.get_model_timeout(), 120)
+
+        # Clear timeout
+        self.connections.clear_model_timeout()
+        self.assertIsNone(self.connections.get_model_timeout())

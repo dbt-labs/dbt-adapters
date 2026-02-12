@@ -9,6 +9,7 @@ from typing import (
     FrozenSet,
     Iterable,
     List,
+    Mapping,
     Optional,
     Set,
     Tuple,
@@ -154,6 +155,7 @@ class BigqueryConfig(AdapterConfig):
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
+    job_execution_timeout_seconds: Optional[int] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -251,6 +253,16 @@ class BigQueryAdapter(BaseAdapter):
         self.cache_renamed(from_relation, to_relation)
         client.copy_table(from_table_ref, to_table_ref)
         client.delete_table(from_table_ref)
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
+        timeout = config.get("job_execution_timeout_seconds")
+        if timeout is not None:
+            self.connections.set_model_timeout(float(timeout))
+        return timeout
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        if context is not None:
+            self.connections.clear_model_timeout()
 
     @available
     def list_schemas(self, database: str) -> List[str]:

@@ -70,6 +70,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         super().__init__(profile, mp_context)
         self.jobs_by_thread: Dict[Hashable, List[str]] = defaultdict(list)
         self._retry = RetryFactory(profile.credentials)
+        self._model_timeout_by_thread: Dict[Hashable, Optional[float]] = {}
 
     @classmethod
     def handle_error(cls, error, message):
@@ -232,6 +233,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
         thread_id = self.get_thread_identifier()
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
+
+    def set_model_timeout(self, timeout: Optional[float]) -> None:
+        thread_id = self.get_thread_identifier()
+        self._model_timeout_by_thread[thread_id] = timeout
+
+    def get_model_timeout(self) -> Optional[float]:
+        thread_id = self.get_thread_identifier()
+        return self._model_timeout_by_thread.get(thread_id)
+
+    def clear_model_timeout(self) -> None:
+        thread_id = self.get_thread_identifier()
+        self._model_timeout_by_thread.pop(thread_id, None)
 
     def raw_execute(
         self,
@@ -591,7 +604,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         limit: Optional[int] = None,
     ):
         client: Client = conn.handle
-        timeout = self._retry.create_job_execution_timeout()
+        # Use model-level timeout if set, otherwise fall back to credentials-level
+        model_timeout = self.get_model_timeout()
+        timeout = model_timeout or self._retry.create_job_execution_timeout()
         query_job_config = QueryJobConfig(**job_params)
         polling_timeout = timeout + 30  # buffer for polling after job execution timeout
         query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
@@ -616,7 +631,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         pre = time.perf_counter()
         try:
             iterator = query_job.result(
-                max_results=limit, timeout=polling_timeout, retry=self._retry.create_retry()
+                max_results=limit,
+                timeout=polling_timeout,
+                retry=self._retry.create_retry(fallback=timeout),
             )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
