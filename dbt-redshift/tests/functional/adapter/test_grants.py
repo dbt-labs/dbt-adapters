@@ -16,8 +16,7 @@ class RedshiftGrantsMixin:
         normalized = {}
         for privilege, grantees in expected_grants.items():
             normalized[privilege] = [
-                g if g.startswith(("user:", "group:", "role:")) else f"user:{g}"
-                for g in grantees
+                g if g.startswith(("user:", "group:", "role:")) else f"user:{g}" for g in grantees
             ]
         super().assert_expected_grants_match_actual(project, relation_name, normalized)
 
