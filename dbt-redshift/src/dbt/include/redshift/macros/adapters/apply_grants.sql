@@ -109,7 +109,7 @@ select
     grantee,
     privilege_type
 from privilege_map
-where grantee <> 'user:' || current_user
+where grantee <> ('user:' || current_user)
   and grantee not like '%=%'  -- filter out malformed entries
 
 {% endmacro %}
