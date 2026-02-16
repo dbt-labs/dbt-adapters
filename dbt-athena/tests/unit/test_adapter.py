@@ -1170,6 +1170,17 @@ class TestAthenaAdapter:
         assert self.adapter.check_schema_exists(data_catalog_name, "non_existing_schema") is False
 
     @mock_aws
+    @patch("dbt.adapters.athena.impl.SQLAdapter.check_schema_exists", return_value=True)
+    def test_check_schema_exists_with_non_glue_data_catalog(
+        self, parent_check_schema_exists, mock_aws_service
+    ):
+        data_catalog_name = "other_data_catalog"
+        mock_aws_service.create_data_catalog(data_catalog_name, AthenaCatalogType.HIVE)
+        self.adapter.acquire_connection("dummy")
+        self.adapter.check_schema_exists(data_catalog_name, DATABASE_NAME)
+        parent_check_schema_exists.assert_called_once_with(data_catalog_name, DATABASE_NAME)
+
+    @mock_aws
     def test_get_columns_in_relation(self, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()

@@ -1170,11 +1170,20 @@ class AthenaAdapter(SQLAdapter):
         return result
 
     def check_schema_exists(self, database: str, schema: str) -> bool:
+        """
+        Check if a schema exists using the Glue GetDatabase API.
+
+        This avoids the default SQL-based implementation which would trigger
+        Athena's StartQueryExecution, requiring unnecessary IAM permissions.
+        For non-Glue data catalogs, falls back to the default SQL-based implementation.
+        """
+        data_catalog = self._get_data_catalog(database)
+        if data_catalog and data_catalog["Type"] != "GLUE":
+            return super().check_schema_exists(database, schema)
+
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
-
-        data_catalog = self._get_data_catalog(database)
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
