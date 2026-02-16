@@ -1169,6 +1169,32 @@ class AthenaAdapter(SQLAdapter):
             result.extend([schema["Name"] for schema in page["DatabaseList"]])
         return result
 
+    def check_schema_exists(self, database: str, schema: str) -> bool:
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+
+        data_catalog = self._get_data_catalog(database)
+        catalog_id = get_catalog_id(data_catalog)
+
+        with boto3_client_lock:
+            glue_client = client.session.client(
+                "glue",
+                region_name=client.region_name,
+                config=get_boto3_config(num_retries=creds.effective_num_retries),
+            )
+
+        try:
+            kwargs: Dict[str, str] = {"Name": schema}
+            if catalog_id:
+                kwargs["CatalogId"] = catalog_id
+            glue_client.get_database(**kwargs)
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "EntityNotFoundException":
+                return False
+            raise e
+
     @staticmethod
     def _is_current_column(col: ColumnTypeDef) -> bool:
         """
