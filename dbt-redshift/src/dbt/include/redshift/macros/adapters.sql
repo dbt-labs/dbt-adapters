@@ -1,5 +1,8 @@
 {% macro dist(dist) %}
   {%- if dist is not none -%}
+      {%- if dist is not string -%}
+        {% do exceptions.raise_compiler_error("The 'dist' config must be a single value (e.g. dist: primary_key), not a list or other type. Redshift distribution key accepts only one column or one of: all, even, auto.") %}
+      {%- endif -%}
       {%- set dist = dist.strip().lower() -%}
 
       {%- if dist in ['all', 'even'] -%}
