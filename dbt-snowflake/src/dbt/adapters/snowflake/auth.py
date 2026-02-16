@@ -12,6 +12,7 @@ else:
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 
 
 @cache
@@ -55,3 +56,19 @@ def private_key_from_file(
         password=encoded_passphrase,
         backend=default_backend(),
     )
+
+
+def private_key_to_pem_string(
+    key_string: str, passphrase: Optional[str] = None
+) -> str:
+    """Convert a private key (inline base64 DER or PEM) to an unencrypted PEM string.
+
+    ADBC's Snowflake driver expects a PEM-encoded PKCS8 string, not DER bytes.
+    """
+    private_key: PrivateKeyTypes = private_key_from_string(key_string, passphrase)
+    pem_bytes = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return pem_bytes.decode("utf-8")

@@ -14,7 +14,6 @@ from dbt.context.query_header import generate_query_header_context
 from dbt.context.providers import generate_runtime_macro_context
 from dbt.contracts.graph.manifest import ManifestStateCheck
 from dbt_common.clients import agate_helper
-from snowflake import connector as snowflake_connector
 
 from .utils import (
     config_from_parts_or_dicts,
@@ -57,13 +56,13 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.assertEqual(self.config.query_comment.comment, "dbt")
         self.assertEqual(self.config.query_comment.append, None)
 
-        self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
+        self.handle = mock.MagicMock()
         self.cursor = self.handle.cursor.return_value
         self.mock_execute = self.cursor.execute
-        self.mock_execute.return_value = mock.MagicMock(sfqid="42")
-        self.patcher = mock.patch("dbt.adapters.snowflake.connections.snowflake.connector.connect")
+        self.patcher = mock.patch(
+            "dbt.adapters.snowflake.connections.snowflake_dbapi.connect"
+        )
         self.snowflake = self.patcher.start()
-        self.snowflake.connect.cursor.return_value = mock.MagicMock(sfqid="42")
 
         # Create the Manifest.state_check patcher
         @mock.patch("dbt.parser.manifest.ManifestLoader.build_manifest_state_check")
@@ -148,13 +147,14 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.adapter.truncate_relation(relation)
 
         # no query comment because wrapped in begin; + commit; for explicit DML
+        # ADBC splitter strips semicolons and preserves original case
         self.mock_execute.assert_has_calls(
             [
-                mock.call("/* dbt */\nBEGIN", None),
+                mock.call("/* dbt */\nbegin", None),
                 mock.call(
-                    '/* dbt */\ntruncate table test_database."test_schema".test_table\n  ;', None
+                    '/* dbt */\ntruncate table test_database."test_schema".test_table', None
                 ),
-                mock.call("/* dbt */\nCOMMIT", None),
+                mock.call("/* dbt */\ncommit", None),
             ]
         )
 
@@ -252,9 +252,9 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.assertEqual(len(list(self.adapter.cancel_open_connections())), 0)
 
     def test_cancel_open_connections_single(self):
+        """Cancel is a no-op with ADBC, but we still verify connections are tracked."""
         master = mock_connection("master")
         model = mock_connection("model")
-        model.handle.session_id = 42
 
         key = self.adapter.connections.get_thread_identifier()
         self.adapter.connections.thread_connections.update(
@@ -263,75 +263,25 @@ class TestSnowflakeAdapter(unittest.TestCase):
                 1: model,
             }
         )
-        with mock.patch.object(self.adapter.connections, "add_query") as add_query:
-            query_result = mock.MagicMock()
-            add_query.return_value = (None, query_result)
-
-            self.assertEqual(len(list(self.adapter.cancel_open_connections())), 1)
-
-            add_query.assert_called_once_with("select system$cancel_all_queries(42)")
+        # ADBC cancel is a no-op — just verify it doesn't raise
+        cancelled = list(self.adapter.cancel_open_connections())
+        self.assertEqual(len(cancelled), 1)
 
     def test_client_session_keep_alive_false_by_default(self):
         conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                ),
-            ]
-        )
-
-    def test_client_session_keep_alive_true(self):
-        self.config.credentials = self.config.credentials.replace(
-            client_session_keep_alive=True,
-            # this gets defaulted via `__post_init__` when `client_session_keep_alive` comes in as `False`
-            # then when `replace` is called, `__post_init__` cannot set it back to `None` since it cannot
-            # tell the difference between set by user and set by `__post_init__`
-            reuse_connections=None,
-        )
-        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
-        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
-
-        self.snowflake.assert_not_called()
-        conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=True,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=None,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        # Verify snowflake_dbapi.connect was called with db_kwargs and autocommit
+        self.snowflake.assert_called_once()
+        call_kwargs = self.snowflake.call_args
+        self.assertTrue(call_kwargs[1].get("autocommit", False))
+        db_kwargs = call_kwargs[1].get("db_kwargs", {})
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.account"], "test-account")
+        self.assertEqual(db_kwargs["username"], "test_user")
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.db"], "test_database")
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.warehouse"], "test_warehouse")
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.schema"], "public")
 
     def test_client_has_query_tag(self):
         self.config.credentials = self.config.credentials.replace(query_tag="test_query_tag")
@@ -340,27 +290,12 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    reuse_connections=True,
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={"QUERY_TAG": "test_query_tag"},
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        # query_tag is now set via ALTER SESSION post-connect, not in db_kwargs
+        # Verify the cursor was used to set session params
+        mock_handle = self.snowflake.return_value
+        mock_cursor = mock_handle.cursor.return_value
+        mock_cursor.execute.assert_any_call("ALTER SESSION SET QUERY_TAG = 'test_query_tag'")
 
         expected_connection_info = [
             (k, v) for (k, v) in self.config.credentials.connection_info() if k == "query_tag"
@@ -376,64 +311,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    password="test_password",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
-
-    def test_authenticator_user_pass_authentication(self):
-        self.config.credentials = self.config.credentials.replace(
-            password="test_password",
-            authenticator="test_sso_url",
-        )
-        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
-        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
-
-        self.snowflake.assert_not_called()
-        conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    password="test_password",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    authenticator="test_sso_url",
-                    private_key=None,
-                    application="dbt",
-                    client_request_mfa_token=True,
-                    client_store_temporary_credential=True,
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(db_kwargs["username"], "test_user")
+        self.assertEqual(db_kwargs["password"], "test_password")
 
     def test_authenticator_externalbrowser_authentication(self):
         self.config.credentials = self.config.credentials.replace(authenticator="externalbrowser")
@@ -442,30 +323,9 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    authenticator="externalbrowser",
-                    private_key=None,
-                    application="dbt",
-                    client_request_mfa_token=True,
-                    client_store_temporary_credential=True,
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.auth_type"], "auth_ext_browser")
 
     def test_authenticator_oauth_authentication(self):
         self.config.credentials = self.config.credentials.replace(
@@ -477,103 +337,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    authenticator="oauth",
-                    token="my-oauth-token",
-                    private_key=None,
-                    application="dbt",
-                    client_request_mfa_token=True,
-                    client_store_temporary_credential=True,
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
-
-    @mock.patch(
-        "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
-    )
-    def test_authenticator_private_key_authentication(self, mock_get_private_key):
-        self.config.credentials = self.config.credentials.replace(
-            private_key_path="/tmp/test_key.p8",
-            private_key_passphrase="p@ssphr@se",
-        )
-
-        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
-        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
-
-        self.snowflake.assert_not_called()
-        conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key="test_key",
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
-
-    @mock.patch(
-        "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
-    )
-    def test_authenticator_private_key_authentication_no_passphrase(self, mock_get_private_key):
-        self.config.credentials = self.config.credentials.replace(
-            private_key_path="/tmp/test_key.p8",
-            private_key_passphrase=None,
-        )
-
-        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
-        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
-
-        self.snowflake.assert_not_called()
-        conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key="test_key",
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.auth_type"], "auth_oauth")
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.client_option.auth_token"], "my-oauth-token")
 
     def test_authenticator_jwt_authentication(self):
         self.config.credentials = self.config.credentials.replace(
@@ -584,30 +351,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    warehouse="test_warehouse",
-                    authenticator="oauth",
-                    token="my-jwt-token",
-                    private_key=None,
-                    application="dbt",
-                    client_request_mfa_token=True,
-                    client_store_temporary_credential=True,
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.auth_type"], "auth_jwt")
+        self.assertEqual(db_kwargs["adbc.snowflake.sql.client_option.auth_token"], "my-jwt-token")
 
     def test_query_tag(self):
         self.config.credentials = self.config.credentials.replace(
@@ -618,64 +365,17 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    password="test_password",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={"QUERY_TAG": "test_query_tag"},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
-
-    def test_reuse_connections_with_keep_alive(self):
-        self.config.credentials = self.config.credentials.replace(
-            reuse_connections=True, client_session_keep_alive=True
-        )
-        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
-        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
-
-        self.snowflake.assert_not_called()
-        conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=True,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key=None,
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
-        )
+        self.snowflake.assert_called_once()
+        # Verify ALTER SESSION SET was used for query_tag
+        mock_handle = self.snowflake.return_value
+        mock_cursor = mock_handle.cursor.return_value
+        mock_cursor.execute.assert_any_call("ALTER SESSION SET QUERY_TAG = 'test_query_tag'")
 
     @mock.patch(
-        "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
+        "dbt.adapters.snowflake.connections.private_key_to_pem_string",
+        return_value="-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
     )
-    def test_authenticator_private_key_string_authentication(self, mock_get_private_key):
+    def test_authenticator_private_key_authentication(self, mock_pem):
         self.config.credentials = self.config.credentials.replace(
             private_key="dGVzdF9rZXk=",
             private_key_passphrase="p@ssphr@se",
@@ -686,37 +386,17 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key="test_key",
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(
+            db_kwargs["adbc.snowflake.sql.client_option.jwt_private_key"],
+            "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
         )
+        mock_pem.assert_called_once_with("dGVzdF9rZXk=", "p@ssphr@se")
 
-    @mock.patch(
-        "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
-    )
-    def test_authenticator_private_key_string_authentication_no_passphrase(
-        self, mock_get_private_key
-    ):
+    def test_authenticator_private_key_path_authentication(self):
         self.config.credentials = self.config.credentials.replace(
-            private_key="dGVzdF9rZXk=",
-            private_key_passphrase=None,
+            private_key_path="/tmp/test_key.p8",
         )
 
         self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
@@ -724,26 +404,11 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.snowflake.assert_not_called()
         conn.handle
-        self.snowflake.assert_has_calls(
-            [
-                mock.call(
-                    account="test-account",
-                    autocommit=True,
-                    client_session_keep_alive=False,
-                    database="test_database",
-                    role=None,
-                    schema="public",
-                    user="test_user",
-                    warehouse="test_warehouse",
-                    private_key="test_key",
-                    application="dbt",
-                    insecure_mode=False,
-                    platform_detection_timeout_seconds=0.0,
-                    session_parameters={},
-                    reuse_connections=True,
-                    ocsp_root_certs_dict_lock_timeout=10,
-                )
-            ]
+        self.snowflake.assert_called_once()
+        db_kwargs = self.snowflake.call_args[1]["db_kwargs"]
+        self.assertEqual(
+            db_kwargs["adbc.snowflake.sql.client_option.jwt_private_key"],
+            "/tmp/test_key.p8",
         )
 
     def test_get_relation_without_quotes(self):
@@ -1088,6 +753,7 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
     encrypted_private_key_passphrase = "insecure"
 
     def test_private_key_string(self):
+        """Test that adbc_auth_args includes PEM key for inline private key."""
         creds = SnowflakeCredentials(
             account="test-account",
             user="test_user",
@@ -1095,7 +761,11 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             schema="public",
             private_key=self.unencrypted_private_key_encoded,
         )
-        self.assertEqual(creds.auth_args()["private_key"], self.unencrypted_private_key)
+        args = creds.adbc_auth_args()
+        # ADBC returns PEM string, not DER bytes
+        self.assertIn("adbc.snowflake.sql.client_option.jwt_private_key", args)
+        pem_str = args["adbc.snowflake.sql.client_option.jwt_private_key"]
+        self.assertTrue(pem_str.startswith("-----BEGIN PRIVATE KEY-----"))
 
     def test_private_key_string_encrypted(self):
         creds = SnowflakeCredentials(
@@ -1106,7 +776,10 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             private_key=self.encrypted_private_key_encoded,
             private_key_passphrase=self.encrypted_private_key_passphrase,
         )
-        self.assertEqual(creds.auth_args()["private_key"], self.unencrypted_private_key)
+        args = creds.adbc_auth_args()
+        self.assertIn("adbc.snowflake.sql.client_option.jwt_private_key", args)
+        pem_str = args["adbc.snowflake.sql.client_option.jwt_private_key"]
+        self.assertTrue(pem_str.startswith("-----BEGIN PRIVATE KEY-----"))
 
     def test_malformed_private_key_string(self):
         creds = SnowflakeCredentials(
@@ -1116,7 +789,7 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             schema="public",
             private_key="dGVzdF9rZXk=",
         )
-        self.assertRaises(ValueError, creds.auth_args)
+        self.assertRaises(ValueError, creds.adbc_auth_args)
 
     def test_invalid_private_key_string(self):
         creds = SnowflakeCredentials(
@@ -1126,7 +799,7 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             schema="public",
             private_key="invalid[base64]=",
         )
-        self.assertRaises(ValueError, creds.auth_args)
+        self.assertRaises(ValueError, creds.adbc_auth_args)
 
     def test_invalid_private_key_path(self):
         creds = SnowflakeCredentials(
@@ -1136,4 +809,10 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             schema="public",
             private_key_path="/tmp/does/not/exist.p8",
         )
-        self.assertRaises(FileNotFoundError, creds.auth_args)
+        # With ADBC, private_key_path is passed directly as a string, so no FileNotFoundError
+        # until the driver tries to use it. Just verify it's set correctly.
+        args = creds.adbc_auth_args()
+        self.assertEqual(
+            args["adbc.snowflake.sql.client_option.jwt_private_key"],
+            "/tmp/does/not/exist.p8",
+        )

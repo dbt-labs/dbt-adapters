@@ -9,188 +9,6 @@ import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
 
-class TestSnowflakeLogging:
-    """Test suite for snowflake logging configuration"""
-
-    def test_connections_sets_debug_logs_when_env_var_present(self, monkeypatch):
-        """Test that setting DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING enables DEBUG level logging"""
-        log_mock = Mock()
-        logger_mock = Mock(return_value=log_mock)
-
-        monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
-        monkeypatch.setattr(os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": "true"})
-
-        reload(connections)
-
-        # Verify AdapterLogger was created with correct name
-        logger_mock.assert_called_once_with("Snowflake")
-
-        # Verify all three dependency loggers are configured with DEBUG level
-        expected_debug_calls = [
-            call("Setting snowflake.connector to DEBUG (file logging only)"),
-            call("Setting botocore to DEBUG (file logging only)"),
-            call("Setting boto3 to DEBUG (file logging only)"),
-        ]
-        log_mock.debug.assert_has_calls(expected_debug_calls)
-
-        expected_level_calls = [
-            call("snowflake.connector", "DEBUG"),
-            call("botocore", "DEBUG"),
-            call("boto3", "DEBUG"),
-        ]
-        log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
-
-    def test_connections_sets_error_logs_when_env_var_absent(self, monkeypatch):
-        """Test that absence of DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING sets ERROR level logging"""
-        log_mock = Mock()
-        logger_mock = Mock(return_value=log_mock)
-
-        monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
-        # Explicitly set environment without the debug flag
-        monkeypatch.setattr(os, "environ", {})
-
-        with patch("logging.getLogger") as mock_get_logger:
-            reload(connections)
-
-        # Verify AdapterLogger was created
-        logger_mock.assert_called_once_with("Snowflake")
-
-        # Verify all three dependency loggers are configured with ERROR level
-        expected_debug_calls = [
-            call("Setting snowflake.connector to ERROR (file logging only)"),
-            call("Setting botocore to ERROR (file logging only)"),
-            call("Setting boto3 to ERROR (file logging only)"),
-        ]
-
-        log_mock.debug.assert_has_calls(expected_debug_calls)
-
-        expected_level_calls = [
-            call("snowflake.connector", "ERROR"),
-            call("botocore", "ERROR"),
-            call("boto3", "ERROR"),
-        ]
-        log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
-
-    def test_connections_handles_various_env_var_values(self, monkeypatch):
-        """Test that any truthy value for the env var enables debug logging"""
-        test_values = ["1", "True", "YES", "on", "random"]
-
-        for value in test_values:
-            log_mock = Mock()
-            logger_mock = Mock(return_value=log_mock)
-
-            monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
-            monkeypatch.setattr(os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": value})
-
-            with patch("logging.getLogger"):
-                reload(connections)
-
-            # Should set DEBUG level for all loggers (fallback for non-INFO/DEBUG values)
-            expected_level_calls = [
-                call("snowflake.connector", "DEBUG"),
-                call("botocore", "DEBUG"),
-                call("boto3", "DEBUG"),
-            ]
-            log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
-
-    def test_connections_handles_case_insensitive_values(self, monkeypatch):
-        """Test that DEBUG and INFO values are case insensitive"""
-        test_cases = [
-            ("debug", "DEBUG"),
-            ("DEBUG", "DEBUG"),
-            ("info", "INFO"),
-            ("INFO", "INFO"),
-            ("Debug", "DEBUG"),
-            ("Info", "INFO"),
-        ]
-
-        for env_value, expected_level in test_cases:
-            log_mock = Mock()
-            logger_mock = Mock(return_value=log_mock)
-
-            monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", logger_mock)
-            monkeypatch.setattr(
-                os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": env_value}
-            )
-
-            with patch("logging.getLogger"):
-                reload(connections)
-
-            # Should set the expected level for all loggers
-            expected_level_calls = [
-                call("snowflake.connector", expected_level),
-                call("botocore", expected_level),
-                call("boto3", expected_level),
-            ]
-            log_mock.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
-
-    def test_setup_snowflake_logging_with_info_level(self):
-        """Test setup_snowflake_logging with INFO level"""
-        with patch("dbt.adapters.snowflake.connections.logger") as mock_logger:
-            with patch("logging.getLogger") as mock_get_logger:
-                mock_package_logger = Mock()
-                mock_get_logger.return_value = mock_package_logger
-
-                # Test INFO level
-                connections.setup_snowflake_logging("INFO")
-
-                # Verify debug messages (always say "DEBUG (file logging only)")
-                expected_debug_calls = [
-                    call("Setting snowflake.connector to INFO (file logging only)"),
-                    call("Setting botocore to INFO (file logging only)"),
-                    call("Setting boto3 to INFO (file logging only)"),
-                ]
-                mock_logger.debug.assert_has_calls(expected_debug_calls)
-
-                # Verify correct level is set (INFO in this case)
-                expected_level_calls = [
-                    call("snowflake.connector", "INFO"),
-                    call("botocore", "INFO"),
-                    call("boto3", "INFO"),
-                ]
-                mock_logger.set_adapter_dependency_log_level.assert_has_calls(expected_level_calls)
-
-    def test_expected_logger_names_are_configured(self):
-        """Test that exactly the expected logger names are configured"""
-        expected_loggers = ["snowflake.connector", "botocore", "boto3"]
-
-        with patch("dbt.adapters.snowflake.connections.logger") as mock_logger:
-            with patch("logging.getLogger") as mock_get_logger:
-                connections.setup_snowflake_logging("DEBUG")
-
-                # Extract the logger names from the calls
-                actual_logger_names = [
-                    call[0][0]
-                    for call in mock_logger.set_adapter_dependency_log_level.call_args_list
-                ]
-
-                assert actual_logger_names == expected_loggers
-                assert len(actual_logger_names) == 3
-
-
-# Keep existing tests for backward compatibility
-def test_connections_sets_logs_in_response_to_env_var(monkeypatch):
-    """Test that setting the DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING environment variable happens on import"""
-    log_mock = Mock()
-    monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", Mock(return_value=log_mock))
-    monkeypatch.setattr(os, "environ", {"DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING": "true"})
-    reload(connections)
-
-    assert log_mock.debug.call_count == 3
-    assert log_mock.set_adapter_dependency_log_level.call_count == 3
-
-
-def test_connections_does_not_set_logs_in_response_to_env_var(monkeypatch):
-    log_mock = Mock()
-    monkeypatch.setattr(dbt.adapters.events.logging, "AdapterLogger", Mock(return_value=log_mock))
-    reload(connections)
-
-    assert log_mock.debug.call_count == 3  # Debug messages are always logged
-    assert (
-        log_mock.set_adapter_dependency_log_level.call_count == 3
-    )  # But with ERROR level (default)
-
-
 def test_connnections_credentials_replaces_underscores_with_hyphens():
     credentials = {
         "account": "account_id_with_underscores",
@@ -230,3 +48,75 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+def test_adbc_auth_args_basic():
+    """Test that adbc_auth_args builds correct kwargs for basic user/pass auth."""
+    creds = connections.SnowflakeCredentials(
+        account="test-account",
+        user="test_user",
+        password="test_password",
+        database="test_database",
+        warehouse="test_warehouse",
+        schema="public",
+    )
+    args = creds.adbc_auth_args()
+    assert args["adbc.snowflake.sql.account"] == "test-account"
+    assert args["username"] == "test_user"
+    assert args["password"] == "test_password"
+    assert args["adbc.snowflake.sql.db"] == "test_database"
+    assert args["adbc.snowflake.sql.warehouse"] == "test_warehouse"
+    assert args["adbc.snowflake.sql.schema"] == "public"
+
+
+def test_adbc_auth_args_externalbrowser():
+    """Test that externalbrowser auth maps to auth_ext_browser."""
+    creds = connections.SnowflakeCredentials(
+        account="test-account",
+        user="test_user",
+        database="test_database",
+        schema="public",
+        authenticator="externalbrowser",
+    )
+    args = creds.adbc_auth_args()
+    assert args["adbc.snowflake.sql.auth_type"] == "auth_ext_browser"
+
+
+def test_adbc_auth_args_oauth():
+    """Test that oauth auth maps correctly."""
+    creds = connections.SnowflakeCredentials(
+        account="test-account",
+        database="test_database",
+        schema="public",
+        authenticator="oauth",
+        token="my-oauth-token",
+    )
+    args = creds.adbc_auth_args()
+    assert args["adbc.snowflake.sql.auth_type"] == "auth_oauth"
+    assert args["adbc.snowflake.sql.client_option.auth_token"] == "my-oauth-token"
+
+
+def test_adbc_auth_args_role():
+    """Test that role is included when set."""
+    creds = connections.SnowflakeCredentials(
+        account="test-account",
+        user="test_user",
+        database="test_database",
+        schema="public",
+        role="test_role",
+    )
+    args = creds.adbc_auth_args()
+    assert args["adbc.snowflake.sql.role"] == "test_role"
+
+
+def test_adbc_auth_args_private_key_path():
+    """Test that private_key_path is passed through."""
+    creds = connections.SnowflakeCredentials(
+        account="test-account",
+        user="test_user",
+        database="test_database",
+        schema="public",
+        private_key_path="/tmp/test_key.p8",
+    )
+    args = creds.adbc_auth_args()
+    assert args["adbc.snowflake.sql.client_option.jwt_private_key"] == "/tmp/test_key.p8"
