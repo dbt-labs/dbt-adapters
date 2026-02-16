@@ -1,5 +1,7 @@
 {% materialization table, adapter='redshift' %}
 
+  {% set original_query_group = set_query_group() %}
+
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') %}
   {%- set intermediate_relation =  make_intermediate_relation(target_relation) -%}
@@ -64,6 +66,8 @@
   {{ drop_relation_if_exists(backup_relation) }}
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
+
+  {% do unset_query_group(original_query_group) %}
 
   {{ return({'relations': [target_relation]}) }}
 {% endmaterialization %}

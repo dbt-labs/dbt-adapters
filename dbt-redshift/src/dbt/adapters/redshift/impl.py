@@ -54,6 +54,7 @@ class RedshiftConfig(AdapterConfig):
     bind: Optional[bool] = None
     backup: Optional[bool] = True
     auto_refresh: Optional[bool] = False
+    query_group: Optional[str] = None
 
 
 class RedshiftAdapter(SQLAdapter):
