@@ -1,0 +1,6 @@
+kind: Fixes
+body: Change log level for BigQuery job link from debug to info for better visibility.
+time: 2026-02-13T15:32:25.585766+05:30
+custom:
+    Author: aahel
+    Issue: "544"
