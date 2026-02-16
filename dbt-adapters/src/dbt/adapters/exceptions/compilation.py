@@ -74,7 +74,7 @@ class DuplicateMacroInPackageError(CompilationError):
             "{self.macro.package_name}".
 
 
-            To fix this error, rename or remove one of the following macros.
+            All macros require unique names, to fix this error rename or remove any duplicates.
             They can be found in these files:
 
                 - {self.macro.original_file_path}
