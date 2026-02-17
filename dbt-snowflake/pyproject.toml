@@ -23,8 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.22.4,<2.0",
+    "dbt-common>=1.11.6,<2.0",
+    "dbt-adapters>=1.22.6,<2.0",
     # cursor.stats support requires >= 4.2.0 (SNOW-295953)
     "snowflake-connector-python[secure-local-storage]>=4.2.0,<5.0.0",
     "certifi<2025.4.26",
