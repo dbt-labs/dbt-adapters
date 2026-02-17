@@ -3,6 +3,7 @@ import uuid
 from dbt.tests.util import run_dbt, write_file
 from dbt.tests.adapter.python_model.test_python_model import (
     BasePythonEmptyTests,
+    BasePythonMetaGetTests,
     BasePythonModelTests,
     BasePythonIncrementalTests,
     BasePythonSampleTests,
@@ -239,4 +240,8 @@ class TestEmptyModeWithPythonModel(BasePythonEmptyTests):
 
 @pytest.mark.skip(reason="Sample mode is unsupported on 1.9")
 class TestSampleModeWithPythonModel(BasePythonSampleTests):
+    pass
+
+
+class TestPythonMetaGetSnowflake(BasePythonMetaGetTests):
     pass
