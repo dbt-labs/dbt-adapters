@@ -79,6 +79,27 @@ class PartitionConfig(dbtClassMixin):
         else:
             return self.render(alias)
 
+    def render_for_partition(self, alias: Optional[str] = None):
+        """Render the partition field normalized to partition boundaries.
+
+        For int64 range partitions, multiple distinct field values can fall within
+        the same partition. This method normalizes values to their partition start
+        value using: value - MOD(value - range_start, range_interval).
+
+        This prevents generating excessively large arrays of distinct values
+        when computing partitions for replacement in insert_overwrite.
+
+        For all other partition types, this delegates to render_wrapped().
+        """
+        if self.data_type == "int64" and self.range is not None:
+            column: str = self.field
+            if alias:
+                column = f"{alias}.{column}"
+            start = self.range["start"]
+            interval = self.range["interval"]
+            return f"({column} - MOD({column} - {start}, {interval}))"
+        return self.render_wrapped(alias)
+
     @classmethod
     def parse(cls, raw_partition_by) -> Optional["PartitionConfig"]:
         if raw_partition_by is None:
