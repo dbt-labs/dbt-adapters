@@ -456,6 +456,36 @@ def get_connection_method(
 class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
 
+    def __init__(self, profile, mp_context):
+        super().__init__(profile, mp_context)
+        # Callable that returns whether to skip transaction statements
+        # Set by the adapter after initialization via set_skip_transactions_checker
+        self._skip_transactions_checker: Optional[Callable[[], bool]] = None
+
+    def set_skip_transactions_checker(self, checker: Callable[[], bool]) -> None:
+        """Set the checker function that determines if transaction statements should be skipped.
+
+        This is called by the adapter to pass the behavior flag check.
+        """
+        self._skip_transactions_checker = checker
+
+    def _should_skip_transaction_statements(self) -> bool:
+        """Check if we should skip BEGIN/COMMIT/ROLLBACK statements.
+
+        Returns True if:
+        1. autocommit is enabled (each statement auto-commits)
+        2. The behavior flag is set (checked via _skip_transactions_checker)
+
+        Both conditions must be true to skip transaction statements.
+        """
+        if not self._is_autocommit_enabled():
+            return False
+
+        if self._skip_transactions_checker is None:
+            return False
+
+        return self._skip_transactions_checker()
+
     def cancel(self, connection: Connection):
         pid = connection.backend_pid
         sql = f"select pg_terminate_backend({pid})"
@@ -486,6 +516,57 @@ class RedshiftConnectionManager(SQLConnectionManager):
         rows = cursor.rowcount
         message = "SUCCESS"
         return AdapterResponse(_message=message, rows_affected=rows)
+
+    def _is_autocommit_enabled(self) -> bool:
+        """Check if autocommit is enabled for the current connection."""
+        connection = self.get_thread_connection()
+        return connection.credentials.autocommit is True
+
+    def begin(self) -> None:
+        """Begin a transaction.
+
+        When autocommit is enabled and the behavior flag is set, we skip sending
+        the BEGIN statement since each statement is automatically committed.
+        However, we still set transaction_open = True to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only skip BEGIN if autocommit + behavior flag is set
+            super().begin()
+
+        connection.transaction_open = True
+
+    def commit(self) -> None:
+        """Commit the current transaction.
+
+        When autocommit is enabled and the behavior flag is set, we skip sending
+        the COMMIT statement since each statement is automatically committed.
+        However, we still set transaction_open = False to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only skip COMMIT if autocommit + behavior flag is set
+            super().commit()
+        connection.transaction_open = False
+
+    def rollback_if_open(self) -> None:
+        """Rollback the current transaction if one is open.
+
+        When autocommit is enabled and the behavior flag is set, there's no
+        transaction to rollback since each statement is independently committed.
+        We still reset the transaction_open flag to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only perform ROLLBACK if autocommit + behavior flag is not set
+            super().rollback_if_open()
+        connection.transaction_open = False
 
     @contextmanager
     def exception_handler(self, sql):

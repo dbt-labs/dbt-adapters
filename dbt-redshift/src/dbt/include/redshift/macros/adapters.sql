@@ -1,6 +1,8 @@
-
 {% macro dist(dist) %}
   {%- if dist is not none -%}
+      {%- if dist is not string -%}
+        {% do exceptions.raise_compiler_error("The 'dist' config must be a single value (e.g. dist: primary_key), not a list or other type. Redshift distribution key accepts only one column or one of: all, even, auto.") %}
+      {%- endif -%}
       {%- set dist = dist.strip().lower() -%}
 
       {%- if dist in ['all', 'even'] -%}
@@ -270,7 +272,7 @@
   {% endif %}
 
   {# Override: do not set column comments for LBVs #}
-  {% set is_lbv = config.get('materialized') == 'view' and config.get('bind') == false %}
+  {% set is_lbv = relation.type == 'view' and config.get('bind') == false %}
   {% if for_columns and config.persist_column_docs() and model.columns and not is_lbv %}
     {% do run_query(alter_column_comment(relation, model.columns)) %}
   {% endif %}
