@@ -34,14 +34,14 @@ _EXPIRY_BUFFER_SECONDS = 300
 
 def _build_cache_key(credentials: Any) -> str:
     """Build a cache key from the assume role configuration."""
-    parts = (
-        credentials.assume_role_arn,
-        getattr(credentials, "assume_role_external_id", None),
-        getattr(credentials, "assume_role_session_name", None),
-        getattr(credentials, "assume_role_duration_seconds", None),
-        getattr(credentials, "region_name", None),
-    )
-    return json.dumps(parts)
+    parts = {
+        "role_arn": credentials.assume_role_arn,
+        "external_id": getattr(credentials, "assume_role_external_id", None),
+        "session_name": getattr(credentials, "assume_role_session_name", None),
+        "duration": getattr(credentials, "assume_role_duration_seconds", None),
+        "region": getattr(credentials, "region_name", None),
+    }
+    return json.dumps(parts, sort_keys=True)
 
 
 def _evict_expired_cache_entries() -> None:
