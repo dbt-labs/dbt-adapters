@@ -1,9 +1,10 @@
 import json
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from functools import cached_property
 from hashlib import md5
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
 import boto3
@@ -23,6 +24,25 @@ invocation_id = get_invocation_id()
 spark_session_list: Dict[UUID, str] = {}
 spark_session_load: Dict[UUID, int] = {}
 
+# Cache for assumed role sessions: role_arn -> (session, expiration)
+_assume_role_cache: Dict[str, Tuple[boto3.session.Session, datetime]] = {}
+_assume_role_cache_lock = threading.Lock()
+
+# Refresh credentials this many seconds before actual expiration
+_EXPIRY_BUFFER_SECONDS = 300
+
+
+def _build_cache_key(credentials: Any) -> str:
+    """Build a cache key from the assume role configuration."""
+    parts = [
+        credentials.assume_role_arn,
+        getattr(credentials, "assume_role_external_id", None) or "",
+        getattr(credentials, "assume_role_session_name", None) or "",
+        str(getattr(credentials, "assume_role_duration_seconds", None) or ""),
+        getattr(credentials, "region_name", None) or "",
+    ]
+    return "|".join(parts)
+
 
 def _assume_role_session(
     base_session: boto3.session.Session,
@@ -30,17 +50,22 @@ def _assume_role_session(
 ) -> boto3.session.Session:
     """Create a boto3 session with temporary credentials from STS AssumeRole.
 
+    Returns a cached session if the temporary credentials are still valid.
+    Uses a lock to prevent multiple threads from assuming the same role
+    concurrently.
+
     Args:
         base_session: The base boto3 session used to create the STS client.
         credentials: Credentials object with assume role configuration.
 
     Returns:
-        A new boto3 session authenticated with the assumed role's temporary credentials.
+        A boto3 session authenticated with the assumed role's temporary credentials.
 
     Raises:
         DbtRuntimeError: If the AssumeRole call fails or duration_seconds is out of range.
     """
     role_arn = credentials.assume_role_arn
+    cache_key = _build_cache_key(credentials)
 
     if duration := getattr(credentials, "assume_role_duration_seconds", None):
         if not (900 <= duration <= 43200):
@@ -48,32 +73,44 @@ def _assume_role_session(
                 f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
             )
 
-    LOGGER.debug(f"Assuming role: {role_arn}")
+    with _assume_role_cache_lock:
+        cached = _assume_role_cache.get(cache_key)
+        if cached is not None:
+            session, expiration = cached
+            if datetime.now(timezone.utc) < expiration - timedelta(seconds=_EXPIRY_BUFFER_SECONDS):
+                LOGGER.debug(f"Using cached assumed role session for: {role_arn}")
+                return session
 
-    try:
-        sts_client = base_session.client("sts")
-        kwargs: Dict[str, Any] = {
-            "RoleArn": role_arn,
-            "RoleSessionName": getattr(credentials, "assume_role_session_name", None) or "dbt-athena",
-        }
-        if external_id := getattr(credentials, "assume_role_external_id", None):
-            kwargs["ExternalId"] = external_id
-        if duration:
-            kwargs["DurationSeconds"] = duration
+        LOGGER.debug(f"Assuming role: {role_arn}")
 
-        response = sts_client.assume_role(**kwargs)
-        temp = response["Credentials"]
+        try:
+            sts_client = base_session.client("sts")
+            kwargs: Dict[str, Any] = {
+                "RoleArn": role_arn,
+                "RoleSessionName": getattr(credentials, "assume_role_session_name", None) or "dbt-athena",
+            }
+            if external_id := getattr(credentials, "assume_role_external_id", None):
+                kwargs["ExternalId"] = external_id
+            if duration:
+                kwargs["DurationSeconds"] = duration
 
-        return boto3.session.Session(
-            aws_access_key_id=temp["AccessKeyId"],
-            aws_secret_access_key=temp["SecretAccessKey"],
-            aws_session_token=temp["SessionToken"],
-            region_name=credentials.region_name,
-        )
-    except DbtRuntimeError:
-        raise
-    except Exception as e:
-        raise DbtRuntimeError(f"Failed to assume role {role_arn}: {e}") from e
+            response = sts_client.assume_role(**kwargs)
+            temp = response["Credentials"]
+
+            new_session = boto3.session.Session(
+                aws_access_key_id=temp["AccessKeyId"],
+                aws_secret_access_key=temp["SecretAccessKey"],
+                aws_session_token=temp["SessionToken"],
+                region_name=credentials.region_name,
+            )
+
+            _assume_role_cache[cache_key] = (new_session, temp["Expiration"])
+
+            return new_session
+        except DbtRuntimeError:
+            raise
+        except Exception as e:
+            raise DbtRuntimeError(f"Failed to assume role {role_arn}: {e}") from e
 
 
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
