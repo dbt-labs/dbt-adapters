@@ -61,6 +61,10 @@ class AthenaCredentials(Credentials):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_session_token: Optional[str] = None
+    assume_role_arn: Optional[str] = None
+    assume_role_external_id: Optional[str] = None
+    assume_role_session_name: Optional[str] = None
+    assume_role_duration_seconds: Optional[int] = None
     poll_interval: float = 1.0
     debug_query_state: bool = False
     _ALIASES = {"catalog": "database"}
@@ -99,6 +103,7 @@ class AthenaCredentials(Credentials):
             "poll_interval",
             "aws_profile_name",
             "aws_access_key_id",
+            "assume_role_arn",
             "endpoint_url",
             "s3_data_dir",
             "s3_data_naming",

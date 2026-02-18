@@ -24,24 +24,82 @@ spark_session_list: Dict[UUID, str] = {}
 spark_session_load: Dict[UUID, int] = {}
 
 
+def _assume_role_session(
+    base_session: boto3.session.Session,
+    credentials: Any,
+) -> boto3.session.Session:
+    """Create a boto3 session with temporary credentials from STS AssumeRole.
+
+    Args:
+        base_session: The base boto3 session used to create the STS client.
+        credentials: Credentials object with assume role configuration.
+
+    Returns:
+        A new boto3 session authenticated with the assumed role's temporary credentials.
+
+    Raises:
+        DbtRuntimeError: If the AssumeRole call fails or duration_seconds is out of range.
+    """
+    role_arn = credentials.assume_role_arn
+
+    if duration := getattr(credentials, "assume_role_duration_seconds", None):
+        if not (900 <= duration <= 43200):
+            raise DbtRuntimeError(
+                f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
+            )
+
+    LOGGER.debug(f"Assuming role: {role_arn}")
+
+    try:
+        sts_client = base_session.client("sts")
+        kwargs: Dict[str, Any] = {
+            "RoleArn": role_arn,
+            "RoleSessionName": getattr(credentials, "assume_role_session_name", None) or "dbt-athena",
+        }
+        if external_id := getattr(credentials, "assume_role_external_id", None):
+            kwargs["ExternalId"] = external_id
+        if duration:
+            kwargs["DurationSeconds"] = duration
+
+        response = sts_client.assume_role(**kwargs)
+        temp = response["Credentials"]
+
+        return boto3.session.Session(
+            aws_access_key_id=temp["AccessKeyId"],
+            aws_secret_access_key=temp["SecretAccessKey"],
+            aws_session_token=temp["SessionToken"],
+            region_name=credentials.region_name,
+        )
+    except DbtRuntimeError:
+        raise
+    except Exception as e:
+        raise DbtRuntimeError(f"Failed to assume role {role_arn}: {e}") from e
+
+
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
-    return boto3.session.Session(
+    base_session = boto3.session.Session(
         aws_access_key_id=connection.credentials.aws_access_key_id,
         aws_secret_access_key=connection.credentials.aws_secret_access_key,
         aws_session_token=connection.credentials.aws_session_token,
         region_name=connection.credentials.region_name,
         profile_name=connection.credentials.aws_profile_name,
     )
+    if getattr(connection.credentials, "assume_role_arn", None):
+        return _assume_role_session(base_session, connection.credentials)
+    return base_session
 
 
 def get_boto3_session_from_credentials(credentials: Any) -> boto3.session.Session:
-    return boto3.session.Session(
+    base_session = boto3.session.Session(
         aws_access_key_id=credentials.aws_access_key_id,
         aws_secret_access_key=credentials.aws_secret_access_key,
         aws_session_token=credentials.aws_session_token,
         region_name=credentials.region_name,
         profile_name=credentials.aws_profile_name,
     )
+    if getattr(credentials, "assume_role_arn", None):
+        return _assume_role_session(base_session, credentials)
+    return base_session
 
 
 class AthenaSparkSessionManager:
