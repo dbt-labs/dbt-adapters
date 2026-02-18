@@ -34,14 +34,29 @@ _EXPIRY_BUFFER_SECONDS = 300
 
 def _build_cache_key(credentials: Any) -> str:
     """Build a cache key from the assume role configuration."""
-    parts = [
+    parts = (
         credentials.assume_role_arn,
-        getattr(credentials, "assume_role_external_id", None) or "",
-        getattr(credentials, "assume_role_session_name", None) or "",
-        str(getattr(credentials, "assume_role_duration_seconds", None) or ""),
-        getattr(credentials, "region_name", None) or "",
+        getattr(credentials, "assume_role_external_id", None),
+        getattr(credentials, "assume_role_session_name", None),
+        getattr(credentials, "assume_role_duration_seconds", None),
+        getattr(credentials, "region_name", None),
+    )
+    return json.dumps(parts)
+
+
+def _evict_expired_cache_entries() -> None:
+    """Remove expired entries from the assume role cache.
+
+    Must be called while holding ``_assume_role_cache_lock``.
+    """
+    now = datetime.now(timezone.utc)
+    expired_keys = [
+        key
+        for key, (_, expiration) in _assume_role_cache.items()
+        if now >= expiration - timedelta(seconds=_EXPIRY_BUFFER_SECONDS)
     ]
-    return "|".join(parts)
+    for key in expired_keys:
+        del _assume_role_cache[key]
 
 
 def _assume_role_session(
@@ -80,6 +95,8 @@ def _assume_role_session(
             if datetime.now(timezone.utc) < expiration - timedelta(seconds=_EXPIRY_BUFFER_SECONDS):
                 LOGGER.debug(f"Using cached assumed role session for: {role_arn}")
                 return session
+
+        _evict_expired_cache_entries()
 
         LOGGER.debug(f"Assuming role: {role_arn}")
 

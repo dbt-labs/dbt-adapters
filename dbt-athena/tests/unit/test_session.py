@@ -12,6 +12,7 @@ from dbt.adapters.athena.session import (
     AthenaSparkSessionManager,
     _assume_role_cache,
     _assume_role_session,
+    _evict_expired_cache_entries,
     get_boto3_session,
     get_boto3_session_from_credentials,
 )
@@ -364,6 +365,25 @@ class TestAssumeRoleSession:
         assert session_a is session_a_mock
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
+
+    def test_expired_cache_entries_are_evicted(self):
+        """Expired entries should be removed when a new AssumeRole is performed."""
+        expired_session = MagicMock(name="expired_session")
+        valid_session = MagicMock(name="valid_session")
+
+        _assume_role_cache["expired_key"] = (
+            expired_session,
+            datetime.now(timezone.utc) - timedelta(minutes=10),
+        )
+        _assume_role_cache["valid_key"] = (
+            valid_session,
+            datetime.now(timezone.utc) + timedelta(hours=1),
+        )
+
+        _evict_expired_cache_entries()
+
+        assert "expired_key" not in _assume_role_cache
+        assert "valid_key" in _assume_role_cache
 
 
 @pytest.mark.usefixtures("athena_credentials", "athena_client")
