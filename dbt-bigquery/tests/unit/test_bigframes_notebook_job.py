@@ -70,29 +70,6 @@ class TestGetServiceAccountFromCredentials(unittest.TestCase):
 
         assert result == "compute-sa@project.iam.gserviceaccount.com"
 
-    def test_external_account_with_impersonation_url(self):
-        """WIF credentials with service_account_impersonation_url."""
-        creds = Mock(spec=[])  # no attributes by default
-        creds.service_account_impersonation_url = (
-            "https://iamcredentials.googleapis.com/v1/projects/-/"
-            "serviceAccounts/wif-sa@project.iam.gserviceaccount.com:generateAccessToken"
-        )
-
-        helper = self._make_helper(creds)
-        result = helper._get_service_account_from_credentials()
-
-        assert result == "wif-sa@project.iam.gserviceaccount.com"
-
-    def test_external_account_impersonation_url_no_match(self):
-        """WIF credentials with malformed impersonation URL."""
-        creds = Mock(spec=[])
-        creds.service_account_impersonation_url = "https://example.com/bad-url"
-
-        helper = self._make_helper(creds)
-        result = helper._get_service_account_from_credentials()
-
-        assert result is None
-
     def test_regular_user_oauth_returns_none(self):
         """Regular user OAuth credentials (no SA properties)."""
         from google.oauth2.credentials import Credentials as GoogleCredentials

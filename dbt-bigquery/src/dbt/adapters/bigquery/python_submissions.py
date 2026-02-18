@@ -335,14 +335,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
         if service_account_email:
             return service_account_email
 
-        # External account credentials with service account impersonation URL:
-        # e.g., Workload Identity Federation with SA impersonation.
-        impersonation_url = getattr(creds, "service_account_impersonation_url", None)
-        if impersonation_url:
-            match = re.search(r"/serviceAccounts/([^:]+):", impersonation_url)
-            if match:
-                return match.group(1)
-
         return None
 
     def _config_notebook_job(
