@@ -337,7 +337,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
             return target_principal
 
         # Direct service account credentials, or impersonated credentials where
-        # target_principal is not set but service_account_email is available.
+        # _target_principal is not set but service_account_email is available.
         # Covers: Compute Engine SAs, Cloud Composer, Cloud Run, and ADC with
         # SA impersonation.
         service_account_email = getattr(creds, "service_account_email", None)
