@@ -282,6 +282,10 @@ class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
     pass
 
 
+class TestPythonMetaGetBigquery(dbt_tests.BasePythonMetaGetTests):
+    pass
+
+
 models__simple_bigframes_model = """
 def model(dbt, session):
     dbt.config(
