@@ -3,6 +3,8 @@ import random
 import pytest
 from google.api_core.exceptions import NotFound
 
+from dbt.tests.util import relation_from_name, run_dbt
+
 from dbt.tests.adapter.utils.test_array_append import BaseArrayAppend
 from dbt.tests.adapter.utils.test_array_concat import BaseArrayConcat
 from dbt.tests.adapter.utils.test_array_construct import BaseArrayConstruct
@@ -17,6 +19,7 @@ from dbt.tests.adapter.utils.test_dateadd import BaseDateAdd
 from dbt.tests.adapter.utils.test_datediff import BaseDateDiff
 from dbt.tests.adapter.utils.test_date_spine import BaseDateSpine
 from dbt.tests.adapter.utils.test_date_trunc import BaseDateTrunc
+from dbt.tests.adapter.utils.test_equals import BaseEquals
 from dbt.tests.adapter.utils.test_escape_single_quotes import BaseEscapeSingleQuotesBackslash
 from dbt.tests.adapter.utils.test_except import BaseExcept
 from dbt.tests.adapter.utils.test_generate_series import BaseGenerateSeries
@@ -141,6 +144,34 @@ class TestDateSpine(BaseDateSpine):
 
 class TestDateTrunc(BaseDateTrunc):
     pass
+
+
+class TestEquals(BaseEquals):
+    def test_equal_values(self, project):
+        run_dbt(["seed"])
+        results = run_dbt(["run"])
+
+        # Verify the adapter macro compiles to IS NOT DISTINCT FROM
+        compiled_models = {r.node.name: r.node.compiled_code for r in results.results}
+        assert "IS NOT DISTINCT FROM" in compiled_models["equal_values"].upper()
+        assert "IS NOT DISTINCT FROM" in compiled_models["not_equal_values"].upper()
+
+        # There are 9 cases total; 3 are equal and 6 are not equal
+
+        # 3 are equal
+        relation = relation_from_name(project.adapter, "equal_values")
+        result = project.run_sql(
+            f"select count(*) as num_rows from {relation} where expected = 'same'", fetch="one"
+        )
+        assert result[0] == 3
+
+        # 6 are not equal
+        relation = relation_from_name(project.adapter, "not_equal_values")
+        result = project.run_sql(
+            f"select count(*) as num_rows from {relation} where expected = 'different'",
+            fetch="one",
+        )
+        assert result[0] == 6
 
 
 class TestEscapeSingleQuotes(BaseEscapeSingleQuotesBackslash):
