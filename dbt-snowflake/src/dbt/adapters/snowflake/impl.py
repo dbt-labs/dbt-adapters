@@ -542,6 +542,7 @@ CALL {proc_name}();
             "warehouse",
             "refresh_mode",
             "immutable_where",
+            "cluster_by",
         ]
         available_columns = [c.lower() for c in dt_table.column_names]
         if "initialization_warehouse" in available_columns:

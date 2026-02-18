@@ -1,0 +1,6 @@
+kind: Fixes
+body: Add cluster_by ALTER support for Snowflake dynamic tables.
+time: 2026-02-09T11:45:36.559022-08:00
+custom:
+    Author: igorbelianski-cyber
+    Issue: "706"
