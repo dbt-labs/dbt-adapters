@@ -75,7 +75,6 @@
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 
   {% do unset_query_group(original_query_group) %}
-
   {{ return({'relations': [target_relation]}) }}
 
 {%- endmaterialization -%}

@@ -4,7 +4,6 @@
     {% set relations = materialization_materialized_view_default() %}
 
     {% do unset_query_group(original_query_group) %}
-
     {{ return(relations) }}
 {% endmaterialization %}
 

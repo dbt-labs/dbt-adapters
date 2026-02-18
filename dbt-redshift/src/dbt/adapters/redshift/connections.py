@@ -644,9 +644,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
         if backend_pid := cls._get_backend_pid(open_connection):
             open_connection.backend_pid = backend_pid
 
-        # Set session query_group for WLM and query logging if configured
         if getattr(credentials, "query_group", None):
-            logger.debug(f"Setting query_group to '{credentials.query_group}'")
             value = credentials.query_group.replace("'", "''")
             with open_connection.handle.cursor() as cursor:
                 cursor.execute(f"SET query_group TO '{value}'")

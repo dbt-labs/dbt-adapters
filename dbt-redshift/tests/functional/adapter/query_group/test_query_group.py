@@ -3,8 +3,6 @@
 import pytest
 from dbt.tests.util import run_dbt
 
-# Minimal snapshot (single column, check on id) so query_group can be asserted via post-hook.
-# Kept simple to avoid Redshift type-inference issues that can occur with more complex snapshot queries.
 snapshots__snapshot_query_group_sql = """
 {% snapshot snapshot_query_group %}
     {{ config(unique_key='id', strategy='check', check_cols=['id']) }}

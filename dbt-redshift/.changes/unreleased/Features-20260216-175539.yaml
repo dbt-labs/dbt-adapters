@@ -2,5 +2,5 @@ kind: Features
 body: Adds support for Redshift session `query_group` so dbt runs can be tagged for WLM and query logging
 time: 2026-02-16T17:55:39.941825+05:30
 custom:
-    Author: tauhid621
+    Author: tauhid621 trouze
     Issue: "648"
