@@ -2,7 +2,7 @@
   {% set original_query_group = set_query_group() %}
 
   {% set relations = materialization_test_default() %}
-  {% do unset_query_group(original_query_group) %}
 
+  {% do unset_query_group(original_query_group) %}
   {{ return(relations) }}
 {% endmaterialization %}
