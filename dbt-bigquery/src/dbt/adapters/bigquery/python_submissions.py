@@ -327,10 +327,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
         if isinstance(creds, ImpersonatedCredentials) and target_principal:
             return target_principal
 
-        # Direct service account credentials, or impersonated credentials where
+        # Direct service account credentials (e.g., Compute Engine SAs in
+        # Cloud Composer, Cloud Run), or impersonated credentials where
         # _target_principal is not set but service_account_email is available.
-        # Covers: Compute Engine SAs, Cloud Composer, Cloud Run, and ADC with
-        # SA impersonation.
         service_account_email = getattr(creds, "service_account_email", None)
         if service_account_email:
             return service_account_email
@@ -361,11 +360,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
         ):
-            # Determine identity type from credential object properties rather
-            # than parsing email addresses. This robustly handles: impersonated
-            # credentials (via profiles.yml or ADC), direct service accounts
-            # (Cloud Composer, Cloud Run), and external account credentials
-            # with SA impersonation (Workload Identity Federation).
+            # Detect if the OAuth identity is a service account (e.g.,
+            # impersonated credentials via profiles.yml or ADC, or direct
+            # service accounts in Cloud Composer/Cloud Run).
             service_account = self._get_service_account_from_credentials()
             if service_account:
                 notebook_execution_job.service_account = service_account
