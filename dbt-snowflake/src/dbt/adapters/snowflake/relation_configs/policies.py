@@ -10,6 +10,7 @@ class SnowflakeRelationType(StrEnum):
     CTE = "cte"
     External = "external"
     DynamicTable = "dynamic_table"
+    HybridTable = "hybrid_table"
     Function = "function"
 
 
