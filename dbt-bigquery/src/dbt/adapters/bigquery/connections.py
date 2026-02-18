@@ -609,7 +609,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
             and query_job.job_id is not None
             and query_job.project is not None
         ):
-            logger.info(self._bq_job_link(query_job.location, query_job.project, query_job.job_id))
+            job_link = self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
+            if conn.credentials.job_link_info_level_log:
+                logger.info(job_link)
+            else:
+                logger.debug(job_link)
 
         pre = time.perf_counter()
         try:
