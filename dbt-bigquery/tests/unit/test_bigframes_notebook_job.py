@@ -23,11 +23,11 @@ class TestGetServiceAccountFromCredentials(unittest.TestCase):
         return helper
 
     def test_impersonated_credentials_returns_target_principal(self):
-        """ADC with SA impersonation or profiles.yml impersonate_service_account."""
+        """ADC with SA impersonation returns _target_principal."""
         from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 
         creds = Mock(spec=ImpersonatedCredentials)
-        creds.target_principal = "sa@project.iam.gserviceaccount.com"
+        creds._target_principal = "sa@project.iam.gserviceaccount.com"
 
         helper = self._make_helper(creds)
         result = helper._get_service_account_from_credentials()
@@ -35,11 +35,11 @@ class TestGetServiceAccountFromCredentials(unittest.TestCase):
         assert result == "sa@project.iam.gserviceaccount.com"
 
     def test_impersonated_credentials_empty_target_principal_falls_through(self):
-        """Impersonated credentials with empty target_principal falls through to service_account_email."""
+        """Impersonated credentials with empty _target_principal falls through to service_account_email."""
         from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 
         creds = Mock(spec=ImpersonatedCredentials)
-        creds.target_principal = ""
+        creds._target_principal = ""
         creds.service_account_email = "sa@project.iam.gserviceaccount.com"
 
         helper = self._make_helper(creds)
@@ -48,11 +48,11 @@ class TestGetServiceAccountFromCredentials(unittest.TestCase):
         assert result == "sa@project.iam.gserviceaccount.com"
 
     def test_impersonated_credentials_no_target_principal_no_sa_email_returns_none(self):
-        """Impersonated credentials with no target_principal and no service_account_email."""
+        """Impersonated credentials with no _target_principal and no service_account_email."""
         from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 
         creds = Mock(spec=ImpersonatedCredentials)
-        creds.target_principal = None
+        creds._target_principal = None
         creds.service_account_email = None
 
         helper = self._make_helper(creds)
@@ -146,7 +146,7 @@ class TestConfigNotebookJob(unittest.TestCase):
         from google.cloud import aiplatform_v1
 
         creds = Mock(spec=ImpersonatedCredentials)
-        creds.target_principal = "impersonated-sa@project.iam.gserviceaccount.com"
+        creds._target_principal = "impersonated-sa@project.iam.gserviceaccount.com"
 
         helper = self._make_helper(creds, BigQueryConnectionMethod.OAUTH)
         job = helper._config_notebook_job("template-123")

@@ -332,8 +332,9 @@ class BigFramesHelper(_BigQueryPythonHelper):
         # Impersonated credentials: from profiles.yml impersonate_service_account
         # or from ADC with service account impersonation (e.g.,
         # gcloud auth application-default login --impersonate-service-account).
-        if isinstance(creds, ImpersonatedCredentials) and creds.target_principal:
-            return creds.target_principal
+        target_principal = getattr(creds, "_target_principal", None)
+        if isinstance(creds, ImpersonatedCredentials) and target_principal:
+            return target_principal
 
         # Direct service account credentials, or impersonated credentials where
         # target_principal is not set but service_account_email is available.
