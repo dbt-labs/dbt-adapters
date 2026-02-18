@@ -192,23 +192,6 @@ class TestConfigNotebookJob(unittest.TestCase):
         assert not job.service_account
 
     @patch("dbt.adapters.bigquery.python_submissions.aiplatform_v1", create=True)
-    def test_external_oauth_wif_with_impersonation_url_sets_service_account(self, _):
-        """EXTERNAL_OAUTH_WIF with SA impersonation URL sets service_account."""
-        from google.cloud import aiplatform_v1
-
-        creds = Mock(spec=[])
-        creds.service_account_impersonation_url = (
-            "https://iamcredentials.googleapis.com/v1/projects/-/"
-            "serviceAccounts/wif-sa@project.iam.gserviceaccount.com:generateAccessToken"
-        )
-
-        helper = self._make_helper(creds, BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF)
-        job = helper._config_notebook_job("template-123")
-
-        assert job.service_account == "wif-sa@project.iam.gserviceaccount.com"
-        assert not job.execution_user
-
-    @patch("dbt.adapters.bigquery.python_submissions.aiplatform_v1", create=True)
     def test_unsupported_method_raises_error(self, _):
         """Unsupported connection method raises ValueError."""
         from google.cloud import aiplatform_v1

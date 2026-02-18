@@ -317,16 +317,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return match.group(1) if match else ""
 
     def _get_service_account_from_credentials(self) -> Optional[str]:
-        """Determine the service account email from the credential object.
-
-        Inspects credential object properties rather than parsing email addresses,
-        handling multiple credential scenarios: impersonated credentials (via
-        profiles.yml or ADC), direct service account credentials, and external
-        account credentials with service account impersonation.
-
-        Returns the service account email if detected, or None for regular user
-        credentials.
-        """
+        """Returns the service account email from credentials, or None for regular users."""
         creds = self._GoogleCredentials
 
         # Impersonated credentials: from profiles.yml impersonate_service_account
@@ -377,16 +368,15 @@ class BigFramesHelper(_BigQueryPythonHelper):
         elif self._connection_method in (
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
-            BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF,
         ):
             # Determine identity type from credential object properties rather
             # than parsing email addresses. This robustly handles: impersonated
             # credentials (via profiles.yml or ADC), direct service accounts
             # (Cloud Composer, Cloud Run), and external account credentials
             # with SA impersonation (Workload Identity Federation).
-            service_account_email = self._get_service_account_from_credentials()
-            if service_account_email:
-                notebook_execution_job.service_account = service_account_email
+            service_account = self._get_service_account_from_credentials()
+            if service_account:
+                notebook_execution_job.service_account = service_account
             else:
                 # Regular user OAuth: fetch user email from the userinfo endpoint.
                 request = Request()
