@@ -273,19 +273,17 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             )
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_query_and_results_uses_model_timeout(self, MockQueryJobConfig):
-        """Test that _query_and_results uses model-level timeout when set"""
+    def test_query_and_results_uses_model_timeout_from_job_params(self, MockQueryJobConfig):
+        """Test that _query_and_results uses job_timeout_ms from job_params when set"""
         mock_job = Mock(job_id="test_job", location="US", project="project")
         mock_job.result.return_value = iter([])
         self.mock_client.query.return_value = mock_job
 
-        # Set a model-level timeout of 60 seconds
-        self.connections.set_model_timeout(60)
-
+        # Pass model-level timeout via job_params (as raw_execute would)
         self.connections._query_and_results(
             self.mock_connection,
             "SELECT 1",
-            {"dry_run": False},
+            {"dry_run": False, "job_timeout_ms": 60000},
             job_id="test_job",
         )
 
@@ -293,22 +291,12 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # polling timeout should be model timeout (60) + 30 second buffer = 90
         self.assertEqual(call_kwargs["timeout"], 90)
 
-        # job_timeout_ms should be model timeout in milliseconds
-        mock_config_instance = MockQueryJobConfig.return_value
-        self.assertEqual(mock_config_instance.job_timeout_ms, 60000)
-
-        # Clean up
-        self.connections.clear_model_timeout()
-
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_query_and_results_falls_back_to_profile_timeout(self, MockQueryJobConfig):
         """Test that _query_and_results falls back to profile-level timeout when no model timeout"""
         mock_job = Mock(job_id="test_job", location="US", project="project")
         mock_job.result.return_value = iter([])
         self.mock_client.query.return_value = mock_job
-
-        # Ensure no model-level timeout is set
-        self.connections.clear_model_timeout()
 
         self.connections._query_and_results(
             self.mock_connection,
@@ -321,26 +309,13 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # profile timeout is 1, so polling timeout = 1 + 30 = 31
         self.assertEqual(call_kwargs["timeout"], 31)
 
-    def test_model_timeout_lifecycle(self):
-        """Test set/get/clear model timeout methods"""
-        # Initially no timeout set
-        self.assertIsNone(self.connections.get_model_timeout())
-
-        # Set timeout
-        self.connections.set_model_timeout(120)
-        self.assertEqual(self.connections.get_model_timeout(), 120)
-
-        # Clear timeout
-        self.connections.clear_model_timeout()
-        self.assertIsNone(self.connections.get_model_timeout())
-
     def test_copy_bq_table_respects_model_timeout(self):
         """Test that copy_bq_table uses the model-level timeout when set"""
         mock_copy_job = Mock()
         self.mock_client.copy_table.return_value = mock_copy_job
 
-        # Set a model-level timeout
-        self.connections.set_model_timeout(45)
+        # Set model timeout on the connection object (as pre_model_hook would)
+        self.mock_connection._bq_model_timeout = 45.0
 
         source = BigQueryRelation.create(database="project", schema="dataset", identifier="table1")
         destination = BigQueryRelation.create(
@@ -351,6 +326,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         )
 
         # Verify copy_job.result was called with the model timeout
-        mock_copy_job.result.assert_called_once_with(timeout=45)
+        mock_copy_job.result.assert_called_once_with(timeout=45.0)
 
-        self.connections.clear_model_timeout()
+        # Clean up
+        self.mock_connection._bq_model_timeout = None

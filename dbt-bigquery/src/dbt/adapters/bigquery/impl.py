@@ -257,12 +257,14 @@ class BigQueryAdapter(BaseAdapter):
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
         timeout = config.get("job_execution_timeout_seconds")
         if timeout is not None:
-            self.connections.set_model_timeout(float(timeout))
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = float(timeout)
         return timeout
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
         if context is not None:
-            self.connections.clear_model_timeout()
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
