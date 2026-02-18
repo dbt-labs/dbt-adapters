@@ -64,6 +64,7 @@ class BigQueryCredentials(Credentials):
     job_retries: Optional[int] = 1
     job_creation_timeout_seconds: Optional[int] = None
     job_execution_timeout_seconds: Optional[int] = None
+    log_job_link: Optional[bool] = False
 
     # Keyfile json creds (unicode or base 64 encoded)
     keyfile: Optional[str] = None
@@ -157,6 +158,7 @@ class BigQueryCredentials(Credentials):
             "job_retries",
             "job_creation_timeout_seconds",
             "job_execution_timeout_seconds",
+            "log_job_link",
             "timeout_seconds",
             "client_id",
             "token_uri",
