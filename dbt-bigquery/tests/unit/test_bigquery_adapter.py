@@ -1173,10 +1173,10 @@ def test_sanitize_label_length(label_length):
     assert len(_sanitize_label(random_string)) <= _VALIDATE_LABEL_LENGTH_LIMIT
 
 
-class TestPartitionConfigRenderForPartition:
-    """Tests for PartitionConfig.render_for_partition().
+class TestPartitionConfigRenderWrappedInt64Range:
+    """Tests for render_wrapped() with int64 range partitions.
 
-    For int64 range partitions, render_for_partition normalizes field values
+    For int64 range partitions, render_wrapped normalizes field values
     to their partition start value, preventing excessively large arrays when
     computing partitions for replacement in insert_overwrite.
     """
@@ -1190,7 +1190,7 @@ class TestPartitionConfigRenderForPartition:
                 "range": {"start": 0, "end": 100000, "interval": 1000},
             }
         )
-        result = config.render_for_partition()
+        result = config.render_wrapped()
         assert result == "(partkey - MOD(partkey - 0, 1000))"
 
     def test_int64_range_with_nonzero_start(self):
@@ -1201,7 +1201,7 @@ class TestPartitionConfigRenderForPartition:
                 "range": {"start": 100, "end": 10000, "interval": 500},
             }
         )
-        result = config.render_for_partition()
+        result = config.render_wrapped()
         assert result == "(id - MOD(id - 100, 500))"
 
     def test_int64_range_with_alias(self):
@@ -1212,25 +1212,10 @@ class TestPartitionConfigRenderForPartition:
                 "range": {"start": 0, "end": 100000, "interval": 1000},
             }
         )
-        result = config.render_for_partition(alias="DBT_INTERNAL_DEST")
+        result = config.render_wrapped(alias="DBT_INTERNAL_DEST")
         assert result == "(DBT_INTERNAL_DEST.partkey - MOD(DBT_INTERNAL_DEST.partkey - 0, 1000))"
 
-    def test_int64_without_range_delegates_to_render_wrapped(self):
-        """int64 without range config should fall through to render_wrapped."""
+    def test_int64_without_range_returns_raw_field(self):
+        """int64 without range config should return the raw field name."""
         config = PartitionConfig(field="id", data_type="int64")
-        assert config.render_for_partition() == config.render_wrapped()
-        assert config.render_for_partition() == "id"
-
-    def test_date_delegates_to_render_wrapped(self):
-        config = PartitionConfig.parse({"field": "ts", "data_type": "date"})
-        assert config.render_for_partition() == config.render_wrapped()
-
-    def test_timestamp_delegates_to_render_wrapped(self):
-        config = PartitionConfig.parse(
-            {"field": "ts", "data_type": "timestamp", "granularity": "hour"}
-        )
-        assert config.render_for_partition() == config.render_wrapped()
-
-    def test_date_with_alias_delegates_to_render_wrapped(self):
-        config = PartitionConfig.parse({"field": "ts", "data_type": "date"})
-        assert config.render_for_partition(alias="t") == config.render_wrapped(alias="t")
+        assert config.render_wrapped() == "id"

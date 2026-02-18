@@ -189,7 +189,7 @@
     {%- endcall %}
   {%- endif -%}
   {%- set partitions_sql -%}
-    select distinct {{ partition_by.render_for_partition() }}
+    select distinct {{ partition_by.render_wrapped() }}
     from {{ tmp_relation }}
   {%- endset -%}
   {%- set partitions = run_query(partitions_sql).columns[0].values() -%}
@@ -204,7 +204,7 @@
      {{ bq_dynamic_copy_partitions_insert_overwrite_sql(tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, copy_partitions) }}
   {% else -%}
       {% set predicate -%}
-          {{ partition_by.render_for_partition(alias='DBT_INTERNAL_DEST') }} in unnest(dbt_partitions_for_replacement)
+          {{ partition_by.render_wrapped(alias='DBT_INTERNAL_DEST') }} in unnest(dbt_partitions_for_replacement)
       {%- endset %}
 
       {%- set source_sql -%}
@@ -227,7 +227,7 @@
       {% else %}
         -- 1. temp table already exists, we used it to check for schema changes
       {% endif %}
-      {%- set partition_field = partition_by.time_partitioning_field() if partition_by.time_ingestion_partitioning else partition_by.render_for_partition() -%}
+      {%- set partition_field = partition_by.time_partitioning_field() if partition_by.time_ingestion_partitioning else partition_by.render_wrapped() -%}
 
       -- 2. define partitions to update
       set (dbt_partitions_for_replacement) = (

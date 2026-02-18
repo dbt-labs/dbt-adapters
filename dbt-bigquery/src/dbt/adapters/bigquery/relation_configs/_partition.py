@@ -66,8 +66,26 @@ class PartitionConfig(dbtClassMixin):
             return column
 
     def render_wrapped(self, alias: Optional[str] = None):
-        """Wrap the partitioning column when time involved to ensure it is properly cast to matching time."""
-        # if data type is going to be truncated, no need to wrap
+        """Render the partition field normalized to partition boundaries.
+
+        For time-based partitions, wraps the column in the appropriate cast
+        to ensure it matches the partition data type.
+
+        For int64 range partitions, normalizes values to their partition start
+        boundary using: value - MOD(value - range_start, range_interval).
+        This prevents generating excessively large arrays of distinct values
+        when computing partitions for replacement in insert_overwrite.
+        """
+        # int64 range partitions: normalize to partition start boundary
+        if self.data_type == "int64" and self.range is not None:
+            column: str = self.field
+            if alias:
+                column = f"{alias}.{column}"
+            start = self.range["start"]
+            interval = self.range["interval"]
+            return f"({column} - MOD({column} - {start}, {interval}))"
+
+        # time-based: wrap with cast if not already truncated
         if (
             self.data_type in ("date", "timestamp", "datetime")
             and not self.data_type_should_be_truncated()
@@ -78,27 +96,6 @@ class PartitionConfig(dbtClassMixin):
             return f"{self.data_type}({self.render(alias)})"
         else:
             return self.render(alias)
-
-    def render_for_partition(self, alias: Optional[str] = None):
-        """Render the partition field normalized to partition boundaries.
-
-        For int64 range partitions, multiple distinct field values can fall within
-        the same partition. This method normalizes values to their partition start
-        value using: value - MOD(value - range_start, range_interval).
-
-        This prevents generating excessively large arrays of distinct values
-        when computing partitions for replacement in insert_overwrite.
-
-        For all other partition types, this delegates to render_wrapped().
-        """
-        if self.data_type == "int64" and self.range is not None:
-            column: str = self.field
-            if alias:
-                column = f"{alias}.{column}"
-            start = self.range["start"]
-            interval = self.range["interval"]
-            return f"({column} - MOD({column} - {start}, {interval}))"
-        return self.render_wrapped(alias)
 
     @classmethod
     def parse(cls, raw_partition_by) -> Optional["PartitionConfig"]:
