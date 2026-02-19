@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from functools import cached_property
 from hashlib import md5
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Tuple
 from uuid import UUID
 
 import boto3
@@ -37,8 +37,8 @@ def _build_cache_key(credentials: Any) -> str:
     parts = {
         "role_arn": credentials.assume_role_arn,
         "external_id": getattr(credentials, "assume_role_external_id", None),
-        "session_name": getattr(credentials, "assume_role_session_name", None),
-        "duration": getattr(credentials, "assume_role_duration_seconds", None),
+        "session_name": credentials.assume_role_session_name,
+        "duration": credentials.assume_role_duration_seconds,
         "region": getattr(credentials, "region_name", None),
     }
     return json.dumps(parts, sort_keys=True)
@@ -82,11 +82,11 @@ def _assume_role_session(
     role_arn = credentials.assume_role_arn
     cache_key = _build_cache_key(credentials)
 
-    if duration := getattr(credentials, "assume_role_duration_seconds", None):
-        if not (900 <= duration <= 43200):
-            raise DbtRuntimeError(
-                f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
-            )
+    duration = credentials.assume_role_duration_seconds
+    if not (900 <= duration <= 43200):
+        raise DbtRuntimeError(
+            f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
+        )
 
     with _assume_role_cache_lock:
         cached = _assume_role_cache.get(cache_key)
@@ -104,7 +104,7 @@ def _assume_role_session(
             sts_client = base_session.client("sts")
             kwargs: Dict[str, Any] = {
                 "RoleArn": role_arn,
-                "RoleSessionName": getattr(credentials, "assume_role_session_name", None) or "dbt-athena",
+                "RoleSessionName": credentials.assume_role_session_name,
             }
             if external_id := getattr(credentials, "assume_role_external_id", None):
                 kwargs["ExternalId"] = external_id

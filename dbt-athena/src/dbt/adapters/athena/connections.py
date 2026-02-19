@@ -63,8 +63,8 @@ class AthenaCredentials(Credentials):
     aws_session_token: Optional[str] = None
     assume_role_arn: Optional[str] = None
     assume_role_external_id: Optional[str] = None
-    assume_role_session_name: Optional[str] = None
-    assume_role_duration_seconds: Optional[int] = None
+    assume_role_session_name: str = "dbt-athena"
+    assume_role_duration_seconds: int = 3600
     poll_interval: float = 1.0
     debug_query_state: bool = False
     _ALIASES = {"catalog": "database"}
