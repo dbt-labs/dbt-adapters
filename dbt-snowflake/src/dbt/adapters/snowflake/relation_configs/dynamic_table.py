@@ -49,6 +49,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - initialize: specifies the behavior of the initial refresh of the dynamic table
     - cluster_by: specifies the columns to cluster on
     - immutable_where: specifies an immutability constraint expression
+    - transient: specifies whether the dynamic table is transient (no fail-safe). snowflake_default_transient_dynamic_tables determines the default value
 
     There are currently no non-configurable parameters.
     """
@@ -66,6 +67,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
     immutable_where: Optional[str] = None
+    transient: Optional[bool] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -91,6 +93,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
             "immutable_where": config_dict.get("immutable_where"),
+            "transient": config_dict.get("transient"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -117,6 +120,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "immutable_where": relation_config.config.extra.get(  # type:ignore
                 "immutable_where"
             ),
+            "transient": relation_config.config.extra.get("transient"),  # type:ignore
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -232,6 +236,16 @@ class SnowflakeDynamicTableClusterByConfigChange(RelationConfigChange):
         return False
 
 
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableTransientConfigChange(RelationConfigChange):
+    context: Optional[bool] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        # Transient cannot be changed via ALTER, requires full table recreation
+        return True
+
+
 @dataclass
 class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
@@ -242,6 +256,7 @@ class SnowflakeDynamicTableConfigChangeset:
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
     immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
     cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
+    transient: Optional[SnowflakeDynamicTableTransientConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
@@ -261,6 +276,7 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
                 self.immutable_where.requires_full_refresh if self.immutable_where else False,
                 self.cluster_by.requires_full_refresh if self.cluster_by else False,
+                self.transient.requires_full_refresh if self.transient else False,
             ]
         )
 
@@ -274,5 +290,6 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.refresh_mode,
                 self.immutable_where,
                 self.cluster_by,
+                self.transient,
             ]
         )

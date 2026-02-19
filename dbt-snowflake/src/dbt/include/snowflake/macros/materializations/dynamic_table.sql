@@ -92,6 +92,12 @@
 
 {% macro snowflake__get_dynamic_table_configuration_changes(existing_relation, new_config) -%}
     {% set _existing_dynamic_table = snowflake__describe_dynamic_table(existing_relation) %}
-    {% set _configuration_changes = existing_relation.dynamic_table_config_changeset(_existing_dynamic_table, new_config.model) %}
+    {#- Only query transient status when user explicitly configured it -#}
+    {% if new_config.get("transient") is not none %}
+        {% set _existing_transient = adapter.query_dynamic_table_transient_status(existing_relation) %}
+    {% else %}
+        {% set _existing_transient = none %}
+    {% endif %}
+    {% set _configuration_changes = existing_relation.dynamic_table_config_changeset(_existing_dynamic_table, new_config.model, _existing_transient) %}
     {% do return(_configuration_changes) %}
 {%- endmacro %}
