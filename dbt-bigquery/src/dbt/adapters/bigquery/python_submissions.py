@@ -1,9 +1,18 @@
+from __future__ import annotations
+
 import inspect
 import json
 import re
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, TYPE_CHECKING, Union
 import uuid
+
+# These imports are heavy and only needed for BigFrames Python models.
+# They are lazy-loaded inside BigFramesHelper methods to avoid slowing
+# down every `dbt parse` invocation. See: https://github.com/dbt-labs/dbt-adapters/issues/1604
+if TYPE_CHECKING:
+    from google.cloud import aiplatform_v1
+    from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F401
 
 from dbt.adapters.base import PythonJobHelper, PythonSubmissionResult
 from dbt.adapters.bigquery import BigQueryCredentials
@@ -24,12 +33,9 @@ from dbt_common.exceptions import DbtRuntimeError
 
 from google.api_core.operation import Operation
 from google.auth.transport.requests import Request
-from google.cloud import aiplatform_v1
-from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
-import nbformat
 
 _logger = AdapterLogger("BigQuery")
 
@@ -231,6 +237,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             return creds.token
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
+        import nbformat
+
         notebook = nbformat.v4.new_notebook()
         # Put all codes in one cell.
         notebook.cells.append(nbformat.v4.new_code_cell(compiled_code))
@@ -238,6 +246,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return nbformat.writes(notebook, nbformat.NO_CONVERT)
 
     def _get_notebook_template_id(self) -> str:
+        from google.cloud import aiplatform_v1
+
         # If user specifies a runtime template id, use it.
         if self._notebook_template_id:
             return self._notebook_template_id
@@ -266,6 +276,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             return self._create_notebook_template()
 
     def _create_notebook_template(self) -> str:
+        from google.cloud import aiplatform_v1
+
         # Construct the full network and subnetwork resource names.
         network_full_name = f"projects/{self._project}/global/networks/{_NETWORK_NAME}"
         subnetwork_full_name = (
@@ -308,6 +320,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
     def _config_notebook_job(
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
+        from google.cloud import aiplatform_v1
+
         notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
         notebook_execution_job.notebook_runtime_template_resource_name = (
             f"projects/{self._project}/locations/{self._region}/"
@@ -480,6 +494,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
     def _track_notebook_job_status(self, job_name: str) -> aiplatform_v1.NotebookExecutionJob:
         """Tracks the notebook job until it completes or times out."""
+        from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F811
+
         max_wait_time = self._polling_retry.timeout
         elapsed = 0
 
@@ -514,6 +530,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
     def _submit_bigframes_job(
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
+        from google.cloud import aiplatform_v1  # noqa: F811
+        from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F811
 
         notebook_execution_job = self._config_notebook_job(notebook_template_id)
 
