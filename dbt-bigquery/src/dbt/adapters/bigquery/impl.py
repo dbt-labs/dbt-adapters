@@ -255,8 +255,7 @@ class BigQueryAdapter(BaseAdapter):
         client.delete_table(from_table_ref)
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
-    """ Override the connection's query execution timeout based on the model config
-    """
+        """Override the connection's query execution timeout based on the model config"""
         timeout = config.get("job_execution_timeout_seconds")
         if timeout is not None:
             conn = self.connections.get_thread_connection()
