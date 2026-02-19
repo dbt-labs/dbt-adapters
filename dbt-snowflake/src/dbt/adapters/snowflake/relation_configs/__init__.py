@@ -8,6 +8,7 @@ from dbt.adapters.snowflake.relation_configs.dynamic_table import (
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
+    SnowflakeDynamicTableTransientConfigChange,
 )
 from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,

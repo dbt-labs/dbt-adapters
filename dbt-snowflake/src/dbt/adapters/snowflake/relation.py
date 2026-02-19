@@ -26,6 +26,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableWarehouseConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
+    SnowflakeDynamicTableTransientConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -93,7 +94,10 @@ class SnowflakeRelation(BaseRelation):
 
     @classmethod
     def dynamic_table_config_changeset(
-        cls, relation_results: RelationResults, relation_config: RelationConfig
+        cls,
+        relation_results: RelationResults,
+        relation_config: RelationConfig,
+        existing_transient: Optional[bool] = None,
     ) -> Optional[SnowflakeDynamicTableConfigChangeset]:
         existing_dynamic_table = SnowflakeDynamicTableConfig.from_relation_results(
             relation_results
@@ -148,6 +152,16 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.cluster_by = SnowflakeDynamicTableClusterByConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.cluster_by,
+            )
+
+        if (
+            new_dynamic_table.transient is not None
+            and existing_transient is not None
+            and new_dynamic_table.transient != existing_transient
+        ):
+            config_change_collection.transient = SnowflakeDynamicTableTransientConfigChange(
+                action=RelationConfigChangeAction.create,  # type: ignore
+                context=new_dynamic_table.transient,
             )
 
         if config_change_collection.has_changes:
