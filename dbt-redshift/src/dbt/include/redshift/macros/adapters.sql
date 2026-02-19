@@ -257,13 +257,35 @@
 {%- endmacro %}
 
 
-{% macro redshift__list_schemas(database) -%}
-  {{ return(postgres__list_schemas(database)) }}
-{%- endmacro %}
+{% macro redshift__list_schemas(database) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('list_schemas', fetch_result=True) -%}
+      select distinct schema_name as nspname
+      from svv_all_schemas
+      {% if database %}
+      where database_name = '{{ database }}'
+      {% endif %}
+    {% endcall %}
+    {{ return(load_result('list_schemas').table) }}
+  {% else %}
+    {{ return(postgres__list_schemas(database)) }}
+  {% endif %}
+{% endmacro %}
 
-{% macro redshift__check_schema_exists(information_schema, schema) -%}
-  {{ return(postgres__check_schema_exists(information_schema, schema)) }}
-{%- endmacro %}
+{% macro redshift__check_schema_exists(information_schema, schema) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('check_schema_exists', fetch_result=True) -%}
+      select count(*) from svv_all_schemas
+      where schema_name = '{{ schema }}'
+      {% if information_schema.database %}
+      and database_name = '{{ information_schema.database }}'
+      {% endif %}
+    {% endcall %}
+    {{ return(load_result('check_schema_exists').table) }}
+  {% else %}
+    {{ return(postgres__check_schema_exists(information_schema, schema)) }}
+  {% endif %}
+{% endmacro %}
 
 
 {% macro redshift__persist_docs(relation, model, for_relation, for_columns) -%}
