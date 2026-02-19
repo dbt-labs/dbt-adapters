@@ -42,6 +42,15 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
+REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
+    name="redshift_use_show_apis",
+    default=False,
+    description=(
+        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
+        "for metadata queries. Required for cross-database operations with Datasharing. "
+    ),
+)
+
 if TYPE_CHECKING:
     import agate
 
@@ -88,7 +97,10 @@ class RedshiftAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
-        return [REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS]
+        return [
+            REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
+            REDSHIFT_USE_SHOW_APIS,
+        ]
 
     @classmethod
     def date_function(cls):
