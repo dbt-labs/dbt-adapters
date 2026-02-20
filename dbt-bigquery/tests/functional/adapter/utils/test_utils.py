@@ -147,7 +147,23 @@ class TestDateTrunc(BaseDateTrunc):
 
 
 class TestEquals(BaseEquals):
-    pass
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        # BigQuery's CSV loader doesn't recognize the string "null" as NULL for INT64 columns.
+        # Using empty values instead, which BigQuery correctly interprets as NULL.
+        return {
+            "data_equals.csv": """key_name,x,y,expected
+1,1,1,same
+2,1,2,different
+3,1,,different
+4,2,1,different
+5,2,2,same
+6,2,,different
+7,,1,different
+8,,2,different
+9,,,same
+""",
+        }
 
 
 class TestEscapeSingleQuotes(BaseEscapeSingleQuotesBackslash):
