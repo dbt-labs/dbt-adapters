@@ -21,7 +21,7 @@ def _make_adapter_stub(flag_enabled: bool):
     """Create a minimal stub with the behavior flag for _check_for_wildcard_identifier."""
     return SimpleNamespace(
         behavior=SimpleNamespace(
-            bigquery_reject_wildcard_source_freshness=flag_enabled,
+            bigquery_reject_wildcard_metadata_source_freshness=flag_enabled,
         ),
     )
 

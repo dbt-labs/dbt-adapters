@@ -122,8 +122,8 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     ),
 )
 
-BIGQUERY_REJECT_WILDCARD_SOURCE_FRESHNESS = BehaviorFlag(
-    name="bigquery_reject_wildcard_source_freshness",
+BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_reject_wildcard_metadata_source_freshness",
     default=False,
     description=(
         "Raise an error when metadata-based source freshness is used with a wildcard table "
@@ -212,7 +212,7 @@ class BigQueryAdapter(BaseAdapter):
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
-            BIGQUERY_REJECT_WILDCARD_SOURCE_FRESHNESS,
+            BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
         ]
 
     @classmethod
@@ -984,7 +984,7 @@ class BigQueryAdapter(BaseAdapter):
         """
         identifier = source.identifier
         if identifier and "*" in identifier:
-            if self.behavior.bigquery_reject_wildcard_source_freshness:
+            if self.behavior.bigquery_reject_wildcard_metadata_source_freshness:
                 raise dbt_common.exceptions.DbtRuntimeError(
                     f"Metadata-based source freshness is not supported for wildcard table "
                     f"'{source}'. Please set 'loaded_at_field' on this source to use a "
