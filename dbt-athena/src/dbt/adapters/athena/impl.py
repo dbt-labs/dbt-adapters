@@ -1169,6 +1169,7 @@ class AthenaAdapter(SQLAdapter):
             result.extend([schema["Name"] for schema in page["DatabaseList"]])
         return result
 
+    @available
     def check_schema_exists(self, database: str, schema: str) -> bool:
         """
         Check if a schema exists using the Glue GetDatabase API.
