@@ -186,6 +186,9 @@ class RedshiftCredentials(Credentials):
     tcp_keepalive_interval: Optional[int] = None
     tcp_keepalive_count: Optional[int] = None
 
+    # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
+    query_group: Optional[str] = None
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -222,6 +225,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_idle",
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
+            "query_group",
         )
 
     @property
@@ -639,6 +643,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         if backend_pid := cls._get_backend_pid(open_connection):
             open_connection.backend_pid = backend_pid
+
+        if getattr(credentials, "query_group", None):
+            value = credentials.query_group.replace("'", "''")
+            with open_connection.handle.cursor() as cursor:
+                cursor.execute(f"SET query_group TO '{value}'")
+
         return open_connection
 
     def execute(
