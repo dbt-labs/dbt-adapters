@@ -1198,7 +1198,8 @@ class AthenaAdapter(SQLAdapter):
             kwargs: Dict[str, str] = {"Name": schema}
             if catalog_id:
                 kwargs["CatalogId"] = catalog_id
-            glue_client.get_database(**kwargs)
+            response = glue_client.get_database(**kwargs)
+            LOGGER.debug(f"Glue GetDatabase response for schema '{schema}': {response}")
             return True
         except ClientError as e:
             if e.response["Error"]["Code"] == "EntityNotFoundException":
