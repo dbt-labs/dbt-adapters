@@ -34,7 +34,9 @@ class ColumnsInRelation:
 class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
-        return {"flags": {}}
+        return {
+            "name": "test_columns_in_relation_behavior_flag_off",
+        }
 
     @pytest.fixture(scope="class")
     def expected_columns(self):
@@ -48,7 +50,10 @@ class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
 class TestColumnsInRelationBehaviorFlagOn(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
-        return {"flags": {"redshift_use_show_apis": True}}
+        return {
+            "name": "test_columns_in_relation_behavior_flag_on",
+            "flags": {"redshift_use_show_apis": True},
+        }
 
     @pytest.fixture(scope="class")
     def expected_columns(self):
