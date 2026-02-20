@@ -122,6 +122,16 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     ),
 )
 
+BIGQUERY_REJECT_WILDCARD_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_reject_wildcard_source_freshness",
+    default=False,
+    description=(
+        "Raise an error when metadata-based source freshness is used with a wildcard table "
+        "identifier (e.g. 'events_*'). BigQuery returns the current time as the modified "
+        "timestamp for wildcard tables, causing freshness checks to always report ~0 seconds."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -202,6 +212,7 @@ class BigQueryAdapter(BaseAdapter):
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
+            BIGQUERY_REJECT_WILDCARD_SOURCE_FRESHNESS,
         ]
 
     @classmethod
@@ -959,8 +970,7 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
-    @staticmethod
-    def _check_for_wildcard_identifier(source: BaseRelation) -> None:
+    def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
         """Raise an error if the source identifier contains a wildcard character.
 
         When ``client.get_table()`` is called with a wildcard identifier
@@ -974,11 +984,12 @@ class BigQueryAdapter(BaseAdapter):
         """
         identifier = source.identifier
         if identifier and "*" in identifier:
-            raise dbt_common.exceptions.DbtRuntimeError(
-                f"Metadata-based source freshness is not supported for wildcard table "
-                f"'{source}'. Please set 'loaded_at_field' on this source to use a "
-                f"query-based freshness check instead."
-            )
+            if self.behavior.bigquery_reject_wildcard_source_freshness:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Metadata-based source freshness is not supported for wildcard table "
+                    f"'{source}'. Please set 'loaded_at_field' on this source to use a "
+                    f"query-based freshness check instead."
+                )
 
     def calculate_freshness_from_metadata(
         self,
