@@ -121,12 +121,59 @@
       in DDL (e.g. OPTIONS(description=...)).
     -#}
   {%- else -%}
+    {#-- Update description via adapter method (which uses DDL or API based on behavior flag) --#}
     {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
   {%- endif -%}
 {% endmacro %}
 
+{% macro bigquery__alter_relation_description_ddl(relation, description) %}
+  {#-- DDL macro for updating relation description - called by adapter.update_table_description --#}
+  {% set escaped_description = description | replace('\\', '\\\\') | replace('"', '\\"') %}
+  {% set sql %}
+    alter table {{ relation }} set options(description="""{{ escaped_description }}""")
+  {% endset %}
+  {% do run_query(sql) %}
+{% endmacro %}
+
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}
-  {% do adapter.update_columns(relation, column_dict) %}
+  {%- if adapter.behavior.bigquery_use_ddl_for_metadata_operations.no_warn -%}
+    {#--
+      Use DDL for top-level columns with only description updates.
+      Fall back to API for nested columns (contain '.') or columns with policy_tags,
+      since BigQuery DDL doesn't support those operations.
+    --#}
+    {% set ddl_columns = {} %}
+    {% set api_columns = {} %}
+
+    {% for column_name, column_config in column_dict.items() %}
+      {% if '.' in column_name or column_config.get('policy_tags') %}
+        {#-- Nested columns or policy tags require API --#}
+        {% do api_columns.update({column_name: column_config}) %}
+      {% else %}
+        {#-- Top-level columns with only description can use DDL --#}
+        {% do ddl_columns.update({column_name: column_config}) %}
+      {% endif %}
+    {% endfor %}
+
+    {#-- Execute DDL for simple column descriptions --#}
+    {% for column_name, column_config in ddl_columns.items() %}
+      {% if column_config.get('description') is not none %}
+        {% set escaped_description = column_config.get('description', '') | replace('\\', '\\\\') | replace('"', '\\"') %}
+        {% set sql %}
+          alter table {{ relation }} alter column `{{ column_name }}` set options(description="""{{ escaped_description }}""")
+        {% endset %}
+        {% do run_query(sql) %}
+      {% endif %}
+    {% endfor %}
+
+    {#-- Fall back to API for nested columns and policy tags --#}
+    {% if api_columns %}
+      {% do adapter.update_columns(relation, api_columns) %}
+    {% endif %}
+  {%- else -%}
+    {#-- Legacy behavior: use API for all column updates --#}
+    {% do adapter.update_columns(relation, column_dict) %}
+  {%- endif -%}
 {% endmacro %}
 
 {% macro bigquery__alter_relation_add_columns(relation, add_columns) %}
