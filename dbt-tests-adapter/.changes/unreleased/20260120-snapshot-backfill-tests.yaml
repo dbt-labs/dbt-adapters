@@ -1,0 +1,6 @@
+kind: Features
+body: Add base test classes for snapshot column backfill feature (BaseSnapshotBackfillSingleColumn, BaseSnapshotBackfillMultipleColumns, BaseSnapshotBackfillSequential, BaseSnapshotBackfillAuditJson, etc.)
+time: 2026-01-20T00:00:00.000000000Z
+custom:
+  Author: ""
+  Issue: "1562"
