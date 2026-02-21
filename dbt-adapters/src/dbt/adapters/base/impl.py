@@ -1329,21 +1329,28 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         from dbt_common.clients.agate_helper import table_from_rows
 
+        # Define all possible text-only columns for catalog metadata
+        all_text_columns = [
+            "table_database",
+            "table_schema",
+            "table_name",
+            "table_type",
+            "table_comment",
+            "table_owner",
+            "column_name",
+            "column_type",
+            "column_comment",
+        ]
+
+        # Filter to only columns that actually exist in the table to avoid
+        # warnings from agate when adapters don't return all metadata columns
+        existing_text_columns = [col for col in all_text_columns if col in table.column_names]
+
         # force database + schema to be strings
         table = table_from_rows(
             table.rows,
             table.column_names,
-            text_only_columns=[
-                "table_database",
-                "table_schema",
-                "table_name",
-                "table_type",
-                "table_comment",
-                "table_owner",
-                "column_name",
-                "column_type",
-                "column_comment",
-            ],
+            text_only_columns=existing_text_columns,
         )
         return table.where(_catalog_filter_schemas(used_schemas))
 
