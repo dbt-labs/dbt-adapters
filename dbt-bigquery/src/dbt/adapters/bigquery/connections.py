@@ -264,6 +264,10 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
+        reservation = conn.credentials.reservation
+        if reservation:
+            job_params["reservation"] = reservation
+
         with self.exception_handler(sql):
 
             def _execute_with_retry():

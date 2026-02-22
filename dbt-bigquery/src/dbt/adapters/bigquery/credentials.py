@@ -59,6 +59,7 @@ class BigQueryCredentials(Credentials):
     priority: Optional[Priority] = None
     maximum_bytes_billed: Optional[int] = None
     impersonate_service_account: Optional[str] = None
+    reservation: Optional[str] = None
 
     job_retry_deadline_seconds: Optional[int] = None
     job_retries: Optional[int] = 1
@@ -167,6 +168,7 @@ class BigQueryCredentials(Credentials):
             "dataproc_cluster_name",
             "gcs_bucket",
             "dataproc_batch",
+            "reservation",
         )
 
     @classmethod
