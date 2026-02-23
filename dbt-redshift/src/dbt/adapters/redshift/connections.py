@@ -452,6 +452,9 @@ def get_connection_method(
             c.autocommit = True
         if credentials.role:
             c.cursor().execute(f"set role {credentials.role}")
+        if credentials.query_group:
+            value = str(credentials.query_group).replace("'", "''")
+            c.cursor().execute(f"SET query_group TO '{value}'")
         return c
 
     return connect
@@ -643,11 +646,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         if backend_pid := cls._get_backend_pid(open_connection):
             open_connection.backend_pid = backend_pid
-
-        if getattr(credentials, "query_group", None):
-            value = credentials.query_group.replace("'", "''")
-            with open_connection.handle.cursor() as cursor:
-                cursor.execute(f"SET query_group TO '{value}'")
 
         return open_connection
 

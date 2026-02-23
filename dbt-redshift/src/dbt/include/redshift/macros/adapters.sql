@@ -331,46 +331,16 @@
 {% endmacro %}
 
 
-{# Query group support for WLM and query logging (STL_QUERY, SVL_QLOG). #}
-{# When not set, Redshift may return 'unset'; treat as no value so unset_query_group uses RESET. #}
-{% macro get_current_query_group() -%}
-  {% set result = run_query("SELECT current_setting('query_group') AS value") %}
-  {% set value = result.rows[0]['value'] if result.rows else none %}
-  {{ return(none if value is none or value == 'unset' else value) }}
-{%- endmacro %}
+{% macro set_query_group(value) %}
+  {% set sql -%}
+    SET query_group TO '{{ value | replace("'", "''") }}'
+  {% endset %}
+  {% do run_query(sql) %}
+{% endmacro %}
 
-
-{% macro set_query_group() -%}
-  {{ return(adapter.dispatch('set_query_group', 'dbt')()) }}
-{%- endmacro %}
-
-
-{% macro redshift__set_query_group() -%}
-  {% set new_query_group = config.get('query_group') %}
-  {% if new_query_group %}
-    {% set original_query_group = get_current_query_group() %}
-    {{ log("Setting query_group to '" ~ new_query_group ~ "'. Will reset to '" ~ (original_query_group or '') ~ "' after materialization.") }}
-    {% do run_query("SET query_group TO '{}'".format(new_query_group | replace("'", "''"))) %}
-    {{ return(original_query_group) }}
-  {% endif %}
-  {{ return(none) }}
-{%- endmacro %}
-
-
-{% macro unset_query_group(original_query_group) -%}
-  {{ return(adapter.dispatch('unset_query_group', 'dbt')(original_query_group)) }}
-{%- endmacro %}
-
-
-{% macro redshift__unset_query_group(original_query_group) -%}
-  {% set new_query_group = config.get('query_group') %}
-  {% if new_query_group %}
-    {% if original_query_group %}
-      {{ log("Resetting query_group to '" ~ original_query_group ~ "'.") }}
-      {% do run_query("SET query_group TO '{}'".format(original_query_group | replace("'", "''"))) %}
-    {% else %}
-      {{ log("No original query_group, resetting parameter.") }}
-      {% do run_query("RESET query_group") %}
-    {% endif %}
-  {% endif %}
-{%- endmacro %}
+{% macro unset_query_group() %}
+  {% set sql -%}
+    RESET query_group
+  {% endset %}
+  {% do run_query(sql) %}
+{% endmacro %}
