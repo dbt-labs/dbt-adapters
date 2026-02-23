@@ -2,9 +2,10 @@ import os
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 
+import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type, TYPE_CHECKING, Mapping
+from typing import List, Optional, Set, Any, Dict, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
@@ -42,8 +43,14 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
-if TYPE_CHECKING:
-    import agate
+REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
+    name="redshift_use_show_apis",
+    default=False,
+    description=(
+        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
+        "for metadata queries. Required for cross-database operations with Datasharing. "
+    ),
+)
 
 
 @dataclass
@@ -89,7 +96,10 @@ class RedshiftAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
-        return [REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS]
+        return [
+            REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
+            REDSHIFT_USE_SHOW_APIS,
+        ]
 
     @classmethod
     def date_function(cls):
@@ -141,6 +151,37 @@ class RedshiftAdapter(SQLAdapter):
             )
         # return an empty string on success so macros can call this
         return ""
+
+    @available
+    def merge_relation_tables(
+        self,
+        all_relations: "agate.Table",
+        materialized_views: "agate.Table",
+    ) -> "agate.Table":
+        """Merge all relations with materialized view info.
+
+        For each row in all_relations with type 'view', if a matching
+        (database, schema, name) key exists in materialized_views, the type is
+        updated to 'materialized_view'.
+        Returns a new agate Table with the same structure as all_relations.
+        """
+        mv_lookup = {
+            (row["database"], row["schema"], row["name"]) for row in materialized_views.rows
+        }
+
+        new_rows = []
+        for row in all_relations.rows:
+            key = (row["database"], row["schema"], row["name"])
+            row_type = (
+                "materialized_view" if key in mv_lookup and row["type"] == "view" else row["type"]
+            )
+            new_rows.append((row["database"], row["name"], row["schema"], row_type))
+
+        return agate.Table(
+            new_rows,
+            column_names=all_relations.column_names,
+            column_types=all_relations.column_types,
+        )
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
