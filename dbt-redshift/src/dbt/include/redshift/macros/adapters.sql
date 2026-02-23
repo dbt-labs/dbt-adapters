@@ -329,18 +329,3 @@
   {% endif %}
 
 {% endmacro %}
-
-
-{% macro set_query_group(value) %}
-  {% set sql -%}
-    SET query_group TO '{{ value | replace("'", "''") }}'
-  {% endset %}
-  {% do run_query(sql) %}
-{% endmacro %}
-
-{% macro unset_query_group() %}
-  {% set sql -%}
-    RESET query_group
-  {% endset %}
-  {% do run_query(sql) %}
-{% endmacro %}
