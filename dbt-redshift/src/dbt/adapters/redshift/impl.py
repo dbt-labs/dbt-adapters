@@ -263,20 +263,20 @@ class RedshiftAdapter(SQLAdapter):
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         default_query_group = self.config.credentials.query_group
-        query_group = config.get("query_group", default_query_group)
+        model_query_group = config.get("query_group")
 
-        if query_group == default_query_group or query_group is None:
+        if model_query_group == default_query_group or model_query_group is None:
             return None
-        self._set_query_group(query_group)
+        self._set_query_group(model_query_group)
         return None
 
     def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
         default_query_group = self.config.credentials.query_group
-        query_group = config.get("query_group", default_query_group)
+        model_query_group = config.get("query_group")
 
-        if query_group == default_query_group:
+        if model_query_group == default_query_group:
             return None
-        elif default_query_group is None and query_group is not None:
+        elif default_query_group is None and model_query_group is not None:
             self._unset_query_group()
         else:
             self._set_query_group(default_query_group)
