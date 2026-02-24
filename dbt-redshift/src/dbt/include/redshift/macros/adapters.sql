@@ -1,6 +1,8 @@
-
 {% macro dist(dist) %}
   {%- if dist is not none -%}
+      {%- if dist is not string -%}
+        {% do exceptions.raise_compiler_error("The 'dist' config must be a single value (e.g. dist: primary_key), not a list or other type. Redshift distribution key accepts only one column or one of: all, even, auto.") %}
+      {%- endif -%}
       {%- set dist = dist.strip().lower() -%}
 
       {%- if dist in ['all', 'even'] -%}
@@ -106,6 +108,34 @@
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
+  {% if redshift__use_show_apis() %}
+    {{ return(redshift__get_columns_in_relation_svv(relation)) }}
+  {% else %}
+    {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_svv(relation) -%}
+  {% call statement('get_columns_in_relation', fetch_result=True) %}
+    select
+      column_name,
+      data_type,
+      character_maximum_length,
+      numeric_precision,
+      numeric_scale
+    from svv_all_columns
+    where database_name = '{{ relation.database }}'
+      and schema_name = '{{ relation.schema }}'
+      and table_name = '{{ relation.identifier }}'
+    order by ordinal_position
+  {% endcall %}
+  {% set table = load_result('get_columns_in_relation').table %}
+  {{ return(sql_convert_columns_in_relation(table)) }}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_legacy(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
       with bound_views as (
         select
@@ -224,30 +254,65 @@
 {% endmacro %}
 
 {% macro redshift__list_relations_without_caching(schema_relation) %}
+  {% if redshift__use_show_apis() %}
+    {# Joining SVV views in Redshift is unreliable as some data is available in leader node but queries run on compute nodes #}
+    {# Therefore, we run two separate queries and merge the results #}
 
-  {% call statement('list_relations_without_caching', fetch_result=True) -%}
-    select
+    {% call statement('dbt_all_relations', fetch_result=True) -%}
+      select
+        database_name as database,
+        table_name as name,
+        schema_name as schema,
+        case when table_type = 'VIEW' then 'view' else 'table' end as type
+      from svv_all_tables
+      where schema_name ilike '{{ schema_relation.schema }}'
+      {% if schema_relation.database %}
+      and database_name = '{{ schema_relation.database }}'
+      {% endif %}
+    {% endcall %}
+
+    {% call statement('dbt_materialized_views', fetch_result=True) -%}
+      select
+        trim(database_name) as database,
+        trim(name) as name,
+        trim(schema_name) as schema,
+        'materialized_view' as type
+      from svv_mv_info
+      where trim(schema_name) ilike '{{ schema_relation.schema }}'
+      {% if schema_relation.database %}
+      and database_name = '{{ schema_relation.database }}'
+      {% endif %}
+    {% endcall %}
+
+    {% set all_relations = load_result('dbt_all_relations').table %}
+    {% set materialized_views = load_result('dbt_materialized_views').table %}
+
+    {{ return(adapter.merge_relation_tables(all_relations, materialized_views)) }}
+  {% else %}
+    {% call statement('list_relations_without_caching', fetch_result=True) -%}
+      select
         table_catalog as database,
         table_name as name,
         table_schema as schema,
         'table' as type
-    from information_schema.tables
-    where table_schema ilike '{{ schema_relation.schema }}'
-    and table_type = 'BASE TABLE'
-    union all
-    select
-      table_catalog as database,
-      table_name as name,
-      table_schema as schema,
-      case
-        when view_definition ilike '%create materialized view%'
-          then 'materialized_view'
-        else 'view'
-      end as type
-    from information_schema.views
-    where table_schema ilike '{{ schema_relation.schema }}'
-  {% endcall %}
-  {{ return(load_result('list_relations_without_caching').table) }}
+      from information_schema.tables
+      where table_schema ilike '{{ schema_relation.schema }}'
+      and table_type = 'BASE TABLE'
+      union all
+      select
+        table_catalog as database,
+        table_name as name,
+        table_schema as schema,
+        case
+          when view_definition ilike '%create materialized view%'
+            then 'materialized_view'
+          else 'view'
+        end as type
+      from information_schema.views
+      where table_schema ilike '{{ schema_relation.schema }}'
+    {% endcall %}
+    {{ return(load_result('list_relations_without_caching').table) }}
+  {% endif %}
 {% endmacro %}
 
 {% macro redshift__information_schema_name(database) -%}
@@ -255,13 +320,35 @@
 {%- endmacro %}
 
 
-{% macro redshift__list_schemas(database) -%}
-  {{ return(postgres__list_schemas(database)) }}
-{%- endmacro %}
+{% macro redshift__list_schemas(database) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('list_schemas', fetch_result=True) -%}
+      select distinct schema_name as nspname
+      from svv_all_schemas
+      {% if database %}
+      where database_name = '{{ database }}'
+      {% endif %}
+    {% endcall %}
+    {{ return(load_result('list_schemas').table) }}
+  {% else %}
+    {{ return(postgres__list_schemas(database)) }}
+  {% endif %}
+{% endmacro %}
 
-{% macro redshift__check_schema_exists(information_schema, schema) -%}
-  {{ return(postgres__check_schema_exists(information_schema, schema)) }}
-{%- endmacro %}
+{% macro redshift__check_schema_exists(information_schema, schema) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('check_schema_exists', fetch_result=True) -%}
+      select count(*) from svv_all_schemas
+      where schema_name = '{{ schema }}'
+      {% if information_schema.database %}
+      and database_name = '{{ information_schema.database }}'
+      {% endif %}
+    {% endcall %}
+    {{ return(load_result('check_schema_exists').table) }}
+  {% else %}
+    {{ return(postgres__check_schema_exists(information_schema, schema)) }}
+  {% endif %}
+{% endmacro %}
 
 
 {% macro redshift__persist_docs(relation, model, for_relation, for_columns) -%}
@@ -270,7 +357,7 @@
   {% endif %}
 
   {# Override: do not set column comments for LBVs #}
-  {% set is_lbv = config.get('materialized') == 'view' and config.get('bind') == false %}
+  {% set is_lbv = relation.type == 'view' and config.get('bind') == false %}
   {% if for_columns and config.persist_column_docs() and model.columns and not is_lbv %}
     {% do run_query(alter_column_comment(relation, model.columns)) %}
   {% endif %}
