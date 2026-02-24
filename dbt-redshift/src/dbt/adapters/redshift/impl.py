@@ -5,7 +5,7 @@ from multiprocessing.context import SpawnContext
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type
+from typing import List, Optional, Set, Any, Dict, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
@@ -61,6 +61,7 @@ class RedshiftConfig(AdapterConfig):
     bind: Optional[bool] = None
     backup: Optional[bool] = True
     auto_refresh: Optional[bool] = False
+    query_group: Optional[str] = None
 
 
 class RedshiftAdapter(SQLAdapter):
@@ -253,3 +254,29 @@ class RedshiftAdapter(SQLAdapter):
     def debug_query(self):
         """Override for DebugTask method"""
         self.execute("select 1 as id")
+
+    def _set_query_group(self, value: str) -> None:
+        self.execute(f"SET query_group TO '{value}'")
+
+    def _unset_query_group(self) -> None:
+        self.execute("RESET query_group")
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        default_query_group = self.config.credentials.query_group
+        model_query_group = config.get("query_group")
+
+        if model_query_group == default_query_group or model_query_group is None:
+            return None
+        self._set_query_group(model_query_group)
+        return None
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
+        default_query_group = self.config.credentials.query_group
+        model_query_group = config.get("query_group")
+
+        if model_query_group == default_query_group:
+            return None
+        elif default_query_group is None and model_query_group is not None:
+            self._unset_query_group()
+        else:
+            self._set_query_group(default_query_group)
