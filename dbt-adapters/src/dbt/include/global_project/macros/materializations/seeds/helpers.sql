@@ -33,15 +33,8 @@
 
 {% macro default__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
     {%- set relation = relation if relation is not none else this -%}
-    {% set sql = "" %}
-    {% if full_refresh %}
-        {{ adapter.drop_relation(old_relation) }}
-        {% set sql = create_csv_table(model, agate_table, relation) %}
-    {% else %}
-        {{ adapter.truncate_relation(old_relation) }}
-        {% set sql = "truncate table " ~ old_relation.render() %}
-    {% endif %}
-
+    {# Seed now loads into an explicit relation (often an intermediate table). #}
+    {% set sql = create_csv_table(model, agate_table, relation) %}
     {{ return(sql) }}
 {% endmacro %}
 
@@ -72,6 +65,15 @@
 
 {% macro default__get_batch_size() %}
   {{ return(10000) }}
+{% endmacro %}
+
+
+{% macro seed_can_use_relation_rename() -%}
+  {{ return(adapter.dispatch('seed_can_use_relation_rename', 'dbt')()) }}
+{%- endmacro %}
+
+{% macro default__seed_can_use_relation_rename() %}
+  {{ return(true) }}
 {% endmacro %}
 
 

@@ -1,10 +1,12 @@
-{% macro default__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
-    {% set sql = "" %}
-    -- No truncate in Athena so always drop CSV table and recreate
-    {{ drop_relation(old_relation) }}
-    {% set sql = create_csv_table(model, agate_table) %}
+{% macro athena__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
+    {%- set relation = relation if relation is not none else this -%}
+    {% set sql = create_csv_table(model, agate_table, relation) %}
 
     {{ return(sql) }}
+{% endmacro %}
+
+{% macro athena__seed_can_use_relation_rename() %}
+  {{ return(false) }}
 {% endmacro %}
 
 {% macro try_cast_timestamp(col) %}

@@ -1,8 +1,7 @@
 import pytest
 from dbt.tests.adapter.simple_seed.fixtures import macros__schema_test
 from dbt.tests.adapter.simple_seed.seeds import seeds__enabled_in_config_csv, seeds__tricky_csv
-from dbt.tests.adapter.simple_seed.test_seed import SeedConfigBase
-from dbt.tests.adapter.simple_seed.test_seed import BaseTestEmptySeed
+from dbt.tests.adapter.simple_seed.test_seed import BaseSeedConcurrent, BaseTestEmptySeed, SeedConfigBase
 from dbt.tests.adapter.utils.base_utils import run_dbt
 
 _SEED_CONFIGS_CSV = """
@@ -190,3 +189,7 @@ class TestBigQuerySeedWithUniqueDelimiter(TestSimpleSeedConfigs):
                 },
             },
         }
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
+    pass

@@ -14,6 +14,7 @@
   {%- set backup_relation_type = 'table' if old_relation is none else old_relation.type -%}
   {%- set backup_relation = make_backup_relation(target_relation, backup_relation_type) -%}
   {%- set preexisting_backup_relation = load_cached_relation(backup_relation) -%}
+  {%- set can_use_relation_rename = seed_can_use_relation_rename() -%}
 
   {%- set grant_config = config.get('grants') -%}
   {%- set agate_table = load_agate_table() -%}
@@ -61,11 +62,20 @@
       {%- endcall %}
       -- drop the intermediate relation since we just inserted its rows
       {{ adapter.drop_relation(intermediate_relation) }}
-  {% else %}
+  {% elif can_use_relation_rename %}
       {% if old_relation is not none %}
           {{ adapter.rename_relation(old_relation, backup_relation) }}
       {% endif %}
       {{ adapter.rename_relation(intermediate_relation, target_relation) }}
+  {% else %}
+      {% if old_relation is not none %}
+          {{ adapter.drop_relation(old_relation) }}
+      {% endif %}
+      {% call statement('create_target_from_intermediate') -%}
+          create table {{ target_relation.render() }} as
+          select * from {{ intermediate_relation.render() }}
+      {%- endcall %}
+      {{ adapter.drop_relation(intermediate_relation) }}
   {% endif %}
 
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode) %}

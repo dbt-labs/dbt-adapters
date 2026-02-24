@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.adapter.simple_seed.test_seed import SeedConfigBase
+from dbt.tests.adapter.simple_seed.test_seed import BaseSeedConcurrent, SeedConfigBase
 from dbt.tests.util import run_dbt
 
 
@@ -14,3 +14,7 @@ class TestSimpleBigSeedBatched(SeedConfigBase):
     def test_big_batched_seed(self, project):
         seed_results = run_dbt(["seed"])
         assert len(seed_results) == 1
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
+    pass

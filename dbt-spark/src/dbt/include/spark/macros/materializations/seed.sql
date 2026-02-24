@@ -5,9 +5,6 @@
 
 {% macro spark__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
     {%- set relation = relation if relation is not none else this -%}
-    {% if old_relation %}
-        {{ adapter.drop_relation(old_relation) }}
-    {% endif %}
     {# Call Spark's implementation directly for compatibility with older dbt helper macro signatures. #}
     {% set sql = spark__create_csv_table(model, agate_table, relation) %}
     {{ return(sql) }}

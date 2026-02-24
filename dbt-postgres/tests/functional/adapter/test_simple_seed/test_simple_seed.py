@@ -5,6 +5,7 @@ Placing this file in its own directory avoids collisions.
 
 from dbt.tests.adapter.simple_seed.test_seed import (
     BaseBasicSeedTests,
+    BaseSeedConcurrent,
     BaseSeedConfigFullRefreshOn,
     BaseSeedConfigFullRefreshOff,
     BaseSeedCustomSchema,
@@ -71,4 +72,8 @@ class TestEmptySeed(BaseTestEmptySeed):
 
 
 class TestSimpleSeedColumnOverride(BaseSimpleSeedColumnOverride):
+    pass
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
     pass

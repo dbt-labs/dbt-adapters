@@ -4,7 +4,8 @@
 {% endmacro %}
 
 {% macro bigquery__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
-    {{ adapter.drop_relation(old_relation) }}
+    {# Keep the existing target relation intact; seed now loads into an explicit relation. #}
+    {{ create_csv_table(model, agate_table, relation) }}
 {% endmacro %}
 
 {% macro bigquery__load_csv_rows(model, agate_table, relation=none) %}
