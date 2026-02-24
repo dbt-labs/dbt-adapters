@@ -53,7 +53,9 @@
   -- cleanup
   {% if exists_as_table and not full_refresh_mode %}
       -- For non-full refresh, doing an atomic insert so we don't drop grants
-      {{ truncate_relation(target_relation) }}
+      {% call statement('truncate_target') -%}
+          truncate table {{ target_relation.render() }}
+      {%- endcall %}
       {% call statement('insert_to_target') -%}
           insert into {{ target_relation.render() }}
           select * from {{ intermediate_relation.render() }}
@@ -69,10 +71,8 @@
       {% if old_relation is not none %}
           {{ adapter.drop_relation(old_relation) }}
       {% endif %}
-      {% do create_csv_table(model, agate_table, target_relation) %}
-      {% call statement('insert_from_intermediate') -%}
-          insert into {{ target_relation.render() }}
-          select * from {{ intermediate_relation.render() }}
+      {% call statement('create_target_from_intermediate') -%}
+          {{ seed_create_target_from_intermediate(target_relation, intermediate_relation) }}
       {%- endcall %}
       {{ adapter.drop_relation(intermediate_relation) }}
   {% endif %}

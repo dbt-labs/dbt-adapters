@@ -76,6 +76,15 @@
   {{ return(true) }}
 {% endmacro %}
 
+{% macro seed_create_target_from_intermediate(target_relation, intermediate_relation) -%}
+  {{ return(adapter.dispatch('seed_create_target_from_intermediate', 'dbt')(target_relation, intermediate_relation)) }}
+{%- endmacro %}
+
+{% macro default__seed_create_target_from_intermediate(target_relation, intermediate_relation) %}
+  create table {{ target_relation.render() }} as
+  select * from {{ intermediate_relation.render() }}
+{% endmacro %}
+
 {% macro get_seed_column_quoted_csv(model, column_names) %}
   {%- set quote_seed_column = model['config'].get('quote_columns', None) -%}
     {% set quoted = [] %}

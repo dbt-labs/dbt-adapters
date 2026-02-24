@@ -9,6 +9,13 @@
   {{ return(false) }}
 {% endmacro %}
 
+{% macro athena__seed_create_target_from_intermediate(target_relation, intermediate_relation) %}
+  {% set sql %}
+    select * from {{ intermediate_relation.render_hive() }}
+  {% endset %}
+  {{ create_table_as(false, target_relation, sql) }}
+{% endmacro %}
+
 {% macro try_cast_timestamp(col) %}
     {% set date_formats = [
       '%Y-%m-%d %H:%i:%s',
