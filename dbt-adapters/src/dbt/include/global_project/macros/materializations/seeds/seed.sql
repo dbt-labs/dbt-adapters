@@ -53,9 +53,7 @@
   -- cleanup
   {% if exists_as_table and not full_refresh_mode %}
       -- For non-full refresh, doing an atomic insert so we don't drop grants
-      {% call statement('truncate_target') -%}
-          {{ truncate_relation(target_relation) }}
-      {%- endcall %}
+      {{ truncate_relation(target_relation) }}
       {% call statement('insert_to_target') -%}
           insert into {{ target_relation.render() }}
           select * from {{ intermediate_relation.render() }}
@@ -72,8 +70,7 @@
           {{ adapter.drop_relation(old_relation) }}
       {% endif %}
       {% call statement('create_target_from_intermediate') -%}
-          create table {{ target_relation.render() }} as
-          select * from {{ intermediate_relation.render() }}
+          {{ seed_create_target_from_intermediate(target_relation, intermediate_relation) }}
       {%- endcall %}
       {{ adapter.drop_relation(intermediate_relation) }}
   {% endif %}
