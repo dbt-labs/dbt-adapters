@@ -25,3 +25,5 @@ prompts:
     hint: '1 or more'
     type: 'int'
     default: 1
+  query_group:
+    hint: 'optional; WLM query group / tag for query logs (STL_QUERY, SVL_QLOG)'
