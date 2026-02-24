@@ -357,6 +357,15 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
+        # Explicit acknowledge the 'out-of-org' warning required by Vertex AI.
+        # This label is needed for cross-project runtime templates to bypass GCP
+        # security policy blocks that would otherwise prevent job creation.
+        # TODO: add a function test for it.
+        security_ack_label = {
+            "aiplatform.googleapis.com/notebook_runtime_out_of_org_warning": "ack"
+        }
+        notebook_execution_job.labels = security_ack_label
+
         if self._connection_method in (
             BigQueryConnectionMethod.SERVICE_ACCOUNT,
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
