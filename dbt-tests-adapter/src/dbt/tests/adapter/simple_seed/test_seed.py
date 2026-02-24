@@ -435,7 +435,6 @@ class BaseSeedConcurrent(SeedConfigBase):
 
     def test_concurrent_seeds(self, project):
         from concurrent.futures import ThreadPoolExecutor
-        import threading
 
         # Start with an empty table
         run_dbt(["seed"])
