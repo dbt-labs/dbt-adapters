@@ -8,7 +8,8 @@
     {% if old_relation %}
         {{ adapter.drop_relation(old_relation) }}
     {% endif %}
-    {% set sql = create_csv_table(model, agate_table, relation) %}
+    {# Call Spark's implementation directly for compatibility with older dbt helper macro signatures. #}
+    {% set sql = spark__create_csv_table(model, agate_table, relation) %}
     {{ return(sql) }}
 {% endmacro %}
 
