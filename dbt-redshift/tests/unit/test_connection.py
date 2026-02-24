@@ -319,6 +319,84 @@ class TestConnection(TestCase):
         assert default_credentials.tcp_keepalive_count is None
 
 
+class TestQueryGroup(TestCase):
+    """Tests for query_group credential and connection behavior."""
+
+    def test_credentials_query_group_from_dict(self):
+        credentials = RedshiftCredentials.from_dict(
+            {
+                "type": "redshift",
+                "dbname": "redshift",
+                "user": "root",
+                "host": "test-host.redshift.amazonaws.com",
+                "pass": "password",
+                "port": 5439,
+                "schema": "public",
+                "query_group": "dbt_test_group",
+            }
+        )
+        assert credentials.query_group == "dbt_test_group"
+
+    def test_credentials_query_group_default_none(self):
+        credentials = RedshiftCredentials.from_dict(
+            {
+                "type": "redshift",
+                "dbname": "redshift",
+                "user": "root",
+                "host": "test-host.redshift.amazonaws.com",
+                "pass": "password",
+                "port": 5439,
+                "schema": "public",
+            }
+        )
+        assert credentials.query_group is None
+
+    @mock.patch("redshift_connector.connect", MagicMock())
+    def test_open_executes_set_query_group_when_configured(self):
+        mock_cursor = MagicMock()
+        mock_handle = MagicMock()
+        mock_handle.cursor.return_value = mock_cursor
+
+        connect_mock = MagicMock()
+        connect_mock.return_value = mock_handle
+
+        profile_cfg = {
+            "outputs": {
+                "test": {
+                    "type": "redshift",
+                    "dbname": "redshift",
+                    "user": "root",
+                    "host": "thishostshouldnotexist.test.us-east-1",
+                    "pass": "password",
+                    "port": 5439,
+                    "schema": "public",
+                    "query_group": "dbt_test_group",
+                }
+            },
+            "target": "test",
+        }
+        project_cfg = {
+            "name": "X",
+            "version": "0.1",
+            "profile": "test",
+            "project-root": "/tmp/dbt/does-not-exist",
+            "quoting": {"identifier": False, "schema": True},
+            "config-version": 2,
+        }
+        config = config_from_parts_or_dicts(project_cfg, profile_cfg)
+        adapter = RedshiftAdapter(config, get_context("spawn"))
+        inject_adapter(adapter, RedshiftPlugin)
+
+        connection = mock_connection("test", state="closed")
+        connection.credentials = config.credentials
+        connection.handle = None
+
+        with mock.patch("redshift_connector.connect", connect_mock):
+            adapter.connections.open(connection)
+
+        mock_cursor.execute.assert_any_call("SET query_group TO 'dbt_test_group'")
+
+
 class TestAutocommitBehavior(TestCase):
     """Tests for autocommit-aware transaction management with behavior flag."""
 
