@@ -1,10 +1,11 @@
-{% macro redshift__create_csv_table(model, agate_table) %}
+{% macro redshift__create_csv_table(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
   {%- set column_override = model['config'].get('column_types', {}) -%}
   {%- set quote_seed_column = model['config'].get('quote_columns', None) -%}
   {%- set _dist = model['config'].get('dist', None) -%}
 
   {% set sql %}
-    create table {{ this.render() }} (
+    create table {{ relation.render() }} (
         {%- for col_name in agate_table.column_names -%}
             {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
             {%- set type = column_override.get(col_name, inferred_type) -%}

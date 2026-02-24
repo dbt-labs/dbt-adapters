@@ -415,3 +415,46 @@ class BaseTestEmptySeed:
 
 class TestEmptySeed(BaseTestEmptySeed):
     pass
+
+
+class BaseSeedConcurrent(SeedConfigBase):
+    @pytest.fixture(scope="class", autouse=True)
+    def setUp(self, project):
+        """Create table for ensuring seeds and models used in tests build correctly"""
+        project.run_sql(seeds.seeds__expected_sql)
+
+    @pytest.fixture(scope="class")
+    def seeds(self, test_data_dir):
+        return {"seed_actual.csv": seeds.seed__actual_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "models__downstream_from_seed_actual.sql": fixtures.models__downstream_from_seed_actual,
+        }
+
+    def test_concurrent_seeds(self, project):
+        from concurrent.futures import ThreadPoolExecutor
+        import threading
+
+        # Start with an empty table
+        run_dbt(["seed"])
+
+        # Run two seed operations concurrently
+        def run_seed():
+            return run_dbt(["seed"])
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            future1 = executor.submit(run_seed)
+            future2 = executor.submit(run_seed)
+
+            res1 = future1.result()
+            res2 = future2.result()
+
+        assert len(res1) == 1
+        assert len(res2) == 1
+        check_relations_equal(project.adapter, ["seed_expected", "seed_actual"])
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
+    pass

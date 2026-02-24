@@ -1,14 +1,15 @@
 
-{% macro create_csv_table(model, agate_table) -%}
-  {{ adapter.dispatch('create_csv_table', 'dbt')(model, agate_table) }}
+{% macro create_csv_table(model, agate_table, relation=none) -%}
+  {{ adapter.dispatch('create_csv_table', 'dbt')(model, agate_table, relation) }}
 {%- endmacro %}
 
-{% macro default__create_csv_table(model, agate_table) %}
+{% macro default__create_csv_table(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
   {%- set column_override = model['config'].get('column_types', {}) -%}
   {%- set quote_seed_column = model['config'].get('quote_columns', None) -%}
 
   {% set sql %}
-    create table {{ this.render() }} (
+    create table {{ relation.render() }} (
         {%- for col_name in agate_table.column_names -%}
             {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
             {%- set type = column_override.get(col_name, inferred_type) -%}
@@ -26,15 +27,16 @@
 {% endmacro %}
 
 
-{% macro reset_csv_table(model, full_refresh, old_relation, agate_table) -%}
-  {{ adapter.dispatch('reset_csv_table', 'dbt')(model, full_refresh, old_relation, agate_table) }}
+{% macro reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) -%}
+  {{ adapter.dispatch('reset_csv_table', 'dbt')(model, full_refresh, old_relation, agate_table, relation) }}
 {%- endmacro %}
 
-{% macro default__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
+{% macro default__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
+    {%- set relation = relation if relation is not none else this -%}
     {% set sql = "" %}
     {% if full_refresh %}
         {{ adapter.drop_relation(old_relation) }}
-        {% set sql = create_csv_table(model, agate_table) %}
+        {% set sql = create_csv_table(model, agate_table, relation) %}
     {% else %}
         {{ adapter.truncate_relation(old_relation) }}
         {% set sql = "truncate table " ~ old_relation.render() %}
@@ -85,11 +87,12 @@
 {% endmacro %}
 
 
-{% macro load_csv_rows(model, agate_table) -%}
-  {{ adapter.dispatch('load_csv_rows', 'dbt')(model, agate_table) }}
+{% macro load_csv_rows(model, agate_table, relation=none) -%}
+  {{ adapter.dispatch('load_csv_rows', 'dbt')(model, agate_table, relation) }}
 {%- endmacro %}
 
-{% macro default__load_csv_rows(model, agate_table) %}
+{% macro default__load_csv_rows(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
 
   {% set batch_size = get_batch_size() %}
 
@@ -106,7 +109,7 @@
       {% endfor %}
 
       {% set sql %}
-          insert into {{ this.render() }} ({{ cols_sql }}) values
+          insert into {{ relation.render() }} ({{ cols_sql }}) values
           {% for row in chunk -%}
               ({%- for column in agate_table.column_names -%}
                   {{ get_binding_char() }}

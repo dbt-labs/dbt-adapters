@@ -1,4 +1,5 @@
-{% macro snowflake__load_csv_rows(model, agate_table) %}
+{% macro snowflake__load_csv_rows(model, agate_table, relation=none) %}
+    {%- set relation = relation if relation is not none else this -%}
     {% set batch_size = get_batch_size() %}
     {% set cols_sql = get_seed_column_quoted_csv(model, agate_table.column_names) %}
     {% set bindings = [] %}
@@ -13,7 +14,7 @@
         {% endfor %}
 
         {% set sql %}
-            insert into {{ this.render() }} ({{ cols_sql }}) values
+            insert into {{ relation.render() }} ({{ cols_sql }}) values
             {% for row in chunk -%}
                 ({%- for column in agate_table.column_names -%}
                     %s

@@ -3,16 +3,18 @@
 {% endmacro %}
 
 
-{% macro spark__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
+{% macro spark__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
+    {%- set relation = relation if relation is not none else this -%}
     {% if old_relation %}
         {{ adapter.drop_relation(old_relation) }}
     {% endif %}
-    {% set sql = create_csv_table(model, agate_table) %}
+    {% set sql = create_csv_table(model, agate_table, relation) %}
     {{ return(sql) }}
 {% endmacro %}
 
 
-{% macro spark__load_csv_rows(model, agate_table) %}
+{% macro spark__load_csv_rows(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
 
   {% set batch_size = get_batch_size() %}
   {% set column_override = model['config'].get('column_types', {}) %}
@@ -27,7 +29,7 @@
       {% endfor %}
 
       {% set sql %}
-          insert into {{ this.render() }} values
+          insert into {{ relation.render() }} values
           {% for row in chunk -%}
               ({%- for col_name in agate_table.column_names -%}
                   {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
@@ -51,12 +53,13 @@
 {% endmacro %}
 
 
-{% macro spark__create_csv_table(model, agate_table) %}
+{% macro spark__create_csv_table(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
   {%- set column_override = model['config'].get('column_types', {}) -%}
   {%- set quote_seed_column = model['config'].get('quote_columns', None) -%}
 
   {% set sql %}
-    create table {{ this.render() }} (
+    create table {{ relation.render() }} (
         {%- for col_name in agate_table.column_names -%}
             {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
             {%- set type = column_override.get(col_name, inferred_type) -%}
