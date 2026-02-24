@@ -97,7 +97,6 @@ class SnowflakeRelation(BaseRelation):
         cls,
         relation_results: RelationResults,
         relation_config: RelationConfig,
-        existing_transient: Optional[bool] = None,
     ) -> Optional[SnowflakeDynamicTableConfigChangeset]:
         existing_dynamic_table = SnowflakeDynamicTableConfig.from_relation_results(
             relation_results
@@ -154,10 +153,13 @@ class SnowflakeRelation(BaseRelation):
                 context=new_dynamic_table.cluster_by,
             )
 
+        # Transient is only compared when both sides are explicitly known:
+        # - new is None when the user omitted transient from their config ("don't care")
+        # - existing is None when describe_dynamic_table was called without include_transient
         if (
             new_dynamic_table.transient is not None
-            and existing_transient is not None
-            and new_dynamic_table.transient != existing_transient
+            and existing_dynamic_table.transient is not None
+            and new_dynamic_table.transient != existing_dynamic_table.transient
         ):
             config_change_collection.transient = SnowflakeDynamicTableTransientConfigChange(
                 action=RelationConfigChangeAction.create,  # type: ignore

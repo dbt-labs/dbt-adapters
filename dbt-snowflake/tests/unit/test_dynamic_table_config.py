@@ -323,11 +323,11 @@ class TestTransientChangeDetectionLogic:
 
     Transient is only compared when:
     - The user explicitly set transient in their config (not None)
-    - existing_transient was queried and provided (not None)
+    - The existing transient column is present in the relation results (not None)
     """
 
     @staticmethod
-    def _make_relation_results(extra_columns=None):
+    def _make_relation_results(transient=None):
         import agate
 
         dt_row_data = {
@@ -340,12 +340,17 @@ class TestTransientChangeDetectionLogic:
             "refresh_mode": "AUTO",
             "immutable_where": None,
         }
-        if extra_columns:
-            dt_row_data.update(extra_columns)
+        column_types = [agate.Text()] * len(dt_row_data)
+
+        if transient is not None:
+            dt_row_data["transient"] = transient
+            column_types.append(agate.Boolean())
+
         return {
             "dynamic_table": agate.Table(
                 [list(dt_row_data.values())],
                 list(dt_row_data.keys()),
+                column_types,
             )
         }
 
@@ -368,15 +373,15 @@ class TestTransientChangeDetectionLogic:
         )
         return relation_config
 
-    def test_no_transient_config_no_query_no_change(self):
-        """When user doesn't set transient, no change is detected regardless of existing state."""
+    def test_no_transient_config_no_column_no_change(self):
+        """When user doesn't set transient and column is absent, no change is detected."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
         relation_results = self._make_relation_results()
         relation_config = self._make_relation_config(transient=None)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=None
+            relation_results, relation_config
         )
 
         if changeset is not None:
@@ -386,11 +391,11 @@ class TestTransientChangeDetectionLogic:
         """When user sets transient=True and existing is also True, no change."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results()
+        relation_results = self._make_relation_results(transient=True)
         relation_config = self._make_relation_config(transient=True)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=True
+            relation_results, relation_config
         )
 
         if changeset is not None:
@@ -400,11 +405,11 @@ class TestTransientChangeDetectionLogic:
         """When user sets transient=True but existing is False, change is detected."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results()
+        relation_results = self._make_relation_results(transient=False)
         relation_config = self._make_relation_config(transient=True)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=False
+            relation_results, relation_config
         )
 
         assert changeset is not None
@@ -416,11 +421,11 @@ class TestTransientChangeDetectionLogic:
         """When user sets transient=False but existing is True, change is detected."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results()
+        relation_results = self._make_relation_results(transient=True)
         relation_config = self._make_relation_config(transient=False)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=True
+            relation_results, relation_config
         )
 
         assert changeset is not None
@@ -428,15 +433,15 @@ class TestTransientChangeDetectionLogic:
         assert changeset.transient.context is False
         assert changeset.requires_full_refresh is True
 
-    def test_explicit_transient_with_no_existing_query_no_change(self):
-        """When user sets transient but existing_transient is None (not queried), no change."""
+    def test_explicit_transient_with_no_column_no_change(self):
+        """When user sets transient but column is absent in results, no change."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
         relation_results = self._make_relation_results()
         relation_config = self._make_relation_config(transient=True)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=None
+            relation_results, relation_config
         )
 
         if changeset is not None:
@@ -446,11 +451,11 @@ class TestTransientChangeDetectionLogic:
         """When user omits transient, no change even if existing table is transient."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results()
+        relation_results = self._make_relation_results(transient=True)
         relation_config = self._make_relation_config(transient=None)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=True
+            relation_results, relation_config
         )
 
         if changeset is not None:
@@ -460,11 +465,11 @@ class TestTransientChangeDetectionLogic:
         """When user omits transient, no change even if existing table is non-transient."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results()
+        relation_results = self._make_relation_results(transient=False)
         relation_config = self._make_relation_config(transient=None)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
-            relation_results, relation_config, existing_transient=False
+            relation_results, relation_config
         )
 
         if changeset is not None:

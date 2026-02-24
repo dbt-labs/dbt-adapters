@@ -176,6 +176,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "table_tag": dynamic_table.get("table_tag"),
             "cluster_by": cluster_by,
             "immutable_where": immutable_where,
+            # agate.Row.get() returns None when the column is absent, which is the
+            # correct default -- it means "not queried" and skips transient comparison.
+            "transient": dynamic_table.get("transient"),
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 

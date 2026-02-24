@@ -39,10 +39,7 @@ from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
 from dbt.adapters.snowflake import SnowflakeRelation
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import agate
+import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
@@ -528,7 +525,9 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+    def describe_dynamic_table(
+        self, relation: SnowflakeRelation, include_transient: bool = False
+    ) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
@@ -564,10 +563,18 @@ CALL {proc_name}();
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
 
-        return {"dynamic_table": dt_table.select(base_columns)}
+        selected = dt_table.select(base_columns)
 
-    @available
-    def query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
+        if include_transient:
+            is_transient = self._query_dynamic_table_transient_status(relation)
+            # choosing a future proof column name
+            selected = selected.compute(
+                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
+            )
+
+        return {"dynamic_table": selected}
+
+    def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
         Query SHOW TABLES to determine if a dynamic table is transient.
 
