@@ -69,8 +69,10 @@
       {% if old_relation is not none %}
           {{ adapter.drop_relation(old_relation) }}
       {% endif %}
-      {% call statement('create_target_from_intermediate') -%}
-          {{ seed_create_target_from_intermediate(target_relation, intermediate_relation) }}
+      {% do create_csv_table(model, agate_table, target_relation) %}
+      {% call statement('insert_from_intermediate') -%}
+          insert into {{ target_relation.render() }}
+          select * from {{ intermediate_relation.render() }}
       {%- endcall %}
       {{ adapter.drop_relation(intermediate_relation) }}
   {% endif %}
