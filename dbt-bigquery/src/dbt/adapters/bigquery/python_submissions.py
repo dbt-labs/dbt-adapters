@@ -317,7 +317,13 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return match.group(1) if match else ""
 
     def _get_service_account_from_credentials(self) -> Optional[str]:
-        """Returns the service account email from credentials, or None for regular users."""
+        """Detect if the OAuth identity is a service account.
+
+        Handles impersonated credentials (via profiles.yml or ADC) and direct
+        service accounts (Cloud Composer, Cloud Run).
+
+        Returns the service account email if detected, or None for regular users.
+        """
         creds = self._GoogleCredentials
 
         # Impersonated credentials: from profiles.yml impersonate_service_account
@@ -360,9 +366,6 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
         ):
-            # Detect if the OAuth identity is a service account (e.g.,
-            # impersonated credentials via profiles.yml or ADC, or direct
-            # service accounts in Cloud Composer/Cloud Run).
             service_account = self._get_service_account_from_credentials()
             if service_account:
                 notebook_execution_job.service_account = service_account
