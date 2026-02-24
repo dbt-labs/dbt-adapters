@@ -76,6 +76,21 @@
   {{ return(true) }}
 {% endmacro %}
 
+{% macro seed_can_use_truncate() -%}
+  {{ return(adapter.dispatch('seed_can_use_truncate', 'dbt')()) }}
+{%- endmacro %}
+
+{% macro default__seed_can_use_truncate() %}
+  {{ return(true) }}
+{% endmacro %}
+
+{% macro seed_finalize(target_relation) -%}
+  {{ adapter.dispatch('seed_finalize', 'dbt')(target_relation) }}
+{%- endmacro %}
+
+{% macro default__seed_finalize(target_relation) %}
+{% endmacro %}
+
 {% macro seed_create_target_from_intermediate(target_relation, intermediate_relation) -%}
   {{ return(adapter.dispatch('seed_create_target_from_intermediate', 'dbt')(target_relation, intermediate_relation)) }}
 {%- endmacro %}

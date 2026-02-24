@@ -15,6 +15,7 @@
   {%- set backup_relation = make_backup_relation(target_relation, backup_relation_type) -%}
   {%- set preexisting_backup_relation = load_cached_relation(backup_relation) -%}
   {%- set can_use_relation_rename = seed_can_use_relation_rename() -%}
+  {%- set can_use_truncate = seed_can_use_truncate() -%}
 
   {%- set grant_config = config.get('grants') -%}
   {%- set agate_table = load_agate_table() -%}
@@ -51,16 +52,13 @@
   {% do create_indexes(intermediate_relation) %}
 
   -- cleanup
-  {% if exists_as_table and not full_refresh_mode %}
-      -- For non-full refresh, doing an atomic insert so we don't drop grants
-      {% call statement('truncate_target') -%}
-          truncate table {{ target_relation.render() }}
-      {%- endcall %}
+  {% if exists_as_table and not full_refresh_mode and can_use_truncate %}
+      -- Non-full refresh with truncate: atomic insert preserves grants
+      {{ truncate_relation(target_relation) }}
       {% call statement('insert_to_target') -%}
           insert into {{ target_relation.render() }}
           select * from {{ intermediate_relation.render() }}
       {%- endcall %}
-      -- drop the intermediate relation since we just inserted its rows
       {{ adapter.drop_relation(intermediate_relation) }}
   {% elif can_use_relation_rename %}
       {% if old_relation is not none %}
@@ -77,6 +75,8 @@
       {{ adapter.drop_relation(intermediate_relation) }}
   {% endif %}
 
+  {{ seed_finalize(target_relation) }}
+
   {% set should_revoke = should_revoke(old_relation, full_refresh_mode) %}
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
@@ -88,9 +88,7 @@
   {{ adapter.commit() }}
 
   -- finally, drop the existing/backup relation after the commit
-  {% if full_refresh_mode or not exists_as_table %}
-    {{ drop_relation_if_exists(backup_relation) }}
-  {% endif %}
+  {{ drop_relation_if_exists(backup_relation) }}
 
   {{ run_hooks(post_hooks, inside_transaction=False) }}
 

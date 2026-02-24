@@ -9,9 +9,13 @@
   {{ return(false) }}
 {% endmacro %}
 
+{% macro athena__seed_can_use_truncate() %}
+  {{ return(false) }}
+{% endmacro %}
+
 {% macro athena__seed_create_target_from_intermediate(target_relation, intermediate_relation) %}
   {% set sql %}
-    select * from {{ intermediate_relation.render_hive() }}
+    select * from {{ intermediate_relation.render() }}
   {% endset %}
   {{ create_table_as(false, target_relation, sql) }}
 {% endmacro %}
