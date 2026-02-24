@@ -1,0 +1,6 @@
+kind: Features
+body: Migrate `get_columns_in_relation` to use `svv_all_columns`, enabling cross-database column introspection for Datasharing
+time: 2026-02-19T15:56:45.207359+05:30
+custom:
+    Author: tauhid621
+    Issue: "1624"
