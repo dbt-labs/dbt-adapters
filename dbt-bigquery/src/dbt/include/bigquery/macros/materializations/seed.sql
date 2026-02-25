@@ -12,6 +12,10 @@
   {{ return(false) }}
 {% endmacro %}
 
+{% macro bigquery__seed_can_use_relation_rename() %}
+  {{ return(false) }}
+{% endmacro %}
+
 {% macro bigquery__seed_finalize(target_relation) %}
   {% call statement('apply_table_options') %}
     alter table {{ target_relation.render() }} set {{ bigquery_table_options(config, model) }}
