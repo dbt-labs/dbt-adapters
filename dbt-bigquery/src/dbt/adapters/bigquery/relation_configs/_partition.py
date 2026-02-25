@@ -78,9 +78,7 @@ class PartitionConfig(dbtClassMixin):
         """
         # int64 range partitions: normalize to partition start boundary
         if self.data_type == "int64" and self.range is not None:
-            column: str = self.field
-            if alias:
-                column = f"{alias}.{column}"
+            column = self.render(alias)
             start = self.range["start"]
             interval = self.range["interval"]
             return f"({column} - MOD({column} - {start}, {interval}))"
