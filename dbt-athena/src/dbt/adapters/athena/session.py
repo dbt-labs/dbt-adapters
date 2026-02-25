@@ -42,6 +42,8 @@ def _assume_role_session(
     credentials: Any,
 ) -> boto3.session.Session:
     duration = credentials.assume_role_duration_seconds
+    # Valid range is 900–43200 seconds per AWS STS docs:
+    # https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html#API_AssumeRole_RequestParameters
     if not (900 <= duration <= 43200):
         raise DbtRuntimeError(
             f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
@@ -63,7 +65,7 @@ def _assume_role_session(
 def _get_assume_role_session(
     base_session: boto3.session.Session,
     key: _AssumeRoleParams,
-    _ttl_hash: int,
+    _ttl_hash: int,  # artificial value that changes every ttl seconds to force cache invalidation
 ) -> boto3.session.Session:
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
     sts_client = base_session.client("sts")
