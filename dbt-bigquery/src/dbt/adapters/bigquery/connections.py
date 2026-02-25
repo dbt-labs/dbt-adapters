@@ -22,6 +22,7 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
+from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
@@ -264,6 +265,10 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
+        model_timeout = getattr(conn, "_bq_model_timeout", None)
+        if model_timeout is not None:
+            job_params["job_timeout_ms"] = int(model_timeout * 1000)
+
         with self.exception_handler(sql):
 
             def _execute_with_retry():
@@ -469,7 +474,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 job_config=CopyJobConfig(write_disposition=write_disposition),
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
-            copy_job.result(timeout=self._retry.create_job_execution_timeout(fallback=300))
+            model_timeout = getattr(conn, "_bq_model_timeout", None)
+            copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
+            copy_job.result(timeout=copy_timeout)
 
     def write_dataframe_to_table(
         self,
@@ -590,12 +597,19 @@ class BigQueryConnectionManager(BaseConnectionManager):
         job_id,
         limit: Optional[int] = None,
     ):
-        client: Client = conn.handle
-        timeout = self._retry.create_job_execution_timeout()
-        query_job_config = QueryJobConfig(**job_params)
-        polling_timeout = timeout + 30  # buffer for polling after job execution timeout
-        query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
+        client: Client = conn.handle
+        # Only set job_timeout_ms from profile if not already set (e.g., via model-level config)
+        if "job_timeout_ms" in job_params:
+            timeout = job_params["job_timeout_ms"] / 1000
+        else:
+            timeout = self._retry.create_job_execution_timeout()
+            if timeout:
+                job_params["job_timeout_ms"] = int(timeout * 1000)
+        query_job_config = QueryJobConfig(**job_params)
+        polling_timeout = (
+            timeout + 30 if timeout else None
+        )  # buffer for polling after job execution timeout
         # Cannot reuse job_config if destination is set and ddl is used
         query_job = client.query(
             query=sql,
@@ -618,7 +632,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
         pre = time.perf_counter()
         try:
             iterator = query_job.result(
-                max_results=limit, timeout=polling_timeout, retry=self._retry.create_retry()
+                max_results=limit,
+                timeout=polling_timeout,
+                retry=DEFAULT_JOB_RETRY.with_timeout(timeout),
             )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
