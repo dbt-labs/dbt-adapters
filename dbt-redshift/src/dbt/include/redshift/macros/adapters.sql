@@ -109,29 +109,29 @@
 
 {% macro redshift__get_columns_in_relation(relation) -%}
   {% if redshift__use_show_apis() %}
-    {{ return(redshift__get_columns_in_relation_svv(relation)) }}
+    {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
   {% endif %}
 {% endmacro %}
 
 
-{% macro redshift__get_columns_in_relation_svv(relation) -%}
+{% macro redshift__get_columns_in_relation_show(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
-    select
-      column_name,
-      data_type,
-      character_maximum_length,
-      numeric_precision,
-      numeric_scale
-    from svv_all_columns
-    where database_name = '{{ relation.database }}'
-      and schema_name = '{{ relation.schema }}'
-      and table_name = '{{ relation.identifier }}'
-    order by ordinal_position
+    SHOW COLUMNS FROM TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
   {% endcall %}
   {% set table = load_result('get_columns_in_relation').table %}
-  {{ return(sql_convert_columns_in_relation(table)) }}
+  {% set columns = [] %}
+  {% for row in table %}
+    {% do columns.append(api.Column(
+      column=row['column_name'],
+      dtype=row['data_type'],
+      char_size=row['character_maximum_length'],
+      numeric_precision=row['numeric_precision'],
+      numeric_scale=row['numeric_scale']
+    )) %}
+  {% endfor %}
+  {{ return(columns) }}
 {% endmacro %}
 
 
