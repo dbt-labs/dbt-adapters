@@ -80,9 +80,7 @@ def _get_assume_role_session(
     try:
         response = sts_client.assume_role(**kwargs)
     except ClientError as e:
-        raise DbtRuntimeError(
-            f"Failed to assume role {key.assume_role_arn}: {e}"
-        ) from e
+        raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
     return boto3.session.Session(
         aws_access_key_id=response["Credentials"]["AccessKeyId"],
         aws_secret_access_key=response["Credentials"]["SecretAccessKey"],

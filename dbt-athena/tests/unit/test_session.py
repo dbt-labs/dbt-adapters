@@ -186,7 +186,9 @@ class TestAssumeRoleSession:
 
     @patch("dbt.adapters.athena.session.boto3.session.Session")
     @patch("dbt.adapters.athena.session._assume_role_session")
-    def test_get_boto3_session_from_credentials_calls_assume_role(self, mock_assume, mock_session_cls):
+    def test_get_boto3_session_from_credentials_calls_assume_role(
+        self, mock_assume, mock_session_cls
+    ):
         mock_base = MagicMock()
         mock_assumed = MagicMock()
         mock_session_cls.return_value = mock_base
