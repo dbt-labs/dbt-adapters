@@ -295,13 +295,14 @@
 {% macro redshift__list_schemas(database) %}
   {% if redshift__use_show_apis() %}
     {% call statement('list_schemas', fetch_result=True) -%}
-      select distinct schema_name as nspname
-      from svv_all_schemas
-      {% if database %}
-      where database_name = '{{ database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ database }}
     {% endcall %}
-    {{ return(load_result('list_schemas').table) }}
+    {%- set table = load_result('list_schemas').table -%}
+    {%- set schemas = [] -%}
+    {%- for row in table.rows -%}
+      {%- do schemas.append([row['schema_name']]) -%}
+    {%- endfor -%}
+    {{ return(schemas) }}
   {% else %}
     {{ return(postgres__list_schemas(database)) }}
   {% endif %}
@@ -310,13 +311,13 @@
 {% macro redshift__check_schema_exists(information_schema, schema) %}
   {% if redshift__use_show_apis() %}
     {% call statement('check_schema_exists', fetch_result=True) -%}
-      select count(*) from svv_all_schemas
-      where schema_name = '{{ schema }}'
-      {% if information_schema.database %}
-      and database_name = '{{ information_schema.database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ information_schema.database }}
+      LIKE '{{ schema }}'
     {% endcall %}
-    {{ return(load_result('check_schema_exists').table) }}
+    {%- set table = load_result('check_schema_exists').table -%}
+
+    {# We return list of list because the base adapter expects column count #}
+    {{ return([[table.rows | length]]) }}
   {% else %}
     {{ return(postgres__check_schema_exists(information_schema, schema)) }}
   {% endif %}
