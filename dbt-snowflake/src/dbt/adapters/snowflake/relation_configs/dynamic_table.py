@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import Optional, Dict, Any, TYPE_CHECKING, Union
 
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.contracts.relation import RelationConfig
@@ -7,6 +7,7 @@ from dbt.adapters.contracts.relation import ComponentName
 from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard library until py3.11
 from typing_extensions import Self
 
+from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 
 if TYPE_CHECKING:
@@ -43,8 +44,11 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - query: the query behind the table
     - target_lag: the maximum amount of time that the dynamic table’s content should lag behind updates to the base tables
     - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
+    - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
+    - cluster_by: specifies the columns to cluster on
+    - immutable_where: specifies an immutability constraint expression
 
     There are currently no non-configurable parameters.
     """
@@ -55,10 +59,13 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     query: str
     target_lag: str
     snowflake_warehouse: str
+    snowflake_initialization_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    cluster_by: Optional[Union[str, list[str]]] = None
+    immutable_where: Optional[str] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -75,10 +82,15 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": config_dict.get("query"),
             "target_lag": config_dict.get("target_lag"),
             "snowflake_warehouse": config_dict.get("snowflake_warehouse"),
+            "snowflake_initialization_warehouse": config_dict.get(
+                "snowflake_initialization_warehouse"
+            ),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
+            "cluster_by": config_dict.get("cluster_by"),
+            "immutable_where": config_dict.get("immutable_where"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -94,10 +106,17 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
+            "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
+                "snowflake_initialization_warehouse"
+            ),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
+            "cluster_by": cluster_by(relation_config),
+            "immutable_where": relation_config.config.extra.get(  # type:ignore
+                "immutable_where"
+            ),
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -112,6 +131,34 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
         dynamic_table: "agate.Row" = relation_results["dynamic_table"].rows[0]
 
+        # Snowflake returns "NONE" as a string for unset optional warehouse values
+        # Some Snowflake environments may also return empty strings
+        # We need to convert these to Python None to avoid rendering invalid SQL
+        init_warehouse = dynamic_table.get("initialization_warehouse")
+        if init_warehouse is not None and (
+            str(init_warehouse).upper() == "NONE" or str(init_warehouse).strip() == ""
+        ):
+            init_warehouse = None
+
+        # Snowflake returns immutable_where as "IMMUTABLE WHERE (expression)"
+        # We need to extract just the expression to match what users configure
+        immutable_where = dynamic_table.get("immutable_where")
+        if immutable_where is not None:
+            immutable_where_str = str(immutable_where).strip()
+            if immutable_where_str.upper() == "NONE" or immutable_where_str == "":
+                immutable_where = None
+            elif immutable_where_str.upper().startswith("IMMUTABLE WHERE ("):
+                # Strip "IMMUTABLE WHERE (" prefix and ")" suffix
+                immutable_where = immutable_where_str[17:-1]  # len("IMMUTABLE WHERE (") = 17
+
+        # Snowflake may return empty string for unset cluster_by
+        # Normalize to Python None for consistency
+        cluster_by = dynamic_table.get("cluster_by")
+        if cluster_by is not None and str(cluster_by).strip() not in ("", "NONE", "None"):
+            cluster_by = str(cluster_by).strip()
+        else:
+            cluster_by = None
+
         config_dict = {
             "name": dynamic_table.get("name"),
             "schema_name": dynamic_table.get("schema_name"),
@@ -119,9 +166,12 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "query": dynamic_table.get("text"),
             "target_lag": dynamic_table.get("target_lag"),
             "snowflake_warehouse": dynamic_table.get("warehouse"),
+            "snowflake_initialization_warehouse": init_warehouse,
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
+            "cluster_by": cluster_by,
+            "immutable_where": immutable_where,
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 
@@ -147,6 +197,15 @@ class SnowflakeDynamicTableWarehouseConfigChange(RelationConfigChange):
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableInitializationWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
     context: Optional[str] = None
 
@@ -155,11 +214,34 @@ class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
         return True
 
 
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableImmutableWhereConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableClusterByConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
 @dataclass
 class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeDynamicTableWarehouseConfigChange] = None
+    snowflake_initialization_warehouse: Optional[
+        SnowflakeDynamicTableInitializationWarehouseConfigChange
+    ] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
+    immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
+    cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
@@ -171,10 +253,26 @@ class SnowflakeDynamicTableConfigChangeset:
                     if self.snowflake_warehouse
                     else False
                 ),
+                (
+                    self.snowflake_initialization_warehouse.requires_full_refresh
+                    if self.snowflake_initialization_warehouse
+                    else False
+                ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
+                self.immutable_where.requires_full_refresh if self.immutable_where else False,
+                self.cluster_by.requires_full_refresh if self.cluster_by else False,
             ]
         )
 
     @property
     def has_changes(self) -> bool:
-        return any([self.target_lag, self.snowflake_warehouse, self.refresh_mode])
+        return any(
+            [
+                self.target_lag,
+                self.snowflake_warehouse,
+                self.snowflake_initialization_warehouse,
+                self.refresh_mode,
+                self.immutable_where,
+                self.cluster_by,
+            ]
+        )

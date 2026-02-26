@@ -98,7 +98,12 @@
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
-    comment on {{ relation_type }} {{ relation.render() }} IS $${{ relation_comment | replace('$', '[$]') }}$$;
+
+    {%- if relation.is_iceberg_format -%}
+        alter iceberg table {{ relation.render() }} set comment = $${{ relation_comment | replace('$', '[$]') }}$$;
+    {%- else -%}
+        comment on {{ relation_type }} {{ relation.render() }} IS $${{ relation_comment | replace('$', '[$]') }}$$;
+    {%- endif -%}
 {% endmacro %}
 
 
@@ -157,6 +162,35 @@
 {% endmacro %}
 
 
+{% macro snowflake__get_column_data_type_for_alter(relation, column) %}
+  {#
+    Helper macro to get the correct data type for ALTER TABLE operations.
+    For Iceberg tables, we need to handle VARCHAR constraints differently because
+    Snowflake Iceberg tables only support max length (134,217,728) or STRING directly.
+
+    This fixes the bug where dbt generates VARCHAR(16777216) for new columns which
+    is not supported by Snowflake Iceberg tables.
+  #}
+  {% if relation.is_iceberg_format and column.is_string() %}
+    {% set data_type = column.data_type.upper() %}
+    {% if data_type.startswith('CHARACTER VARYING') or data_type.startswith('VARCHAR') %}
+      {#
+        For Iceberg tables, convert any VARCHAR specification to STRING.
+        This handles cases where:
+        - dbt auto-generates VARCHAR(16777216) for columns without explicit size
+        - users specify VARCHAR with any size (even the max 134217728)
+        Using STRING is more compatible and avoids size-related errors.
+      #}
+      STRING
+    {% else %}
+      {# Keep other string types like TEXT as-is #}
+      {{ column.data_type }}
+    {% endif %}
+  {% else %}
+    {{ column.data_type }}
+  {% endif %}
+{% endmacro %}
+
 {% macro snowflake__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
     {% if relation.is_dynamic_table -%}
@@ -170,7 +204,7 @@
     {% set sql -%}
        alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} add column
           {% for column in add_columns %}
-            {{ adapter.quote(column.name) }} {{ column.data_type }}{{ ',' if not loop.last }}
+            {{ adapter.quote(column.name) }} {{ snowflake__get_column_data_type_for_alter(relation, column) }}{{ ',' if not loop.last }}
           {% endfor %}
     {%- endset -%}
 
@@ -195,6 +229,35 @@
 
 
 
+{% macro snowflake__is_catalog_linked_database(relation=none, catalog_relation=none) -%}
+    {#-- Helper macro to detect if we're in a catalog-linked database context --#}
+    {%- if catalog_relation is not none -%}
+        {#-- Direct catalog_relation object provided --#}
+        {%- if catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.config -%}
+        {%- set catalog_relation = adapter.build_catalog_relation(relation) -%}
+        {%- if catalog_relation is not none and catalog_relation|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- elif relation and relation.catalog -%}
+        {#-- Relation with catalog attribute --#}
+        {%- set catalog_integration = adapter.get_catalog_integration(relation.catalog) -%}
+        {%- if catalog_integration is not none and catalog_integration|attr('catalog_linked_database') -%}
+            {{ return(true) }}
+        {%- else -%}
+            {{ return(false) }}
+        {%- endif -%}
+    {%- else -%}
+        {{ return(false) }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% macro snowflake_dml_explicit_transaction(dml) %}
   {#
     Use this macro to wrap all INSERT, MERGE, UPDATE, DELETE, and TRUNCATE
@@ -217,6 +280,10 @@
     truncate table {{ relation.render() }}
   {% endset %}
   {% call statement('truncate_relation') -%}
-    {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+        {{ truncate_dml }}
+    {% else %}
+      {{ snowflake_dml_explicit_transaction(truncate_dml) }}
+    {% endif %}
   {%- endcall %}
 {% endmacro %}

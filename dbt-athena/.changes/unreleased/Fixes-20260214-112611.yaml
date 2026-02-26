@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix bucket partitioning to group partition conditions with OR before combining with bucket conditions via AND, reducing redundant query expansion.
+time: 2026-02-14T11:26:11.869441+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1636"

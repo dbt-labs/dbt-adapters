@@ -1,3 +1,4 @@
+import copy
 from dataclasses import dataclass
 from datetime import datetime
 from multiprocessing.context import SpawnContext
@@ -8,11 +9,12 @@ from typing import (
     FrozenSet,
     Iterable,
     List,
+    Mapping,
     Optional,
+    Set,
     Tuple,
     TYPE_CHECKING,
     Type,
-    Set,
     Union,
 )
 
@@ -24,6 +26,7 @@ from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as Big
 import google.cloud.exceptions
 import pytz
 
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
@@ -34,6 +37,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
+from dbt_common.record import record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -41,11 +45,13 @@ from dbt.adapters.base import (
     BaseRelation,
     ConstraintSupport,
     PythonJobHelper,
+    PythonSubmissionResult,
     RelationType,
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse
+from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.relation import ComponentName
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.catalogs import CatalogRelation
@@ -69,6 +75,10 @@ from dbt.adapters.bigquery.python_submissions import (
     ServerlessDataProcHelper,
     BigFramesHelper,
 )
+from dbt.adapters.bigquery.record.record_types import (
+    BigQueryAdapterDescribeRelationRecord,
+    BigQueryAdapterIsReplaceableRecord,
+)
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
     BigQueryBaseRelationConfig,
@@ -76,6 +86,12 @@ from dbt.adapters.bigquery.relation_configs import (
     PartitionConfig,
 )
 from dbt.adapters.bigquery.utility import sql_escape
+
+from dbt.adapters.bigquery.struct_utils import (
+    build_nested_additions,
+    find_missing_fields,
+    merge_nested_fields,
+)
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -90,6 +106,33 @@ WRITE_APPEND = google.cloud.bigquery.job.WriteDisposition.WRITE_APPEND
 WRITE_TRUNCATE = google.cloud.bigquery.job.WriteDisposition.WRITE_TRUNCATE
 
 CREATE_SCHEMA_MACRO_NAME = "create_schema"
+
+BIGQUERY_USE_BATCH_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_use_batch_source_freshness",
+    default=False,
+    description="Use information schema TABLE_STORAGE table to calculate source freshness in batch.",
+)
+
+BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
+    name="bigquery_noop_alter_relation_comment",
+    default=False,
+    description=(
+        "Make bigquery__alter_relation_comment a no-op. This is useful when relation "
+        "descriptions are already set in DDL (e.g. via OPTIONS(description=...)) to avoid "
+        "an unnecessary update."
+    ),
+)
+
+BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_reject_wildcard_metadata_source_freshness",
+    default=False,
+    description=(
+        "Raise an error when metadata-based source freshness is used with a wildcard table "
+        "identifier (e.g. 'events_*'). BigQuery returns the current time as the modified "
+        "timestamp for wildcard tables, causing freshness checks to always report ~0 seconds."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -121,6 +164,8 @@ class BigqueryConfig(AdapterConfig):
     intermediate_format: Optional[str] = None
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
+    enable_change_history: Optional[bool] = None
+    job_execution_timeout_seconds: Optional[int] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -150,6 +195,7 @@ class BigQueryAdapter(BaseAdapter):
         {
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
+            Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
         }
     )
 
@@ -162,6 +208,14 @@ class BigQueryAdapter(BaseAdapter):
     ###
     # Implementations of abstract methods
     ###
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [
+            BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
+            BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
+            BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
+        ]
 
     @classmethod
     def date_function(cls) -> str:
@@ -210,6 +264,19 @@ class BigQueryAdapter(BaseAdapter):
         self.cache_renamed(from_relation, to_relation)
         client.copy_table(from_table_ref, to_table_ref)
         client.delete_table(from_table_ref)
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
+        """Override the connection's query execution timeout based on the model config"""
+        timeout = config.get("job_execution_timeout_seconds")
+        if timeout is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = float(timeout)
+        return timeout
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        if context is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -549,6 +616,12 @@ class BigQueryAdapter(BaseAdapter):
         return table.clustering_fields == conf_cluster
 
     @available.parse(lambda *a, **k: True)
+    @record_function(
+        BigQueryAdapterIsReplaceableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def is_replaceable(
         self, relation, conf_partition: Optional[PartitionConfig], conf_cluster
     ) -> bool:
@@ -650,19 +723,191 @@ class BigQueryAdapter(BaseAdapter):
 
     @available.parse_none
     def alter_table_add_columns(self, relation, columns):
-        logger.debug('Adding columns ({}) to table {}".'.format(columns, relation))
+        logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
+        self.alter_table_add_remove_columns(relation, columns, None)
 
+    @available.parse_none
+    def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
         table_ref = self.get_table_ref_from_relation(relation)
         table = client.get_table(table_ref)
 
-        new_columns = [col.column_to_bq_schema() for col in columns]
-        new_schema = table.schema + new_columns
+        schema_as_dicts = [field.to_api_repr() for field in table.schema]
 
-        new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
-        client.update_table(new_table, ["schema"])
+        # BigQuery only supports dropping top-level columns via ALTER TABLE.
+        # Track names so nested removals can still be logged for visibility.
+        drop_candidates: List[BigQueryColumn] = []
+        nested_removals: List[str] = []
+
+        if remove_columns:
+            for column in remove_columns:
+                if "." in column.name:
+                    nested_removals.append(column.name)
+                else:
+                    drop_candidates.append(column)
+
+        if nested_removals:
+            logger.warning(
+                "BigQuery limitation: Cannot remove nested fields via schema update. "
+                "Attempted to remove: {}. Consider using 'append_new_columns' mode "
+                "or recreating the table with full_refresh.".format(nested_removals)
+            )
+
+        if drop_candidates:
+            relation_name = relation.render()
+            drop_clauses = [f"drop column {self.quote(column.name)}" for column in drop_candidates]
+            drop_sql = f"alter table {relation_name} {', '.join(drop_clauses)}"
+
+            column_names = [column.name for column in drop_candidates]
+            logger.debug(
+                'Dropping columns `{}` from table "{}".'.format(column_names, relation_name)
+            )
+            self.execute(drop_sql, fetch=False)
+
+            # Refresh schema after drops so additions operate on the latest definition
+            table = client.get_table(table_ref)
+            schema_as_dicts = [field.to_api_repr() for field in table.schema]
+
+        if add_columns:
+            additions = build_nested_additions(add_columns)
+            schema_as_dicts = merge_nested_fields(schema_as_dicts, additions)
+            new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
+            new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
+            client.update_table(new_table, ["schema"])
+
+    @available.parse(lambda *a, **k: {})
+    def sync_struct_columns(
+        self,
+        on_schema_change: str,
+        source_relation: BigQueryRelation,
+        target_relation: BigQueryRelation,
+        schema_changes_dict: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if on_schema_change not in ("append_new_columns", "sync_all_columns"):
+            return schema_changes_dict
+
+        logger.debug(
+            "BigQuery STRUCT sync invoked: mode=%s target=%s",
+            on_schema_change,
+            target_relation.render(),
+        )
+
+        conn = self.connections.get_thread_connection()
+        client = conn.handle
+
+        source_table = client.get_table(self.get_table_ref_from_relation(source_relation))
+        target_table = client.get_table(self.get_table_ref_from_relation(target_relation))
+
+        source_schema = [field.to_api_repr() for field in source_table.schema]
+        target_schema = [field.to_api_repr() for field in target_table.schema]
+
+        # Identify nested fields that exist in the source schema but not the target.
+        missing_fields = find_missing_fields(source_schema, target_schema)
+        nested_additions = {
+            path: field_def for path, field_def in missing_fields.items() if "." in path
+        }
+
+        # Also include struct columns flagged by diff_column_data_types so we cover
+        # cases where only the STRUCT signature changed.
+        struct_type_changes: Set[str] = set()
+        for change in schema_changes_dict.get("new_target_types", []):
+            column_name = change.get("column_name")
+            if not column_name:
+                continue
+            new_type = change.get("new_type", "")
+            if "STRUCT<" in new_type.upper() or "RECORD" in new_type.upper():
+                struct_type_changes.add(column_name.split(".", 1)[0])
+
+        struct_columns_to_update: Set[str] = {
+            path.split(".", 1)[0] for path in nested_additions.keys()
+        }
+        struct_columns_to_update.update(struct_type_changes)
+
+        logger.debug(
+            "BigQuery STRUCT sync details: target=%s nested_additions=%s struct_columns=%s",
+            target_relation.render(),
+            sorted(nested_additions.keys()),
+            sorted(struct_columns_to_update),
+        )
+
+        if not struct_columns_to_update:
+            return schema_changes_dict
+
+        updated_schema: List[Dict[str, Any]] = []
+        handled_columns: Set[str] = set()
+
+        for field in target_schema:
+            field_name = field["name"]
+            if field_name in struct_columns_to_update:
+                source_field = next(
+                    (
+                        _src_field
+                        for _src_field in source_schema
+                        if _src_field["name"] == field_name
+                    ),
+                    None,
+                )
+                if source_field:
+                    updated_schema.append(copy.deepcopy(source_field))
+                    handled_columns.add(field_name)
+                else:
+                    logger.debug(
+                        "BigQuery STRUCT sync: unable to locate source definition for %s on %s",
+                        field_name,
+                        target_relation.render(),
+                    )
+                    updated_schema.append(copy.deepcopy(field))
+            else:
+                updated_schema.append(copy.deepcopy(field))
+
+        if not handled_columns:
+            return schema_changes_dict
+
+        try:
+            new_schema = [SchemaField.from_api_repr(field) for field in updated_schema]
+            target_table.schema = new_schema
+            client.update_table(target_table, ["schema"])
+            logger.debug(
+                "BigQuery STRUCT sync applied for %s columns=%s",
+                target_relation.render(),
+                sorted(handled_columns),
+            )
+
+            if schema_changes_dict.get("source_not_in_target"):
+                schema_changes_dict["source_not_in_target"] = [
+                    column
+                    for column in schema_changes_dict["source_not_in_target"]
+                    if column.name.split(".", 1)[0] not in handled_columns
+                ]
+
+            schema_changes_dict["target_columns"] = [
+                BigQueryColumn.create_from_field(field) for field in new_schema
+            ]
+        except google.api_core.exceptions.BadRequest as exc:
+            logger.warning("Failed to update STRUCT column schema: %s", exc)
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Failed to update STRUCT schema for {target_relation.render()}: {exc}"
+            ) from exc
+
+        # Remove handled STRUCT type changes so downstream logic does not retry
+        if schema_changes_dict.get("new_target_types"):
+            schema_changes_dict["new_target_types"] = [
+                change
+                for change in schema_changes_dict["new_target_types"]
+                if not change.get("column_name")
+                or change.get("column_name").split(".", 1)[0] not in handled_columns
+            ]
+
+        if (
+            not schema_changes_dict.get("source_not_in_target")
+            and not schema_changes_dict.get("target_not_in_source")
+            and not schema_changes_dict.get("new_target_types")
+        ):
+            schema_changes_dict["schema_changed"] = False
+
+        return schema_changes_dict
 
     @available.parse_none
     def load_dataframe(
@@ -740,11 +985,34 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
+        """Raise an error if the source identifier contains a wildcard character.
+
+        When ``client.get_table()`` is called with a wildcard identifier
+        (e.g. ``events_*``), BigQuery creates a temporary table that unions all
+        matching tables.  The ``modified`` timestamp on this temp table reflects
+        the current time, not the actual modification time of the underlying
+        tables — causing metadata-based freshness checks to report an age of
+        ~0 seconds.
+
+        See: https://github.com/googleapis/python-bigquery/issues/2035
+        """
+        identifier = source.identifier
+        if identifier and "*" in identifier:
+            if self.behavior.bigquery_reject_wildcard_metadata_source_freshness:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Metadata-based source freshness is not supported for wildcard table "
+                    f"'{source}'. Please set 'loaded_at_field' on this source to use a "
+                    f"query-based freshness check instead."
+                )
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
+        self._check_for_wildcard_identifier(source)
+
         conn = self.connections.get_thread_connection()
         client: Client = conn.handle
 
@@ -759,6 +1027,68 @@ class BigQueryAdapter(BaseAdapter):
         )
 
         return None, freshness
+
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        """
+        Given a list of sources (BaseRelations), calculate the metadata-based freshness in batch.
+        This method should _not_ execute a warehouse query per source, but rather batch up
+        the sources into as few requests as possible to minimize the number of roundtrips required
+        to compute metadata-based freshness for each input source.
+        :param sources: The list of sources to calculate metadata-based freshness for
+        :param macro_resolver: An optional macro_resolver to use for get_relation_last_modified
+        :return: a tuple where:
+            * the first element is a list of optional AdapterResponses indicating the response
+              for each request the method made to compute the freshness for the provided sources.
+            * the second element is a dictionary mapping an input source BaseRelation to a FreshnessResponse,
+              if it was possible to calculate a FreshnessResponse for the source.
+        """
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for source in sources:
+            self._check_for_wildcard_identifier(source)
+
+        # Legacy behavior: use metadata-based freshness for each source
+        if not self.behavior.bigquery_use_batch_source_freshness:
+            for source in sources:
+                adapter_response, freshness_response = self.calculate_freshness_from_metadata(
+                    source, macro_resolver
+                )
+                adapter_responses.append(adapter_response)
+                freshness_responses[source] = freshness_response
+            return adapter_responses, freshness_responses
+
+        # Track schema, identifiers of sources for lookup from batch query
+        schema_identifier_to_source = {
+            (
+                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
+            ): source
+            for source in sources
+        }
+
+        result = self.execute_macro(
+            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+            kwargs={
+                "information_schema": None,
+                "relations": sources,
+            },
+            macro_resolver=macro_resolver,
+            needs_conn=True,
+        )
+        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+        adapter_responses.append(adapter_response)
+
+        for row in table:
+            raw_relation, freshness_response = self._parse_freshness_row(row, table)
+            source_relation_for_result = schema_identifier_to_source[raw_relation]
+            freshness_responses[source_relation_for_result] = freshness_response
+
+        return adapter_responses, freshness_responses
 
     @available.parse(lambda *a, **k: {})
     def get_common_options(
@@ -811,6 +1141,9 @@ class BigQueryAdapter(BaseAdapter):
             if config.get("partition_expiration_days") is not None:
                 opts["partition_expiration_days"] = config.get("partition_expiration_days")
 
+            if config.get("enable_change_history") is not None:
+                opts["enable_change_history"] = config.get("enable_change_history")
+
             relation_config = getattr(config, "model", None)
             if not temporary and (
                 catalog_relation := self.build_catalog_relation(relation_config)
@@ -827,6 +1160,10 @@ class BigQueryAdapter(BaseAdapter):
     @available.parse(lambda *a, **k: {})
     def get_view_options(self, config: Dict[str, Any], node: Dict[str, Any]) -> Dict[str, Any]:
         opts = self.get_common_options(config, node)
+        if config.get("enable_change_history"):
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "`enable_change_history` is not supported for views on BigQuery."
+            )
         return opts
 
     @available.parse(lambda *a, **k: True)
@@ -839,7 +1176,13 @@ class BigQueryAdapter(BaseAdapter):
             table = None
         return table
 
-    @available.parse(lambda *a, **k: True)
+    @available.parse(lambda *a, **k: None)
+    @record_function(
+        BigQueryAdapterDescribeRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def describe_relation(
         self, relation: BigQueryRelation
     ) -> Optional[BigQueryBaseRelationConfig]:
@@ -933,7 +1276,15 @@ class BigQueryAdapter(BaseAdapter):
         else:
             return list(res)
 
-    def generate_python_submission_response(self, submission_result) -> BigQueryAdapterResponse:
+    def generate_python_submission_response(
+        self, submission_result: PythonSubmissionResult
+    ) -> BigQueryAdapterResponse:
+        if isinstance(submission_result, PythonSubmissionResult):
+            return BigQueryAdapterResponse(
+                _message="OK",
+                job_id=submission_result.run_id,
+                code=submission_result.compiled_code,
+            )
         return BigQueryAdapterResponse(_message="OK")
 
     @property

@@ -34,10 +34,13 @@
     create dynamic table {{ relation }}
         target_lag = '{{ dynamic_table.target_lag }}'
         warehouse = {{ dynamic_table.snowflake_warehouse }}
+        {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
         {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
         {{ optional('initialize', dynamic_table.initialize) }}
         {{ optional('with row access policy', dynamic_table.row_access_policy, equals_char='') }}
         {{ optional('with tag', dynamic_table.table_tag, quote_char='(', equals_char='') }}
+        {{ optional('cluster by', dynamic_table.cluster_by, quote_char='(', equals_char='') }}
+        {{ optional('immutable where', dynamic_table.immutable_where, quote_char='(', equals_char='') }}
         as (
             {{ sql }}
         )
@@ -67,6 +70,7 @@
     create dynamic iceberg table {{ relation }}
         target_lag = '{{ dynamic_table.target_lag }}'
         warehouse = {{ dynamic_table.snowflake_warehouse }}
+        {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
         {{ optional('external_volume', catalog_relation.external_volume, "'") }}
         catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
         base_location = '{{ catalog_relation.base_location }}'
@@ -74,6 +78,8 @@
         {{ optional('initialize', dynamic_table.initialize) }}
         {{ optional('row_access_policy', dynamic_table.row_access_policy) }}
         {{ optional('table_tag', dynamic_table.table_tag) }}
+        {{ optional('cluster by', dynamic_table.cluster_by, quote_char='(', equals_char='') }}
+        {{ optional('immutable where', dynamic_table.immutable_where, quote_char='(', equals_char='') }}
         as (
             {{ sql }}
         )

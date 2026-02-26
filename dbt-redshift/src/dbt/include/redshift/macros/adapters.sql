@@ -1,6 +1,8 @@
-
 {% macro dist(dist) %}
   {%- if dist is not none -%}
+      {%- if dist is not string -%}
+        {% do exceptions.raise_compiler_error("The 'dist' config must be a single value (e.g. dist: primary_key), not a list or other type. Redshift distribution key accepts only one column or one of: all, even, auto.") %}
+      {%- endif -%}
       {%- set dist = dist.strip().lower() -%}
 
       {%- if dist in ['all', 'even'] -%}
@@ -106,6 +108,34 @@
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
+  {% if redshift__use_show_apis() %}
+    {{ return(redshift__get_columns_in_relation_show(relation)) }}
+  {% else %}
+    {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_show(relation) -%}
+  {% call statement('get_columns_in_relation', fetch_result=True) %}
+    SHOW COLUMNS FROM TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
+  {% endcall %}
+  {% set table = load_result('get_columns_in_relation').table %}
+  {% set columns = [] %}
+  {% for row in table %}
+    {% do columns.append(api.Column(
+      column=row['column_name'],
+      dtype=row['data_type'],
+      char_size=row['character_maximum_length'],
+      numeric_precision=row['numeric_precision'],
+      numeric_scale=row['numeric_scale']
+    )) %}
+  {% endfor %}
+  {{ return(columns) }}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_legacy(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
       with bound_views as (
         select
@@ -224,30 +254,37 @@
 {% endmacro %}
 
 {% macro redshift__list_relations_without_caching(schema_relation) %}
-
-  {% call statement('list_relations_without_caching', fetch_result=True) -%}
-    select
+  {% if redshift__use_show_apis() %}
+    {% call statement('show_tables', fetch_result=True) -%}
+      SHOW TABLES FROM SCHEMA {{ schema_relation.database }}.{{ schema_relation.schema }}
+    {% endcall %}
+    {% set show_result = load_result('show_tables').table %}
+    {{ return(adapter.transform_show_tables_for_list_relations(show_result)) }}
+  {% else %}
+    {% call statement('list_relations_without_caching', fetch_result=True) -%}
+      select
         table_catalog as database,
         table_name as name,
         table_schema as schema,
         'table' as type
-    from information_schema.tables
-    where table_schema ilike '{{ schema_relation.schema }}'
-    and table_type = 'BASE TABLE'
-    union all
-    select
-      table_catalog as database,
-      table_name as name,
-      table_schema as schema,
-      case
-        when view_definition ilike '%create materialized view%'
-          then 'materialized_view'
-        else 'view'
-      end as type
-    from information_schema.views
-    where table_schema ilike '{{ schema_relation.schema }}'
-  {% endcall %}
-  {{ return(load_result('list_relations_without_caching').table) }}
+      from information_schema.tables
+      where table_schema ilike '{{ schema_relation.schema }}'
+      and table_type = 'BASE TABLE'
+      union all
+      select
+        table_catalog as database,
+        table_name as name,
+        table_schema as schema,
+        case
+          when view_definition ilike '%create materialized view%'
+            then 'materialized_view'
+          else 'view'
+        end as type
+      from information_schema.views
+      where table_schema ilike '{{ schema_relation.schema }}'
+    {% endcall %}
+    {{ return(load_result('list_relations_without_caching').table) }}
+  {% endif %}
 {% endmacro %}
 
 {% macro redshift__information_schema_name(database) -%}
@@ -255,13 +292,36 @@
 {%- endmacro %}
 
 
-{% macro redshift__list_schemas(database) -%}
-  {{ return(postgres__list_schemas(database)) }}
-{%- endmacro %}
+{% macro redshift__list_schemas(database) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('list_schemas', fetch_result=True) -%}
+      SHOW SCHEMAS FROM DATABASE {{ database }}
+    {% endcall %}
+    {%- set table = load_result('list_schemas').table -%}
+    {%- set schemas = [] -%}
+    {%- for row in table.rows -%}
+      {%- do schemas.append([row['schema_name']]) -%}
+    {%- endfor -%}
+    {{ return(schemas) }}
+  {% else %}
+    {{ return(postgres__list_schemas(database)) }}
+  {% endif %}
+{% endmacro %}
 
-{% macro redshift__check_schema_exists(information_schema, schema) -%}
-  {{ return(postgres__check_schema_exists(information_schema, schema)) }}
-{%- endmacro %}
+{% macro redshift__check_schema_exists(information_schema, schema) %}
+  {% if redshift__use_show_apis() %}
+    {% call statement('check_schema_exists', fetch_result=True) -%}
+      SHOW SCHEMAS FROM DATABASE {{ information_schema.database }}
+      LIKE '{{ schema }}'
+    {% endcall %}
+    {%- set table = load_result('check_schema_exists').table -%}
+
+    {# We return list of list because the base adapter expects column count #}
+    {{ return([[table.rows | length]]) }}
+  {% else %}
+    {{ return(postgres__check_schema_exists(information_schema, schema)) }}
+  {% endif %}
+{% endmacro %}
 
 
 {% macro redshift__persist_docs(relation, model, for_relation, for_columns) -%}
@@ -270,7 +330,7 @@
   {% endif %}
 
   {# Override: do not set column comments for LBVs #}
-  {% set is_lbv = config.get('materialized') == 'view' and config.get('bind') == false %}
+  {% set is_lbv = relation.type == 'view' and config.get('bind') == false %}
   {% if for_columns and config.persist_column_docs() and model.columns and not is_lbv %}
     {% do run_query(alter_column_comment(relation, model.columns)) %}
   {% endif %}

@@ -2,6 +2,7 @@ import abc
 import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
@@ -30,6 +31,9 @@ from dbt.adapters.record.base import (
     AdapterGetPartitionsMetadataRecord,
     AdapterConvertTypeRecord,
     AdapterStandardizeGrantsDictRecord,
+    AdapterListRelationsWithoutCachingRecord,
+    AdapterGetColumnsInRelationRecord,
+    SubmitPythonJobRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -78,6 +82,7 @@ from dbt.adapters.catalogs import (
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
     CatalogRelation,
+    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
@@ -231,6 +236,14 @@ class PythonJobHelper:
         raise NotImplementedError("PythonJobHelper submit function is not implemented yet")
 
 
+@dataclass
+class PythonSubmissionResult:
+    """Result from submitting a Python job."""
+
+    run_id: str
+    compiled_code: str
+
+
 class FreshnessResponse(TypedDict):
     max_loaded_at: datetime
     snapshotted_at: datetime
@@ -334,9 +347,18 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._catalog_client.get(name)
 
     @available
-    def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
-        catalog = self.get_catalog_integration(config.catalog)
-        return catalog.build_relation(config)
+    def build_catalog_relation(self, config: RelationConfig) -> Optional[CatalogRelation]:
+        if not config.config:
+            return None
+
+        # "catalog" is legacy, but we support it for backward compatibility
+        if catalog_name := config.config.get(
+            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or config.config.get("catalog"):
+            catalog = self.get_catalog_integration(catalog_name)
+            return catalog.build_relation(config)
+
+        return None
 
     ###
     # Methods to set / access a macro resolver
@@ -734,7 +756,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         raise NotImplementedError("`rename_relation` is not implemented for this adapter!")
 
-    @auto_record_function("AdapterGetColumnsInRelation", group="Available")
+    @record_function(
+        AdapterGetColumnsInRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     @available.parse_list
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
@@ -772,6 +799,12 @@ class BaseAdapter(metaclass=AdapterMeta):
             "`expand_target_column_types` is not implemented for this adapter!"
         )
 
+    @record_function(
+        AdapterListRelationsWithoutCachingRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
         """List relations in the given schema, bypassing the cache.
@@ -1688,6 +1721,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("default_python_submission_method is not specified")
 
     @log_code_execution
+    @record_function(
+        SubmitPythonJobRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
         submission_method = parsed_model["config"].get(
             "submission_method", self.default_python_submission_method

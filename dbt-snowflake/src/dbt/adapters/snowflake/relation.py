@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
-from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
 from dbt.adapters.contracts.relation import ComponentName, RelationConfig
 from dbt.adapters.events.types import AdapterEventWarning, AdapterEventDebug
 from dbt.adapters.relation_configs import (
@@ -20,9 +20,12 @@ from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
+    SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
+    SnowflakeDynamicTableImmutableWhereConfigChange,
+    SnowflakeDynamicTableClusterByConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -114,12 +117,37 @@ class SnowflakeRelation(BaseRelation):
             )
 
         if (
+            new_dynamic_table.snowflake_initialization_warehouse
+            != existing_dynamic_table.snowflake_initialization_warehouse
+        ):
+            config_change_collection.snowflake_initialization_warehouse = (
+                SnowflakeDynamicTableInitializationWarehouseConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.snowflake_initialization_warehouse,
+                )
+            )
+
+        if (
             new_dynamic_table.refresh_mode != RefreshMode.AUTO
             and new_dynamic_table.refresh_mode != existing_dynamic_table.refresh_mode
         ):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
+            )
+
+        if new_dynamic_table.immutable_where != existing_dynamic_table.immutable_where:
+            config_change_collection.immutable_where = (
+                SnowflakeDynamicTableImmutableWhereConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.immutable_where,
+                )
+            )
+
+        if new_dynamic_table.cluster_by != existing_dynamic_table.cluster_by:
+            config_change_collection.cluster_by = SnowflakeDynamicTableClusterByConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new_dynamic_table.cluster_by,
             )
 
         if config_change_collection.has_changes:
@@ -197,6 +225,22 @@ class SnowflakeRelation(BaseRelation):
             return "iceberg"
         else:
             return ""
+
+    def _render_event_time_filtered(self, event_time_filter: EventTimeFilter) -> str:
+        """
+        Returns "" if start and end are both None
+        """
+        filter = ""
+        if event_time_filter.start and event_time_filter.end:
+            filter = f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}') and {event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+        elif event_time_filter.start:
+            filter = (
+                f"{event_time_filter.field_name} >= to_timestamp_tz('{event_time_filter.start}')"
+            )
+        elif event_time_filter.end:
+            filter = f"{event_time_filter.field_name} < to_timestamp_tz('{event_time_filter.end}')"
+
+        return filter
 
     def get_iceberg_ddl_options(self, config: RelationConfig) -> str:
         # If the base_location_root config is supplied, overwrite the default value ("_dbt/")

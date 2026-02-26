@@ -70,12 +70,12 @@ class DuplicateMacroInPackageError(CompilationError):
         # this is the result :(
         msg = line_wrap_message(
             f"""\
-            dbt found two macros named "{self.macro.name}" in the project
+            dbt found multiple macros named "{self.macro.name}" in the project
             "{self.macro.package_name}".
 
 
-            To fix this error, rename or remove one of the following
-            macros:
+            All macros require unique names, to fix this error rename or remove any duplicates.
+            They can be found in these files:
 
                 - {self.macro.original_file_path}
 
@@ -254,4 +254,16 @@ class RelationWrongTypeError(CompilationError):
             "`--full-refresh` and dbt will drop it for you."
         )
 
+        return msg
+
+
+class InvalidRelationConfigError(CompilationError):
+    def __init__(self, relation, config, msg):
+        self.relation = relation
+        self.config = config
+        self.msg = msg
+        super().__init__(msg=self.get_message())
+
+    def get_message(self) -> str:
+        msg = f"Invalid relation config: {self.config}"
         return msg
