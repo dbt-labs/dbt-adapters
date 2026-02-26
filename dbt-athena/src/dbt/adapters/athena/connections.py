@@ -495,6 +495,10 @@ class AthenaResultSet(Iterator[Row]):
             return UUID(value)
         elif type == "ipaddress":
             return ip_address(value)
+        elif type == "array":
+            return self._parse_array(value)
+        elif type == "map" or type == "row":
+            return self._parse_map_or_row(value)
         else:
             return value
 
@@ -553,6 +557,75 @@ class AthenaResultSet(Iterator[Row]):
             return time.replace(tzinfo=tz)
         except ValueError:
             raise ValueError(f'Could not parse time with time zone "{value}"')
+     
+    def _parse_array(self, value) -> List[Any]:
+        if value == '[]':
+            return []
+
+        result = []
+        current_element = ""
+        nesting = 0
+
+        for char in value[1:-1]:
+            if char == "[":
+                nesting += 1
+            elif char == "]":
+                nesting -= 1
+            
+            if char == "," and nesting == 0:
+                element = self._process_nested_value(current_element.strip())
+                result.append(element)
+                current_element = ""
+            else:
+                current_element += char
+        
+        if len(current_element.strip()) > 0:
+            element = self._process_nested_value(current_element.strip())
+            result.append(element)
+        
+        return result
+        
+    def _parse_map_or_row(self, value) -> List[Any]:
+        if value == "{}":
+            return {}
+
+        result = {}
+        current_key = ""
+        current_value = None
+        nesting = 0
+
+        for char in value[1:-1]:
+            if char == "{":
+                nesting += 1
+            elif char == "}":
+                nesting -= 1
+
+            if char == "=" and nesting == 0:
+                current_value = ""
+            elif char == "," and nesting == 0:
+                value = self._process_nested_value(current_value.strip())
+                result[current_key.strip()] = value
+                current_key = ""
+                current_value = None
+            elif current_value is not None:
+                current_value += char
+            else:
+                current_key += char
+        
+        if len(current_key.strip()) > 0 and current_value is not None:
+            value = self._process_nested_value(current_value.strip())
+            result[current_key.strip()] = value
+        
+        return result
+        
+    def _process_nested_value(self, value: str) -> Any:
+        if value.startswith("["):
+            return self._parse_array(value)
+        elif value.startswith("{"):
+            return self._parse_map_or_row(value)
+        else:
+            return value
+
 
 class AthenaConnection(Connection):
     session: BotoSession

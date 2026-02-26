@@ -982,6 +982,50 @@ class TestAthenaCursor:
             ("hello world",),
             ({"a": 1, "b": {"c": [3]}},),
         ]
+        
+    def test_fetch_converts_arrays(self, cursor, athena_client):
+        data = [
+            ["[]"],
+            ["[1, 2, 3]"],
+            ["[a, b, c]"],
+            ["[a, [1, 2, 3], [NULL, TRUE, FALSE], []]"],
+        ]
+        page = self._create_page(athena_client, [("a", "array")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows[0] == ([],)
+        assert rows[1] == (["1", "2", "3"],)
+        assert rows[2] == (["a", "b", "c"],)
+        assert rows[3] == (["a", ["1", "2", "3"], ["NULL", "TRUE", "FALSE"], []],)
+
+    def test_fetch_converts_rows(self, cursor, athena_client):
+        data = [
+            ["{}"],
+            ["{a=1, b=2, c=3}"],
+            ["{a=1, b={c=3}, c={}}"],
+        ]
+        page = self._create_page(athena_client, [("r", "row")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows[0] == ({},)
+        assert rows[1] == ({"a": "1", "b": "2", "c": "3"},)
+        assert rows[2] == ({"a": "1", "b": {"c": "3"}, "c": {}},)
+
+    def test_fetch_converts_maps(self, cursor, athena_client):
+        data = [
+            ["{}"],
+            ["{a=1, b=2, c=3}"],
+            ["{a=1, b={c=3}, c={}}"],
+        ]
+        page = self._create_page(athena_client, [("m", "map")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows[0] == ({},)
+        assert rows[1] == ({"a": "1", "b": "2", "c": "3"},)
+        assert rows[2] == ({"a": "1", "b": {"c": "3"}, "c": {}},)
 
     def test_fetch_converts_uuids(self, cursor, athena_client):
         data = [

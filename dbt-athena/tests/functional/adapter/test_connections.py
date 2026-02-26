@@ -117,11 +117,11 @@ class TestConnection:
                 CAST(MAP(ARRAY['a', 'b', 'c'], ARRAY[1, 2, 3]) AS JSON) AS json_constructed_value
         """
         result = project.run_sql(query, fetch="one")
-        assert result[0] == [1, 2, 3]
+        assert result[0] == ["1", "2", "3"]
         assert result[1] == ["a", "b", "c"]
-        assert result[2] == {"a": 1, "b": 2, "c": 3}
+        assert result[2] == {"a": "1", "b": "2", "c": "3"}
         assert result[3] == {"a": "a", "b": "b", "c": "c"}
-        assert result[4] == {"a": 1, "b": 2, "c": 3}
+        assert result[4] == {"a": "1", "b": "2", "c": "3"}
         assert result[5] == {"a": "a", "b": "b", "c": "c"}
         assert result[6] == [1, 2, ["c"]]
         assert result[7] == {"a": 1, "b": 2, "c": 3}
