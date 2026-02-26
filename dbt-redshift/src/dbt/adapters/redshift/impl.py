@@ -189,6 +189,29 @@ class RedshiftAdapter(SQLAdapter):
             column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
 
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
+        """Translate the result of `show grants` to match the grants config format.
+
+        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        returns columns ``identity_name`` and ``privilege_type`` (uppercase).
+        Otherwise the legacy query returns ``grantee`` and ``privilege_type``
+        (lowercase).
+        """
+        if not self.behavior.redshift_use_show_apis.no_warn:
+            return super().standardize_grants_dict(grants_table)
+
+        grants_dict: Dict[str, List[str]] = {}
+
+        for row in grants_table:
+            grantee = row["identity_name"]
+            privilege = row["privilege_type"].lower()
+            if privilege in grants_dict:
+                grants_dict[privilege].append(grantee)
+            else:
+                grants_dict[privilege] = [grantee]
+
+        return grants_dict
+
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
