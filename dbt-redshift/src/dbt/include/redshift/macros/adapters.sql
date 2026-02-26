@@ -255,39 +255,11 @@
 
 {% macro redshift__list_relations_without_caching(schema_relation) %}
   {% if redshift__use_show_apis() %}
-    {# Joining SVV views in Redshift is unreliable as some data is available in leader node but queries run on compute nodes #}
-    {# Therefore, we run two separate queries and merge the results #}
-
-    {% call statement('dbt_all_relations', fetch_result=True) -%}
-      select
-        database_name as database,
-        table_name as name,
-        schema_name as schema,
-        case when table_type = 'VIEW' then 'view' else 'table' end as type
-      from svv_all_tables
-      where schema_name ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
+    {% call statement('show_tables', fetch_result=True) -%}
+      SHOW TABLES FROM SCHEMA {{ schema_relation.database }}.{{ schema_relation.schema }}
     {% endcall %}
-
-    {% call statement('dbt_materialized_views', fetch_result=True) -%}
-      select
-        trim(database_name) as database,
-        trim(name) as name,
-        trim(schema_name) as schema,
-        'materialized_view' as type
-      from svv_mv_info
-      where trim(schema_name) ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
-    {% endcall %}
-
-    {% set all_relations = load_result('dbt_all_relations').table %}
-    {% set materialized_views = load_result('dbt_materialized_views').table %}
-
-    {{ return(adapter.merge_relation_tables(all_relations, materialized_views)) }}
+    {% set show_result = load_result('show_tables').table %}
+    {{ return(adapter.transform_show_tables_for_list_relations(show_result)) }}
   {% else %}
     {% call statement('list_relations_without_caching', fetch_result=True) -%}
       select

@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix insert_overwrite with integer range partitions generating oversized replacement
+  arrays and leaving stale data by normalizing field values to partition boundaries.
+time: 2026-02-17T19:47:01.371239+05:30
+custom:
+    Author: aahel
+    Issue: "605"
