@@ -2,9 +2,10 @@ import os
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 
+import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type, TYPE_CHECKING
+from typing import List, Optional, Set, Any, Dict, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
@@ -42,8 +43,14 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
-if TYPE_CHECKING:
-    import agate
+REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
+    name="redshift_use_show_apis",
+    default=False,
+    description=(
+        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
+        "for metadata queries. Required for cross-database operations with Datasharing. "
+    ),
+)
 
 
 @dataclass
@@ -54,6 +61,7 @@ class RedshiftConfig(AdapterConfig):
     bind: Optional[bool] = None
     backup: Optional[bool] = True
     auto_refresh: Optional[bool] = False
+    query_group: Optional[str] = None
 
 
 class RedshiftAdapter(SQLAdapter):
@@ -88,7 +96,10 @@ class RedshiftAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
-        return [REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS]
+        return [
+            REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
+            REDSHIFT_USE_SHOW_APIS,
+        ]
 
     @classmethod
     def date_function(cls):
@@ -140,6 +151,43 @@ class RedshiftAdapter(SQLAdapter):
             )
         # return an empty string on success so macros can call this
         return ""
+
+    @available
+    def transform_show_tables_for_list_relations(
+        self, show_tables: "agate.Table"
+    ) -> "agate.Table":
+        """Transform SHOW TABLES FROM SCHEMA output into the relation format dbt expects.
+
+        SHOW TABLES returns columns including database_name, schema_name, table_name,
+        table_type (TABLE/VIEW), and table_subtype (REGULAR TABLE, REGULAR VIEW,
+        LATE BINDING VIEW, MATERIALIZED VIEW).
+
+        Returns an agate Table with columns: database, name, schema, type
+        where type is one of: table, view, materialized_view.
+        """
+        new_rows = []
+        for row in show_tables.rows:
+            table_type = (row["table_type"] or "").strip().upper()
+            if table_type == "VIEW":
+                subtype = (row["table_subtype"] or "").strip().upper()
+                relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
+            else:
+                relation_type = "table"
+
+            new_rows.append(
+                (
+                    row["database_name"],
+                    row["table_name"],
+                    row["schema_name"],
+                    relation_type,
+                )
+            )
+
+        return agate.Table(
+            new_rows,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
+        )
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
@@ -212,3 +260,29 @@ class RedshiftAdapter(SQLAdapter):
     def debug_query(self):
         """Override for DebugTask method"""
         self.execute("select 1 as id")
+
+    def _set_query_group(self, value: str) -> None:
+        self.execute(f"SET query_group TO '{value}'")
+
+    def _unset_query_group(self) -> None:
+        self.execute("RESET query_group")
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        default_query_group = self.config.credentials.query_group
+        model_query_group = config.get("query_group")
+
+        if model_query_group == default_query_group or model_query_group is None:
+            return None
+        self._set_query_group(model_query_group)
+        return None
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
+        default_query_group = self.config.credentials.query_group
+        model_query_group = config.get("query_group")
+
+        if model_query_group == default_query_group:
+            return None
+        elif default_query_group is None and model_query_group is not None:
+            self._unset_query_group()
+        else:
+            self._set_query_group(default_query_group)

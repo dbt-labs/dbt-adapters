@@ -9,6 +9,7 @@ from typing import (
     FrozenSet,
     Iterable,
     List,
+    Mapping,
     Optional,
     Set,
     Tuple,
@@ -122,6 +123,16 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     ),
 )
 
+BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_reject_wildcard_metadata_source_freshness",
+    default=False,
+    description=(
+        "Raise an error when metadata-based source freshness is used with a wildcard table "
+        "identifier (e.g. 'events_*'). BigQuery returns the current time as the modified "
+        "timestamp for wildcard tables, causing freshness checks to always report ~0 seconds."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -154,6 +165,7 @@ class BigqueryConfig(AdapterConfig):
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
+    job_execution_timeout_seconds: Optional[int] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -202,6 +214,7 @@ class BigQueryAdapter(BaseAdapter):
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
+            BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
         ]
 
     @classmethod
@@ -251,6 +264,19 @@ class BigQueryAdapter(BaseAdapter):
         self.cache_renamed(from_relation, to_relation)
         client.copy_table(from_table_ref, to_table_ref)
         client.delete_table(from_table_ref)
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
+        """Override the connection's query execution timeout based on the model config"""
+        timeout = config.get("job_execution_timeout_seconds")
+        if timeout is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = float(timeout)
+        return timeout
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        if context is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -985,11 +1011,34 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
+        """Raise an error if the source identifier contains a wildcard character.
+
+        When ``client.get_table()`` is called with a wildcard identifier
+        (e.g. ``events_*``), BigQuery creates a temporary table that unions all
+        matching tables.  The ``modified`` timestamp on this temp table reflects
+        the current time, not the actual modification time of the underlying
+        tables — causing metadata-based freshness checks to report an age of
+        ~0 seconds.
+
+        See: https://github.com/googleapis/python-bigquery/issues/2035
+        """
+        identifier = source.identifier
+        if identifier and "*" in identifier:
+            if self.behavior.bigquery_reject_wildcard_metadata_source_freshness:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Metadata-based source freshness is not supported for wildcard table "
+                    f"'{source}'. Please set 'loaded_at_field' on this source to use a "
+                    f"query-based freshness check instead."
+                )
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
+        self._check_for_wildcard_identifier(source)
+
         conn = self.connections.get_thread_connection()
         client: Client = conn.handle
 
@@ -1025,6 +1074,9 @@ class BigQueryAdapter(BaseAdapter):
         """
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for source in sources:
+            self._check_for_wildcard_identifier(source)
 
         # Legacy behavior: use metadata-based freshness for each source
         if not self.behavior.bigquery_use_batch_source_freshness:
