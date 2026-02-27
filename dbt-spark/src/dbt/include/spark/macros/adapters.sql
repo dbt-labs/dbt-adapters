@@ -355,13 +355,16 @@
 
 {% macro spark__persist_docs(relation, model, for_relation, for_columns) -%}
   {% if for_columns and config.persist_column_docs() and model.columns %}
+    {% do warn_for_missing_doc_columns(relation, model.columns) %}
     {% do alter_column_comment(relation, model.columns) %}
   {% endif %}
 {% endmacro %}
 
 {% macro spark__alter_column_comment(relation, column_dict) %}
   {% if config.get('file_format', validator=validation.any[basestring]) in ['delta', 'hudi', 'iceberg'] %}
-    {% for column_name in column_dict %}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% set existing_columns_lower = existing_columns | map("lower") | list %}
+    {% for column_name in column_dict if (column_name | lower in existing_columns_lower) %}
       {% set comment = column_dict[column_name]['description'] %}
       {% set escaped_comment = comment | replace('\'', '\\\'') %}
       {% set comment_query %}
