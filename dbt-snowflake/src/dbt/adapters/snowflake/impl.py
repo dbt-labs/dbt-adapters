@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
+from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -22,6 +22,7 @@ from dbt_common.contracts.metadata import (
     CatalogTable,
     ColumnMetadata,
 )
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
@@ -38,10 +39,18 @@ from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
 from dbt.adapters.snowflake import SnowflakeRelation
 
-if TYPE_CHECKING:
-    import agate
+import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
+    name="snowflake_default_transient_dynamic_tables",
+    default=False,
+    description=(
+        "When enabled, dynamic tables default to transient (matching regular table behavior). "
+        "This is a breaking change from previous behavior where dynamic tables were non-transient."
+    ),
+)
 
 
 @dataclass
@@ -98,6 +107,10 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
         }
     )
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -512,7 +525,9 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+    def describe_dynamic_table(
+        self, relation: SnowflakeRelation, include_transient: bool = False
+    ) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
@@ -548,7 +563,35 @@ CALL {proc_name}();
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
 
-        return {"dynamic_table": dt_table.select(base_columns)}
+        selected = dt_table.select(base_columns)
+
+        if include_transient:
+            is_transient = self._query_dynamic_table_transient_status(relation)
+            # choosing a future proof column name
+            selected = selected.compute(
+                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
+            )
+
+        return {"dynamic_table": selected}
+
+    def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
+        """
+        Query SHOW TABLES to determine if a dynamic table is transient.
+
+        SHOW DYNAMIC TABLES does not expose transient status, so we fall back to
+        SHOW TABLES where the "kind" column contains "TRANSIENT" for transient tables.
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        _, tables_table = self.execute(show_tables_sql, fetch=True)
+        if len(tables_table.rows) > 0:
+            tables_table = tables_table.rename(
+                column_names=[name.lower() for name in tables_table.column_names]
+            )
+            return tables_table.rows[0].get("kind") == "TRANSIENT"
+        return False
 
     def expand_column_types(self, goal, current):
         reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
