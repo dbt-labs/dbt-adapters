@@ -1,0 +1,6 @@
+kind: Fixes
+body: Quote grants when removing them, allowing all characters
+time: 2026-01-15T12:16:51.335412+01:00
+custom:
+    Author: b-per
+    Issue: "1550"
