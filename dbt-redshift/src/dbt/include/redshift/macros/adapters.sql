@@ -108,7 +108,10 @@
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {% if redshift__use_show_apis() %}
+  {# relation from temp tables does not have a database or schema. #}
+  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+
+  {% if redshift__use_show_apis() and relation.database and relation.schema %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
