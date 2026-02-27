@@ -392,7 +392,7 @@ jobs:
 
     integration-tests-snowflake:
         if: contains(fromJSON(inputs.packages), 'dbt-snowflake')
-        runs-on: macos-latest
+        runs-on: ${{ inputs.os }}
         defaults:
             run:
                 working-directory: "./dbt-snowflake"
