@@ -1,0 +1,6 @@
+kind: Features
+body: list_relations - using SHOW TABLES command to get the relation details instead of using svv_* based tables
+time: 2026-02-25T16:06:19.232871+05:30
+custom:
+    Author: tauhid621
+    Issue: "1669"

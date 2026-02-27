@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional, Union
 
 from dbt_common.exceptions import DbtConfigError
 
@@ -7,6 +7,10 @@ from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
+
+
+def auto_refresh(model: RelationConfig) -> Optional[bool]:
+    return model.config.get("auto_refresh") if model.config else None
 
 
 def max_data_extension_time_in_days(model: RelationConfig) -> Optional[int]:
@@ -42,7 +46,7 @@ def base_location(model: RelationConfig) -> Optional[str]:
 
 
 def catalog_name(model: RelationConfig) -> Optional[str]:
-    if not model.config:
+    if not model.config or not hasattr(model.config, "get"):
         return None
 
     if _catalog := model.config.get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME):
@@ -67,6 +71,21 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
         return ", ".join(fields)
     if fields is not None:
         raise DbtConfigError(f"Unexpected cluster_by configuration: {fields}")
+    return None
+
+
+# Keys may have to be lowercased due to Glue
+def partition_by(model: RelationConfig) -> Optional[Union[str, List[str]]]:
+    if not model.config:
+        return None
+
+    fields = model.config.get("partition_by")
+    if isinstance(fields, str):
+        return fields
+    if isinstance(fields, Iterable):
+        return list(fields)
+    if fields is not None:
+        raise DbtConfigError(f"Unexpected partition_by configuration: {fields}")
     return None
 
 
@@ -107,3 +126,7 @@ def table_format(model: RelationConfig) -> Optional[str]:
         # make table_format case-insensitive
         return _table_format.upper()
     return None
+
+
+def target_file_size(model: RelationConfig) -> Optional[str]:
+    return model.config.get("target_file_size") if model.config else None

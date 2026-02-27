@@ -19,6 +19,7 @@ dependencies = [
     "pytest-csv~=3.0",
     "pytest-dotenv",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -27,7 +28,6 @@ features=["all"]
 [envs.default.scripts]
 setup = [
     "pre-commit install",
-    "cp -n test.env.example test.env",
     "pip install -r dagger/requirements.txt",
 ]
 code-quality = "pre-commit run --all-files"
@@ -71,6 +71,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -91,6 +92,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]

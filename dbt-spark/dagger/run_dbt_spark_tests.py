@@ -91,7 +91,7 @@ async def test_spark(test_args):
         # create cache volumes, these are persisted between runs saving time when developing locally
         tst_container = (
             client.container(platform=dagger.Platform("linux/amd64"))
-            .from_("python:3.9-slim")
+            .from_("python:3.10-slim")
             .with_mounted_cache("/var/cache/apt/archives", client.cache_volume("os_reqs"))
             .with_mounted_cache("/root/.cache/pip", client.cache_volume("pip"))
         )
@@ -102,6 +102,9 @@ async def test_spark(test_args):
             .with_directory("/scripts", client.host().directory("./dagger/scripts"))
             .with_exec(["./scripts/install_os_reqs.sh"])
             .with_exec(["pip", "install", "-U", "pip", "hatch"])
+            .with_exec(
+                ["pip", "install", "virtualenv<21"]
+            )  # TODO: remove once hatch releases a fix for https://github.com/pypa/hatch/issues/2193
             .with_(env_variables(TESTING_ENV_VARS))
         )
 
@@ -140,7 +143,7 @@ async def test_spark(test_args):
             )
 
         elif test_args.profile == "spark_session":
-            tst_container = tst_container.with_exec(["apt-get", "install", "openjdk-17-jre", "-y"])
+            tst_container = tst_container.with_exec(["./scripts/install_jdk.sh"])
 
         # run the tests
         result = (

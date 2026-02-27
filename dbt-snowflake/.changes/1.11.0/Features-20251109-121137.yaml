@@ -1,0 +1,6 @@
+kind: Features
+body: Allow partition_by model config for Snowflake Iceberg tables
+time: 2025-11-09T12:11:37.192348-05:00
+custom:
+    Author: ajhlee-dbit
+    Issue: "1349"

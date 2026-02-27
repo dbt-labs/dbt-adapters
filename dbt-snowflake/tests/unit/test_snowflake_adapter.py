@@ -7,8 +7,9 @@ from unittest import mock
 
 from dbt.adapters.snowflake import SnowflakeAdapter
 from dbt.adapters.snowflake import Plugin as SnowflakePlugin
+from dbt.adapters.snowflake import SnowflakeAdapterResponse
 from dbt.adapters.snowflake.column import SnowflakeColumn
-from dbt.adapters.snowflake.connections import SnowflakeCredentials
+from dbt.adapters.snowflake.connections import SnowflakeCredentials, SnowflakeConnectionManager
 from dbt.contracts.files import FileHash
 from dbt.context.query_header import generate_query_header_context
 from dbt.context.providers import generate_runtime_macro_context
@@ -59,6 +60,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
         self.cursor = self.handle.cursor.return_value
+        self.cursor.stats = None  # Explicitly set to None to avoid MagicMock auto-creation
         self.mock_execute = self.cursor.execute
         self.mock_execute.return_value = mock.MagicMock(sfqid="42")
         self.patcher = mock.patch("dbt.adapters.snowflake.connections.snowflake.connector.connect")
@@ -290,8 +292,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 ),
             ]
         )
@@ -323,8 +327,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=None,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -351,7 +357,9 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -385,8 +393,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -419,8 +429,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -449,8 +461,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -483,8 +497,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -517,8 +533,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -551,8 +569,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -583,8 +603,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     client_request_mfa_token=True,
                     client_store_temporary_credential=True,
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -613,8 +635,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -642,8 +666,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key=None,
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -676,8 +702,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -712,8 +740,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     private_key="test_key",
                     application="dbt",
                     insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
         )
@@ -1109,3 +1139,208 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             private_key_path="/tmp/does/not/exist.p8",
         )
         self.assertRaises(FileNotFoundError, creds.auth_args)
+
+
+class TestSnowflakeGetResponse(unittest.TestCase):
+    """Tests for SnowflakeConnectionManager.get_response with cursor.stats support."""
+
+    def test_get_response_with_stats(self):
+        """Test get_response populates stats from cursor.stats for DML operations."""
+        # Create a mock cursor with stats (simulating snowflake-connector-python >= 4.2.0)
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        # Mock stats object (like QueryResultStats from snowflake connector)
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 100
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        # rows_affected uses rows_inserted when available and > 0
+        assert response.rows_affected == 100
+        assert response.query_id == "01abc123-0000-0000-0000-000000000000"
+        assert response.rows_inserted == 100
+        assert response.rows_deleted == 0
+        assert response.rows_updated == 0
+        assert response.rows_duplicates == 0
+
+    def test_get_response_with_stats_none_values(self):
+        """Test get_response when cursor.stats has None values (non-DML operations)."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        # Mock stats object with None values (like for CREATE VIEW)
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = None
+        stats.num_rows_deleted = None
+        stats.num_rows_updated = None
+        stats.num_dml_duplicates = None
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 1
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_without_stats_attribute(self):
+        """Test get_response when cursor doesn't have stats attribute (older connector)."""
+        cursor = mock.MagicMock(spec=["sqlstate", "rowcount", "sfqid"])
+        cursor.sqlstate = None
+        cursor.rowcount = 5
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 5
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_with_stats_none(self):
+        """Test get_response when cursor.stats is None."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 3
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 3
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_with_sqlstate(self):
+        """Test get_response preserves sqlstate code when present."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = "02000"
+        cursor.rowcount = 0
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "02000"
+        assert str(response) == "02000 0"
+
+    def test_get_response_with_update_stats(self):
+        """Test get_response with UPDATE operation stats."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 50
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 50
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert response.rows_affected == 50
+        assert response.rows_inserted == 0
+        assert response.rows_updated == 50
+        assert response.rows_deleted == 0
+
+    def test_get_response_with_delete_stats(self):
+        """Test get_response with DELETE operation stats."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 25
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0
+        stats.num_rows_deleted = 25
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert response.rows_affected == 25
+        assert response.rows_inserted == 0
+        assert response.rows_deleted == 25
+        assert response.rows_updated == 0
+
+    def test_get_response_ctas_uses_rows_inserted(self):
+        """Test get_response uses rows_inserted for rows_affected for CTAS operations."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1  # CTAS returns 1 for rowcount (the success message row)
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 1000
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rows_inserted for accurate reporting
+        assert response.rows_affected == 1000
+        assert response.rows_inserted == 1000
+        assert str(response) == "SUCCESS 1000"
+
+    def test_get_response_uses_rowcount_when_no_rows_inserted(self):
+        """Test get_response uses rowcount when rows_inserted is 0 or None."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0  # No rows inserted
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rowcount when rows_inserted is 0
+        assert response.rows_affected == 1
+        assert response.rows_inserted == 0
+        assert str(response) == "SUCCESS 1"
+
+    def test_get_response_rowcount_when_no_stats(self):
+        """Test get_response uses rowcount when no stats available."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 5
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rowcount when no stats
+        assert response.rows_affected == 5
+        assert response.rows_inserted is None
+        assert str(response) == "SUCCESS 5"

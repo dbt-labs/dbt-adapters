@@ -9,7 +9,6 @@ import google.cloud.bigquery
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
-from dbt.adapters.bigquery.retry import RetryFactory
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -24,6 +23,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.mock_client = Mock(google.cloud.bigquery.Client)
 
         self.mock_connection = MagicMock()
+        self.mock_connection.name = "test_connection"  # Must be a string for fire_event
         self.mock_connection.handle = self.mock_client
         self.mock_connection.credentials = self.credentials
 
@@ -87,6 +87,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_query_and_results(self, MockQueryJobConfig):
+        self.mock_client.query.return_value = Mock(job_id="1")
         self.connections._query_and_results(
             self.mock_connection,
             "sql",
@@ -158,3 +159,174 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             database="project", schema="dataset", identifier="table2"
         )
         self.connections.copy_bq_table(source, destination, write_disposition)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_retries_with_fresh_job_id(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+
+        def capture_job_id(*args, **kwargs):
+            job_ids_used.append(kwargs.get("job_id"))
+            if len(job_ids_used) < 2:
+                raise exceptions.ServiceUnavailable("Service unavailable")
+            mock_job = Mock(job_id=kwargs.get("job_id"), location="US", project="project")
+            mock_job.result.return_value = iter([])
+            return mock_job
+
+        self.mock_client.query.side_effect = capture_job_id
+        self.connections.raw_execute("SELECT 1")
+        self.assertEqual(self.mock_client.query.call_count, 2)
+        self.assertNotEqual(job_ids_used[0], job_ids_used[1])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_no_retry_on_non_retryable_error(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self.mock_client.query.side_effect = exceptions.BadRequest("Syntax error")
+        from dbt_common.exceptions import DbtDatabaseError
+
+        with self.assertRaises(DbtDatabaseError):
+            self.connections.raw_execute("SELECT * FORM table")
+        self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_result_failure_triggers_retry(self, MockQueryJobConfig):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        call_count = {"query": 0}
+
+        def make_query_job(*args, **kwargs):
+            call_count["query"] += 1
+            mock_job = Mock(job_id=f"job_{call_count['query']}", location="US", project="project")
+            if call_count["query"] == 1:
+                mock_job.result.side_effect = exceptions.ServiceUnavailable("Service unavailable")
+            else:
+                mock_job.result.return_value = iter([])
+            return mock_job
+
+        self.mock_client.query.side_effect = make_query_job
+        self.connections.raw_execute("SELECT 1")
+        self.assertEqual(self.mock_client.query.call_count, 2)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_passes_timeout_to_result(self, MockQueryJobConfig):
+        """Test that _query_and_results passes a timeout to query_job.result()"""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        # Verify result() was called with a timeout parameter
+        mock_job.result.assert_called_once()
+        call_kwargs = mock_job.result.call_args[1]
+        self.assertIn("timeout", call_kwargs)
+        # timeout should be job_execution_timeout (1) + 30 second buffer = 31
+        self.assertEqual(call_kwargs["timeout"], 31)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_polling_timeout_includes_buffer(self, MockQueryJobConfig):
+        """Test that the polling timeout is job_execution_timeout + 30 seconds buffer"""
+        # Set a specific job_execution_timeout and recreate the connection manager
+        self.credentials.job_execution_timeout_seconds = 120
+        connections = BigQueryConnectionManager(
+            profile=Mock(credentials=self.credentials, query_comment=None),
+            mp_context=Mock(),
+        )
+        connections.get_thread_connection = lambda: self.mock_connection
+
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        # timeout should be 120 + 30 = 150
+        self.assertEqual(call_kwargs["timeout"], 150)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_retryable_google_api_error_is_reraised(self, MockQueryJobConfig):
+        """Test that retryable GoogleAPICallError is re-raised for retry mechanism"""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        # ServiceUnavailable is a retryable error
+        mock_job.result.side_effect = exceptions.ServiceUnavailable("Service unavailable")
+        self.mock_client.query.return_value = mock_job
+
+        # Should raise ServiceUnavailable, not DbtDatabaseError
+        with self.assertRaises(exceptions.ServiceUnavailable):
+            self.connections._query_and_results(
+                self.mock_connection,
+                "SELECT 1",
+                {"dry_run": False},
+                job_id="test_job",
+            )
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_uses_model_timeout_from_job_params(self, MockQueryJobConfig):
+        """Test that _query_and_results uses job_timeout_ms from job_params when set"""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        # Pass model-level timeout via job_params (as raw_execute would)
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False, "job_timeout_ms": 60000},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        # polling timeout should be model timeout (60) + 30 second buffer = 90
+        self.assertEqual(call_kwargs["timeout"], 90)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_falls_back_to_profile_timeout(self, MockQueryJobConfig):
+        """Test that _query_and_results falls back to profile-level timeout when no model timeout"""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        # profile timeout is 1, so polling timeout = 1 + 30 = 31
+        self.assertEqual(call_kwargs["timeout"], 31)
+
+    def test_copy_bq_table_respects_model_timeout(self):
+        """Test that copy_bq_table uses the model-level timeout when set"""
+        mock_copy_job = Mock()
+        self.mock_client.copy_table.return_value = mock_copy_job
+
+        # Set model timeout on the connection object (as pre_model_hook would)
+        self.mock_connection._bq_model_timeout = 45.0
+
+        source = BigQueryRelation.create(database="project", schema="dataset", identifier="table1")
+        destination = BigQueryRelation.create(
+            database="project", schema="dataset", identifier="table2"
+        )
+        self.connections.copy_bq_table(
+            source, destination, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
+        )
+
+        # Verify copy_job.result was called with the model timeout
+        mock_copy_job.result.assert_called_once_with(timeout=45.0)
+
+        # Clean up
+        self.mock_connection._bq_model_timeout = None

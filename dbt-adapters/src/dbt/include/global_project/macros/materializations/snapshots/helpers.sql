@@ -8,7 +8,7 @@
 {% macro default__create_columns(relation, columns) %}
   {% for column in columns %}
     {% call statement() %}
-      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.data_type }};
+      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.expanded_data_type }};
     {% endcall %}
   {% endfor %}
 {% endmacro %}
@@ -158,7 +158,12 @@
             and not (
                 --avoid updating the record's valid_to if the latest entry is marked as deleted
                 snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-                and snapshotted_data.{{ columns.dbt_valid_to }} is null
+                and
+                {% if config.get('dbt_valid_to_current') -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+                {%- else -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} is null
+                {%- endif %}
             )
             {%- endif %}
     )
@@ -172,10 +177,10 @@
 
         select
             'insert' as dbt_change_type,
-            {#
+            {#/*
                 If a column has been added to the source it won't yet exist in the
                 snapshotted table so we insert a null value as a placeholder for the column.
-             #}
+             */#}
             {%- for col in source_sql_cols -%}
             {%- if col.name in snapshotted_cols -%}
             snapshotted_data.{{ adapter.quote(col.column) }},
@@ -202,7 +207,12 @@
         and not (
             --avoid inserting a new record if the latest one is marked as deleted
             snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-            and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            and
+            {% if config.get('dbt_valid_to_current') -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+            {%- else -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} is null
+            {%- endif %}
             )
 
     )
