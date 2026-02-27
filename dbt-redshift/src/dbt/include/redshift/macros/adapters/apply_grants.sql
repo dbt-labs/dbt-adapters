@@ -54,6 +54,9 @@
 
 
 {% macro redshift__get_show_grant_sql(relation) %}
+  {% if redshift__use_show_apis() %}
+    SHOW GRANTS ON TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
+  {% else %}
 {#-
     Query existing grants on a relation, including users, groups, and roles.
     Returns grantee names with 'user:' or 'group:' prefix to match the config format.
@@ -68,50 +71,51 @@
     Privilege codes: r=select, a=insert, w=update, d=delete, R=references
 -#}
 
-with ns as (
-    select generate_series(1, 100) as n
-),
+    with ns as (
+        select generate_series(1, 100) as n
+    ),
 
-acl_entries as (
+    acl_entries as (
+        select
+            trim(split_part(array_to_string(c.relacl, ','), ',', ns.n)) as acl_entry
+        from pg_class c
+        cross join ns
+        where c.oid = '{{ relation }}'::regclass
+          and len(trim(split_part(array_to_string(c.relacl, ','), ',', ns.n))) > 0
+    ),
+
+    parsed as (
+        select
+            case
+                when split_part(acl_entry, '=', 1) like 'group %'
+                then 'group:' || trim(substring(split_part(acl_entry, '=', 1), 7))
+                else 'user:' || split_part(acl_entry, '=', 1)
+            end as grantee,
+            split_part(split_part(acl_entry, '=', 2), '/', 1) as privileges
+        from acl_entries
+        where len(split_part(acl_entry, '=', 1)) > 0
+    ),
+
+    privilege_map as (
+        select grantee, privileges, 'select' as privilege_type from parsed where privileges like '%r%'
+        union all
+        select grantee, privileges, 'insert' as privilege_type from parsed where privileges like '%a%'
+        union all
+        select grantee, privileges, 'update' as privilege_type from parsed where privileges like '%w%'
+        union all
+        select grantee, privileges, 'delete' as privilege_type from parsed where privileges like '%d%'
+        union all
+        select grantee, privileges, 'references' as privilege_type from parsed where privileges like '%R%'
+    )
+
     select
-        trim(split_part(array_to_string(c.relacl, ','), ',', ns.n)) as acl_entry
-    from pg_class c
-    cross join ns
-    where c.oid = '{{ relation }}'::regclass
-      and len(trim(split_part(array_to_string(c.relacl, ','), ',', ns.n))) > 0
-),
+        grantee,
+        privilege_type
+    from privilege_map
+    where grantee <> ('user:' || current_user)
+      and grantee not like '%=%'  -- filter out malformed entries
 
-parsed as (
-    select
-        case
-            when split_part(acl_entry, '=', 1) like 'group %'
-            then 'group:' || trim(substring(split_part(acl_entry, '=', 1), 7))
-            else 'user:' || split_part(acl_entry, '=', 1)
-        end as grantee,
-        split_part(split_part(acl_entry, '=', 2), '/', 1) as privileges
-    from acl_entries
-    where len(split_part(acl_entry, '=', 1)) > 0
-),
-
-privilege_map as (
-    select grantee, privileges, 'select' as privilege_type from parsed where privileges like '%r%'
-    union all
-    select grantee, privileges, 'insert' as privilege_type from parsed where privileges like '%a%'
-    union all
-    select grantee, privileges, 'update' as privilege_type from parsed where privileges like '%w%'
-    union all
-    select grantee, privileges, 'delete' as privilege_type from parsed where privileges like '%d%'
-    union all
-    select grantee, privileges, 'references' as privilege_type from parsed where privileges like '%R%'
-)
-
-select
-    grantee,
-    privilege_type
-from privilege_map
-where grantee <> ('user:' || current_user)
-  and grantee not like '%=%'  -- filter out malformed entries
-
+  {% endif %}
 {% endmacro %}
 
 
