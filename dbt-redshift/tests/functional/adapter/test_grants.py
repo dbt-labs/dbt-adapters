@@ -43,25 +43,25 @@ class TestInvalidGrantsRedshift(RedshiftGrantsMixin, BaseModelGrants):
     pass
 
 
-class TestModelGrantsRedshiftWithShowApis(BaseModelGrants):
+class TestModelGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseModelGrants):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"flags": {"redshift_use_show_apis": True}}
 
 
-class TestIncrementalGrantsRedshiftWithShowApis(BaseIncrementalGrants):
+class TestIncrementalGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseIncrementalGrants):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"flags": {"redshift_use_show_apis": True}}
 
 
-class TestSeedGrantsRedshiftWithShowApis(BaseSeedGrants):
+class TestSeedGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseSeedGrants):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"flags": {"redshift_use_show_apis": True}}
 
 
-class TestSnapshotGrantsRedshiftWithShowApis(BaseSnapshotGrants):
+class TestSnapshotGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseSnapshotGrants):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"flags": {"redshift_use_show_apis": True}}
