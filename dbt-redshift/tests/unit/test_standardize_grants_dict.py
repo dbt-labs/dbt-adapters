@@ -108,10 +108,10 @@ class TestStandardizeGrantsDictShowApi:
         )
         result = adapter.standardize_grants_dict(table)
         assert result == {
-            "select": ["alice"],
-            "drop": ["alice"],
-            "alter": ["alice"],
-            "truncate": ["bob"],
+            "select": ["user:alice"],
+            "drop": ["user:alice"],
+            "alter": ["user:alice"],
+            "truncate": ["user:bob"],
         }
 
     def test_empty_table(self, adapter, mocker):

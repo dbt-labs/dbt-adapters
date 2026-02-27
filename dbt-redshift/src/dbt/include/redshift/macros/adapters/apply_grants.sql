@@ -154,9 +154,6 @@
     - 'group:groupname' -> REVOKE ... FROM GROUP groupname
     - 'role:rolename' -> REVOKE ... FROM ROLE rolename
 -#}
-  {% if redshift__use_show_apis() %}
-    SHOW GRANTS ON TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
-  {% else %}
     {%- set formatted_grantees = [] -%}
     {%- for grantee in grantees -%}
         {%- if grantee.startswith('group:') -%}
@@ -171,5 +168,4 @@
         {%- endif -%}
     {%- endfor -%}
     revoke {{ privilege }} on {{ relation.render() }} from {{ formatted_grantees | join(', ') }}
-  {% endif %}
 {% endmacro %}
