@@ -104,8 +104,3 @@ integration-tests = [
     "pip install -r dagger/requirements.txt",
     "python dagger/run_dbt_spark_tests.py {args:--profile apache_spark}",
 ]
-
-[tool.hatch.env]
-requires = [
-"virtualenv==20.26.6",
-]
