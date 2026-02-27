@@ -153,35 +153,64 @@ class RedshiftAdapter(SQLAdapter):
         return ""
 
     @available
-    def merge_relation_tables(
-        self,
-        all_relations: "agate.Table",
-        materialized_views: "agate.Table",
+    def transform_show_tables_for_list_relations(
+        self, show_tables: "agate.Table"
     ) -> "agate.Table":
-        """Merge all relations with materialized view info.
+        """Transform SHOW TABLES FROM SCHEMA output into the relation format dbt expects.
 
-        For each row in all_relations with type 'view', if a matching
-        (database, schema, name) key exists in materialized_views, the type is
-        updated to 'materialized_view'.
-        Returns a new agate Table with the same structure as all_relations.
+        SHOW TABLES returns columns including database_name, schema_name, table_name,
+        table_type (TABLE/VIEW), and table_subtype (REGULAR TABLE, REGULAR VIEW,
+        LATE BINDING VIEW, MATERIALIZED VIEW).
+
+        Returns an agate Table with columns: database, name, schema, type
+        where type is one of: table, view, materialized_view.
         """
-        mv_lookup = {
-            (row["database"], row["schema"], row["name"]) for row in materialized_views.rows
-        }
-
         new_rows = []
-        for row in all_relations.rows:
-            key = (row["database"], row["schema"], row["name"])
-            row_type = (
-                "materialized_view" if key in mv_lookup and row["type"] == "view" else row["type"]
+        for row in show_tables.rows:
+            table_type = (row["table_type"] or "").strip().upper()
+            if table_type == "VIEW":
+                subtype = (row["table_subtype"] or "").strip().upper()
+                relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
+            else:
+                relation_type = "table"
+
+            new_rows.append(
+                (
+                    row["database_name"],
+                    row["table_name"],
+                    row["schema_name"],
+                    relation_type,
+                )
             )
-            new_rows.append((row["database"], row["name"], row["schema"], row_type))
 
         return agate.Table(
             new_rows,
-            column_names=all_relations.column_names,
-            column_types=all_relations.column_types,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
+
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
+        """Translate the result of `show grants` to match the grants config format.
+
+        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        returns columns ``identity_name`` and ``privilege_type`` (uppercase).
+        Otherwise the legacy query returns ``grantee`` and ``privilege_type``
+        (lowercase).
+        """
+        if not self.behavior.redshift_use_show_apis.no_warn:
+            return super().standardize_grants_dict(grants_table)
+
+        grants_dict: Dict[str, List[str]] = {}
+
+        for row in grants_table:
+            grantee = row["identity_name"]
+            privilege = row["privilege_type"].lower()
+            if privilege in grants_dict:
+                grants_dict[privilege].append(grantee)
+            else:
+                grants_dict[privilege] = [grantee]
+
+        return grants_dict
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)

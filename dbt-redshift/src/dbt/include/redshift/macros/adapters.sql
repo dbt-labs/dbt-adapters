@@ -108,30 +108,33 @@
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {% if redshift__use_show_apis() %}
-    {{ return(redshift__get_columns_in_relation_svv(relation)) }}
+  {# relation from temp tables does not have a database or schema. #}
+  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+
+  {% if redshift__use_show_apis() and relation.database and relation.schema %}
+    {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
   {% endif %}
 {% endmacro %}
 
 
-{% macro redshift__get_columns_in_relation_svv(relation) -%}
+{% macro redshift__get_columns_in_relation_show(relation) -%}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
-    select
-      column_name,
-      data_type,
-      character_maximum_length,
-      numeric_precision,
-      numeric_scale
-    from svv_all_columns
-    where database_name = '{{ relation.database }}'
-      and schema_name = '{{ relation.schema }}'
-      and table_name = '{{ relation.identifier }}'
-    order by ordinal_position
+    SHOW COLUMNS FROM TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
   {% endcall %}
   {% set table = load_result('get_columns_in_relation').table %}
-  {{ return(sql_convert_columns_in_relation(table)) }}
+  {% set columns = [] %}
+  {% for row in table %}
+    {% do columns.append(api.Column(
+      column=row['column_name'],
+      dtype=row['data_type'],
+      char_size=row['character_maximum_length'],
+      numeric_precision=row['numeric_precision'],
+      numeric_scale=row['numeric_scale']
+    )) %}
+  {% endfor %}
+  {{ return(columns) }}
 {% endmacro %}
 
 
@@ -255,39 +258,11 @@
 
 {% macro redshift__list_relations_without_caching(schema_relation) %}
   {% if redshift__use_show_apis() %}
-    {# Joining SVV views in Redshift is unreliable as some data is available in leader node but queries run on compute nodes #}
-    {# Therefore, we run two separate queries and merge the results #}
-
-    {% call statement('dbt_all_relations', fetch_result=True) -%}
-      select
-        database_name as database,
-        table_name as name,
-        schema_name as schema,
-        case when table_type = 'VIEW' then 'view' else 'table' end as type
-      from svv_all_tables
-      where schema_name ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
+    {% call statement('show_tables', fetch_result=True) -%}
+      SHOW TABLES FROM SCHEMA {{ schema_relation.database }}.{{ schema_relation.schema }}
     {% endcall %}
-
-    {% call statement('dbt_materialized_views', fetch_result=True) -%}
-      select
-        trim(database_name) as database,
-        trim(name) as name,
-        trim(schema_name) as schema,
-        'materialized_view' as type
-      from svv_mv_info
-      where trim(schema_name) ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
-    {% endcall %}
-
-    {% set all_relations = load_result('dbt_all_relations').table %}
-    {% set materialized_views = load_result('dbt_materialized_views').table %}
-
-    {{ return(adapter.merge_relation_tables(all_relations, materialized_views)) }}
+    {% set show_result = load_result('show_tables').table %}
+    {{ return(adapter.transform_show_tables_for_list_relations(show_result)) }}
   {% else %}
     {% call statement('list_relations_without_caching', fetch_result=True) -%}
       select
@@ -323,13 +298,14 @@
 {% macro redshift__list_schemas(database) %}
   {% if redshift__use_show_apis() %}
     {% call statement('list_schemas', fetch_result=True) -%}
-      select distinct schema_name as nspname
-      from svv_all_schemas
-      {% if database %}
-      where database_name = '{{ database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ database }}
     {% endcall %}
-    {{ return(load_result('list_schemas').table) }}
+    {%- set table = load_result('list_schemas').table -%}
+    {%- set schemas = [] -%}
+    {%- for row in table.rows -%}
+      {%- do schemas.append([row['schema_name']]) -%}
+    {%- endfor -%}
+    {{ return(schemas) }}
   {% else %}
     {{ return(postgres__list_schemas(database)) }}
   {% endif %}
@@ -338,13 +314,13 @@
 {% macro redshift__check_schema_exists(information_schema, schema) %}
   {% if redshift__use_show_apis() %}
     {% call statement('check_schema_exists', fetch_result=True) -%}
-      select count(*) from svv_all_schemas
-      where schema_name = '{{ schema }}'
-      {% if information_schema.database %}
-      and database_name = '{{ information_schema.database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ information_schema.database }}
+      LIKE '{{ schema }}'
     {% endcall %}
-    {{ return(load_result('check_schema_exists').table) }}
+    {%- set table = load_result('check_schema_exists').table -%}
+
+    {# We return list of list because the base adapter expects column count #}
+    {{ return([[table.rows | length]]) }}
   {% else %}
     {{ return(postgres__check_schema_exists(information_schema, schema)) }}
   {% endif %}
@@ -386,6 +362,23 @@
 
 {% macro redshift__alter_column_comment(relation, column_dict) %}
   {% do return(postgres__alter_column_comment(relation, column_dict)) %}
+{% endmacro %}
+
+
+{% macro redshift__alter_column_type(relation, column_name, new_column_type) -%}
+  {#
+    Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
+    For those, use native ALTER; for any other type change, fall back to
+    default add/copy/drop/rename.
+  #}
+  {% set type_lower = (new_column_type | lower) | trim %}
+  {% if type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte' %}
+    {% call statement('alter_column_type') %}
+      alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
+    {% endcall %}
+  {% else %}
+    {{ default__alter_column_type(relation, column_name, new_column_type) }}
+  {% endif %}
 {% endmacro %}
 
 
