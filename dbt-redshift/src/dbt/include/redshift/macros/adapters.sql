@@ -108,7 +108,10 @@
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {% if redshift__use_show_apis() %}
+  {# relation from temp tables does not have a database or schema. #}
+  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+
+  {% if redshift__use_show_apis() and relation.database and relation.schema %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
@@ -359,6 +362,23 @@
 
 {% macro redshift__alter_column_comment(relation, column_dict) %}
   {% do return(postgres__alter_column_comment(relation, column_dict)) %}
+{% endmacro %}
+
+
+{% macro redshift__alter_column_type(relation, column_name, new_column_type) -%}
+  {#
+    Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
+    For those, use native ALTER; for any other type change, fall back to
+    default add/copy/drop/rename.
+  #}
+  {% set type_lower = (new_column_type | lower) | trim %}
+  {% if type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte' %}
+    {% call statement('alter_column_type') %}
+      alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
+    {% endcall %}
+  {% else %}
+    {{ default__alter_column_type(relation, column_name, new_column_type) }}
+  {% endif %}
 {% endmacro %}
 
 
