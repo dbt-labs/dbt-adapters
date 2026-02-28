@@ -19,6 +19,11 @@ from dbt.adapters.events.logging import AdapterLogger
 import dbt_common.exceptions
 
 from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
+from dbt.adapters.redshift import constants
+from dbt.adapters.redshift.catalogs import (
+    GlueCatalogIntegration,
+    RedshiftInfoSchemaCatalogIntegration,
+)
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -71,6 +76,9 @@ class RedshiftAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = RedshiftConfig
 
+    # Catalog integrations for Iceberg/Glue support
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration, RedshiftInfoSchemaCatalogIntegration]
+
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -93,6 +101,8 @@ class RedshiftAdapter(SQLAdapter):
         self.connections.set_skip_transactions_checker(
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
+        # Register default catalog integrations
+        self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:

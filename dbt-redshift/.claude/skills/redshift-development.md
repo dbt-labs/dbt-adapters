@@ -15,10 +15,17 @@ dbt-redshift/
 │   │   ├── __init__.py              # Plugin registration
 │   │   ├── __version__.py           # Version info
 │   │   ├── connections.py           # RedshiftConnectionManager, RedshiftCredentials
-│   │   ├── impl.py                  # RedshiftAdapter
+│   │   ├── impl.py                  # RedshiftAdapter with CATALOG_INTEGRATIONS
 │   │   ├── relation.py              # RedshiftRelation
 │   │   ├── auth_providers.py        # IAM, Identity Center auth
 │   │   ├── utility.py               # Helper functions
+│   │   ├── constants.py             # Catalog type constants
+│   │   ├── parse_model.py           # Model config parsing helpers
+│   │   ├── catalogs/                # Catalog integrations
+│   │   │   ├── __init__.py
+│   │   │   ├── _glue.py             # GlueCatalogIntegration for Iceberg
+│   │   │   ├── _info_schema.py      # Default Redshift catalog
+│   │   │   └── _relation.py         # RedshiftCatalogRelation dataclass
 │   │   └── relation_configs/        # Materialized view, dist, sort configs
 │   │       ├── base.py
 │   │       ├── materialized_view.py
@@ -27,6 +34,7 @@ dbt-redshift/
 │   │       └── policies.py
 │   └── include/redshift/
 │       └── macros/                  # Redshift SQL implementations
+│           └── relations/iceberg/   # Iceberg table creation macros
 ├── tests/
 │   ├── unit/                        # Unit tests
 │   └── functional/                  # Integration tests
@@ -46,6 +54,7 @@ Extends `PostgresAdapter` with Redshift-specific features:
 - **Capabilities**: Schema metadata, table last modified, catalog retrieval
 - **Date Function**: `GETDATE()`
 - **Type Conversions**: Redshift-specific type handling
+- **Catalog Integrations**: GlueCatalogIntegration, RedshiftInfoSchemaCatalogIntegration
 
 ### RedshiftConnectionManager (`connections.py`)
 
@@ -145,6 +154,15 @@ DBT_TEST_USER_2=dbt_test_user_2
 DBT_TEST_USER_3=dbt_test_user_3
 ```
 
+### Iceberg/Glue Catalog Testing
+
+```shell
+REDSHIFT_ICEBERG_EXTERNAL_SCHEMA=dbt_iceberg_schema
+REDSHIFT_ICEBERG_S3_BUCKET=s3://your-dbt-iceberg-test-bucket/iceberg-data
+REDSHIFT_ICEBERG_IAM_ROLE=arn:aws:iam::YOUR_ACCOUNT_ID:role/RedshiftGlueIcebergRole
+REDSHIFT_ICEBERG_GLUE_DATABASE=dbt_iceberg_test_db
+```
+
 ## Running Tests
 
 ### Unit Tests
@@ -230,17 +248,316 @@ Categories: Breaking Changes, Features, Fixes, Under the Hood, Dependencies, Sec
 ) }}
 ```
 
+## Iceberg Tables via AWS Glue Data Catalog
+
+dbt-redshift supports creating Iceberg tables managed by AWS Glue Data Catalog. This enables open table format storage with features like time travel, schema evolution, and cross-engine compatibility.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        dbt Model Config                         │
+│              catalog='my_glue_catalog'                          │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   GlueCatalogIntegration                        │
+│    - Reads catalog config from dbt_project.yml                  │
+│    - Builds RedshiftCatalogRelation with storage_uri, etc.      │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Redshift External Schema                       │
+│    - Points to Glue Data Catalog database                       │
+│    - Requires IAM role with Glue/S3 permissions                 │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                AWS Glue Data Catalog                            │
+│    - Stores Iceberg table metadata                              │
+│    - Table definitions, schemas, partition info                 │
+└─────────────────────┬───────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Amazon S3                                  │
+│    - Stores Iceberg data files (Parquet)                        │
+│    - Stores Iceberg metadata files                              │
+│    - Path: {external_volume}/{schema}/{model_name}/             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Prerequisites
+
+1. **External Schema**: Must be created in Redshift before running dbt:
+
+```sql
+CREATE EXTERNAL SCHEMA dbt_iceberg_schema
+FROM DATA CATALOG
+DATABASE 'my_glue_database'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftGlueRole'
+REGION 'us-east-1';
+```
+
+2. **IAM Role**: Redshift cluster needs an IAM role with permissions for:
+   - AWS Glue Data Catalog (read/write tables, databases)
+   - Amazon S3 (read/write to data bucket)
+
+3. **S3 Bucket**: For storing Iceberg table data and metadata
+
+### Configuration
+
+#### Project-Level Catalog Configuration (`dbt_project.yml`)
+
+```yaml
+catalogs:
+  - name: my_glue_catalog
+    active_write_integration: glue_integration
+    write_integrations:
+      - name: glue_integration
+        catalog_type: glue
+        table_format: iceberg
+        file_format: parquet
+        external_volume: s3://my-bucket/iceberg-data
+        adapter_properties:
+          external_schema: dbt_iceberg_schema
+          glue_database: my_glue_database  # Optional
+```
+
+#### Model Configuration
+
+```sql
+{{ config(
+    materialized='table',
+    catalog='my_glue_catalog',
+    partition_by=['date_column', 'region']  -- Optional partitioning
+) }}
+
+SELECT * FROM {{ ref('source_table') }}
+```
+
+#### Model-Level Overrides
+
+```sql
+{{ config(
+    materialized='table',
+    catalog='my_glue_catalog',
+    external_schema='custom_schema',           -- Override catalog default
+    storage_uri='s3://custom/path/my_table/'   -- Override auto-generated path
+) }}
+```
+
+### Key Components
+
+#### `constants.py`
+
+```python
+ICEBERG_TABLE_FORMAT = "iceberg"
+DEFAULT_TABLE_FORMAT = "default"
+PARQUET_FILE_FORMAT = "parquet"
+GLUE_CATALOG_TYPE = "glue"
+INFO_SCHEMA_CATALOG_TYPE = "INFO_SCHEMA"
+```
+
+#### `GlueCatalogIntegration` (`catalogs/_glue.py`)
+
+- Extends `CatalogIntegration` base class from dbt-adapters
+- Parses `adapter_properties` for `external_schema` and `glue_database`
+- Auto-generates storage URI: `{external_volume}/{schema}/{model_name}/`
+- Builds `RedshiftCatalogRelation` with all Iceberg configuration
+
+#### `RedshiftCatalogRelation` (`catalogs/_relation.py`)
+
+```python
+@dataclass
+class RedshiftCatalogRelation:
+    catalog_type: str           # "glue" or "INFO_SCHEMA"
+    catalog_name: Optional[str]
+    table_format: Optional[str] # "iceberg" or "default"
+    file_format: Optional[str]  # "parquet"
+    external_volume: Optional[str]
+    storage_uri: Optional[str]  # Full S3 path for data
+    glue_database: Optional[str]
+    external_schema: Optional[str]
+    partition_by: Optional[List[str]]
+```
+
+#### `parse_model.py`
+
+Helper functions to extract catalog config from model:
+
+- `catalog_name(model)` - Get catalog name from config
+- `external_schema(model)` - Get external schema override
+- `storage_uri(model)` - Get explicit storage URI
+- `partition_by(model)` - Get partition columns (normalizes string to list)
+- `file_format(model)` - Get file format override
+
+### Macro Flow
+
+1. `redshift__create_table_as` checks if model has Iceberg catalog
+2. Routes to `redshift__create_iceberg_table_as` for Iceberg tables
+3. Creates table in external schema with Iceberg properties
+4. Inserts data from model SQL
+
+### Type Mapping (Redshift → Iceberg)
+
+| Redshift Type | Iceberg Type |
+|---------------|--------------|
+| SMALLINT, INT2 | INT |
+| INTEGER, INT, INT4 | INT |
+| BIGINT, INT8 | BIGINT |
+| DECIMAL, NUMERIC | DECIMAL |
+| REAL, FLOAT4 | FLOAT |
+| DOUBLE PRECISION, FLOAT8 | DOUBLE |
+| BOOLEAN, BOOL | BOOLEAN |
+| CHAR, CHARACTER, NCHAR, BPCHAR | STRING |
+| VARCHAR, NVARCHAR, TEXT | STRING |
+| DATE | DATE |
+| TIMESTAMP, TIMESTAMP WITHOUT TIME ZONE | TIMESTAMP |
+| TIMESTAMPTZ, TIMESTAMP WITH TIME ZONE | TIMESTAMPTZ |
+| TIME, TIME WITHOUT TIME ZONE | STRING |
+| TIMETZ | STRING |
+| VARBYTE, BINARY, VARBINARY | BINARY |
+| SUPER | STRING |
+| HLLSKETCH | BINARY |
+| GEOMETRY, GEOGRAPHY | STRING |
+
+### Testing Iceberg Support
+
+#### Unit Tests
+
+```shell
+hatch run unit-tests tests/unit/test_glue_catalog_integration.py -v
+```
+
+#### Functional Tests (requires AWS setup)
+
+```shell
+# Set environment variables first
+export REDSHIFT_ICEBERG_EXTERNAL_SCHEMA=dbt_iceberg_schema
+export REDSHIFT_ICEBERG_S3_BUCKET=s3://my-bucket/iceberg
+
+hatch run integration-tests tests/functional/adapter/iceberg/
+```
+
+### AWS Setup Commands
+
+#### Create IAM Role
+
+```bash
+# Create trust policy
+cat > trust-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "redshift.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+# Create the IAM role
+aws iam create-role \
+  --role-name RedshiftGlueIcebergRole \
+  --assume-role-policy-document file://trust-policy.json
+
+# Create permissions policy
+cat > permissions-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "glue:GetDatabase",
+        "glue:GetDatabases",
+        "glue:CreateDatabase",
+        "glue:GetTable",
+        "glue:GetTables",
+        "glue:CreateTable",
+        "glue:UpdateTable",
+        "glue:DeleteTable",
+        "glue:GetPartitions",
+        "glue:BatchCreatePartition",
+        "glue:BatchDeletePartition"
+      ],
+      "Resource": [
+        "arn:aws:glue:*:*:catalog",
+        "arn:aws:glue:*:*:database/*",
+        "arn:aws:glue:*:*:table/*/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:GetBucketLocation"
+      ],
+      "Resource": [
+        "arn:aws:s3:::your-iceberg-bucket",
+        "arn:aws:s3:::your-iceberg-bucket/*"
+      ]
+    }
+  ]
+}
+EOF
+
+# Attach the policy
+aws iam put-role-policy \
+  --role-name RedshiftGlueIcebergRole \
+  --policy-name GlueS3IcebergAccess \
+  --policy-document file://permissions-policy.json
+```
+
+#### Create External Schema in Redshift
+
+```sql
+-- First, create a Glue database (if needed)
+-- Can be done via AWS Console or Glue API
+
+-- Then create external schema in Redshift
+CREATE EXTERNAL SCHEMA dbt_iceberg_schema
+FROM DATA CATALOG
+DATABASE 'dbt_iceberg_test_db'
+IAM_ROLE 'arn:aws:iam::YOUR_ACCOUNT_ID:role/RedshiftGlueIcebergRole'
+REGION 'us-east-1';
+```
+
+### Limitations
+
+- **Table materialization only**: Incremental models not yet supported
+- **External schema required**: Must be pre-created in Redshift
+- **Partitions are identity transforms**: No complex partition transforms (bucket, truncate, etc.)
+- **No MERGE support**: Full table replacement on each run
+
 ## Key Files Reference
 
 | File | Purpose |
 |------|---------|
-| `impl.py` | Main adapter with constraints, capabilities, type conversions |
+| `impl.py` | Main adapter with constraints, capabilities, type conversions, catalog integrations |
 | `connections.py` | Connection management and credentials |
 | `relation.py` | Relation handling with dist/sort configs |
 | `auth_providers.py` | IAM and Identity Center authentication |
+| `constants.py` | Catalog type constants (GLUE, INFO_SCHEMA, ICEBERG) |
+| `parse_model.py` | Model config parsing for catalog settings |
+| `catalogs/_glue.py` | GlueCatalogIntegration for Iceberg tables |
+| `catalogs/_info_schema.py` | Default catalog for standard Redshift tables |
+| `catalogs/_relation.py` | RedshiftCatalogRelation dataclass |
 | `relation_configs/materialized_view.py` | MV configuration and changesets |
 | `relation_configs/dist.py` | Distribution style configuration |
 | `relation_configs/sort.py` | Sort key configuration |
+| `macros/relations/iceberg/create.sql` | Iceberg table creation macro |
 
 ## Available Hatch Scripts
 
@@ -266,3 +583,6 @@ Categories: Breaking Changes, Features, Fixes, Under the Hood, Dependencies, Sec
 3. Test IAM authentication paths when changing auth code
 4. Validate materialized view changes against actual Redshift cluster
 5. Keep redshift-connector version pinned due to API stability concerns
+6. When adding catalog integrations, follow the pattern from dbt-snowflake/dbt-bigquery
+7. For Iceberg tables, ensure external schema exists before running dbt models
+8. Use unit tests with MagicMock for catalog integration testing - use real dicts for config

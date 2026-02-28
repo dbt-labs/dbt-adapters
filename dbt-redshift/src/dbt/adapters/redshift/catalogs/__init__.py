@@ -1,0 +1,3 @@
+from dbt.adapters.redshift.catalogs._glue import GlueCatalogIntegration
+from dbt.adapters.redshift.catalogs._info_schema import RedshiftInfoSchemaCatalogIntegration
+from dbt.adapters.redshift.catalogs._relation import RedshiftCatalogRelation
