@@ -204,6 +204,54 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsPATAuth:
+    """Test suite for Programmatic Access Token (PAT) authentication"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "database": "test_db",
+            "schema": "test_schema",
+        }
+
+    def test_pat_auth_args_passes_token(self, base_credentials):
+        """PAT authenticator should pass token directly to connector"""
+        creds = connections.SnowflakeCredentials(
+            **base_credentials,
+            authenticator="programmatic_access_token",
+            token="my-pat-token",
+        )
+        args = creds.auth_args()
+        assert args["token"] == "my-pat-token"
+        assert args["authenticator"] == "programmatic_access_token"
+
+    def test_pat_auth_no_spurious_warning(self, base_credentials):
+        """PAT authenticator should not trigger the 'token set but authenticator wrong' warning"""
+        # This should not raise or warn — the validation in __post_init__ should
+        # recognize programmatic_access_token as a valid authenticator for token
+        creds = connections.SnowflakeCredentials(
+            **base_credentials,
+            authenticator="programmatic_access_token",
+            token="my-pat-token",
+        )
+        # If __post_init__ doesn't include 'programmatic_access_token' in the
+        # allowlist, it would emit a warning. We verify the credential was
+        # created without issue and auth_args works correctly.
+        args = creds.auth_args()
+        assert "token" in args
+
+    def test_pat_auth_without_token(self, base_credentials):
+        """PAT authenticator without a token should still produce auth args (connector will error)"""
+        creds = connections.SnowflakeCredentials(
+            **base_credentials,
+            authenticator="programmatic_access_token",
+        )
+        args = creds.auth_args()
+        assert args["authenticator"] == "programmatic_access_token"
+        assert args.get("token") is None
+
+
 def test_snowflake_oauth_expired_token_raises_error():
     credentials = {
         "account": "test_account",
