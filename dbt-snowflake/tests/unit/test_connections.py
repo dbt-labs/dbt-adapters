@@ -5,6 +5,7 @@ from importlib import reload
 from unittest.mock import Mock, patch, call
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -230,3 +231,38 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+def test_azure_oauth_token_fails_without_scope():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "schema": "schema",
+        "authenticator": "oauth",
+        "get_token_from_azure_default_credential": True,
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        creds = connections.SnowflakeCredentials(**credentials)
+    assert '"azure_token_scope" is required' in str(excinfo.value)
+    assert 'when "get_token_from_azure_default_credential" is set to true' in str(excinfo.value)
+
+
+@patch("azure.identity.DefaultAzureCredential")
+def test_azure_oauth_token(mock_default_credential):
+    azure_token_scope = "api://snowflake_oauth/.default"
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "schema": "schema",
+        "authenticator": "oauth",
+        "get_token_from_azure_default_credential": True,
+        "azure_token_scope": azure_token_scope,
+    }
+    creds = connections.SnowflakeCredentials(**credentials)
+    mock_default_credential.assert_called_once()
+    assert creds._azure_cred == mock_default_credential.return_value
+
+    auth_args = creds.auth_args()
+    creds._azure_cred.get_token.assert_called_once_with(azure_token_scope)
+    assert auth_args["authenticator"] == "oauth"
+    assert auth_args["token"] == creds._azure_cred.get_token.return_value.token
