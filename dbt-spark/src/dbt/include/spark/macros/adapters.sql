@@ -400,23 +400,8 @@
 
 
 {% macro spark__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
-
-  {% if remove_columns %}
-    {% if relation.is_delta %}
-      {% set platform_name = 'Delta Lake' %}
-    {% elif relation.is_iceberg %}
-      {% set platform_name = 'Iceberg' %}
-    {% else %}
-      {% set platform_name = 'Apache Spark' %}
-    {% endif %}
-    {{ exceptions.raise_compiler_error(platform_name + ' does not support dropping columns from tables') }}
-  {% endif %}
-
-  {% if add_columns is none %}
-    {% set add_columns = [] %}
-  {% endif %}
-
-  {% set sql -%}
+  {% if add_columns %}
+  {% set add_sql -%}
 
      alter {{ relation.type }} {{ relation }}
 
@@ -426,7 +411,19 @@
             {% endfor %}
 
   {%- endset -%}
+  {% do run_query(add_sql) %}
+  {% endif %}
 
-  {% do run_query(sql) %}
+  {% if remove_columns %}
+    {% if not (relation.is_iceberg or relation.is_delta) %}
+        {{ exceptions.raise_compiler_error('Dropping columns is only supported for Iceberg and Delta tables.') }}
+    {% endif %}
 
+    {% for column in remove_columns %}
+      {%- set drop_sql -%}
+        alter table {{ relation }} drop column {{ column.quoted }}
+      {%- endset -%}
+      {% do run_query(drop_sql) %}
+    {% endfor %}
+  {% endif %}
 {% endmacro %}
