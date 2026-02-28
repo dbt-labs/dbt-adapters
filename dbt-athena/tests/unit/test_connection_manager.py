@@ -2,18 +2,17 @@ from multiprocessing import get_context
 from unittest import mock
 
 import pytest
-from pyathena.model import AthenaQueryExecution
 
 from dbt.adapters.athena import AthenaConnectionManager
-from dbt.adapters.athena.connections import AthenaAdapterResponse
+from dbt.adapters.athena.connections import AthenaAdapterResponse, AthenaCursor
 
 
 class TestAthenaConnectionManager:
     @pytest.mark.parametrize(
         ("state", "result"),
         (
-            pytest.param(AthenaQueryExecution.STATE_SUCCEEDED, "OK"),
-            pytest.param(AthenaQueryExecution.STATE_CANCELLED, "ERROR"),
+            pytest.param(AthenaCursor.STATE_SUCCEEDED, "OK"),
+            pytest.param(AthenaCursor.STATE_CANCELLED, "ERROR"),
         ),
     )
     def test_get_response(self, state, result):
