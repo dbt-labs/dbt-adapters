@@ -2,7 +2,39 @@
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
-    {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by) -%}
+
+    {# Get column info from relation (for truncate transformation) #}
+    {%- set relation_columns = adapter.get_columns_in_relation(sql) -%}
+
+    {# Transform truncate() partition keys to either substr() or floor() based on column types #}
+    {%- set transformed_partitioned_by = [] -%}
+    {%- for partition_key in partitioned_by -%}
+        {%- set truncate_match = modules.re.search('truncate\\((.+?),\\s*(\\d+)\\)', partition_key.lower()) -%}
+        {%- if truncate_match -%}
+            {%- set col_name = truncate_match.group(1) -%}
+            {%- set width = truncate_match.group(2) -%}
+
+            {# Find the column type #}
+            {%- set column = None -%}
+            {%- for col in relation_columns -%}
+                {%- if col.name.lower() == col_name.lower() -%}
+                    {%- set column = col -%}
+                {%- endif -%}
+            {%- endfor -%}
+
+            {# Transform based on column type #}
+            {%- if column and not column.is_numeric() -%}
+                {%- do transformed_partitioned_by.append('substr(' ~ col_name ~ ', 1, ' ~ width ~ ')') -%}
+            {%- else -%}
+                {%- do transformed_partitioned_by.append('floor(' ~ col_name ~ ' / ' ~ width ~ ')') -%}
+            {%- endif -%}
+        {%- else -%}
+            {# No transformation needed, keep original #}
+            {%- do transformed_partitioned_by.append(partition_key) -%}
+        {%- endif -%}
+    {%- endfor -%}
+
+    {%- set partitioned_keys = adapter.format_partition_keys(transformed_partitioned_by) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
 
     {# Retrieve distinct partitions from the given SQL #}
