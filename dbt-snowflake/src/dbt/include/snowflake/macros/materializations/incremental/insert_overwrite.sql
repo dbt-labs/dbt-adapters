@@ -20,14 +20,14 @@
 
     {%- set dml -%}
 
+    {%- set dest_cols_csv = get_quoted_csv(dest_columns | map(attribute='name')) -%}
     {%- set overwrite_columns = config.get('overwrite_columns', []) -%}
 
     {{ config.get('sql_header', '') }}
 
-    {% set target_columns_list = '(' ~ ', '.join(overwrite_columns) ~ ')' if overwrite_columns else '' %}
-    {% set source_query_columns_list = ', '.join(overwrite_columns) if overwrite_columns else '*' %}
-    insert overwrite into {{ target.render() }} {{ target_columns_list }}
-        select {{ source_query_columns_list }}
+    {% set columns_list = ', '.join(overwrite_columns) if overwrite_columns else dest_cols_csv %}
+    insert overwrite into {{ target.render() }} ({{ columns_list }})
+        select {{ columns_list }}
         from {{ source.render() }}
 
     {%- endset -%}
