@@ -38,6 +38,8 @@ from snowflake.connector.errors import (
     BindUploadError,
 )
 
+from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
+
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -81,6 +83,8 @@ else:
 
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
+
+ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
 
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
@@ -126,9 +130,13 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    workload_identity_provider: Optional[str] = None
+    workload_identity_entra_resource: Optional[str] = None
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
-    platform_detection_timeout_seconds: float = 0.0
+    platform_detection_timeout_seconds: Optional[float] = (
+        None if workload_identity_provider else 0.0
+    )
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -201,6 +209,8 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "workload_identity_provider",
+            "workload_identity_entra_resource",
             "platform_detection_timeout_seconds",
         )
 
@@ -251,6 +261,36 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator.lower() == "workload_identity":
+                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+
+                if (
+                    not self.workload_identity_provider
+                    or self.workload_identity_provider.upper()
+                    not in ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS
+                ):
+
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n"
+                        f"{', '.join(ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS)}\n\n"
+                        f"Provided workload_identity_provider was '{self.workload_identity_provider}'"
+                    )
+
+                result["workload_identity_provider"] = self.workload_identity_provider
+
+                if self.token:
+                    result["token"] = self.token
+
+                if self.workload_identity_entra_resource:
+                    if self.workload_identity_provider.upper() != "AZURE":
+                        raise DbtConfigError(
+                            "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+                        )
+
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True

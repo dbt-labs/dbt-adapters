@@ -1,0 +1,6 @@
+kind: Features
+body: Introduction of Workload Identity Federation as a supported method of authentication to Snowflake
+time: 2025-09-09T22:10:07.504016+01:00
+custom:
+    Author: roryjbd,sfc-gh-pmansour
+    Issue: "1234"

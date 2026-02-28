@@ -5,6 +5,7 @@ from importlib import reload
 from unittest.mock import Mock, patch, call
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -230,3 +231,73 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+def test_connnections_credentials_passes_through_wif_params():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "azure",
+        "workload_identity_entra_resource": "app://123",
+        "token": "test_token",
+    }
+    auth_args = connections.SnowflakeCredentials(**credentials).auth_args()
+    assert auth_args["authenticator"] == "WORKLOAD_IDENTITY"
+    assert auth_args["workload_identity_provider"] == "azure"
+    assert auth_args["workload_identity_entra_resource"] == "app://123"
+    assert auth_args["token"] == "test_token"
+
+
+def test_connnections_credentials_wif_authenticator_fails_without_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        # Missing workload_identity_provider
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_invalid_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "some_non_existent_cloud_provider",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_and_non_azure_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "aws",
+        "workload_identity_entra_resource": "app://123",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+        in str(excinfo)
+    )
