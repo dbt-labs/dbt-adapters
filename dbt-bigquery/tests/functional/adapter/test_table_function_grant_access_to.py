@@ -5,16 +5,6 @@ import pytest
 from dbt.tests.util import run_dbt
 
 
-MY_TVF_SQL = """
-{{ config(
-    grant_access_to=[
-      {'project': 'dbt-test-env', 'dataset': dataset_name},
-    ]
-) }}
-SELECT x, x * 2 AS double_x
-FROM UNNEST(GENERATE_ARRAY(1, max_value)) AS x
-""".strip()
-
 MY_TVF_YML = """
 functions:
   - name: my_tvf
@@ -34,7 +24,16 @@ def get_schema_name(base_schema_name: str) -> str:
 
 
 def tvf_sql_with_dataset(dataset: str) -> str:
-    return MY_TVF_SQL.replace("dataset_name", f"'{dataset}'")
+    config = f"""config(
+    grant_access_to=[
+      {{'project': 'dbt-test-env', 'dataset': '{dataset}'}},
+    ]
+)"""
+    return (
+        "{{ " + config + " }}\n"
+        "SELECT x, x * 2 AS double_x\n"
+        "FROM UNNEST(GENERATE_ARRAY(1, max_value)) AS x"
+    )
 
 
 class TestTableFunctionGrantAccessTo:

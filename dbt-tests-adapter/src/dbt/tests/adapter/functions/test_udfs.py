@@ -95,7 +95,7 @@ class ErrorForUnsupportedType(UDFsBasic):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "functions": {"+type": "window"},
+            "functions": {"+type": "nonexistent"},
         }
 
     def test_udfs(self, project, sql_event_catcher):
@@ -109,7 +109,7 @@ class ErrorForUnsupportedType(UDFsBasic):
 
         assert len(run_result_error_catcher.caught_events) == 1
         assert (
-            "No macro named 'window_function_sql' found within namespace"
+            "No macro named 'nonexistent_function_sql' found within namespace"
             in run_result_error_catcher.caught_events[0].data.msg
         )
 
