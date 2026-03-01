@@ -69,7 +69,11 @@ from dbt.adapters.bigquery.catalogs import (
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
 from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+    remove_access_entry_from_dataset,
+)
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
@@ -1209,16 +1213,35 @@ class BigQueryAdapter(BaseAdapter):
         grant_target = GrantTarget.from_dict(grant_target_dict)
         if entity_type == "view":
             entity = self.get_table_ref_from_relation(entity).to_api_repr()
+        elif entity_type == "routine":
+            entity = self._get_routine_ref_from_relation(entity)
         with _dataset_lock:
             dataset_ref = self.connections.dataset_ref(grant_target.project, grant_target.dataset)
             dataset = client.get_dataset(dataset_ref)
             access_entry = AccessEntry(role, entity_type, entity)
-            # only perform update if access entry not in dataset
-            if is_access_entry_in_dataset(dataset, access_entry):
-                logger.warning(f"Access entry {access_entry} " f"already exists in dataset")
-            else:
+            if entity_type == "routine":
+                # CREATE OR REPLACE on a routine invalidates existing authorized routine
+                # entries (they remain but return 403). Always remove-then-add to refresh.
+                dataset = remove_access_entry_from_dataset(dataset, access_entry)
                 dataset = add_access_entry_to_dataset(dataset, access_entry)
                 client.update_dataset(dataset, ["access_entries"])
+            else:
+                # For views: only perform update if access entry not in dataset
+                if is_access_entry_in_dataset(dataset, access_entry):
+                    logger.warning(
+                        f"Access entry {access_entry} " f"already exists in dataset"
+                    )
+                else:
+                    dataset = add_access_entry_to_dataset(dataset, access_entry)
+                    client.update_dataset(dataset, ["access_entries"])
+
+    def _get_routine_ref_from_relation(self, relation) -> dict:
+        """Builds a routine reference dict from a relation."""
+        return {
+            "projectId": relation.database,
+            "datasetId": relation.schema,
+            "routineId": relation.identifier,
+        }
 
     @available.parse_none
     def get_dataset_location(self, relation):

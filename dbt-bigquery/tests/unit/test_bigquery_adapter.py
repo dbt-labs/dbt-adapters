@@ -1149,6 +1149,74 @@ class TestBigQueryGrantAccessTo(BaseTestBigQueryAdapter):
         )
         self.mock_client.update_dataset.assert_called_once()
 
+    def test_grant_access_to_routine_builds_correct_access_entry(self):
+        routine_relation = BigQueryRelation.from_dict(
+            {
+                "type": None,
+                "path": {
+                    "database": "my-project",
+                    "schema": "my_dataset",
+                    "identifier": "my_tvf",
+                },
+                "quote_policy": {"identifier": False},
+            }
+        )
+        grant_target_dict = {"dataset": "target_dataset", "project": "target_project"}
+        self.adapter.grant_access_to(
+            entity=routine_relation,
+            entity_type="routine",
+            role=None,
+            grant_target_dict=grant_target_dict,
+        )
+        self.mock_client.update_dataset.assert_called_once()
+        # Verify the dataset was updated with correct access entries
+        call_args = self.mock_client.update_dataset.call_args
+        updated_dataset = call_args[0][0]
+        # Should contain original entry + new routine entry
+        routine_entries = [
+            e for e in updated_dataset.access_entries if e.entity_type == "routine"
+        ]
+        assert len(routine_entries) == 1
+        assert routine_entries[0].entity_id == {
+            "projectId": "my-project",
+            "datasetId": "my_dataset",
+            "routineId": "my_tvf",
+        }
+
+    def test_grant_access_to_routine_always_updates(self):
+        """Routines should always remove-then-add, even if entry already exists."""
+        routine_relation = BigQueryRelation.from_dict(
+            {
+                "type": None,
+                "path": {
+                    "database": "my-project",
+                    "schema": "my_dataset",
+                    "identifier": "my_tvf",
+                },
+                "quote_policy": {"identifier": False},
+            }
+        )
+        # Pre-populate dataset with a matching routine entry
+        routine_ref = {
+            "projectId": "my-project",
+            "datasetId": "my_dataset",
+            "routineId": "my_tvf",
+        }
+        existing_routine_entry = AccessEntry(None, "routine", routine_ref)
+        self.mock_dataset.access_entries = [
+            AccessEntry(None, "table", self.entity),
+            existing_routine_entry,
+        ]
+        grant_target_dict = {"dataset": "target_dataset", "project": "target_project"}
+        self.adapter.grant_access_to(
+            entity=routine_relation,
+            entity_type="routine",
+            role=None,
+            grant_target_dict=grant_target_dict,
+        )
+        # Should always call update_dataset for routines (remove-then-add pattern)
+        self.mock_client.update_dataset.assert_called_once()
+
 
 @pytest.mark.parametrize(
     ["input", "output"],

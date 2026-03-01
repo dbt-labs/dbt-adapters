@@ -30,6 +30,31 @@ def is_access_entry_in_dataset(dataset: Dataset, access_entry: AccessEntry) -> b
     return False
 
 
+def remove_access_entry_from_dataset(dataset: Dataset, access_entry: AccessEntry) -> Dataset:
+    """Removes a matching access entry from a dataset.
+
+    Matches on entity_type and properties (same logic as is_access_entry_in_dataset).
+
+    Args:
+        dataset (Dataset): the dataset to be updated
+        access_entry (AccessEntry): the access entry to be removed from the dataset
+
+    Returns:
+        Dataset: the updated dataset
+    """
+    access_entries: List[AccessEntry] = dataset.access_entries
+    updated_entries = []
+    for existing_entry in access_entries:
+        role_match = existing_entry.role == access_entry.role
+        entity_type_match = existing_entry.entity_type == access_entry.entity_type
+        property_match = existing_entry._properties.items() <= access_entry._properties.items()
+        if role_match and entity_type_match and property_match:
+            continue
+        updated_entries.append(existing_entry)
+    dataset.access_entries = updated_entries
+    return dataset
+
+
 def add_access_entry_to_dataset(dataset: Dataset, access_entry: AccessEntry) -> Dataset:
     """Adds an access entry to a dataset, always use access_entry_present_in_dataset to check
     if the access entry already exists before calling this function.
