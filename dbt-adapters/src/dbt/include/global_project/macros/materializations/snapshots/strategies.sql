@@ -170,7 +170,7 @@
     )
     {%- endset %}
 
-    {% set scd_args = api.Relation.scd_args(primary_key, updated_at) %}
+    {% set scd_args = api.Relation.scd_args(primary_key, check_cols_config) %}
     {% set scd_id_expr = snapshot_hash_arguments(scd_args) %}
 
     {% do return({
