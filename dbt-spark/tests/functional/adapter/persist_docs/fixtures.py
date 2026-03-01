@@ -136,6 +136,18 @@ seeds:
           {{ doc('my_fun_doc')}}
 """
 
+_PROPERTIES__MISSING_COLUMN = """
+version: 2
+
+models:
+  - name: table_delta_model
+    columns:
+      - name: id
+        description: "id column"
+      - name: column_that_does_not_exist
+        description: "this column does not exist"
+"""
+
 _SEEDS__BASIC = """id,name
 1,Alice
 2,Bob

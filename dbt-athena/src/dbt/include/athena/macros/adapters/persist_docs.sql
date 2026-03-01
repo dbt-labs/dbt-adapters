@@ -2,7 +2,8 @@
   {% set persist_relation_docs = for_relation and config.persist_relation_docs()%}
   {% set persist_column_docs = for_columns and config.persist_column_docs() and model.columns %}
   {% if persist_column_docs %}
-    {% do warn_for_missing_doc_columns(relation, model.columns) %}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% do validate_doc_columns(relation, model.columns, existing_columns) %}
   {% endif %}
   {% if persist_relation_docs or persist_column_docs %}
     {% do adapter.persist_docs_to_glue(

@@ -104,59 +104,28 @@
   {{ return(adapter.check_schema_exists(information_schema.database, schema)) }}
 {% endmacro %}
 
-{#-- BigQuery override: handles nested STRUCT columns with dot-notation (e.g. level_1.level_2.field).
-
-     BigQuery's get_columns_in_relation returns top-level columns only. Each column's
-     flatten() method returns leaf-level dot-paths (e.g. "level_1.level_2.level_3_a")
-     but NOT intermediate STRUCT nodes (e.g. "level_1" or "level_1.level_2"), even though
-     those are valid targets for descriptions.
-
-     To build the full set of valid column paths, we take each flattened leaf name and
-     extract every prefix. For example, "level_1.level_2.level_3_a" produces:
-       - "level_1"             (valid: top-level STRUCT)
-       - "level_1.level_2"    (valid: nested STRUCT)
-       - "level_1.level_2.level_3_a"  (valid: leaf column)
---#}
-{% macro bigquery__warn_for_missing_doc_columns(relation, column_dict) %}
-  {% set existing_columns = adapter.get_columns_in_relation(relation) %}
-
-  {#-- Build the set of all valid column paths (leaves + intermediate STRUCTs) --#}
-  {% set valid_names = [] %}
-  {% for col in existing_columns %}
-    {% for flat_col in col.flatten() %}
-      {#-- For "a.b.c", generate prefixes: "a", "a.b", "a.b.c" --#}
-      {% set parts = flat_col.name.split(".") %}
-      {% for i in range(1, parts | length + 1) %}
-        {% set prefix = parts[:i] | join(".") | lower %}
-        {% if prefix not in valid_names %}
-          {% do valid_names.append(prefix) %}
-        {% endif %}
-      {% endfor %}
-    {% endfor %}
-  {% endfor %}
-
-  {#-- Find documented columns that don't match any valid path --#}
-  {% set missing = [] %}
-  {% for col_name in column_dict %}
-    {% if col_name | lower not in valid_names %}
-      {% do missing.append(col_name) %}
-    {% endif %}
-  {% endfor %}
-
-  {% if missing | length > 0 %}
-    {{ exceptions.warn("In relation " ~ relation.render() ~ ": The following columns are specified in the schema but are not present in the database: " ~ missing | join(", ")) }}
-  {% endif %}
-  {{ return(missing) }}
-{% endmacro %}
-
 {#-- Handle both relation and column level documentation #}
 {% macro bigquery__persist_docs(relation, model, for_relation, for_columns) -%}
   {% if for_relation and config.persist_relation_docs() and model.description %}
     {% do alter_relation_comment(relation, model.description) %}
   {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
-    {% do warn_for_missing_doc_columns(relation, model.columns) %}
-    {% do alter_column_comment(relation, model.columns) %}
+    {#-- BigQuery: build STRUCT-aware valid column names (leaves + intermediate paths) --#}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) %}
+    {% set valid_names = [] %}
+    {% for col in existing_columns %}
+      {% for flat_col in col.flatten() %}
+        {% set parts = flat_col.name.split(".") %}
+        {% for i in range(1, parts | length + 1) %}
+          {% set prefix = parts[:i] | join(".") | lower %}
+          {% if prefix not in valid_names %}
+            {% do valid_names.append(prefix) %}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    {% endfor %}
+    {% set filtered_columns = validate_doc_columns(relation, model.columns, valid_names) %}
+    {% do alter_column_comment(relation, filtered_columns) %}
   {% endif %}
 {% endmacro %}
 

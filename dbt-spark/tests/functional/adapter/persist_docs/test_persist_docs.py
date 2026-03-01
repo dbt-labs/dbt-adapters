@@ -8,6 +8,7 @@ from fixtures import (
     _MODELS__TABLE_DELTA_MODEL,
     _MODELS__TABLE_DELTA_MODEL_MISSING_COLUMN,
     _PROPERTIES__MODELS,
+    _PROPERTIES__MISSING_COLUMN,
     _PROPERTIES__SEEDS,
     _SEEDS__BASIC,
     _MODELS__VIEW_DELTA_MODEL,
@@ -147,7 +148,7 @@ class TestPersistDocsMissingColumn:
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": _PROPERTIES__MODELS}
+        return {"schema.yml": _PROPERTIES__MISSING_COLUMN}
 
     def test_missing_column(self, project):
         """

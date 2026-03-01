@@ -22,30 +22,23 @@
   {{ return(adapter.dispatch('persist_docs', 'dbt')(relation, model, for_relation, for_columns)) }}
 {% endmacro %}
 
-{#-- Warns when the YAML schema defines columns that don't exist in the database relation.
-     Returns the list of missing column names. Dispatched so adapters with nested columns
-     (e.g. BigQuery STRUCTs) can provide custom comparison logic. --#}
-{% macro warn_for_missing_doc_columns(relation, column_dict) %}
-  {{ return(adapter.dispatch('warn_for_missing_doc_columns', 'dbt')(relation, column_dict)) }}
-{% endmacro %}
-
-{% macro default__warn_for_missing_doc_columns(relation, column_dict) %}
-  {#-- Get the column names that actually exist in the database --#}
-  {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
-  {% set existing_columns_lower = existing_columns | map("lower") | list %}
-
-  {#-- Find documented columns that aren't in the relation --#}
+{#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names. Returns a filtered column_dict containing only columns that exist. --#}
+{% macro validate_doc_columns(relation, column_dict, existing_column_names) %}
+  {% set existing_lower = existing_column_names | map("lower") | list %}
   {% set missing = [] %}
   {% for col_name in column_dict %}
-    {% if col_name | lower not in existing_columns_lower %}
+    {% if col_name | lower not in existing_lower %}
       {% do missing.append(col_name) %}
     {% endif %}
   {% endfor %}
-
   {% if missing | length > 0 %}
     {{ exceptions.warn("In relation " ~ relation.render() ~ ": The following columns are specified in the schema but are not present in the database: " ~ missing | join(", ")) }}
   {% endif %}
-  {{ return(missing) }}
+  {% set filtered = {} %}
+  {% for col_name in column_dict if col_name | lower in existing_lower %}
+    {% do filtered.update({col_name: column_dict[col_name]}) %}
+  {% endfor %}
+  {{ return(filtered) }}
 {% endmacro %}
 
 {% macro default__persist_docs(relation, model, for_relation, for_columns) -%}
@@ -54,11 +47,9 @@
   {% endif %}
 
   {% if for_columns and config.persist_column_docs() and model.columns %}
-    {% do warn_for_missing_doc_columns(relation, model.columns) %}
-    {#-- Guard against empty SQL: alter_column_comment may return an empty string
-         when no documented columns match actual columns (e.g. Postgres filters by
-         existing columns). Running an empty query would cause a database error. --#}
-    {% set alter_comment_sql = alter_column_comment(relation, model.columns) %}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% set filtered_columns = validate_doc_columns(relation, model.columns, existing_columns) %}
+    {% set alter_comment_sql = alter_column_comment(relation, filtered_columns) %}
     {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
       {% do run_query(alter_comment_sql) %}
     {% endif %}
