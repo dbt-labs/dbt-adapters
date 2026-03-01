@@ -241,16 +241,19 @@ athena:
       used in incremental model runs
     - Schema will be created in the model target database if does not exist
 - `lf_tags_config` (`default=none`)
-    - [AWS Lake Formation](#aws-lake-formation-integration) tags to associate with the table and columns
+    - [AWS Lake Formation](#aws-lake-formation-integration) tags to associate with the database, table and columns
     - `enabled` (`default=False`) whether LF tags management is enabled for a model
-    - `tags` dictionary with tags and their values to assign for the model
+    - `drop_existing` (`default=False`) remove tags that are not defined in the config before applying the new set.
+      Set this to `true` when you want dbt to be authoritative for tags on the database/table/columns. When `false`,
+      tags are only added or updated and pre-existing values remain untouched.
+    - `tags_database` dictionary with tags and their values to assign to the database of the relation
+    - `tags` dictionary with tags and their values to assign to the model (table/view)
     - `tags_columns` dictionary with a tag key, value and list of columns they must be assigned to
-    - `lf_inherited_tags` (`default=none`)
-        - List of Lake Formation tag keys that are intended to be inherited from the database level and thus shouldn't be
-          removed during association of those defined in `lf_tags_config`
-            - i.e., the default behavior of `lf_tags_config` is to be exhaustive and first remove any pre-existing tags from
-              tables and columns before associating the ones currently defined for a given model
-            - This breaks tag inheritance as inherited tags appear on tables and columns like those associated directly
+        - `inherited_tags` (`default=none`)
+            - List of Lake Formation tag keys that are intended to be inherited from the database level and thus shouldn't be
+              removed during association of those defined in `lf_tags_config`
+                - Make sure `drop_existing` is set to true when you rely on inherited tags, otherwise dbt can't remove
+                  overrides that were previously applied
 
 ```sql
 {{
@@ -262,6 +265,10 @@ athena:
     schema='test_schema',
     lf_tags_config={
           'enabled': true,
+          'drop_existing': true,
+          'tags_database': {
+            'db_tag': 'restricted'
+          },
           'tags': {
             'tag1': 'value1',
             'tag2': 'value2'
@@ -283,6 +290,9 @@ athena:
 ```yaml
   +lf_tags_config:
     enabled: true
+    drop_existing: true
+    tags_database:
+      db_tag: restricted
     tags:
       tag1: value1
       tag2: value2
@@ -293,17 +303,31 @@ athena:
 ```
 
 - `lf_grants` (`default=none`)
-    - Lake Formation grants config for data_cell filters
+    - Lake Formation grants config for data cell filters
+    - `data_cell_filters.enabled` toggles whether dbt should manage filters for the model
+    - `data_cell_filters.drop_existing` (`default=False`) removes any existing filters that are not defined in the config
+    - Each filter entry supports:
+        - `row_filter` (SQL expression) **or** `all_rows` (`true` to grant the filter access to every row)
+        - `column_names` (subset of columns to include) or `excluded_column_names` (columns to omit via wildcard); only one
+          of these options can be provided per filter, and omitting both grants access to every column
+        - `principals` list of AWS Lake Formation principal identifiers that should be granted `SELECT` on the filter
     - Format:
 
   ```python
   lf_grants={
           'data_cell_filters': {
-              'enabled': True | False,
+              'enabled': True,
+              'drop_existing': True,
               'filters': {
-                  'filter_name': {
-                      'row_filter': '<filter_condition>',
-                      'principals': ['principal_arn1', 'principal_arn2']
+                  'restricted_rows': {
+                      'row_filter': "tenant_id = 'foo'",
+                      'column_names': ['tenant_id', 'order_id', 'total'],
+                      'principals': ['arn:aws:iam::123456789012:role/analyst']
+                  },
+                  'audit_wildcard': {
+                      'all_rows': True,
+                      'excluded_column_names': ['pii_column'],
+                      'principals': ['arn:aws:iam::123456789012:role/auditor']
                   }
               }
           }
@@ -312,22 +336,18 @@ athena:
 
 > Notes:
 >
-> - `lf_tags` and `lf_tags_columns` configs support only attaching lf tags to corresponding resources.
-    > We recommend managing LF Tags permissions somewhere outside dbt. For example, you may use
-    > [terraform](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lakeformation_permissions) or
-    > [aws cdk](https://docs.aws.amazon.com/cdk/api/v1/docs/aws-lakeformation-readme.html) for such purpose.
+> - `lf_tags_config` manages LF tag associations only. Set `drop_existing: true` when dbt should remove tags that are not
+>   defined in the config, and manage LF tag permissions outside dbt (for example with
+>   [terraform](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/lakeformation_permissions)
+>   or [aws cdk](https://docs.aws.amazon.com/cdk/api/v1/docs/aws-lakeformation-readme.html)).
+> - All LF tags referenced in the configuration must already exist in AWS Lake Formation; dbt will raise an error if it
+>   attempts to associate a tag that has not been created beforehand.
 > - `data_cell_filters` management can't be automated outside dbt because the filter can't be attached to the table
-    > which doesn't exist. Once you `enable` this config, dbt will set all filters and their permissions during every
-    > dbt run. Such approach keeps the actual state of row level security configuration actual after every dbt run and
-    > apply changes if they occur: drop, create, update filters and their permissions.
-> - Any tags listed in `lf_inherited_tags` should be strictly inherited from the database level and never overridden at
-    the table and column level
-    >   - Currently `dbt-athena` does not differentiate between an inherited tag association and an override of same it made
-          >     previously
->   - e.g. If an inherited tag is overridden by an `lf_tags_config` value in one DBT run, and that override is removed
-      prior to a subsequent run, the prior override will linger and no longer be encoded anywhere (in e.g. Terraform
-      where the inherited value is configured nor in the DBT project where the override previously existed but now is
-      gone)
+>   which doesn't exist. Once you `enable` this config, dbt will set all filters and their permissions during every
+>   dbt run and update them in place; enable `drop_existing` to delete filters that are removed from your configuration.
+> - Any tags listed in `inherited_tags` should be strictly inherited from the database level and never overridden at the
+>   table and column level. Currently `dbt-athena` does not differentiate between an inherited tag association and an
+>   override applied in a previous run, so combine inherited tags with `drop_existing: true` to keep inheritance intact.
 
 [create-table-as]: https://docs.aws.amazon.com/athena/latest/ug/create-table-as.html#ctas-table-properties
 
@@ -696,15 +716,21 @@ from {{ ref('model') }} {% endsnapshot %}
 
 The adapter implements AWS Lake Formation tags management in the following way:
 
-- You can enable or disable lf-tags management via [config](#table-configuration) (disabled by default)
-- Once you enable the feature, lf-tags will be updated on every dbt run
-- First, all lf-tags for columns are removed to avoid inheritance issues
-- Then, all redundant lf-tags are removed from tables and actual tags from table configs are applied
-- Finally, lf-tags for columns are applied
+- You can enable or disable LF tag management via [config](#table-configuration) (disabled by default)
+- Once you enable the feature, LF tags will be evaluated on every dbt run
+- If `drop_existing` is `true`, dbt removes tags from the database, table and columns that are not part of the current
+  configuration (while respecting `inherited_tags`)
+- After the optional cleanup phase, dbt applies the tags defined via `tags_database`, `tags` and `tags_columns`
+- When `drop_existing` is `false`, dbt keeps any existing tags as-is and only adds the tags specified in the config
+- Data cell filters defined via `lf_grants` are created or updated every run; when `drop_existing` is enabled they are
+  also removed if they no longer appear in the configuration
+- Each filter can either specify a SQL `row_filter` or set `all_rows` to `true`, and can include either `column_names` or
+  `excluded_column_names` to drive column-level access (leaving both blank grants access to every column)
 
 It's important to understand the following points:
 
-- dbt does not manage lf-tags for databases
+- Database-level tagging is opt-in: use the profile-level `lf_tags_database` option or the per-model
+  `lf_tags_config.tags_database` value if you want dbt to attach tags to the database itself
 - dbt does not manage Lake Formation permissions
 
 That's why you should handle this by yourself manually or using an automation tool like terraform, AWS CDK etc.

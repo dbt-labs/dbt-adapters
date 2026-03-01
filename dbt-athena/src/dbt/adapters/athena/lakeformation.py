@@ -1,6 +1,6 @@
 """AWS Lakeformation permissions management helper utilities."""
 
-from typing import Dict, List, Optional, Sequence, Set, Union
+from typing import Dict, List, Mapping, Optional, Sequence, Set, Union
 
 from dbt_common.exceptions import DbtRuntimeError
 from mypy_boto3_lakeformation import LakeFormationClient
@@ -14,7 +14,7 @@ from mypy_boto3_lakeformation.type_defs import (
     RemoveLFTagsFromResourceResponseTypeDef,
     ResourceTypeDef,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from dbt.adapters.athena.relation import AthenaRelation
 from dbt.adapters.events.logging import AdapterLogger
@@ -24,7 +24,9 @@ logger = AdapterLogger("AthenaLakeFormation")
 
 class LfTagsConfig(BaseModel):
     enabled: bool = False
-    tags: Optional[Dict[str, str]] = None
+    drop_existing: bool = False
+    tags: Optional[Dict[str, str]] = None  # These are for the TABLE
+    tags_database: Optional[Dict[str, str]] = None
     tags_columns: Optional[Dict[str, Dict[str, List[str]]]] = None
     inherited_tags: Optional[List[str]] = None
 
@@ -39,20 +41,55 @@ class LfTagsManager:
         self.lf_client = lf_client
         self.database = relation.schema
         self.table = relation.identifier
-        self.lf_tags = lf_tags_config.tags
+        self.lf_tags = lf_tags_config.tags  # Table tags
+        self.lf_tags_database = lf_tags_config.tags_database
         self.lf_tags_columns = lf_tags_config.tags_columns
+        self.drop_existing = lf_tags_config.drop_existing
         self.lf_inherited_tags = (
             set(lf_tags_config.inherited_tags) if lf_tags_config.inherited_tags else set()
         )
 
+    def _remove_lf_tags_database(
+        self, db_resource: ResourceTypeDef, existing_lf_tags: GetResourceLFTagsResponseTypeDef
+    ) -> None:
+        """Helper to remove database tags based on config."""
+        lf_tags_database = existing_lf_tags.get("LFTagsOnDatabase", [])
+        logger.debug(f"EXISTING DATABASE TAGS: {lf_tags_database}")
+
+        to_remove = {
+            tag["TagKey"]: tag["TagValues"]
+            for tag in lf_tags_database
+            if tag["TagKey"] not in (self.lf_tags_database or {})
+            if tag["TagKey"] not in self.lf_inherited_tags
+        }
+        logger.debug(f"DATABASE TAGS TO REMOVE: {to_remove}")
+        if to_remove:
+            response = self.lf_client.remove_lf_tags_from_resource(
+                Resource=db_resource,
+                LFTags=[{"TagKey": k, "TagValues": v} for k, v in to_remove.items()],
+            )
+            self._parse_and_log_lf_response(response, None, to_remove, "remove")
+
     def process_lf_tags_database(self) -> None:
-        if self.lf_tags:
-            database_resource = {"Database": {"Name": self.database}}
+        if not self.lf_tags_database and not self.drop_existing:
+            logger.debug("No database tags to apply and drop_existing is false, skipping.")
+            return
+
+        database_resource = {"Database": {"Name": self.database}}
+
+        if self.drop_existing:
+            logger.debug("drop_existing is true, checking for database tags to remove.")
+            existing_lf_tags_database = self.lf_client.get_resource_lf_tags(
+                Resource=database_resource
+            )
+            self._remove_lf_tags_database(database_resource, existing_lf_tags_database)
+
+        if self.lf_tags_database:
             response = self.lf_client.add_lf_tags_to_resource(
                 Resource=database_resource,
-                LFTags=[{"TagKey": k, "TagValues": [v]} for k, v in self.lf_tags.items()],
+                LFTags=[{"TagKey": k, "TagValues": [v]} for k, v in self.lf_tags_database.items()],
             )
-            self._parse_and_log_lf_response(response, None, self.lf_tags)
+            self._parse_and_log_lf_response(response, None, self.lf_tags_database)
 
     def process_lf_tags(self) -> None:
         table_resource = {"Table": {"DatabaseName": self.database, "Name": self.table}}
@@ -69,7 +106,7 @@ class LfTagsManager:
 
         for column in lf_tags_columns:
             non_inherited_tags = [
-                tag for tag in column["LFTags"] if not tag["TagKey"] in lf_inherited_tags
+                tag for tag in column["LFTags"] if tag["TagKey"] not in lf_inherited_tags
             ]
             for tag in non_inherited_tags:
                 tag_key = tag["TagKey"]
@@ -84,6 +121,10 @@ class LfTagsManager:
         return to_remove
 
     def _remove_lf_tags_columns(self, existing_lf_tags: GetResourceLFTagsResponseTypeDef) -> None:
+        if not self.drop_existing:
+            logger.debug("drop_existing is false, skipping column tag removal.")
+            return
+
         lf_tags_columns = existing_lf_tags.get("LFTagsOnColumns", [])
         logger.debug(f"COLUMNS: {lf_tags_columns}")
         if lf_tags_columns:
@@ -127,17 +168,20 @@ class LfTagsManager:
         logger.debug(f"EXISTING TABLE TAGS: {lf_tags_table}")
         logger.debug(f"CONFIG TAGS: {self.lf_tags}")
 
-        to_remove = LfTagsManager._table_tags_to_remove(
-            lf_tags_table, self.lf_tags, self.lf_inherited_tags
-        )
-
-        logger.debug(f"TAGS TO REMOVE: {to_remove}")
-        if to_remove:
-            response = self.lf_client.remove_lf_tags_from_resource(
-                Resource=table_resource,
-                LFTags=[{"TagKey": k, "TagValues": v} for k, v in to_remove.items()],
+        if self.drop_existing:
+            to_remove = LfTagsManager._table_tags_to_remove(
+                lf_tags_table, self.lf_tags, self.lf_inherited_tags
             )
-            self._parse_and_log_lf_response(response, None, self.lf_tags, "remove")
+
+            logger.debug(f"TAGS TO REMOVE: {to_remove}")
+            if to_remove:
+                response = self.lf_client.remove_lf_tags_from_resource(
+                    Resource=table_resource,
+                    LFTags=[{"TagKey": k, "TagValues": v} for k, v in to_remove.items()],
+                )
+                self._parse_and_log_lf_response(response, None, self.lf_tags, "remove")
+        else:
+            logger.debug("drop_existing is false, skipping table tag removal.")
 
         if self.lf_tags:
             response = self.lf_client.add_lf_tags_to_resource(
@@ -169,7 +213,7 @@ class LfTagsManager:
             AddLFTagsToResourceResponseTypeDef, RemoveLFTagsFromResourceResponseTypeDef
         ],
         columns: Optional[List[str]] = None,
-        lf_tags: Optional[Dict[str, str]] = None,
+        lf_tags: Optional[Mapping[str, Union[str, Sequence[str]]]] = None,
         verb: str = "add",
     ) -> None:
         table_appendix = f".{self.table}" if self.table else ""
@@ -186,31 +230,87 @@ class LfTagsManager:
 
 
 class FilterConfig(BaseModel):
-    row_filter: str
+    row_filter: Optional[str] = None
+    all_rows: bool = False
     column_names: List[str] = []
+    excluded_column_names: List[str] = []
     principals: List[str] = []
+
+    @model_validator(mode="after")
+    def check_row_filter_logic(self):
+        row_filter = self.row_filter
+        all_rows = self.all_rows
+
+        # Check if both are set
+        if all_rows and (row_filter is not None and row_filter.strip()):
+            raise ValueError("Cannot set 'row_filter' when 'all_rows' is True")
+
+        # Check if neither is set
+        if not all_rows and (row_filter is None or not row_filter.strip()):
+            raise ValueError("Must provide 'row_filter' when 'all_rows' is False")
+
+        return self
 
     def to_api_repr(
         self, catalog_id: str, database: str, table: str, name: str
     ) -> DataCellsFilterTypeDef:
-        return {
+        filter_data: DataCellsFilterTypeDef = {
             "TableCatalogId": catalog_id,
             "DatabaseName": database,
             "TableName": table,
             "Name": name,
-            "RowFilter": {"FilterExpression": self.row_filter},
-            "ColumnNames": self.column_names,
-            "ColumnWildcard": {"ExcludedColumnNames": []},
         }
 
+        if self.all_rows:
+            filter_data["RowFilter"] = {"AllRowsWildcard": {}}
+        elif self.row_filter:
+            filter_data["RowFilter"] = {"FilterExpression": self.row_filter}
+
+        if self.column_names:
+            filter_data["ColumnNames"] = self.column_names
+        elif self.excluded_column_names:
+            filter_data["ColumnWildcard"] = {"ExcludedColumnNames": self.excluded_column_names}
+        else:
+            filter_data["ColumnWildcard"] = {"ExcludedColumnNames": []}
+
+        return filter_data
+
     def to_update(self, existing: DataCellsFilterTypeDef) -> bool:
-        return self.row_filter != existing["RowFilter"]["FilterExpression"] or set(
-            self.column_names
-        ) != set(existing["ColumnNames"])
+        existing_row_filter = existing.get("RowFilter", {})
+        if self.all_rows:
+            # Config wants all_rows. Update if existing is not all_rows.
+            if "AllRowsWildcard" not in existing_row_filter:
+                return True
+        elif self.row_filter:
+            # Config wants a filter expression. Update if existing is not that expression.
+            if existing_row_filter.get("FilterExpression") != self.row_filter:
+                return True
+
+        existing_cols = set(existing.get("ColumnNames", []))
+        existing_excluded = set(
+            (existing.get("ColumnWildcard") or {}).get("ExcludedColumnNames", [])
+        )
+
+        if self.column_names:
+            if "ColumnWildcard" in existing:
+                return True
+            return set(self.column_names) != existing_cols
+        elif self.excluded_column_names:
+            if "ColumnNames" in existing:
+                return True
+            return set(self.excluded_column_names) != existing_excluded
+        else:
+            if "ColumnNames" in existing:
+                return True
+            return bool(existing_excluded)
+
+        # If no row filter or column logic changes were detected
+        return False
 
 
 class DataCellFiltersConfig(BaseModel):
     enabled: bool = False
+    drop_existing: bool = False
     filters: Dict[str, FilterConfig]
 
 
@@ -245,19 +345,22 @@ class LfPermissions:
         current_filters = self.get_filters()
         logger.debug(f"CURRENT FILTERS: {current_filters}")
 
-        to_drop = [
-            f
-            for name, f in current_filters.items()
-            if name not in config.data_cell_filters.filters
-        ]
-        logger.debug(f"FILTERS TO DROP: {to_drop}")
-        for f in to_drop:
-            self.lf_client.delete_data_cells_filter(
-                TableCatalogId=f["TableCatalogId"],
-                DatabaseName=f["DatabaseName"],
-                TableName=f["TableName"],
-                Name=f["Name"],
-            )
+        if config.data_cell_filters.drop_existing:
+            to_drop = [
+                f
+                for name, f in current_filters.items()
+                if name not in config.data_cell_filters.filters
+            ]
+            logger.debug(f"FILTERS TO DROP: {to_drop}")
+            for f in to_drop:
+                self.lf_client.delete_data_cells_filter(
+                    TableCatalogId=f["TableCatalogId"],
+                    DatabaseName=f["DatabaseName"],
+                    TableName=f["TableName"],
+                    Name=f["Name"],
+                )
+        else:
+            logger.debug("drop_existing is false, skipping filter removal.")
 
         to_add = [
             f.to_api_repr(self.catalog_id, self.database, self.table, name)
