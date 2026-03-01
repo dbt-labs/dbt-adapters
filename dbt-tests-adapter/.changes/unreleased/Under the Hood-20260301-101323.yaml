@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Added tests for persist_docs.columns behaviour to raise appropriate warnings
+time: 2026-03-01T10:13:23.57605+05:30
+custom:
+    Author: sriramr98
+    Issue: "1690"
