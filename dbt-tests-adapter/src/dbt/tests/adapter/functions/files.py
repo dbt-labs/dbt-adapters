@@ -148,3 +148,21 @@ functions:
       data_type: float
       description: The resulting xlarge price
 """
+
+MY_TVF_SQL = """
+SELECT x, x * 2 AS double_x
+FROM generate_series(1, max_value) AS x
+""".strip()
+
+MY_TVF_YML = """
+functions:
+  - name: generate_double_series
+    description: Table function that generates a series of numbers with their doubles
+    config:
+      type: table
+    arguments:
+      - name: max_value
+        data_type: integer
+    returns:
+      data_type: TABLE
+"""

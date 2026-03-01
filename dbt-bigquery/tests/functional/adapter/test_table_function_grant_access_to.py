@@ -5,30 +5,36 @@ import pytest
 from dbt.tests.util import run_dbt
 
 
-TABLE_FUNCTION_SQL = """
+MY_TVF_SQL = """
+{{ config(
+    grant_access_to=[
+      {'project': 'dbt-test-env', 'dataset': dataset_name},
+    ]
+) }}
 SELECT x, x * 2 AS double_x
-FROM UNNEST(GENERATE_ARRAY(1, {arg})) AS x
+FROM UNNEST(GENERATE_ARRAY(1, max_value)) AS x
+""".strip()
+
+MY_TVF_YML = """
+functions:
+  - name: my_tvf
+    description: Table function for testing grant_access_to
+    config:
+      type: table
+    arguments:
+      - name: max_value
+        data_type: INT64
+    returns:
+      data_type: TABLE
 """
-
-
-def table_function_model(dataset: str):
-    config = f"""config(
-                grant_access_to=[
-                  {{'project': 'dbt-test-env', 'dataset': '{dataset}'}},
-                ]
-            )"""
-    return (
-        "{{"
-        + config
-        + "}}"
-        + """
-           SELECT x, x * 2 AS double_x
-           FROM UNNEST(GENERATE_ARRAY(1, max_value)) AS x"""
-    )
 
 
 def get_schema_name(base_schema_name: str) -> str:
     return f"{base_schema_name}_tvf_grant_access"
+
+
+def tvf_sql_with_dataset(dataset: str) -> str:
+    return MY_TVF_SQL.replace("dataset_name", f"'{dataset}'")
 
 
 class TestTableFunctionGrantAccessTo:
@@ -61,21 +67,11 @@ class TestTableFunctionGrantAccessTo:
             project.adapter.drop_schema(relation)
 
     @pytest.fixture(scope="class")
-    def models(self, unique_schema):
+    def functions(self, unique_schema):
         dataset = get_schema_name(unique_schema)
         return {
-            "my_tvf.sql": table_function_model(dataset=dataset),
-        }
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "my_tvf": {
-                "type": "table",
-                "arguments": [
-                    {"name": "max_value", "data_type": "INT64"},
-                ],
-            },
+            "my_tvf.sql": tvf_sql_with_dataset(dataset),
+            "my_tvf.yml": MY_TVF_YML,
         }
 
     def test_table_function_grant_access_succeeds(
