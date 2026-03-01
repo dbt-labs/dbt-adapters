@@ -1,4 +1,5 @@
 import pytest
+from dbt.tests.adapter.simple_seed.test_seed import BaseSeedConcurrent
 from dbt.tests.adapter.simple_seed.test_seed_type_override import BaseSimpleSeedColumnOverride
 from dbt.tests.adapter.utils.base_utils import run_dbt
 
@@ -119,4 +120,8 @@ class BaseSimpleSeedDiststyleAll:
 
 
 class TestSimpleSeedDiststyleAll(BaseSimpleSeedDiststyleAll):
+    pass
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
     pass
