@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for Snowflake Programmatic Access Token (PAT) authentication
+time: 2026-02-28T12:00:00.000000-05:00
+custom:
+    Author: adam-stone
+    Issue: none

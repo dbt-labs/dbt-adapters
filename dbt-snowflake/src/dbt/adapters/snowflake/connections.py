@@ -139,7 +139,7 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt"]:
+        if self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]:
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
@@ -251,6 +251,12 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator == "programmatic_access_token":
+                # Snowflake Programmatic Access Tokens (PATs) are passed directly
+                # to the connector via the `token` field. The connector handles
+                # PAT auth natively since snowflake-connector-python v3.12.0.
+                result["token"] = self.token
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
