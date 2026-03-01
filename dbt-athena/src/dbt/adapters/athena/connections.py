@@ -1,16 +1,21 @@
 import json
 import re
 import time
+import weakref
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, ContextManager, Dict, List, Optional, Tuple
+from typing import Any, ContextManager, Dict, List, Optional, Tuple, Type, Union
 
 from dbt_common.exceptions import ConnectionError, DbtRuntimeError
 from dbt_common.utils import md5
-from pyathena.connection import Connection as AthenaConnection
+from pyathena.connection import (
+    Connection as PyAthenaConnection,
+    FunctionalCursor,
+    ConnectionCursor,
+)
 from pyathena.cursor import Cursor
 from pyathena.error import OperationalError, ProgrammingError
 
@@ -34,6 +39,7 @@ from typing_extensions import Self
 
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.exceptions import CancelledQueryException
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
 from dbt.adapters.contracts.connection import (
@@ -110,10 +116,33 @@ class AthenaCredentials(Credentials):
         )
 
 
+class AthenaConnection(PyAthenaConnection):
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._cursors_created = weakref.WeakSet()
+
+    def cursor(
+        self, cursor: Optional[Type[FunctionalCursor]] = None, **kwargs
+    ) -> Union[FunctionalCursor, ConnectionCursor]:
+        cursor_created = super().cursor(cursor, **kwargs)
+        self._cursors_created.add(cursor_created)
+        return cursor_created
+
+    def cancel(self) -> None:
+        for cursor in self._cursors_created:
+            cursor.cancel()
+
+
 class AthenaCursor(Cursor):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._executor = ThreadPoolExecutor()
+
+    def cancel(self) -> None:
+        if not self.query_id:
+            LOGGER.warning("QueryExecutionId is none or empty.")
+        self._cancel(self.query_id)
 
     def _collect_result_set(self, query_id: str) -> AthenaResultSet:
         query_execution = self._poll(query_id)
@@ -130,7 +159,7 @@ class AthenaCursor(Cursor):
             query_execution = self.__poll(query_id)
         except KeyboardInterrupt as e:
             if self._kill_on_interrupt:
-                LOGGER.warning("Query canceled by user.")
+                LOGGER.warning("Query cancelled by user.")
                 self._cancel(query_id)
                 query_execution = self.__poll(query_id)
             else:
@@ -172,7 +201,8 @@ class AthenaCursor(Cursor):
             retry=retry_if_exception(
                 lambda e: (
                     False
-                    if catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e)
+                    if (catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e))
+                    or isinstance(e, CancelledQueryException)
                     else True
                 )
             ),
@@ -199,7 +229,7 @@ class AthenaCursor(Cursor):
                 reraise=True,
             )
             def execute_with_iceberg_retries() -> AthenaCursor:
-                query_id = self._execute(
+                self.query_id = self._execute(
                     operation,
                     parameters=parameters,
                     work_group=work_group,
@@ -208,11 +238,15 @@ class AthenaCursor(Cursor):
                     cache_expiration_time=cache_expiration_time,
                 )
 
-                LOGGER.debug(f"Athena query ID {query_id}")
+                LOGGER.debug(f"Athena query ID {self.query_id}")
 
                 query_execution = self._executor.submit(
-                    self._collect_result_set, query_id
+                    self._collect_result_set, self.query_id
                 ).result()
+
+                if query_execution.state == AthenaQueryExecution.STATE_CANCELLED:
+                    raise CancelledQueryException("Query cancelled")
+
                 if query_execution.state == AthenaQueryExecution.STATE_SUCCEEDED:
                     self.result_set = self._result_set_class(
                         self._connection,
@@ -335,7 +369,8 @@ class AthenaConnectionManager(SQLConnectionManager):
         return cursor.rowcount, cursor.data_scanned_in_bytes
 
     def cancel(self, connection: Connection) -> None:
-        pass
+        if connection.handle:
+            connection.handle.cancel()
 
     def add_begin_query(self) -> None:
         pass
