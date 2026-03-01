@@ -203,7 +203,8 @@ class RedshiftAdapter(SQLAdapter):
         grants_dict: Dict[str, List[str]] = {}
 
         for row in grants_table:
-            grantee = row["identity_name"]
+            identity_type = row["identity_type"].lower()
+            grantee = f"{identity_type}:{row['identity_name']}"
             privilege = row["privilege_type"].lower()
             if privilege in grants_dict:
                 grants_dict[privilege].append(grantee)
