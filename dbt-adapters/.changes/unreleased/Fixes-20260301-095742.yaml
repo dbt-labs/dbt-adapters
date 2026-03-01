@@ -1,0 +1,6 @@
+kind: Fixes
+body: When persist_docs.columns is enabled, dbt now warns about columns defined in YAML that don't exist in the database, instead of crashing with cryptic database errors. A new dispatched macro warn_for_missing_doc_columns is available for adapters to customize this behavior.
+time: 2026-03-01T09:57:42.418624+05:30
+custom:
+    Author: sriramr98
+    Issue: "1690"
