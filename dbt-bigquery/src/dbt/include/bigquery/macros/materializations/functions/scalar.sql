@@ -37,3 +37,22 @@
     {{ bigquery__scalar_function_create_replace_signature_python(target_relation) }}
     {{ bigquery__get_scalar_function_body_python() }}
 {% endmacro %}
+
+{% macro bigquery__scalar_function_create_replace_signature_javascript(target_relation) %}
+    CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_sql()}})
+    RETURNS {{ model.returns.data_type }}
+    LANGUAGE js
+    {{ scalar_function_volatility_sql() }}
+    AS
+{% endmacro %}
+
+{% macro bigquery__get_scalar_function_body_javascript() %}
+    r"""
+{{ model.compiled_code }}
+    """
+{% endmacro %}
+
+{% macro bigquery__scalar_function_javascript(target_relation) %}
+    {{ bigquery__scalar_function_create_replace_signature_javascript(target_relation) }}
+    {{ bigquery__get_scalar_function_body_javascript() }}
+{% endmacro %}

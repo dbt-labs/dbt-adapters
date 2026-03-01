@@ -251,3 +251,58 @@ class PythonUDFVolatilitySupport(PythonUDFSupported):
         return {
             "functions": {"+volatility": "non-deterministic"},
         }
+
+
+class JavaScriptUDFSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.js": files.MY_UDF_JS,
+            "price_for_xlarge.yml": files.MY_UDF_JS_YML,
+        }
+
+
+class JavaScriptUDFNotSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.js": files.MY_UDF_JS,
+            "price_for_xlarge.yml": files.MY_UDF_JS_YML,
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "No macro named 'scalar_function_javascript' found within namespace"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
+
+
+class JavaScriptUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.js": files.MY_UDF_JS,
+            "price_for_xlarge.yml": files.MY_UDF_JS_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class JavaScriptUDFVolatilitySupport(JavaScriptUDFSupported):
+    def check_function_volatility(self, sql: str):
+        assert "VOLATILE" in sql
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+volatility": "non-deterministic"},
+        }

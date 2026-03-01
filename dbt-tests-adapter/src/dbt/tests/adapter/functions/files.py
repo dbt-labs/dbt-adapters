@@ -36,6 +36,25 @@ functions:
       description: The resulting xlarge price
 """
 
+MY_UDF_JS = """
+return PRICE * 2;
+""".strip()
+
+MY_UDF_JS_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    config:
+      entry_point: price_for_xlarge
+    arguments:
+      - name: PRICE
+        data_type: float
+        description: The price of the standard item
+    returns:
+      data_type: float
+      description: The resulting xlarge price
+"""
+
 SUM_SQUARED_UDAF_PYTHON = """
 class SumSquared:
   def __init__(self):
@@ -91,6 +110,22 @@ functions:
       description: The sum of the input values, then squared
 """
 
+SUM_SQUARED_UDAF_JS_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+    arguments:
+      - name: VALUE
+        data_type: float
+        description: The value to to agg (and in the end square the result). JS UDFs do not support numeric/number, only float.
+        default_value: 1
+    returns:
+      data_type: float
+      description: The sum of the input values, then squared
+"""
+
 BASIC_MODEL_SQL = """
 SELECT 1 as id, 1 as value
 UNION ALL
@@ -118,6 +153,45 @@ functions:
       description: The sum of the input values, then squared
 """
 
+SUM_SQUARED_UDAF_JS = """
+export function initialState() {
+  // Start by keeping track of the total sum. Set it to 0 at the beginning.
+  return { current_sum: 0 };
+}
+
+export function aggregate(state, value) {
+  // Every time we get a new number, add it to our running total, but only if it's not missing.
+  if (value !== null) {
+    state.current_sum += value;
+  }
+}
+
+export function merge(state, partialState) {
+  // If there were separate parts adding up numbers, add those together too.
+  state.current_sum += partialState.current_sum;
+}
+
+export function finalize(state) {
+  // When we're all done, multiply the sum by itself (square it) and return that.
+  return state.current_sum * state.current_sum;
+}
+""".strip()
+
+SUM_SQUARED_UDAF_JS_YML = """
+functions:
+  - name: sum_squared
+    description: Sums all the values, then squares the result
+    config:
+      type: aggregate
+    arguments:
+      - name: VALUE
+        data_type: FLOAT64
+        description: The value to to agg (and in the end square the result). BQ example, Snowflake does not support JS UDAFs.
+    returns:
+      data_type: FLOAT64
+      description: The sum of the input values, then squared
+"""
+
 MY_UDF_WITH_DEFAULT_ARG_YML = """
 functions:
   - name: price_for_xlarge
@@ -141,6 +215,22 @@ functions:
       runtime_version: "3.12"
     arguments:
       - name: price
+        data_type: float
+        description: The price of the standard item
+        default_value: 100
+    returns:
+      data_type: float
+      description: The resulting xlarge price
+"""
+
+MY_UDF_JS_WITH_DEFAULT_ARG_YML = """
+functions:
+  - name: price_for_xlarge
+    description: Calculate the price for the xlarge version of a standard item
+    config:
+      entry_point: price_for_xlarge
+    arguments:
+      - name: PRICE
         data_type: float
         description: The price of the standard item
         default_value: 100

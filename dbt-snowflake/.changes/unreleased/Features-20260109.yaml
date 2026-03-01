@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for JS UDF/UDAF for BigQuery and Snowflake
+time: 2026-01-09T10:00:00.000000-00:00
+custom:
+  Author: lbk-fishtown
+  Issue: "dbt-core/#12332"
