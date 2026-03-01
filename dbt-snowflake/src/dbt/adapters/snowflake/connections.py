@@ -129,6 +129,7 @@ class SnowflakeCredentials(Credentials):
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
     platform_detection_timeout_seconds: float = 0.0
+    timezone: Optional[str] = None
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -202,6 +203,7 @@ class SnowflakeCredentials(Credentials):
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "platform_detection_timeout_seconds",
+            "timezone",
         )
 
     def auth_args(self):
@@ -222,6 +224,8 @@ class SnowflakeCredentials(Credentials):
             result["proxy_port"] = self.proxy_port
         if self.protocol:
             result["protocol"] = self.protocol
+        if self.timezone:
+            result["timezone"] = self.timezone
         if self.authenticator:
             result["authenticator"] = self.authenticator
             if self.authenticator == "oauth":
