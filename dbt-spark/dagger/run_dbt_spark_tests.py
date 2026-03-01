@@ -126,6 +126,9 @@ async def test_spark(test_args):
                     ],
                 ),
             )
+            # mount sibling packages so pre-install-commands can find them
+            .with_directory("/dbt-adapters", client.host().directory("../dbt-adapters"))
+            .with_directory("/dbt-tests-adapter", client.host().directory("../dbt-tests-adapter"))
         )
 
         # install profile-specific system dependencies last since tests usually rotate through profiles
