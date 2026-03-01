@@ -166,6 +166,21 @@ class BaseTestBigQueryAdapter(unittest.TestCase):
                     "compute_region": "europe-west1",
                     "submission_method": "serverless",
                 },
+                "anonymous_ok": {
+                    "type": "bigquery",
+                    "method": "anonymous",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                    "api_endpoint": "http://localhost:9050",
+                },
+                "anonymous_missing_api_endpoint": {
+                    "type": "bigquery",
+                    "method": "anonymous",
+                    "project": "dbt-unit-000000",
+                    "schema": "dummy_schema",
+                    "threads": 1,
+                },
             },
             "target": "oauth",
         }
@@ -399,6 +414,20 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
             connection = adapter.acquire_connection("dummy")
             self.assertEqual(connection.type, "bigquery")
             self.assertEqual(connection.credentials.maximum_bytes_billed, 0)
+
+        except dbt_common.exceptions.base.DbtValidationError as e:
+            self.fail("got DbtValidationError: {}".format(str(e)))
+
+        mock_open_connection.assert_not_called()
+        connection.handle
+        mock_open_connection.assert_called_once()
+
+    @patch("dbt.adapters.bigquery.BigQueryConnectionManager.open", return_value=_bq_conn())
+    def test_acquire_connection_anonymous_validations(self, mock_open_connection):
+        adapter = self.get_adapter("anonymous_ok")
+        try:
+            connection = adapter.acquire_connection("dummy")
+            self.assertEqual(connection.type, "bigquery")
 
         except dbt_common.exceptions.base.DbtValidationError as e:
             self.fail("got DbtValidationError: {}".format(str(e)))
