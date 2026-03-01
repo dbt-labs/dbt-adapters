@@ -9,6 +9,8 @@ import agate
 import boto3
 import botocore
 import pytest
+
+from botocore.exceptions import ClientError
 from dbt_common.clients import agate_helper
 from dbt_common.exceptions import ConnectionError, DbtRuntimeError
 from moto import mock_aws
@@ -19,7 +21,10 @@ from dbt.adapters.athena import AthenaAdapter
 from dbt.adapters.athena import Plugin as AthenaPlugin
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.connections import AthenaCursor, AthenaParameterFormatter
-from dbt.adapters.athena.exceptions import S3LocationException
+from dbt.adapters.athena.exceptions import (
+    S3DeleteRetriableException,
+    S3LocationException,
+)
 from dbt.adapters.athena.relation import AthenaRelation, TableType
 from dbt.adapters.athena.utils import AthenaCatalogType
 from dbt.adapters.contracts.connection import ConnectionState
@@ -1376,6 +1381,144 @@ class TestAthenaAdapter:
         self.adapter.acquire_connection("dummy")
         self.adapter.drop_glue_database(database_name=test_input["Name"])
         assert glue_client.get_databases()["DatabaseList"] == []
+
+    @pytest.mark.parametrize(
+        "path_exists, delete_side_effect, expected_exception",
+        [
+            # 1. Path does not exist
+            (False, None, None),
+            # 2. _delete_with_app_retry returns nothing
+            (True, None, None),
+            # 3. _delete_with_app_retry raises ClientError
+            (
+                True,
+                ClientError(
+                    error_response={
+                        "Error": {"Code": "InternalError", "Message": "Something went wrong"}
+                    },
+                    operation_name="DeleteObjects",
+                ),
+                DbtRuntimeError,
+            ),
+            # 4. _delete_with_app_retry raises DbtRuntimeError
+            (
+                True,
+                DbtRuntimeError("Failed to delete files from S3."),
+                DbtRuntimeError,
+            ),
+        ],
+    )
+    @mock_aws
+    def test_delete_from_s3(self, path_exists, delete_side_effect, expected_exception):
+        adapter = self.adapter
+        adapter.acquire_connection("dummy")
+        s3_path = "s3://bucket/prefix"
+
+        # Patch _parse_s3_path, _s3_path_exists, _delete_with_app_retry, and LOGGER
+        with (
+            patch.object(adapter, "_s3_path_exists", return_value=path_exists),
+            patch.object(adapter, "_delete_with_app_retry") as mock_delete_with_app_retry,
+        ):
+            if delete_side_effect:
+                mock_delete_with_app_retry.side_effect = delete_side_effect
+
+            if expected_exception:
+                with pytest.raises(expected_exception):
+                    adapter.delete_from_s3(s3_path)
+            else:
+                adapter.delete_from_s3(s3_path)
+
+    @pytest.mark.parametrize(
+        "response, expected_exception",
+        [
+            (
+                # Single error in response
+                [
+                    {
+                        "Errors": [
+                            {
+                                "Key": "some/key/file1",
+                                "Code": "InternalError",
+                                "Message": "An internal error occurred",
+                            }
+                        ]
+                    }
+                ],
+                S3DeleteRetriableException,
+            ),
+            (
+                # Multiple errors in response
+                [
+                    {
+                        "Errors": [
+                            {
+                                "Key": "some/key/file1",
+                                "Code": "InternalError",
+                                "Message": "An internal error occurred",
+                            },
+                            {
+                                "Key": "some/key/file2",
+                                "Code": "SlowDown",
+                                "Message": "Reduce your request rate",
+                            },
+                        ]
+                    }
+                ],
+                S3DeleteRetriableException,
+            ),
+            (
+                # No errors in response
+                [{}],
+                None,
+            ),
+            (
+                # Mixed: one with errors, one without
+                [
+                    {},
+                    {
+                        "Errors": [
+                            {
+                                "Key": "some/key/file3",
+                                "Code": "AccessDenied",
+                                "Message": "Access Denied",
+                            }
+                        ]
+                    },
+                ],
+                DbtRuntimeError,
+            ),
+            (
+                # Mixed: one retriable error, one non-retriable error
+                [
+                    {
+                        "Errors": [
+                            {
+                                "Key": "some/key/file1",
+                                "Code": "InternalError",
+                                "Message": "An internal error occurred",
+                            },
+                            {
+                                "Key": "some/key/file3",
+                                "Code": "AccessDenied",
+                                "Message": "Access Denied",
+                            },
+                        ]
+                    }
+                ],
+                S3DeleteRetriableException,
+            ),
+        ],
+    )
+    @mock_aws
+    def test_check_s3_delete_response(self, response, expected_exception):
+        bucket_name = "my-bucket"
+        prefix = "test_prefix"
+        if expected_exception:
+            with pytest.raises(expected_exception):
+                self.adapter._check_s3_delete_response(response, bucket_name, prefix)
+        else:
+            # Should not raise if there are no errors
+            self.adapter._check_s3_delete_response(response, bucket_name, prefix)
 
 
 class TestAthenaFilterCatalog:

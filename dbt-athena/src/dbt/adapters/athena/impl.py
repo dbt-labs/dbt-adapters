@@ -28,6 +28,7 @@ from mypy_boto3_glue.type_defs import (
     TableVersionTypeDef,
 )
 from pyathena.error import OperationalError
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from dbt.adapters.athena import AthenaConnectionManager
 from dbt.adapters.athena.column import AthenaColumn
@@ -35,6 +36,7 @@ from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.connections import AthenaCursor
 from dbt.adapters.athena.constants import LOGGER
 from dbt.adapters.athena.exceptions import (
+    S3DeleteRetriableException,
     S3LocationException,
     SnapshotMigrationRequired,
 )
@@ -502,41 +504,114 @@ class AthenaAdapter(SQLAdapter):
     @available
     def delete_from_s3(self, s3_path: str) -> None:
         """
-        Deletes files from s3 given a s3 path in the format: s3://my_bucket/prefix
-        Additionally, parses the response from the s3 delete request and raises
-        a DbtRuntimeError in case it included errors.
+        Deletes the S3 path specified by `s3_path`. If the path does not exist, it does nothing.
+
+        Args:
+            s3_path: The S3 path to delete, e.g., "s3://my-bucket/my-prefix/".
+
+        Raises:
+            DbtRuntimeError: If the S3 delete operation fails after retries.
         """
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
         bucket_name, prefix = self._parse_s3_path(s3_path)
-        if self._s3_path_exists(bucket_name, prefix):
-            s3_resource = client.session.resource(
-                "s3",
-                region_name=client.region_name,
-                config=get_boto3_config(num_retries=creds.effective_num_retries),
+        if not self._s3_path_exists(bucket_name, prefix):
+            LOGGER.debug("S3 path does not exist, nothing to delete")
+            return
+        s3_resource = client.session.resource(
+            "s3",
+            region_name=client.region_name,
+            config=get_boto3_config(num_retries=creds.effective_num_retries),
+        )
+        s3_bucket = s3_resource.Bucket(bucket_name)
+        LOGGER.debug(
+            f"Deleting table data: path='{s3_path}', bucket='{bucket_name}', prefix='{prefix}'"
+        )
+        try:
+            self._delete_with_app_retry(s3_bucket, bucket_name, prefix)
+        except Exception as e:
+            LOGGER.exception(
+                f"S3 delete operation failed after retries for: "
+                f"s3_path='{s3_path}', bucket='{bucket_name}', prefix='{prefix}'"
             )
-            s3_bucket = s3_resource.Bucket(bucket_name)
-            LOGGER.debug(
-                f"Deleting table data: path='{s3_path}', bucket='{bucket_name}', prefix='{prefix}'"
+            raise DbtRuntimeError(
+                f"Failed to delete S3 path '{s3_path}', bucket='{bucket_name}', prefix='{prefix}' "
+                f"after {creds.effective_num_retries} retries. "
+            ) from e
+
+    @retry(
+        stop=stop_after_attempt(4),  # Up to 4x boto3 retries
+        wait=wait_exponential(multiplier=30, min=30, max=300),  # 30s, 60s, 120s, 240s
+        retry=retry_if_exception(
+            lambda e: (
+                (
+                    isinstance(e, ClientError)
+                    and e.response.get("Error", {}).get("Code", "")
+                    in ["SlowDown", "InternalError"]
+                )
+                or isinstance(e, S3DeleteRetriableException)
             )
-            response = s3_bucket.objects.filter(Prefix=prefix).delete()
-            is_all_successful = True
-            for res in response:
-                if "Errors" in res:
-                    for err in res["Errors"]:
-                        is_all_successful = False
-                        LOGGER.error(
-                            "Failed to delete files: Key='{}', Code='{}', Message='{}', s3_bucket='{}'",
-                            err["Key"],
-                            err["Code"],
-                            err["Message"],
-                            bucket_name,
-                        )
-            if is_all_successful is False:
-                raise DbtRuntimeError("Failed to delete files from S3.")
-        else:
-            LOGGER.debug("S3 path does not exist")
+        ),
+        reraise=True,
+        before_sleep=lambda retry_state: LOGGER.warning(
+            f"Retrying S3 delete (attempt {retry_state.attempt_number}) due to error: "
+            f"{retry_state.outcome.exception() if retry_state.outcome is not None else 'Unknown error'}"
+        ),
+    )
+    def _delete_with_app_retry(self, s3_bucket: Any, bucket_name: str, prefix: str) -> None:
+        """
+        Deletes all objects in the S3 bucket with the given prefix.
+
+        Args:
+            s3_bucket: The S3 bucket resource.
+            bucket_name: The name of the S3 bucket.
+            prefix: The prefix to filter objects to delete.
+
+        Raises:
+            S3DeleteRetriableException: If there were retriable errors but they did not go
+            away after retries (e.g. SlowDown, InternalError).
+            DbtRuntimeError: If there were only non retryiable errors in the response
+            from the S3 delete operation.
+        """
+        response = s3_bucket.objects.filter(Prefix=prefix).delete()
+        self._check_s3_delete_response(response, bucket_name, prefix)
+
+    def _check_s3_delete_response(self, response: Any, bucket_name: str, prefix: str) -> None:
+        """
+        Checks the response from the S3 delete operation.
+
+        Args:
+            response: The response from the S3 delete operation.
+            bucket_name: The name of the S3 bucket.
+        Raises:
+            S3DeleteRetriableException: If retriable errors are found.
+            DbtRuntimeError: If non-retriable errors are found.
+        """
+        retriable_errors = {"SlowDown", "InternalError"}
+        error_codes = set()
+        for res in response:
+            if "Errors" in res:
+                for err in res["Errors"]:
+                    error_codes.add(err["Code"])
+                    LOGGER.error(
+                        "Failed to delete files: Key='{}', Code='{}', Message='{}', s3_bucket='{}'",
+                        err["Key"],
+                        err["Code"],
+                        err["Message"],
+                        bucket_name,
+                    )
+        if not error_codes:
+            msg = "S3 delete operation completed successfully with no errors."
+            LOGGER.debug(msg)
+            return
+        # If there is at least one retriable error, we raise a S3DeleteRetriableException
+        # So that we try our best effort to delete the files.
+        if error_codes & retriable_errors:
+            raise S3DeleteRetriableException(
+                f"Retriable S3 delete errors: {error_codes} occurred when deleting prefix: {prefix}"
+            )
+        raise DbtRuntimeError("Failed to delete files from S3")
 
     @staticmethod
     def _parse_s3_path(s3_path: str) -> Tuple[str, str]:
