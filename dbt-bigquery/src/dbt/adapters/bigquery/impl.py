@@ -16,6 +16,7 @@ from typing import (
     TYPE_CHECKING,
     Type,
     Union,
+    Mapping,
 )
 
 import google.api_core
@@ -204,6 +205,74 @@ class BigQueryAdapter(BaseAdapter):
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        """
+        Hook called before executing a model. Switches to the configured execution_project.
+
+        Supports two configuration formats:
+        1. String: Direct project specification
+           config:
+             execution_project: 'my-compute-project'
+
+        2. Dict: Target-based mapping
+           config:
+             execution_project:
+               dev: 'dev-sandbox'
+               prod: 'production-project'
+
+        Args:
+            config: The model's configuration dictionary
+
+        Returns:
+            The previous execution_project (for restoration in post_model_hook)
+        """
+        # Get the execution_project from model config
+        model_execution_project = config.get("execution_project")
+
+        if model_execution_project is None:
+            # No per-model execution_project configured
+            return None
+
+        # Handle dict mapping (target -> execution_project)
+        if isinstance(model_execution_project, dict):
+            current_target = self.config.target_name
+            model_execution_project = model_execution_project.get(current_target)
+
+            if model_execution_project is None:
+                # No mapping for current target
+                return None
+
+        # Strip whitespace and check if empty
+        if isinstance(model_execution_project, str):
+            model_execution_project = model_execution_project.strip()
+
+        # Check for empty string after stripping
+        if not model_execution_project:
+            # Empty or whitespace-only execution_project - treat as None
+            return None
+
+        # Get the default execution_project from credentials
+        default_execution_project = self.config.credentials.execution_project
+
+        if model_execution_project == default_execution_project:
+            return None
+
+        # Switch to the model's execution_project
+        previous_project = self.connections.switch_execution_project(model_execution_project)
+
+        return previous_project
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
+        """
+        Hook called after executing a model. Restores the previous execution_project.
+
+        Args:
+            config: The model's configuration dictionary
+            context: The previous execution_project returned by pre_model_hook
+        """
+        if context is not None:
+            self.connections.switch_execution_project(context)
 
     ###
     # Implementations of abstract methods

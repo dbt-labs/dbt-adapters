@@ -6,6 +6,7 @@ import json
 from multiprocessing.context import SpawnContext
 import re
 import time
+from multiprocessing.synchronize import RLock
 from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
@@ -39,7 +40,7 @@ from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SQLQuery, SQLQueryStatus
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.bigquery.clients import create_bigquery_client
-from dbt.adapters.bigquery.credentials import Priority
+from dbt.adapters.bigquery.credentials import BigQueryCredentials, Priority
 from dbt.adapters.bigquery.retry import RetryFactory
 
 if TYPE_CHECKING:
@@ -71,6 +72,12 @@ class BigQueryConnectionManager(BaseConnectionManager):
         super().__init__(profile, mp_context)
         self.jobs_by_thread: Dict[Hashable, List[str]] = defaultdict(list)
         self._retry = RetryFactory(profile.credentials)
+        # Cache of BigQuery clients by execution_project for per-node configuration
+        self.client_cache: Dict[str, Client] = {}
+        # Lock for thread-safe cache access
+        self.cache_lock: RLock = mp_context.RLock()
+        # Track the current execution project per thread
+        self.thread_execution_projects: Dict[Hashable, str] = {}
 
     @classmethod
     def handle_error(cls, error, message):
@@ -153,9 +160,19 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
     @classmethod
     def close(cls, connection):
-        connection.handle.close()
-        connection.state = ConnectionState.CLOSED
+        """
+        Override close to handle cached clients properly.
+        We don't want to close cached clients that might be used by other threads.
+        """
+        # Check if this client is marked as cached
+        if hasattr(connection.handle, "_dbt_cached") and connection.handle._dbt_cached:
+            # Don't close cached clients - they're shared across threads
+            logger.debug("Not closing cached client as it may be reused")
+        else:
+            # This is a thread-specific handle, safe to close
+            connection.handle.close()
 
+        connection.state = ConnectionState.CLOSED
         return connection
 
     def begin(self):
@@ -233,6 +250,144 @@ class BigQueryConnectionManager(BaseConnectionManager):
         thread_id = self.get_thread_identifier()
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
+
+    def get_client_for_project(self, execution_project: str) -> Client:
+        """
+        Get or create a BigQuery client for the specified execution project.
+        Uses caching to avoid recreating clients unnecessarily.
+
+        Args:
+            execution_project: The GCP project where queries should execute
+
+        Returns:
+            BigQuery Client configured for the specified project
+        """
+        with self.cache_lock:
+            if execution_project not in self.client_cache:
+                # Create new credentials with the specified execution_project
+                modified_credentials = self._create_modified_credentials(execution_project)
+
+                logger.debug(
+                    f"Creating new BigQuery client for execution_project: {execution_project}"
+                )
+                client = create_bigquery_client(modified_credentials)
+                # Mark this client as cached so we don't close it prematurely
+                client._dbt_cached = True
+                self.client_cache[execution_project] = client
+
+            return self.client_cache[execution_project]
+
+    def _create_modified_credentials(self, execution_project: str) -> BigQueryCredentials:
+        """
+        Create a copy of credentials with a different execution_project.
+
+        Args:
+            execution_project: The execution project to use
+
+        Returns:
+            Modified BigQueryCredentials instance
+        """
+        # Get the credentials as a dict
+        creds_dict = self.profile.credentials.to_dict()
+
+        # Handle alias keys by renaming them to their canonical names
+        # BigQueryCredentials._ALIASES maps 'legacy_name': 'current_name'
+        # We need to rename legacy keys to current keys to avoid "unexpected keyword argument" errors
+        for legacy_key, current_key in BigQueryCredentials._ALIASES.items():
+            if legacy_key in creds_dict:
+                # If the current key doesn't exist, rename the legacy key
+                # If both exist, keep the current key and remove the legacy one
+                if current_key not in creds_dict:
+                    creds_dict[current_key] = creds_dict[legacy_key]
+
+                # Remove the legacy key after preserving its value
+                del creds_dict[legacy_key]
+
+        # Update execution_project to the new value
+        creds_dict["execution_project"] = execution_project
+
+        # Convert list back to tuple for scopes (lists aren't hashable)
+        if "scopes" in creds_dict and isinstance(creds_dict["scopes"], list):
+            creds_dict["scopes"] = tuple(creds_dict["scopes"])
+
+        # Convert string values back to enums
+        if "method" in creds_dict and isinstance(creds_dict["method"], str):
+            from dbt.adapters.bigquery.credentials import BigQueryConnectionMethod
+
+            creds_dict["method"] = BigQueryConnectionMethod(creds_dict["method"])
+
+        if "priority" in creds_dict and isinstance(creds_dict["priority"], str):
+            creds_dict["priority"] = Priority(creds_dict["priority"])
+
+        return BigQueryCredentials(**creds_dict)
+
+    def switch_execution_project(self, execution_project: Optional[str]) -> Optional[str]:
+        """
+        Switch the current connection to use a different execution_project.
+
+        Args:
+            execution_project: The new execution project to use (None to use default)
+
+        Returns:
+            The previous execution_project (for restoration)
+        """
+        thread_id = self.get_thread_identifier()
+        connection = self.get_thread_connection()
+
+        # Get current execution project
+        current_project = self.thread_execution_projects.get(
+            thread_id, self.profile.credentials.execution_project
+        )
+
+        # If no change needed, return early
+        if execution_project is None or execution_project == current_project:
+            return current_project
+
+        # Validate project name (basic validation - actual validation happens in BigQuery client)
+        # Project IDs must be 6-30 characters, lowercase letters, numbers, and hyphens
+        # Must start with a letter and cannot end with a hyphen
+        import re
+
+        if not re.match(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$", execution_project):
+            from dbt_common.exceptions import DbtRuntimeError
+
+            raise DbtRuntimeError(
+                f"Invalid execution_project '{execution_project}'. "
+                f"Project IDs must be 6-30 characters, contain only lowercase letters, "
+                f"numbers, and hyphens. Must start with a letter and cannot end with a hyphen."
+            )
+
+        # Get or create client for the new execution project
+        new_client = self.get_client_for_project(execution_project)
+
+        # Update the connection handle
+        connection.handle = new_client
+
+        # Track the new execution project for this thread
+        self.thread_execution_projects[thread_id] = execution_project
+
+        logger.info(
+            f"Switched execution_project for {thread_id} from {current_project} to {execution_project}"
+        )
+
+        return current_project
+
+    def cleanup_all(self) -> None:
+        """
+        Clean up all connections and cached clients.
+        """
+        super().cleanup_all()
+
+        with self.cache_lock:
+            for project, client in self.client_cache.items():
+                try:
+                    logger.debug(f"Closing cached client for project: {project}")
+                    client.close()
+                except Exception as e:
+                    logger.warning(f"Error closing client for project {project}: {e}")
+
+            self.client_cache.clear()
+            self.thread_execution_projects.clear()
 
     def raw_execute(
         self,
