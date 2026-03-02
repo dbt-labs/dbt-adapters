@@ -1,6 +1,0 @@
-kind: Features
-body: Add base table-valued function (TVF) materialization macro following the scalar/aggregate pattern
-time: 2026-03-01T16:42:03.000000+00:00
-custom:
-    Author: aballiet
-    Issue: "1691"
