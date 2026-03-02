@@ -399,34 +399,213 @@
 {% endmacro %}
 
 
+{% macro check_table_properties(relation, expected_properties) %}
+  {# Fetching current properties and populate a dict to easily compare #}
+  {% set msg -%}
+    Fetching table properties for {{ relation }}
+  {%- endset -%}
+  {{ log(msg) }}
+
+  {% set properties_table = fetch_tbl_properties(relation) %}
+
+  {% set current_properties = {} %}
+
+  {{ log("Current properties:") }}
+  {% for row in properties_table.rows %}
+    {{ log("Property '" ~ row['key'] ~ "' : " ~ row['value']) }}
+    {% set current_properties = current_properties.update({ row['key']: row['value'] }) %}
+  {% endfor %}
+
+  {# Control variable for monitoring validation status #}
+  {% set missing_properties = {} %}
+
+  {# Iterated through expected properties #}
+
+  {% for key, expected_value in expected_properties.items() %}
+    {% set current_value = current_properties.get(key) %}
+
+    {# Check for known numeric values to be >= #}s
+    {% if key in ['delta.minReaderVersion', 'delta.minWriterVersion'] %}
+      {% if current_value is not none and current_value | int >= expected_value %}
+        {{ log("Property '" ~ key ~ "' is valid : " ~ current_value ~ " >= " ~ expected_value) }}
+      {% else %}
+        {{ log("Property '" ~ key ~ "' is not valid. Found : " ~ current_value ~ ", expected : " ~ expected_value) }}
+        {% do missing_properties.update({key : expected_value}) %}
+      {% endif %}
+    {% else %}
+      {# Check for other properties to be = #}
+      {% if current_value == expected_value %}
+        {{ log("Property '" ~ key ~ "' valid : " ~ current_value) }}
+      {% else %}
+        {{ log("Property '" ~ key ~ "' is not valid. Found : " ~ current_value ~ ", expected : " ~ expected_value) }}
+        {% do missing_properties.update({key : expected_value}) %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+
+  {{ return(missing_properties) }}
+{% endmacro %}
+
+
 {% macro spark__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
-  {% if remove_columns %}
-    {% if relation.is_delta %}
-      {% set platform_name = 'Delta Lake' %}
-    {% elif relation.is_iceberg %}
+  {% if remove_columns and not relation.is_delta %}
+    {% if relation.is_iceberg %}
       {% set platform_name = 'Iceberg' %}
     {% else %}
       {% set platform_name = 'Apache Spark' %}
     {% endif %}
     {{ exceptions.raise_compiler_error(platform_name + ' does not support dropping columns from tables') }}
+  {% elif remove_columns and relation.is_delta %}
+    {# Checking Delta table properties to see if we can drop columns #}
+    {# It must have the following properties #}
+
+    {% set expected_properties = {
+        'delta.columnMapping.mode': 'name'
+    } %}
+
+    {% set missing_properties = check_table_properties(relation, expected_properties) %}
+    {% if missing_properties %}
+      {% set msg %}
+        Delta table properties do not allow dropping columns. Dropping is available with the following properties:
+          {{ expected_properties }}
+        Either run the following command : 
+        
+        ALTER TABLE {{ relation }} 
+        SET TBLPROPERTIES (
+          {% for key, value in missing_properties.items() %}
+            '{{ key }}' = '{{ value }}'{{ ',' if not loop.last }}
+          {% endfor %}
+        )
+
+        Or add the following to your model condfig and rebuild it : 
+        table_properties={
+            'delta.columnMapping.mode': 'name'
+        }
+      {% endset %}
+
+      {{ exceptions.raise_compiler_error(msg) }}
+    {% endif %}
   {% endif %}
+
 
   {% if add_columns is none %}
     {% set add_columns = [] %}
   {% endif %}
+  {% set add_columns_final = {} %}
+  {% for column in add_columns %}
+    {% set column_name = column.name | lower %}
+    {% do add_columns_final.update({column_name: column}) %}
+  {% endfor %}
 
-  {% set sql -%}
+  {% if remove_columns is none %}
+    {% set remove_columns = [] %}
+  {% endif %}
+  {% set remove_columns_final = {} %}
+  {% for column in remove_columns %}
+    {% set column_name = column.name | lower %}
+    {% do remove_columns_final.update({column_name: column}) %}
+  {% endfor %}
 
-     alter {{ relation.type }} {{ relation }}
+  {% set model_node = graph.nodes.values() | selectattr("name", "equalto", relation.name) | first %}
+  {% set column_properties = model_node.columns %}
+  {% set column_rename = {} %}
+  {% set prior_column_name_holder = [None] %}
+  {% set prior_column_name_mapping = {} %}
+  {% for column_name, properties in model_node.columns.items() %}
+    {{ log("Column name: " ~ column_name ~ " - previous name: " ~ properties.get("meta", {}).get("previous_name")) }}
+    {% set previous_name = properties.get("meta", {}).get("previous_name") %}
 
-       {% if add_columns %} add columns {% endif %}
-            {% for column in add_columns %}
-               {{ column.quoted }} {{ column.data_type }}{{ ',' if not loop.last }}
-            {% endfor %}
+    {% if previous_name and previous_name != column_name and previous_name in remove_columns_final and column_name in add_columns_final and remove_columns_final[previous_name].data_type == add_columns_final[column_name].data_type%}
+      {{ log("Column to be renamed: " ~ previous_name ~ " -> " ~ column_name) }}
+      {% do column_rename.update({previous_name: column_name}) %}
+      {% do remove_columns_final.pop(previous_name) %}
+      {% do add_columns_final.pop(column_name) %}
+    {% endif %} 
 
-  {%- endset -%}
+    {% do prior_column_name_mapping.update({column_name: prior_column_name_holder[0]}) %}
+    {% do prior_column_name_holder.clear() %}
+    {% do prior_column_name_holder.append(column_name) %}
+  {% endfor %}
 
-  {% do run_query(sql) %}
+  {% set add_columns_final_enriched = {} %}
+  {% for column_name, column_object in add_columns_final.items() %}
+    {% do add_columns_final_enriched.update({column_name: {'comment': "", 'prior_column_name': None, 'data_type': column_object.data_type}}) %}
+  {% endfor %}
+
+  {% for column_name, column_properties in column_properties.items() %}
+    {% if column_name in add_columns_final_enriched  %}
+      {% set raw_classifications = column_properties.get("meta", {}).get("classifications", []) %}
+      {% set classifications_string = "" %}
+      {% if raw_classifications %}
+        {% set classifications_string = "[" ~ raw_classifications | join(",") ~ "]" %}
+      {% endif %}
+      {% set raw_comment = column_properties.get("description", "") %}
+      {% set comment = "" %}
+      {% if raw_comment or classifications_string %}
+        {% set comment = "comment '" ~ ((classifications_string ~ " " ~ raw_comment) if classifications_string else raw_comment) ~ "'" %}
+        {% for column_name, column_object in add_columns_final_enriched.items() %}
+          {% if column_name == column_name %}
+            {% do add_columns_final_enriched[column_name].update({'comment': comment}) %}
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+      
+      {% if column_name in prior_column_name_mapping %}
+        {% do add_columns_final_enriched[column_name].update({'prior_column_name': prior_column_name_mapping[column_name]}) %}
+      {% endif %}
+
+    {% endif %}
+  {% endfor %}
+
+  {# Will run only if using Delta format with appropriated table properties #}
+  {% if remove_columns_final %}
+    {% set sql -%}
+      alter {{ relation.type }} {{ relation }}
+      drop columns
+      {% for column in remove_columns_final.values() %}
+        {{ column.name }}{{ ',' if not loop.last }}
+      {% endfor %}
+    {%- endset -%}
+
+    {{ log("Removing Columns SQL: " ~ sql) }}
+
+    {% call statement("run_query_statement", fetch_result=false, auto_begin=false) %}
+      {{ sql }}
+    {% endcall %}
+  {% endif %}
+
+  {% if column_rename %}
+    {% for old_name, new_name in column_rename.items() %}
+      {% set sql -%}
+        alter {{ relation.type }} {{ relation }}
+        rename column
+          {{ old_name }} to {{ new_name }};
+      {%- endset -%}
+
+      {{ log("Renaming Column SQL: " ~ sql) }}
+
+      {% call statement("run_query_statement", fetch_result=false, auto_begin=false) %}
+        {{ sql }}
+      {% endcall %}
+    {% endfor %}
+  {% endif %}
+
+  {# We run add columns after renaming columns to ensure that we have the order of the columns correct #}
+  {% if add_columns_final_enriched %}
+    {% set sql -%}
+      alter {{ relation.type }} {{ relation }}
+      add columns
+      {% for column_name, column in add_columns_final_enriched.items() %}
+        {{ column_name }} {{ column.get('data_type') }} {{ column.get('comment') }} {{ ('AFTER ' ~ column.get('prior_column_name')) if column.get('prior_column_name') else '' }} {{ ',' if not loop.last }}
+      {% endfor %}
+    {%- endset -%}
+
+    {{ log("Adding Columns SQL: " ~ sql) }}
+
+    {% call statement("run_query_statement", fetch_result=false, auto_begin=false) %}
+      {{ sql }}
+    {% endcall %}
+  {% endif %}
 
 {% endmacro %}
