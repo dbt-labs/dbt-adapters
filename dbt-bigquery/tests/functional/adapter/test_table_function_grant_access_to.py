@@ -91,12 +91,12 @@ class TestTableFunctionGrantAccessTo:
         self, project, setup_grant_schema, teardown_grant_schema, unique_schema
     ):
         # First run: creates TVF and grants access
-        results = run_dbt(["run"])
+        results = run_dbt(["build"])
         assert len(results) == 1
         self._assert_routine_authorized(project, unique_schema, "my_tvf")
 
         # Second run: validates idempotency (remove-then-add pattern)
         time.sleep(5)
-        results = run_dbt(["run"])
+        results = run_dbt(["build"])
         assert len(results) == 1
         self._assert_routine_authorized(project, unique_schema, "my_tvf")
