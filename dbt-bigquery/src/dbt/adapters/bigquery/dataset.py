@@ -30,8 +30,7 @@ def is_access_entry_in_dataset(dataset: Dataset, access_entry: AccessEntry) -> b
         bool: True if entry exists in dataset, False otherwise
     """
     return any(
-        _access_entries_match(existing, access_entry)
-        for existing in dataset.access_entries
+        _access_entries_match(existing, access_entry) for existing in dataset.access_entries
     )
 
 
@@ -46,7 +45,8 @@ def remove_access_entry_from_dataset(dataset: Dataset, access_entry: AccessEntry
         Dataset: the updated dataset
     """
     dataset.access_entries = [
-        existing for existing in dataset.access_entries
+        existing
+        for existing in dataset.access_entries
         if not _access_entries_match(existing, access_entry)
     ]
     return dataset

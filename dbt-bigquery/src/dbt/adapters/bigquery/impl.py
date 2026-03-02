@@ -1228,9 +1228,7 @@ class BigQueryAdapter(BaseAdapter):
             else:
                 # For views: only perform update if access entry not in dataset
                 if is_access_entry_in_dataset(dataset, access_entry):
-                    logger.warning(
-                        f"Access entry {access_entry} " f"already exists in dataset"
-                    )
+                    logger.warning(f"Access entry {access_entry} " f"already exists in dataset")
                 else:
                     dataset = add_access_entry_to_dataset(dataset, access_entry)
                     client.update_dataset(dataset, ["access_entries"])

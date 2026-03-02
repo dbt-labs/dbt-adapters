@@ -1173,9 +1173,7 @@ class TestBigQueryGrantAccessTo(BaseTestBigQueryAdapter):
         call_args = self.mock_client.update_dataset.call_args
         updated_dataset = call_args[0][0]
         # Should contain original entry + new routine entry
-        routine_entries = [
-            e for e in updated_dataset.access_entries if e.entity_type == "routine"
-        ]
+        routine_entries = [e for e in updated_dataset.access_entries if e.entity_type == "routine"]
         assert len(routine_entries) == 1
         assert routine_entries[0].entity_id == {
             "projectId": "my-project",
