@@ -310,6 +310,31 @@ select id, "NONE" from {{ ref('my_seed_none') }}
 """
 
 
+# Copy Grants fixtures
+DYNAMIC_TABLE_COPY_GRANTS = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    copy_grants=True,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_NO_COPY_GRANTS = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    copy_grants=False,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
 # Transient dynamic table fixtures
 DYNAMIC_TABLE_TRANSIENT = """
 {{ config(
