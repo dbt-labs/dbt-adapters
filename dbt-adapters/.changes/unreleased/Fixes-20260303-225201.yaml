@@ -3,4 +3,4 @@ body: Apply sql_header config in test and unit test materializations
 time: 2026-03-03T22:52:01.85372+05:30
 custom:
     Author: aahel
-    Issue: "9775"
+    Issue: "1678"
