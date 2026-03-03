@@ -550,6 +550,61 @@ class TestAutocommitBehavior(TestCase):
         # Should have called add_commit_query because behavior flag is not set
         mock_add_commit.assert_called_once()
 
+    def test_outside_transaction_commits_and_re_begins(self):
+        """Test that outside_transaction() commits open transaction, yields, then begins a new one."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = True
+
+        # Behavior flag NOT set (checker returns False) — transactions are sent
+        self.adapter.connections.set_skip_transactions_checker(lambda: False)
+
+        call_order = []
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(
+                self.adapter.connections,
+                "commit",
+                side_effect=lambda: call_order.append("commit"),
+            ):
+                with mock.patch.object(
+                    self.adapter.connections,
+                    "begin",
+                    side_effect=lambda: call_order.append("begin"),
+                ):
+                    with self.adapter.connections.outside_transaction():
+                        call_order.append("body")
+
+        assert call_order == ["commit", "body", "begin"]
+
+    def test_outside_transaction_skips_commit_when_no_open_transaction(self):
+        """Test that outside_transaction() skips commit if no transaction is open."""
+        mock_connection = MagicMock()
+        mock_connection.credentials.autocommit = True
+        mock_connection.transaction_open = False
+
+        call_order = []
+
+        with mock.patch.object(
+            self.adapter.connections, "get_thread_connection", return_value=mock_connection
+        ):
+            with mock.patch.object(
+                self.adapter.connections,
+                "commit",
+                side_effect=lambda: call_order.append("commit"),
+            ):
+                with mock.patch.object(
+                    self.adapter.connections,
+                    "begin",
+                    side_effect=lambda: call_order.append("begin"),
+                ):
+                    with self.adapter.connections.outside_transaction():
+                        call_order.append("body")
+
+        assert call_order == ["body", "begin"]
+
     @mock.patch("redshift_connector.connect", MagicMock())
     def test_retryable_exceptions_is_tuple_when_retry_all_true(self):
         """Test that retryable_exceptions is a proper tuple when retry_all=True.

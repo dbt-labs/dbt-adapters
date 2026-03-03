@@ -123,6 +123,15 @@ class RedshiftAdapter(SQLAdapter):
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 
+    def alter_column_type(self, relation, column_name, new_column_type) -> None:
+        """Redshift's ALTER TABLE ALTER COLUMN cannot run inside a transaction block.
+
+        Wrap the base implementation so the statement executes outside any
+        open transaction.
+        """
+        with self.connections.outside_transaction():
+            return super().alter_column_type(relation, column_name, new_column_type)
+
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx):
         column = agate_table.columns[col_idx]

@@ -619,6 +619,24 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
 
+    @contextmanager
+    def outside_transaction(self) -> Generator[None, None, None]:
+        """Run the enclosed statements outside of a transaction block.
+
+        Some Redshift DDL statements (e.g. ALTER TABLE ALTER COLUMN) cannot
+        run inside a transaction block. This context manager commits any
+        open transaction before yielding, then re-opens one afterward so
+        that dbt's transaction tracking remains consistent.
+        """
+        connection = self.get_thread_connection()
+
+        if connection.transaction_open:
+            self.commit()
+
+        yield
+
+        self.begin()
+
     @classmethod
     def open(cls, connection):
         if connection.state == "open":
