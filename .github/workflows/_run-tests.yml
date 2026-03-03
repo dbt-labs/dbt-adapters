@@ -50,6 +50,7 @@ jobs:
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
+        secrets: inherit
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
@@ -74,6 +75,7 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
             hatch-env: "ci"
+        secrets: inherit
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml

@@ -1,3 +1,5 @@
+import pytest
+
 from dbt.tests.adapter.grants.test_model_grants import BaseModelGrants
 from dbt.tests.adapter.grants.test_incremental_grants import BaseIncrementalGrants
 from dbt.tests.adapter.grants.test_seed_grants import BaseSeedGrants
@@ -22,3 +24,27 @@ class TestSnapshotGrantsRedshift(BaseSnapshotGrants):
 
 class TestInvalidGrantsRedshift(BaseModelGrants):
     pass
+
+
+class TestModelGrantsRedshiftWithShowApis(BaseModelGrants):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_use_show_apis": True}}
+
+
+class TestIncrementalGrantsRedshiftWithShowApis(BaseIncrementalGrants):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_use_show_apis": True}}
+
+
+class TestSeedGrantsRedshiftWithShowApis(BaseSeedGrants):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_use_show_apis": True}}
+
+
+class TestSnapshotGrantsRedshiftWithShowApis(BaseSnapshotGrants):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_use_show_apis": True}}

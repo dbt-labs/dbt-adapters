@@ -1,0 +1,6 @@
+kind: Features
+body: Add snowflake_initialization_warehouse parameter for dynamic tables
+time: 2026-01-21T17:45:58.007963-08:00
+custom:
+    Author: ibelianski
+    Issue: "1566"

@@ -9,6 +9,8 @@ from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkRelation
 from .utils import config_from_parts_or_dicts
 
+ENFORCED_SPARK_CONFIG = {"spark.sql.ansi.enabled": "false"}
+
 
 class TestSparkAdapter(unittest.TestCase):
     @pytest.fixture(autouse=True)
@@ -69,7 +71,7 @@ class TestSparkAdapter(unittest.TestCase):
             self.assertIsNone(auth)
             self.assertIsNone(kerberos_service_name)
             self.assertIsNone(password)
-            self.assertDictEqual(configuration, {})
+            self.assertDictEqual(configuration, ENFORCED_SPARK_CONFIG)
 
         with mock.patch.object(hive, "connect", new=hive_thrift_connect):
             connection = adapter.acquire_connection("dummy")
@@ -88,7 +90,7 @@ class TestSparkAdapter(unittest.TestCase):
             transport = thrift_transport._trans
             self.assertEqual(transport.host, "myorg.sparkhost.com")
             self.assertEqual(transport.port, 10001)
-            self.assertDictEqual(configuration, {})
+            self.assertDictEqual(configuration, ENFORCED_SPARK_CONFIG)
 
         with mock.patch.object(hive, "connect", new=hive_thrift_connect):
             connection = adapter.acquire_connection("dummy")
@@ -111,7 +113,7 @@ class TestSparkAdapter(unittest.TestCase):
             self.assertEqual(auth, "KERBEROS")
             self.assertEqual(kerberos_service_name, "hive")
             self.assertIsNone(password)
-            self.assertDictEqual(configuration, {})
+            self.assertDictEqual(configuration, ENFORCED_SPARK_CONFIG)
 
         with mock.patch.object(hive, "connect", new=hive_thrift_connect):
             connection = adapter.acquire_connection("dummy")

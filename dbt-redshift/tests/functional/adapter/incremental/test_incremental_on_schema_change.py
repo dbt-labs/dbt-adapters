@@ -2,13 +2,75 @@ from dbt.tests.adapter.incremental.test_incremental_on_schema_change import (
     BaseIncrementalOnSchemaChange,
     BaseIncrementalOnSchemaChangeSetup,
 )
-from dbt.tests.util import run_dbt
+from dbt.tests.util import check_relations_equal, run_dbt
 import pytest
 
 
 class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
     pass
 
+
+# ---- Column type change (redshift__alter_column_type): VARCHAR expand + int→bigint ----
+_INCREMENTAL_VARCHAR_EXPAND = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns'
+    )
+}}
+with source_data as (
+    select 1 as id, 'Alice' as name
+    union all select 2, 'Bob'
+)
+
+{% if is_incremental() %}
+select id, cast(name as varchar(256)) as name from source_data where id not in (select id from {{ this }})
+{% else %}
+select id, cast(name as varchar(20)) as name from source_data
+{% endif %}
+"""
+
+_INCREMENTAL_VARCHAR_EXPAND_TARGET = """
+{{
+    config(materialized='table')
+}}
+with source_data as (
+    select 1 as id, 'Alice' as name
+    union all select 2, 'Bob'
+)
+select id, cast(name as varchar(256)) as name from source_data
+"""
+
+_INCREMENTAL_INT_TO_BIGINT = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns'
+    )
+}}
+with source_data as (
+    select 1 as id, 100 as counter
+    union all select 2, 200
+)
+{% if is_incremental() %}
+select id, counter::bigint as counter from source_data where id not in (select id from {{ this }})
+{% else %}
+select id, counter::integer as counter from source_data
+{% endif %}
+"""
+
+_INCREMENTAL_INT_TO_BIGINT_TARGET = """
+{{
+    config(materialized='table')
+}}
+with source_data as (
+    select 1 as id, 100 as counter
+    union all select 2, 200
+)
+select id, counter::bigint as counter from source_data
+"""
 
 # Test fixtures for special character column names
 _MODEL_A_SPECIAL_CHARS = """
@@ -164,9 +226,6 @@ class TestIncrementalOnSchemaChangeSpecialChars(BaseIncrementalOnSchemaChangeSet
             ]
         )
 
-        # Verify results match expected output
-        from dbt.tests.util import check_relations_equal
-
         check_relations_equal(
             project.adapter,
             [
@@ -196,10 +255,46 @@ class TestIncrementalOnSchemaChangeSpecialChars(BaseIncrementalOnSchemaChangeSet
             ]
         )
 
-        # Verify results match expected output
-        from dbt.tests.util import check_relations_equal
-
         check_relations_equal(
             project.adapter,
             ["incremental_sync_all_special_chars", "incremental_sync_all_special_chars_target"],
+        )
+
+
+class TestIncrementalOnSchemaChangeColumnType(BaseIncrementalOnSchemaChangeSetup):
+    """Test incremental schema change when column *type* changes (redshift__alter_column_type).
+
+    - VARCHAR expand: expand_target_column_types -> native ALTER COLUMN TYPE.
+    - INTEGER -> BIGINT: process_schema_changes -> default add/copy/drop/rename.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental_varchar_expand.sql": _INCREMENTAL_VARCHAR_EXPAND,
+            "incremental_varchar_expand_target.sql": _INCREMENTAL_VARCHAR_EXPAND_TARGET,
+            "incremental_int_to_bigint.sql": _INCREMENTAL_INT_TO_BIGINT,
+            "incremental_int_to_bigint_target.sql": _INCREMENTAL_INT_TO_BIGINT_TARGET,
+        }
+
+    def test_incremental_varchar_expand_succeeds_and_matches_target(self, project):
+        select = "incremental_varchar_expand incremental_varchar_expand_target"
+        # First run - creates initial table
+        run_dbt(["run", "--select", select])
+        # Second run - should expand the column type
+        run_dbt(["run", "--select", select])
+        check_relations_equal(
+            project.adapter,
+            ["incremental_varchar_expand", "incremental_varchar_expand_target"],
+        )
+
+    def test_incremental_int_to_bigint_succeeds_and_matches_target(self, project):
+        select = "incremental_int_to_bigint incremental_int_to_bigint_target"
+        # First run - creates initial table
+        run_dbt(["run", "--select", select])
+        # Second run - should convert the column type to bigint
+        run_dbt(["run", "--select", select])
+        check_relations_equal(
+            project.adapter,
+            ["incremental_int_to_bigint", "incremental_int_to_bigint_target"],
         )
