@@ -95,7 +95,7 @@ class RedshiftAdapter(SQLAdapter):
         )
 
         if self.config.credentials.ra3_node:
-            logger.warning(
+            logger.info(
                 "The `ra3_node` configuration in profiles.yml is deprecated. "
                 "Use the `redshift_use_show_apis` behavior flag instead. "
             )
