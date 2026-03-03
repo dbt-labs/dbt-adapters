@@ -370,9 +370,15 @@
     Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
     For those, use native ALTER; for any other type change, fall back to
     default add/copy/drop/rename.
+
+    The native ALTER TABLE ALTER COLUMN cannot run inside a transaction block.
+    It is only safe to use when `redshift_skip_autocommit_transaction_statements`
+    is enabled (i.e. we are not wrapping statements in BEGIN/COMMIT).
+    When the flag is off, always use the default migration path.
   #}
   {% set type_lower = (new_column_type | lower) | trim %}
-  {% if type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte' %}
+  {% set skip_txn = adapter.behavior.redshift_skip_autocommit_transaction_statements.no_warn %}
+  {% if skip_txn and (type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte') %}
     {% call statement('alter_column_type') %}
       alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
     {% endcall %}
