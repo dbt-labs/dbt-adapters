@@ -1,7 +1,5 @@
 from types import SimpleNamespace
 
-from dbt_common.behavior_flags import BehaviorFlagRendered
-from dbt.adapters.redshift.impl import REDSHIFT_USE_SHOW_APIS
 import jinja2
 
 
@@ -16,14 +14,8 @@ def _load_redshift_metadata_helpers_macros(adapter, return_fn=lambda x: x):
 
 def test_use_show_apis_macro_returns_true_when_flag_enabled():
     adapter = SimpleNamespace(
-        behavior=SimpleNamespace(
-            redshift_use_show_apis=BehaviorFlagRendered(
-                REDSHIFT_USE_SHOW_APIS,
-                {REDSHIFT_USE_SHOW_APIS["name"]: True},
-            )
-        ),
+        use_show_apis=lambda: True,
     )
-    assert adapter.behavior.redshift_use_show_apis.no_warn is True
 
     macros = _load_redshift_metadata_helpers_macros(adapter)
     result = macros.redshift__use_show_apis()
@@ -32,11 +24,8 @@ def test_use_show_apis_macro_returns_true_when_flag_enabled():
 
 def test_use_show_apis_macro_returns_false_when_flag_disabled():
     adapter = SimpleNamespace(
-        behavior=SimpleNamespace(
-            redshift_use_show_apis=BehaviorFlagRendered(REDSHIFT_USE_SHOW_APIS, {})
-        ),
+        use_show_apis=lambda: False,
     )
-    assert adapter.behavior.redshift_use_show_apis.no_warn is False
 
     macros = _load_redshift_metadata_helpers_macros(adapter)
     result = macros.redshift__use_show_apis()
