@@ -34,12 +34,12 @@ GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
-    default=True,
+    default=False,
     description=(
         "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
         "since each statement is automatically committed. This reduces round-trips "
-        "to the database and avoids unnecessary transaction overhead."
-        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
+        "to the database and avoids unnecessary transaction overhead. "
+        "Setting this to True will enable the optimization."
     ),
 )
 
@@ -94,6 +94,12 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
+        if self.config.credentials.ra3_node:
+            logger.info(
+                "The `ra3_node` configuration in profiles.yml is deprecated. "
+                "Use the `redshift_use_show_apis` behavior flag instead. "
+            )
+
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
@@ -137,13 +143,23 @@ class RedshiftAdapter(SQLAdapter):
         return "varchar(24)"
 
     @available
+    def use_show_apis(self) -> bool:
+        """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
+
+        Returns True when the ``redshift_use_show_apis`` behavior flag is
+        enabled *or* when the legacy ``ra3_node`` credential is set.
+        """
+        return bool(
+            self.config.credentials.ra3_node or self.behavior.redshift_use_show_apis.no_warn
+        )
+
+    @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
-        ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not ra3_node:
+        if database.lower() != expected.lower() and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
                     database, expected
@@ -189,11 +205,34 @@ class RedshiftAdapter(SQLAdapter):
             column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
 
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
+        """Translate the result of `show grants` to match the grants config format.
+
+        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        returns columns ``identity_name`` and ``privilege_type`` (uppercase).
+        Otherwise the legacy query returns ``grantee`` and ``privilege_type``
+        (lowercase).
+        """
+        if not self.use_show_apis():
+            return super().standardize_grants_dict(grants_table)
+
+        grants_dict: Dict[str, List[str]] = {}
+
+        for row in grants_table:
+            grantee = row["identity_name"]
+            privilege = row["privilege_type"].lower()
+            if privilege in grants_dict:
+                grants_dict[privilege].append(grantee)
+            else:
+                grants_dict[privilege] = [grantee]
+
+        return grants_dict
+
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
         try:
-            return schemas.flatten(allow_multiple_databases=self.config.credentials.ra3_node)
+            return schemas.flatten(allow_multiple_databases=self.use_show_apis())
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
