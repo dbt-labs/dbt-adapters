@@ -161,34 +161,8 @@
       {%- do drop_relation(tmp_relation) -%}
     {%- endif -%}
 
-    {# Generate S3 location for tmp relation and clean it #}
-    {%- set s3_data_dir = config.get('s3_data_dir', default=target.s3_data_dir) -%}
-    {%- set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) -%}
-    {%- set s3_tmp_table_dir = config.get('s3_tmp_table_dir', default=target.s3_tmp_table_dir) -%}
-    {%- set external_location = config.get('external_location', default=none) -%}
-    {%- set format = config.get('format', default='parquet') -%}
-    {%- set tmp_location = adapter.generate_s3_location(
-            tmp_relation, s3_data_dir, s3_data_naming, s3_tmp_table_dir, external_location, temporary
-        ) -%}
-    {%- set work_group_output_location_enforced = adapter.is_work_group_output_location_enforced() -%}
-    {%- do adapter.delete_from_s3(tmp_location) -%}
-
-    {# Create tmp staging table as HIVE (forced) to avoid Iceberg "non-empty location" errors on retry #}
     {%- do log('CREATE NON-PARTITIONED STAGING TABLE (Hive): ' ~ tmp_relation) -%}
-    {%- set create_tmp_sql -%}
-      create table {{ tmp_relation }}
-      with (
-        table_type='hive',
-        is_external=true,
-        {%- if not work_group_output_location_enforced %}
-        external_location='{{ tmp_location }}',
-        {%- endif %}
-        format='{{ format }}'
-      )
-      as
-        {{ compiled_code }}
-    {%- endset -%}
-    {%- do run_query(create_tmp_sql) -%}
+    {%- do run_query(athena__create_hive_staging_table_as(tmp_relation, compiled_code, temporary)) -%}
 
     {% set partitions_batches = get_partition_batches(sql=tmp_relation, as_subquery=False) %}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
@@ -224,6 +198,38 @@
 
     select 'SUCCESSFULLY CREATED TABLE {{ relation }}'
 
+{%- endmacro %}
+
+{#
+  Create a Hive external table regardless of the model's table_type config.
+
+  Used as the tmp staging table in create_table_as_with_partitions to avoid
+  ICEBERG_FILESYSTEM_ERROR: Cannot create a table on a non-empty location,
+  which occurs on Iceberg retry (num_iceberg_retries) because previously
+  written S3 data persists between attempts.
+#}
+{% macro athena__create_hive_staging_table_as(relation, compiled_code, temporary) -%}
+  {%- set s3_data_dir = config.get('s3_data_dir', default=target.s3_data_dir) -%}
+  {%- set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) -%}
+  {%- set s3_tmp_table_dir = config.get('s3_tmp_table_dir', default=target.s3_tmp_table_dir) -%}
+  {%- set external_location = config.get('external_location', default=none) -%}
+  {%- set format = config.get('format', default='parquet') -%}
+  {%- set location = adapter.generate_s3_location(
+          relation, s3_data_dir, s3_data_naming, s3_tmp_table_dir, external_location, temporary
+      ) -%}
+  {%- set work_group_output_location_enforced = adapter.is_work_group_output_location_enforced() -%}
+  {%- do adapter.delete_from_s3(location) -%}
+  create table {{ relation }}
+  with (
+    table_type='hive',
+    is_external=true,
+    {%- if not work_group_output_location_enforced %}
+    external_location='{{ location }}',
+    {%- endif %}
+    format='{{ format }}'
+  )
+  as
+    {{ compiled_code }}
 {%- endmacro %}
 
 {% macro safe_create_table_as(temporary, relation, compiled_code, language='sql', force_batch=False) -%}
