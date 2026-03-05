@@ -83,21 +83,21 @@ class SparkConnectionMethod(StrEnum):
 
 @dataclass
 class SparkCredentials(Credentials):
-    host: Optional[str] = None
-    schema: Optional[str] = None  # type:ignore
+    host: Union[None, str] = None
+    schema: Union[None, str] = None  # type:ignore
     method: SparkConnectionMethod = None  # type: ignore
-    database: Optional[str] = None  # type:ignore
-    driver: Optional[str] = None
-    cluster: Optional[str] = None
-    endpoint: Optional[str] = None
-    token: Optional[str] = None
-    user: Optional[str] = None
-    password: Optional[str] = None
+    database: Union[None, str] = None  # type:ignore
+    driver: Union[None, str] = None
+    cluster: Union[None, str] = None
+    endpoint: Union[None, str] = None
+    token: Union[None, str] = None
+    user: Union[None, str] = None
+    password: Union[None, str] = None
     port: int = 443
-    auth: Optional[str] = None
-    kerberos_service_name: Optional[str] = None
+    auth: Union[None, str] = None
+    kerberos_service_name: Union[None, str] = None
     organization: str = "0"
-    connection_string_suffix: Optional[str] = None
+    connection_string_suffix: Union[None, str] = None
     connect_retries: int = 0
     connect_timeout: int = 10
     use_ssl: bool = False
@@ -249,7 +249,7 @@ class PyhiveConnectionWrapper(SparkConnectionWrapper):
         self,
         handle: "pyodbc.Connection",
         poll_interval: int = 5,
-        query_timeout: Optional[int] = None,
+        query_timeout: Union[None, int] = None,
         query_retries: int = 1,
     ) -> None:
         self.handle = handle
@@ -693,7 +693,7 @@ def build_ssl_transport(
     username: str,
     auth: str,
     kerberos_service_name: str,
-    password: Optional[str] = None,
+    password: Union[None, str] = None,
 ) -> "thrift_sasl.TSaslClientTransport":
     transport = None
     if port is None:
