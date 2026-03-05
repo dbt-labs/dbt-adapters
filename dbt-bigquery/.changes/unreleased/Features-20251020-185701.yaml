@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add `execution_project` configuration option for models to specify which GCP project executes queries, enabling per-model billing and compute'
+time: 2025-10-20T18:57:01.43213-07:00
+custom:
+    Author: bordway-shop
+    Issue: "343"
