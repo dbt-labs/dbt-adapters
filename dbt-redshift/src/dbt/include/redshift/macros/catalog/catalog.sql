@@ -149,6 +149,35 @@
 {% endmacro %}
 
 
+{% macro _redshift__get_base_catalog_show(database, schemas, columns_filter) -%}
+    {% set show_tables_results = [] %}
+    {% for schema in schemas %}
+        {%- call statement('show_tables_' ~ loop.index, fetch_result=True) -%}
+            SHOW TABLES FROM SCHEMA {{ database }}.{{ schema }}
+        {%- endcall -%}
+        {% do show_tables_results.append(load_result('show_tables_' ~ loop.index).table) %}
+    {% endfor %}
+
+    {% set svv_columns_sql %}
+        select
+            database_name,
+            schema_name,
+            table_name,
+            column_name,
+            ordinal_position,
+            data_type,
+            remarks
+        from svv_redshift_columns
+        where database_name = '{{ database }}'
+        and ({{ columns_filter }})
+    {% endset %}
+    {# retry as svv queries can fail due to other schema drops #}
+    {% set columns_table = adapter.execute_fetch_with_retry(svv_columns_sql) %}
+
+    {{ return(adapter.build_catalog_from_show_tables_and_svv_columns(show_tables_results, columns_table)) }}
+{%- endmacro %}
+
+
 {% macro redshift__can_select_from(table_name) %}
 
     {%- call statement('has_table_privilege', fetch_result=True) -%}

@@ -52,6 +52,32 @@ REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
     ),
 )
 
+CATALOG_COLUMNS = [
+    "table_database",
+    "table_schema",
+    "table_name",
+    "table_type",
+    "table_comment",
+    "table_owner",
+    "column_name",
+    "column_index",
+    "column_type",
+    "column_comment",
+]
+
+CATALOG_COLUMN_TYPES = [
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Number(),
+    agate.Text(),
+    agate.Text(),
+]
+
 
 @dataclass
 class RedshiftConfig(AdapterConfig):
@@ -203,6 +229,85 @@ class RedshiftAdapter(SQLAdapter):
             new_rows,
             column_names=["database", "name", "schema", "type"],
             column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
+        )
+
+    @available
+    def execute_fetch_with_retry(self, sql: str, max_retries: int = 3) -> "agate.Table":
+        """Execute a SQL query and fetch results, retrying on transient errors.
+
+        Some Redshift system views (e.g. svv_redshift_columns) internally scan
+        all schemas visible to the user.  If any schema is dropped concurrently,
+        the query raises "schema ... does not exist" even when the dropped schema
+        isn't referenced in the WHERE clause.  Retrying resolves this once the
+        concurrent DROP commits.
+        """
+        for attempt in range(max_retries):
+            try:
+                _, table = self.execute(sql, fetch=True)
+                return table
+            except dbt_common.exceptions.DbtRuntimeError as e:
+                if "does not exist" in str(e) and attempt < max_retries - 1:
+                    logger.debug(
+                        f"Transient error executing query (attempt {attempt + 1}), "
+                        f"retrying: {e}"
+                    )
+                    continue
+                raise
+        raise dbt_common.exceptions.DbtRuntimeError("Unreachable")
+
+    @available
+    def build_catalog_from_show_tables_and_svv_columns(
+        self,
+        show_tables_results: List["agate.Table"],
+        svv_columns: "agate.Table",
+    ) -> "agate.Table":
+        """Build the base catalog by joining SHOW TABLES metadata with SVV_REDSHIFT_COLUMNS."""
+        if not show_tables_results or not svv_columns.rows:
+            return agate.Table([], column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES)
+
+        table_meta: Dict[tuple, tuple] = {}
+        for show_table in show_tables_results:
+            for row in show_table.rows:
+                table_type = (row["table_type"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper()
+
+                if subtype == "MATERIALIZED VIEW":
+                    catalog_type = "MATERIALIZED VIEW"
+                elif subtype == "LATE BINDING VIEW":
+                    catalog_type = "LATE BINDING VIEW"
+                elif table_type == "VIEW":
+                    catalog_type = "VIEW"
+                else:
+                    catalog_type = "BASE TABLE"
+
+                key = (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+                table_meta[key] = (
+                    row["database_name"],
+                    row["schema_name"],
+                    row["table_name"],
+                    catalog_type,
+                    row["remarks"],
+                    row["owner"],
+                )
+
+        catalog_rows = []
+        for row in svv_columns.rows:
+            meta = table_meta.get(
+                (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+            )
+            if meta:
+                catalog_rows.append(
+                    meta
+                    + (
+                        row["column_name"],
+                        row["ordinal_position"],
+                        row["data_type"],
+                        row["remarks"],
+                    )
+                )
+
+        return agate.Table(
+            catalog_rows, column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES
         )
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
