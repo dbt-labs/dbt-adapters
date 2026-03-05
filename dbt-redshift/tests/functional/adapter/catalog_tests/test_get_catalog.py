@@ -1,20 +1,7 @@
 from dbt.adapters.contracts.relation import RelationType
+from dbt.adapters.redshift.impl import CATALOG_COLUMNS
 from dbt.tests.util import get_connection
 import pytest
-
-
-CATALOG_BASE_COLUMNS = [
-    "table_database",
-    "table_schema",
-    "table_name",
-    "table_type",
-    "table_comment",
-    "table_owner",
-    "column_name",
-    "column_index",
-    "column_type",
-    "column_comment",
-]
 
 
 class TestGetCatalog:
@@ -184,7 +171,7 @@ class TestGetCatalogShowApis(TestGetCatalog):
                 used_schemas=my_schemas,
             )
         assert len(catalog) == 12
-        for col in CATALOG_BASE_COLUMNS:
+        for col in CATALOG_COLUMNS:
             assert col in catalog.column_names
 
     def test_get_one_catalog_by_schemas(
@@ -207,5 +194,5 @@ class TestGetCatalogShowApis(TestGetCatalog):
         # SHOW TABLES does not return the MV underlying system table,
         # so we only get 4 relations × 3 cols = 12
         assert len(catalog) == 12
-        for col in CATALOG_BASE_COLUMNS:
+        for col in CATALOG_COLUMNS:
             assert col in catalog.column_names
