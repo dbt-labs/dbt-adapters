@@ -511,10 +511,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
     def _get_backend_pid(cls, connection):
         with connection.handle.cursor() as c:
             sql = "select pg_backend_pid()"
-            res = c.execute(sql).fetchone()
-        if res:
-            return res[0]
-        return None
+            try:
+                res = c.execute(sql).fetchone()
+            except Exception as e:
+                logger.debug(f"Error getting backend PID: {e} - continuing")
+                res = None
+        return res[0] if res else None
 
     @classmethod
     def get_response(cls, cursor: redshift_connector.Cursor) -> AdapterResponse:
