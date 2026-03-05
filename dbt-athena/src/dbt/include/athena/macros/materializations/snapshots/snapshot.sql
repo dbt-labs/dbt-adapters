@@ -53,6 +53,88 @@
 {% endmacro %}
 
 
+{# Athena-specific ISO8601 timestamp for backfill audit column #}
+{% macro athena__snapshot_backfill_timestamp() %}
+    {{ return("format_datetime(current_timestamp, 'yyyy-MM-dd''T''HH:mm:ss''Z''')") }}
+{% endmacro %}
+
+
+{# Athena-specific JSON entries builder - uses || concatenation #}
+{% macro athena__backfill_audit_json_entries(columns) %}
+    {%- set entries = [] -%}
+    {%- for col in columns -%}
+        {%- do entries.append("'\"" ~ col.name ~ "\": \"' || " ~ snapshot_backfill_timestamp() ~ " || '\"'") -%}
+    {%- endfor -%}
+    {{ return(entries | join(" || ', ' || ")) }}
+{% endmacro %}
+
+
+{# Athena backfill for Iceberg tables using MERGE syntax #}
+{# Note: Athena/Presto uses unquoted identifiers that are case-insensitive #}
+{% macro athena__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
+    {%- set column_names = columns | map(attribute='name') | list -%}
+    {%- set table_type = config.get('table_type', 'hive') -%}
+
+    {% if table_type != 'iceberg' %}
+        {{ log("WARNING: Snapshot backfill for Athena requires 'table_type: iceberg'. Backfill skipped for hive table '" ~ relation.identifier ~ "'.", info=true) }}
+        {{ return('') }}
+    {% endif %}
+
+    {% call statement('backfill_snapshot_columns') %}
+    MERGE INTO {{ relation }} AS dbt_backfill_target
+    USING ({{ source_sql }}) AS dbt_backfill_source
+    ON {{ athena__backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
+    WHEN MATCHED THEN UPDATE SET
+        {%- for col in columns %}
+        {{ col.name }} = dbt_backfill_source.{{ col.name }}
+        {%- if not loop.last or audit_column %},{% endif %}
+        {%- endfor %}
+        {%- if audit_column %}
+        {{ audit_column }} = CASE
+            WHEN dbt_backfill_target.{{ audit_column }} IS NULL THEN
+                '{' || {{ backfill_audit_json_entries(columns) }} || '}'
+            ELSE
+                substr(dbt_backfill_target.{{ audit_column }}, 1, length(dbt_backfill_target.{{ audit_column }}) - 1)
+                || ', ' || {{ backfill_audit_json_entries(columns) }} || '}'
+        END
+        {%- endif %}
+    {% endcall %}
+
+    {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
+{% endmacro %}
+
+
+{# Athena-specific unique key join - uses unquoted identifiers #}
+{% macro athena__backfill_unique_key_join(unique_key, target_alias, source_alias) %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
+            {{ target_alias }}.{{ key }} = {{ source_alias }}.{{ key }}
+            {%- if not loop.last %} AND {% endif %}
+        {% endfor %}
+    {% else %}
+        {{ target_alias }}.{{ unique_key }} = {{ source_alias }}.{{ unique_key }}
+    {% endif %}
+{% endmacro %}
+
+
+{# Athena-specific ensure audit column exists #}
+{% macro athena__ensure_backfill_audit_column(relation, audit_column) %}
+    {%- set table_type = config.get('table_type', 'hive') -%}
+    {%- set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute='name') | map('lower') | list -%}
+
+    {%- if audit_column | lower not in existing_columns -%}
+        {% if table_type == 'iceberg' %}
+            {% call statement('add_backfill_audit_column') %}
+                ALTER TABLE {{ relation }} ADD COLUMNS ({{ audit_column }} VARCHAR);
+            {% endcall %}
+            {{ log("Added backfill audit column '" ~ audit_column ~ "' to snapshot '" ~ relation.identifier ~ "'.", info=true) }}
+        {% else %}
+            {{ log("WARNING: Cannot add audit column to hive table. Backfill audit will not be tracked.", info=true) }}
+        {% endif %}
+    {%- endif -%}
+{% endmacro %}
+
+
 {#
     Create a new temporary table that will hold the new snapshot results.
     This table will then be used to overwrite the target snapshot table.
@@ -150,7 +232,7 @@
 
   {% if not target_relation_exists %}
 
-      {% set build_sql = build_snapshot_table(strategy, model['compiled_sql']) %}
+      {% set build_sql = build_snapshot_table(strategy, model['compiled_code']) %}
       {% set final_sql = create_table_as(False, target_relation, build_sql) %}
 
   {% else %}
@@ -177,6 +259,26 @@
         {% do alter_relation_add_columns(target_relation, missing_columns, table_type) %}
       {% endif %}
 
+      {# Snapshot Column Backfill: Optionally backfill historical rows with current source values #}
+      {# Note: Only supported for Iceberg tables in Athena #}
+      {% set unique_key = config.get('unique_key') %}
+      {% if missing_columns | length > 0 and snapshot_backfill_enabled() %}
+          {% set audit_column = get_backfill_audit_column() %}
+
+          {# Add audit column if configured and doesn't exist #}
+          {% if audit_column %}
+              {% do ensure_backfill_audit_column(target_relation, audit_column) %}
+          {% endif %}
+
+          {# Backfill historical rows with current source values #}
+          {% do backfill_snapshot_columns(
+              target_relation,
+              missing_columns,
+              model['compiled_code'],
+              unique_key,
+              audit_column
+          ) %}
+      {% endif %}
 
       {% set source_columns = adapter.get_columns_in_relation(staging_table)
                                    | rejectattr('name', 'equalto', 'dbt_change_type')
