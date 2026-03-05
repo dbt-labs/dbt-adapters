@@ -30,6 +30,7 @@ code-quality = "pre-commit run --all-files"
 unit-tests = "python -m pytest {args:tests/unit}"
 integration-tests = "python -m pytest {args:tests/functional}"
 all-tests = ["unit-tests", "integration-tests"]
+bench = "python -m pytest tests/functional/adapter/test_benchmark_get_columns.py -s -k benchmark"
 
 [envs.build]
 detached = true

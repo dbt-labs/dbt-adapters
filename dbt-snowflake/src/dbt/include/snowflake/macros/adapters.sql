@@ -107,15 +107,42 @@
 {% endmacro %}
 
 
-{% macro snowflake__alter_column_comment(relation, column_dict) -%}
+{% macro snowflake__persist_docs(relation, model, for_relation, for_columns) -%}
+  {% if for_relation and config.persist_relation_docs() and model.description %}
+    {% do run_query(alter_relation_comment(relation, model.description)) %}
+  {% endif %}
+  {% if for_columns and config.persist_column_docs() and model.columns %}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% do validate_doc_columns(relation, model.columns, existing_columns) %}
+    {# Re-key documented columns by DB column name for correct casing in ALTER.
+       Snowflake returns UPPERCASE, YAML is typically lowercase. #}
+    {% set column_dict = {} %}
+    {% for col_name in existing_columns %}
+      {% if col_name | lower in model.columns %}
+        {% do column_dict.update({col_name: model.columns[col_name | lower]}) %}
+      {% elif col_name | upper in model.columns %}
+        {% do column_dict.update({col_name: model.columns[col_name | upper]}) %}
+      {% elif col_name in model.columns %}
+        {% do column_dict.update({col_name: model.columns[col_name]}) %}
+      {% endif %}
+    {% endfor %}
+    {% if column_dict | length > 0 %}
+      {% set alter_comment_sql = alter_column_comment(relation, column_dict) %}
+      {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
+        {% do run_query(alter_comment_sql) %}
+      {% endif %}
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+{% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% if relation.is_dynamic_table -%}
         {% set relation_type = "table" %}
     {% else -%}
         {% set relation_type = relation.type %}
     {% endif %}
     alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} alter
-    {% for column_name in existing_columns if (column_name in existing_columns) or (column_name|lower in existing_columns) %}
+    {% for column_name in column_dict %}
         {{ get_column_comment_sql(column_name, column_dict) }} {{- ',' if not loop.last else ';' }}
     {% endfor %}
 {% endmacro %}

@@ -40,6 +40,7 @@ docker-dev = [
     "docker build -f docker/dev.Dockerfile -t dbt-bigquery-dev .",
 	"docker run --rm -it --name dbt-bigquery-dev -v $(shell pwd):/opt/code dbt-bigquery-dev",
 ]
+bench = "python -m pytest tests/functional/adapter/test_benchmark_get_columns.py -s -k benchmark"
 
 [envs.build]
 detached = true
