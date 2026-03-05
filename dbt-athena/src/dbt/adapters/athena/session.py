@@ -1,10 +1,9 @@
 import json
 import threading
 import time
-from datetime import datetime, timedelta, timezone
 from functools import cached_property, lru_cache
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, Dict, NamedTuple, Optional
 from uuid import UUID
 
 import boto3
