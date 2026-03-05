@@ -40,9 +40,7 @@ def adapter(mocker):
 
 
 def _set_use_show_apis(adapter, mocker, enabled):
-    mock_behavior = mocker.MagicMock()
-    mock_behavior.redshift_use_show_apis.no_warn = enabled
-    adapter._behavior = mock_behavior
+    adapter.use_show_apis = lambda: enabled
 
 
 class TestStandardizeGrantsDictShowApi:
