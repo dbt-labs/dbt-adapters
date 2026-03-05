@@ -1,0 +1,6 @@
+kind: Fixes
+body: Gate sql_header in test materializations behind REQUIRE_SQL_HEADER_IN_TEST_CONFIGS behavior flag
+time: 2026-03-05T20:48:03.036139+05:30
+custom:
+    Author: aahel
+    Issue: "1713"
