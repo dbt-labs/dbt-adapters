@@ -60,7 +60,9 @@ def _run_macro(table_type="hive", work_group_output_location_enforced=False):
     """Call athena__create_hive_staging_table_as and return (sql, mock_adapter)."""
     mock_adapter = mock.Mock()
     mock_adapter.generate_s3_location.return_value = _TMP_LOCATION
-    mock_adapter.is_work_group_output_location_enforced.return_value = work_group_output_location_enforced
+    mock_adapter.is_work_group_output_location_enforced.return_value = (
+        work_group_output_location_enforced
+    )
 
     config_data = {
         "table_type": table_type,
