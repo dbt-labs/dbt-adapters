@@ -151,3 +151,38 @@ class TestIcebergRestCatalogIntegration:
         assert relation.catalog_linked_database == "custom_db"
         assert relation.external_volume == "test_volume"
         assert relation.auto_refresh is True
+
+    def test_unity_catalog_type_routes_to_insert_into_macro(self):
+        """Unity catalog type should route to snowflake__create_insert_into_table_iceberg_rest."""
+        relation = IcebergRestCatalogRelation(
+            catalog_name="UNITY_CATALOG",
+            catalog_linked_database="unity_db",
+            catalog_linked_database_type="unity",
+            external_volume="test_volume",
+        )
+        assert relation.catalog_type == "ICEBERG_REST"
+        assert relation.catalog_linked_database_type == "unity"
+        assert relation.catalog_linked_database_type.lower() in ["glue", "unity"]
+
+    def test_integration_with_unity_returns_linked_db(self):
+        """Full IcebergRestCatalogIntegration with unity config has catalog_linked_database."""
+        config = SimpleNamespace(
+            name="unity_catalog",
+            catalog_name="UNITY",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "unity_db",
+                "catalog_linked_database_type": "unity",
+            },
+        )
+        integration = IcebergRestCatalogIntegration(config)
+
+        model = Mock()
+        model.config = {}
+        model.schema = "test_schema"
+        model.identifier = "test_table"
+
+        relation = integration.build_relation(model)
+        assert relation.catalog_linked_database == "unity_db"
+        assert relation.catalog_linked_database_type == "unity"

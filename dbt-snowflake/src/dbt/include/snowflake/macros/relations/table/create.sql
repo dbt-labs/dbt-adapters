@@ -1,6 +1,13 @@
+
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+        {{ log("snowflake__create_table_as_1 is catalog linked database", info=True) }}
+    {% else %}
+        {{ log("snowflake__create_table_as_1 is not catalog linked database", info=True) }}
+    {% endif %}
+
 
     {%- if language == 'sql' -%}
         {%- if temporary -%}
@@ -11,8 +18,8 @@
             {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'ICEBERG_REST' -%}
             {%- if catalog_relation.catalog_linked_database_type is defined and
-            catalog_relation.catalog_linked_database_type == 'glue' -%}
-                {{ snowflake__create_table_iceberg_rest_with_glue(relation, compiled_code, catalog_relation) }}
+            catalog_relation.catalog_linked_database_type|lower in ['glue', 'unity'] -%}
+                {{ snowflake__create_insert_into_table_iceberg_rest(relation, compiled_code, catalog_relation) }}
             {%- else -%}
                 {{ snowflake__create_table_iceberg_rest_sql(relation, compiled_code) }}
             {%- endif -%}
@@ -264,10 +271,10 @@ as (
 {%- endmacro %}
 
 
-{% macro snowflake__create_table_iceberg_rest_with_glue(relation, compiled_code, catalog_relation) -%}
+{% macro snowflake__create_insert_into_table_iceberg_rest(relation, compiled_code, catalog_relation) -%}
 {#-
-    Creates an Iceberg table for Catalog Linked Databases (e.g., AWS Glue) with explicit column definitions.
-    This is used when CTAS is not supported.
+    Creates an Iceberg table for Catalog Linked Databases (e.g., AWS Glue, Unity Catalog)
+    with explicit column definitions. This is used when CTAS is not supported.
 
     This macro is specifically for CLD where we need to create the table with an explicit schema
     because CTAS is not available.
@@ -293,6 +300,12 @@ as (
   {%- set partition_by_string = partition_by_keys_quotes | join(", ")-%}
 {% else %}
   {%- set partition_by_string = none -%}
+{%- endif -%}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
 {%- endif -%}
 
 {%- set sql_header = config.get('sql_header', none) -%}
