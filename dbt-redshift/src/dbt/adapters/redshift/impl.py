@@ -78,6 +78,13 @@ CATALOG_COLUMN_TYPES = [
     agate.Text(),
 ]
 
+_SHOW_TABLE_TYPE_MAP = {
+    "TABLE": "BASE TABLE",
+    "VIEW": "VIEW",
+    "MATERIALIZED VIEW": "MATERIALIZED VIEW",
+    "LATE BINDING VIEW": "LATE BINDING VIEW",
+}
+
 
 @dataclass
 class RedshiftConfig(AdapterConfig):
@@ -232,30 +239,6 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     @available
-    def execute_fetch_with_retry(self, sql: str, max_retries: int = 3) -> "agate.Table":
-        """Execute a SQL query and fetch results, retrying on transient errors.
-
-        Some Redshift system views (e.g. svv_redshift_columns) internally scan
-        all schemas visible to the user.  If any schema is dropped concurrently,
-        the query raises "schema ... does not exist" even when the dropped schema
-        isn't referenced in the WHERE clause.  Retrying resolves this once the
-        concurrent DROP commits.
-        """
-        for attempt in range(max_retries):
-            try:
-                _, table = self.execute(sql, fetch=True)
-                return table
-            except dbt_common.exceptions.DbtRuntimeError as e:
-                if "does not exist" in str(e) and attempt < max_retries - 1:
-                    logger.debug(
-                        f"Transient error executing query (attempt {attempt + 1}), "
-                        f"retrying: {e}"
-                    )
-                    continue
-                raise
-        raise dbt_common.exceptions.DbtRuntimeError("Unreachable")
-
-    @available
     def build_catalog_from_show_tables_and_svv_columns(
         self,
         show_tables_results: List["agate.Table"],
@@ -270,15 +253,9 @@ class RedshiftAdapter(SQLAdapter):
             for row in show_table.rows:
                 table_type = (row["table_type"] or "").strip().upper()
                 subtype = (row["table_subtype"] or "").strip().upper()
-
-                if subtype == "MATERIALIZED VIEW":
-                    catalog_type = "MATERIALIZED VIEW"
-                elif subtype == "LATE BINDING VIEW":
-                    catalog_type = "LATE BINDING VIEW"
-                elif table_type == "VIEW":
-                    catalog_type = "VIEW"
-                else:
-                    catalog_type = "BASE TABLE"
+                catalog_type = _SHOW_TABLE_TYPE_MAP.get(
+                    subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
+                )
 
                 key = (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
                 table_meta[key] = (

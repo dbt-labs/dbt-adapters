@@ -158,7 +158,7 @@
         {% do show_tables_results.append(load_result('show_tables_' ~ loop.index).table) %}
     {% endfor %}
 
-    {% set svv_columns_sql %}
+    {%- call statement('svv_columns', fetch_result=True) -%}
         select
             database_name,
             schema_name,
@@ -170,9 +170,8 @@
         from svv_redshift_columns
         where database_name = '{{ database }}'
         and ({{ columns_filter }})
-    {% endset %}
-    {# retry as svv queries can fail due to other schema drops #}
-    {% set columns_table = adapter.execute_fetch_with_retry(svv_columns_sql) %}
+    {%- endcall -%}
+    {% set columns_table = load_result('svv_columns').table %}
 
     {{ return(adapter.build_catalog_from_show_tables_and_svv_columns(show_tables_results, columns_table)) }}
 {%- endmacro %}
