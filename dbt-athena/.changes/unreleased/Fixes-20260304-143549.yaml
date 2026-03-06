@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix "connection never acquired" with `--no-populate-cache` and `threads > 1`
+time: 2026-03-04T14:35:49.58616+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1705"
