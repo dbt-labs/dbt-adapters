@@ -40,6 +40,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
     ctas_not_supported: Optional[bool] = False
+    preserve_identifier_case: Optional[bool] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -57,6 +58,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
                 "max_data_extension_time_in_days"
             )
             self.ctas_not_supported = adapter_properties.get("ctas_not_supported", False)
+            self.preserve_identifier_case = adapter_properties.get("preserve_identifier_case")
 
         if not self.catalog_linked_database:
             raise InvalidCatalogIntegrationConfigError(

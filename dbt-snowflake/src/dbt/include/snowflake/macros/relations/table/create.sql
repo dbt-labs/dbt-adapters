@@ -2,13 +2,7 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
-    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
-        {{ log("snowflake__create_table_as_1 is catalog linked database", info=True) }}
-    {% else %}
-        {{ log("snowflake__create_table_as_1 is not catalog linked database", info=True) }}
-    {% endif %}
-
-
+    
     {%- if language == 'sql' -%}
         {%- if temporary -%}
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}

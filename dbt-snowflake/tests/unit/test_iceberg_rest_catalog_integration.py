@@ -1,14 +1,14 @@
 """Tests for IcebergRestCatalog integration with Snowflake macros."""
 
 import pytest
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock
 from types import SimpleNamespace
 
 from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogIntegration,
     IcebergRestCatalogRelation,
 )
-from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
+from dbt.adapters.catalogs import CatalogIntegrationClient, InvalidCatalogIntegrationConfigError
 
 
 class TestIcebergRestCatalogIntegration:
@@ -227,3 +227,222 @@ class TestIcebergRestCatalogIntegration:
         assert relation.catalog_linked_database == "unity_db"
         assert relation.catalog_linked_database_type == "unity"
         assert relation.ctas_not_supported is True
+
+    def test_preserve_identifier_case_true_stored_from_adapter_properties(self):
+        """preserve_identifier_case=True from adapter_properties is stored on integration."""
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "test_db",
+                "preserve_identifier_case": True,
+            },
+        )
+        integration = IcebergRestCatalogIntegration(config)
+        assert integration.preserve_identifier_case is True
+
+    def test_preserve_identifier_case_not_set_defaults_none(self):
+        """preserve_identifier_case defaults to None when not in adapter_properties."""
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "test_db",
+            },
+        )
+        integration = IcebergRestCatalogIntegration(config)
+        assert integration.preserve_identifier_case is None
+
+
+def _make_mock_adapter(quoting=None, catalog_integrations=None):
+    """Create a mock SnowflakeAdapter with _catalog_client and config.quoting.
+
+    Uses SimpleNamespace to avoid Mock(spec=) overriding bound methods.
+    """
+    from dbt.adapters.snowflake.impl import SnowflakeAdapter
+    from dbt.adapters.snowflake import SnowflakeRelation
+
+    adapter = SimpleNamespace()
+    adapter.Relation = SnowflakeRelation
+
+    # Bind real methods from SnowflakeAdapter
+    adapter._is_quoted = lambda identifier: SnowflakeAdapter._is_quoted(adapter, identifier)
+    adapter._strip_quotes = lambda identifier: SnowflakeAdapter._strip_quotes(adapter, identifier)
+    adapter._preserve_identifier_case = lambda database: SnowflakeAdapter._preserve_identifier_case(adapter, database)
+
+    # Set up config.quoting
+    if quoting is None:
+        quoting = {"database": False, "schema": False, "identifier": False}
+    adapter.config = SimpleNamespace(quoting=quoting)
+
+    # Set up _catalog_client
+    client = CatalogIntegrationClient([IcebergRestCatalogIntegration])
+    if catalog_integrations:
+        for integration in catalog_integrations:
+            client.add(integration)
+    adapter._catalog_client = client
+
+    return adapter
+
+
+class TestPreserveIdentifierCase:
+    """Tests for SnowflakeAdapter._preserve_identifier_case()."""
+
+    def test_returns_false_for_regular_database(self):
+        adapter = _make_mock_adapter()
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._preserve_identifier_case(adapter, "regular_db")
+        assert result is False
+
+    def test_returns_false_when_preserve_identifier_case_not_set(self):
+        """Default (None) means case is NOT preserved (standard Snowflake uppercase)."""
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "my_cld",
+            },
+        )
+        adapter = _make_mock_adapter(catalog_integrations=[config])
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld")
+        assert result is False
+
+    def test_returns_true_when_preserve_identifier_case_true(self):
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "my_cld",
+                "preserve_identifier_case": True,
+            },
+        )
+        adapter = _make_mock_adapter(catalog_integrations=[config])
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld")
+        assert result is True
+
+    def test_case_insensitive_database_lookup(self):
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "My_CLD",
+                "preserve_identifier_case": True,
+            },
+        )
+        adapter = _make_mock_adapter(catalog_integrations=[config])
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        assert SnowflakeAdapter._preserve_identifier_case(adapter, "MY_CLD") is True
+        assert SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld") is True
+
+
+class TestMakeMatchKwargs:
+    """Tests for SnowflakeAdapter._make_match_kwargs()."""
+
+    def test_uppercases_when_quoting_false(self):
+        """Standard behavior: uppercase identifiers when quoting is False."""
+        adapter = _make_mock_adapter()
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._make_match_kwargs(
+            adapter, "my_db", "my_schema", "my_table"
+        )
+        assert result == {
+            "database": "MY_DB",
+            "schema": "MY_SCHEMA",
+            "identifier": "MY_TABLE",
+        }
+
+    def test_preserves_case_when_preserve_identifier_case_enabled(self):
+        """CLD with preserve_identifier_case=True: preserve lowercase."""
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "my_cld",
+                "preserve_identifier_case": True,
+            },
+        )
+        adapter = _make_mock_adapter(catalog_integrations=[config])
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._make_match_kwargs(
+            adapter, "my_cld", "my_schema", "my_table"
+        )
+        assert result == {
+            "database": "my_cld",
+            "schema": "my_schema",
+            "identifier": "my_table",
+        }
+
+    def test_strips_quotes_from_quoted_identifiers(self):
+        """Quoted identifiers should be stripped regardless of CLD settings."""
+        adapter = _make_mock_adapter()
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        result = SnowflakeAdapter._make_match_kwargs(
+            adapter, '"my_db"', '"my_schema"', '"my_table"'
+        )
+        assert result == {
+            "database": "my_db",
+            "schema": "my_schema",
+            "identifier": "my_table",
+        }
+
+
+class TestParseListRelationsResult:
+    """Tests for SnowflakeAdapter._parse_list_relations_result()."""
+
+    def _make_result_row(self, database, schema, identifier,
+                         relation_type="TABLE", is_dynamic="N", is_iceberg="N"):
+        """Create a mock agate.Row for _parse_list_relations_result."""
+        return (database, schema, identifier, relation_type, is_dynamic, is_iceberg)
+
+    def test_quote_policy_true_for_regular_database(self):
+        adapter = _make_mock_adapter()
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        row = self._make_result_row("MY_DB", "MY_SCHEMA", "MY_TABLE")
+        relation = SnowflakeAdapter._parse_list_relations_result(adapter, row)
+
+        assert relation.quote_policy.database is True
+        assert relation.quote_policy.schema is True
+        assert relation.quote_policy.identifier is True
+
+    def test_quote_policy_false_for_cld_with_preserve_identifier_case_enabled(self):
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "my_cld",
+                "preserve_identifier_case": True,
+            },
+        )
+        adapter = _make_mock_adapter(catalog_integrations=[config])
+        from dbt.adapters.snowflake.impl import SnowflakeAdapter
+
+        row = self._make_result_row("my_cld", "my_schema", "my_table")
+        relation = SnowflakeAdapter._parse_list_relations_result(adapter, row)
+
+        assert relation.quote_policy.database is False
+        assert relation.quote_policy.schema is False
+        assert relation.quote_policy.identifier is False

@@ -1,4 +1,4 @@
-from typing import Dict, Iterable, Type
+from typing import Dict, Iterable, Optional, Type
 
 from dbt.adapters.catalogs._exceptions import (
     DbtCatalogIntegrationAlreadyExistsError,
@@ -44,6 +44,27 @@ class CatalogIntegrationClient:
             return self.__catalog_integrations[name]
         except KeyError:
             raise DbtCatalogIntegrationNotFoundError(name, self.__catalog_integrations.keys())
+
+    def get_catalog_integration_by_database(
+        self, database: str
+    ) -> Optional[CatalogIntegration]:
+        """
+        Find a catalog integration by its associated catalog_linked_database name.
+
+        Args:
+            database: The database name to search for
+
+        Returns:
+            The CatalogIntegration if found, None otherwise
+        """
+        for integration in self.__catalog_integrations.values():
+            if hasattr(integration, "catalog_linked_database"):
+                if (
+                    integration.catalog_linked_database
+                    and integration.catalog_linked_database.upper() == database.upper()
+                ):
+                    return integration
+        return None
 
     def __catalog_integration_factory(self, catalog_type: str) -> Type[CatalogIntegration]:
         try:

@@ -142,22 +142,42 @@ class SnowflakeAdapter(SQLAdapter):
         lowered = table.rename(column_names=[c.lower() for c in table.column_names])
         return super()._catalog_filter_table(lowered, used_schemas)
 
+    def _preserve_identifier_case(self, database: str) -> bool:
+        """
+        Check if identifier case should be preserved for a given database.
+
+        For Iceberg REST catalog linked databases, users can set
+        preserve_identifier_case=true in adapter_properties to prevent the
+        default uppercasing behavior. This prevents ApproximateMatchError
+        when CLD identifiers are lowercase.
+        """
+        if not database:
+            return False
+        integration = self._catalog_client.get_catalog_integration_by_database(database)
+        return (
+            integration is not None
+            and integration.catalog_type == constants.ICEBERG_REST_CATALOG_TYPE
+            and getattr(integration, "preserve_identifier_case", None) is True
+        )
+
     def _make_match_kwargs(self, database, schema, identifier):
         # if any path part is already quoted then consider same casing but without quotes
         quoting = self.config.quoting
+        should_uppercase = not self._preserve_identifier_case(database)
+
         if self._is_quoted(identifier):
             identifier = self._strip_quotes(identifier)
-        elif identifier is not None and quoting["identifier"] is False:
+        elif identifier is not None and quoting["identifier"] is False and should_uppercase:
             identifier = identifier.upper()
 
         if self._is_quoted(schema):
             schema = self._strip_quotes(schema)
-        elif schema is not None and quoting["schema"] is False:
+        elif schema is not None and quoting["schema"] is False and should_uppercase:
             schema = schema.upper()
 
         if self._is_quoted(database):
             database = self._strip_quotes(database)
-        elif database is not None and quoting["database"] is False:
+        elif database is not None and quoting["database"] is False and should_uppercase:
             database = database.upper()
 
         return filter_null_values(
@@ -336,7 +356,12 @@ class SnowflakeAdapter(SQLAdapter):
             else constants.INFO_SCHEMA_TABLE_FORMAT
         )
 
-        quote_policy = {"database": True, "schema": True, "identifier": True}
+        should_quote = not self._preserve_identifier_case(database)
+        quote_policy = {
+            "database": should_quote,
+            "schema": should_quote,
+            "identifier": should_quote,
+        }
 
         return self.Relation.create(
             database=database,
