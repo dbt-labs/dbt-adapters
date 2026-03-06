@@ -165,6 +165,10 @@ class Credentials(ExtensibleDbtClassMixin, Replaceable, metaclass=abc.ABCMeta):
         data = super().__pre_deserialize__(data)
         # Need to fixup dbname => database, pass => password
         data = cls.translate_aliases(data)
+        # Coerce explicitly to avoid mashumaro 3.15+ converting None to "None"
+        for key in ("schema", "database"):
+            if key in data and data[key] is not None:
+                data[key] = str(data[key])
         return data
 
     @classmethod
