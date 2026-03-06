@@ -208,10 +208,9 @@ class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
                             "table_format": "iceberg",
                             "adapter_properties": {
                                 "catalog_linked_database": os.getenv(
-                                    "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_UNITY"
+                                    "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE"  # ideally can be driven by Catalog linked DB with Unity catalog. Reusing Glue for now, as behaviour is same.
                                 ),
-                                "catalog_linked_database_type": "unity",
-                                "ctas_not_supported": True,  # Unity uses same insert-into process as Glue
+                                "ctas_not_supported": True,  # allows to use same insert-into process like Glue, without being vendor specific
                                 "max_data_extension_time_in_days": 1,
                                 "target_file_size": "AUTO",
                                 "auto_refresh": "true",
