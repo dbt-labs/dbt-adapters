@@ -6,6 +6,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryMaterializedViewConfig,
     BigQueryOptionsConfig,
 )
+from dbt.adapters.bigquery.relation_configs._cluster import BigQueryClusterConfig
 from dbt.adapters.contracts.relation import RelationConfig
 
 
@@ -177,3 +178,31 @@ class TestBigQueryRelationConfigs(unittest.TestCase):
             # Should detect changes when tags are removed
             self.assertIsNotNone(changeset)
             self.assertIsNotNone(changeset.options)
+
+
+class TestClusterConfigComparison(unittest.TestCase):
+    def test_same_fields_different_order_no_change(self):
+        """Cluster fields in different order should not be detected as a change."""
+        cluster_a = BigQueryClusterConfig(fields=("portal", "cu_name", "rt_name"))
+        cluster_b = BigQueryClusterConfig(fields=("rt_name", "portal", "cu_name"))
+        self.assertFalse(BigQueryRelation._cluster_config_has_changed(cluster_a, cluster_b))
+
+    def test_different_fields_detected_as_change(self):
+        """Different cluster fields should be detected as a change."""
+        cluster_a = BigQueryClusterConfig(fields=("id", "value"))
+        cluster_b = BigQueryClusterConfig(fields=("id", "name"))
+        self.assertTrue(BigQueryRelation._cluster_config_has_changed(cluster_a, cluster_b))
+
+    def test_cluster_added_detected_as_change(self):
+        """Adding cluster config (None -> config) should be detected as a change."""
+        cluster = BigQueryClusterConfig(fields=("id",))
+        self.assertTrue(BigQueryRelation._cluster_config_has_changed(cluster, None))
+
+    def test_cluster_removed_detected_as_change(self):
+        """Removing cluster config (config -> None) should be detected as a change."""
+        cluster = BigQueryClusterConfig(fields=("id",))
+        self.assertTrue(BigQueryRelation._cluster_config_has_changed(None, cluster))
+
+    def test_both_none_no_change(self):
+        """Both cluster configs None should not be detected as a change."""
+        self.assertFalse(BigQueryRelation._cluster_config_has_changed(None, None))
