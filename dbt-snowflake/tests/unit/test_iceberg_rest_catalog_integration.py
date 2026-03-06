@@ -4,11 +4,13 @@ import pytest
 from unittest.mock import Mock
 from types import SimpleNamespace
 
+from dbt.adapters.catalogs import CatalogIntegrationClient, InvalidCatalogIntegrationConfigError
+from dbt.adapters.snowflake import SnowflakeRelation
 from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogIntegration,
     IcebergRestCatalogRelation,
 )
-from dbt.adapters.catalogs import CatalogIntegrationClient, InvalidCatalogIntegrationConfigError
+from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
 
 class TestIcebergRestCatalogIntegration:
@@ -100,8 +102,6 @@ class TestIcebergRestCatalogIntegration:
 
     def test_integration_with_environment_variable_for_macro(self):
         """Test full integration with environment variable that would be used by macro."""
-        import os
-
         config = SimpleNamespace(
             name="test_iceberg_rest",
             catalog_name="POLARIS",
@@ -263,9 +263,6 @@ def _make_mock_adapter(quoting=None, catalog_integrations=None):
 
     Uses SimpleNamespace to avoid Mock(spec=) overriding bound methods.
     """
-    from dbt.adapters.snowflake.impl import SnowflakeAdapter
-    from dbt.adapters.snowflake import SnowflakeRelation
-
     adapter = SimpleNamespace()
     adapter.Relation = SnowflakeRelation
 
@@ -294,7 +291,6 @@ class TestPreserveIdentifierCase:
 
     def test_returns_false_for_regular_database(self):
         adapter = _make_mock_adapter()
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._preserve_identifier_case(adapter, "regular_db")
         assert result is False
@@ -311,7 +307,6 @@ class TestPreserveIdentifierCase:
             },
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld")
         assert result is False
@@ -328,7 +323,6 @@ class TestPreserveIdentifierCase:
             },
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld")
         assert result is True
@@ -345,7 +339,6 @@ class TestPreserveIdentifierCase:
             },
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         assert SnowflakeAdapter._preserve_identifier_case(adapter, "MY_CLD") is True
         assert SnowflakeAdapter._preserve_identifier_case(adapter, "my_cld") is True
@@ -357,7 +350,6 @@ class TestMakeMatchKwargs:
     def test_uppercases_when_quoting_false(self):
         """Standard behavior: uppercase identifiers when quoting is False."""
         adapter = _make_mock_adapter()
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._make_match_kwargs(
             adapter, "my_db", "my_schema", "my_table"
@@ -381,7 +373,6 @@ class TestMakeMatchKwargs:
             },
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._make_match_kwargs(
             adapter, "my_cld", "my_schema", "my_table"
@@ -395,7 +386,6 @@ class TestMakeMatchKwargs:
     def test_strips_quotes_from_quoted_identifiers(self):
         """Quoted identifiers should be stripped regardless of CLD settings."""
         adapter = _make_mock_adapter()
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         result = SnowflakeAdapter._make_match_kwargs(
             adapter, '"my_db"', '"my_schema"', '"my_table"'
@@ -417,7 +407,6 @@ class TestParseListRelationsResult:
 
     def test_quote_policy_true_for_regular_database(self):
         adapter = _make_mock_adapter()
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         row = self._make_result_row("MY_DB", "MY_SCHEMA", "MY_TABLE")
         relation = SnowflakeAdapter._parse_list_relations_result(adapter, row)
@@ -438,7 +427,6 @@ class TestParseListRelationsResult:
             },
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
-        from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
         row = self._make_result_row("my_cld", "my_schema", "my_table")
         relation = SnowflakeAdapter._parse_list_relations_result(adapter, row)
