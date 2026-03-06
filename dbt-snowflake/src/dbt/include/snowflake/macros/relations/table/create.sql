@@ -2,7 +2,7 @@
 {% macro snowflake__create_table_as(temporary, relation, compiled_code, language='sql') -%}
 
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
-    
+
     {%- if language == 'sql' -%}
         {%- if temporary -%}
             {{ snowflake__create_table_temporary_sql(relation, compiled_code) }}

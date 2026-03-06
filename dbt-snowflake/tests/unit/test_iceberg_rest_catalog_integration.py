@@ -4,7 +4,10 @@ import pytest
 from unittest.mock import Mock
 from types import SimpleNamespace
 
-from dbt.adapters.catalogs import CatalogIntegrationClient, InvalidCatalogIntegrationConfigError
+from dbt.adapters.catalogs import (
+    CatalogIntegrationClient,
+    InvalidCatalogIntegrationConfigError,
+)
 from dbt.adapters.snowflake import SnowflakeRelation
 from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogIntegration,
@@ -269,7 +272,9 @@ def _make_mock_adapter(quoting=None, catalog_integrations=None):
     # Bind real methods from SnowflakeAdapter
     adapter._is_quoted = lambda identifier: SnowflakeAdapter._is_quoted(adapter, identifier)
     adapter._strip_quotes = lambda identifier: SnowflakeAdapter._strip_quotes(adapter, identifier)
-    adapter._preserve_identifier_case = lambda database: SnowflakeAdapter._preserve_identifier_case(adapter, database)
+    adapter._preserve_identifier_case = (
+        lambda database: SnowflakeAdapter._preserve_identifier_case(adapter, database)
+    )
 
     # Set up config.quoting
     if quoting is None:
@@ -351,9 +356,7 @@ class TestMakeMatchKwargs:
         """Standard behavior: uppercase identifiers when quoting is False."""
         adapter = _make_mock_adapter()
 
-        result = SnowflakeAdapter._make_match_kwargs(
-            adapter, "my_db", "my_schema", "my_table"
-        )
+        result = SnowflakeAdapter._make_match_kwargs(adapter, "my_db", "my_schema", "my_table")
         assert result == {
             "database": "MY_DB",
             "schema": "MY_SCHEMA",
@@ -374,9 +377,7 @@ class TestMakeMatchKwargs:
         )
         adapter = _make_mock_adapter(catalog_integrations=[config])
 
-        result = SnowflakeAdapter._make_match_kwargs(
-            adapter, "my_cld", "my_schema", "my_table"
-        )
+        result = SnowflakeAdapter._make_match_kwargs(adapter, "my_cld", "my_schema", "my_table")
         assert result == {
             "database": "my_cld",
             "schema": "my_schema",
@@ -400,8 +401,15 @@ class TestMakeMatchKwargs:
 class TestParseListRelationsResult:
     """Tests for SnowflakeAdapter._parse_list_relations_result()."""
 
-    def _make_result_row(self, database, schema, identifier,
-                         relation_type="TABLE", is_dynamic="N", is_iceberg="N"):
+    def _make_result_row(
+        self,
+        database,
+        schema,
+        identifier,
+        relation_type="TABLE",
+        is_dynamic="N",
+        is_iceberg="N",
+    ):
         """Create a mock agate.Row for _parse_list_relations_result."""
         return (database, schema, identifier, relation_type, is_dynamic, is_iceberg)
 

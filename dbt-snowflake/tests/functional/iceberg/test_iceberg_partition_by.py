@@ -132,7 +132,6 @@ order by 1, 2
 """
 
 
-
 class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
     @pytest.fixture(scope="class")
     def seeds(self):

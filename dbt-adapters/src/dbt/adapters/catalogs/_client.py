@@ -45,9 +45,7 @@ class CatalogIntegrationClient:
         except KeyError:
             raise DbtCatalogIntegrationNotFoundError(name, self.__catalog_integrations.keys())
 
-    def get_catalog_integration_by_database(
-        self, database: str
-    ) -> Optional[CatalogIntegration]:
+    def get_catalog_integration_by_database(self, database: str) -> Optional[CatalogIntegration]:
         """
         Find a catalog integration by its associated catalog_linked_database name.
 

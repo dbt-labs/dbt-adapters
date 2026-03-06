@@ -4,8 +4,17 @@ from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
-from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.capability import (
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+    Capability,
+)
+from dbt.adapters.catalogs import (
+    CatalogRelation,
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+)
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
@@ -333,7 +342,14 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
@@ -398,7 +414,10 @@ class SnowflakeAdapter(SQLAdapter):
             grantee = row["grantee_name"]
             granted_to = row["granted_to"]
             privilege = row["privilege"]
-            if privilege != "OWNERSHIP" and granted_to not in ["SHARE", "DATABASE_ROLE"]:
+            if privilege != "OWNERSHIP" and granted_to not in [
+                "SHARE",
+                "DATABASE_ROLE",
+            ]:
                 if privilege in grants_dict.keys():
                     grants_dict[privilege].append(grantee)
                 else:
@@ -594,7 +613,12 @@ CALL {proc_name}();
             is_transient = self._query_dynamic_table_transient_status(relation)
             # choosing a future proof column name
             selected = selected.compute(
-                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
+                [
+                    (
+                        "transient",
+                        agate.Formula(agate.Boolean(), lambda row: is_transient),
+                    )
+                ]
             )
 
         return {"dynamic_table": selected}
