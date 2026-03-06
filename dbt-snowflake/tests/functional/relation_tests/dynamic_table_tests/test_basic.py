@@ -97,10 +97,10 @@ select * from {{ ref('my_seed') }}
         }
 
     def test_dynamic_table_copy_grants_in_sql(self, project):
-        """Test that copy_grants appears in the generated SQL"""
+        """Test that copy_grants appears in the generated SQL on replace (full-refresh)"""
         run_dbt(["seed"])
-        _, logs = run_dbt_and_capture(["--debug", "run"])
+        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run", "--full-refresh"])
 
-        # Check that copy grants appears in the SQL
         assert_message_in_logs("copy grants", logs)
         assert query_relation_type(project, "my_dynamic_table_copy_grants") == "dynamic_table"
