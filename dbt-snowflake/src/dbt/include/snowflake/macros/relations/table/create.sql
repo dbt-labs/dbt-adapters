@@ -17,8 +17,9 @@
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
             {{ snowflake__create_table_built_in_sql(relation, compiled_code) }}
         {%- elif catalog_relation.catalog_type == 'ICEBERG_REST' -%}
-            {%- if catalog_relation.catalog_linked_database_type is defined and
-            catalog_relation.catalog_linked_database_type|lower in ['glue', 'unity'] -%}
+            {%- if catalog_relation.ctas_not_supported or
+            (catalog_relation.catalog_linked_database_type is defined and
+            catalog_relation.catalog_linked_database_type|lower == 'glue') -%}
                 {{ snowflake__create_insert_into_table_iceberg_rest(relation, compiled_code, catalog_relation) }}
             {%- else -%}
                 {{ snowflake__create_table_iceberg_rest_sql(relation, compiled_code) }}

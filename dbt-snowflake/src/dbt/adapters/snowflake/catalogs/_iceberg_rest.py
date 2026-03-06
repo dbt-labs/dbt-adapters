@@ -25,6 +25,7 @@ class IcebergRestCatalogRelation:
     target_file_size: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     auto_refresh: Optional[bool] = None
+    ctas_not_supported: Optional[bool] = False
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -38,6 +39,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     catalog_linked_database_type: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
+    ctas_not_supported: Optional[bool] = False
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -54,6 +56,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             self.max_data_extension_time_in_days = adapter_properties.get(
                 "max_data_extension_time_in_days"
             )
+            self.ctas_not_supported = adapter_properties.get("ctas_not_supported", False)
 
         if not self.catalog_linked_database:
             raise InvalidCatalogIntegrationConfigError(
@@ -87,6 +90,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             partition_by=parse_model.partition_by(model),
             catalog_linked_database=self.catalog_linked_database,
             catalog_linked_database_type=self.catalog_linked_database_type,
+            ctas_not_supported=self.ctas_not_supported,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,
             target_file_size=parse_model.target_file_size(model) or self.target_file_size,
             max_data_extension_time_in_days=parse_model.max_data_extension_time_in_days(model)

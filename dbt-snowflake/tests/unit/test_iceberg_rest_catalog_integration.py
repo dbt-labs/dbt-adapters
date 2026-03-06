@@ -152,20 +152,59 @@ class TestIcebergRestCatalogIntegration:
         assert relation.external_volume == "test_volume"
         assert relation.auto_refresh is True
 
-    def test_unity_catalog_type_routes_to_insert_into_macro(self):
-        """Unity catalog type should route to snowflake__create_insert_into_table_iceberg_rest."""
+    def test_ctas_not_supported_routes_to_insert_into_macro(self):
+        """ctas_not_supported=True should route to snowflake__create_insert_into_table_iceberg_rest."""
         relation = IcebergRestCatalogRelation(
             catalog_name="UNITY_CATALOG",
             catalog_linked_database="unity_db",
             catalog_linked_database_type="unity",
-            external_volume="test_volume",
+            ctas_not_supported=True,
         )
         assert relation.catalog_type == "ICEBERG_REST"
-        assert relation.catalog_linked_database_type == "unity"
-        assert relation.catalog_linked_database_type.lower() in ["glue", "unity"]
+        assert relation.ctas_not_supported is True
 
-    def test_integration_with_unity_returns_linked_db(self):
-        """Full IcebergRestCatalogIntegration with unity config has catalog_linked_database."""
+    def test_glue_type_routes_to_insert_into_without_ctas_not_supported(self):
+        """Glue catalog_linked_database_type should route to insert-into even without ctas_not_supported."""
+        relation = IcebergRestCatalogRelation(
+            catalog_name="GLUE_CATALOG",
+            catalog_linked_database="glue_db",
+            catalog_linked_database_type="glue",
+        )
+        assert relation.catalog_type == "ICEBERG_REST"
+        assert relation.catalog_linked_database_type == "glue"
+        assert relation.ctas_not_supported is False
+
+    def test_ctas_not_supported_default_is_false(self):
+        """ctas_not_supported should default to False."""
+        relation = IcebergRestCatalogRelation(
+            catalog_name="TEST",
+            catalog_linked_database="test_db",
+        )
+        assert relation.ctas_not_supported is False
+
+    def test_ctas_not_supported_defaults_false_when_not_in_adapter_properties(self):
+        """ctas_not_supported defaults to False when not set in adapter_properties."""
+        config = SimpleNamespace(
+            name="test_catalog",
+            catalog_name="TEST",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "test_db",
+            },
+        )
+        integration = IcebergRestCatalogIntegration(config)
+
+        model = Mock()
+        model.config = {}
+        model.schema = "test_schema"
+        model.identifier = "test_table"
+
+        relation = integration.build_relation(model)
+        assert relation.ctas_not_supported is False
+
+    def test_integration_with_unity_returns_ctas_not_supported(self):
+        """Full IcebergRestCatalogIntegration with ctas_not_supported plumbs through."""
         config = SimpleNamespace(
             name="unity_catalog",
             catalog_name="UNITY",
@@ -174,6 +213,7 @@ class TestIcebergRestCatalogIntegration:
             adapter_properties={
                 "catalog_linked_database": "unity_db",
                 "catalog_linked_database_type": "unity",
+                "ctas_not_supported": True,
             },
         )
         integration = IcebergRestCatalogIntegration(config)
@@ -186,3 +226,4 @@ class TestIcebergRestCatalogIntegration:
         relation = integration.build_relation(model)
         assert relation.catalog_linked_database == "unity_db"
         assert relation.catalog_linked_database_type == "unity"
+        assert relation.ctas_not_supported is True
