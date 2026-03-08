@@ -701,8 +701,8 @@ def build_ssl_transport(
     if auth is None:
         auth = "NONE"
 
-    # thrift >= 0.20.0 changed TSSLSocket to no longer accept cert_reqs as a
-    # keyword argument directly. Instead, we must pass an ssl_context.
+    # newer versions of thrift changed TSSLSocket to no longer
+    # directly accept CERT_NONE, so pass ssl context instead
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
