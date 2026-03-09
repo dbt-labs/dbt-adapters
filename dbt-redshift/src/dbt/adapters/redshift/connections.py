@@ -658,10 +658,13 @@ class RedshiftConnectionManager(SQLConnectionManager):
         def _handle_execute_exception(
             e: Exception, retries: int, backoff: int, retry_all: bool
         ) -> Tuple[int, int]:
-            retryable_msgs = ("could not open relation with OID", "does not exist")
+            oid_not_found_msg = "could not open relation with OID"
+            err_str = str(e)
             if retries == 0:
                 raise e
-            if any(msg in str(e) for msg in retryable_msgs):
+            if oid_not_found_msg in err_str:
+                pass
+            elif "schema" in err_str and "does not exist" in err_str:
                 pass
             elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass
