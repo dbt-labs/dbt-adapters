@@ -42,3 +42,13 @@ class TestCatalogRelationTypes:
         assert node_name in docs.nodes
         node = docs.nodes[node_name]
         assert node.metadata.type == relation_type
+
+
+class TestCatalogRelationTypesShowApis(TestCatalogRelationTypes):
+    """Same relation type tests but with SHOW/SVV APIs enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "flags": {"redshift_use_show_apis": True},
+        }
