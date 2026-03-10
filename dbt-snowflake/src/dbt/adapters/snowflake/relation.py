@@ -20,9 +20,13 @@ from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
+    SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
+    SnowflakeDynamicTableImmutableWhereConfigChange,
+    SnowflakeDynamicTableClusterByConfigChange,
+    SnowflakeDynamicTableTransientConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -90,7 +94,9 @@ class SnowflakeRelation(BaseRelation):
 
     @classmethod
     def dynamic_table_config_changeset(
-        cls, relation_results: RelationResults, relation_config: RelationConfig
+        cls,
+        relation_results: RelationResults,
+        relation_config: RelationConfig,
     ) -> Optional[SnowflakeDynamicTableConfigChangeset]:
         existing_dynamic_table = SnowflakeDynamicTableConfig.from_relation_results(
             relation_results
@@ -114,12 +120,50 @@ class SnowflakeRelation(BaseRelation):
             )
 
         if (
+            new_dynamic_table.snowflake_initialization_warehouse
+            != existing_dynamic_table.snowflake_initialization_warehouse
+        ):
+            config_change_collection.snowflake_initialization_warehouse = (
+                SnowflakeDynamicTableInitializationWarehouseConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.snowflake_initialization_warehouse,
+                )
+            )
+
+        if (
             new_dynamic_table.refresh_mode != RefreshMode.AUTO
             and new_dynamic_table.refresh_mode != existing_dynamic_table.refresh_mode
         ):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
+            )
+
+        if new_dynamic_table.immutable_where != existing_dynamic_table.immutable_where:
+            config_change_collection.immutable_where = (
+                SnowflakeDynamicTableImmutableWhereConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new_dynamic_table.immutable_where,
+                )
+            )
+
+        if new_dynamic_table.cluster_by != existing_dynamic_table.cluster_by:
+            config_change_collection.cluster_by = SnowflakeDynamicTableClusterByConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new_dynamic_table.cluster_by,
+            )
+
+        # Transient is only compared when both sides are explicitly known:
+        # - new is None when the user omitted transient from their config ("don't care")
+        # - existing is None when describe_dynamic_table was called without include_transient
+        if (
+            new_dynamic_table.transient is not None
+            and existing_dynamic_table.transient is not None
+            and new_dynamic_table.transient != existing_dynamic_table.transient
+        ):
+            config_change_collection.transient = SnowflakeDynamicTableTransientConfigChange(
+                action=RelationConfigChangeAction.create,  # type: ignore
+                context=new_dynamic_table.transient,
             )
 
         if config_change_collection.has_changes:
