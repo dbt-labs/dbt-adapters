@@ -3,4 +3,4 @@ body: Update ddtrace to use at least 3.0 (2.0 is EOL)
 time: 2026-03-10T23:34:21.639794+01:00
 custom:
     Author: annebelleo
-    PR: "1736"
+    PR: "1738"
