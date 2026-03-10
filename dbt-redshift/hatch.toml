@@ -14,7 +14,7 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "ddtrace==2.3.0",
+    "ddtrace>=3.0",
     "freezegun",
     "ipdb~=0.13.13",
     "pre-commit==3.7.0",
@@ -75,7 +75,7 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
-    "ddtrace==2.3.0",
+    "ddtrace>=3.0",
     "flaky",
     "freezegun",
     "pytest-csv~=3.0",
@@ -96,7 +96,7 @@ integration-tests-flaky = "python -m pytest tests/functional -m flaky -n1 --ddtr
 pre-install-commands = []
 dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
-    "ddtrace==2.3.0",
+    "ddtrace>=3.0",
     "flaky",
     "freezegun",
     "pytest-csv>=3.0,<4.0",
