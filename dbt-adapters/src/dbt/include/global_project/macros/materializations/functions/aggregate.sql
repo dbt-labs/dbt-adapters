@@ -11,6 +11,7 @@
     {{ get_aggregate_function_volatility_specifier() }}
     {% if model.get('language') == 'python' %}
         {{ get_function_python_options() }}
+        {{ get_function_python_packages_sql() }}
     {% endif %}
     AS
 {% endmacro %}
@@ -62,4 +63,13 @@
 {% macro default__get_function_python_options() %}
     RUNTIME_VERSION = '{{ model.config.get('runtime_version') }}'
     HANDLER = '{{ model.config.get('entry_point') }}'
+{% endmacro %}
+
+--- function python packages (for PyPI dependencies) ---
+
+{% macro get_function_python_packages_sql() %}
+    {{ return(adapter.dispatch('get_function_python_packages_sql', 'dbt')()) }}
+{% endmacro %}
+
+{% macro default__get_function_python_packages_sql() %}
 {% endmacro %}
