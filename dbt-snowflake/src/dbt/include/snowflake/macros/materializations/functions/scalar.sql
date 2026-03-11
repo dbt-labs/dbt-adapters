@@ -44,10 +44,18 @@
     {{ scalar_function_volatility_sql() }}
     RUNTIME_VERSION = '{{ model.config.get('runtime_version') }}'
     HANDLER = '{{ model.config.get('entry_point') }}'
+    {{ get_function_python_packages_sql() }}
     AS
 {% endmacro %}
 
 {% macro snowflake__scalar_function_python(target_relation) %}
     {{ snowflake__scalar_function_create_replace_signature_python(target_relation) }}
     {{ scalar_function_body_sql() }}
+{% endmacro %}
+
+{% macro snowflake__get_function_python_packages_sql() %}
+    {% set packages = model.config.get('packages', []) %}
+    {% if packages %}
+    PACKAGES = ('{{ packages | join("','") }}')
+    {% endif %}
 {% endmacro %}
