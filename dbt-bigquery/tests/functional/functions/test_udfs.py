@@ -14,6 +14,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFRuntimeVersionRequired,
     PythonUDFEntryPointRequired,
     SqlUDFDefaultArgSupport,
+    PythonUDFWithPackagesSupported,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -209,3 +210,10 @@ class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
             "price_for_xlarge.sql": files.MY_UDF_SQL,
             "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
         }
+
+
+class TestBigqueryPythonUDFWithPackages(PythonUDFWithPackagesSupported):
+    """Python UDF with packages: BigQuery uses OPTIONS(..., packages = ['numpy'])."""
+
+    def expected_packages_sql_fragment(self) -> str:
+        return "packages = ['numpy']"
