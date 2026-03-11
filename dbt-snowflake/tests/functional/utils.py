@@ -70,6 +70,14 @@ def describe_dynamic_table(project, name: str) -> Optional[SnowflakeDynamicTable
     return SnowflakeDynamicTableConfig.from_relation_results(results)
 
 
+def query_transient_status(project, name: str) -> bool:
+    """Check if a dynamic table is transient via describe_dynamic_table with transient info."""
+    relation = relation_from_name(project.adapter, name)
+    with get_connection(project.adapter):
+        results = project.adapter.describe_dynamic_table(relation, include_transient=True)
+    return SnowflakeDynamicTableConfig.from_relation_results(results).transient
+
+
 def refresh_dynamic_table(project, name: str) -> None:
     macro = "snowflake__refresh_dynamic_table"
     dynamic_table = relation_from_name(project.adapter, name)

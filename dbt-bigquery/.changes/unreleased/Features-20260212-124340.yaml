@@ -1,0 +1,6 @@
+kind: Features
+body: Make job_execution_timeout_seconds configurable at the model level
+time: 2026-02-12T12:43:40.790267+05:30
+custom:
+    Author: aahel
+    Issue: "575"

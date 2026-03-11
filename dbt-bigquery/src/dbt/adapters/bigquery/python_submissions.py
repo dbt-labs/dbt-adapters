@@ -27,6 +27,7 @@ from dbt.adapters.bigquery.credentials import (
     create_google_credentials,
     DataprocBatchConfig,
 )
+from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.exceptions import DbtRuntimeError
@@ -53,8 +54,6 @@ _DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
 # Time interval in seconds between successive polling attempts to check the
 # notebook job's status in BigFrames mode.
 _COLAB_POLL_INTERVAL = 30
-# Suffix used by service accounts.
-_SERVICE_ACCOUNT_SUFFIX = "iam.gserviceaccount.com"
 
 
 class _BigQueryPythonHelper(PythonJobHelper):
@@ -317,6 +316,32 @@ class BigFramesHelper(_BigQueryPythonHelper):
         match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
         return match.group(1) if match else ""
 
+    def _get_service_account_from_credentials(self) -> Optional[str]:
+        """Detect if the OAuth identity is a service account.
+
+        Handles impersonated credentials (via profiles.yml or ADC) and direct
+        service accounts (Cloud Composer, Cloud Run).
+
+        Returns the service account email if detected, or None for regular users.
+        """
+        creds = self._GoogleCredentials
+
+        # Impersonated credentials: from profiles.yml impersonate_service_account
+        # or from ADC with service account impersonation (e.g.,
+        # gcloud auth application-default login --impersonate-service-account).
+        target_principal = getattr(creds, "_target_principal", None)
+        if isinstance(creds, ImpersonatedCredentials) and target_principal:
+            return target_principal
+
+        # Direct service account credentials (e.g., Compute Engine SAs in
+        # Cloud Composer, Cloud Run), or impersonated credentials where
+        # _target_principal is not set but service_account_email is available.
+        service_account_email = getattr(creds, "service_account_email", None)
+        if service_account_email:
+            return service_account_email
+
+        return None
+
     def _config_notebook_job(
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
@@ -332,6 +357,15 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
+        # Explicit acknowledge the 'out-of-org' warning required by Vertex AI.
+        # This label is needed for cross-project runtime templates to bypass GCP
+        # security policy blocks that would otherwise prevent job creation.
+        # TODO: add a function test for it.
+        security_ack_label = {
+            "aiplatform.googleapis.com/notebook_runtime_out_of_org_warning": "ack"
+        }
+        notebook_execution_job.labels = security_ack_label
+
         if self._connection_method in (
             BigQueryConnectionMethod.SERVICE_ACCOUNT,
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
@@ -341,21 +375,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
         ):
-            # If `impersonate_service_account` is configured correctly in
-            # profiles.yml, the job will run as the specified service account.
-            if hasattr(self._GoogleCredentials, "_target_principal"):
-                target_principal = self._GoogleCredentials._target_principal
-                if target_principal:
-                    notebook_execution_job.service_account = target_principal
-                else:
-                    raise ValueError(
-                        "The impersonated service account is incorrect. Please "
-                        "verify the `impersonate_service_account` setting in "
-                        "your profiles.yml configuration."
-                    )
-
-            # The job will run under the identity of the authenticated user.
+            service_account = self._get_service_account_from_credentials()
+            if service_account:
+                notebook_execution_job.service_account = service_account
             else:
+                # Regular user OAuth: fetch user email from the userinfo endpoint.
                 request = Request()
                 response = request(
                     method="GET",
@@ -368,13 +392,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                         f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
                     )
                 if user_email := json.loads(response.data).get("email"):
-                    # In services such as Cloud Composer and Cloud Run, the authenticated user
-                    # is a service account with associated Application Default Credentials.
-                    # This does not require service account impersonation.
-                    if user_email and user_email.endswith(_SERVICE_ACCOUNT_SUFFIX):
-                        notebook_execution_job.service_account = user_email
-                    else:
-                        notebook_execution_job.execution_user = user_email
+                    notebook_execution_job.execution_user = user_email
                 else:
                     raise DbtRuntimeError(
                         "Authorization request to get user failed to return an email."
