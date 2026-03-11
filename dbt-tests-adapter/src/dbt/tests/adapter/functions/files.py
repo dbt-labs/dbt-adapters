@@ -148,3 +148,28 @@ functions:
       data_type: float
       description: The resulting xlarge price
 """
+
+# Python UDF that uses a package (numpy) so we can verify packages are templated and the function runs
+MY_UDF_PYTHON_WITH_NUMPY = """
+import numpy as np
+
+def sqrt_input(x: float) -> float:
+    return float(np.sqrt(x))
+""".strip()
+
+MY_UDF_PYTHON_WITH_PACKAGES_YML = """
+functions:
+  - name: sqrt_input
+    description: Return the square root of the input using numpy
+    config:
+      entry_point: sqrt_input
+      runtime_version: "3.12"
+      packages: ["numpy"]
+    arguments:
+      - name: x
+        data_type: float
+        description: The value to take the square root of
+    returns:
+      data_type: float
+      description: The square root of the input
+""".strip()
