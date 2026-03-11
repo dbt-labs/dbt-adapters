@@ -727,7 +727,7 @@ class TestSchedulerChangeDetectionLogic:
         if changeset is not None:
             assert changeset.scheduler is None
 
-    def test_scheduler_change_triggers_changeset(self):
+    def test_scheduler_change_enable_to_disable(self):
         """When user sets scheduler=DISABLE but SHOW output is ENABLE, change detected."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
@@ -741,4 +741,20 @@ class TestSchedulerChangeDetectionLogic:
         assert changeset is not None
         assert changeset.scheduler is not None
         assert changeset.scheduler.context == "DISABLE"
+        assert changeset.requires_full_refresh is False
+
+    def test_scheduler_change_disable_to_enable(self):
+        """When user sets scheduler=ENABLE but SHOW output is DISABLE, change detected."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(scheduler="DISABLE")
+        relation_config = self._make_relation_config(scheduler="ENABLE")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.scheduler is not None
+        assert changeset.scheduler.context == "ENABLE"
         assert changeset.requires_full_refresh is False

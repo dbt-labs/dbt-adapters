@@ -90,9 +90,6 @@ class TestSchedulerDisabled:
         run_dbt(["seed"])
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        model_qualified = (
-            f"{project.database}.{project.test_schema}.MY_DT_SCHEDULER_DISABLED"
-        )
         assert_message_in_logs("scheduler = 'DISABLE'", logs)
         assert_message_in_logs("alter dynamic table", logs)
         assert_message_in_logs("Applying REFRESH to:", logs)
@@ -213,6 +210,132 @@ class TestSchedulerConfigChange:
         run_dbt(["run"])
 
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_TARGET_LAG_ONLY)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("scheduler = 'ENABLE'", logs)
+        assert_message_in_logs("target_lag = '2 minutes'", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs, False)
+
+    def test_alter_scheduler_disabled_to_enabled_explicit(self, project):
+        """Verify scheduler can be altered from DISABLE to ENABLE with explicit scheduler config."""
+        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
+        run_dbt(["run"])
+
+        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("scheduler = 'ENABLE'", logs)
+        assert_message_in_logs("target_lag = '2 minutes'", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs, False)
+
+    def test_alter_scheduler_enabled_to_disabled_explicit(self, project):
+        """Verify scheduler can be altered from ENABLE to DISABLE (reverse direction)."""
+        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED)
+        run_dbt(["run"])
+
+        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("scheduler = 'DISABLE'", logs)
+        assert_message_in_logs("alter dynamic table", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs)
+
+
+class TestIcebergSchedulerDisabled:
+    """Verify SCHEDULER=DISABLE on a dynamic iceberg table."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "my_iceberg_dt_sched_disabled.sql": models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED,
+        }
+
+    def test_iceberg_scheduler_disabled_in_create_ddl(self, project):
+        run_dbt(["seed"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("create dynamic iceberg table", logs)
+        assert_message_in_logs("scheduler = 'DISABLE'", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs)
+        assert query_relation_type(project, "my_iceberg_dt_sched_disabled") == "dynamic_table"
+
+
+class TestIcebergSchedulerEnabled:
+    """Verify SCHEDULER=ENABLE with target_lag on a dynamic iceberg table."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "my_iceberg_dt_sched_enabled.sql": models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED,
+        }
+
+    def test_iceberg_scheduler_enabled_in_create_ddl(self, project):
+        run_dbt(["seed"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("create dynamic iceberg table", logs)
+        assert_message_in_logs("scheduler = 'ENABLE'", logs)
+        assert_message_in_logs("target_lag = '2 minutes'", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert query_relation_type(project, "my_iceberg_dt_sched_enabled") == "dynamic_table"
+
+
+class TestIcebergSchedulerConfigChange:
+    """Verify scheduler can be toggled on a dynamic iceberg table via ALTER."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_dt_scheduler.sql": models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED)
+
+    def test_iceberg_alter_scheduler_to_disabled(self, project):
+        """Verify scheduler can be altered from ENABLE to DISABLE on iceberg."""
+        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("scheduler = 'DISABLE'", logs)
+        assert_message_in_logs("alter dynamic table", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs)
+
+    def test_iceberg_alter_scheduler_to_enabled(self, project):
+        """Verify scheduler can be altered from DISABLE to ENABLE on iceberg."""
+        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED)
+        run_dbt(["run"])
+
+        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
