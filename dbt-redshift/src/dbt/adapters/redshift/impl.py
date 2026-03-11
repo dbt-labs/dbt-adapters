@@ -212,6 +212,7 @@ class RedshiftAdapter(SQLAdapter):
         where type is one of: table, view, materialized_view.
         """
         new_rows = []
+        # has_subtype is only needed until redshift patch 197 is everywhere
         has_subtype = "table_subtype" in show_tables.column_names
         for row in show_tables.rows:
             table_type = (row["table_type"] or "").strip().upper()
@@ -248,6 +249,7 @@ class RedshiftAdapter(SQLAdapter):
 
         table_meta: Dict[tuple, tuple] = {}
         for show_table in show_tables_results:
+            # has_subtype is only needed until redshift patch 197 is everywhere
             has_subtype = "table_subtype" in show_table.column_names
             for row in show_table.rows:
                 table_type = (row["table_type"] or "").strip().upper()
