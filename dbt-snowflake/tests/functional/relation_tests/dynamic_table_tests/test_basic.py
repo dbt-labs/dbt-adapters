@@ -222,7 +222,9 @@ class TestSchedulerConfigChange:
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
         run_dbt(["run"])
 
-        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED)
+        update_model(
+            project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED
+        )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
@@ -232,7 +234,9 @@ class TestSchedulerConfigChange:
 
     def test_alter_scheduler_enabled_to_disabled_explicit(self, project):
         """Verify scheduler can be altered from ENABLE to DISABLE (reverse direction)."""
-        update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED)
+        update_model(
+            project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED
+        )
         run_dbt(["run"])
 
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
@@ -318,11 +322,15 @@ class TestIcebergSchedulerConfigChange:
     def setup_method(self, project, setup_class):
         run_dbt(["run", "--full-refresh"])
         yield
-        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED)
+        update_model(
+            project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED
+        )
 
     def test_iceberg_alter_scheduler_to_disabled(self, project):
         """Verify scheduler can be altered from ENABLE to DISABLE on iceberg."""
-        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED)
+        update_model(
+            project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED
+        )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
@@ -332,10 +340,14 @@ class TestIcebergSchedulerConfigChange:
 
     def test_iceberg_alter_scheduler_to_enabled(self, project):
         """Verify scheduler can be altered from DISABLE to ENABLE on iceberg."""
-        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED)
+        update_model(
+            project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED
+        )
         run_dbt(["run"])
 
-        update_model(project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED)
+        update_model(
+            project, "iceberg_dt_scheduler", models.DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED
+        )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
