@@ -1,0 +1,6 @@
+kind: Fixes
+body: Exclude ICEBERG_FILESYSTEM_ERROR from outer retry
+time: 2026-03-11T11:58:19.948752+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1741"
