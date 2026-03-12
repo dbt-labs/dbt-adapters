@@ -1,0 +1,6 @@
+kind: Features
+body: Add get_catalog_integration_by_database() to CatalogIntegrationClient for looking up catalog integrations by linked database name
+time: 2026-03-06T23:12:27.730323+11:00
+custom:
+    Author: ameyk
+    Issue: "1480"
