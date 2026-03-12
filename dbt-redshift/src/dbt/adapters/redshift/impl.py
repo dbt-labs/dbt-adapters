@@ -188,8 +188,9 @@ class RedshiftAdapter(SQLAdapter):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
+        ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not self.use_show_apis():
+        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
                     database, expected
@@ -314,8 +315,9 @@ class RedshiftAdapter(SQLAdapter):
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
+        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
         try:
-            return schemas.flatten(allow_multiple_databases=self.use_show_apis())
+            return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
