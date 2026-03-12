@@ -3,6 +3,7 @@ Unit tests for SnowflakeDynamicTableConfig, testing:
 - snowflake_initialization_warehouse parameter
 - immutable_where parameter
 - transient parameter
+- scheduler parameter
 """
 
 import pytest
@@ -13,6 +14,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
+    SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
 )
 
@@ -474,3 +476,285 @@ class TestTransientChangeDetectionLogic:
 
         if changeset is not None:
             assert changeset.transient is None
+
+
+class TestSchedulerOptional:
+    """Tests to verify scheduler is an optional parameter for dynamic tables."""
+
+    def test_scheduler_is_optional(self):
+        """scheduler should be optional and default to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+            }
+        )
+        assert config.scheduler is None
+
+    def test_scheduler_can_be_set_enable(self):
+        """scheduler should be settable to ENABLE."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "scheduler": "ENABLE",
+            }
+        )
+        assert config.scheduler == "ENABLE"
+
+    def test_scheduler_can_be_set_disable(self):
+        """scheduler should be settable to DISABLE."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "snowflake_warehouse": "MY_WH",
+                "scheduler": "DISABLE",
+            }
+        )
+        assert config.scheduler == "DISABLE"
+
+    def test_scheduler_can_be_none(self):
+        """scheduler can be explicitly set to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "scheduler": None,
+            }
+        )
+        assert config.scheduler is None
+
+
+class TestSchedulerChangeset:
+    """Tests for scheduler change detection in SnowflakeDynamicTableConfigChangeset."""
+
+    def test_changeset_without_scheduler_has_no_changes(self):
+        """A changeset with no scheduler change should not have changes."""
+        changeset = SnowflakeDynamicTableConfigChangeset()
+        assert changeset.scheduler is None
+        assert changeset.has_changes is False
+        assert changeset.requires_full_refresh is False
+
+    def test_changeset_with_scheduler_change(self):
+        """A changeset with scheduler change should have changes but not require full refresh."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            scheduler=SnowflakeDynamicTableSchedulerConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context="DISABLE",
+            )
+        )
+        assert changeset.scheduler is not None
+        assert changeset.has_changes is True
+        assert changeset.requires_full_refresh is False
+
+    def test_scheduler_change_does_not_require_full_refresh(self):
+        """Changing scheduler should not require a full refresh (can be altered in place)."""
+        change = SnowflakeDynamicTableSchedulerConfigChange(
+            action=RelationConfigChangeAction.alter,
+            context="ENABLE",
+        )
+        assert change.requires_full_refresh is False
+
+    def test_scheduler_change_to_disable(self):
+        """Changing scheduler to DISABLE should be a valid change."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            scheduler=SnowflakeDynamicTableSchedulerConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context="DISABLE",
+            )
+        )
+        assert changeset.scheduler is not None
+        assert changeset.scheduler.context == "DISABLE"
+        assert changeset.has_changes is True
+        assert changeset.requires_full_refresh is False
+
+
+class TestTargetLagOptional:
+    """Tests to verify target_lag is now optional."""
+
+    def test_target_lag_can_be_none(self):
+        """target_lag should now accept None (for scheduler=DISABLE scenarios)."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "snowflake_warehouse": "MY_WH",
+                "scheduler": "DISABLE",
+            }
+        )
+        assert config.target_lag is None
+        assert config.scheduler == "DISABLE"
+
+    def test_target_lag_can_still_be_set(self):
+        """target_lag should still work when provided."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "5 minutes",
+                "snowflake_warehouse": "MY_WH",
+            }
+        )
+        assert config.target_lag == "5 minutes"
+
+    def test_target_lag_defaults_to_none(self):
+        """target_lag should default to None when omitted."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "snowflake_warehouse": "MY_WH",
+            }
+        )
+        assert config.target_lag is None
+
+
+class TestSchedulerChangeDetectionLogic:
+    """
+    Tests for scheduler change detection in SnowflakeRelation.dynamic_table_config_changeset().
+    """
+
+    @staticmethod
+    def _make_relation_results(scheduler=None):
+        import agate
+
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": "1 hour",
+            "warehouse": "MY_WH",
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+        }
+        column_types = [agate.Text()] * len(dt_row_data)
+
+        if scheduler is not None:
+            dt_row_data["scheduler"] = scheduler
+            column_types.append(agate.Text())
+
+        return {
+            "dynamic_table": agate.Table(
+                [list(dt_row_data.values())],
+                list(dt_row_data.keys()),
+                column_types,
+            )
+        }
+
+    @staticmethod
+    def _make_relation_config(scheduler=None, target_lag="1 hour"):
+        from unittest.mock import MagicMock
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        extra = {
+            "snowflake_warehouse": "MY_WH",
+        }
+        if target_lag is not None:
+            extra["target_lag"] = target_lag
+        if scheduler is not None:
+            extra["scheduler"] = scheduler
+        relation_config.config.extra = extra
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return relation_config
+
+    def test_no_scheduler_config_no_column_no_change(self):
+        """When user doesn't set scheduler and column is absent, no change detected."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results()
+        relation_config = self._make_relation_config(scheduler=None)
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.scheduler is None
+
+    def test_scheduler_disable_matches_no_change(self):
+        """When user sets scheduler=DISABLE and SHOW output is DISABLE, no change."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(scheduler="DISABLE")
+        relation_config = self._make_relation_config(scheduler="DISABLE")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.scheduler is None
+
+    def test_scheduler_enable_matches_no_change(self):
+        """When user sets scheduler=ENABLE and SHOW output is ENABLE, no change."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(scheduler="ENABLE")
+        relation_config = self._make_relation_config(scheduler="ENABLE")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.scheduler is None
+
+    def test_scheduler_change_enable_to_disable(self):
+        """When user sets scheduler=DISABLE but SHOW output is ENABLE, change detected."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(scheduler="ENABLE")
+        relation_config = self._make_relation_config(scheduler="DISABLE")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.scheduler is not None
+        assert changeset.scheduler.context == "DISABLE"
+        assert changeset.requires_full_refresh is False
+
+    def test_scheduler_change_disable_to_enable(self):
+        """When user sets scheduler=ENABLE but SHOW output is DISABLE, change detected."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(scheduler="DISABLE")
+        relation_config = self._make_relation_config(scheduler="ENABLE")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.scheduler is not None
+        assert changeset.scheduler.context == "ENABLE"
+        assert changeset.requires_full_refresh is False
