@@ -346,8 +346,23 @@ class TestPartitionByIcebergRestGlueCatalog(TestIcebergPartitionBy):
         assert 'partition by ("order_date")' in iceberg_sql
 
 
-class TestPartitionByIcebergRestUnityCatalog(TestPartitionByIcebergRestGlueCatalog):
+class TestPartitionByIcebergRestUnityCatalog(TestIcebergPartitionBy):
     # Unity Catalog uses the same insert-into process as Glue
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed", "--log-level", "debug"])
+        yield
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "quoting": {
+                "database": False,
+                "schema": True,
+                "identifier": True,
+            }
+        }
 
     @pytest.fixture(scope="class", autouse=True)
     def setup_unity_seed(self, project):
