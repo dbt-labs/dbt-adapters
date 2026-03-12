@@ -15,6 +15,16 @@
         {{ dynamic_table_execute_build_sql(build_sql, existing_relation, target_relation) }}
     {% endif %}
 
+    {%- set dynamic_table = target_relation.from_config(config.model) -%}
+    {% set scheduler_is_disabled = (dynamic_table.scheduler is not none and dynamic_table.scheduler | upper == 'DISABLE') %}
+    {% set scheduler_defaults_to_disabled = (dynamic_table.scheduler is none and dynamic_table.target_lag is none) %}
+    {% set needs_refresh = scheduler_is_disabled or scheduler_defaults_to_disabled %}
+    {% if build_sql != '' and needs_refresh %}
+        {% call statement(name="refresh") %}
+            {{ snowflake__refresh_dynamic_table(target_relation) }}
+        {% endcall %}
+    {% endif %}
+
     {{ run_hooks(post_hooks) }}
 
     {% do unset_query_tag(query_tag) %}

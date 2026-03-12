@@ -33,6 +33,11 @@ class Initialize(StrEnum):
         return cls("ON_CREATE")
 
 
+class Scheduler(StrEnum):
+    ENABLE = "ENABLE"
+    DISABLE = "DISABLE"
+
+
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     """
@@ -47,6 +52,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
+    - scheduler: specifies whether to ENABLE or DISABLE the dynamic table's scheduler
     - cluster_by: specifies the columns to cluster on
     - immutable_where: specifies an immutability constraint expression
     - transient: specifies whether the dynamic table is transient (no fail-safe). snowflake_default_transient_dynamic_tables determines the default value
@@ -58,11 +64,12 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     schema_name: str
     database_name: str
     query: str
-    target_lag: str
     snowflake_warehouse: str
+    target_lag: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
+    scheduler: Optional[Scheduler] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
@@ -89,6 +96,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             ),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
+            "scheduler": config_dict.get("scheduler"),
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
@@ -129,6 +137,13 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         if initialize := relation_config.config.extra.get("initialize"):  # type:ignore
             config_dict["initialize"] = initialize.upper()
 
+        if scheduler := relation_config.config.extra.get("scheduler"):  # type:ignore
+            config_dict["scheduler"] = scheduler.upper()
+        elif config_dict.get("target_lag"):
+            config_dict["scheduler"] = "ENABLE"
+        else:
+            config_dict["scheduler"] = "DISABLE"
+
         return config_dict
 
     @classmethod
@@ -163,15 +178,21 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         else:
             cluster_by = None
 
+        scheduler = dynamic_table.get("scheduler")
+        target_lag = dynamic_table.get("target_lag")
+        if scheduler is None:
+            scheduler = "ENABLE" if target_lag else "DISABLE"
+
         config_dict = {
             "name": dynamic_table.get("name"),
             "schema_name": dynamic_table.get("schema_name"),
             "database_name": dynamic_table.get("database_name"),
             "query": dynamic_table.get("text"),
-            "target_lag": dynamic_table.get("target_lag"),
+            "target_lag": target_lag,
             "snowflake_warehouse": dynamic_table.get("warehouse"),
             "snowflake_initialization_warehouse": init_warehouse,
             "refresh_mode": dynamic_table.get("refresh_mode"),
+            "scheduler": scheduler,
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
             "cluster_by": cluster_by,
@@ -240,6 +261,15 @@ class SnowflakeDynamicTableClusterByConfigChange(RelationConfigChange):
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableSchedulerConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableTransientConfigChange(RelationConfigChange):
     context: Optional[bool] = None
 
@@ -257,6 +287,7 @@ class SnowflakeDynamicTableConfigChangeset:
         SnowflakeDynamicTableInitializationWarehouseConfigChange
     ] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
+    scheduler: Optional[SnowflakeDynamicTableSchedulerConfigChange] = None
     immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
     cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
     transient: Optional[SnowflakeDynamicTableTransientConfigChange] = None
@@ -277,6 +308,7 @@ class SnowflakeDynamicTableConfigChangeset:
                     else False
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
+                self.scheduler.requires_full_refresh if self.scheduler else False,
                 self.immutable_where.requires_full_refresh if self.immutable_where else False,
                 self.cluster_by.requires_full_refresh if self.cluster_by else False,
                 self.transient.requires_full_refresh if self.transient else False,
@@ -291,6 +323,7 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.snowflake_warehouse,
                 self.snowflake_initialization_warehouse,
                 self.refresh_mode,
+                self.scheduler,
                 self.immutable_where,
                 self.cluster_by,
                 self.transient,

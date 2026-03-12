@@ -310,6 +310,31 @@ select id, "NONE" from {{ ref('my_seed_none') }}
 """
 
 
+# Copy Grants fixtures
+DYNAMIC_TABLE_COPY_GRANTS = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    copy_grants=True,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_NO_COPY_GRANTS = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    copy_grants=False,
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
 # Transient dynamic table fixtures
 DYNAMIC_TABLE_TRANSIENT = """
 {{ config(
@@ -341,6 +366,59 @@ DYNAMIC_TABLE_DEFAULT_TRANSIENT = """
     materialized='dynamic_table',
     snowflake_warehouse='DBT_TESTING',
     target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Scheduler fixtures
+DYNAMIC_TABLE_SCHEDULER_DISABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    scheduler='DISABLE',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_SCHEDULER_ENABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    scheduler='ENABLE',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_NO_TARGET_LAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_TARGET_LAG_ONLY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    scheduler='ENABLE',
     refresh_mode='INCREMENTAL',
 ) }}
 select * from {{ ref('my_seed') }}
