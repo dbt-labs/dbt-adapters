@@ -53,7 +53,9 @@
         {%- set is_transient = false -%}
     {%- endif -%}
     {%- set transient_keyword = 'transient ' if is_transient else '' -%}
+    {%- set copy_grants = config.get('copy_grants', default=false) -%}
 create or replace {{ transient_keyword }}dynamic table {{ relation }}
+    {% if copy_grants -%} copy grants {%- endif %}
     target_lag = '{{ dynamic_table.target_lag }}'
     warehouse = {{ dynamic_table.snowflake_warehouse }}
     {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
@@ -88,8 +90,10 @@ create or replace {{ transient_keyword }}dynamic table {{ relation }}
 -#}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+{%- set copy_grants = config.get('copy_grants', default=false) -%}
 
 create or replace dynamic iceberg table {{ relation }}
+    {% if copy_grants -%} copy grants {%- endif %}
     target_lag = '{{ dynamic_table.target_lag }}'
     warehouse = {{ dynamic_table.snowflake_warehouse }}
     {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}

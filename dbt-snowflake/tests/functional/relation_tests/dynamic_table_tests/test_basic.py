@@ -32,6 +32,45 @@ class TestBasic:
         assert query_relation_type(project, "my_dynamic_iceberg_table") == "dynamic_table"
 
 
+class TestDynamicTableCopyGrants:
+
+    DT_COPY_GRANTS = "my_dynamic_table_copy_grants"
+    DT_NO_COPY_GRANTS = "my_dynamic_table_no_copy_grants"
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            f"{self.DT_COPY_GRANTS}.sql": models.DYNAMIC_TABLE_COPY_GRANTS,
+            f"{self.DT_NO_COPY_GRANTS}.sql": models.DYNAMIC_TABLE_NO_COPY_GRANTS,
+        }
+
+    def test_copy_grants_in_replace_ddl(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        _, logs = run_dbt_and_capture(["--debug", "run", "--full-refresh"])
+
+        copy_grants_qualified = (
+            f"{project.database}.{project.test_schema}.{self.DT_COPY_GRANTS}"
+        )
+        no_copy_grants_qualified = (
+            f"{project.database}.{project.test_schema}.{self.DT_NO_COPY_GRANTS}"
+        )
+
+        assert_message_in_logs(
+            f"create or replace dynamic table {copy_grants_qualified}", logs
+        )
+        assert_message_in_logs("copy grants", logs)
+
+        assert_message_in_logs(
+            f"create or replace dynamic table {no_copy_grants_qualified}", logs
+        )
+
+
 class TestAutoConfigDoesntFullRefresh:
     """
     AUTO refresh_strategy will be compared accurately with both INCREMENTAL and FULL.
