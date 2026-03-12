@@ -141,7 +141,7 @@ $ hatch run code-quality
 ```
 OR
 ```shell
-$ pre-commit -run --all-files
+$ pre-commit run --all-files
 ```
 
 ## Unit tests
