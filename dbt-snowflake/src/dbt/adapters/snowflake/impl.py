@@ -137,10 +137,30 @@ class SnowflakeAdapter(SQLAdapter):
     def _catalog_filter_table(
         cls, table: "agate.Table", used_schemas: FrozenSet[Tuple[str, str]]
     ) -> "agate.Table":
+        from dbt_common.clients.agate_helper import table_from_rows
+        from dbt.adapters.base.impl import _catalog_filter_schemas
+
         # On snowflake, users can set QUOTED_IDENTIFIERS_IGNORE_CASE, so force
         # the column names to their lowercased forms.
+
         lowered = table.rename(column_names=[c.lower() for c in table.column_names])
-        return super()._catalog_filter_table(lowered, used_schemas)
+
+        table = table_from_rows(
+            lowered.rows,
+            lowered.column_names,
+            text_only_columns=[
+                "table_database",
+                "table_schema",
+                "table_name",
+                "table_type",
+                "table_owner",
+                "table_comment",
+                "column_name",
+                "column_type",
+                "column_comment",
+            ],
+        )
+        return table.where(_catalog_filter_schemas(used_schemas))
 
     def _make_match_kwargs(self, database, schema, identifier):
         # if any path part is already quoted then consider same casing but without quotes
