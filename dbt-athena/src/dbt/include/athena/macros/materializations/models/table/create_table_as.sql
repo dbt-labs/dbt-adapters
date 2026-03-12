@@ -207,16 +207,11 @@
       {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
       {%- set query_result = relation ~ ' with many partitions created' -%}
     {%- else -%}
-        {%- if temporary -%}
-          {%- do run_query(create_table_as(temporary, relation, compiled_code, language, true)) -%}
-          {%- set compiled_code_result = relation ~ ' as temporary relation without partitioning created' -%}
-        {%- else -%}
-          {%- set compiled_code_result = adapter.run_query_with_partitions_limit_catching(create_table_as(temporary, relation, compiled_code)) -%}
-          {%- do log('COMPILED CODE RESULT: ' ~ compiled_code_result) -%}
-          {%- if compiled_code_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
+        {%- set compiled_code_result = adapter.run_query_with_partitions_limit_catching(create_table_as(temporary, relation, compiled_code)) -%}
+        {%- do log('COMPILED CODE RESULT: ' ~ compiled_code_result) -%}
+        {%- if compiled_code_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
             {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
             {%- set compiled_code_result = relation ~ ' with many partitions created' -%}
-          {%- endif -%}
         {%- endif -%}
     {%- endif -%}
     {{ return(compiled_code_result) }}
