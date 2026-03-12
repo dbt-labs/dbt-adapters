@@ -1,6 +1,9 @@
 import pytest
 
-from dbt.tests.adapter.functions.test_udafs import BasicPythonUDAF, PythonUDAFDefaultArgSupport
+from dbt.tests.adapter.functions.test_udafs import (
+    BasicPythonUDAF,
+    PythonUDAFDefaultArgSupport,
+)
 
 
 class TestSnowflakePythonUDAF(BasicPythonUDAF):
