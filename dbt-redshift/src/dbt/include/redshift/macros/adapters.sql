@@ -32,6 +32,23 @@
 
 
 {% macro redshift__create_table_as(temporary, relation, sql) -%}
+  {#-- Check if this is an Iceberg table --#}
+  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
+  {%- if catalog_relation is not none and catalog_relation.table_format == 'iceberg' and not temporary -%}
+    {#-- Route to Iceberg table creation --#}
+    {{ redshift__create_iceberg_table_as(relation, sql, catalog_relation) }}
+
+  {%- else -%}
+    {#-- Standard Redshift table creation --#}
+    {{ redshift__create_standard_table_as(temporary, relation, sql) }}
+
+  {%- endif -%}
+{%- endmacro %}
+
+
+{% macro redshift__create_standard_table_as(temporary, relation, sql) -%}
+{#-- Standard Redshift table creation (non-Iceberg) --#}
 
   {%- set _dist = config.get('dist') -%}
   {%- set _sort_type = config.get(
