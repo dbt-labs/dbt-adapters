@@ -1,0 +1,6 @@
+kind: Features
+body: Add change_tracking support for regular Snowflake tables.
+time: 2026-03-12T16:23:05-07:00
+custom:
+    Author: ibelianski
+    Issue: none
