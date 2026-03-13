@@ -3,7 +3,7 @@ from dbt.contracts.graph.nodes import FunctionNode
 from dbt.contracts.results import RunStatus
 from dbt.events.types import JinjaLogWarning
 from dbt.tests.util import run_dbt
-from dbt.tests.adapter.functions.files import MY_UDF_PYTHON
+from dbt.tests.adapter.functions.files import MY_UDF_PYTHON, MY_UDF_PYTHON_WITH_NUMPY
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
     DeterministicUDF,
@@ -214,6 +214,13 @@ class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
 
 class TestBigqueryPythonUDFWithPackages(PythonUDFWithPackagesSupported):
     """Python UDF with packages: BigQuery uses OPTIONS(..., packages = ['numpy'])."""
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sqrt_input.py": MY_UDF_PYTHON_WITH_NUMPY,
+            "sqrt_input.yml": files.MY_UDF_PYTHON_WITH_PACKAGES_YML,
+        }
 
     def expected_packages_sql_fragment(self) -> str:
         return "packages = ['numpy']"
