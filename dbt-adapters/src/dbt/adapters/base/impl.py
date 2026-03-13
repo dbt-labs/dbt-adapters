@@ -119,6 +119,9 @@ GET_CATALOG_RELATIONS_MACRO_NAME = "get_catalog_relations"
 FRESHNESS_MACRO_NAME = "collect_freshness"
 CUSTOM_SQL_FRESHNESS_MACRO_NAME = "collect_freshness_custom_sql"
 GET_RELATION_LAST_MODIFIED_MACRO_NAME = "get_relation_last_modified"
+VOLUME_MACRO_NAME = "collect_source_volume"
+VOLUME_WILDCARD_MACRO_NAME = "collect_source_volume_wildcard"
+VOLUME_PARTITION_MACRO_NAME = "collect_source_volume_partitions"
 DEFAULT_BASE_BEHAVIOR_FLAGS = [
     {
         "name": "require_batched_execution_for_custom_microbatch_strategy",
@@ -248,6 +251,19 @@ class FreshnessResponse(TypedDict):
     max_loaded_at: datetime
     snapshotted_at: datetime
     age: float  # age in seconds
+
+
+class VolumeCheckResult(TypedDict):
+    entity_name: str  # table name, shard name, or partition_id
+    total_rows: int
+    status: str  # "pass", "warn", "error"
+
+
+class VolumeResponse(TypedDict):
+    results: List[VolumeCheckResult]
+    min_rows: int
+    checked_at: datetime
+    status: str  # "pass", "warn", "error" (worst across all results)
 
 
 class SnapshotStrategy(TypedDict):
@@ -1624,6 +1640,21 @@ class BaseAdapter(metaclass=AdapterMeta):
         freshness_response = self._create_freshness_response(last_modified_val, snapshotted_at_val)
         raw_relation = schema.lower().strip(), identifier.lower().strip()
         return raw_relation, freshness_response
+
+    def calculate_source_volume(
+        self,
+        source: BaseRelation,
+        warn_below: Optional[int],
+        error_below: Optional[int],
+        **kwargs: Any,
+    ) -> "VolumeResponse":
+        """Calculate row-count volume for a source table using database metadata.
+
+        Adapters that support SourceVolumeMetadata should override this method.
+        """
+        raise NotImplementedError(
+            f"calculate_source_volume not implemented for {self.type()}"
+        )
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Any:
         """A hook for running some operation before the model materialization
