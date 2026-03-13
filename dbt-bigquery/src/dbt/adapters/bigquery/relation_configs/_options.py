@@ -62,6 +62,9 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         def escaped_string(x):
             return f'"""{sql_escape(x)}"""'
 
+        def timestamp(x):
+            return f"TIMESTAMP '{x.strftime('%Y-%m-%d %H:%M:%S.%f')}'"
+
         def interval(x):
             return x
 
@@ -71,7 +74,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         option_formatters = {
             "enable_refresh": boolean,
             "refresh_interval_minutes": numeric,
-            "expiration_timestamp": interval,
+            "expiration_timestamp": timestamp,
             "max_staleness": interval,
             "kms_key_name": string,
             "description": escaped_string,

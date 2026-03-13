@@ -106,6 +106,22 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
         self.assertEqual(config_dict["labels"], {"env": "prod"})
         self.assertFalse(config_dict["enable_refresh"])
 
+    def test_expiration_timestamp_formatted_as_bq_literal(self):
+        """Test that expiration_timestamp is rendered as a BigQuery TIMESTAMP literal, not a raw datetime."""
+        from datetime import datetime
+
+        dt = datetime(2025, 7, 18, 18, 56, 22, 153305)
+        options = BigQueryOptionsConfig(expiration_timestamp=dt)
+
+        ddl_dict = options.as_ddl_dict()
+
+        self.assertEqual(
+            ddl_dict["expiration_timestamp"],
+            "TIMESTAMP '2025-07-18 18:56:22.153305'",
+        )
+        # Must not be a raw datetime object (which would cause a BigQuery syntax error)
+        self.assertIsInstance(ddl_dict["expiration_timestamp"], str)
+
 
 if __name__ == "__main__":
     unittest.main()
