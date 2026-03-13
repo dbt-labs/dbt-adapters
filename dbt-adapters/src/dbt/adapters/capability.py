@@ -24,6 +24,9 @@ class Capability(str, Enum):
     MicrobatchConcurrency = "MicrobatchConcurrency"
     """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
 
+    SourceVolumeMetadata = "SourceVolumeMetadata"
+    """Indicates support for checking source table row counts via database metadata (e.g. INFORMATION_SCHEMA)."""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"
