@@ -7,6 +7,9 @@ from dbt_common.exceptions import DbtRuntimeError
 
 COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
 
+SNOWFLAKE_MAX_VARCHAR_LENGTH = 16777216
+ICEBERG_MAX_VARCHAR_LENGTH = 134217728
+
 
 @dataclass
 class SnowflakeColumn(Column):
@@ -70,7 +73,8 @@ class SnowflakeColumn(Column):
 
         # We want to pass through numeric parsing for composite types
         if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
-            return cls(name, raw_data_type, None, None, None)
+            normalized = cls._normalize_iceberg_varchar(raw_data_type)
+            return cls(name, normalized, None, None, None)
 
         collation = None
         # Check if there's a COLLATE clause and extract it
@@ -92,6 +96,15 @@ class SnowflakeColumn(Column):
             numeric_precision=base_column.numeric_precision,
             numeric_scale=base_column.numeric_scale,
             collation=collation,
+        )
+
+    @staticmethod
+    def _normalize_iceberg_varchar(raw_data_type: str) -> str:
+        """Normalize Iceberg VARCHAR(134217728) to Snowflake VARCHAR(16777216) in structured types."""
+        return re.sub(
+            r"(?i)\bVARCHAR\(" + str(ICEBERG_MAX_VARCHAR_LENGTH) + r"\)",
+            f"VARCHAR({SNOWFLAKE_MAX_VARCHAR_LENGTH})",
+            raw_data_type,
         )
 
     def is_array(self) -> bool:
