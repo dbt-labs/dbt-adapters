@@ -1,10 +1,23 @@
-{% macro default__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
-    {% set sql = "" %}
-    -- No truncate in Athena so always drop CSV table and recreate
-    {{ drop_relation(old_relation) }}
-    {% set sql = create_csv_table(model, agate_table) %}
+{% macro athena__reset_csv_table(model, full_refresh, old_relation, agate_table, relation=none) %}
+    {%- set relation = relation if relation is not none else this -%}
+    {% set sql = create_csv_table(model, agate_table, relation) %}
 
     {{ return(sql) }}
+{% endmacro %}
+
+{% macro athena__seed_can_use_relation_rename() %}
+  {{ return(false) }}
+{% endmacro %}
+
+{% macro athena__seed_can_use_truncate() %}
+  {{ return(false) }}
+{% endmacro %}
+
+{% macro athena__seed_create_target_from_intermediate(target_relation, intermediate_relation) %}
+  {% set sql %}
+    select * from {{ intermediate_relation.render() }}
+  {% endset %}
+  {{ create_table_as(false, target_relation, sql) }}
 {% endmacro %}
 
 {% macro try_cast_timestamp(col) %}
@@ -31,8 +44,8 @@
     ) as {{ col }}
 {% endmacro %}
 
-{% macro create_csv_table_insert(model, agate_table) %}
-  {%- set identifier = model['alias'] -%}
+{% macro create_csv_table_insert(model, agate_table, relation) %}
+  {%- set identifier = relation.identifier -%}
 
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
@@ -42,13 +55,6 @@
   {%- set s3_data_naming = config.get('s3_data_naming', target.s3_data_naming) -%}
   {%- set s3_tmp_table_dir = config.get('s3_tmp_table_dir', default=target.s3_tmp_table_dir) -%}
   {%- set external_location = config.get('external_location') -%}
-
-  {%- set relation = api.Relation.create(
-    identifier=identifier,
-    schema=model.schema,
-    database=model.database,
-    type='table'
-  ) -%}
 
   {%- set location = adapter.generate_s3_location(relation,
                                                  s3_data_dir,
@@ -87,8 +93,8 @@
 {% endmacro %}
 
 
-{% macro create_csv_table_upload(model, agate_table) %}
-  {%- set identifier = model['alias'] -%}
+{% macro create_csv_table_upload(model, agate_table, relation) %}
+  {%- set identifier = relation.identifier -%}
 
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
@@ -101,9 +107,9 @@
   {%- set seed_s3_upload_args = config.get('seed_s3_upload_args', default=target.seed_s3_upload_args) -%}
 
   {%- set tmp_relation = api.Relation.create(
-    identifier=identifier + "__dbt_tmp",
-    schema=model.schema,
-    database=model.database,
+    identifier=identifier + "__dbt_tmp_upload",
+    schema=relation.schema,
+    database=relation.database,
     type='table'
   ) -%}
 
@@ -114,14 +120,6 @@
     s3_data_naming,
     external_location,
     seed_s3_upload_args=seed_s3_upload_args
-  ) -%}
-
-  -- create target relation
-  {%- set relation = api.Relation.create(
-    identifier=identifier,
-    schema=model.schema,
-    database=model.database,
-    type='table'
   ) -%}
 
   -- drop tmp relation if exists
@@ -189,26 +187,27 @@
   {{ return(sql_table) }}
 {% endmacro %}
 
-{% macro athena__create_csv_table(model, agate_table) %}
-
+{% macro athena__create_csv_table(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
   {%- set seed_by_insert = config.get('seed_by_insert', False) | as_bool -%}
 
   {%- if seed_by_insert -%}
     {% do log('seed by insert...') %}
-    {%- set sql_table = create_csv_table_insert(model, agate_table) -%}
+    {%- set sql_table = create_csv_table_insert(model, agate_table, relation) -%}
   {%- else -%}
     {% do log('seed by upload...') %}
-    {%- set sql_table = create_csv_table_upload(model, agate_table) -%}
+    {%- set sql_table = create_csv_table_upload(model, agate_table, relation) -%}
   {%- endif -%}
 
   {{ return(sql_table) }}
 {% endmacro %}
 
 {# Overwrite to satisfy dbt-core logic #}
-{% macro athena__load_csv_rows(model, agate_table) %}
-    {%- set seed_by_insert = config.get('seed_by_insert', False) | as_bool -%}
+{% macro athena__load_csv_rows(model, agate_table, relation=none) %}
+  {%- set relation = relation if relation is not none else this -%}
+  {%- set seed_by_insert = config.get('seed_by_insert', False) | as_bool -%}
   {%- if seed_by_insert %}
-    {{ default__load_csv_rows(model, agate_table) }}
+    {{ default__load_csv_rows(model, agate_table, relation) }}
   {%- else -%}
     select 1
   {% endif %}

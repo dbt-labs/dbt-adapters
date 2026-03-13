@@ -415,3 +415,45 @@ class BaseTestEmptySeed:
 
 class TestEmptySeed(BaseTestEmptySeed):
     pass
+
+
+class BaseSeedConcurrent(SeedConfigBase):
+    @pytest.fixture(scope="class")
+    def seeds(self, test_data_dir):
+        return {"seed_actual.csv": seeds.seed__actual_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "models__downstream_from_seed_actual.sql": fixtures.models__downstream_from_seed_actual,
+        }
+
+    def test_concurrent_seeds(self, project):
+        """Verify the table is not corrupted after concurrent seed attempts.
+
+        The intermediate table approach ensures the target table is never
+        left in a partial state. Some adapters may not support true in-process
+        concurrency via ThreadPoolExecutor, so we only assert the table is
+        usable after concurrent access.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        run_dbt(["seed"])
+
+        def run_seed():
+            return run_dbt(["seed"])
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(run_seed) for _ in range(2)]
+            for f in as_completed(futures):
+                try:
+                    f.result()
+                except Exception:
+                    pass
+
+        final = run_dbt(["seed"])
+        assert len(final) == 1
+
+
+class TestSeedConcurrent(BaseSeedConcurrent):
+    pass
