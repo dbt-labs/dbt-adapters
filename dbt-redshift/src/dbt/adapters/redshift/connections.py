@@ -186,6 +186,9 @@ class RedshiftCredentials(Credentials):
     tcp_keepalive_interval: Optional[int] = None
     tcp_keepalive_count: Optional[int] = None
 
+    # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
+    query_group: Optional[str] = None
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -222,6 +225,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_idle",
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
+            "query_group",
         )
 
     @property
@@ -448,6 +452,9 @@ def get_connection_method(
             c.autocommit = True
         if credentials.role:
             c.cursor().execute(f"set role {credentials.role}")
+        if credentials.query_group:
+            value = str(credentials.query_group).replace("'", "''")
+            c.cursor().execute(f"SET query_group TO '{value}'")
         return c
 
     return connect
@@ -652,9 +659,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
             e: Exception, retries: int, backoff: int, retry_all: bool
         ) -> Tuple[int, int]:
             oid_not_found_msg = "could not open relation with OID"
+            err_str = str(e)
             if retries == 0:
                 raise e
-            if oid_not_found_msg in str(e):
+            if oid_not_found_msg in err_str:
+                pass
+            elif "schema" in err_str and "does not exist" in err_str:
                 pass
             elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass

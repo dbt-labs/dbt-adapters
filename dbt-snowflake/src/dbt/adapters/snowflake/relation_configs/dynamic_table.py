@@ -49,6 +49,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - initialize: specifies the behavior of the initial refresh of the dynamic table
     - cluster_by: specifies the columns to cluster on
     - immutable_where: specifies an immutability constraint expression
+    - transient: specifies whether the dynamic table is transient (no fail-safe). snowflake_default_transient_dynamic_tables determines the default value
 
     There are currently no non-configurable parameters.
     """
@@ -66,6 +67,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
     immutable_where: Optional[str] = None
+    transient: Optional[bool] = None
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -91,6 +93,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
             "immutable_where": config_dict.get("immutable_where"),
+            "transient": config_dict.get("transient"),
         }
 
         return super().from_dict(kwargs_dict)  # type:ignore
@@ -117,6 +120,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "immutable_where": relation_config.config.extra.get(  # type:ignore
                 "immutable_where"
             ),
+            "transient": relation_config.config.extra.get("transient"),  # type:ignore
         }
 
         if refresh_mode := relation_config.config.extra.get("refresh_mode"):  # type:ignore
@@ -151,6 +155,14 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
                 # Strip "IMMUTABLE WHERE (" prefix and ")" suffix
                 immutable_where = immutable_where_str[17:-1]  # len("IMMUTABLE WHERE (") = 17
 
+        # Snowflake may return empty string for unset cluster_by
+        # Normalize to Python None for consistency
+        cluster_by = dynamic_table.get("cluster_by")
+        if cluster_by is not None and str(cluster_by).strip() not in ("", "NONE", "None"):
+            cluster_by = str(cluster_by).strip()
+        else:
+            cluster_by = None
+
         config_dict = {
             "name": dynamic_table.get("name"),
             "schema_name": dynamic_table.get("schema_name"),
@@ -162,8 +174,11 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "refresh_mode": dynamic_table.get("refresh_mode"),
             "row_access_policy": dynamic_table.get("row_access_policy"),
             "table_tag": dynamic_table.get("table_tag"),
-            "cluster_by": dynamic_table.get("cluster_by"),
+            "cluster_by": cluster_by,
             "immutable_where": immutable_where,
+            # agate.Row.get() returns None when the column is absent, which is the
+            # correct default -- it means "not queried" and skips transient comparison.
+            "transient": dynamic_table.get("transient"),
             # we don't get initialize since that's a one-time scheduler attribute, not a DT attribute
         }
 
@@ -215,6 +230,25 @@ class SnowflakeDynamicTableImmutableWhereConfigChange(RelationConfigChange):
         return False
 
 
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableClusterByConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableTransientConfigChange(RelationConfigChange):
+    context: Optional[bool] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        # Transient cannot be changed via ALTER, requires full table recreation
+        return True
+
+
 @dataclass
 class SnowflakeDynamicTableConfigChangeset:
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
@@ -224,6 +258,8 @@ class SnowflakeDynamicTableConfigChangeset:
     ] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
     immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
+    cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
+    transient: Optional[SnowflakeDynamicTableTransientConfigChange] = None
 
     @property
     def requires_full_refresh(self) -> bool:
@@ -242,6 +278,8 @@ class SnowflakeDynamicTableConfigChangeset:
                 ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
                 self.immutable_where.requires_full_refresh if self.immutable_where else False,
+                self.cluster_by.requires_full_refresh if self.cluster_by else False,
+                self.transient.requires_full_refresh if self.transient else False,
             ]
         )
 
@@ -254,5 +292,7 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.snowflake_initialization_warehouse,
                 self.refresh_mode,
                 self.immutable_where,
+                self.cluster_by,
+                self.transient,
             ]
         )
