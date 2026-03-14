@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set grant_config before applying grants
+time: 2026-01-25T09:43:19.962275-05:00
+custom:
+    Author: katieclaiborne-duet
+    Issue: "1503"
