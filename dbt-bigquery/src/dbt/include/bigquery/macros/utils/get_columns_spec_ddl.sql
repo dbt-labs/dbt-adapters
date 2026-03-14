@@ -32,6 +32,6 @@
     {%- for i in user_provided_columns %}
       {%- set col = user_provided_columns[i] -%}
       {%- set col_name = adapter.quote(col['name']) if col.get('quote') else col['name'] -%}
-      {{ col_name }}{{ ", " if not loop.last }}
+      {{ adapter.get_struct_select_expr(col_name, col['data_type']) }}{{ ", " if not loop.last }}
     {%- endfor -%}
 {% endmacro %}

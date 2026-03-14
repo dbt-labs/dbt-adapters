@@ -1,6 +1,10 @@
 import pytest
 
-from dbt.adapters.bigquery.column import get_nested_column_data_types
+from dbt.adapters.bigquery.column import (
+    get_nested_column_data_types,
+    get_struct_select_expression,
+    _parse_struct_fields,
+)
 
 
 @pytest.mark.parametrize(
@@ -244,3 +248,76 @@ from dbt.adapters.bigquery.column import get_nested_column_data_types
 def test_get_nested_column_data_types(columns, constraints, expected_nested_columns):
     actual_nested_columns = get_nested_column_data_types(columns, constraints)
     assert expected_nested_columns == actual_nested_columns
+
+
+@pytest.mark.parametrize(
+    ["data_type", "expected_fields"],
+    [
+        ("INT64", None),
+        ("STRING", None),
+        (
+            "struct<x INT64, y STRING>",
+            [{"name": "x", "data_type": "INT64"}, {"name": "y", "data_type": "STRING"}],
+        ),
+        (
+            "struct<a struct<b INT64, c STRING>, d INT64>",
+            [
+                {"name": "a", "data_type": "struct<b INT64, c STRING>"},
+                {"name": "d", "data_type": "INT64"},
+            ],
+        ),
+        (
+            "struct<nested string not null, nested2 int64>",
+            [
+                {"name": "nested", "data_type": "string not null"},
+                {"name": "nested2", "data_type": "int64"},
+            ],
+        ),
+    ],
+)
+def test_parse_struct_fields(data_type, expected_fields):
+    assert _parse_struct_fields(data_type) == expected_fields
+
+
+@pytest.mark.parametrize(
+    ["column_name", "data_type", "expected"],
+    [
+        # Non-struct column returns name as-is
+        ("col", "INT64", "col"),
+        ("col", "STRING", "col"),
+        # Simple struct - fields are explicitly selected
+        (
+            "col",
+            "struct<y INT64, x INT64>",
+            "STRUCT(col.y AS y, col.x AS x) AS col",
+        ),
+        # Struct with 3 fields
+        (
+            "struct_data",
+            "struct<y INT64, x INT64, z INT64>",
+            "STRUCT(struct_data.y AS y, struct_data.x AS x, struct_data.z AS z) AS struct_data",
+        ),
+        # Nested struct
+        (
+            "a",
+            "struct<b struct<c STRING, d INT64>, e INT64>",
+            "STRUCT(STRUCT(a.b.c AS c, a.b.d AS d) AS b, a.e AS e) AS a",
+        ),
+        # Deeply nested struct
+        (
+            "a",
+            "struct<b struct<c struct<d STRING>>>",
+            "STRUCT(STRUCT(STRUCT(a.b.c.d AS d) AS c) AS b) AS a",
+        ),
+        # Array type - not a struct, returns as-is
+        ("col", "ARRAY<INT64>", "col"),
+        # Struct with constraints in field types
+        (
+            "col",
+            "struct<x STRING not null, y INT64>",
+            "STRUCT(col.x AS x, col.y AS y) AS col",
+        ),
+    ],
+)
+def test_get_struct_select_expression(column_name, data_type, expected):
+    assert get_struct_select_expression(column_name, data_type) == expected

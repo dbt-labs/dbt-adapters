@@ -67,7 +67,11 @@ from dbt.adapters.bigquery.catalogs import (
     BigQueryInfoSchemaCatalogIntegration,
     BigQueryCatalogRelation,
 )
-from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
+from dbt.adapters.bigquery.column import (
+    BigQueryColumn,
+    get_nested_column_data_types,
+    get_struct_select_expression,
+)
 from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
 from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
 from dbt.adapters.bigquery.python_submissions import (
@@ -309,6 +313,11 @@ class BigQueryAdapter(BaseAdapter):
         constraints: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Dict[str, Optional[str]]]:
         return get_nested_column_data_types(columns, constraints)
+
+    @available.parse(lambda *a, **k: "")
+    @staticmethod
+    def get_struct_select_expr(column_name: str, data_type: str) -> str:
+        return get_struct_select_expression(column_name, data_type)
 
     def get_columns_in_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
         try:
