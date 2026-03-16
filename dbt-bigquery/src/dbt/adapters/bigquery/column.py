@@ -8,6 +8,108 @@ from dbt.adapters.base.column import Column
 
 _PARENT_DATA_TYPE_KEY = "__parent_data_type"
 
+
+def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
+    """
+    Parse a BigQuery STRUCT type string into a list of field dicts with 'name' and 'data_type'.
+
+    Returns None if the data_type is not a STRUCT.
+
+    Examples:
+    >>> _parse_struct_fields("struct<x INT64, y STRING>")
+    [{'name': 'x', 'data_type': 'INT64'}, {'name': 'y', 'data_type': 'STRING'}]
+    >>> _parse_struct_fields("struct<a struct<b INT64, c STRING>, d INT64>")
+    [{'name': 'a', 'data_type': 'struct<b INT64, c STRING>'}, {'name': 'd', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("INT64")
+    None
+    """
+    stripped = data_type.strip()
+    lower = stripped.lower()
+
+    if not lower.startswith("struct<"):
+        return None
+
+    # Extract the content inside struct<...>
+    # Find the matching closing >
+    inner = stripped[len("struct<") : -1]
+
+    # Split fields at top-level commas (not inside nested angle brackets)
+    fields = []
+    depth = 0
+    current = []
+    for char in inner:
+        if char == "<":
+            depth += 1
+            current.append(char)
+        elif char == ">":
+            depth -= 1
+            current.append(char)
+        elif char == "," and depth == 0:
+            fields.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current:
+        fields.append("".join(current).strip())
+
+    result = []
+    for field in fields:
+        # Split on first whitespace to get name, rest is the data type (possibly with constraints)
+        parts = field.split(None, 1)
+        if len(parts) == 2:
+            result.append({"name": parts[0], "data_type": parts[1]})
+        elif len(parts) == 1:
+            result.append({"name": parts[0], "data_type": ""})
+    return result
+
+
+def get_struct_select_expression(column_name: str, data_type: str) -> str:
+    """
+    Generate a SELECT expression for a column that ensures STRUCT fields are
+    selected in the order defined by data_type.
+
+    For non-STRUCT columns, returns the column name as-is.
+    For STRUCT columns, returns a STRUCT() constructor that explicitly names
+    each field, ensuring positional alignment with the DDL definition.
+
+    Examples:
+    >>> get_struct_select_expression("col", "INT64")
+    'col'
+    >>> get_struct_select_expression("col", "struct<y INT64, x INT64>")
+    'STRUCT(col.y AS y, col.x AS x) AS col'
+    >>> get_struct_select_expression("col", "struct<a struct<b INT64, c STRING>, d INT64>")
+    'STRUCT(STRUCT(col.a.b AS b, col.a.c AS c) AS a, col.d AS d) AS col'
+    """
+    fields = _parse_struct_fields(data_type)
+    if fields is None:
+        return column_name
+
+    field_exprs = _build_struct_field_expressions(column_name, fields)
+    return f"STRUCT({', '.join(field_exprs)}) AS {column_name}"
+
+
+def _build_struct_field_expressions(parent_path: str, fields: List[Dict[str, str]]) -> List[str]:
+    """
+    Recursively build field expressions for a STRUCT SELECT.
+
+    For each field, if it's a nested struct, recurse to build a nested STRUCT() expression.
+    Otherwise, emit `parent.field AS field`.
+    """
+    exprs = []
+    for field in fields:
+        field_name = field["name"]
+        field_type = field["data_type"]
+        field_path = f"{parent_path}.{field_name}"
+
+        nested_fields = _parse_struct_fields(field_type)
+        if nested_fields is not None:
+            nested_exprs = _build_struct_field_expressions(field_path, nested_fields)
+            exprs.append(f"STRUCT({', '.join(nested_exprs)}) AS {field_name}")
+        else:
+            exprs.append(f"{field_path} AS {field_name}")
+    return exprs
+
+
 Self = TypeVar("Self", bound="BigQueryColumn")
 
 
