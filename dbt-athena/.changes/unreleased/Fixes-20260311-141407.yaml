@@ -1,0 +1,6 @@
+kind: Fixes
+body: Partition tmp table in incremental to reduce batch scan cost
+time: 2026-03-11T14:14:07.932048+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1744"
