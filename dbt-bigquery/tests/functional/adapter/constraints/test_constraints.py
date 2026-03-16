@@ -71,7 +71,7 @@ create or replace table <model_identifier> (
 )
 OPTIONS()
 as (
-    select id from
+    select STRUCT(id.nested_column AS nested_column, id.nested_column2 AS nested_column2) AS id from
   (
     select STRUCT("test" as nested_column, "test" as nested_column2) as id
   ) as model_subq
