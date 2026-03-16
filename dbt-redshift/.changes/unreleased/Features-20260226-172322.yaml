@@ -1,0 +1,6 @@
+kind: Features
+body: Migrate get_show_grant_sql to use SHOW GRANTS ON TABLE
+time: 2026-02-26T17:23:22.316316+05:30
+custom:
+    Author: tauhid621
+    Issue: "1677"

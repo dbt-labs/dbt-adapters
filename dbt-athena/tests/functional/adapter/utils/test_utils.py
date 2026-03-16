@@ -19,6 +19,7 @@ from dbt.tests.adapter.utils.test_current_timestamp import BaseCurrentTimestampN
 from dbt.tests.adapter.utils.test_date_trunc import BaseDateTrunc
 from dbt.tests.adapter.utils.test_dateadd import BaseDateAdd
 from dbt.tests.adapter.utils.test_datediff import BaseDateDiff
+from dbt.tests.adapter.utils.test_equals import BaseEquals
 from dbt.tests.adapter.utils.test_escape_single_quotes import (
     BaseEscapeSingleQuotesQuote,
 )
@@ -70,6 +71,10 @@ class TestBoolOr(BaseBoolOr):
 
 
 class TestConcat(BaseConcat):
+    pass
+
+
+class TestEquals(BaseEquals):
     pass
 
 

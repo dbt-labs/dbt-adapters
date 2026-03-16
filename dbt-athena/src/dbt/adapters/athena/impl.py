@@ -1035,7 +1035,9 @@ class AthenaAdapter(SQLAdapter):
         # Update table description
         if persist_relation_docs:
             # Prepare dbt description
-            clean_table_description = ellipsis_comment(clean_sql_comment(model["description"]))
+            clean_table_description = ellipsis_comment(
+                clean_sql_comment(model["description"]), 2048
+            )
             # Get current description from Glue
             glue_table_description = table.get("Description", "")
             # Get current description parameter from Glue
@@ -1085,7 +1087,7 @@ class AthenaAdapter(SQLAdapter):
                 if col_name in model["columns"]:
                     col_comment = model["columns"][col_name]["description"]
                     # Prepare column description from dbt
-                    clean_col_comment = ellipsis_comment(clean_sql_comment(col_comment))
+                    clean_col_comment = ellipsis_comment(clean_sql_comment(col_comment), 255)
                     # Get current column comment from Glue
                     glue_col_comment = col_obj.get("Comment", "")
                     # Check that column description is already attached to Glue table
