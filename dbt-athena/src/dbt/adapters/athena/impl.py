@@ -34,6 +34,7 @@ from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.connections import AthenaCursor
 from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.session import get_boto3_session_from_credentials
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
     SnapshotMigrationRequired,
@@ -704,22 +705,21 @@ class AthenaAdapter(SQLAdapter):
 
     def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
         if database:
-            conn = self.connections.get_thread_connection()
-            creds = conn.credentials
-            client = conn.handle
+            creds = self.connections.profile.credentials
+            session = get_boto3_session_from_credentials(creds)
             if database.lower() == "awsdatacatalog":
                 with boto3_client_lock:
-                    sts = client.session.client(
+                    sts = session.client(
                         "sts",
-                        region_name=client.region_name,
+                        region_name=creds.region_name,
                         config=get_boto3_config(num_retries=creds.effective_num_retries),
                     )
                 catalog_id = sts.get_caller_identity()["Account"]
                 return {"Name": database, "Type": "GLUE", "Parameters": {"catalog-id": catalog_id}}
             with boto3_client_lock:
-                athena = client.session.client(
+                athena = session.client(
                     "athena",
-                    region_name=client.region_name,
+                    region_name=creds.region_name,
                     config=get_boto3_config(num_retries=creds.effective_num_retries),
                 )
             return athena.get_data_catalog(Name=database)["DataCatalog"]
@@ -734,13 +734,12 @@ class AthenaAdapter(SQLAdapter):
             # For non-Glue Data Catalogs, use the original Athena query against INFORMATION_SCHEMA approach
             return super().list_relations_without_caching(schema_relation)
 
-        conn = self.connections.get_thread_connection()
-        creds = conn.credentials
-        client = conn.handle
+        creds = self.connections.profile.credentials
+        session = get_boto3_session_from_credentials(creds)
         with boto3_client_lock:
-            glue_client = client.session.client(
+            glue_client = session.client(
                 "glue",
-                region_name=client.region_name,
+                region_name=creds.region_name,
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
 
@@ -1178,17 +1177,16 @@ class AthenaAdapter(SQLAdapter):
 
     @available
     def get_columns_in_relation(self, relation: AthenaRelation) -> List[AthenaColumn]:
-        conn = self.connections.get_thread_connection()
-        creds = conn.credentials
-        client = conn.handle
+        creds = self.connections.profile.credentials
+        session = get_boto3_session_from_credentials(creds)
 
         data_catalog = self._get_data_catalog(relation.database)  # type:ignore
         catalog_id = get_catalog_id(data_catalog)
 
         with boto3_client_lock:
-            glue_client = client.session.client(
+            glue_client = session.client(
                 "glue",
-                region_name=client.region_name,
+                region_name=creds.region_name,
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
 
