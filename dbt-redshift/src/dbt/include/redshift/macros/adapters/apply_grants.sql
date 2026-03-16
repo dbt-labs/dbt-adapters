@@ -49,7 +49,7 @@
     from svv_relation_privileges
     where namespace_name = '{{ relation.schema }}'
       and relation_name = '{{ relation.identifier }}'
-      and identity_name <> current_user
+      and not (identity_type = 'user' and identity_name = current_user)
   {% endif %}
 {% endmacro %}
 

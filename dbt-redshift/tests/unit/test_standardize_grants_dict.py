@@ -176,6 +176,42 @@ class TestStandardizeGrantsDictShowApi:
             "select": ["user:alice", "group:readonly_group", "role:readonly_role"],
         }
 
+    def test_public_grants_skipped(self, adapter, mocker):
+        """PUBLIC grants are not configurable via dbt and should be excluded."""
+        _set_use_show_apis(adapter, mocker, enabled=True)
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "0",
+                    "PUBLIC",
+                    "public",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
     def test_empty_table(self, adapter, mocker):
         _set_use_show_apis(adapter, mocker, enabled=True)
         table = _make_show_grants_table([])
@@ -214,6 +250,18 @@ class TestStandardizeGrantsDictSvv:
             "select": ["user:alice", "user:bob"],
             "insert": ["user:alice"],
         }
+
+    def test_public_grants_skipped(self, adapter, mocker):
+        """PUBLIC grants are not configurable via dbt and should be excluded."""
+        _set_use_show_apis(adapter, mocker, enabled=False)
+        table = _make_svv_table(
+            [
+                ("alice", "user", "SELECT"),
+                ("PUBLIC", "public", "SELECT"),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
 
     def test_empty_table(self, adapter, mocker):
         _set_use_show_apis(adapter, mocker, enabled=False)

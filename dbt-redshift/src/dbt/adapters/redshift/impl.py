@@ -314,6 +314,9 @@ class RedshiftAdapter(SQLAdapter):
             for row in grants_table:
                 identity_name = row["identity_name"]
                 identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
                 # SHOW GRANTS reports groups as identity_type='role' with a
                 # '/' prefix on identity_name.  This is undocumented behavior.
                 if identity_type == "role" and identity_name.startswith("/"):
@@ -329,6 +332,9 @@ class RedshiftAdapter(SQLAdapter):
             # svv_relation_privileges path — identity_type is accurate
             for row in grants_table:
                 identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
                 grantee = f"{identity_type}:{row['identity_name']}"
                 privilege = row["privilege_type"].lower()
                 if privilege in grants_dict:
