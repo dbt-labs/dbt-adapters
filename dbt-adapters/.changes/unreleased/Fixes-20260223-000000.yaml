@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix seed concurrency race condition by loading CSV data into an intermediate table before atomically swapping into the target relation
+time: 2026-02-23T00:00:00.000000-08:00
+custom:
+  Author: will-sargent-dbtlabs
+  Issue: "1665"

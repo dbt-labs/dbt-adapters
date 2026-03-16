@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add TestSeedConcurrent functional test to verify concurrent dbt seed executions do not produce race conditions or duplicate records
+time: 2026-02-23T00:00:00.000000-08:00
+custom:
+  Author: will-sargent-dbtlabs
+  Issue: "1665"
