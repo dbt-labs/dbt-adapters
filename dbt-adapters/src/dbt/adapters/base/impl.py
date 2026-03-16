@@ -768,6 +768,21 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
+    @available.parse_list
+    def get_pseudocolumns_for_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Get a list of queryable pseudocolumns for the given relation.
+
+        Pseudocolumns are system-generated columns that can be queried but don't
+        appear in the information schema (e.g., BigQuery's _FILE_NAME for external tables).
+
+        Default implementation returns an empty list. Adapters should override this
+        to provide pseudocolumns specific to their platform.
+
+        :param relation: The relation to get pseudocolumns for
+        :return: List of Column objects representing queryable pseudocolumns
+        """
+        return []
+
     def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
         """Get catalog information including table-level and column-level metadata for a single relation."""
         raise NotImplementedError(

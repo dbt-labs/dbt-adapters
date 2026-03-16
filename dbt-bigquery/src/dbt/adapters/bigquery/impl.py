@@ -321,6 +321,32 @@ class BigQueryAdapter(BaseAdapter):
             logger.debug("get_columns_in_relation error: {}".format(e))
             return []
 
+    @available.parse_list
+    def get_pseudocolumns_for_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
+        """Return pseudocolumns for BigQuery external tables.
+
+        External tables have _FILE_NAME (STRING) pseudocolumn that contains
+        the name of the file from which the row was loaded.
+        """
+        pseudocolumns = []
+
+        try:
+            # Fetch the table to check if it's external
+            table = self.connections.get_bq_table(
+                database=relation.database, schema=relation.schema, identifier=relation.identifier
+            )
+
+            # Only external tables have _FILE_NAME pseudocolumn
+            if table.table_type == "EXTERNAL":
+                pseudocolumns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+
+        except (ValueError, google.cloud.exceptions.NotFound) as e:
+            logger.debug("get_pseudocolumns_for_relation error: {}".format(e))
+            # Return empty list if table doesn't exist or can't be accessed
+            pass
+
+        return pseudocolumns
+
     @available.parse(lambda *a, **k: [])
     def add_time_ingestion_partition_column(self, partition_by, columns) -> List[BigQueryColumn]:
         """Add time ingestion partition column to columns list"""
