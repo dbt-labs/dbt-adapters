@@ -179,20 +179,18 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``redshift_use_show_apis`` behavior flag is
-        enabled *or* when the legacy ``ra3_node`` credential is set.
+        Returns True when the ``redshift_use_show_apis`` behavior flag.
         """
-        return bool(
-            self.config.credentials.ra3_node or self.behavior.redshift_use_show_apis.no_warn
-        )
+        return self.behavior.redshift_use_show_apis.no_warn
 
     @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
+        ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not self.use_show_apis():
+        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
                     database, expected
@@ -215,10 +213,12 @@ class RedshiftAdapter(SQLAdapter):
         where type is one of: table, view, materialized_view.
         """
         new_rows = []
+        # has_subtype is only needed until redshift patch 197 is everywhere
+        has_subtype = "table_subtype" in show_tables.column_names
         for row in show_tables.rows:
             table_type = (row["table_type"] or "").strip().upper()
             if table_type == "VIEW":
-                subtype = (row["table_subtype"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
                 relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
             else:
                 relation_type = "table"
@@ -250,9 +250,11 @@ class RedshiftAdapter(SQLAdapter):
 
         table_meta: Dict[tuple, tuple] = {}
         for show_table in show_tables_results:
+            # has_subtype is only needed until redshift patch 197 is everywhere
+            has_subtype = "table_subtype" in show_table.column_names
             for row in show_table.rows:
                 table_type = (row["table_type"] or "").strip().upper()
-                subtype = (row["table_subtype"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
                 catalog_type = _SHOW_TABLE_TYPE_MAP.get(
                     subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
                 )
@@ -313,8 +315,9 @@ class RedshiftAdapter(SQLAdapter):
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
+        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
         try:
-            return schemas.flatten(allow_multiple_databases=self.use_show_apis())
+            return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
