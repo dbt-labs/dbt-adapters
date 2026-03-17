@@ -618,22 +618,18 @@ class AthenaAdapter(SQLAdapter):
             config=get_boto3_config(num_retries=creds.effective_num_retries),
         )
 
-        bucket_name, _ = self._parse_s3_path(s3_paths[0])
-        s3_bucket = s3_resource.Bucket(bucket_name)
+        # Group paths by bucket to support partitions spread across multiple buckets
+        paths_by_bucket: Dict[str, List[str]] = {}
+        for s3_path in s3_paths:
+            bucket, _ = self._parse_s3_path(s3_path)
+            paths_by_bucket.setdefault(bucket, []).append(s3_path)
 
-        def filter_objects_by_prefixes() -> Generator[Any, None, None]:
-            for s3_path in s3_paths:
-                current_bucket, prefix = self._parse_s3_path(s3_path)
-                if current_bucket != bucket_name:
-                    # It would be possible to implement support for deleting from
-                    # different buckets, but it's not likely to be a common scenario
-                    # -> Opt for keeping the code simple and caching the bucket instance
-                    # Raise an error if the assumption doesn't hold
-                    raise DbtRuntimeError(
-                        f"All S3 paths must be in the same bucket. "
-                        f"Expected bucket '{bucket_name}' but found '{current_bucket}' in path '{s3_path}'"
-                    )
+        def filter_objects_by_prefixes(
+            s3_bucket: Any, bucket_paths: List[str]
+        ) -> Generator[Any, None, None]:
+            for s3_path in bucket_paths:
                 LOGGER.debug(f"Listing files for deletion: {s3_path}")
+                _, prefix = self._parse_s3_path(s3_path)
                 yield from s3_bucket.objects.filter(Prefix=prefix)
 
         def chunk_object_keys(objects_iter) -> Generator[List[Dict[str, str]], None, None]:
@@ -646,21 +642,29 @@ class AthenaAdapter(SQLAdapter):
             if chunk:
                 yield chunk
 
-        for object_keys in chunk_object_keys(filter_objects_by_prefixes()):
-            if object_keys:
-                LOGGER.debug(f"Calling delete_objects for {len(object_keys)} objects")
-                response = s3_bucket.delete_objects(Delete={"Objects": object_keys})
-                LOGGER.debug(response)
-                if "Errors" in response:
-                    for err in response["Errors"]:
-                        LOGGER.error(
-                            f"Failed to delete S3 object: Key='{err['Key']}', "
-                            f"Code='{err['Code']}', Message='{err['Message']}', "
-                            f"Bucket='{bucket_name}'"
-                        )
-                    raise DbtRuntimeError(
-                        f"Failed to delete {len(response['Errors'])} object(s) from S3 bucket '{bucket_name}'"
+        for bucket_name, bucket_paths in paths_by_bucket.items():
+            s3_bucket = s3_resource.Bucket(bucket_name)
+            for object_keys in chunk_object_keys(
+                filter_objects_by_prefixes(s3_bucket, bucket_paths)
+            ):
+                if object_keys:
+                    LOGGER.debug(f"Calling delete_objects for {len(object_keys)} objects")
+                    response = s3_bucket.delete_objects(Delete={"Objects": object_keys})
+                    deleted_count = len(response.get("Deleted", []))
+                    error_count = len(response.get("Errors", []))
+                    LOGGER.debug(
+                        f"delete_objects result: {deleted_count} deleted, {error_count} errors"
                     )
+                    if "Errors" in response:
+                        for err in response["Errors"]:
+                            LOGGER.error(
+                                f"Failed to delete S3 object: Key='{err['Key']}', "
+                                f"Code='{err['Code']}', Message='{err['Message']}', "
+                                f"Bucket='{bucket_name}'"
+                            )
+                        raise DbtRuntimeError(
+                            f"Failed to delete {len(response['Errors'])} object(s) from S3 bucket '{bucket_name}'"
+                        )
 
     @staticmethod
     def _parse_s3_path(s3_path: str) -> Tuple[str, str]:

@@ -585,6 +585,37 @@ class TestAthenaAdapter:
         assert "Partition not found" in dbt_error_caplog.getvalue()
 
     @mock_aws
+    def test_bulk_delete_from_s3_supports_multiple_buckets(self, mock_aws_service):
+        """Partitions spanning multiple S3 buckets should all be deleted without error."""
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        self.adapter.acquire_connection("dummy")
+
+        second_bucket = "test-dbt-athena-second"
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3.create_bucket(
+            Bucket=second_bucket, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3.put_object(Body=b"{}", Bucket=BUCKET, Key="tables/table/dt=2022-01-01/data.parquet")
+        s3.put_object(
+            Body=b"{}", Bucket=second_bucket, Key="tables/table/dt=2022-01-02/data.parquet"
+        )
+
+        # Before fix this raised DbtRuntimeError due to bucket mismatch
+        self.adapter.bulk_delete_from_s3(
+            [
+                f"s3://{BUCKET}/tables/table/dt=2022-01-01/",
+                f"s3://{second_bucket}/tables/table/dt=2022-01-02/",
+            ]
+        )
+
+        assert s3.list_objects_v2(Bucket=BUCKET).get("KeyCount", 0) == 0
+        assert s3.list_objects_v2(Bucket=second_bucket).get("KeyCount", 0) == 0
+
+    @mock_aws
     def test_clean_up_table_table_does_not_exist(self, dbt_debug_caplog, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
