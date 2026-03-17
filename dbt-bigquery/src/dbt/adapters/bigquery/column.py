@@ -13,24 +13,40 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     """
     Parse a BigQuery STRUCT type string into a list of field dicts with 'name' and 'data_type'.
 
-    Returns None if the data_type is not a STRUCT.
+    Returns None if the data_type is not a STRUCT or is malformed.
+    Handles trailing constraints like `struct<x INT64> not null` correctly.
 
     Examples:
     >>> _parse_struct_fields("struct<x INT64, y STRING>")
     [{'name': 'x', 'data_type': 'INT64'}, {'name': 'y', 'data_type': 'STRING'}]
     >>> _parse_struct_fields("struct<a struct<b INT64, c STRING>, d INT64>")
     [{'name': 'a', 'data_type': 'struct<b INT64, c STRING>'}, {'name': 'd', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("struct<x INT64> not null")
+    [{'name': 'x', 'data_type': 'INT64'}]
     >>> _parse_struct_fields("INT64")
     None
     """
     stripped = data_type.strip()
-    lower = stripped.lower()
 
-    if not lower.startswith("struct<"):
+    if not stripped.lower().startswith("struct<"):
         return None
 
-    # Extract the content inside struct<...>
-    inner = stripped[len("struct<") : -1]
+    # Find the matching closing > by tracking angle-bracket depth
+    start = len("struct<")
+    depth = 1
+    i = start
+    while i < len(stripped) and depth > 0:
+        if stripped[i] == "<":
+            depth += 1
+        elif stripped[i] == ">":
+            depth -= 1
+        i += 1
+
+    if depth != 0:
+        # Malformed type string — unbalanced angle brackets
+        return None
+
+    inner = stripped[start : i - 1]
 
     # Split fields at top-level commas (not inside nested angle brackets)
     fields = []
@@ -42,6 +58,8 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
             current.append(char)
         elif char == ">":
             depth -= 1
+            if depth < 0:
+                return None
             current.append(char)
         elif char == "," and depth == 0:
             fields.append("".join(current).strip())

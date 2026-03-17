@@ -273,6 +273,15 @@ def test_get_nested_column_data_types(columns, constraints, expected_nested_colu
                 {"name": "nested2", "data_type": "int64"},
             ],
         ),
+        # Trailing constraints after closing > must not corrupt inner field parsing
+        (
+            "struct<x INT64, y STRING> not null",
+            [{"name": "x", "data_type": "INT64"}, {"name": "y", "data_type": "STRING"}],
+        ),
+        (
+            "struct<a struct<b INT64>> not null",
+            [{"name": "a", "data_type": "struct<b INT64>"}],
+        ),
     ],
 )
 def test_parse_struct_fields(data_type, expected_fields):
