@@ -7,6 +7,7 @@ from dbt.exceptions import DbtRuntimeError
 from agate import Row
 from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkRelation
+from dbt.adapters.spark.impl import SCHEMA_NOT_FOUND_MESSAGES
 from .utils import config_from_parts_or_dicts
 
 ENFORCED_SPARK_CONFIG = {"spark.sql.ansi.enabled": "false"}
@@ -705,16 +706,35 @@ class TestListRelationsWithoutCaching(unittest.TestCase):
             with self.assertRaises(DbtRuntimeError):
                 adapter.list_relations_without_caching(schema_relation)
 
-    def test_database_not_found_returns_empty(self):
-        """When the schema/database genuinely does not exist, an empty list
-        should be returned rather than raising an error."""
+    def test_schema_not_found_returns_empty(self):
+        """When the schema/database genuinely does not exist (legacy Hive
+        'Database not found' message), an empty list should be returned."""
         adapter = self._make_adapter()
         schema_relation = self._make_schema_relation(adapter, schema="nonexistent")
 
         with mock.patch.object(
             adapter,
             "execute_macro",
-            side_effect=DbtRuntimeError(f"Database '{schema_relation}' not found"),
+            side_effect=DbtRuntimeError("Database not found"),
         ):
             result = adapter.list_relations_without_caching(schema_relation)
             self.assertEqual(result, [])
+
+
+@pytest.mark.parametrize("not_found_msg", SCHEMA_NOT_FOUND_MESSAGES)
+def test_all_schema_not_found_messages_return_empty(not_found_msg, target_http):
+    """Every message in SCHEMA_NOT_FOUND_MESSAGES should cause
+    list_relations_without_caching to return [] rather than raise.
+    This covers engine-specific variants such as Spark SQL's [SCHEMA_NOT_FOUND]."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="nonexistent", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=DbtRuntimeError(not_found_msg),
+    ):
+        result = adapter.list_relations_without_caching(schema_relation)
+        assert result == []

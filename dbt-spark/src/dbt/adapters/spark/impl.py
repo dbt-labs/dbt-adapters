@@ -61,6 +61,14 @@ DESCRIBE_TABLE_EXTENDED_MACRO_NAME = "describe_table_extended_without_caching"
 KEY_TABLE_OWNER = "Owner"
 KEY_TABLE_STATISTICS = "Statistics"
 
+SCHEMA_NOT_FOUND_MESSAGES = (
+    "[SCHEMA_NOT_FOUND]",
+    "Schema not found",
+    "Database not found",
+    "NoSuchNamespaceException",
+    "NoSuchDatabaseException",
+)
+
 TABLE_OR_VIEW_NOT_FOUND_MESSAGES = (
     "[TABLE_OR_VIEW_NOT_FOUND]",
     "Table or view not found",
@@ -244,7 +252,7 @@ class SparkAdapter(SQLAdapter):
             )
         except DbtRuntimeError as e:
             errmsg = getattr(e, "msg", "")
-            if f"Database '{schema_relation}' not found" in errmsg:
+            if any(msg in errmsg for msg in SCHEMA_NOT_FOUND_MESSAGES):
                 return []
             # Iceberg compute engine behavior: show table
             elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
