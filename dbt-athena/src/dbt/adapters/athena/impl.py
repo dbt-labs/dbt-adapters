@@ -476,12 +476,23 @@ class AthenaAdapter(SQLAdapter):
             for glue_batch in get_chunks(
                 partitions, AthenaAdapter.BATCH_DELETE_PARTITION_API_LIMIT
             ):
-                glue_client.batch_delete_partition(
+                response = glue_client.batch_delete_partition(
                     CatalogId=catalog_id,
                     DatabaseName=relation.schema,
                     TableName=relation.identifier,
                     PartitionsToDelete=[{"Values": p["Values"]} for p in glue_batch],
                 )
+                if response.get("Errors"):
+                    for err in response["Errors"]:
+                        LOGGER.error(
+                            f"Failed to delete Glue partition: Values='{err['PartitionValues']}', "
+                            f"Code='{err['ErrorDetail']['ErrorCode']}', "
+                            f"Message='{err['ErrorDetail']['ErrorMessage']}'"
+                        )
+                    raise DbtRuntimeError(
+                        f"Failed to delete {len(response['Errors'])} partition(s) from Glue table "
+                        f"'{relation.schema}.{relation.identifier}'"
+                    )
 
         for partition_params_chunk in chunk_iterable(
             get_partition_params_dicts(), AthenaAdapter.PARTITION_PROCESSING_CHUNK_SIZE

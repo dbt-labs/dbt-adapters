@@ -539,6 +539,52 @@ class TestAthenaAdapter:
             assert "Message='Access Denied'" in dbt_error_caplog.getvalue()
 
     @mock_aws
+    def test_clean_up_partitions_glue_batch_delete_errors_are_raised(
+        self, mock_aws_service, dbt_error_caplog
+    ):
+        """batch_delete_partition can return per-partition errors without raising; verify they are surfaced."""
+        table_name = "table"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+        mock_aws_service.add_data_in_table(table_name)
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        batch_delete_error_response = {
+            "Errors": [
+                {
+                    "PartitionValues": ["2022-01-01"],
+                    "ErrorDetail": {
+                        "ErrorCode": "EntityNotFoundException",
+                        "ErrorMessage": "Partition not found",
+                    },
+                }
+            ]
+        }
+
+        original_make_api_call = botocore.client.BaseClient._make_api_call
+
+        def mock_make_api_call(self, operation_name, api_params):
+            if operation_name == "BatchDeletePartition":
+                return batch_delete_error_response
+            return original_make_api_call(self, operation_name, api_params)
+
+        with patch.object(botocore.client.BaseClient, "_make_api_call", mock_make_api_call):
+            with pytest.raises(
+                DbtRuntimeError,
+                match=r"Failed to delete 1 partition\(s\) from Glue table",
+            ):
+                self.adapter.clean_up_partitions(relation, "dt = '2022-01-01'")
+
+        assert "EntityNotFoundException" in dbt_error_caplog.getvalue()
+        assert "Partition not found" in dbt_error_caplog.getvalue()
+
+    @mock_aws
     def test_clean_up_table_table_does_not_exist(self, dbt_debug_caplog, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
