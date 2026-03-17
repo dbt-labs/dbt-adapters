@@ -80,53 +80,6 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     return result
 
 
-def get_struct_select_expression(column_name: str, data_type: str) -> str:
-    """
-    Generate a SELECT expression for a column that ensures STRUCT fields are
-    selected in the order defined by data_type.
-
-    For non-STRUCT columns, returns the column name as-is.
-    For STRUCT columns, returns a STRUCT() constructor that explicitly names
-    each field, ensuring positional alignment with the DDL definition.
-
-    Examples:
-    >>> get_struct_select_expression("col", "INT64")
-    'col'
-    >>> get_struct_select_expression("col", "struct<y INT64, x INT64>")
-    'STRUCT(col.y AS y, col.x AS x) AS col'
-    >>> get_struct_select_expression("col", "struct<a struct<b INT64, c STRING>, d INT64>")
-    'STRUCT(STRUCT(col.a.b AS b, col.a.c AS c) AS a, col.d AS d) AS col'
-    """
-    fields = _parse_struct_fields(data_type)
-    if fields is None:
-        return column_name
-
-    field_exprs = _build_struct_field_expressions(column_name, fields)
-    return f"STRUCT({', '.join(field_exprs)}) AS {column_name}"
-
-
-def _build_struct_field_expressions(parent_path: str, fields: List[Dict[str, str]]) -> List[str]:
-    """
-    Recursively build field expressions for a STRUCT SELECT.
-
-    For each field, if it's a nested struct, recurse to build a nested STRUCT() expression.
-    Otherwise, emit `parent.field AS field`.
-    """
-    exprs = []
-    for field in fields:
-        field_name = field["name"]
-        field_type = field["data_type"]
-        field_path = f"{parent_path}.{field_name}"
-
-        nested_fields = _parse_struct_fields(field_type)
-        if nested_fields is not None:
-            nested_exprs = _build_struct_field_expressions(field_path, nested_fields)
-            exprs.append(f"STRUCT({', '.join(nested_exprs)}) AS {field_name}")
-        else:
-            exprs.append(f"{field_path} AS {field_name}")
-    return exprs
-
-
 Self = TypeVar("Self", bound="BigQueryColumn")
 
 
@@ -245,6 +198,58 @@ class BigQueryColumn(Column):
             kwargs = {"fields": fields}
 
         return SchemaField(self.name, self.dtype, self.mode, **kwargs)
+
+    @classmethod
+    def get_struct_select_expression(cls, column_name: str, data_type: str) -> str:
+        """
+        Generate a SELECT expression that ensures STRUCT fields are selected in the
+        order defined by data_type, regardless of the source field order.
+
+        For non-STRUCT columns, returns the column name as-is.
+        For STRUCT columns, returns a STRUCT() constructor that explicitly names each
+        field, ensuring positional alignment with the DDL definition.
+
+        This is used during contract enforcement so that YAML-defined field order in
+        the CREATE TABLE DDL matches the field order in the SELECT subquery.
+
+        Examples:
+        >>> BigQueryColumn.get_struct_select_expression("col", "INT64")
+        'col'
+        >>> BigQueryColumn.get_struct_select_expression("col", "struct<y INT64, x INT64>")
+        'STRUCT(col.y AS y, col.x AS x) AS col'
+        >>> BigQueryColumn.get_struct_select_expression("col", "struct<a struct<b INT64, c STRING>, d INT64>")
+        'STRUCT(STRUCT(col.a.b AS b, col.a.c AS c) AS a, col.d AS d) AS col'
+        """
+        fields = _parse_struct_fields(data_type)
+        if fields is None:
+            return column_name
+
+        field_exprs = cls._build_struct_field_expressions(column_name, fields)
+        return f"STRUCT({', '.join(field_exprs)}) AS {column_name}"
+
+    @classmethod
+    def _build_struct_field_expressions(
+        cls, parent_path: str, fields: List[Dict[str, str]]
+    ) -> List[str]:
+        """
+        Recursively build field expressions for a STRUCT SELECT constructor.
+
+        For each field, if it's a nested struct, recurse to build a nested STRUCT() expression.
+        Otherwise, emit `parent.field AS field`.
+        """
+        exprs = []
+        for field in fields:
+            field_name = field["name"]
+            field_type = field["data_type"]
+            field_path = f"{parent_path}.{field_name}"
+
+            nested_fields = _parse_struct_fields(field_type)
+            if nested_fields is not None:
+                nested_exprs = cls._build_struct_field_expressions(field_path, nested_fields)
+                exprs.append(f"STRUCT({', '.join(nested_exprs)}) AS {field_name}")
+            else:
+                exprs.append(f"{field_path} AS {field_name}")
+        return exprs
 
 
 def get_nested_column_data_types(

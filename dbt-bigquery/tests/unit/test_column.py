@@ -1,8 +1,8 @@
 import pytest
 
 from dbt.adapters.bigquery.column import (
+    BigQueryColumn,
     get_nested_column_data_types,
-    get_struct_select_expression,
     _parse_struct_fields,
 )
 
@@ -329,4 +329,4 @@ def test_parse_struct_fields(data_type, expected_fields):
     ],
 )
 def test_get_struct_select_expression(column_name, data_type, expected):
-    assert get_struct_select_expression(column_name, data_type) == expected
+    assert BigQueryColumn.get_struct_select_expression(column_name, data_type) == expected
