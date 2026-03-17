@@ -22,10 +22,6 @@ class TestSeedInsertOverwriteNoDataDoubling(SeedConfigBase):
     the row count. Runs two sequential dbt seed invocations and asserts the row count
     stays the same — catching regressions where INSERT OVERWRITE is skipped or where
     subsequent batch INSERTs append rather than replace.
-
-    Note: this does not test concurrent seed invocations, which is the root cause
-    described in https://github.com/dbt-labs/dbt-adapters/issues/740. True concurrent
-    safety for multi-batch seeds (> 10 000 rows) requires a temp-table swap pattern.
     """
 
     ROW_COUNT = 20_000  # exceeds the 10 000-row batch size to cover multi-batch code path
