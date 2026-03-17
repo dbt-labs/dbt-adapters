@@ -3,11 +3,11 @@ import pytest
 from multiprocessing import get_context
 from unittest import mock
 
-from dbt.exceptions import DbtRuntimeError
+from dbt_common.exceptions import DbtRuntimeError
 from agate import Row
 from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkRelation
-from dbt.adapters.spark.impl import SCHEMA_NOT_FOUND_MESSAGES
+from dbt.adapters.spark.impl import SCHEMA_NOT_FOUND_MESSAGES, LIST_RELATIONS_MACRO_NAME
 from .utils import config_from_parts_or_dicts
 
 ENFORCED_SPARK_CONFIG = {"spark.sql.ansi.enabled": "false"}
@@ -738,3 +738,62 @@ def test_all_schema_not_found_messages_return_empty(not_found_msg, target_http):
     ):
         result = adapter.list_relations_without_caching(schema_relation)
         assert result == []
+
+
+ICEBERG_V2_ERROR = "SHOW TABLE EXTENDED is not supported for v2 tables"
+
+
+class TestListRelationsIcebergV2Fallback(unittest.TestCase):
+    """Tests for the Iceberg v2 fallback path inside list_relations_without_caching.
+
+    When the primary SHOW TABLE EXTENDED macro raises the v2-table error, the adapter
+    falls back to a SHOW TABLES macro.  Unexpected errors from *that* fallback should
+    propagate rather than be swallowed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def set_up_fixtures(self, target_http):
+        self.target_http = target_http
+
+    def _make_adapter(self):
+        return SparkAdapter(self.target_http, get_context("spawn"))
+
+    def _make_schema_relation(self, adapter, schema="analytics"):
+        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+
+    def test_iceberg_v2_fallback_returns_relations(self):
+        """When the primary macro raises the v2-table error, the fallback SHOW TABLES
+        macro is called and its results are returned successfully."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        fallback_rows = mock.MagicMock()
+        fallback_rows.__iter__ = mock.Mock(return_value=iter([]))
+
+        def execute_macro_side_effect(macro_name, *args, **kwargs):
+            if macro_name == LIST_RELATIONS_MACRO_NAME:
+                raise DbtRuntimeError(ICEBERG_V2_ERROR)
+            return fallback_rows
+
+        with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+            with mock.patch.object(
+                adapter, "_build_spark_relation_list", return_value=[]
+            ) as mock_build:
+                result = adapter.list_relations_without_caching(schema_relation)
+                self.assertEqual(result, [])
+                mock_build.assert_called_once()
+
+    def test_iceberg_v2_fallback_error_propagates(self):
+        """If the fallback SHOW TABLES macro itself raises an unexpected error, that
+        error should propagate rather than being silently swallowed."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        def execute_macro_side_effect(macro_name, *args, **kwargs):
+            if macro_name == LIST_RELATIONS_MACRO_NAME:
+                raise DbtRuntimeError(ICEBERG_V2_ERROR)
+            raise DbtRuntimeError("Unexpected fallback failure")
+
+        with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+            with self.assertRaises(DbtRuntimeError):
+                adapter.list_relations_without_caching(schema_relation)
