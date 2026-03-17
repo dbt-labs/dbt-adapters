@@ -13,7 +13,6 @@ from dbt.tests.adapter.utils.test_date import BaseDate
 from dbt.tests.adapter.utils.test_dateadd import BaseDateAdd
 from dbt.tests.adapter.utils.test_datediff import BaseDateDiff
 from dbt.tests.adapter.utils.test_date_trunc import BaseDateTrunc
-from dbt.tests.adapter.utils.test_equals import BaseEquals
 from dbt.tests.adapter.utils.test_escape_single_quotes import BaseEscapeSingleQuotesBackslash
 from dbt.tests.adapter.utils.test_except import BaseExcept
 from dbt.tests.adapter.utils.test_hash import BaseHash
@@ -102,10 +101,6 @@ class TestDateDiff(BaseDateDiff):
 
 
 class TestDateTrunc(BaseDateTrunc):
-    pass
-
-
-class TestEquals(BaseEquals):
     pass
 
 
