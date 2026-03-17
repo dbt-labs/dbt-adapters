@@ -677,3 +677,44 @@ class TestSparkAdapter(unittest.TestCase):
                 "stats:rows:value": 12345678,
             },
         )
+
+
+class TestListRelationsWithoutCaching(unittest.TestCase):
+    @pytest.fixture(autouse=True)
+    def set_up_fixtures(self, target_http):
+        self.target_http = target_http
+
+    def _make_adapter(self):
+        return SparkAdapter(self.target_http, get_context("spawn"))
+
+    def _make_schema_relation(self, adapter, schema="analytics"):
+        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+
+    def test_unknown_error_is_raised(self):
+        """An unexpected error from the metastore should propagate rather than
+        silently returning an empty list, which would cause incremental models
+        to recreate tables and lose data (issue #1289)."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        with mock.patch.object(
+            adapter,
+            "execute_macro",
+            side_effect=DbtRuntimeError("Connection to Hive Metastore failed"),
+        ):
+            with self.assertRaises(DbtRuntimeError):
+                adapter.list_relations_without_caching(schema_relation)
+
+    def test_database_not_found_returns_empty(self):
+        """When the schema/database genuinely does not exist, an empty list
+        should be returned rather than raising an error."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter, schema="nonexistent")
+
+        with mock.patch.object(
+            adapter,
+            "execute_macro",
+            side_effect=DbtRuntimeError(f"Database '{schema_relation}' not found"),
+        ):
+            result = adapter.list_relations_without_caching(schema_relation)
+            self.assertEqual(result, [])

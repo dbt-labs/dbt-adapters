@@ -250,24 +250,15 @@ class SparkAdapter(SQLAdapter):
             elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
                 # this happens with spark-iceberg with v2 iceberg tables
                 # https://issues.apache.org/jira/browse/SPARK-33393
-                try:
-                    # Iceberg behavior: 3-row result of relations obtained
-                    show_table_rows = self.execute_macro(
-                        LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
-                    )
-                    return self._build_spark_relation_list(
-                        row_list=show_table_rows,
-                        relation_info_func=self._get_relation_information_using_describe,
-                    )
-                except DbtRuntimeError as e:
-                    description = "Error while retrieving information about"
-                    logger.debug(f"{description} {schema_relation}: {e.msg}")
-                    return []
-            else:
-                logger.debug(
-                    f"Error while retrieving information about {schema_relation}: {errmsg}"
+                show_table_rows = self.execute_macro(
+                    LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
                 )
-                return []
+                return self._build_spark_relation_list(
+                    row_list=show_table_rows,
+                    relation_info_func=self._get_relation_information_using_describe,
+                )
+            else:
+                raise
 
     def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
         if not self.Relation.get_default_include_policy().database:
