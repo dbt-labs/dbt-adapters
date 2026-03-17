@@ -446,6 +446,15 @@ class AthenaAdapter(SQLAdapter):
             current_chunk: List[str] = []
             for condition in where_conditions:
                 condition_with_brackets = f"({condition})"
+                if (
+                    len(condition_with_brackets)
+                    > AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH
+                ):
+                    raise DbtRuntimeError(
+                        f"Partition condition exceeds the Glue API expression limit of "
+                        f"{AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH} characters: "
+                        f"'{condition_with_brackets[:100]}...'"
+                    )
                 if current_chunk and (
                     len(join_or_conditions(current_chunk + [condition_with_brackets]))
                     > AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH

@@ -616,6 +616,26 @@ class TestAthenaAdapter:
         assert s3.list_objects_v2(Bucket=second_bucket).get("KeyCount", 0) == 0
 
     @mock_aws
+    def test_clean_up_partitions_raises_for_oversized_single_condition(self, mock_aws_service):
+        """A single partition condition exceeding the Glue expression limit should raise clearly."""
+        table_name = "table"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        # Construct a single condition that is longer than the 2048-char limit
+        oversized_condition = "dt = '" + "x" * 2100 + "'"
+
+        with pytest.raises(DbtRuntimeError, match="Glue API expression limit"):
+            self.adapter.clean_up_partitions(relation, [oversized_condition])
+
+    @mock_aws
     def test_clean_up_table_table_does_not_exist(self, dbt_debug_caplog, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
