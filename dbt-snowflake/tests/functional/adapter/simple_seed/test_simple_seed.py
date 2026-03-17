@@ -19,12 +19,16 @@ class TestSimpleBigSeedBatched(SeedConfigBase):
 class TestSeedInsertOverwriteNoDataDoubling(SeedConfigBase):
     """
     Verifies that re-seeding an existing table (non-full-refresh) does not double
-    the row count. Before the INSERT OVERWRITE fix, the TRUNCATE auto-committed and
-    each INSERT batch was its own transaction; here we confirm the overwrite path
-    replaces rather than appends.
+    the row count. Runs two sequential dbt seed invocations and asserts the row count
+    stays the same — catching regressions where INSERT OVERWRITE is skipped or where
+    subsequent batch INSERTs append rather than replace.
+
+    Note: this does not test concurrent seed invocations, which is the root cause
+    described in https://github.com/dbt-labs/dbt-adapters/issues/740. True concurrent
+    safety for multi-batch seeds (> 10 000 rows) requires a temp-table swap pattern.
     """
 
-    ROW_COUNT = 20_000  # exceeds the 10 000-row batch size → exercises multi-batch path
+    ROW_COUNT = 20_000  # exceeds the 10 000-row batch size to cover multi-batch code path
 
     @pytest.fixture(scope="class")
     def seeds(self):
