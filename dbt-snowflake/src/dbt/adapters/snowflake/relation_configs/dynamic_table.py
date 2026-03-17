@@ -140,9 +140,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         if scheduler := relation_config.config.extra.get("scheduler"):  # type:ignore
             config_dict["scheduler"] = scheduler.upper()
         elif config_dict.get("target_lag"):
-            config_dict["scheduler"] = "ENABLE"
+            config_dict["scheduler"] = Scheduler.ENABLE.value
         else:
-            config_dict["scheduler"] = "DISABLE"
+            config_dict["scheduler"] = Scheduler.DISABLE.value
 
         return config_dict
 
@@ -181,7 +181,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         scheduler = dynamic_table.get("scheduler")
         target_lag = dynamic_table.get("target_lag")
         if scheduler is None:
-            scheduler = "ENABLE" if target_lag else "DISABLE"
+            scheduler = Scheduler.ENABLE.value if target_lag else Scheduler.DISABLE.value
 
         config_dict = {
             "name": dynamic_table.get("name"),
