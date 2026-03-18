@@ -1,6 +1,0 @@
-kind: Features
-body: Improve duplicate macro in package error message
-time: 2026-02-11T01:15:24.316889+05:30
-custom:
-    Author: ash2shukla
-    Issue: "10387"
