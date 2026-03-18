@@ -425,3 +425,11 @@
   {% endif %}
 
 {% endmacro %}
+
+
+{% macro redshift__show_tables_from_schema(database, schema) %}
+    {%- call statement('show_tables', fetch_result=True) -%}
+        SHOW TABLES FROM SCHEMA {{ database }}.{{ schema }}
+    {%- endcall -%}
+    {{ return(load_result('show_tables')) }}
+{% endmacro %}
