@@ -18,7 +18,6 @@ from mypy_boto3_glue.client import GlueClient
 from dbt.adapters.athena import AthenaAdapter
 from dbt.adapters.athena import Plugin as AthenaPlugin
 from dbt.adapters.athena.column import AthenaColumn
-from dbt.adapters.athena.connections import AthenaCursor, AthenaParameterFormatter
 from dbt.adapters.athena.exceptions import S3LocationException
 from dbt.adapters.athena.relation import AthenaRelation, TableType
 from dbt.adapters.athena.utils import AthenaCatalogType
@@ -101,20 +100,8 @@ class TestAthenaAdapter:
         connection_cls.assert_not_called()
         connection.handle
         connection_cls.assert_called_once()
-        _, arguments = connection_cls.call_args_list[0]
-        assert arguments["s3_staging_dir"] == "s3://my-bucket/test-dbt/"
-        assert arguments["endpoint_url"] is None
-        assert arguments["schema_name"] == "test_dbt_athena"
-        assert arguments["work_group"] == "dbt-athena-adapter"
-        assert arguments["cursor_class"] == AthenaCursor
-        assert isinstance(arguments["formatter"], AthenaParameterFormatter)
-        assert arguments["poll_interval"] == 1.0
-        assert arguments["retry_config"].attempt == 6
-        assert arguments["retry_config"].exceptions == (
-            "ThrottlingException",
-            "TooManyRequestsException",
-            "InternalServerException",
-        )
+        received_credentials = connection_cls.call_args_list[0][0][0]
+        assert received_credentials == connection.credentials
 
     @mock.patch("dbt.adapters.athena.connections.AthenaConnection")
     def test_acquire_connection(self, connection_cls):
@@ -128,7 +115,7 @@ class TestAthenaAdapter:
 
     @mock.patch("dbt.adapters.athena.connections.AthenaConnection")
     def test_acquire_connection_exc(self, connection_cls, dbt_error_caplog):
-        connection_cls.side_effect = lambda **_: (_ for _ in ()).throw(Exception("foobar"))
+        connection_cls.side_effect = lambda *_: (_ for _ in ()).throw(Exception("foobar"))
         connection = self.adapter.acquire_connection("dummy")
         conn_res = None
         with pytest.raises(ConnectionError) as exc:
