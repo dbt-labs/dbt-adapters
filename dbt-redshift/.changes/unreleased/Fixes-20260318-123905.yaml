@@ -1,5 +1,5 @@
 kind: Fixes
-body: Remove ra3_node deprecation log until SHOWS APIs is GA
+body: Remove ra3_node deprecation log until SHOW APIs are GA
 time: 2026-03-18T12:39:05.512111+05:30
 custom:
     Author: tauhid621
