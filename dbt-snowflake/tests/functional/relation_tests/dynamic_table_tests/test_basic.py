@@ -3,7 +3,12 @@ import pytest
 from dbt.tests.util import assert_message_in_logs, run_dbt, run_dbt_and_capture
 
 from tests.functional.relation_tests.dynamic_table_tests import models
-from tests.functional.utils import query_relation_type, update_model
+from tests.functional.utils import (
+    insert_record,
+    query_relation_type,
+    query_row_count,
+    update_model,
+)
 
 
 class TestBasic:
@@ -246,6 +251,93 @@ class TestSchedulerConfigChange:
         assert_message_in_logs("scheduler = 'DISABLE'", logs)
         assert_message_in_logs("alter dynamic table", logs)
         assert_message_in_logs("Applying REFRESH to:", logs)
+
+
+class _SchedulerNoOpBase:
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    def _assert_no_op_run_behavior(
+        self, project, relation_name: str, expect_refresh: bool
+    ) -> None:
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        initial_count = query_row_count(project, relation_name)
+        assert initial_count == 3
+
+        insert_record(project, "my_seed", {"id": 4, "value": 400})
+
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs, expect_refresh)
+
+        refreshed_count = query_row_count(project, relation_name)
+        if expect_refresh:
+            assert refreshed_count == 4
+        else:
+            assert refreshed_count == 3
+
+
+class TestSchedulerDisabledNoOpRefresh(_SchedulerNoOpBase):
+    """
+    Verify no-op runs still refresh disabled-scheduler dynamic tables when source data changes.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "my_dt_scheduler_disabled_noop_refresh.sql": models.DYNAMIC_TABLE_SCHEDULER_DISABLED,
+        }
+
+    def test_no_op_run_refreshes_disabled_scheduler_dynamic_table(self, project):
+        self._assert_no_op_run_behavior(
+            project, "my_dt_scheduler_disabled_noop_refresh", expect_refresh=True
+        )
+
+
+class TestSchedulerDefaultDisabledNoOpRefresh(_SchedulerNoOpBase):
+    """
+    Verify no-op runs still refresh when scheduler defaults to disabled (no target_lag).
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "my_dt_no_target_lag_noop_refresh.sql": models.DYNAMIC_TABLE_NO_TARGET_LAG,
+        }
+
+    def test_no_op_run_refreshes_default_disabled_scheduler_dynamic_table(self, project):
+        self._assert_no_op_run_behavior(
+            project, "my_dt_no_target_lag_noop_refresh", expect_refresh=True
+        )
+
+
+class TestSchedulerEnabledNoOpNoRefresh:
+    """
+    Verify no-op runs do not issue explicit REFRESH when scheduler is enabled.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "my_dt_scheduler_enabled_noop.sql": models.DYNAMIC_TABLE_SCHEDULER_ENABLED,
+        }
+
+    def test_no_op_run_does_not_refresh_enabled_scheduler_dynamic_table(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        insert_record(project, "my_seed", {"id": 4, "value": 400})
+
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying REFRESH to:", logs, False)
 
 
 class TestIcebergSchedulerDisabled:

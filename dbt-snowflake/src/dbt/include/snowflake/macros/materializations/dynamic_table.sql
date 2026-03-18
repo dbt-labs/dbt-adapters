@@ -19,7 +19,7 @@
     {% set scheduler_is_disabled = (dynamic_table.scheduler is not none and dynamic_table.scheduler | upper == 'DISABLE') %}
     {% set scheduler_defaults_to_disabled = (dynamic_table.scheduler is none and dynamic_table.target_lag is none) %}
     {% set needs_refresh = scheduler_is_disabled or scheduler_defaults_to_disabled %}
-    {% if build_sql != '' and needs_refresh %}
+    {% if needs_refresh %}
         {% call statement(name="refresh") %}
             {{ snowflake__refresh_dynamic_table(target_relation) }}
         {% endcall %}
