@@ -132,12 +132,6 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
-        if self.config.credentials.ra3_node:
-            logger.info(
-                "The `ra3_node` configuration in profiles.yml is deprecated. "
-                "Use the `redshift_use_show_apis` behavior flag instead. "
-            )
-
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
