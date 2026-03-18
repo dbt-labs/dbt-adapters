@@ -102,3 +102,32 @@ class PythonUDAFDefaultArgSupport(BasicPythonUDAF):
             )
             assert len(result.results) == 1
             assert result.results[0].agate_table.rows[0].values()[0] == 9.0
+
+
+class BasicJavaScriptUDAF(UDAFBase):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sum_squared.js": files.SUM_SQUARED_UDAF_JS,
+            "sum_squared.yml": files.SUM_SQUARED_UDAF_JS_YML,
+        }
+
+
+class JavaScriptUDAFDefaultArgSupport(BasicJavaScriptUDAF):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sum_squared.js": files.SUM_SQUARED_UDAF_JS,
+            "sum_squared.yml": files.SUM_SQUARED_UDAF_JS_WITH_DEFAULT_ARG_YML,
+        }
+
+    def test_udaf(self, project, sql_event_catcher):
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+        assert len(result.results) == 2
+
+        if not self.expect_default_arg_support:
+            assert "DEFAULT 1" not in sql_event_catcher.caught_events[0].data.sql
+        else:
+            assert "DEFAULT 1" in sql_event_catcher.caught_events[0].data.sql
