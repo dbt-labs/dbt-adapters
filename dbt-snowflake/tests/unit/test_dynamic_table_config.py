@@ -17,6 +17,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
 )
+from dbt_common.exceptions import CompilationError
 
 
 class TestSnowflakeDynamicTableConfig:
@@ -540,6 +541,56 @@ class TestSchedulerOptional:
         assert config.scheduler is None
 
 
+class TestSchedulerValidation:
+    """Tests for compile-time validation of scheduler/target_lag combinations."""
+
+    @staticmethod
+    def _make_relation_config(scheduler=None, target_lag=None):
+        from unittest.mock import MagicMock
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        extra = {"snowflake_warehouse": "MY_WH"}
+        if scheduler is not None:
+            extra["scheduler"] = scheduler
+        if target_lag is not None:
+            extra["target_lag"] = target_lag
+        relation_config.config.extra = extra
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return relation_config
+
+    def test_scheduler_enable_invalid_when_target_lag_none(self):
+        relation_config = self._make_relation_config(scheduler="ENABLE", target_lag=None)
+
+        with pytest.raises(CompilationError, match="requires `target_lag`"):
+            SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+    def test_scheduler_disable_invalid_when_target_lag_set(self):
+        relation_config = self._make_relation_config(scheduler="DISABLE", target_lag="1 hour")
+
+        with pytest.raises(CompilationError, match="requires `target_lag` to be omitted"):
+            SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+    def test_scheduler_enable_valid_when_target_lag_set(self):
+        relation_config = self._make_relation_config(scheduler="ENABLE", target_lag="1 hour")
+
+        config = SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+        assert config.scheduler == "ENABLE"
+        assert config.target_lag == "1 hour"
+
+    def test_invalid_scheduler_literal_still_rejected(self):
+        relation_config = self._make_relation_config(scheduler="ENABLED", target_lag="1 hour")
+
+        with pytest.raises(CompilationError, match="Invalid value for `scheduler`"):
+            SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+
 class TestSchedulerChangeset:
     """Tests for scheduler change detection in SnowflakeDynamicTableConfigChangeset."""
 
@@ -636,7 +687,7 @@ class TestSchedulerChangeDetectionLogic:
     """
 
     @staticmethod
-    def _make_relation_results(scheduler=None):
+    def _make_relation_results(scheduler=None, target_lag="1 hour"):
         import agate
 
         dt_row_data = {
@@ -644,7 +695,7 @@ class TestSchedulerChangeDetectionLogic:
             "schema_name": "test_schema",
             "database_name": "test_db",
             "text": "SELECT 1",
-            "target_lag": "1 hour",
+            "target_lag": target_lag,
             "warehouse": "MY_WH",
             "refresh_mode": "AUTO",
             "immutable_where": None,
@@ -703,8 +754,8 @@ class TestSchedulerChangeDetectionLogic:
         """When user sets scheduler=DISABLE and SHOW output is DISABLE, no change."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results(scheduler="DISABLE")
-        relation_config = self._make_relation_config(scheduler="DISABLE")
+        relation_results = self._make_relation_results(scheduler="DISABLE", target_lag=None)
+        relation_config = self._make_relation_config(scheduler="DISABLE", target_lag=None)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
             relation_results, relation_config
@@ -732,7 +783,7 @@ class TestSchedulerChangeDetectionLogic:
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
         relation_results = self._make_relation_results(scheduler="ENABLE")
-        relation_config = self._make_relation_config(scheduler="DISABLE")
+        relation_config = self._make_relation_config(scheduler="DISABLE", target_lag=None)
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
             relation_results, relation_config
@@ -747,8 +798,8 @@ class TestSchedulerChangeDetectionLogic:
         """When user sets scheduler=ENABLE but SHOW output is DISABLE, change detected."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
-        relation_results = self._make_relation_results(scheduler="DISABLE")
-        relation_config = self._make_relation_config(scheduler="ENABLE")
+        relation_results = self._make_relation_results(scheduler="DISABLE", target_lag=None)
+        relation_config = self._make_relation_config(scheduler="ENABLE", target_lag="1 hour")
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
             relation_results, relation_config

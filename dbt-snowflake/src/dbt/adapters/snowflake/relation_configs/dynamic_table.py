@@ -5,6 +5,7 @@ from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.contracts.relation import ComponentName
 from dbt_common.dataclass_schema import StrEnum  # doesn't exist in standard library until py3.11
+from dbt_common.exceptions import CompilationError
 from typing_extensions import Self
 
 from dbt.adapters.snowflake.parse_model import cluster_by
@@ -137,12 +138,31 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         if initialize := relation_config.config.extra.get("initialize"):  # type:ignore
             config_dict["initialize"] = initialize.upper()
 
+        target_lag = config_dict.get("target_lag")
         if scheduler := relation_config.config.extra.get("scheduler"):  # type:ignore
-            config_dict["scheduler"] = scheduler.upper()
-        elif config_dict.get("target_lag"):
-            config_dict["scheduler"] = Scheduler.ENABLE.value
+            normalized_scheduler = scheduler.upper()
+            if normalized_scheduler not in (Scheduler.ENABLE, Scheduler.DISABLE):
+                raise CompilationError(
+                    "Invalid value for `scheduler`: "
+                    f"'{scheduler}'. Expected one of: "
+                    f"{Scheduler.ENABLE}, {Scheduler.DISABLE}."
+                )
+
+            if normalized_scheduler == Scheduler.ENABLE and target_lag is None:
+                raise CompilationError(
+                    "Invalid dynamic table config: `scheduler='ENABLE'` requires `target_lag`."
+                )
+
+            if normalized_scheduler == Scheduler.DISABLE and target_lag is not None:
+                raise CompilationError(
+                    "Invalid dynamic table config: `scheduler='DISABLE'` requires `target_lag` "
+                    "to be omitted."
+                )
+            config_dict["scheduler"] = normalized_scheduler
+        elif target_lag:
+            config_dict["scheduler"] = Scheduler.ENABLE
         else:
-            config_dict["scheduler"] = Scheduler.DISABLE.value
+            config_dict["scheduler"] = Scheduler.DISABLE
 
         return config_dict
 
@@ -181,7 +201,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         scheduler = dynamic_table.get("scheduler")
         target_lag = dynamic_table.get("target_lag")
         if scheduler is None:
-            scheduler = Scheduler.ENABLE.value if target_lag else Scheduler.DISABLE.value
+            scheduler = Scheduler.ENABLE if target_lag else Scheduler.DISABLE
 
         config_dict = {
             "name": dynamic_table.get("name"),
