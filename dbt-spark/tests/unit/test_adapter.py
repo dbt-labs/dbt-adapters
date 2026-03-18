@@ -7,7 +7,11 @@ from dbt_common.exceptions import DbtRuntimeError
 from agate import Row
 from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkRelation
-from dbt.adapters.spark.impl import SCHEMA_NOT_FOUND_MESSAGES, LIST_RELATIONS_MACRO_NAME
+from dbt.adapters.spark.impl import (
+    LIST_RELATIONS_MACRO_NAME,
+    SCHEMA_NOT_FOUND_MESSAGES,
+    TABLE_OR_VIEW_NOT_FOUND_MESSAGES,
+)
 from .utils import config_from_parts_or_dicts
 
 ENFORCED_SPARK_CONFIG = {"spark.sql.ansi.enabled": "false"}
@@ -726,6 +730,26 @@ def test_all_schema_not_found_messages_return_empty(not_found_msg, target_http):
     """Every message in SCHEMA_NOT_FOUND_MESSAGES should cause
     list_relations_without_caching to return [] rather than raise.
     This covers engine-specific variants such as Spark SQL's [SCHEMA_NOT_FOUND]."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="nonexistent", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=DbtRuntimeError(not_found_msg),
+    ):
+        result = adapter.list_relations_without_caching(schema_relation)
+        assert result == []
+
+
+@pytest.mark.parametrize("not_found_msg", TABLE_OR_VIEW_NOT_FOUND_MESSAGES)
+def test_all_table_or_view_not_found_messages_return_empty(not_found_msg, target_http):
+    """Every message in TABLE_OR_VIEW_NOT_FOUND_MESSAGES should cause
+    list_relations_without_caching to return [] rather than raise.
+    This covers Databricks/Simba errors like [TABLE_OR_VIEW_NOT_FOUND] that
+    surface when a schema has no matching tables."""
     adapter = SparkAdapter(target_http, get_context("spawn"))
     schema_relation = adapter.Relation.create(
         schema="nonexistent", identifier=""

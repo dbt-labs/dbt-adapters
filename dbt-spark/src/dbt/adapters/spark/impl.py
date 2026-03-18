@@ -252,7 +252,9 @@ class SparkAdapter(SQLAdapter):
             )
         except DbtRuntimeError as e:
             errmsg = getattr(e, "msg", "")
-            if any(msg in errmsg for msg in SCHEMA_NOT_FOUND_MESSAGES):
+            if any(msg in errmsg for msg in SCHEMA_NOT_FOUND_MESSAGES) or any(
+                msg in errmsg for msg in TABLE_OR_VIEW_NOT_FOUND_MESSAGES
+            ):
                 return []
             # Iceberg compute engine behavior: show table
             elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
