@@ -1,6 +1,6 @@
 from typing import Any, Sequence, cast
 
-import pytest  # type: ignore
+import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 
@@ -82,6 +82,6 @@ class TestFineGrainedMutationsFail:
             "view_with_flag.sql": view_fgm_enabled_model,
         }
 
-    def test_view_with_flag_fails(self):
+    def test_view_with_flag_fails(self, project):
         _, stdout = run_dbt_and_capture(["run", "--select", "view_with_flag"], expect_pass=False)
-        assert "`enable_fine_grained_mutations` is not supported for views on BigQuery." in stdout
+        assert "`enable_fine_grained_mutations` is not supported for views on BigQuery" in stdout
