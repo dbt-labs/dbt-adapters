@@ -34,12 +34,12 @@ GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
-    default=True,
+    default=False,
     description=(
         "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
         "since each statement is automatically committed. This reduces round-trips "
-        "to the database and avoids unnecessary transaction overhead."
-        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
+        "to the database and avoids unnecessary transaction overhead. "
+        "Setting this to True will enable the optimization."
     ),
 )
 
@@ -51,6 +51,39 @@ REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
         "for metadata queries. Required for cross-database operations with Datasharing. "
     ),
 )
+
+CATALOG_COLUMNS = [
+    "table_database",
+    "table_schema",
+    "table_name",
+    "table_type",
+    "table_comment",
+    "table_owner",
+    "column_name",
+    "column_index",
+    "column_type",
+    "column_comment",
+]
+
+CATALOG_COLUMN_TYPES = [
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Number(),
+    agate.Text(),
+    agate.Text(),
+]
+
+_SHOW_TABLE_TYPE_MAP = {
+    "TABLE": "BASE TABLE",
+    "VIEW": "VIEW",
+    "MATERIALIZED VIEW": "MATERIALIZED VIEW",
+    "LATE BINDING VIEW": "LATE BINDING VIEW",
+}
 
 
 @dataclass
@@ -137,13 +170,21 @@ class RedshiftAdapter(SQLAdapter):
         return "varchar(24)"
 
     @available
+    def use_show_apis(self) -> bool:
+        """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
+
+        Returns True when the ``redshift_use_show_apis`` behavior flag.
+        """
+        return self.behavior.redshift_use_show_apis.no_warn
+
+    @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
         ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not ra3_node:
+        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
                     database, expected
@@ -166,10 +207,12 @@ class RedshiftAdapter(SQLAdapter):
         where type is one of: table, view, materialized_view.
         """
         new_rows = []
+        # has_subtype is only needed until redshift patch 197 is everywhere
+        has_subtype = "table_subtype" in show_tables.column_names
         for row in show_tables.rows:
             table_type = (row["table_type"] or "").strip().upper()
             if table_type == "VIEW":
-                subtype = (row["table_subtype"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
                 relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
             else:
                 relation_type = "table"
@@ -189,6 +232,57 @@ class RedshiftAdapter(SQLAdapter):
             column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
 
+    @available
+    def build_catalog_from_show_tables_and_svv_columns(
+        self,
+        show_tables_results: List["agate.Table"],
+        svv_columns: "agate.Table",
+    ) -> "agate.Table":
+        """Build the base catalog by joining SHOW TABLES metadata with SVV_REDSHIFT_COLUMNS."""
+        if not show_tables_results or not svv_columns.rows:
+            return agate.Table([], column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES)
+
+        table_meta: Dict[tuple, tuple] = {}
+        for show_table in show_tables_results:
+            # has_subtype is only needed until redshift patch 197 is everywhere
+            has_subtype = "table_subtype" in show_table.column_names
+            for row in show_table.rows:
+                table_type = (row["table_type"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                catalog_type = _SHOW_TABLE_TYPE_MAP.get(
+                    subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
+                )
+
+                key = (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+                table_meta[key] = (
+                    row["database_name"],
+                    row["schema_name"],
+                    row["table_name"],
+                    catalog_type,
+                    row["remarks"],
+                    row["owner"],
+                )
+
+        catalog_rows = []
+        for row in svv_columns.rows:
+            meta = table_meta.get(
+                (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+            )
+            if meta:
+                catalog_rows.append(
+                    meta
+                    + (
+                        row["column_name"],
+                        row["ordinal_position"],
+                        row["data_type"],
+                        row["remarks"],
+                    )
+                )
+
+        return agate.Table(
+            catalog_rows, column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES
+        )
+
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of `show grants` to match the grants config format.
 
@@ -197,7 +291,7 @@ class RedshiftAdapter(SQLAdapter):
         Otherwise the legacy query returns ``grantee`` and ``privilege_type``
         (lowercase).
         """
-        if not self.behavior.redshift_use_show_apis.no_warn:
+        if not self.use_show_apis():
             return super().standardize_grants_dict(grants_table)
 
         grants_dict: Dict[str, List[str]] = {}
@@ -215,8 +309,9 @@ class RedshiftAdapter(SQLAdapter):
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
+        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
         try:
-            return schemas.flatten(allow_multiple_databases=self.config.credentials.ra3_node)
+            return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
