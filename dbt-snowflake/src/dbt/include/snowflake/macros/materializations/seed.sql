@@ -9,8 +9,6 @@
     {% if full_refresh %}
         {{ adapter.drop_relation(old_relation) }}
         {% set sql = create_csv_table(model, agate_table) %}
-    {% else %}
-        {% set sql = "insert overwrite into " ~ old_relation.render() %}
     {% endif %}
     {{ return(sql) }}
 {% endmacro %}
@@ -22,13 +20,19 @@
         INSERT OVERWRITE, which atomically clears the table and inserts new rows as
         one DML operation. Subsequent batches append with regular INSERT. Everything
         commits together, so concurrent readers never see an empty or partial table.
+
+        For catalog-linked databases (e.g. Glue-backed Iceberg), explicit transaction
+        wrapping is skipped to stay consistent with the rest of the adapter.
     --#}
     {% set batch_size = get_batch_size() %}
     {% set cols_sql = get_seed_column_quoted_csv(model, agate_table.column_names) %}
+    {% set is_catalog_linked = snowflake__is_catalog_linked_database(relation=config.model) %}
 
     {% set statements = [] %}
 
-    {% do adapter.add_query('BEGIN', auto_begin=False) %}
+    {% if not is_catalog_linked %}
+        {% do adapter.add_query('BEGIN', auto_begin=False) %}
+    {% endif %}
 
     {% for chunk in agate_table.rows | batch(batch_size) %}
         {% set bindings = [] %}
@@ -55,10 +59,21 @@
         {% endif %}
     {% endfor %}
 
-    {% do adapter.add_query('COMMIT', auto_begin=False) %}
+    {%- if (agate_table.rows | length) == 0 -%}
+        {% set sql %}
+            insert overwrite into {{ this.render() }} ({{ cols_sql }})
+            select {{ cols_sql }} from {{ this.render() }} where 1=0
+        {% endset %}
+        {% do adapter.add_query(sql, auto_begin=False) %}
+        {% do statements.append(sql) %}
+    {%- endif -%}
+
+    {% if not is_catalog_linked %}
+        {% do adapter.add_query('COMMIT', auto_begin=False) %}
+    {% endif %}
 
     {# Return SQL so we can render it out into the compiled files #}
-    {{ return(statements[0]) }}
+    {{ return(statements[0] if statements else '') }}
 {% endmacro %}
 
 {% materialization seed, adapter='snowflake' %}
