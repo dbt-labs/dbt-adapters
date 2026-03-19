@@ -52,30 +52,33 @@
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
     {%- if ns.is_bucketed -%}
-        {# Group non-empty partition conditions into batches respecting athena_partitions_limit #}
         {%- set partition_batches = [] -%}
         {%- set non_empty_partitions = ns.partitions | select | list -%}
-        {%- if non_empty_partitions | length > 0 -%}
-            {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
-                {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
+        {%- set num_non_bucket = non_empty_partitions | length -%}
+
+        {# Coordinate chunk sizes so partition × bucket ≤ partitions_limit #}
+        {%- if num_non_bucket > 0 -%}
+            {%- set partition_chunk_size = [num_non_bucket, athena_partitions_limit] | min -%}
+            {%- set bucket_chunk_size = [1, (athena_partitions_limit / partition_chunk_size) | int] | max -%}
+
+            {%- for i in range(0, num_non_bucket, partition_chunk_size) -%}
+                {%- set batch = non_empty_partitions[i:i + partition_chunk_size] -%}
                 {%- do partition_batches.append(batch | join(' or ')) -%}
             {%- endfor -%}
+        {%- else -%}
+            {%- set bucket_chunk_size = athena_partitions_limit -%}
         {%- endif -%}
 
-        {# For each bucket, chunk the IN clause values by athena_partitions_limit and combine with partition batches #}
         {%- for bucket_num in ns.bucket_numbers -%}
             {%- set values = ns.bucket_conditions[bucket_num] -%}
-
-            {%- for ci in range(0, values | length, athena_partitions_limit) -%}
-                {%- set chunk = values[ci:ci + athena_partitions_limit] -%}
+            {%- for ci in range(0, values | length, bucket_chunk_size) -%}
+                {%- set chunk = values[ci:ci + bucket_chunk_size] -%}
                 {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
-
                 {%- if partition_batches | length > 0 -%}
                     {%- for pb in partition_batches -%}
                         {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
                     {%- endfor -%}
                 {%- else -%}
-                    {# Bucket-only case (no non-bucket partition columns) #}
                     {%- do partitions_batches.append(bucket_cond) -%}
                 {%- endif -%}
             {%- endfor -%}

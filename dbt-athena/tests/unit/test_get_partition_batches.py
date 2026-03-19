@@ -203,6 +203,39 @@ class TestBucketOnlyBatching:
             "col IN ('e')",
         ]
 
+    def test_bucket_only_values_under_limit(self):
+        """Bucket values within limit should not be split."""
+        # md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d']
+        # With limit=10, no splitting needed
+        result = _render_macro(
+            config={
+                "partitioned_by": ["bucket(col, 2)"],
+                "partitions_limit": 10,
+            },
+            rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
+            column_types=["varchar"],
+        )
+        assert result == [
+            "col IN ('a', 'b', 'c', 'd')",
+            "col IN ('e')",
+        ]
+
+    def test_bucket_only_limit_one(self):
+        """Bucket-only with limit=1: each value becomes its own batch."""
+        result = _render_macro(
+            config={
+                "partitioned_by": ["bucket(col, 2)"],
+                "partitions_limit": 1,
+            },
+            rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
+            column_types=["varchar"],
+        )
+        for batch in result:
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", "))
+            assert num_in <= 1, f"Batch has {num_in} values, expected ≤ 1"
+        assert len(result) == 5
+
 
 class TestBucketWithPartitionsBatching:
     """Tests for bucket + non-bucket partition columns (AND structure)."""
@@ -247,13 +280,72 @@ class TestBucketWithPartitionsBatching:
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('charlie')",
         ]
 
+    def test_single_partition_with_bucket_values_exceeding_limit(self):
+        """non_bucket=1, bucket values > limit.
+
+        partition_chunk = min(1, 3) = 1, bucket_chunk = floor(3/1) = 3.
+        Bucket values exceeding 3 should be split into chunks of 3.
+        """
+        limit = 3
+        # 7 users on a single date — hash distributes across buckets
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": limit,
+            },
+            rows=[["2024-01-01", f"user{i}"] for i in range(1, 8)],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} × {num_in} = {num_or * num_in}"
+            )
+            assert num_or == 1, "Single non-bucket partition should not be split"
+            assert num_in <= limit, f"Bucket chunk should be ≤ {limit}"
+
+    def test_few_partitions_with_many_bucket_values(self):
+        """non_bucket < limit, bucket values > bucket_chunk.
+
+        non_bucket=2, limit=4 → partition_chunk=2, bucket_chunk=floor(4/2)=2.
+        A bucket with 5 values should be split into chunks of 2.
+        """
+        limit = 4
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": limit,
+            },
+            rows=[
+                [date, f"user{i}"]
+                for date in ["2024-01-01", "2024-01-02"]
+                for i in range(1, 8)
+            ],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} × {num_in} = {num_or * num_in}"
+            )
+            assert num_in <= 2, f"Bucket chunk should be ≤ 2 (floor({limit}/2))"
+
     def test_partitions_split_with_buckets(self):
-        """Partitions exceeding the limit should be split, each combined with each bucket."""
-        # md5 hash with bucket(user_id, 3):
-        #   user1->bucket 1, user2->bucket 2, user3->bucket 2,
-        #   user4->bucket 0, user5->bucket 2
-        # 5 dates with limit=2 -> 3 partition batches
-        # 3 buckets × 3 partition batches = 9 batches (bucket 2 has 3 values but within limit)
+        """Partitions exceeding the limit should be split, each combined with each bucket.
+
+        With coordinated chunk sizes (limit=2, 5 non-bucket partitions):
+          partition_chunk_size = min(5, 2) = 2
+          bucket_chunk_size = max(1, floor(2/2)) = 1
+        So bucket values are chunked individually to keep cross-product ≤ limit.
+
+        md5 hash with bucket(user_id, 3):
+          user1->bucket 1, user2->bucket 2, user3->bucket 2,
+          user4->bucket 0, user5->bucket 2
+        """
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 3)"],
@@ -266,9 +358,12 @@ class TestBucketWithPartitionsBatching:
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user1')",
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user1')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user1')",
-            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user2', 'user3')",
-            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user2', 'user3')",
-            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user2')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user2')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user2')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user3')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user3')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user3')",
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user5')",
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user5')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user5')",
@@ -276,3 +371,110 @@ class TestBucketWithPartitionsBatching:
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user4')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user4')",
         ]
+
+
+class TestCrossProductLimit:
+    """Tests verifying that the cross-product of partitions × bucket values respects the limit."""
+
+    def test_cross_product_respects_limit(self):
+        """Invariant: every batch's cross-product must be ≤ partitions_limit."""
+        limit = 4
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 3)"],
+                "partitions_limit": limit,
+            },
+            rows=[[f"2024-01-{i:02d}", f"user{i}"] for i in range(1, 11)],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} partitions × {num_in} bucket values = {num_or * num_in}"
+            )
+
+    def test_many_months_few_buckets(self):
+        """Production-like scenario: 12 months × many users, limit=100."""
+        limit = 100
+        months = [f"2024-{m:02d}-01" for m in range(1, 13)]
+        users = [f"user{i}" for i in range(1, 51)]
+        rows = [[month, user] for month in months for user in users]
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 10)"],
+                "partitions_limit": limit,
+            },
+            rows=rows,
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} partitions × {num_in} bucket values = {num_or * num_in}"
+            )
+
+    def test_non_bucket_count_exceeds_limit(self):
+        """When non-bucket partitions exceed limit, partition_chunk_size = limit, bucket_chunk_size = 1."""
+        limit = 3
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": limit,
+            },
+            rows=[[f"2024-01-{i:02d}", f"u{i}"] for i in range(1, 8)],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} partitions × {num_in} bucket values = {num_or * num_in}"
+            )
+
+    def test_non_bucket_count_equals_limit(self):
+        """When non-bucket count == limit, partition_chunk = limit, bucket_chunk = 1."""
+        limit = 3
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": limit,
+            },
+            rows=[[f"2024-01-{i:02d}", f"u{i}"] for i in range(1, 4)],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} partitions × {num_in} bucket values = {num_or * num_in}"
+            )
+        assert all("(" in b and "IN" in b for b in result)
+
+    def test_limit_one(self):
+        """Extreme edge case: limit=1 forces partition_chunk=1 and bucket_chunk=1."""
+        limit = 1
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": limit,
+            },
+            rows=[
+                ["2024-01-01", "alice"],
+                ["2024-01-02", "bob"],
+            ],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            in_match = re.search(r"IN \((.+?)\)", batch)
+            num_in = len(in_match.group(1).split(", ")) if in_match else 1
+            assert num_or * num_in <= limit, (
+                f"Batch exceeds limit {limit}: {num_or} partitions × {num_in} bucket values = {num_or * num_in}"
+            )
+        assert len(result) > 0
