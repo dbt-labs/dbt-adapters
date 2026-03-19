@@ -28,6 +28,24 @@
     {% set cols_sql = get_seed_column_quoted_csv(model, agate_table.column_names) %}
     {% set is_catalog_linked = snowflake__is_catalog_linked_database(relation=config.model) %}
 
+    {#-- Handle empty seeds (header-only CSV) with an early return. The batching
+         loop below would never run, so we issue a single INSERT OVERWRITE that
+         selects zero rows to atomically clear the table. --#}
+    {% if (agate_table.rows | length) == 0 %}
+        {% set sql %}
+            insert overwrite into {{ this.render() }} ({{ cols_sql }})
+            select {{ cols_sql }} from {{ this.render() }} where 1=0
+        {% endset %}
+        {% if not is_catalog_linked %}
+            {% do adapter.add_query('BEGIN', auto_begin=False) %}
+        {% endif %}
+        {% do adapter.add_query(sql, abridge_sql_log=True) %}
+        {% if not is_catalog_linked %}
+            {% do adapter.add_query('COMMIT', auto_begin=False) %}
+        {% endif %}
+        {{ return(sql) }}
+    {% endif %}
+
     {% set statements = [] %}
 
     {% if not is_catalog_linked %}
@@ -59,21 +77,12 @@
         {% endif %}
     {% endfor %}
 
-    {%- if (agate_table.rows | length) == 0 -%}
-        {% set sql %}
-            insert overwrite into {{ this.render() }} ({{ cols_sql }})
-            select {{ cols_sql }} from {{ this.render() }} where 1=0
-        {% endset %}
-        {% do adapter.add_query(sql, auto_begin=False) %}
-        {% do statements.append(sql) %}
-    {%- endif -%}
-
     {% if not is_catalog_linked %}
         {% do adapter.add_query('COMMIT', auto_begin=False) %}
     {% endif %}
 
     {# Return SQL so we can render it out into the compiled files #}
-    {{ return(statements[0] if statements else '') }}
+    {{ return(statements[0]) }}
 {% endmacro %}
 
 {% materialization seed, adapter='snowflake' %}
