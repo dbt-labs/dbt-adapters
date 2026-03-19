@@ -3,4 +3,4 @@ body: Use INSERT OVERWRITE to make dbt seed atomic on Snowflake, preventing conc
 time: 2026-03-17T12:15:30.985696+05:30
 custom:
     Author: aahel
-    Issue: 740
+    Issue: "740"
