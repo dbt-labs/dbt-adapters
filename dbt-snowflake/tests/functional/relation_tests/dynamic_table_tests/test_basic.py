@@ -11,6 +11,10 @@ from tests.functional.utils import (
 )
 
 
+def assert_message_not_in_logs(message: str, logs: str):
+    assert_message_in_logs(message, logs, expected_pass=False)
+
+
 class TestBasic:
 
     @pytest.fixture(scope="class", autouse=True)
@@ -67,11 +71,11 @@ class TestAutoConfigDoesntFullRefresh:
 
         _, logs = run_dbt_and_capture(["--debug", "run", "--select", f"{test_dt}.sql"])
 
-        assert_message_in_logs(f"create dynamic table {model_qualified_name}", logs, False)
-        assert_message_in_logs(
-            f"create or replace dynamic table {model_qualified_name}", logs, False
+        assert_message_not_in_logs(f"create dynamic table {model_qualified_name}", logs)
+        assert_message_not_in_logs(
+            f"create or replace dynamic table {model_qualified_name}", logs
         )
-        assert_message_in_logs("refresh_mode = AUTO", logs, False)
+        assert_message_not_in_logs("refresh_mode = AUTO", logs)
         assert_message_in_logs(
             f"No configuration changes were identified on: `{model_qualified_name}`. Continuing.",
             logs,
@@ -79,7 +83,7 @@ class TestAutoConfigDoesntFullRefresh:
 
 
 class TestSchedulerDisabled:
-    """Verify SCHEDULER=DISABLED appears in DDL and REFRESH is called after build."""
+    """Verify SCHEDULER=DISABLE appears in DDL and REFRESH is called."""
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -120,7 +124,7 @@ class TestSchedulerEnabled:
 
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
         assert query_relation_type(project, "my_dt_scheduler_enabled") == "dynamic_table"
 
 
@@ -220,7 +224,7 @@ class TestSchedulerConfigChange:
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
 
     def test_alter_scheduler_disabled_to_enabled_explicit(self, project):
         """Verify scheduler can be altered from DISABLE to ENABLE with explicit scheduler config."""
@@ -235,7 +239,7 @@ class TestSchedulerConfigChange:
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
 
     def test_alter_scheduler_enabled_to_disabled_explicit(self, project):
         """Verify scheduler can be altered from ENABLE to DISABLE (reverse direction)."""
@@ -337,7 +341,7 @@ class TestSchedulerEnabledNoOpNoRefresh:
 
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_in_logs("No configuration changes were identified on:", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
 
 
 class TestIcebergSchedulerDisabled:
@@ -383,7 +387,7 @@ class TestIcebergSchedulerEnabled:
         assert_message_in_logs("create dynamic iceberg table", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
         assert query_relation_type(project, "my_iceberg_dt_sched_enabled") == "dynamic_table"
 
 
@@ -445,4 +449,4 @@ class TestIcebergSchedulerConfigChange:
         assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("Applying REFRESH to:", logs, False)
+        assert_message_not_in_logs("Applying REFRESH to:", logs)
