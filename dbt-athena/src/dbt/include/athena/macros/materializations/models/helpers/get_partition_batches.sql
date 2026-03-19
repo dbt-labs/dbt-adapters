@@ -54,14 +54,14 @@
     {%- if ns.is_bucketed -%}
         {%- set partition_batches = [] -%}
         {%- set non_empty_partitions = ns.partitions | select | list -%}
-        {%- set num_non_bucket = non_empty_partitions | length -%}
+        {%- set num_non_bucket_partitions = non_empty_partitions | length -%}
 
         {# Coordinate chunk sizes so partition × bucket ≤ partitions_limit #}
-        {%- if num_non_bucket > 0 -%}
-            {%- set partition_chunk_size = [num_non_bucket, athena_partitions_limit] | min -%}
+        {%- if num_non_bucket_partitions > 0 -%}
+            {%- set partition_chunk_size = [num_non_bucket_partitions, athena_partitions_limit] | min -%}
             {%- set bucket_chunk_size = [1, (athena_partitions_limit / partition_chunk_size) | int] | max -%}
 
-            {%- for i in range(0, num_non_bucket, partition_chunk_size) -%}
+            {%- for i in range(0, num_non_bucket_partitions, partition_chunk_size) -%}
                 {%- set batch = non_empty_partitions[i:i + partition_chunk_size] -%}
                 {%- do partition_batches.append(batch | join(' or ')) -%}
             {%- endfor -%}
