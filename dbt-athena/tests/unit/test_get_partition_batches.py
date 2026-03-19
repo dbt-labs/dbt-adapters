@@ -480,86 +480,83 @@ class TestCrossProductLimit:
         assert len(result) > 0
 
 
-def _extract_partitions_and_values(batches):
-    """Extract all partition conditions and bucket values from batch strings."""
-    partitions = set()
-    bucket_values = set()
-    for batch in batches:
-        paren_match = re.match(r"\((.+?)\) and ", batch)
-        if paren_match:
-            for part in paren_match.group(1).split(" or "):
-                partitions.add(part.strip())
-        in_match = re.search(r"IN \((.+?)\)", batch)
-        if in_match:
-            for val in in_match.group(1).split(", "):
-                bucket_values.add(val.strip())
-    return partitions, bucket_values
-
-
 class TestCompleteness:
-    """Tests verifying that all partition values and bucket values appear in the output."""
+    """Tests verifying all data is covered when limit is very small."""
 
-    def test_all_partitions_and_bucket_values_covered_small_limit(self):
-        """With a very small limit, all dates and all users must still appear across batches."""
-        dates = [f"2024-01-{i:02d}" for i in range(1, 11)]
-        users = [f"user{i}" for i in range(1, 8)]
-        rows = [[d, u] for d in dates for u in users]
+    def test_small_limit_covers_all_data(self):
+        """limit=2 with 3 dates × 3 users: every date-user combination must appear.
+
+        partition_chunk_size = min(3, 2) = 2, bucket_chunk_size = max(1, floor(2/2)) = 1.
+        md5 hash with bucket(user_id, 3): alice->0, bob->2, charlie->1.
+        """
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 3)"],
                 "partitions_limit": 2,
             },
-            rows=rows,
+            rows=[
+                [d, u]
+                for d in ["2024-01-01", "2024-01-02", "2024-01-03"]
+                for u in ["alice", "bob", "charlie"]
+            ],
             column_types=["date", "varchar"],
         )
-        partitions, bucket_values = _extract_partitions_and_values(result)
-        expected_dates = {f"\"date_col\"=DATE'{d}'" for d in dates}
-        expected_users = {f"'{u}'" for u in users}
-        assert expected_dates == partitions, (
-            f"Missing dates: {expected_dates - partitions}"
-        )
-        assert expected_users == bucket_values, (
-            f"Missing users: {expected_users - bucket_values}"
-        )
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('charlie')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('charlie')",
+        ]
 
-    def test_all_values_covered_limit_one(self):
-        """With limit=1, every partition and every bucket value must still appear."""
-        dates = ["2024-01-01", "2024-01-02", "2024-01-03"]
-        users = ["alice", "bob", "charlie"]
-        rows = [[d, u] for d in dates for u in users]
+    def test_limit_one_covers_all_data(self):
+        """limit=1 with 3 dates × 3 users: each batch is exactly 1 date × 1 user.
+
+        partition_chunk_size = min(3, 1) = 1, bucket_chunk_size = max(1, floor(1/1)) = 1.
+        md5 hash with bucket(user_id, 5): alice->0, bob->4, charlie->3.
+        """
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 5)"],
                 "partitions_limit": 1,
             },
-            rows=rows,
+            rows=[
+                [d, u]
+                for d in ["2024-01-01", "2024-01-02", "2024-01-03"]
+                for u in ["alice", "bob", "charlie"]
+            ],
             column_types=["date", "varchar"],
         )
-        partitions, bucket_values = _extract_partitions_and_values(result)
-        expected_dates = {f"\"date_col\"=DATE'{d}'" for d in dates}
-        expected_users = {f"'{u}'" for u in users}
-        assert expected_dates == partitions, (
-            f"Missing dates: {expected_dates - partitions}"
-        )
-        assert expected_users == bucket_values, (
-            f"Missing users: {expected_users - bucket_values}"
-        )
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-02') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-02') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('charlie')",
+            "(\"date_col\"=DATE'2024-01-02') and user_id IN ('charlie')",
+            "(\"date_col\"=DATE'2024-01-03') and user_id IN ('charlie')",
+        ]
 
-    def test_bucket_only_all_values_covered_limit_one(self):
-        """Bucket-only with limit=1: all values must appear across batches."""
-        values = ["a", "b", "c", "d", "e"]
+    def test_bucket_only_limit_one_covers_all_data(self):
+        """Bucket-only with limit=1: each value becomes its own batch.
+
+        md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
+        """
         result = _render_macro(
             config={
                 "partitioned_by": ["bucket(col, 2)"],
                 "partitions_limit": 1,
             },
-            rows=[[v] for v in values],
+            rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
             column_types=["varchar"],
         )
-        all_values = set()
-        for batch in result:
-            in_match = re.search(r"IN \((.+?)\)", batch)
-            for val in in_match.group(1).split(", "):
-                all_values.add(val.strip())
-        expected = {f"'{v}'" for v in values}
-        assert expected == all_values, f"Missing values: {expected - all_values}"
+        assert result == [
+            "col IN ('a')",
+            "col IN ('b')",
+            "col IN ('c')",
+            "col IN ('d')",
+            "col IN ('e')",
+        ]
