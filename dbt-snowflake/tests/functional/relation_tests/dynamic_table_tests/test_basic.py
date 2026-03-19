@@ -72,9 +72,7 @@ class TestAutoConfigDoesntFullRefresh:
         _, logs = run_dbt_and_capture(["--debug", "run", "--select", f"{test_dt}.sql"])
 
         assert_message_not_in_logs(f"create dynamic table {model_qualified_name}", logs)
-        assert_message_not_in_logs(
-            f"create or replace dynamic table {model_qualified_name}", logs
-        )
+        assert_message_not_in_logs(f"create or replace dynamic table {model_qualified_name}", logs)
         assert_message_not_in_logs("refresh_mode = AUTO", logs)
         assert_message_in_logs(
             f"No configuration changes were identified on: `{model_qualified_name}`. Continuing.",
