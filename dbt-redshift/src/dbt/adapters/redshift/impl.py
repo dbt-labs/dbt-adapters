@@ -448,9 +448,9 @@ class RedshiftAdapter(SQLAdapter):
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
-            self._set_query_group(str(config["query_group"]))
+            self._set_query_group(str(config.get("query_group")))
         if self._needs_database_change(config):
-            self._use_database(str(config["database"]))
+            self._use_database(str(config.get("database")))
         return None
 
     def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
