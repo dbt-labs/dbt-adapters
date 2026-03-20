@@ -60,6 +60,25 @@
 
       {% do create_columns(target_relation, missing_columns) %}
 
+      {# Snapshot Column Backfill: Optionally backfill historical rows with current source values #}
+      {% if missing_columns | length > 0 and snapshot_backfill_enabled() %}
+          {% set audit_column = get_backfill_audit_column() %}
+
+          {# Add audit column if configured and doesn't exist #}
+          {% if audit_column %}
+              {% do ensure_backfill_audit_column(target_relation, audit_column) %}
+          {% endif %}
+
+          {# Backfill historical rows with current source values #}
+          {% do backfill_snapshot_columns(
+              target_relation,
+              missing_columns,
+              model['compiled_code'],
+              unique_key,
+              audit_column
+          ) %}
+      {% endif %}
+
       {% set source_columns = adapter.get_columns_in_relation(staging_table)
                                    | rejectattr('name', 'in', remove_columns)
                                    | list %}
