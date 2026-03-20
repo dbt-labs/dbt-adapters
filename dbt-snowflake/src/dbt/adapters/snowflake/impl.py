@@ -67,6 +67,7 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     immutable_where: Optional[str] = None
@@ -562,6 +563,8 @@ CALL {proc_name}();
         available_columns = [c.lower() for c in dt_table.column_names]
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+        if "scheduler" in available_columns:
+            base_columns.append("scheduler")
 
         selected = dt_table.select(base_columns)
 
