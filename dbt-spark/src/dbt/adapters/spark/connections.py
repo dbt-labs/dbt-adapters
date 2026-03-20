@@ -84,9 +84,9 @@ class SparkConnectionMethod(StrEnum):
 @dataclass
 class SparkCredentials(Credentials):
     host: Optional[str] = None
-    schema: Optional[str] = None  # type:ignore
+    schema: Union[None, str] = None  # type:ignore
     method: SparkConnectionMethod = None  # type: ignore
-    database: Optional[str] = None  # type:ignore
+    database: Union[None, str] = None  # type:ignore
     driver: Optional[str] = None
     cluster: Optional[str] = None
     endpoint: Optional[str] = None
