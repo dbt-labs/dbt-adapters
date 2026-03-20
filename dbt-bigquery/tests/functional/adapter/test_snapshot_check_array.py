@@ -3,7 +3,7 @@ Tests for BigQuery snapshots with ARRAY columns using strategy='check'.
 
 BigQuery does not support `!=` on ARRAY types, so the default snapshot_check_strategy
 generates invalid SQL when check_cols includes an ARRAY column. The
-bigquery__snapshot_check_column_values override fixes this by wrapping comparisons
+bigquery__snapshot_check_row_changed override fixes this by wrapping comparisons
 in TO_JSON_STRING().
 """
 

@@ -18,7 +18,7 @@
     {#-- Detect REPEATED (ARRAY) columns that need TO_JSON_STRING wrapping
          since BigQuery does not support != on ARRAY types. --#}
     {% set repeated_cols = [] %}
-    {% for col in adapter.get_columns_in_select_sql(node['compiled_code']) %}
+    {% for col in adapter.get_columns_in_select_sql(get_empty_subquery_sql(node['compiled_code'])) %}
         {% if col.mode == 'REPEATED' %}
             {% do repeated_cols.append(adapter.quote(col.column)) %}
         {% endif %}
