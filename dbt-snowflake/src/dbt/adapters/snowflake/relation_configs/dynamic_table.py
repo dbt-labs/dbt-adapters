@@ -61,6 +61,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     target_lag: str
     snowflake_warehouse: str
     snowflake_initialization_warehouse: Optional[str] = None
+    snowflake_create_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
@@ -87,6 +88,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_initialization_warehouse": config_dict.get(
                 "snowflake_initialization_warehouse"
             ),
+            "snowflake_create_warehouse": config_dict.get("snowflake_create_warehouse"),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
@@ -111,6 +113,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             ),
             "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_initialization_warehouse"
+            ),
+            "snowflake_create_warehouse": relation_config.config.extra.get(  # type:ignore
+                "snowflake_create_warehouse"
             ),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
@@ -213,6 +218,15 @@ class SnowflakeDynamicTableInitializationWarehouseConfigChange(RelationConfigCha
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableCreateWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False  # Only affects DDL execution context, not table structure
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
     context: Optional[str] = None
 
@@ -256,6 +270,7 @@ class SnowflakeDynamicTableConfigChangeset:
     snowflake_initialization_warehouse: Optional[
         SnowflakeDynamicTableInitializationWarehouseConfigChange
     ] = None
+    snowflake_create_warehouse: Optional[SnowflakeDynamicTableCreateWarehouseConfigChange] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
     immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
     cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
@@ -276,6 +291,11 @@ class SnowflakeDynamicTableConfigChangeset:
                     if self.snowflake_initialization_warehouse
                     else False
                 ),
+                (
+                    self.snowflake_create_warehouse.requires_full_refresh
+                    if self.snowflake_create_warehouse
+                    else False
+                ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
                 self.immutable_where.requires_full_refresh if self.immutable_where else False,
                 self.cluster_by.requires_full_refresh if self.cluster_by else False,
@@ -290,6 +310,7 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.target_lag,
                 self.snowflake_warehouse,
                 self.snowflake_initialization_warehouse,
+                self.snowflake_create_warehouse,
                 self.refresh_mode,
                 self.immutable_where,
                 self.cluster_by,

@@ -11,6 +11,7 @@ from dbt.adapters.relation_configs import RelationConfigChangeAction
 from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
+    SnowflakeDynamicTableCreateWarehouseConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
@@ -474,3 +475,98 @@ class TestTransientChangeDetectionLogic:
 
         if changeset is not None:
             assert changeset.transient is None
+
+
+class TestCreateWarehouseOptional:
+    """Tests to verify snowflake_create_warehouse is an optional parameter."""
+
+    def test_create_warehouse_is_optional(self):
+        """snowflake_create_warehouse should be optional and default to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_REFRESH_WH",
+            }
+        )
+        assert config.snowflake_create_warehouse is None
+
+    def test_create_warehouse_can_be_set(self):
+        """snowflake_create_warehouse can be set to a different warehouse than snowflake_warehouse."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_SMALL_REFRESH_WH",
+                "snowflake_create_warehouse": "MY_LARGE_CREATE_WH",
+            }
+        )
+        assert config.snowflake_warehouse == "MY_SMALL_REFRESH_WH"
+        assert config.snowflake_create_warehouse == "MY_LARGE_CREATE_WH"
+
+    def test_create_warehouse_can_be_explicit_none(self):
+        """snowflake_create_warehouse can be explicitly set to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "snowflake_create_warehouse": None,
+            }
+        )
+        assert config.snowflake_create_warehouse is None
+
+
+class TestCreateWarehouseChangeset:
+    """Tests for snowflake_create_warehouse change detection."""
+
+    def test_changeset_without_create_warehouse_has_no_changes(self):
+        """A changeset with no create_warehouse change should not have changes."""
+        changeset = SnowflakeDynamicTableConfigChangeset()
+        assert changeset.snowflake_create_warehouse is None
+        assert not changeset.has_changes
+        assert not changeset.requires_full_refresh
+
+    def test_changeset_with_create_warehouse_change(self):
+        """A changeset with create_warehouse change should have changes but not require full refresh."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            snowflake_create_warehouse=SnowflakeDynamicTableCreateWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context="NEW_LARGE_WH",
+            )
+        )
+        assert changeset.snowflake_create_warehouse is not None
+        assert changeset.has_changes
+        assert (
+            not changeset.requires_full_refresh
+        )  # DDL execution warehouse doesn't affect structure
+
+    def test_create_warehouse_change_does_not_require_full_refresh(self):
+        """Changing snowflake_create_warehouse should not require a full refresh."""
+        change = SnowflakeDynamicTableCreateWarehouseConfigChange(
+            action=RelationConfigChangeAction.alter,
+            context="NEW_LARGE_WH",
+        )
+        assert not change.requires_full_refresh
+
+    def test_create_warehouse_unset_change(self):
+        """Unsetting snowflake_create_warehouse (setting to None) should be valid."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            snowflake_create_warehouse=SnowflakeDynamicTableCreateWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context=None,
+            )
+        )
+        assert changeset.snowflake_create_warehouse is not None
+        assert changeset.snowflake_create_warehouse.context is None
+        assert changeset.has_changes
+        assert not changeset.requires_full_refresh

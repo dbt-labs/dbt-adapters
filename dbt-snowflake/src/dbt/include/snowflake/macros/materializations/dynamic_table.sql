@@ -77,10 +77,16 @@
 {% macro dynamic_table_execute_build_sql(build_sql, existing_relation, target_relation) %}
 
     {% set grant_config = config.get('grants') %}
+    {% set create_warehouse = config.get('snowflake_create_warehouse') %}
+    {% set previous_warehouse = adapter.use_warehouse(create_warehouse) if create_warehouse else none %}
 
     {% call statement(name="main") %}
         {{ build_sql }}
     {% endcall %}
+
+    {% if create_warehouse %}
+        {% do adapter.restore_warehouse(previous_warehouse) %}
+    {% endif %}
 
     {% set should_revoke = should_revoke(existing_relation, full_refresh_mode=True) %}
     {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
