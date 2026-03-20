@@ -47,7 +47,7 @@ class SnowflakeColumn(Column):
             raise DbtRuntimeError("Called string_size() on non-string field!")
 
         if self.dtype == "text" or self.char_size is None:
-            return 16777216
+            return SNOWFLAKE_MAX_VARCHAR_LENGTH
         else:
             return int(self.char_size)
 
