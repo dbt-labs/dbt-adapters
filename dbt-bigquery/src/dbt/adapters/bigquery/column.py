@@ -15,6 +15,7 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
 
     Returns None if the data_type is not a STRUCT or is malformed.
     Handles trailing constraints like `struct<x INT64> not null` correctly.
+    Handles field types with parenthesised parameters like NUMERIC(10, 2).
 
     Examples:
     >>> _parse_struct_fields("struct<x INT64, y STRING>")
@@ -23,6 +24,8 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     [{'name': 'a', 'data_type': 'struct<b INT64, c STRING>'}, {'name': 'd', 'data_type': 'INT64'}]
     >>> _parse_struct_fields("struct<x INT64> not null")
     [{'name': 'x', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("struct<a NUMERIC(10, 2), b INT64>")
+    [{'name': 'a', 'data_type': 'NUMERIC(10, 2)'}, {'name': 'b', 'data_type': 'INT64'}]
     >>> _parse_struct_fields("INT64")
     None
     """
@@ -31,37 +34,60 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     if not stripped.lower().startswith("struct<"):
         return None
 
-    # Find the matching closing > by tracking angle-bracket depth
+    # Find the matching closing > by tracking angle-bracket depth.
+    # Parentheses depth is also tracked so that commas inside NUMERIC(10, 2)
+    # style type parameters are not mistaken for angle-bracket nesting changes.
     start = len("struct<")
-    depth = 1
+    angle_depth = 1
+    paren_depth = 0
     i = start
-    while i < len(stripped) and depth > 0:
-        if stripped[i] == "<":
-            depth += 1
-        elif stripped[i] == ">":
-            depth -= 1
+    while i < len(stripped) and angle_depth > 0:
+        c = stripped[i]
+        if c == "<":
+            angle_depth += 1
+        elif c == ">" and paren_depth == 0:
+            angle_depth -= 1
+        elif c == "(":
+            paren_depth += 1
+        elif c == ")":
+            paren_depth -= 1
         i += 1
 
-    if depth != 0:
+    if angle_depth != 0:
         # Malformed type string — unbalanced angle brackets
+        return None
+
+    # Validate nothing unexpected follows the closing > (only whitespace or constraints)
+    remainder = stripped[i:]
+    if remainder and not remainder[0].isspace():
+        # Extra non-whitespace immediately after the closing > (e.g. "struct<x INT64>>")
         return None
 
     inner = stripped[start : i - 1]
 
-    # Split fields at top-level commas (not inside nested angle brackets)
+    # Split fields at top-level commas — not inside nested angle brackets or parentheses
     fields = []
-    depth = 0
+    angle_depth = 0
+    paren_depth = 0
     current: List[str] = []
     for char in inner:
         if char == "<":
-            depth += 1
+            angle_depth += 1
             current.append(char)
         elif char == ">":
-            depth -= 1
-            if depth < 0:
+            angle_depth -= 1
+            if angle_depth < 0:
                 return None
             current.append(char)
-        elif char == "," and depth == 0:
+        elif char == "(":
+            paren_depth += 1
+            current.append(char)
+        elif char == ")":
+            paren_depth -= 1
+            if paren_depth < 0:
+                return None
+            current.append(char)
+        elif char == "," and angle_depth == 0 and paren_depth == 0:
             fields.append("".join(current).strip())
             current = []
         else:
@@ -69,8 +95,8 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     if current:
         fields.append("".join(current).strip())
 
-    if depth != 0:
-        # Malformed inner type string — unbalanced angle brackets in a field type
+    if angle_depth != 0 or paren_depth != 0:
+        # Malformed inner type string — unbalanced brackets
         return None
 
     result = []

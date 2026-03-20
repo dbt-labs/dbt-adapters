@@ -282,10 +282,24 @@ def test_get_nested_column_data_types(columns, constraints, expected_nested_colu
             "struct<a struct<b INT64>> not null",
             [{"name": "a", "data_type": "struct<b INT64>"}],
         ),
+        # Field types with parenthesised parameters — commas inside () are not field separators
+        (
+            "struct<a NUMERIC(10, 2), b INT64>",
+            [{"name": "a", "data_type": "NUMERIC(10, 2)"}, {"name": "b", "data_type": "INT64"}],
+        ),
+        (
+            "struct<a NUMERIC(10, 2), b struct<c NUMERIC(5, 3), d STRING>>",
+            [
+                {"name": "a", "data_type": "NUMERIC(10, 2)"},
+                {"name": "b", "data_type": "struct<c NUMERIC(5, 3), d STRING>"},
+            ],
+        ),
         # Malformed: missing outer closing > returns None
         ("struct<x INT64, y STRING", None),
         # Malformed: missing inner closing > returns None
         ("struct<a struct<b INT64, c STRING>", None),
+        # Malformed: extra trailing > returns None
+        ("struct<x INT64>>", None),
     ],
 )
 def test_parse_struct_fields(data_type, expected_fields):
