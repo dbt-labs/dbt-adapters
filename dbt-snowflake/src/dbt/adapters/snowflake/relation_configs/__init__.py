@@ -4,6 +4,7 @@ from dbt.adapters.snowflake.relation_configs.dynamic_table import (
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
+    SnowflakeDynamicTableCreateWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
     SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,

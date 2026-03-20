@@ -12,6 +12,7 @@ from dbt.adapters.relation_configs import RelationConfigChangeAction
 from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
+    SnowflakeDynamicTableCreateWarehouseConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableSchedulerConfigChange,
