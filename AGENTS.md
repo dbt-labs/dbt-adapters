@@ -24,9 +24,11 @@ All commands are run from within the specific adapter's directory, not the repo 
 
 ```bash
 cd dbt-{adapter}        # e.g., cd dbt-redshift
-pip install hatch       # if not already installed
-hatch run setup         # installs adapter + deps in editable mode
+pip install hatch changie  # if not already installed; changie is needed for changelog entries
+hatch run setup            # installs adapter + deps in editable mode (includes pre-commit)
 ```
+
+> **Note:** `pre-commit` is managed as a hatch environment dependency — you do not need to install it globally. `hatch run setup` installs it inside the hatch virtualenv and registers the git hooks. `changie` is a standalone tool used outside of hatch for changelog management and must be installed separately as shown above.
 
 To configure the virtual environment for IDE use:
 ```bash
