@@ -75,6 +75,14 @@ class TestModelHooks:
 
         mock_execute.assert_called_once_with('USE "other_db"')
 
+    def test_pre_model_hook_uses_quoted_database(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev")
+        mock_execute = mocker.patch.object(adapter, "execute")
+
+        adapter.pre_model_hook({"database": '"other_db"'})
+
+        mock_execute.assert_called_once_with('USE "other_db"')
+
     def test_pre_model_hook_sets_both(self, mocker):
         adapter = _make_adapter(mocker, default_query_group=None, default_database="dev")
         mock_execute = mocker.patch.object(adapter, "execute")
