@@ -1,0 +1,6 @@
+kind: Features
+body: Add table-valued function support and grant_access_to for routines
+time: 2026-03-01T16:42:03.000000+00:00
+custom:
+    Author: aballiet
+    Issue: "1691"
