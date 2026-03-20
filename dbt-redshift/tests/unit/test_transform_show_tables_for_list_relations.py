@@ -129,16 +129,16 @@ class TestTransformShowTablesForListRelations:
 class TestUseShowApisGating:
     """Verify that use_show_apis correctly gates behavior."""
 
-    def test_standardize_grants_uses_legacy_when_flag_off(self, adapter):
-        """standardize_grants_dict falls back to legacy path when flag is off."""
+    def test_standardize_grants_uses_svv_when_flag_off(self, adapter):
+        """standardize_grants_dict uses svv_relation_privileges path when flag is off."""
         _set_use_show_apis(adapter, enabled=False)
-        legacy_table = agate.Table(
-            [("alice", "select")],
-            column_names=["grantee", "privilege_type"],
-            column_types=[agate.Text(), agate.Text()],
+        svv_table = agate.Table(
+            [("alice", "user", "select")],
+            column_names=["identity_name", "identity_type", "privilege_type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text()],
         )
-        result = adapter.standardize_grants_dict(legacy_table)
-        assert result == {"select": ["alice"]}
+        result = adapter.standardize_grants_dict(svv_table)
+        assert result == {"select": ["user:alice"]}
 
     def test_standardize_grants_uses_show_path_when_flag_on(self, adapter):
         """standardize_grants_dict uses SHOW GRANTS columns when flag is on."""
@@ -175,7 +175,7 @@ class TestUseShowApisGating:
             column_types=[agate.Text()] * 11,
         )
         result = adapter.standardize_grants_dict(show_table)
-        assert result == {"select": ["alice"]}
+        assert result == {"select": ["user:alice"]}
 
     def test_show_apis_only_methods_not_called_when_flag_off(self):
         """transform_show_tables_for_list_relations should only be reachable when flag is on.

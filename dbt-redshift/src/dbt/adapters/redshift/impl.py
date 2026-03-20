@@ -12,7 +12,12 @@ from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
 from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.protocol import MacroResolverProtocol
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
@@ -130,12 +135,6 @@ class RedshiftAdapter(SQLAdapter):
         self.connections.set_skip_transactions_checker(
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
-
-        if self.config.credentials.ra3_node:
-            logger.info(
-                "The `ra3_node` configuration in profiles.yml is deprecated. "
-                "Use the `redshift_use_show_apis` behavior flag instead. "
-            )
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
@@ -294,25 +293,52 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
-        """Translate the result of `show grants` to match the grants config format.
+        """Translate the result of a grants query to match the grants config format.
 
         When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
-        returns columns ``identity_name`` and ``privilege_type`` (uppercase).
-        Otherwise the legacy query returns ``grantee`` and ``privilege_type``
-        (lowercase).
-        """
-        if not self.use_show_apis():
-            return super().standardize_grants_dict(grants_table)
+        is used for cross-database support.  SHOW GRANTS conflates groups and
+        roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
+        on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
+        Redshift behavior and may change across patches.
 
+        When the flag is disabled, ``svv_relation_privileges`` is used instead,
+        which correctly reports ``identity_type`` as ``user``, ``group``, or
+        ``role`` but only works within the current database.
+        """
         grants_dict: Dict[str, List[str]] = {}
 
-        for row in grants_table:
-            grantee = row["identity_name"]
-            privilege = row["privilege_type"].lower()
-            if privilege in grants_dict:
-                grants_dict[privilege].append(grantee)
-            else:
-                grants_dict[privilege] = [grantee]
+        if self.use_show_apis():
+            # SHOW GRANTS path — need to detect groups from the / prefix
+            for row in grants_table:
+                identity_name = row["identity_name"]
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                # SHOW GRANTS reports groups as identity_type='role' with a
+                # '/' prefix on identity_name.  This is undocumented behavior.
+                if identity_type == "role" and identity_name.startswith("/"):
+                    grantee = f"group:{identity_name[1:]}"
+                else:
+                    grantee = f"{identity_type}:{identity_name}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
+        else:
+            # svv_relation_privileges path — identity_type is accurate
+            for row in grants_table:
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                grantee = f"{identity_type}:{row['identity_name']}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
 
         return grants_dict
 
