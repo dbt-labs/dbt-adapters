@@ -22,6 +22,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
+    SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
@@ -101,7 +102,10 @@ class SnowflakeRelation(BaseRelation):
 
         config_change_collection = SnowflakeDynamicTableConfigChangeset()
 
-        if new_dynamic_table.target_lag != existing_dynamic_table.target_lag:
+        if (
+            new_dynamic_table.target_lag != existing_dynamic_table.target_lag
+            and new_dynamic_table.target_lag is not None
+        ):
             config_change_collection.target_lag = SnowflakeDynamicTableTargetLagConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.target_lag,
@@ -133,6 +137,12 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.refresh_mode = SnowflakeDynamicTableRefreshModeConfigChange(
                 action=RelationConfigChangeAction.create,  # type:ignore
                 context=new_dynamic_table.refresh_mode,
+            )
+
+        if new_dynamic_table.scheduler != existing_dynamic_table.scheduler:
+            config_change_collection.scheduler = SnowflakeDynamicTableSchedulerConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new_dynamic_table.scheduler,
             )
 
         if new_dynamic_table.immutable_where != existing_dynamic_table.immutable_where:

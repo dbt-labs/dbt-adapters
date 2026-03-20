@@ -17,18 +17,21 @@
         {%- if snowflake_warehouse -%}{{- log('Applying UPDATE WAREHOUSE to: ' ~ existing_relation) -}}{%- endif -%}
         {%- set snowflake_initialization_warehouse = configuration_changes.snowflake_initialization_warehouse -%}
         {%- if snowflake_initialization_warehouse and snowflake_initialization_warehouse.context -%}{{- log('Applying UPDATE INITIALIZATION_WAREHOUSE to: ' ~ existing_relation) -}}{%- endif -%}
+        {%- set scheduler = configuration_changes.scheduler -%}
+        {%- if scheduler -%}{{- log('Applying UPDATE SCHEDULER to: ' ~ existing_relation) -}}{%- endif -%}
         {%- set immutable_where = configuration_changes.immutable_where -%}
         {%- if immutable_where and immutable_where.context -%}{{- log('Applying UPDATE IMMUTABLE WHERE to: ' ~ existing_relation) -}}{%- endif -%}
 
         {#- Determine what SET changes we have -#}
-        {%- set has_set_changes = target_lag or snowflake_warehouse or (snowflake_initialization_warehouse and snowflake_initialization_warehouse.context) or (immutable_where and immutable_where.context) -%}
+        {%- set has_set_changes = target_lag or snowflake_warehouse or (snowflake_initialization_warehouse and snowflake_initialization_warehouse.context) or scheduler or (immutable_where and immutable_where.context) -%}
 
         {#- Handle SET operations -#}
         {% if has_set_changes %}
         alter dynamic table {{ existing_relation }} set
-            {% if target_lag %}target_lag = '{{ target_lag.context }}'{% endif %}
+            {% if target_lag and target_lag.context %}target_lag = '{{ target_lag.context }}'{% endif %}
             {% if snowflake_warehouse %}warehouse = {{ snowflake_warehouse.context }}{% endif %}
             {% if snowflake_initialization_warehouse and snowflake_initialization_warehouse.context %}initialization_warehouse = {{ snowflake_initialization_warehouse.context }}{% endif %}
+            {% if scheduler %}scheduler = '{{ scheduler.context }}'{% endif %}
             {% if immutable_where and immutable_where.context %}immutable where ({{ immutable_where.context }}){% endif %}
         {% endif %}
 
