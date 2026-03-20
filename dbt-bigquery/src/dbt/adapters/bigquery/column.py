@@ -69,6 +69,10 @@ def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
     if current:
         fields.append("".join(current).strip())
 
+    if depth != 0:
+        # Malformed inner type string — unbalanced angle brackets in a field type
+        return None
+
     result = []
     for field in fields:
         # Split on first whitespace to get name, rest is the data type (possibly with constraints)

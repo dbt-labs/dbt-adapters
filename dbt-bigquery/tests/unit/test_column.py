@@ -282,6 +282,10 @@ def test_get_nested_column_data_types(columns, constraints, expected_nested_colu
             "struct<a struct<b INT64>> not null",
             [{"name": "a", "data_type": "struct<b INT64>"}],
         ),
+        # Malformed: missing outer closing > returns None
+        ("struct<x INT64, y STRING", None),
+        # Malformed: missing inner closing > returns None
+        ("struct<a struct<b INT64, c STRING>", None),
     ],
 )
 def test_parse_struct_fields(data_type, expected_fields):
