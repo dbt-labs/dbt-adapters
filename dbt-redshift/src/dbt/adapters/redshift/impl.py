@@ -429,15 +429,22 @@ class RedshiftAdapter(SQLAdapter):
         return model_query_group is not None and model_query_group != default_query_group
 
     def _use_database(self, database: str) -> None:
-        self.execute(f"USE {database}")
+        self.execute(f"USE {self.quote(database)}")
 
     def _reset_database(self) -> None:
         self.execute("RESET USE")
 
+    @staticmethod
+    def _normalize_database(database: str) -> str:
+        return database.strip('"').lower()
+
     def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
-        model_database = config.get("database")
-        default_database = self.config.credentials.database
-        return model_database is not None and model_database.lower() != default_database.lower()
+        if config.get("database") is None:
+            return False
+
+        model_database = self._normalize_database(str(config.get("database")))
+        default_database = self._normalize_database(self.config.credentials.database)
+        return model_database != default_database
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
