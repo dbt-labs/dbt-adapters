@@ -100,6 +100,7 @@ create or replace {{ transient }}table {{ relation }}
     {% if copy_grants -%} copy grants {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
+    {{ optional('change_tracking', catalog_relation.change_tracking)}}
     as (
         {%- if catalog_relation.cluster_by is not none -%}
         select * from (
