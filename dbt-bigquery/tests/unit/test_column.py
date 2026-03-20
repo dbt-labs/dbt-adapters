@@ -294,29 +294,29 @@ def test_parse_struct_fields(data_type, expected_fields):
         # Non-struct column returns name as-is
         ("col", "INT64", "col"),
         ("col", "STRING", "col"),
-        # Simple struct - fields are explicitly selected
+        # Simple struct - fields are explicitly selected, NULL struct preserved
         (
             "col",
             "struct<y INT64, x INT64>",
-            "STRUCT(col.y AS y, col.x AS x) AS col",
+            "IF(col IS NULL, NULL, STRUCT(col.y AS y, col.x AS x)) AS col",
         ),
         # Struct with 3 fields
         (
             "struct_data",
             "struct<y INT64, x INT64, z INT64>",
-            "STRUCT(struct_data.y AS y, struct_data.x AS x, struct_data.z AS z) AS struct_data",
+            "IF(struct_data IS NULL, NULL, STRUCT(struct_data.y AS y, struct_data.x AS x, struct_data.z AS z)) AS struct_data",
         ),
-        # Nested struct
+        # Nested struct - NULL semantics preserved at each nesting level
         (
             "a",
             "struct<b struct<c STRING, d INT64>, e INT64>",
-            "STRUCT(STRUCT(a.b.c AS c, a.b.d AS d) AS b, a.e AS e) AS a",
+            "IF(a IS NULL, NULL, STRUCT(IF(a.b IS NULL, NULL, STRUCT(a.b.c AS c, a.b.d AS d)) AS b, a.e AS e)) AS a",
         ),
         # Deeply nested struct
         (
             "a",
             "struct<b struct<c struct<d STRING>>>",
-            "STRUCT(STRUCT(STRUCT(a.b.c.d AS d) AS c) AS b) AS a",
+            "IF(a IS NULL, NULL, STRUCT(IF(a.b IS NULL, NULL, STRUCT(IF(a.b.c IS NULL, NULL, STRUCT(a.b.c.d AS d)) AS c)) AS b)) AS a",
         ),
         # Array type - not a struct, returns as-is
         ("col", "ARRAY<INT64>", "col"),
@@ -324,8 +324,10 @@ def test_parse_struct_fields(data_type, expected_fields):
         (
             "col",
             "struct<x STRING not null, y INT64>",
-            "STRUCT(col.x AS x, col.y AS y) AS col",
+            "IF(col IS NULL, NULL, STRUCT(col.x AS x, col.y AS y)) AS col",
         ),
+        # Empty data_type - returns column name as-is (no struct to parse)
+        ("col", "", "col"),
     ],
 )
 def test_get_struct_select_expression(column_name, data_type, expected):

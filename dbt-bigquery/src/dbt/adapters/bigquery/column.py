@@ -206,8 +206,8 @@ class BigQueryColumn(Column):
         order defined by data_type, regardless of the source field order.
 
         For non-STRUCT columns, returns the column name as-is.
-        For STRUCT columns, returns a STRUCT() constructor that explicitly names each
-        field, ensuring positional alignment with the DDL definition.
+        For STRUCT columns, returns an IF(col IS NULL, NULL, STRUCT(...)) expression
+        that explicitly names each field in DDL order, while preserving NULL structs.
 
         This is used during contract enforcement so that YAML-defined field order in
         the CREATE TABLE DDL matches the field order in the SELECT subquery.
@@ -216,16 +216,18 @@ class BigQueryColumn(Column):
         >>> BigQueryColumn.get_struct_select_expression("col", "INT64")
         'col'
         >>> BigQueryColumn.get_struct_select_expression("col", "struct<y INT64, x INT64>")
-        'STRUCT(col.y AS y, col.x AS x) AS col'
+        'IF(col IS NULL, NULL, STRUCT(col.y AS y, col.x AS x)) AS col'
         >>> BigQueryColumn.get_struct_select_expression("col", "struct<a struct<b INT64, c STRING>, d INT64>")
-        'STRUCT(STRUCT(col.a.b AS b, col.a.c AS c) AS a, col.d AS d) AS col'
+        'IF(col IS NULL, NULL, STRUCT(IF(col.a IS NULL, NULL, STRUCT(col.a.b AS b, col.a.c AS c)) AS a, col.d AS d)) AS col'
         """
         fields = _parse_struct_fields(data_type)
         if fields is None:
             return column_name
 
         field_exprs = cls._build_struct_field_expressions(column_name, fields)
-        return f"STRUCT({', '.join(field_exprs)}) AS {column_name}"
+        return (
+            f"IF({column_name} IS NULL, NULL, STRUCT({', '.join(field_exprs)})) AS {column_name}"
+        )
 
     @classmethod
     def _build_struct_field_expressions(
@@ -234,8 +236,9 @@ class BigQueryColumn(Column):
         """
         Recursively build field expressions for a STRUCT SELECT constructor.
 
-        For each field, if it's a nested struct, recurse to build a nested STRUCT() expression.
-        Otherwise, emit `parent.field AS field`.
+        For each field, if it's a nested struct, wraps the STRUCT() constructor in an
+        IF(...IS NULL, NULL, STRUCT(...)) to preserve NULL semantics. Otherwise, emits
+        `parent.field AS field`.
         """
         exprs = []
         for field in fields:
@@ -246,7 +249,9 @@ class BigQueryColumn(Column):
             nested_fields = _parse_struct_fields(field_type)
             if nested_fields is not None:
                 nested_exprs = cls._build_struct_field_expressions(field_path, nested_fields)
-                exprs.append(f"STRUCT({', '.join(nested_exprs)}) AS {field_name}")
+                exprs.append(
+                    f"IF({field_path} IS NULL, NULL, STRUCT({', '.join(nested_exprs)})) AS {field_name}"
+                )
             else:
                 exprs.append(f"{field_path} AS {field_name}")
         return exprs
