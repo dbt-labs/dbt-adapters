@@ -63,7 +63,7 @@ class SnowflakeConfig(AdapterConfig):
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
-    snowflake_create_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
@@ -185,18 +185,6 @@ class SnowflakeAdapter(SQLAdapter):
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
         self.execute("use warehouse {}".format(warehouse))
-
-    @available
-    def use_warehouse(self, warehouse: str) -> str:
-        """Switch to the specified warehouse, returning the previous one for restoration."""
-        previous = self._get_warehouse()
-        self._use_warehouse(warehouse)
-        return previous
-
-    @available
-    def restore_warehouse(self, previous_warehouse: str) -> None:
-        """Restore a previously saved warehouse."""
-        self._use_warehouse(previous_warehouse)
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         default_warehouse = self.config.credentials.warehouse

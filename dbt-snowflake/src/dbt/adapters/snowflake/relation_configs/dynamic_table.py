@@ -43,7 +43,8 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - name: name of the dynamic table
     - query: the query behind the table
     - target_lag: the maximum amount of time that the dynamic table’s content should lag behind updates to the base tables
-    - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
+    - snowflake_warehouse: the name of the warehouse used to execute DDL (CREATE/ALTER); also the refresh warehouse when refresh_warehouse is not set
+    - refresh_warehouse: when set, the warehouse used in the WAREHOUSE = clause of the DDL (i.e. the table's self-refresh warehouse), independent of snowflake_warehouse
     - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
@@ -61,7 +62,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     target_lag: str
     snowflake_warehouse: str
     snowflake_initialization_warehouse: Optional[str] = None
-    snowflake_create_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     row_access_policy: Optional[str] = None
@@ -69,6 +70,16 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     cluster_by: Optional[Union[str, list[str]]] = None
     immutable_where: Optional[str] = None
     transient: Optional[bool] = None
+
+    @property
+    def ddl_warehouse(self) -> str:
+        """The warehouse used in the WAREHOUSE = clause of the CREATE DDL.
+
+        When refresh_warehouse is set, use it as the DDL refresh warehouse while
+        snowflake_warehouse controls which warehouse executes the DDL (via pre_model_hook).
+        When only snowflake_warehouse is set, it serves both roles as before.
+        """
+        return self.refresh_warehouse or self.snowflake_warehouse
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -88,7 +99,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_initialization_warehouse": config_dict.get(
                 "snowflake_initialization_warehouse"
             ),
-            "snowflake_create_warehouse": config_dict.get("snowflake_create_warehouse"),
+            "refresh_warehouse": config_dict.get("refresh_warehouse"),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "row_access_policy": config_dict.get("row_access_policy"),
@@ -114,8 +125,8 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_initialization_warehouse"
             ),
-            "snowflake_create_warehouse": relation_config.config.extra.get(  # type:ignore
-                "snowflake_create_warehouse"
+            "refresh_warehouse": relation_config.config.extra.get(  # type:ignore
+                "refresh_warehouse"
             ),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
@@ -218,15 +229,6 @@ class SnowflakeDynamicTableInitializationWarehouseConfigChange(RelationConfigCha
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
-class SnowflakeDynamicTableCreateWarehouseConfigChange(RelationConfigChange):
-    context: Optional[str] = None
-
-    @property
-    def requires_full_refresh(self) -> bool:
-        return False  # Only affects DDL execution context, not table structure
-
-
-@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
     context: Optional[str] = None
 
@@ -270,7 +272,6 @@ class SnowflakeDynamicTableConfigChangeset:
     snowflake_initialization_warehouse: Optional[
         SnowflakeDynamicTableInitializationWarehouseConfigChange
     ] = None
-    snowflake_create_warehouse: Optional[SnowflakeDynamicTableCreateWarehouseConfigChange] = None
     refresh_mode: Optional[SnowflakeDynamicTableRefreshModeConfigChange] = None
     immutable_where: Optional[SnowflakeDynamicTableImmutableWhereConfigChange] = None
     cluster_by: Optional[SnowflakeDynamicTableClusterByConfigChange] = None
@@ -291,11 +292,6 @@ class SnowflakeDynamicTableConfigChangeset:
                     if self.snowflake_initialization_warehouse
                     else False
                 ),
-                (
-                    self.snowflake_create_warehouse.requires_full_refresh
-                    if self.snowflake_create_warehouse
-                    else False
-                ),
                 self.refresh_mode.requires_full_refresh if self.refresh_mode else False,
                 self.immutable_where.requires_full_refresh if self.immutable_where else False,
                 self.cluster_by.requires_full_refresh if self.cluster_by else False,
@@ -310,7 +306,6 @@ class SnowflakeDynamicTableConfigChangeset:
                 self.target_lag,
                 self.snowflake_warehouse,
                 self.snowflake_initialization_warehouse,
-                self.snowflake_create_warehouse,
                 self.refresh_mode,
                 self.immutable_where,
                 self.cluster_by,
