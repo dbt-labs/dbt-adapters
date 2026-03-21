@@ -52,7 +52,7 @@
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
     {%- if ns.is_bucketed -%}
-        {%- set partition_batches = [] -%}
+        {%- set non_bucket_condition_chunks = [] -%}
         {%- set non_empty_partitions = ns.partitions | select | list -%}
         {%- set num_non_bucket_partitions = non_empty_partitions | length -%}
 
@@ -63,7 +63,7 @@
 
             {%- for i in range(0, num_non_bucket_partitions, partition_chunk_size) -%}
                 {%- set batch = non_empty_partitions[i:i + partition_chunk_size] -%}
-                {%- do partition_batches.append(batch | join(' or ')) -%}
+                {%- do non_bucket_condition_chunks.append(batch | join(' or ')) -%}
             {%- endfor -%}
         {%- else -%}
             {%- set bucket_chunk_size = athena_partitions_limit -%}
@@ -85,8 +85,8 @@
             {%- for vi in range(0, all_values | length, athena_partitions_limit) -%}
                 {%- set value_chunk = all_values[vi:vi + athena_partitions_limit] -%}
                 {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ value_chunk | join(", ") ~ ")" -%}
-                {%- if partition_batches | length > 0 -%}
-                    {%- for pb in partition_batches -%}
+                {%- if non_bucket_condition_chunks | length > 0 -%}
+                    {%- for pb in non_bucket_condition_chunks -%}
                         {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
                     {%- endfor -%}
                 {%- else -%}
