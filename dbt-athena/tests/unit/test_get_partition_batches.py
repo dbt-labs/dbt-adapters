@@ -279,13 +279,11 @@ class TestBucketOnlyBatching:
             rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
             column_types=["varchar"],
         )
-        for batch in result:
-            num_buckets = _count_bucket_nums_in_batch(
-                batch, ["bucket(col, 5)"]
-            )
-            assert num_buckets <= 2, (
-                f"Batch has {num_buckets} bucket nums, expected ≤ 2"
-            )
+        assert result == [
+            "col IN ('a', 'b')",
+            "col IN ('c', 'd')",
+            "col IN ('e')",
+        ]
 
 
 class TestBucketWithPartitionsBatching:
@@ -340,39 +338,32 @@ class TestBucketWithPartitionsBatching:
 
         With bucket(user_id, 2), all users land in just 2 buckets.
         limit=3, partition_chunk=1, bucket_chunk=3.
-        Both buckets fit in one group → 1 batch with all users.
-        Actual open partitions: 1 × 2 = 2 ≤ 3.
+        Both buckets fit in one group, values chunked by limit=3.
         """
-        limit = 3
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 2)"],
-                "partitions_limit": limit,
+                "partitions_limit": 3,
             },
             rows=[["2024-01-01", f"user{i}"] for i in range(1, 8)],
             column_types=["date", "varchar"],
         )
-        for batch in result:
-            num_or = batch.count(" or ") + 1
-            num_buckets = _count_bucket_nums_in_batch(
-                batch, ["date_col", "bucket(user_id, 2)"]
-            )
-            assert num_or * num_buckets <= limit, (
-                f"Batch exceeds limit {limit}: "
-                f"{num_or} partitions × {num_buckets} buckets = {num_or * num_buckets}"
-            )
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('user1', 'user6', 'user7')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('user2', 'user3', 'user4')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('user5')",
+        ]
 
     def test_few_partitions_with_many_bucket_values(self):
         """non_bucket=2, limit=4 → partition_chunk=2, bucket_chunk=2.
 
         With bucket(user_id, 2), both bucket numbers fit in one group.
-        Actual open partitions: 2 × 2 = 4 ≤ 4.
+        Values chunked by limit=4.
         """
-        limit = 4
         result = _render_macro(
             config={
                 "partitioned_by": ["date_col", "bucket(user_id, 2)"],
-                "partitions_limit": limit,
+                "partitions_limit": 4,
             },
             rows=[
                 [date, f"user{i}"]
@@ -381,15 +372,10 @@ class TestBucketWithPartitionsBatching:
             ],
             column_types=["date", "varchar"],
         )
-        for batch in result:
-            num_or = batch.count(" or ") + 1
-            num_buckets = _count_bucket_nums_in_batch(
-                batch, ["date_col", "bucket(user_id, 2)"]
-            )
-            assert num_or * num_buckets <= limit, (
-                f"Batch exceeds limit {limit}: "
-                f"{num_or} partitions × {num_buckets} buckets = {num_or * num_buckets}"
-            )
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user1', 'user6', 'user7', 'user2')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user3', 'user4', 'user5')",
+        ]
 
     def test_partitions_split_with_buckets(self):
         """Partitions exceeding the limit should be split, each combined with grouped buckets.
@@ -506,33 +492,25 @@ class TestCrossProductLimit:
 
     def test_non_bucket_count_equals_limit(self):
         """When non-bucket count == limit, partition_chunk = limit, bucket_chunk = 1."""
-        limit = 3
-        partitioned_by = ["date_col", "bucket(user_id, 2)"]
         result = _render_macro(
             config={
-                "partitioned_by": partitioned_by,
-                "partitions_limit": limit,
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": 3,
             },
             rows=[[f"2024-01-{i:02d}", f"u{i}"] for i in range(1, 4)],
             column_types=["date", "varchar"],
         )
-        for batch in result:
-            num_or = batch.count(" or ") + 1
-            num_buckets = _count_bucket_nums_in_batch(batch, partitioned_by)
-            assert num_or * num_buckets <= limit, (
-                f"Batch exceeds limit {limit}: "
-                f"{num_or} partitions × {num_buckets} buckets = {num_or * num_buckets}"
-            )
-        assert all("(" in b and "IN" in b for b in result)
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02' or \"date_col\"=DATE'2024-01-03') and user_id IN ('u1', 'u3')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02' or \"date_col\"=DATE'2024-01-03') and user_id IN ('u2')",
+        ]
 
     def test_limit_one(self):
         """Extreme edge case: limit=1 forces partition_chunk=1 and bucket_chunk=1."""
-        limit = 1
-        partitioned_by = ["date_col", "bucket(user_id, 2)"]
         result = _render_macro(
             config={
-                "partitioned_by": partitioned_by,
-                "partitions_limit": limit,
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": 1,
             },
             rows=[
                 ["2024-01-01", "alice"],
@@ -540,14 +518,12 @@ class TestCrossProductLimit:
             ],
             column_types=["date", "varchar"],
         )
-        for batch in result:
-            num_or = batch.count(" or ") + 1
-            num_buckets = _count_bucket_nums_in_batch(batch, partitioned_by)
-            assert num_or * num_buckets <= limit, (
-                f"Batch exceeds limit {limit}: "
-                f"{num_or} partitions × {num_buckets} buckets = {num_or * num_buckets}"
-            )
-        assert len(result) > 0
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-02') and user_id IN ('alice')",
+            "(\"date_col\"=DATE'2024-01-01') and user_id IN ('bob')",
+            "(\"date_col\"=DATE'2024-01-02') and user_id IN ('bob')",
+        ]
 
 
 class TestCompleteness:
@@ -634,8 +610,9 @@ class TestBatchCountReduction:
             ],
             column_types=["date", "varchar"],
         )
-        # All 3 users (in 3 different buckets) grouped into 1 batch
-        assert len(result) == 1
+        assert result == [
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('alice', 'bob', 'charlie')",
+        ]
 
     def test_production_like_scenario(self):
         """12 years × 512 buckets with limit=100.
