@@ -424,7 +424,14 @@ class TestCrossProductLimit:
     """
 
     def test_cross_product_respects_limit(self):
-        """Invariant: every batch's partition × bucket_nums must be ≤ partitions_limit."""
+        """Invariant: every batch's partition × bucket_nums must be ≤ partitions_limit.
+
+        Expected output (9 batches, abbreviated):
+          (date=01 or ... or date=04) and user_id IN ('user1', 'user6', ...)
+          (date=05 or ... or date=08) and user_id IN ('user1', 'user6', ...)
+          (date=09 or date=10)        and user_id IN ('user1', 'user6', ...)
+          ... repeated for each bucket group (3 groups total) ...
+        """
         limit = 4
         partitioned_by = ["date_col", "bucket(user_id, 3)"]
         result = _render_macro(
@@ -448,6 +455,10 @@ class TestCrossProductLimit:
 
         partition_chunk=12, bucket_chunk=floor(100/12)=8.
         Bucket numbers are grouped by 8.
+
+        Expected output (abbreviated):
+          (date=2024-01 or ... or date=2024-12) and user_id IN (bucket group 0..7 values)
+          (date=2024-01 or ... or date=2024-12) and user_id IN (bucket group 8..9 values)
         """
         limit = 100
         partitioned_by = ["date_col", "bucket(user_id, 10)"]
@@ -471,7 +482,14 @@ class TestCrossProductLimit:
             )
 
     def test_non_bucket_count_exceeds_limit(self):
-        """When non-bucket partitions exceed limit, partition_chunk_size = limit, bucket_chunk_size = 1."""
+        """When non-bucket partitions exceed limit, partition_chunk_size = limit, bucket_chunk_size = 1.
+
+        Expected output (9 batches, abbreviated):
+          (date=01 or date=02 or date=03) and user_id IN ('u1', 'u3', 'u4')
+          (date=04 or date=05 or date=06) and user_id IN ('u1', 'u3', 'u4')
+          (date=07)                        and user_id IN ('u1', 'u3', 'u4')
+          ... repeated for each bucket (3 buckets, 1 per group) ...
+        """
         limit = 3
         partitioned_by = ["date_col", "bucket(user_id, 2)"]
         result = _render_macro(
@@ -620,6 +638,11 @@ class TestBatchCountReduction:
         partition_chunk=12, bucket_chunk=floor(100/12)=8.
         512 bucket_nums grouped by 8 → ceil(512/8) = 64 groups.
         64 groups × 1 partition_batch = 64 batches (vs 512 without grouping).
+
+        Expected output (abbreviated):
+          (date=2014 or ... or date=2025) and user_id IN (bucket group 0..7 values)
+          (date=2014 or ... or date=2025) and user_id IN (bucket group 8..15 values)
+          ... ~64 batches total, each ≤ 12 dates × 8 bucket nums = 96 ≤ 100 ...
         """
         limit = 100
         partitioned_by = ["date_col", "bucket(user_id, 512)"]
