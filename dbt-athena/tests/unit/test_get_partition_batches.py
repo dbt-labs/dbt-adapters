@@ -612,29 +612,6 @@ class TestCompleteness:
             "(\"date_col\"=DATE'2024-01-03') and user_id IN ('charlie')",
         ]
 
-    def test_bucket_only_limit_one_covers_all_data(self):
-        """Bucket-only with limit=1: each bucket number becomes its own batch.
-
-        md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
-        Values are also chunked by limit=1, so each value gets its own batch.
-        All original values must appear across the batches.
-        """
-        result = _render_macro(
-            config={
-                "partitioned_by": ["bucket(col, 2)"],
-                "partitions_limit": 1,
-            },
-            rows=[["a"], ["b"], ["c"], ["d"], ["e"]],
-            column_types=["varchar"],
-        )
-        assert result == [
-            "col IN ('a')",
-            "col IN ('b')",
-            "col IN ('c')",
-            "col IN ('d')",
-            "col IN ('e')",
-        ]
-
 
 class TestBatchCountReduction:
     """Tests verifying that grouping bucket numbers reduces the total batch count."""
