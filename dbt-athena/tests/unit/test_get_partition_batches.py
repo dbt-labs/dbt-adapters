@@ -204,10 +204,11 @@ class TestBucketOnlyBatching:
     """Tests for bucket partitioning without non-bucket partition columns."""
 
     def test_bucket_only_all_buckets_under_limit(self):
-        """When all bucket numbers fit within the limit, all values go into one batch.
+        """When all bucket numbers fit within the limit, both buckets are grouped.
 
         md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
         limit=2 allows grouping both buckets (2 ≤ 2).
+        Values are still chunked by athena_partitions_limit to avoid query size issues.
         """
         result = _render_macro(
             config={
@@ -218,7 +219,9 @@ class TestBucketOnlyBatching:
             column_types=["varchar"],
         )
         assert result == [
-            "col IN ('a', 'b', 'c', 'd', 'e')",
+            "col IN ('a', 'b')",
+            "col IN ('c', 'd')",
+            "col IN ('e')",
         ]
 
     def test_bucket_only_values_under_limit(self):
@@ -243,7 +246,8 @@ class TestBucketOnlyBatching:
         """Bucket-only with limit=1: each bucket number becomes its own batch.
 
         md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
-        limit=1 forces 1 bucket per batch, but all values for that bucket are included.
+        limit=1 forces 1 bucket per batch. Values are also chunked by limit=1,
+        so each value gets its own batch.
         """
         result = _render_macro(
             config={
@@ -254,15 +258,12 @@ class TestBucketOnlyBatching:
             column_types=["varchar"],
         )
         assert result == [
-            "col IN ('a', 'b', 'c', 'd')",
+            "col IN ('a')",
+            "col IN ('b')",
+            "col IN ('c')",
+            "col IN ('d')",
             "col IN ('e')",
         ]
-        # Verify each batch opens at most 1 bucket partition
-        for batch in result:
-            num_buckets = _count_bucket_nums_in_batch(
-                batch, ["bucket(col, 2)"]
-            )
-            assert num_buckets <= 1
 
     def test_bucket_only_many_buckets_exceed_limit(self):
         """When there are more bucket numbers than the limit, they are grouped.
@@ -401,7 +402,8 @@ class TestBucketWithPartitionsBatching:
         md5 hash with bucket(user_id, 3):
           user1→bucket 1, user2→bucket 2, user3→bucket 2,
           user4→bucket 0, user5→bucket 2
-        Bucket 2 has 3 values (user2, user3, user5) combined into one IN clause.
+        Bucket 2 has 3 values (user2, user3, user5), but values are also chunked
+        by athena_partitions_limit=2, so they are split into (user2,user3) and (user5).
         """
         result = _render_macro(
             config={
@@ -415,9 +417,12 @@ class TestBucketWithPartitionsBatching:
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user1')",
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user1')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user1')",
-            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user2', 'user3', 'user5')",
-            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user2', 'user3', 'user5')",
-            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user2', 'user3', 'user5')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user2', 'user3')",
+            "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user5')",
+            "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user5')",
+            "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user5')",
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user4')",
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user4')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user4')",
@@ -611,7 +616,8 @@ class TestCompleteness:
         """Bucket-only with limit=1: each bucket number becomes its own batch.
 
         md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
-        All values for the same bucket are in one batch.
+        Values are also chunked by limit=1, so each value gets its own batch.
+        All original values must appear across the batches.
         """
         result = _render_macro(
             config={
@@ -622,7 +628,10 @@ class TestCompleteness:
             column_types=["varchar"],
         )
         assert result == [
-            "col IN ('a', 'b', 'c', 'd')",
+            "col IN ('a')",
+            "col IN ('b')",
+            "col IN ('c')",
+            "col IN ('d')",
             "col IN ('e')",
         ]
 

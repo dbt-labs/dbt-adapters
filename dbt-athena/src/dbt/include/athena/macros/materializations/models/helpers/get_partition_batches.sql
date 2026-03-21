@@ -1,7 +1,7 @@
 {% macro get_partition_batches(sql, as_subquery=True) -%}
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
-    {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
+    {%- set athena_partitions_limit = [1, config.get('partitions_limit', 100) | int] | max -%}
     {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
 
@@ -70,8 +70,10 @@
         {%- endif -%}
 
         {# Group bucket numbers so that partition_chunk × bucket_group ≤ limit.
-           All hash values for the grouped buckets are combined into a single IN clause
-           because values within the same bucket share one Iceberg partition. #}
+           Values within the same bucket share one Iceberg partition, so grouping
+           bucket numbers controls open-partition count.
+           Values are still chunked by athena_partitions_limit to avoid exceeding
+           Athena's query size limit. #}
         {%- for bi in range(0, ns.bucket_numbers | length, bucket_chunk_size) -%}
             {%- set bucket_group = ns.bucket_numbers[bi:bi + bucket_chunk_size] -%}
             {%- set all_values = [] -%}
@@ -80,14 +82,17 @@
                     {%- do all_values.append(v) -%}
                 {%- endfor -%}
             {%- endfor -%}
-            {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ all_values | join(", ") ~ ")" -%}
-            {%- if partition_batches | length > 0 -%}
-                {%- for pb in partition_batches -%}
-                    {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
-                {%- endfor -%}
-            {%- else -%}
-                {%- do partitions_batches.append(bucket_cond) -%}
-            {%- endif -%}
+            {%- for vi in range(0, all_values | length, athena_partitions_limit) -%}
+                {%- set value_chunk = all_values[vi:vi + athena_partitions_limit] -%}
+                {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ value_chunk | join(", ") ~ ")" -%}
+                {%- if partition_batches | length > 0 -%}
+                    {%- for pb in partition_batches -%}
+                        {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
+                    {%- endfor -%}
+                {%- else -%}
+                    {%- do partitions_batches.append(bucket_cond) -%}
+                {%- endif -%}
+            {%- endfor -%}
         {%- endfor -%}
     {%- else -%}
         {# Non-bucketed: batch partitions respecting athena_partitions_limit #}
