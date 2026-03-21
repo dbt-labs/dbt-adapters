@@ -1,0 +1,6 @@
+kind: Features
+body: Extract snapshot check column comparison into dispatched `snapshot_check_row_changed` macro for adapter overrides
+time: 2026-03-18T12:00:01.000000+00:00
+custom:
+    Author: antoniabadarau
+    Issue: "1782"
