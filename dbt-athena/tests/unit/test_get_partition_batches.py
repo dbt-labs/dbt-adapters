@@ -203,7 +203,7 @@ class TestNonBucketedBatching:
 class TestBucketOnlyBatching:
     """Tests for bucket partitioning without non-bucket partition columns."""
 
-    def test_bucket_only_all_buckets_under_limit(self):
+    def test_bucket_only_values_chunked(self):
         """When all bucket numbers fit within the limit, both buckets are grouped.
 
         md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
@@ -224,7 +224,7 @@ class TestBucketOnlyBatching:
             "col IN ('e')",
         ]
 
-    def test_bucket_only_values_under_limit(self):
+    def test_bucket_only_no_chunking(self):
         """Bucket values within limit should not be split.
 
         md5 hash with bucket(col, 2): bucket 0=['e'], bucket 1=['a','b','c','d'].
@@ -450,7 +450,7 @@ class TestCrossProductLimit:
                 f"{num_or} partitions × {num_buckets} buckets = {num_or * num_buckets}"
             )
 
-    def test_many_months_few_buckets(self):
+    def test_production_scale_respects_limit(self):
         """Production-like scenario: 12 months × many users, limit=100.
 
         partition_chunk=12, bucket_chunk=floor(100/12)=8.
@@ -632,7 +632,7 @@ class TestBatchCountReduction:
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('alice', 'bob', 'charlie')",
         ]
 
-    def test_production_like_scenario(self):
+    def test_large_scale_respects_limit_and_reduces_batches(self):
         """12 years × 512 buckets with limit=100.
 
         partition_chunk=12, bucket_chunk=floor(100/12)=8.
