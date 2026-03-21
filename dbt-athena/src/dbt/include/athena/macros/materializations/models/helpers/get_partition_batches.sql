@@ -69,19 +69,25 @@
             {%- set bucket_chunk_size = athena_partitions_limit -%}
         {%- endif -%}
 
-        {%- for bucket_num in ns.bucket_numbers -%}
-            {%- set values = ns.bucket_conditions[bucket_num] -%}
-            {%- for ci in range(0, values | length, bucket_chunk_size) -%}
-                {%- set chunk = values[ci:ci + bucket_chunk_size] -%}
-                {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
-                {%- if partition_batches | length > 0 -%}
-                    {%- for pb in partition_batches -%}
-                        {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
-                    {%- endfor -%}
-                {%- else -%}
-                    {%- do partitions_batches.append(bucket_cond) -%}
-                {%- endif -%}
+        {# Group bucket numbers so that partition_chunk × bucket_group ≤ limit.
+           All hash values for the grouped buckets are combined into a single IN clause
+           because values within the same bucket share one Iceberg partition. #}
+        {%- for bi in range(0, ns.bucket_numbers | length, bucket_chunk_size) -%}
+            {%- set bucket_group = ns.bucket_numbers[bi:bi + bucket_chunk_size] -%}
+            {%- set all_values = [] -%}
+            {%- for bn in bucket_group -%}
+                {%- for v in ns.bucket_conditions[bn] -%}
+                    {%- do all_values.append(v) -%}
+                {%- endfor -%}
             {%- endfor -%}
+            {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ all_values | join(", ") ~ ")" -%}
+            {%- if partition_batches | length > 0 -%}
+                {%- for pb in partition_batches -%}
+                    {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
+                {%- endfor -%}
+            {%- else -%}
+                {%- do partitions_batches.append(bucket_cond) -%}
+            {%- endif -%}
         {%- endfor -%}
     {%- else -%}
         {# Non-bucketed: batch partitions respecting athena_partitions_limit #}
