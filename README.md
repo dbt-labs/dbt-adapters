@@ -74,3 +74,6 @@ The following milestones track features that we're planning for the next minor v
 # Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+
+<!-- fix-issue-648: [ADAP-381] Enable tagging of query_group in configs -->
