@@ -212,19 +212,15 @@ class SnowflakeRelation(BaseRelation):
         config_change_collection = SnowflakeInteractiveTableConfigChangeset()
 
         if new_interactive_table.cluster_by != existing_interactive_table.cluster_by:
-            config_change_collection.cluster_by = (
-                SnowflakeInteractiveTableClusterByConfigChange(
-                    action=RelationConfigChangeAction.create,  # type:ignore
-                    context=new_interactive_table.cluster_by,
-                )
+            config_change_collection.cluster_by = SnowflakeInteractiveTableClusterByConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context=new_interactive_table.cluster_by,
             )
 
         if new_interactive_table.target_lag != existing_interactive_table.target_lag:
-            config_change_collection.target_lag = (
-                SnowflakeInteractiveTableTargetLagConfigChange(
-                    action=RelationConfigChangeAction.create,  # type:ignore
-                    context=new_interactive_table.target_lag,
-                )
+            config_change_collection.target_lag = SnowflakeInteractiveTableTargetLagConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context=new_interactive_table.target_lag,
             )
 
         if (

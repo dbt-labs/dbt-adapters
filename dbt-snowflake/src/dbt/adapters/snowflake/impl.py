@@ -617,9 +617,7 @@ CALL {proc_name}();
         return False
 
     @available
-    def describe_interactive_table(
-        self, relation: SnowflakeRelation
-    ) -> Dict[str, Any]:
+    def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
         """
         Get all relevant metadata about an interactive table to return as a dict to Agate Table row.
 
@@ -632,9 +630,7 @@ CALL {proc_name}();
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
-        show_sql = (
-            f"show tables like '{relation.identifier}' in schema {database}.{schema}"
-        )
+        show_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
         res, tables_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
             raise DbtRuntimeError(f"Could not get interactive table metadata: {show_sql} failed")
@@ -645,13 +641,9 @@ CALL {proc_name}();
 
         # SHOW TABLES LIKE uses pattern matching and may return multiple rows.
         # Filter to the exact matching row.
-        exact_match = tables_table.where(
-            lambda row: row.get("name") == relation.identifier
-        )
+        exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
         if len(exact_match.rows) == 0:
-            raise DbtRuntimeError(
-                f"Could not find interactive table: {relation.identifier}"
-            )
+            raise DbtRuntimeError(f"Could not find interactive table: {relation.identifier}")
 
         base_columns = [
             "name",
