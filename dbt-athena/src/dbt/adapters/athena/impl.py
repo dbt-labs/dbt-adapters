@@ -1416,6 +1416,21 @@ class AthenaAdapter(SQLAdapter):
             return partition_key.lower()
 
     @available
+    def format_one_partition_key_with_alias(self, partition_key: str, alias: str) -> str:
+        """Format a partition key and insert a table alias into column references.
+
+        Examples:
+            ('day(created_at)', 'target') -> "date_trunc('day', target.created_at)"
+            ('region', 'target')          -> 'target.region'
+            ('bucket(id, 10)', 'target')  -> 'target.id'
+        """
+        formatted = self.format_one_partition_key(partition_key)
+        hidden = re.search(r"^(date_trunc\('[^']+',\s*)(\w+)(\))$", formatted)
+        if hidden:
+            return f"{hidden.group(1)}{alias}.{hidden.group(2)}{hidden.group(3)}"
+        return f"{alias}.{formatted}"
+
+    @available
     def murmur3_hash(self, value: Any, num_buckets: int) -> int:
         """
         Computes a hash for the given value using the MurmurHash3 algorithm and returns a bucket number.
