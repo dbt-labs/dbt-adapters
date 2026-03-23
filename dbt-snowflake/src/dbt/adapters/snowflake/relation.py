@@ -1,6 +1,6 @@
 import textwrap
 from dataclasses import dataclass, field
-from typing import FrozenSet, Optional, Type, Iterator, Tuple
+from typing import ClassVar, Dict, FrozenSet, Optional, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
@@ -16,6 +16,7 @@ from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error
 
 from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
@@ -44,7 +45,7 @@ class SnowflakeRelation(BaseRelation):
     table_format: str = constants.INFO_SCHEMA_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
-    relation_configs = {
+    relation_configs: ClassVar[Dict[str, Type[SnowflakeRelationConfigBase]]] = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
         SnowflakeRelationType.InteractiveTable: SnowflakeInteractiveTableConfig,
     }
