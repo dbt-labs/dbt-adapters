@@ -43,6 +43,34 @@ import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
+# Snowflake may expose the interactive table flag under different column names
+# depending on the account version. Support both known variants.
+_INTERACTIVE_TABLE_COLUMN_NAMES = ("is_interactive", "is_adaptive")
+_TRUTHY_FLAG_VALUES = ("Y", "YES", True)
+
+
+def _is_interactive_flag(value: Any) -> bool:
+    """Check whether a Snowflake metadata flag value indicates an interactive table.
+
+    Handles both string representations ("Y", "YES") used by SHOW commands
+    and boolean True that some Snowflake versions may return.
+    """
+    return value in _TRUTHY_FLAG_VALUES
+
+
+def _get_interactive_flag(row: Mapping[str, Any]) -> Any:
+    """Extract the interactive table flag from a metadata row.
+
+    Checks both ``is_interactive`` and ``is_adaptive`` column names,
+    returning the first non-None value found (or None).
+    """
+    for col in _INTERACTIVE_TABLE_COLUMN_NAMES:
+        val = row.get(col)
+        if val is not None:
+            return val
+    return None
+
+
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
     default=False,
@@ -242,7 +270,7 @@ class SnowflakeAdapter(SQLAdapter):
         row = object_metadata[0]
 
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
-        is_interactive = row.get("is_interactive") in ("Y", "YES")
+        is_interactive = _is_interactive_flag(_get_interactive_flag(row))
         kind = row.get("kind")
 
         if is_interactive and kind == str(SnowflakeRelationType.Table).upper():
@@ -322,31 +350,40 @@ class SnowflakeAdapter(SQLAdapter):
             column_names=[col.lower() for col in schema_objects.column_names]
         )
         available_columns = [c.lower() for c in schema_objects.column_names]
-        has_is_interactive = "is_interactive" in available_columns
-        if has_is_interactive:
-            columns.append("is_interactive")
+        interactive_col = next(
+            (col for col in _INTERACTIVE_TABLE_COLUMN_NAMES if col in available_columns),
+            None,
+        )
+        if interactive_col:
+            columns.append(interactive_col)
         return [
-            self._parse_list_relations_result(obj, has_is_interactive=has_is_interactive)
+            self._parse_list_relations_result(obj, has_interactive_col=interactive_col is not None)
             for obj in schema_objects.select(columns)
         ]
 
     def _parse_list_relations_result(
-        self, result: "agate.Row", has_is_interactive: bool = False
+        self, result: "agate.Row", has_interactive_col: bool = False
     ) -> SnowflakeRelation:
-        if has_is_interactive:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg, is_interactive = (
-                result
-            )
+        if has_interactive_col:
+            (
+                database,
+                schema,
+                identifier,
+                relation_type,
+                is_dynamic,
+                is_iceberg,
+                interactive_flag,
+            ) = result
         else:
             database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-            is_interactive = None
+            interactive_flag = None
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
         except ValueError:
             relation_type = self.Relation.External
 
-        if relation_type == self.Relation.Table and is_interactive in ("Y", "YES"):
+        if relation_type == self.Relation.Table and _is_interactive_flag(interactive_flag):
             relation_type = SnowflakeRelationType.InteractiveTable
         elif relation_type == self.Relation.Table and is_dynamic in ("Y", "YES"):
             relation_type = SnowflakeRelationType.DynamicTable
@@ -640,8 +677,15 @@ CALL {proc_name}();
         )
 
         # SHOW TABLES LIKE uses pattern matching and may return multiple rows.
-        # Filter to the exact matching row.
-        exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
+        # Filter to the exact matching row, respecting quoting policy:
+        # unquoted identifiers are stored uppercase in Snowflake metadata.
+        if quoting.identifier:
+            exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
+        else:
+            _identifier_upper = (relation.identifier or "").upper()
+            exact_match = tables_table.where(
+                lambda row: row.get("name", "").upper() == _identifier_upper
+            )
         if len(exact_match.rows) == 0:
             raise DbtRuntimeError(f"Could not find interactive table: {relation.identifier}")
 
