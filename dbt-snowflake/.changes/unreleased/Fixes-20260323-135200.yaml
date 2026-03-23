@@ -1,0 +1,6 @@
+kind: Fixes
+body: Use cluster_by columns for ordering in incremental models
+time: 2026-03-23T13:52:00.11682+05:30
+custom:
+    Author: ash2shukla
+    Issue: "1515"
