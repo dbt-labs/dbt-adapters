@@ -42,6 +42,7 @@
         table_schema as "table_schema",
         table_name as "table_name",
         case
+            when is_interactive = 'YES' and table_type = 'BASE TABLE' THEN 'INTERACTIVE TABLE'
             when is_dynamic = 'YES' and table_type = 'BASE TABLE' THEN 'DYNAMIC TABLE'
             else table_type
         end as "table_type",
