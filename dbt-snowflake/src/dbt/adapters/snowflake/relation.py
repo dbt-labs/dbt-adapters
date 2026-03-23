@@ -219,10 +219,7 @@ class SnowflakeRelation(BaseRelation):
                 )
             )
 
-        if (
-            new_interactive_table.target_lag != existing_interactive_table.target_lag
-            and new_interactive_table.target_lag is not None
-        ):
+        if new_interactive_table.target_lag != existing_interactive_table.target_lag:
             config_change_collection.target_lag = (
                 SnowflakeInteractiveTableTargetLagConfigChange(
                     action=RelationConfigChangeAction.create,  # type:ignore

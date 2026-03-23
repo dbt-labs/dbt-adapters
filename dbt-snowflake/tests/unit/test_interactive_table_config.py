@@ -306,6 +306,26 @@ class TestInteractiveTableChangeDetectionLogic:
         assert changeset.target_lag is not None
         assert changeset.target_lag.context == "10 minutes"
 
+    def test_target_lag_removal_detected(self):
+        """When target_lag is removed (dynamic -> static), a changeset is returned."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(
+            cluster_by="id", target_lag="5 minutes", warehouse="MY_WH"
+        )
+        relation_config = self._make_relation_config(
+            cluster_by="id", target_lag=None, snowflake_warehouse=None
+        )
+
+        changeset = SnowflakeRelation.interactive_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.target_lag is not None
+        assert changeset.target_lag.context is None
+        assert changeset.requires_full_refresh
+
     def test_warehouse_change_detected(self):
         """When warehouse changes, a changeset is returned."""
         from dbt.adapters.snowflake.relation import SnowflakeRelation

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, TYPE_CHECKING, Union
+from typing import Optional, Dict, Any, TYPE_CHECKING
 
 from dbt.adapters.relation_configs import RelationConfigChange, RelationResults
 from dbt.adapters.contracts.relation import RelationConfig

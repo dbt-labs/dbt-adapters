@@ -623,7 +623,8 @@ CALL {proc_name}();
         """
         Get all relevant metadata about an interactive table to return as a dict to Agate Table row.
 
-        Uses SHOW TABLES to retrieve interactive table metadata.
+        Uses SHOW TABLES to retrieve interactive table metadata. SHOW TABLES LIKE uses
+        pattern matching, so we filter to an exact name match after fetching results.
 
         Args:
             relation (SnowflakeRelation): the relation to describe
@@ -642,22 +643,31 @@ CALL {proc_name}();
             column_names=[name.lower() for name in tables_table.column_names]
         )
 
+        # SHOW TABLES LIKE uses pattern matching and may return multiple rows.
+        # Filter to the exact matching row.
+        exact_match = tables_table.where(
+            lambda row: row.get("name") == relation.identifier
+        )
+        if len(exact_match.rows) == 0:
+            raise DbtRuntimeError(
+                f"Could not find interactive table: {relation.identifier}"
+            )
+
         base_columns = [
             "name",
             "schema_name",
             "database_name",
+            "text",
             "cluster_by",
         ]
-        available_columns = [c.lower() for c in tables_table.column_names]
+        available_columns = [c.lower() for c in exact_match.column_names]
 
-        if "text" in available_columns:
-            base_columns.append("text")
         if "target_lag" in available_columns:
             base_columns.append("target_lag")
         if "warehouse" in available_columns:
             base_columns.append("warehouse")
 
-        selected = tables_table.select(base_columns)
+        selected = exact_match.select(base_columns)
 
         return {"interactive_table": selected}
 
