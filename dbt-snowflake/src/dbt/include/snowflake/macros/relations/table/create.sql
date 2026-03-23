@@ -48,15 +48,7 @@
     {%- set compiled_code = get_select_subquery(compiled_code) -%}
 {%- endif -%}
 
-{%- set cluster_by_keys = config.get("cluster_by", none) -%}
-{%- if cluster_by_keys is not none and cluster_by_keys is string -%}
-    {%- set cluster_by_keys = [cluster_by_keys] -%}
-{%- endif -%}
-{%- if cluster_by_keys is not none -%}
-    {%- set cluster_by_string = cluster_by_keys|join(", ")-%}
-{% else %}
-    {%- set cluster_by_string = none -%}
-{%- endif -%}
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
@@ -66,10 +58,10 @@ create or replace temporary table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
 as (
-    {%- if cluster_by_string is not none -%}
+    {%- if catalog_relation.cluster_by -%}
         select * from (
             {{ compiled_code }}
-        ) order by ({{ cluster_by_string }})
+        ) order by ({{ catalog_relation.cluster_by }})
     {%- else -%}
         {{ compiled_code }}
     {%- endif %}
