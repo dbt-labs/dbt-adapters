@@ -115,7 +115,7 @@ class SnowflakeRelation(BaseRelation):
                 context=new_dynamic_table.target_lag,
             )
 
-        if new_dynamic_table.ddl_warehouse != existing_dynamic_table.snowflake_warehouse:
+        if new_dynamic_table.ddl_warehouse != existing_dynamic_table.ddl_warehouse:
             config_change_collection.snowflake_warehouse = (
                 SnowflakeDynamicTableWarehouseConfigChange(
                     action=RelationConfigChangeAction.alter,  # type:ignore

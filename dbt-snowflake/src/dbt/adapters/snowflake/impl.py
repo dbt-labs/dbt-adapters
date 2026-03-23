@@ -176,12 +176,14 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
-    def _get_warehouse(self) -> str:
+    def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
-            # can this happen?
-            raise DbtRuntimeError("Could not get current warehouse: no results")
-        return str(table[0][0])
+            return None
+        value = table[0][0]
+        if value is None or str(value).upper() == "NULL":
+            return None
+        return str(value)
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
