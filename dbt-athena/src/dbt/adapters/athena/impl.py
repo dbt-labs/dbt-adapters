@@ -1431,6 +1431,11 @@ class AthenaAdapter(SQLAdapter):
         return f"{alias}.{formatted}"
 
     @available
+    def check_has_bucket_partition(self, partition_keys: List[str]) -> bool:
+        """Check if any partition key uses bucket partitioning."""
+        return any(re.search(r"bucket\(", pk.lower()) for pk in partition_keys)
+
+    @available
     def murmur3_hash(self, value: Any, num_buckets: int) -> int:
         """
         Computes a hash for the given value using the MurmurHash3 algorithm and returns a bucket number.
