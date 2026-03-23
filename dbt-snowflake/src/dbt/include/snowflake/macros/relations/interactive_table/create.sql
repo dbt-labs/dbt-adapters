@@ -1,7 +1,7 @@
 {% macro snowflake__get_create_interactive_table_as_sql(relation, sql) -%}
 
     {%- set interactive_table = relation.from_config(config.model) -%}
-    {{ snowflake__create_interactive_table_sql(interactive_table, relation, compiled_code) }}
+    {{ snowflake__create_interactive_table_sql(interactive_table, relation, sql) }}
 
 {%- endmacro %}
 
