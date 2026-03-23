@@ -77,3 +77,6 @@ Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/d
 
 
 <!-- fix-issue-648: [ADAP-381] Enable tagging of query_group in configs -->
+
+
+<!-- fix-issue-648: [ADAP-381] Enable tagging of query_group in configs -->
