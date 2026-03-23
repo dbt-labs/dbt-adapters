@@ -39,6 +39,37 @@ select * from (
 {% endif %}
 """
 
+# When incremental_predicates is set, auto target filter should be disabled
+models__batch_merge_predicates_guard_sql = """
+{{ config(
+    materialized='incremental',
+    table_type='iceberg',
+    incremental_strategy='merge',
+    unique_key='id',
+    partitioned_by=['DAY(date_column)'],
+    force_batch=True,
+    incremental_predicates=["src.id <> 999"]
+) }}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', cast('2024-01-01' as date)),
+    (5, 'new_5', cast('2024-01-01' as date))
+) as t (id, name, date_column)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', cast('2024-01-01' as date)),
+    (2, 'original_2', cast('2024-01-02' as date))
+) as t (id, name, date_column)
+
+{% endif %}
+"""
+
 
 class TestBatchMergeTargetFilter:
     @pytest.fixture(scope="class")
@@ -103,3 +134,42 @@ class TestBatchMergeTargetFilter:
         )
         preserved_name = project.run_sql(preserved_row_query, fetch="all")[0][0]
         assert preserved_name == "original_3"
+
+
+class TestBatchMergePredicatesGuard:
+    """When incremental_predicates is set, auto target partition filter should be disabled."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "test_predicates_guard.sql": models__batch_merge_predicates_guard_sql,
+        }
+
+    def test__predicates_guard_disables_auto_target_filter(self, project, capsys):
+        relation_name = "test_predicates_guard"
+        count_query = f"select count(*) as records from {project.test_schema}.{relation_name}"
+
+        # First run: creates table with 2 rows
+        first_run = run_dbt(["run", "--select", relation_name])
+        assert first_run.results[0].status == RunStatus.Success
+        assert project.run_sql(count_query, fetch="all")[0][0] == 2
+
+        capsys.readouterr()
+
+        # Second run: incremental with debug logs
+        second_run = run_dbt(["run", "-d", "--select", relation_name])
+        assert second_run.results[0].status == RunStatus.Success
+
+        out, _ = capsys.readouterr()
+
+        # Auto target filter should NOT be present
+        assert "date_trunc('day', target.date_column)" not in out, (
+            "Auto target partition filter should be disabled when incremental_predicates is set"
+        )
+        # But incremental_predicates should still be in the ON clause
+        assert "src.id <> 999" in out, (
+            "User-defined incremental_predicates should still appear in the MERGE ON clause"
+        )
+
+        # Merge should still work correctly: 2 original + 1 new = 3
+        assert project.run_sql(count_query, fetch="all")[0][0] == 3
