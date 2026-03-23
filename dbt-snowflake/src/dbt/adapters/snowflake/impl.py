@@ -347,9 +347,9 @@ class SnowflakeAdapter(SQLAdapter):
             relation_type = self.Relation.External
 
         if relation_type == self.Relation.Table and is_interactive in ("Y", "YES"):
-            relation_type = self.Relation.InteractiveTable
+            relation_type = SnowflakeRelationType.InteractiveTable
         elif relation_type == self.Relation.Table and is_dynamic in ("Y", "YES"):
-            relation_type = self.Relation.DynamicTable
+            relation_type = SnowflakeRelationType.DynamicTable
 
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
