@@ -51,7 +51,7 @@ functions:
     description: Return the square root of the input using numpy
     config:
       entry_point: sqrt_input
-      runtime_version: "3.12"
+      runtime_version: "3.11"
       packages: ["numpy"]
     arguments:
       - name: x
