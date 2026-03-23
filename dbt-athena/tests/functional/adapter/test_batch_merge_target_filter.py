@@ -173,3 +173,82 @@ class TestBatchMergePredicatesGuard:
 
         # Merge should still work correctly: 2 original + 1 new = 3
         assert project.run_sql(count_query, fetch="all")[0][0] == 3
+
+
+# Plain partition key (no Iceberg hidden partitioning)
+models__batch_merge_plain_partition_sql = """
+{{ config(
+    materialized='incremental',
+    table_type='iceberg',
+    incremental_strategy='merge',
+    unique_key='id',
+    partitioned_by=['region'],
+    force_batch=True
+) }}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', 'us-east-1'),
+    (5, 'new_5', 'eu-west-1')
+) as t (id, name, region)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', 'us-east-1'),
+    (2, 'original_2', 'eu-west-1'),
+    (3, 'original_3', 'us-east-1')
+) as t (id, name, region)
+
+{% endif %}
+"""
+
+
+class TestBatchMergePlainPartition:
+    """Plain partition key should generate target.column filter."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "test_plain_partition.sql": models__batch_merge_plain_partition_sql,
+        }
+
+    def test__plain_partition_target_filter(self, project, capsys):
+        relation_name = "test_plain_partition"
+        count_query = f"select count(*) as records from {project.test_schema}.{relation_name}"
+
+        # First run: creates table with 3 rows
+        first_run = run_dbt(["run", "--select", relation_name])
+        assert first_run.results[0].status == RunStatus.Success
+        assert project.run_sql(count_query, fetch="all")[0][0] == 3
+
+        capsys.readouterr()
+
+        # Second run: incremental
+        second_run = run_dbt(["run", "-d", "--select", relation_name])
+        assert second_run.results[0].status == RunStatus.Success
+
+        out, _ = capsys.readouterr()
+
+        # Target filter should use target.region
+        assert "target.region" in out, (
+            "Expected target partition filter with target.region in the MERGE ON clause"
+        )
+        assert re.search(
+            r"on\s*\(.*target\.region",
+            out,
+            re.DOTALL | re.IGNORECASE,
+        ), "Target partition filter should appear within the MERGE ON clause"
+
+        # 3 original + 1 new = 4
+        assert project.run_sql(count_query, fetch="all")[0][0] == 4
+
+        # Verify update applied
+        updated = project.run_sql(
+            f"select name from {project.test_schema}.{relation_name} where id = 1",
+            fetch="all",
+        )[0][0]
+        assert updated == "updated_1"
