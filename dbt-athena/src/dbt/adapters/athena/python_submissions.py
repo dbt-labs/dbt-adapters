@@ -139,13 +139,32 @@ class AthenaPythonJobHelper(PythonJobHelper):
                     break
                 except botocore.exceptions.ClientError as ce:
                     LOGGER.exception(f"Encountered client error: {ce}")
+                    error_message = ce.response["Error"].get("Message", "")
                     if (
                         ce.response["Error"]["Code"] == "InvalidRequestException"
                         and "Session is in the BUSY state; needs to be IDLE to accept Calculations."
-                        in ce.response["Error"]["Message"]
+                        in error_message
                     ):
                         LOGGER.exception("Going to poll until session is IDLE")
                         self.poll_until_session_idle()
+                    elif any(
+                        state in error_message
+                        for state in ["TERMINATED", "TERMINATING", "DEGRADED", "FAILED"]
+                    ):
+                        # Session is no longer available, clean it up and try with a new one
+                        LOGGER.warning(
+                            f"Model {self.relation_name} - Session {self.session_id} is no longer available. "
+                            f"Error: {error_message}. Getting new session."
+                        )
+                        self.spark_connection.remove_terminated_session(self.session_id)
+                        if "session_id" in self.__dict__:
+                            del self.__dict__["session_id"]
+                        # Loop continues with fresh session
+                    else:
+                        # Unknown client error, don't retry forever
+                        raise DbtRuntimeError(
+                            f"Unable to start spark python code execution. ClientError: {ce}"
+                        )
                 except Exception as e:
                     raise DbtRuntimeError(f"Unable to start spark python code execution. Got: {e}")
             execution_status = self.poll_until_execution_completion(calculation_execution_id)

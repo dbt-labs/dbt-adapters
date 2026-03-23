@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
+from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -8,6 +8,8 @@ from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, 
 from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
+from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
@@ -20,6 +22,8 @@ from dbt_common.contracts.metadata import (
     CatalogTable,
     ColumnMetadata,
 )
+from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
@@ -35,26 +39,38 @@ from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
 from dbt.adapters.snowflake import SnowflakeRelation
 
-if TYPE_CHECKING:
-    import agate
+import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
+    name="snowflake_default_transient_dynamic_tables",
+    default=False,
+    description=(
+        "When enabled, dynamic tables default to transient (matching regular table behavior). "
+        "This is a breaking change from previous behavior where dynamic tables were non-transient."
+    ),
+)
 
 
 @dataclass
 class SnowflakeConfig(AdapterConfig):
     transient: Optional[bool] = None
+    partition_by: Optional[Union[str, List[str]]] = None
     cluster_by: Optional[Union[str, List[str]]] = None
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
+    snowflake_initialization_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    immutable_where: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -92,6 +108,10 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
         }
     )
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -506,7 +526,9 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+    def describe_dynamic_table(
+        self, relation: SnowflakeRelation, include_transient: bool = False
+    ) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
@@ -524,16 +546,75 @@ CALL {proc_name}();
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         # normalize column names to lower case, this still preserves column order
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
-        return {
-            "dynamic_table": dt_table.select(
-                [
-                    "name",
-                    "schema_name",
-                    "database_name",
-                    "text",
-                    "target_lag",
-                    "warehouse",
-                    "refresh_mode",
-                ]
+
+        # Select columns that exist in the result set
+        # initialization_warehouse may not be available in all Snowflake accounts
+        base_columns = [
+            "name",
+            "schema_name",
+            "database_name",
+            "text",
+            "target_lag",
+            "warehouse",
+            "refresh_mode",
+            "immutable_where",
+            "cluster_by",
+        ]
+        available_columns = [c.lower() for c in dt_table.column_names]
+        if "initialization_warehouse" in available_columns:
+            base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+        if "scheduler" in available_columns:
+            base_columns.append("scheduler")
+
+        selected = dt_table.select(base_columns)
+
+        if include_transient:
+            is_transient = self._query_dynamic_table_transient_status(relation)
+            # choosing a future proof column name
+            selected = selected.compute(
+                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
             )
-        }
+
+        return {"dynamic_table": selected}
+
+    def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
+        """
+        Query SHOW TABLES to determine if a dynamic table is transient.
+
+        SHOW DYNAMIC TABLES does not expose transient status, so we fall back to
+        SHOW TABLES where the "kind" column contains "TRANSIENT" for transient tables.
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        _, tables_table = self.execute(show_tables_sql, fetch=True)
+        if len(tables_table.rows) > 0:
+            tables_table = tables_table.rename(
+                column_names=[name.lower() for name in tables_table.column_names]
+            )
+            return tables_table.rows[0].get("kind") == "TRANSIENT"
+        return False
+
+    def expand_column_types(self, goal, current):
+        reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
+
+        target_columns = {c.name: c for c in self.get_columns_in_relation(current)}
+
+        for column_name, reference_column in reference_columns.items():
+            target_column = target_columns.get(column_name)
+
+            if target_column is not None and target_column.can_expand_to(reference_column):
+                col_string_size = reference_column.string_size()
+                new_type = self.Column.string_type(col_string_size)
+                if collation := target_column.collation:
+                    new_type += f"collate '{collation}'"
+                fire_event(
+                    ColTypeChange(
+                        orig_type=target_column.data_type,
+                        new_type=new_type,
+                        table=_make_ref_key_dict(current),
+                    )
+                )
+
+                self.alter_column_type(current, column_name, new_type)

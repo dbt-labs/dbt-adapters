@@ -1,8 +1,15 @@
+# **what?**
+# Checks if a changelog entry exists for the package being modified in a pull request.
+
+# **why?**
+# Ensures all changes are properly documented in changelog files before merging.
+
+# **when?**
+# This workflow is called by pull-request-checks.yml when a PR modifies a package. It cannot be tested via workflow_dispatch because dorny/paths-filter inspects the current trigger to determine how to compare branches.
+
 name: "# Changelog entry check"
 run-name: "Changelog entry check - ${{ github.actor }} - package:${{ inputs.package }} pull-request:${{ inputs.pull-request }}"
 
-# this cannot be tested via workflow_dispatch
-# dorny/paths-filter inspects the current trigger to determine how to compare branches
 on:
     workflow_call:
         inputs:
@@ -30,13 +37,14 @@ jobs:
             exists: ${{ steps.changelog.outputs.exists }}
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         steps:
-        -   id: changelog
-            uses: dorny/paths-filter@v3
-            with:
-                token: ${{ secrets.GITHUB_TOKEN }}
-                filters: |
-                    exists:
-                    -   added|modified: '${{ inputs.package }}/.changes/unreleased/**.yaml'
+            - name: "Check for changelog entry"
+              id: changelog
+              uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # dorny/paths-filter@v3
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  filters: |
+                      exists:
+                      -   added|modified: '${{ inputs.package }}/.changes/unreleased/**.yaml'
 
     comment:
         needs: changelog-check
@@ -48,16 +56,21 @@ jobs:
                 Thank you for your pull request! We could not find a changelog entry for this change in the ${{ inputs.package }} package.
                 For details on how to document a change, see the [Contributing Guide](https://github.com/dbt-labs/dbt-adapters/blob/main/CONTRIBUTING.md).
         steps:
-        -   id: comment
-            uses: peter-evans/find-comment@v3
-            with:
-                issue-number: ${{ inputs.pull-request }}
-                comment-author: ${{ env.AUTHOR }}
-                body-includes: ${{ env.COMMENT }}
-        -   if: steps.comment.outputs.comment-body == ''
-            run: gh issue comment ${{ inputs.pull-request }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
-            env:
-                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        -   uses: actions/github-script@v7
-            with:
-                script: core.setFailed('Changelog entry required to merge.')
+            - name: "Check for existing comment"
+              id: comment
+              uses: peter-evans/find-comment@3eae4d37986fb5a8592848f6a574fdf654e61f9e # peter-evans/find-comment@v3
+              with:
+                  issue-number: ${{ inputs.pull-request }}
+                  comment-author: ${{ env.AUTHOR }}
+                  body-includes: ${{ env.COMMENT }}
+
+            - name: "Add comment to PR"
+              if: steps.comment.outputs.comment-body == ''
+              run: gh issue comment ${{ inputs.pull-request }} --repo ${{ github.repository }} --body "${{ env.COMMENT }}"
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: "Fail workflow"
+              uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # actions/github-script@v7
+              with:
+                  script: core.setFailed('Changelog entry required to merge.')

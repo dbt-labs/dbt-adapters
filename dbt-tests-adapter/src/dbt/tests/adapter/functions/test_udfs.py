@@ -3,7 +3,7 @@ import pytest
 from dbt.adapters.events.types import SQLQuery
 from dbt.artifacts.schemas.results import RunStatus
 from dbt.contracts.graph.nodes import FunctionNode
-from dbt.events.types import GenericExceptionOnRun
+from dbt.events.types import RunResultError
 from dbt.tests.adapter.functions import files
 from dbt.tests.util import run_dbt
 from dbt_common.events.base_types import EventMsg
@@ -99,16 +99,155 @@ class ErrorForUnsupportedType(UDFsBasic):
         }
 
     def test_udfs(self, project, sql_event_catcher):
-        generic_exception_catcher = EventCatcher(GenericExceptionOnRun)
+        run_result_error_catcher = EventCatcher(RunResultError)
         result = run_dbt(
-            ["build", "--debug"], expect_pass=False, callbacks=[generic_exception_catcher.catch]
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
         )
         assert len(result.results) == 1
         node_result = result.results[0]
         assert node_result.status == RunStatus.Error
 
-        assert len(generic_exception_catcher.caught_events) == 1
+        assert len(run_result_error_catcher.caught_events) == 1
         assert (
-            "sql table function not implemented for adapter"
-            in generic_exception_catcher.caught_events[0].data.exc
+            "No macro named 'table_function_sql' found within namespace"
+            in run_result_error_catcher.caught_events[0].data.msg
         )
+
+
+class PythonUDFSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_YML,
+        }
+
+
+class PythonUDFNotSupported(UDFsBasic):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_YML,
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "No macro named 'scalar_function_python' found within namespace"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
+
+
+class PythonUDFRuntimeVersionRequired(PythonUDFNotSupported):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+entry_point": "price_for_xlarge"},
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "A `runtime_version` is required for python functions"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
+
+
+class PythonUDFEntryPointRequired(PythonUDFRuntimeVersionRequired):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_YML,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+runtime_version": "3.11"},
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        run_result_error_catcher = EventCatcher(RunResultError)
+        result = run_dbt(
+            ["build", "--debug"], expect_pass=False, callbacks=[run_result_error_catcher.catch]
+        )
+        assert len(result.results) == 1
+        node_result = result.results[0]
+        assert node_result.status == RunStatus.Error
+
+        assert len(run_result_error_catcher.caught_events) == 1
+        assert (
+            "An `entry_point` is required for python functions"
+            in run_result_error_catcher.caught_events[0].data.msg
+        )
+
+
+class SqlUDFDefaultArgSupport(UDFsBasic):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+        assert len(result.results) == 1
+
+        if not self.expect_default_arg_support:
+            assert "DEFAULT 100" not in sql_event_catcher.caught_events[0].data.sql
+        else:
+            assert "DEFAULT 100" in sql_event_catcher.caught_events[0].data.sql
+
+            result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}()"])
+            assert len(result.results) == 1
+            assert result.results[0].agate_table.rows[0].values()[0] == 200
+
+
+class PythonUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class PythonUDFVolatilitySupport(PythonUDFSupported):
+    def check_function_volatility(self, sql: str):
+        assert "VOLATILE" in sql
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+volatility": "non-deterministic"},
+        }

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -17,6 +17,7 @@ class IcebergRestCatalogRelation:
     catalog_type: str = constants.DEFAULT_ICEBERG_REST_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_ICEBERG_REST_CATALOG.name
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
+    partition_by: Optional[Union[list[str], str]] = None
     catalog_linked_database: Optional[str] = None
     catalog_linked_database_type: Optional[str] = None  # e.g., 'glue' for AWS Glue
     external_volume: Optional[str] = None
@@ -83,6 +84,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         return IcebergRestCatalogRelation(
             catalog_name=self.name,
             external_volume=None,
+            partition_by=parse_model.partition_by(model),
             catalog_linked_database=self.catalog_linked_database,
             catalog_linked_database_type=self.catalog_linked_database_type,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,

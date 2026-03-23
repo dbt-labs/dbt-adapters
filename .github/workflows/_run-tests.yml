@@ -1,3 +1,12 @@
+# **what?**
+# Orchestrates running verify-build, unit-tests, and integration-tests workflows across all packages.
+
+# **why?**
+# Provides a single entry point to run all test suites for all packages in the repository.
+
+# **when?**
+# This workflow is called by other workflows (like scheduled-tests.yml) or can be manually triggered via workflow_dispatch.
+
 name: "Run Tests"
 run-name: "Run Tests - ${{ inputs.branch }}"
 
@@ -41,6 +50,7 @@ jobs:
             repository: ${{ inputs.repository }}
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
+        secrets: inherit
 
     unit-tests:
         uses: ./.github/workflows/_unit-tests.yml
@@ -65,6 +75,7 @@ jobs:
             os: ${{ matrix.os }}
             python-version: ${{ matrix.python-version }}
             hatch-env: "ci"
+        secrets: inherit
 
     integration-tests:
         uses: ./.github/workflows/_integration-tests.yml

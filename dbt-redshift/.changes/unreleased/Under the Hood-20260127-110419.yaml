@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Default `redshift_skip_autocommit_transaction_statements` to `False` to preserve legacy transaction behavior. Users can opt-in to skip unnecessary transaction statements by setting the flag to `True`.
+time: 2026-01-27T11:04:19.034683-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1538"
