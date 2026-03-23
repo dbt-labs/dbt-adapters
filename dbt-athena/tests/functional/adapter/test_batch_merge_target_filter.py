@@ -252,3 +252,73 @@ class TestBatchMergePlainPartition:
             fetch="all",
         )[0][0]
         assert updated == "updated_1"
+
+
+# Multiple partition keys: plain + hidden
+models__batch_merge_multi_partition_sql = """
+{{ config(
+    materialized='incremental',
+    table_type='iceberg',
+    incremental_strategy='merge',
+    unique_key='id',
+    partitioned_by=['region', 'DAY(date_column)'],
+    force_batch=True
+) }}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', 'us-east-1', cast('2024-01-01' as date)),
+    (5, 'new_5', 'eu-west-1', cast('2024-01-02' as date))
+) as t (id, name, region, date_column)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', 'us-east-1', cast('2024-01-01' as date)),
+    (2, 'original_2', 'eu-west-1', cast('2024-01-02' as date)),
+    (3, 'original_3', 'us-east-1', cast('2024-01-01' as date))
+) as t (id, name, region, date_column)
+
+{% endif %}
+"""
+
+
+class TestBatchMergeMultiPartition:
+    """Multiple partition keys should all appear in the target filter."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "test_multi_partition.sql": models__batch_merge_multi_partition_sql,
+        }
+
+    def test__multi_partition_target_filter(self, project, capsys):
+        relation_name = "test_multi_partition"
+        count_query = f"select count(*) as records from {project.test_schema}.{relation_name}"
+
+        # First run: creates table with 3 rows
+        first_run = run_dbt(["run", "--select", relation_name])
+        assert first_run.results[0].status == RunStatus.Success
+        assert project.run_sql(count_query, fetch="all")[0][0] == 3
+
+        capsys.readouterr()
+
+        # Second run: incremental
+        second_run = run_dbt(["run", "-d", "--select", relation_name])
+        assert second_run.results[0].status == RunStatus.Success
+
+        out, _ = capsys.readouterr()
+
+        # Both partition keys should have target filters
+        assert "target.region" in out, (
+            "Expected target.region in the MERGE ON clause"
+        )
+        assert "date_trunc('day', target.date_column)" in out, (
+            "Expected date_trunc('day', target.date_column) in the MERGE ON clause"
+        )
+
+        # 3 original + 1 new = 4
+        assert project.run_sql(count_query, fetch="all")[0][0] == 4
