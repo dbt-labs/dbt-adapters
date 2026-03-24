@@ -49,8 +49,8 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - name: name of the dynamic table
     - query: the query behind the table
     - target_lag: the maximum amount of time that the dynamic table’s content should lag behind updates to the base tables
-    - snowflake_warehouse: the name of the warehouse used to execute DDL (CREATE/ALTER); also the refresh warehouse when refresh_warehouse is not set
-    - refresh_warehouse: when set, the warehouse used in the WAREHOUSE = clause of the DDL (i.e. the table's self-refresh warehouse), independent of snowflake_warehouse
+    - snowflake_warehouse: the name of the warehouse used to execute DDL (CREATE/ALTER); also used as the dynamic table's refresh warehouse when refresh_warehouse is not set
+    - refresh_warehouse: when set, used as the WAREHOUSE = parameter in the DDL (the table's self-refresh warehouse); snowflake_warehouse still executes the DDL
     - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
@@ -80,12 +80,12 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     transient: Optional[bool] = None
 
     @property
-    def ddl_warehouse(self) -> str:
-        """The warehouse used in the WAREHOUSE = clause of the CREATE DDL.
+    def warehouse_parameter(self) -> str:
+        """The value used for the WAREHOUSE = parameter in CREATE/REPLACE DYNAMIC TABLE DDL.
 
-        When refresh_warehouse is set, use it as the DDL refresh warehouse while
-        snowflake_warehouse controls which warehouse executes the DDL (via pre_model_hook).
-        When only snowflake_warehouse is set, it serves both roles as before.
+        When refresh_warehouse is set it is used here, so the dynamic table's self-refresh
+        runs on a different warehouse than the one executing the DDL (snowflake_warehouse).
+        When only snowflake_warehouse is set it serves both roles, preserving existing behaviour.
         """
         return self.refresh_warehouse or self.snowflake_warehouse
 

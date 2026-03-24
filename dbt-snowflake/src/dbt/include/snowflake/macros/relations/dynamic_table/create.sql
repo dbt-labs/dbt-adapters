@@ -42,7 +42,7 @@
     {%- set transient_keyword = 'transient ' if is_transient else '' -%}
     create {{ transient_keyword }}dynamic table {{ relation }}
         {% if dynamic_table.target_lag is not none %}target_lag = '{{ dynamic_table.target_lag }}'{% endif %}
-        warehouse = {{ dynamic_table.ddl_warehouse }}
+        warehouse = {{ dynamic_table.warehouse_parameter }}
         {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
         {{ optional('refresh_mode', dynamic_table.refresh_mode) }}
         {{ optional('initialize', dynamic_table.initialize) }}
@@ -83,7 +83,7 @@
 
     create dynamic iceberg table {{ relation }}
         {% if dynamic_table.target_lag is not none %}target_lag = '{{ dynamic_table.target_lag }}'{% endif %}
-        warehouse = {{ dynamic_table.ddl_warehouse }}
+        warehouse = {{ dynamic_table.warehouse_parameter }}
         {{ optional('initialization_warehouse', dynamic_table.snowflake_initialization_warehouse) }}
         {{ optional('external_volume', catalog_relation.external_volume, "'") }}
         catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
