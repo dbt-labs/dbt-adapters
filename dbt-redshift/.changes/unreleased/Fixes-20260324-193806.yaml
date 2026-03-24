@@ -1,0 +1,6 @@
+kind: Fixes
+body: dd cross-database support for create_schema and drop_schema by issuing USE <database> / RESET USE around schema operations targeting a non-default database
+time: 2026-03-24T19:38:06.11511+05:30
+custom:
+    Author: tauhid621
+    Issue: "1786"
