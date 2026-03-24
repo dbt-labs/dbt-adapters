@@ -326,7 +326,7 @@ class SnowflakeAdapter(SQLAdapter):
             "is_dynamic",
             "is_iceberg",
         ]
-        function_columns = ["catalog_name", "schema_name", "name"]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
@@ -339,6 +339,7 @@ class SnowflakeAdapter(SQLAdapter):
         function_relations = [
             self._parse_list_function_relations_result(obj)
             for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
         ]
         return object_relations + function_relations
 
@@ -371,7 +372,7 @@ class SnowflakeAdapter(SQLAdapter):
         )
 
     def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        database, schema, identifier = result
+        database, schema, identifier, _is_builtin = result
         return self.Relation.create(
             database=database,
             schema=schema,
