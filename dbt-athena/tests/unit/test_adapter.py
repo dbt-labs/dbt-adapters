@@ -1337,6 +1337,33 @@ class TestAthenaAdapter:
     def test_format_one_partition_key(self, partition_key, expected_result):
         assert self.adapter.format_one_partition_key(partition_key) == expected_result
 
+    @pytest.mark.parametrize(
+        "partition_key, alias, expected_result",
+        [
+            ("month(hidden)", "target", "date_trunc('month', target.hidden)"),
+            ("day(created_at)", "target", "date_trunc('day', target.created_at)"),
+            ("hour(updated_at)", "target", "date_trunc('hour', target.updated_at)"),
+            ("year(event_date)", "target", "date_trunc('year', target.event_date)"),
+            ("bucket(bucket_col, 10)", "target", "target.bucket_col"),
+            ("regular_col", "target", "target.regular_col"),
+            ("region", "existed", "existed.region"),
+        ],
+    )
+    def test_format_one_partition_key_with_alias(self, partition_key, alias, expected_result):
+        assert self.adapter.format_one_partition_key_with_alias(partition_key, alias) == expected_result
+
+    @pytest.mark.parametrize(
+        "partition_keys, expected_result",
+        [
+            (["day(created_at)", "region"], False),
+            (["bucket(id, 10)"], True),
+            (["day(created_at)", "bucket(id, 10)"], True),
+            (["region"], False),
+        ],
+    )
+    def test_check_has_bucket_partition(self, partition_keys, expected_result):
+        assert self.adapter.check_has_bucket_partition(partition_keys) == expected_result
+
     def test_murmur3_hash_with_int(self):
         bucket_number = self.adapter.murmur3_hash(123, 100)
         assert isinstance(bucket_number, int)
