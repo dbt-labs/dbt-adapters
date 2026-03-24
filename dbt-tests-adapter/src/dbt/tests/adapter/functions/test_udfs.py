@@ -262,8 +262,16 @@ class CanFindScalarFunctionRelation(UDFsBasic):
         assert isinstance(node, FunctionNode)
 
         with project.adapter.connection_named("_test_scalar_function_relation"):
-            relation = project.adapter.get_relation(
-                database=node.database, schema=node.schema, identifier=node.name
+            schema_relation = project.adapter.Relation.create(
+                database=node.database, schema=node.schema
             )
+            # Call list_relations_without_caching directly to get a fresh result
+            # that includes the function built above. Using get_relation would hit
+            # the stale pre-build cache (populated before the function existed).
+            relations = project.adapter.list_relations_without_caching(schema_relation)
 
+        relation = next(
+            (r for r in relations if r.identifier.lower() == node.name.lower()),
+            None,
+        )
         assert relation is not None
