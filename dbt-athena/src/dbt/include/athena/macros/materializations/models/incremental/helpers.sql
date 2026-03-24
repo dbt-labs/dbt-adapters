@@ -111,7 +111,7 @@
       {%- do single_partition.append(partitioned_by[loop.index0] + '=' + value) -%}
     {%- endfor -%}
     {%- set single_partition_expression = single_partition | join(' and ') -%}
-    {%- do partitions.append('(' + single_partition_expression + ')') -%}
+    {%- do partitions.append(single_partition_expression) -%}
   {%- endfor -%}
   {%- do adapter.clean_up_partitions(target_relation, partitions) -%}
 {%- endmacro %}
