@@ -48,15 +48,6 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
-REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
-    name="redshift_use_show_apis",
-    default=False,
-    description=(
-        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
-        "for metadata queries. Required for cross-database operations with Datasharing. "
-    ),
-)
-
 CATALOG_COLUMNS = [
     "table_database",
     "table_schema",
@@ -136,7 +127,6 @@ class RedshiftAdapter(SQLAdapter):
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
             REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
-            REDSHIFT_USE_SHOW_APIS,
         ]
 
     @classmethod
@@ -178,9 +168,9 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``redshift_use_show_apis`` behavior flag.
+        Returns True when the ``datasharing`` profile config is enabled.
         """
-        return self.behavior.redshift_use_show_apis.no_warn
+        return bool(self.config.credentials.datasharing)
 
     @available
     def verify_database(self, database):
@@ -291,7 +281,7 @@ class RedshiftAdapter(SQLAdapter):
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of a grants query to match the grants config format.
 
-        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        When ``datasharing`` is enabled, ``SHOW GRANTS ON TABLE``
         is used for cross-database support.  SHOW GRANTS conflates groups and
         roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
         on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented

@@ -52,8 +52,13 @@ class TestColumnsInRelationBehaviorFlagOn(ColumnsInRelation):
     def project_config_update(self):
         return {
             "name": "test_columns_in_relation_behavior_flag_on",
-            "flags": {"redshift_use_show_apis": True},
         }
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
 
     @pytest.fixture(scope="class")
     def expected_columns(self):
