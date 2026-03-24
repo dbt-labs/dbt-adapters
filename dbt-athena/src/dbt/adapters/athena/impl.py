@@ -663,15 +663,15 @@ class AthenaAdapter(SQLAdapter):
                     LOGGER.debug(
                         f"delete_objects result: {deleted_count} deleted, {error_count} errors"
                     )
-                    if "Errors" in response:
-                        for err in response["Errors"]:
+                    if errors := response.get("Errors"):
+                        for err in errors:
                             LOGGER.error(
                                 f"Failed to delete S3 object: Key='{err['Key']}', "
                                 f"Code='{err['Code']}', Message='{err['Message']}', "
                                 f"Bucket='{bucket_name}'"
                             )
                         raise DbtRuntimeError(
-                            f"Failed to delete {len(response['Errors'])} object(s) from S3 bucket '{bucket_name}'"
+                            f"Failed to delete {len(errors)} object(s) from S3 bucket '{bucket_name}'"
                         )
 
     @staticmethod
