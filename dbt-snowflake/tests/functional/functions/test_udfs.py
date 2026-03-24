@@ -111,6 +111,8 @@ class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
 
 class TestSnowflakePythonUDFVolatilitySupport(PythonUDFVolatilitySupport):
     pass
+
+
 class TestSnowflakeCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
     @pytest.fixture(scope="class")
     def functions(self):
