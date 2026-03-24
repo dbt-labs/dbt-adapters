@@ -367,7 +367,7 @@ class BigQueryAdapter(BaseAdapter):
             #       won't need to do this
             max_results=100000,
         )
-        all_routines = client.list_routines(dataset_ref, max_results=1000)
+        all_routines = client.list_routines(dataset_ref)
 
         # This will 404 if the dataset does not exist. This behavior mirrors
         # the implementation of list_relations for other adapters
