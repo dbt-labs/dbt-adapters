@@ -30,7 +30,7 @@
 
 
 {% macro batch_incremental_insert(tmp_relation, target_relation, dest_cols_csv) %}
-    {% set partitions_batches = get_partition_batches(tmp_relation) %}
+    {% set partitions_batches = get_partition_batches(tmp_relation).src %}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
     {%- for batch in partitions_batches -%}
         {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches|length) -%}

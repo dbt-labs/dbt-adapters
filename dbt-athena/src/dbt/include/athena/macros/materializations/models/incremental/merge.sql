@@ -49,17 +49,31 @@
 
 
 {% macro batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
-    {% set partitions_batches = get_partition_batches(tmp_relation) %}
+    {%- set partition_result = get_partition_batches(tmp_relation) -%}
+    {%- set partitions_batches = partition_result.src -%}
+    {%- set target_partitions_batches = partition_result.target -%}
+    {# Pre-compute loop-invariant guard conditions #}
+    {%- set partitioned_by = config.get('partitioned_by') -%}
+    {%- set incremental_predicates = config.get('incremental_predicates') -%}
+    {%- set has_bucket = partitioned_by and adapter.check_has_bucket_partition(partitioned_by) -%}
+    {%- set enable_target_filter = partitioned_by and incremental_predicates is none and not has_bucket -%}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
     {%- for batch in partitions_batches -%}
         {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches | length) -%}
+        {# Build target filter from pre-computed target partition conditions #}
+        {%- set target_filter_part = '' -%}
+        {%- if enable_target_filter and target_partitions_batches[loop.index0] -%}
+            {%- set target_filter_part -%}
+                and ({{ target_partitions_batches[loop.index0] }})
+            {%- endset -%}
+        {%- endif -%}
         {%- set src_batch_part -%}
             merge into {{ target_relation }} as target
             using (select {{ dest_cols_csv }} from {{ tmp_relation }} where {{ batch }}) as src
         {%- endset -%}
         {%- set merge_batch -%}
           {{ src_batch_part }}
-          {{ merge_part }}
+          {{ merge_part | replace('__BATCH_TARGET_FILTER__', target_filter_part) }}
         {%- endset -%}
         {%- do run_query(merge_batch) -%}
     {%- endfor -%}
@@ -119,6 +133,8 @@
           {%- endfor %}
           )
           {%- endif %}
+          {# Replaced in batch_iceberg_merge with target partition conditions; replaced with '' in non-batch path #}
+          __BATCH_TARGET_FILTER__
       )
       {% if delete_condition is not none -%}
           when matched and ({{ delete_condition }})
@@ -148,7 +164,7 @@
       {%- endset -%}
       {%- set merge_full -%}
           {{ src_part }}
-          {{ merge_part }}
+          {{ merge_part | replace('__BATCH_TARGET_FILTER__', '') }}
       {%- endset -%}
 
       {%- set query_result =  adapter.run_query_with_partitions_limit_catching(merge_full) -%}

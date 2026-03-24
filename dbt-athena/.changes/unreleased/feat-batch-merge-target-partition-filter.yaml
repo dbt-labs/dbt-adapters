@@ -1,0 +1,5 @@
+kind: Features
+body: "Add automatic target partition filtering in batch_iceberg_merge to reduce Iceberg scan volume during MERGE operations. Disabled when incremental_predicates is set or bucket partitions are present. Note: get_partition_batches now returns a dict with 'src' and 'target' keys instead of a plain list."
+time: 2026-03-23T20:00:00.000000+09:00
+custom:
+  Author: bernard-choi

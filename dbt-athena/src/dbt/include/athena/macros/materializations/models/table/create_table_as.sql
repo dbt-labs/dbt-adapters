@@ -164,7 +164,7 @@
     {%- do log('CREATE NON-PARTITIONED STAGING TABLE: ' ~ tmp_relation) -%}
     {%- do run_query(create_table_as(temporary, tmp_relation, compiled_code, language, true)) -%}
 
-    {% set partitions_batches = get_partition_batches(sql=tmp_relation, as_subquery=False) %}
+    {% set partitions_batches = get_partition_batches(sql=tmp_relation, as_subquery=False).src %}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
 
     {%- set dest_columns = adapter.get_columns_in_relation(tmp_relation) -%}
