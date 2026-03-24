@@ -4,7 +4,6 @@ Unit tests for SnowflakeInteractiveTableConfig, testing:
 - target_lag (optional)
 - snowflake_warehouse (optional, required when target_lag is set)
 - config changeset detection
-- interactive table flag detection helpers
 """
 
 import pytest
@@ -16,11 +15,6 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeInteractiveTableClusterByConfigChange,
     SnowflakeInteractiveTableTargetLagConfigChange,
     SnowflakeInteractiveTableWarehouseConfigChange,
-)
-from dbt.adapters.snowflake.impl import (
-    _is_interactive_flag,
-    _get_interactive_flag,
-    _INTERACTIVE_TABLE_COLUMN_NAMES,
 )
 from dbt_common.exceptions import CompilationError
 
@@ -414,40 +408,3 @@ class TestInteractiveTableParseRelationResults:
         results = self._make_agate_results(cluster_by="region, product_id")
         config = SnowflakeInteractiveTableConfig.from_relation_results(results)
         assert config.cluster_by == "region, product_id"
-
-
-class TestInteractiveFlagHelpers:
-    """Tests for _is_interactive_flag and _get_interactive_flag helpers."""
-
-    @pytest.mark.parametrize("value", ["Y", "YES", True])
-    def test_is_interactive_flag_truthy(self, value):
-        assert _is_interactive_flag(value) is True
-
-    @pytest.mark.parametrize("value", ["N", "NO", False, None, "", 0])
-    def test_is_interactive_flag_falsy(self, value):
-        assert _is_interactive_flag(value) is False
-
-    def test_get_interactive_flag_prefers_is_interactive(self):
-        row = {"is_interactive": "Y", "is_adaptive": "N"}
-        assert _get_interactive_flag(row) == "Y"
-
-    def test_get_interactive_flag_falls_back_to_is_adaptive(self):
-        row = {"is_adaptive": "YES"}
-        assert _get_interactive_flag(row) == "YES"
-
-    def test_get_interactive_flag_falls_back_to_is_adaptive_bool(self):
-        row = {"is_adaptive": True}
-        assert _get_interactive_flag(row) is True
-
-    def test_get_interactive_flag_returns_none_when_absent(self):
-        row = {"kind": "TABLE"}
-        assert _get_interactive_flag(row) is None
-
-    def test_get_interactive_flag_skips_none_values(self):
-        """If is_interactive is None but is_adaptive has a value, use is_adaptive."""
-        row = {"is_interactive": None, "is_adaptive": "Y"}
-        assert _get_interactive_flag(row) == "Y"
-
-    def test_column_names_tuple_contains_expected(self):
-        assert "is_interactive" in _INTERACTIVE_TABLE_COLUMN_NAMES
-        assert "is_adaptive" in _INTERACTIVE_TABLE_COLUMN_NAMES

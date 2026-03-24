@@ -43,34 +43,6 @@ import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
-# Snowflake may expose the interactive table flag under different column names
-# depending on the account version. Support both known variants.
-_INTERACTIVE_TABLE_COLUMN_NAMES = ("is_interactive", "is_adaptive")
-_TRUTHY_FLAG_VALUES = ("Y", "YES", True)
-
-
-def _is_interactive_flag(value: Any) -> bool:
-    """Check whether a Snowflake metadata flag value indicates an interactive table.
-
-    Handles both string representations ("Y", "YES") used by SHOW commands
-    and boolean True that some Snowflake versions may return.
-    """
-    return value in _TRUTHY_FLAG_VALUES
-
-
-def _get_interactive_flag(row: Mapping[str, Any]) -> Any:
-    """Extract the interactive table flag from a metadata row.
-
-    Checks both ``is_interactive`` and ``is_adaptive`` column names,
-    returning the first non-None value found (or None).
-    """
-    for col in _INTERACTIVE_TABLE_COLUMN_NAMES:
-        val = row.get(col)
-        if val is not None:
-            return val
-    return None
-
-
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
     default=False,
@@ -270,7 +242,7 @@ class SnowflakeAdapter(SQLAdapter):
         row = object_metadata[0]
 
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
-        is_interactive = _is_interactive_flag(_get_interactive_flag(row))
+        is_interactive = row.get("is_interactive") in ("Y", "YES")
         kind = row.get("kind")
 
         if is_interactive and kind == str(SnowflakeRelationType.Table).upper():
@@ -350,21 +322,18 @@ class SnowflakeAdapter(SQLAdapter):
             column_names=[col.lower() for col in schema_objects.column_names]
         )
         available_columns = [c.lower() for c in schema_objects.column_names]
-        interactive_col = next(
-            (col for col in _INTERACTIVE_TABLE_COLUMN_NAMES if col in available_columns),
-            None,
-        )
-        if interactive_col:
-            columns.append(interactive_col)
+        has_is_interactive = "is_interactive" in available_columns
+        if has_is_interactive:
+            columns.append("is_interactive")
         return [
-            self._parse_list_relations_result(obj, has_interactive_col=interactive_col is not None)
+            self._parse_list_relations_result(obj, has_is_interactive=has_is_interactive)
             for obj in schema_objects.select(columns)
         ]
 
     def _parse_list_relations_result(
-        self, result: "agate.Row", has_interactive_col: bool = False
+        self, result: "agate.Row", has_is_interactive: bool = False
     ) -> SnowflakeRelation:
-        if has_interactive_col:
+        if has_is_interactive:
             (
                 database,
                 schema,
@@ -372,18 +341,18 @@ class SnowflakeAdapter(SQLAdapter):
                 relation_type,
                 is_dynamic,
                 is_iceberg,
-                interactive_flag,
+                is_interactive,
             ) = result
         else:
             database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-            interactive_flag = None
+            is_interactive = None
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
         except ValueError:
             relation_type = self.Relation.External
 
-        if relation_type == self.Relation.Table and _is_interactive_flag(interactive_flag):
+        if relation_type == self.Relation.Table and is_interactive in ("Y", "YES"):
             relation_type = SnowflakeRelationType.InteractiveTable
         elif relation_type == self.Relation.Table and is_dynamic in ("Y", "YES"):
             relation_type = SnowflakeRelationType.DynamicTable
