@@ -92,11 +92,14 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
         interactive_table: "agate.Row" = relation_results["interactive_table"].rows[0]
 
-        cluster_by_val = interactive_table.get("cluster_by")
-        if cluster_by_val is not None and str(cluster_by_val).strip() not in ("", "NONE", "None"):
-            cluster_by_val = str(cluster_by_val).strip()
+        cluster_by_raw = interactive_table.get("cluster_by")
+        if cluster_by_raw is not None and str(cluster_by_raw).strip() not in ("", "NONE", "None"):
+            cluster_by_val = str(cluster_by_raw).strip()
         else:
-            cluster_by_val = None
+            raise CompilationError(
+                "Interactive table metadata is missing a valid `cluster_by` value. "
+                "This is unexpected — interactive tables require cluster_by."
+            )
 
         config_dict = {
             "name": interactive_table.get("name"),
