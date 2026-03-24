@@ -1030,9 +1030,7 @@ class TestSnowflakeColumnIcebergVarcharNormalization(unittest.TestCase):
         assert col.dtype == "OBJECT(first VARCHAR(16777216), last VARCHAR(16777216))"
 
     def test_array_iceberg_varchar_normalized(self):
-        col = SnowflakeColumn.from_description(
-            "my_col", "ARRAY(VARCHAR(134217728) NOT NULL)"
-        )
+        col = SnowflakeColumn.from_description("my_col", "ARRAY(VARCHAR(134217728) NOT NULL)")
         assert col.dtype == "ARRAY(VARCHAR(16777216) NOT NULL)"
 
     def test_map_iceberg_varchar_normalized(self):
@@ -1046,9 +1044,7 @@ class TestSnowflakeColumnIcebergVarcharNormalization(unittest.TestCase):
         assert col.dtype == "OBJECT(name VARCHAR(100))"
 
     def test_object_snowflake_varchar_unchanged(self):
-        col = SnowflakeColumn.from_description(
-            "my_col", "OBJECT(name VARCHAR(16777216))"
-        )
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(name VARCHAR(16777216))")
         assert col.dtype == "OBJECT(name VARCHAR(16777216))"
 
     def test_object_no_varchar_unchanged(self):
@@ -1060,9 +1056,7 @@ class TestSnowflakeColumnIcebergVarcharNormalization(unittest.TestCase):
         assert col.dtype == "OBJECT"
 
     def test_iceberg_varchar_case_insensitive(self):
-        col = SnowflakeColumn.from_description(
-            "my_col", "OBJECT(name varchar(134217728))"
-        )
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(name varchar(134217728))")
         assert col.dtype == "OBJECT(name VARCHAR(16777216))"
 
     def test_iceberg_vs_snowflake_schema_comparison(self):
