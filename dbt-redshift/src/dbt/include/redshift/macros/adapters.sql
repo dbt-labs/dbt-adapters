@@ -318,8 +318,8 @@
   {% call statement('list_function_relations_without_caching', fetch_result=True) -%}
     select distinct
       '{{ schema_relation.database }}' as database,
-      proname as name,
-      ns.nspname as schema,
+      proname::varchar as name,
+      ns.nspname::varchar as schema,
       'function' as type
     from pg_proc
     join pg_namespace as ns on pronamespace = ns.oid
