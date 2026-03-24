@@ -1,4 +1,8 @@
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+    remove_access_entry_from_dataset,
+)
 from dbt.adapters.bigquery import BigQueryRelation
 
 from google.cloud.bigquery import Dataset, AccessEntry, DatasetReference
@@ -88,3 +92,81 @@ def test_is_access_entry_in_dataset_returns_false_if_entry_not_in_dataset():
     dataset = Dataset(dataset_ref)
     access_entry = AccessEntry(None, "table", entity)
     assert not is_access_entry_in_dataset(dataset, access_entry)
+
+
+def test_remove_access_entry_from_dataset_removes_matching_entry():
+    database = "someDb"
+    dataset_name = "someDataset"
+    routine_entity = {
+        "projectId": "test-project",
+        "datasetId": "test_schema",
+        "routineId": "my_routine",
+    }
+    dataset_ref = DatasetReference(project=database, dataset_id=dataset_name)
+    dataset = Dataset(dataset_ref)
+    access_entry = AccessEntry(None, "routine", routine_entity)
+    dataset = add_access_entry_to_dataset(dataset, access_entry)
+    assert len(dataset.access_entries) == 1
+    dataset = remove_access_entry_from_dataset(dataset, access_entry)
+    assert len(dataset.access_entries) == 0
+
+
+def test_remove_access_entry_from_dataset_preserves_other_entries():
+    database = "someDb"
+    dataset_name = "someDataset"
+    routine_entity = {
+        "projectId": "test-project",
+        "datasetId": "test_schema",
+        "routineId": "my_routine",
+    }
+    view_entity = BigQueryRelation.from_dict(
+        {
+            "type": None,
+            "path": {
+                "database": "test-project",
+                "schema": "test_schema",
+                "identifier": "my_view",
+            },
+            "quote_policy": {"identifier": False},
+        }
+    ).to_dict()
+    dataset_ref = DatasetReference(project=database, dataset_id=dataset_name)
+    dataset = Dataset(dataset_ref)
+    routine_entry = AccessEntry(None, "routine", routine_entity)
+    view_entry = AccessEntry(None, "view", view_entity)
+    dataset = add_access_entry_to_dataset(dataset, view_entry)
+    dataset = add_access_entry_to_dataset(dataset, routine_entry)
+    assert len(dataset.access_entries) == 2
+    dataset = remove_access_entry_from_dataset(dataset, routine_entry)
+    assert len(dataset.access_entries) == 1
+    assert is_access_entry_in_dataset(dataset, view_entry)
+
+
+def test_remove_access_entry_from_dataset_handles_no_match():
+    database = "someDb"
+    dataset_name = "someDataset"
+    routine_entity = {
+        "projectId": "test-project",
+        "datasetId": "test_schema",
+        "routineId": "my_routine",
+    }
+    view_entity = BigQueryRelation.from_dict(
+        {
+            "type": None,
+            "path": {
+                "database": "test-project",
+                "schema": "test_schema",
+                "identifier": "my_view",
+            },
+            "quote_policy": {"identifier": False},
+        }
+    ).to_dict()
+    dataset_ref = DatasetReference(project=database, dataset_id=dataset_name)
+    dataset = Dataset(dataset_ref)
+    view_entry = AccessEntry(None, "view", view_entity)
+    dataset = add_access_entry_to_dataset(dataset, view_entry)
+    assert len(dataset.access_entries) == 1
+    routine_entry = AccessEntry(None, "routine", routine_entity)
+    dataset = remove_access_entry_from_dataset(dataset, routine_entry)
+    assert len(dataset.access_entries) == 1
+    assert is_access_entry_in_dataset(dataset, view_entry)
