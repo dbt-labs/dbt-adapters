@@ -465,7 +465,7 @@ class AthenaAdapter(SQLAdapter):
             if current_chunk:
                 yield current_chunk
 
-        def get_partition_params_dicts() -> Generator[Dict[str, Any], None, None]:
+        def iter_partitions() -> Generator[Dict[str, Any], None, None]:
             paginator = glue_client.get_paginator("get_partitions")
             for expression_chunk in get_partition_expressions():
                 expression = join_or_conditions(expression_chunk)
@@ -504,7 +504,7 @@ class AthenaAdapter(SQLAdapter):
                     )
 
         for partition_params_chunk in chunk_iterable(
-            get_partition_params_dicts(), AthenaAdapter.PARTITION_PROCESSING_CHUNK_SIZE
+            iter_partitions(), AthenaAdapter.PARTITION_PROCESSING_CHUNK_SIZE
         ):
             delete_partition_chunk(partition_params_chunk)
 
