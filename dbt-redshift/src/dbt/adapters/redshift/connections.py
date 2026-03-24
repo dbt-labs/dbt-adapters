@@ -189,6 +189,10 @@ class RedshiftCredentials(Credentials):
     # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
     query_group: Optional[str] = None
 
+    # Drop behavior: skip the global RLock on DROP statements.
+    # Safe only for projects with no downstream views (no CASCADE side-effects).
+    allow_concurrent_drops: bool = False
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -226,6 +230,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
             "query_group",
+            "allow_concurrent_drops",
         )
 
     @property

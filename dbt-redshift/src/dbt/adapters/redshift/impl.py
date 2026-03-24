@@ -158,7 +158,13 @@ class RedshiftAdapter(SQLAdapter):
         drop_relation() function.
 
         https://docs.aws.amazon.com/redshift/latest/dg/r_DROP_TABLE.html
+
+        Users with no downstream views (no CASCADE side-effects) can opt out
+        of the lock via `allow_concurrent_drops: true` in their profile credentials
+        to allow DROP statements to run in parallel across threads.
         """
+        if self.config.credentials.allow_concurrent_drops:
+            return super().drop_relation(relation)
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 
