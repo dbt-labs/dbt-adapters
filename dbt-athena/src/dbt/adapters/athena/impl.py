@@ -612,7 +612,6 @@ class AthenaAdapter(SQLAdapter):
         else:
             LOGGER.debug("S3 path does not exist")
 
-    @available
     def bulk_delete_from_s3(self, s3_paths: List[str]) -> None:
         if not s3_paths:
             LOGGER.debug("No S3 paths provided for deletion")
