@@ -43,7 +43,7 @@ def _set_use_show_apis(adapter, mocker, enabled):
 
 
 class TestStandardizeGrantsDictShowApi:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is enabled (SHOW GRANTS)."""
+    """Tests for standardize_grants_dict when datasharing is enabled (SHOW GRANTS)."""
 
     def test_includes_all_privileges(self, adapter, mocker):
         _set_use_show_apis(adapter, mocker, enabled=True)
@@ -220,7 +220,7 @@ class TestStandardizeGrantsDictShowApi:
 
 
 class TestStandardizeGrantsDictSvv:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is disabled (SVV)."""
+    """Tests for standardize_grants_dict when datasharing is disabled (SVV)."""
 
     def test_distinguishes_users_groups_roles(self, adapter, mocker):
         _set_use_show_apis(adapter, mocker, enabled=False)

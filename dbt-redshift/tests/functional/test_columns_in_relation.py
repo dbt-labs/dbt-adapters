@@ -31,11 +31,11 @@ class ColumnsInRelation:
         assert actual_columns == expected_columns
 
 
-class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
+class TestColumnsInRelationDatasharingOff(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "name": "test_columns_in_relation_behavior_flag_off",
+            "name": "test_columns_in_relation_datasharing_off",
         }
 
     @pytest.fixture(scope="class")
@@ -47,11 +47,11 @@ class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
         ]
 
 
-class TestColumnsInRelationBehaviorFlagOn(ColumnsInRelation):
+class TestColumnsInRelationDatasharingOn(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "name": "test_columns_in_relation_behavior_flag_on",
+            "name": "test_columns_in_relation_datasharing_on",
         }
 
     @pytest.fixture(scope="class")

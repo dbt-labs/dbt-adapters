@@ -12,7 +12,7 @@ def _load_redshift_metadata_helpers_macros(adapter, return_fn=lambda x: x):
     return template.make_module({"adapter": adapter, "return": return_fn})
 
 
-def test_use_show_apis_macro_returns_true_when_flag_enabled():
+def test_use_show_apis_macro_returns_true_when_datasharing_enabled():
     adapter = SimpleNamespace(
         use_show_apis=lambda: True,
     )
@@ -22,7 +22,7 @@ def test_use_show_apis_macro_returns_true_when_flag_enabled():
     assert result.strip() == "True"
 
 
-def test_use_show_apis_macro_returns_false_when_flag_disabled():
+def test_use_show_apis_macro_returns_false_when_datasharing_disabled():
     adapter = SimpleNamespace(
         use_show_apis=lambda: False,
     )

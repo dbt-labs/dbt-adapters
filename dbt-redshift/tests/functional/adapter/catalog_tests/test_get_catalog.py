@@ -143,8 +143,8 @@ class TestGetCatalog:
         assert len(catalog) == 17
 
 
-class TestGetCatalogShowApis(TestGetCatalog):
-    """Same catalog tests but with SHOW/SVV APIs enabled."""
+class TestGetCatalogDatasharing(TestGetCatalog):
+    """Same catalog tests but with datasharing enabled."""
 
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):

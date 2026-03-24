@@ -172,6 +172,40 @@ class RedshiftAdapter(SQLAdapter):
         """
         return bool(self.config.credentials.datasharing)
 
+    def _relation_needs_database_change(self, relation) -> bool:
+        """Check if a relation targets a different database than the default."""
+        if relation.database is None:
+            return False
+        model_db = self._normalize_database(str(relation.database))
+        default_db = self._normalize_database(self.config.credentials.database)
+        return model_db != default_db
+
+    def create_schema(self, relation) -> None:
+        """Override to issue USE <database> before the transaction begins.
+
+        Redshift requires USE to be issued outside a transaction when writing
+        to a different database.
+        """
+        needs_use = self._relation_needs_database_change(relation)
+        if needs_use:
+            self._use_database(self._normalize_database(str(relation.database)))
+        try:
+            super().create_schema(relation)
+        finally:
+            if needs_use:
+                self._reset_database()
+
+    def drop_schema(self, relation) -> None:
+        """Override to issue USE <database> before the transaction begins."""
+        needs_use = self._relation_needs_database_change(relation)
+        if needs_use:
+            self._use_database(self._normalize_database(str(relation.database)))
+        try:
+            super().drop_schema(relation)
+        finally:
+            if needs_use:
+                self._reset_database()
+
     @available
     def verify_database(self, database):
         if database.startswith('"'):
