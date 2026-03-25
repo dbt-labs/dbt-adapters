@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from dbt.adapters.relation_configs import RelationConfigChange
 from dbt.adapters.contracts.relation import RelationConfig
@@ -21,7 +21,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
 
     enable_refresh: Optional[bool] = True
     refresh_interval_minutes: Optional[float] = 30
-    expiration_timestamp: Optional[datetime] = None
+    expiration_timestamp: Optional[Union[datetime, str]] = None
     max_staleness: Optional[str] = None
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
@@ -63,6 +63,10 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             return f'"""{sql_escape(x)}"""'
 
         def timestamp(x):
+            if isinstance(x, str):
+                return x
+            if x.tzinfo is not None:
+                x = x.astimezone(timezone.utc).replace(tzinfo=None)
             return f"TIMESTAMP '{x.strftime('%Y-%m-%d %H:%M:%S.%f')}'"
 
         def interval(x):
