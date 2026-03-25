@@ -9,6 +9,9 @@ COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
 
 SNOWFLAKE_MAX_VARCHAR_LENGTH = 16777216
 ICEBERG_MAX_VARCHAR_LENGTH = 134217728
+ICEBERG_VARCHAR_PATTERN = re.compile(
+    r"\bVARCHAR\(" + str(ICEBERG_MAX_VARCHAR_LENGTH) + r"\)", re.IGNORECASE
+)
 
 
 @dataclass
@@ -71,7 +74,8 @@ class SnowflakeColumn(Column):
             NUMBER(38,0)
         """
 
-        # We want to pass through numeric parsing for composite types
+        # For composite types, skip numeric parsing and treat the type opaquely,
+        # only normalizing Iceberg-sized VARCHARs within the definition.
         if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
             normalized = cls._normalize_iceberg_varchar(raw_data_type)
             return cls(name, normalized, None, None, None)
@@ -100,9 +104,9 @@ class SnowflakeColumn(Column):
 
     @staticmethod
     def _normalize_iceberg_varchar(raw_data_type: str) -> str:
-        """Normalize Iceberg VARCHAR(134217728) to Snowflake VARCHAR(16777216) in structured types."""
-        return re.sub(
-            r"(?i)\bVARCHAR\(" + str(ICEBERG_MAX_VARCHAR_LENGTH) + r"\)",
+        """Normalize Iceberg VARCHAR(134217728) to Snowflake VARCHAR(16777216) in composite types
+        (OBJECT, ARRAY, MAP, VECTOR)."""
+        return ICEBERG_VARCHAR_PATTERN.sub(
             f"VARCHAR({SNOWFLAKE_MAX_VARCHAR_LENGTH})",
             raw_data_type,
         )
