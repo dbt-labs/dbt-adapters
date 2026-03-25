@@ -229,7 +229,7 @@ class BigQueryAdapter(BaseAdapter):
         ]
 
     def get_partitions_metadata(self, table):
-        use_standard_sql = self.behavior.bigquery_use_standard_sql_for_partitions
+        use_standard_sql = self.behavior.bigquery_use_standard_sql_for_partitions.no_warn
         return self.connections.get_partitions_metadata(
             table=table, use_standard_sql=use_standard_sql
         )
