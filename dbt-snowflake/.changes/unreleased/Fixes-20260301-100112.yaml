@@ -1,0 +1,6 @@
+kind: Fixes
+body: When persist_docs.columns is enabled, dbt now warns about columns defined in YAML that don't exist in the database and filters them via the validate_doc_columns helper.
+time: 2026-03-01T10:01:12.863166+05:30
+custom:
+    Author: sriramr98
+    Issue: "1690"

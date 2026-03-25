@@ -5,17 +5,20 @@ from multiprocessing.context import SpawnContext
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type, Mapping
+from datetime import datetime, timezone
+from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
-from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
+from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import (
     Capability,
     CapabilityDict,
     CapabilitySupport,
     Support,
 )
+from dbt.adapters.protocol import MacroResolverProtocol
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
@@ -36,6 +39,7 @@ for package in packages:
     logger.set_adapter_dependency_log_level(package, level)
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
+SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
@@ -343,6 +347,60 @@ class RedshiftAdapter(SQLAdapter):
                     grants_dict[privilege] = [grantee]
 
         return grants_dict
+
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        if not self.behavior.redshift_use_show_apis.no_warn:
+            return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
+
+        source_lookup = {
+            (
+                (source.database or "").lower(),
+                (source.schema or "").lower(),
+                (source.identifier or "").lower(),
+            ): source
+            for source in sources
+        }
+
+        sources_by_schema: Dict[Tuple[str, str], List[BaseRelation]] = {}
+        for source in sources:
+            sources_by_schema.setdefault((source.database or "", source.schema or ""), []).append(
+                source
+            )
+
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for (database, schema), schema_sources in sources_by_schema.items():
+            result = self.execute_macro(
+                SHOW_TABLES_FROM_SCHEMA_MACRO_NAME,
+                kwargs={"database": database, "schema": schema},
+                needs_conn=True,
+            )
+            adapter_response, table = result.response, result.table
+            adapter_responses.append(adapter_response)
+
+            requested_identifiers = {(s.identifier or "").lower() for s in schema_sources}
+            snapshot_time = datetime.now(timezone.utc)
+
+            for row in table:
+                table_name = row["table_name"]
+                if table_name.lower() not in requested_identifiers:
+                    continue
+
+                last_modified = row["last_modified_time"]
+
+                lookup_key = (database.lower(), schema.lower(), table_name.lower())
+                source = source_lookup[lookup_key]
+
+                freshness_responses[source] = self._create_freshness_response(
+                    last_modified, snapshot_time
+                )
+
+        return adapter_responses, freshness_responses
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
