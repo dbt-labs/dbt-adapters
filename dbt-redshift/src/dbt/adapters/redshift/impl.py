@@ -5,12 +5,20 @@ from multiprocessing.context import SpawnContext
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type, Mapping
+from datetime import datetime, timezone
+from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
-from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
+from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
 from dbt.adapters.base.meta import available
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
+from dbt.adapters.protocol import MacroResolverProtocol
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
@@ -31,6 +39,7 @@ for package in packages:
     logger.set_adapter_dependency_log_level(package, level)
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
+SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
@@ -127,12 +136,6 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
-        if self.config.credentials.ra3_node:
-            logger.info(
-                "The `ra3_node` configuration in profiles.yml is deprecated. "
-                "Use the `redshift_use_show_apis` behavior flag instead. "
-            )
-
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
@@ -179,20 +182,18 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``redshift_use_show_apis`` behavior flag is
-        enabled *or* when the legacy ``ra3_node`` credential is set.
+        Returns True when the ``redshift_use_show_apis`` behavior flag.
         """
-        return bool(
-            self.config.credentials.ra3_node or self.behavior.redshift_use_show_apis.no_warn
-        )
+        return self.behavior.redshift_use_show_apis.no_warn
 
     @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
+        ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not self.use_show_apis():
+        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
                     database, expected
@@ -215,10 +216,12 @@ class RedshiftAdapter(SQLAdapter):
         where type is one of: table, view, materialized_view.
         """
         new_rows = []
+        # has_subtype is only needed until redshift patch 197 is everywhere
+        has_subtype = "table_subtype" in show_tables.column_names
         for row in show_tables.rows:
             table_type = (row["table_type"] or "").strip().upper()
             if table_type == "VIEW":
-                subtype = (row["table_subtype"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
                 relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
             else:
                 relation_type = "table"
@@ -250,9 +253,11 @@ class RedshiftAdapter(SQLAdapter):
 
         table_meta: Dict[tuple, tuple] = {}
         for show_table in show_tables_results:
+            # has_subtype is only needed until redshift patch 197 is everywhere
+            has_subtype = "table_subtype" in show_table.column_names
             for row in show_table.rows:
                 table_type = (row["table_type"] or "").strip().upper()
-                subtype = (row["table_subtype"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
                 catalog_type = _SHOW_TABLE_TYPE_MAP.get(
                     subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
                 )
@@ -288,33 +293,115 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
-        """Translate the result of `show grants` to match the grants config format.
+        """Translate the result of a grants query to match the grants config format.
 
         When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
-        returns columns ``identity_name`` and ``privilege_type`` (uppercase).
-        Otherwise the legacy query returns ``grantee`` and ``privilege_type``
-        (lowercase).
-        """
-        if not self.use_show_apis():
-            return super().standardize_grants_dict(grants_table)
+        is used for cross-database support.  SHOW GRANTS conflates groups and
+        roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
+        on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
+        Redshift behavior and may change across patches.
 
+        When the flag is disabled, ``svv_relation_privileges`` is used instead,
+        which correctly reports ``identity_type`` as ``user``, ``group``, or
+        ``role`` but only works within the current database.
+        """
         grants_dict: Dict[str, List[str]] = {}
 
-        for row in grants_table:
-            grantee = row["identity_name"]
-            privilege = row["privilege_type"].lower()
-            if privilege in grants_dict:
-                grants_dict[privilege].append(grantee)
-            else:
-                grants_dict[privilege] = [grantee]
+        if self.use_show_apis():
+            # SHOW GRANTS path — need to detect groups from the / prefix
+            for row in grants_table:
+                identity_name = row["identity_name"]
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                # SHOW GRANTS reports groups as identity_type='role' with a
+                # '/' prefix on identity_name.  This is undocumented behavior.
+                if identity_type == "role" and identity_name.startswith("/"):
+                    grantee = f"group:{identity_name[1:]}"
+                else:
+                    grantee = f"{identity_type}:{identity_name}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
+        else:
+            # svv_relation_privileges path — identity_type is accurate
+            for row in grants_table:
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                grantee = f"{identity_type}:{row['identity_name']}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
 
         return grants_dict
+
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        if not self.behavior.redshift_use_show_apis.no_warn:
+            return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
+
+        source_lookup = {
+            (
+                (source.database or "").lower(),
+                (source.schema or "").lower(),
+                (source.identifier or "").lower(),
+            ): source
+            for source in sources
+        }
+
+        sources_by_schema: Dict[Tuple[str, str], List[BaseRelation]] = {}
+        for source in sources:
+            sources_by_schema.setdefault((source.database or "", source.schema or ""), []).append(
+                source
+            )
+
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for (database, schema), schema_sources in sources_by_schema.items():
+            result = self.execute_macro(
+                SHOW_TABLES_FROM_SCHEMA_MACRO_NAME,
+                kwargs={"database": database, "schema": schema},
+                needs_conn=True,
+            )
+            adapter_response, table = result.response, result.table
+            adapter_responses.append(adapter_response)
+
+            requested_identifiers = {(s.identifier or "").lower() for s in schema_sources}
+            snapshot_time = datetime.now(timezone.utc)
+
+            for row in table:
+                table_name = row["table_name"]
+                if table_name.lower() not in requested_identifiers:
+                    continue
+
+                last_modified = row["last_modified_time"]
+
+                lookup_key = (database.lower(), schema.lower(), table_name.lower())
+                source = source_lookup[lookup_key]
+
+                freshness_responses[source] = self._create_freshness_response(
+                    last_modified, snapshot_time
+                )
+
+        return adapter_responses, freshness_responses
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
+        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
         try:
-            return schemas.flatten(allow_multiple_databases=self.use_show_apis())
+            return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
@@ -388,22 +475,44 @@ class RedshiftAdapter(SQLAdapter):
     def _unset_query_group(self) -> None:
         self.execute("RESET query_group")
 
-    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
+    def _apply_query_group(self, query_group: Optional[str]) -> None:
+        if query_group is None:
+            self._unset_query_group()
+        else:
+            self._set_query_group(query_group)
 
-        if model_query_group == default_query_group or model_query_group is None:
-            return None
-        self._set_query_group(model_query_group)
+    def _needs_query_group_change(self, config: Mapping[str, Any]) -> bool:
+        model_query_group = config.get("query_group")
+        default_query_group = self.config.credentials.query_group
+        return model_query_group is not None and model_query_group != default_query_group
+
+    def _use_database(self, database: str) -> None:
+        self.execute(f"USE {self.quote(database)}")
+
+    def _reset_database(self) -> None:
+        self.execute("RESET USE")
+
+    @staticmethod
+    def _normalize_database(database: str) -> str:
+        return database.strip('"').lower()
+
+    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
+        if config.get("database") is None:
+            return False
+
+        model_database = self._normalize_database(str(config.get("database")))
+        default_database = self._normalize_database(self.config.credentials.database)
+        return model_database != default_database
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        if self._needs_query_group_change(config):
+            self._set_query_group(str(config.get("query_group")))
+        if self._needs_database_change(config):
+            self._use_database(self._normalize_database(str(config.get("database"))))
         return None
 
     def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
-
-        if model_query_group == default_query_group:
-            return None
-        elif default_query_group is None and model_query_group is not None:
-            self._unset_query_group()
-        else:
-            self._set_query_group(default_query_group)
+        if self._needs_query_group_change(config):
+            self._apply_query_group(self.config.credentials.query_group)
+        if self._needs_database_change(config):
+            self._reset_database()
