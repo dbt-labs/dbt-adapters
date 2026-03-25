@@ -475,22 +475,44 @@ class RedshiftAdapter(SQLAdapter):
     def _unset_query_group(self) -> None:
         self.execute("RESET query_group")
 
-    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
+    def _apply_query_group(self, query_group: Optional[str]) -> None:
+        if query_group is None:
+            self._unset_query_group()
+        else:
+            self._set_query_group(query_group)
 
-        if model_query_group == default_query_group or model_query_group is None:
-            return None
-        self._set_query_group(model_query_group)
+    def _needs_query_group_change(self, config: Mapping[str, Any]) -> bool:
+        model_query_group = config.get("query_group")
+        default_query_group = self.config.credentials.query_group
+        return model_query_group is not None and model_query_group != default_query_group
+
+    def _use_database(self, database: str) -> None:
+        self.execute(f"USE {self.quote(database)}")
+
+    def _reset_database(self) -> None:
+        self.execute("RESET USE")
+
+    @staticmethod
+    def _normalize_database(database: str) -> str:
+        return database.strip('"').lower()
+
+    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
+        if config.get("database") is None:
+            return False
+
+        model_database = self._normalize_database(str(config.get("database")))
+        default_database = self._normalize_database(self.config.credentials.database)
+        return model_database != default_database
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        if self._needs_query_group_change(config):
+            self._set_query_group(str(config.get("query_group")))
+        if self._needs_database_change(config):
+            self._use_database(self._normalize_database(str(config.get("database"))))
         return None
 
     def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
-
-        if model_query_group == default_query_group:
-            return None
-        elif default_query_group is None and model_query_group is not None:
-            self._unset_query_group()
-        else:
-            self._set_query_group(default_query_group)
+        if self._needs_query_group_change(config):
+            self._apply_query_group(self.config.credentials.query_group)
+        if self._needs_database_change(config):
+            self._reset_database()
