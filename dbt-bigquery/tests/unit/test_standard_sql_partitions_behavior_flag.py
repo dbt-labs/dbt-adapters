@@ -10,7 +10,7 @@ def _make_adapter_stub(flag_enabled: bool):
     mock_connections.get_partitions_metadata = Mock(return_value=Mock())
     return SimpleNamespace(
         behavior=SimpleNamespace(
-            bigquery_use_standard_sql_for_partitions=flag_enabled,
+            bigquery_use_standard_sql_for_partitions=SimpleNamespace(no_warn=flag_enabled),
         ),
         connections=mock_connections,
     )
