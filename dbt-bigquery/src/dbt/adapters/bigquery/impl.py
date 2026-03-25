@@ -133,6 +133,16 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
     ),
 )
 
+BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
+    name="bigquery_use_standard_sql_for_partitions",
+    default=False,
+    description=(
+        "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
+        "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
+        "deprecated by BigQuery on June 1, 2026."
+    ),
+)
+
 _dataset_lock = threading.Lock()
 
 
@@ -215,7 +225,14 @@ class BigQueryAdapter(BaseAdapter):
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
             BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
+            BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS,
         ]
+
+    def get_partitions_metadata(self, table):
+        use_standard_sql = self.behavior.bigquery_use_standard_sql_for_partitions
+        return self.connections.get_partitions_metadata(
+            table=table, use_standard_sql=use_standard_sql
+        )
 
     @classmethod
     def date_function(cls) -> str:
