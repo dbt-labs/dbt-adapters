@@ -13,7 +13,7 @@ _BOOL_TO_STR_MAP = {
 
 
 def resolve_change_tracking(
-    model: RelationConfig, integration_default: Optional[str]
+    model: RelationConfig, integration_default: Optional[bool | str]
 ) -> Optional[str]:
     """
     Resolves change tracking for a catalog integration.
