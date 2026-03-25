@@ -161,10 +161,10 @@ create or replace iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
+    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
-    {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('storage_serialization_policy', catalog_relation.storage_serialization_policy, "'")}}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
