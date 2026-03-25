@@ -9,10 +9,10 @@ def adapter(mocker):
     mock_config = mocker.MagicMock()
     mock_config.credentials.database = "dev"
     mock_config.credentials.ra3_node = False
+    mock_config.credentials.datasharing = False
+    mock_config.flags = {}
     mock_mp_context = mocker.MagicMock()
-    adapter = RedshiftAdapter(mock_config, mock_mp_context)
-    adapter.config.credentials.datasharing = False
-    return adapter
+    return RedshiftAdapter(mock_config, mock_mp_context)
 
 
 class TestVerifyDatabase:
@@ -49,3 +49,7 @@ class TestVerifyDatabase:
         adapter.config.credentials.datasharing = False
         with pytest.raises(dbt_common.exceptions.NotImplementedError, match="Cross-db"):
             adapter.verify_database("other_db")
+
+    def test_cross_db_allowed_with_show_apis_flag(self, adapter, mocker):
+        mocker.patch.object(adapter, "use_show_apis", return_value=True)
+        assert adapter.verify_database("other_db") == ""
