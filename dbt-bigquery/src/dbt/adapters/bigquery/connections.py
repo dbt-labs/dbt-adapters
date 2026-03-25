@@ -422,8 +422,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
     def _bq_job_link(location, project_id, job_id) -> str:
         return f"https://console.cloud.google.com/bigquery?project={project_id}&j=bq:{location}:{job_id}&page=queryresults"
 
-    def get_partitions_metadata(self, table, use_standard_sql=False):
-        if use_standard_sql:
+    def get_partitions_metadata(self, table):
+        if getattr(self, "use_standard_sql_for_partitions", False):
             sql = f"""
                 SELECT partition_id
                 FROM `{table.project}.{table.dataset}.INFORMATION_SCHEMA.PARTITIONS`
