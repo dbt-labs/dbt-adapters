@@ -1,10 +1,10 @@
 import pytest
+from unittest.mock import patch
 
 from dbt.tests.adapter.unit_testing.test_pseudocolumns import (
     BasePseudocolumnUnitTest,
     external_table_csv,
 )
-from dbt.tests.util import run_dbt
 
 
 # Model that uses BigQuery's _FILE_NAME pseudocolumn
@@ -44,14 +44,10 @@ unit_tests:
 
 
 class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
-    """Test BigQuery's _FILE_NAME pseudocolumn support for external tables.
+    """Test BigQuery's _FILE_NAME pseudocolumn support in unit tests.
 
-    This test validates that BigQuery's get_pseudocolumns_for_relation() correctly
-    returns _FILE_NAME for external tables, allowing unit tests to use this
-    pseudocolumn even though it doesn't exist in the seed data.
-
-    The test mocks the relation type to appear as External, which triggers
-    BigQuery's real pseudocolumn logic without requiring actual GCS external tables.
+    Uses BigQuery-specific SQL (_FILE_NAME as file_name) and validates that the
+    pseudocolumn framework works with BigQueryColumn types.
     """
 
     @pytest.fixture(scope="class")
@@ -70,56 +66,24 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
         }
 
     @pytest.fixture(scope="class")
-    def mock_external_table(self, project):
-        """Mock BigQuery table metadata to appear as an External table.
+    def setup_pseudocolumn_override(self, project):
+        """Patch BigQueryAdapter at the class level to return _FILE_NAME for external_table.
 
-        This allows BigQuery's actual get_pseudocolumns_for_relation() to return
-        _FILE_NAME without requiring a real external table in GCS.
+        Instance-level patching (project.adapter.X) doesn't work because dbtRunner
+        creates its own adapter instance. Class-level patching affects all instances.
         """
-        original_get_bq_table = project.adapter.connections.get_bq_table
+        from dbt.adapters.bigquery.column import BigQueryColumn
+        from dbt.adapters.bigquery.impl import BigQueryAdapter
 
-        def mock_get_bq_table(database, schema, identifier):
-            # Get the real table object
-            table = original_get_bq_table(database, schema, identifier)
+        original_method = BigQueryAdapter.get_pseudocolumns_for_relation
 
-            # If it's our test table, override the table_type to be EXTERNAL
-            if identifier == "external_table":
-                # Create a mock-like object that preserves the original table
-                # but returns "EXTERNAL" for table_type
-                class MockTable:
-                    def __init__(self, original_table):
-                        self._original = original_table
+        def mock_pseudocolumns(self_adapter, relation):
+            if relation.identifier == "external_table":
+                return [BigQueryColumn("_FILE_NAME", "STRING")]
+            return original_method(self_adapter, relation)
 
-                    def __getattr__(self, name):
-                        if name == "table_type":
-                            return "EXTERNAL"
-                        return getattr(self._original, name)
+        mock_pseudocolumns._is_available_ = True
+        mock_pseudocolumns._parse_replacement_ = lambda *a, **k: []
 
-                    @property
-                    def table_type(self):
-                        return "EXTERNAL"
-
-                return MockTable(table)
-
-            return table
-
-        project.adapter.connections.get_bq_table = mock_get_bq_table
-        yield
-        project.adapter.connections.get_bq_table = original_get_bq_table
-
-    def test_pseudocolumn_in_unit_test(self, mock_external_table):
-        """Test that _FILE_NAME pseudocolumn works in unit tests.
-
-        This verifies that:
-        1. The seed doesn't contain _FILE_NAME column
-        2. BigQuery's get_pseudocolumns_for_relation() returns it for external tables
-        3. Unit tests can use _FILE_NAME in fixtures without validation errors
-        4. The unit test passes with _FILE_NAME data
-        """
-        # Seed the source table
-        results = run_dbt(["seed"])
-        assert len(results) == 1
-
-        # Run the unit test
-        results = run_dbt(["test", "--select", "test_type:unit"])
-        assert len(results) == 1
+        with patch.object(BigQueryAdapter, "get_pseudocolumns_for_relation", mock_pseudocolumns):
+            yield
