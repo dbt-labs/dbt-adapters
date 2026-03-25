@@ -1,4 +1,5 @@
 from dbt.adapters.contracts.relation import RelationType
+from dbt.adapters.redshift.impl import CATALOG_COLUMNS
 from dbt.tests.util import get_connection
 import pytest
 
@@ -140,3 +141,58 @@ class TestGetCatalog:
         # my_seed, my_table, my_view, my_materialized_view each have 3 cols = 12 cols
         # my_materialized_view creates an underlying table with 2 additional = 5 cols
         assert len(catalog) == 17
+
+
+class TestGetCatalogShowApis(TestGetCatalog):
+    """Same catalog tests but with SHOW/SVV APIs enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "flags": {"redshift_use_show_apis": True},
+        }
+
+    def test_get_one_catalog_by_relations(
+        self,
+        adapter,
+        my_schema,
+        my_seed,
+        my_table,
+        my_view,
+        my_materialized_view,
+        my_information_schema,
+    ):
+        my_schemas = frozenset({(my_schema.database, my_schema.schema)})
+        my_relations = [my_seed, my_table, my_view, my_materialized_view]
+        with get_connection(adapter):
+            catalog = adapter._get_one_catalog_by_relations(
+                information_schema=my_information_schema,
+                relations=my_relations,
+                used_schemas=my_schemas,
+            )
+        assert len(catalog) == 12
+        for col in CATALOG_COLUMNS:
+            assert col in catalog.column_names
+
+    def test_get_one_catalog_by_schemas(
+        self,
+        adapter,
+        my_schema,
+        my_seed,
+        my_table,
+        my_view,
+        my_materialized_view,
+        my_information_schema,
+    ):
+        my_schemas = frozenset({(my_schema.database, my_schema.schema)})
+        with get_connection(adapter):
+            catalog = adapter._get_one_catalog(
+                information_schema=my_information_schema,
+                schemas={my_schema.schema},
+                used_schemas=my_schemas,
+            )
+        # SHOW TABLES does not return the MV underlying system table,
+        # so we only get 4 relations × 3 cols = 12
+        assert len(catalog) == 12
+        for col in CATALOG_COLUMNS:
+            assert col in catalog.column_names

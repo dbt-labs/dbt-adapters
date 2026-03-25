@@ -98,17 +98,32 @@
 
 
 {% macro redshift__create_schema(relation) -%}
-  {{ postgres__create_schema(relation) }}
+  {% if redshift__use_show_apis() %}
+    {%- call statement('create_schema') -%}
+      create schema if not exists {{ relation.without_identifier() }}
+    {%- endcall -%}
+  {% else %}
+    {{ postgres__create_schema(relation) }}
+  {% endif %}
 {% endmacro %}
 
 
 {% macro redshift__drop_schema(relation) -%}
-  {{ postgres__drop_schema(relation) }}
+  {% if redshift__use_show_apis() %}
+    {%- call statement('drop_schema') -%}
+      drop schema if exists {{ relation.without_identifier() }} cascade
+    {%- endcall -%}
+  {% else %}
+    {{ postgres__drop_schema(relation) }}
+  {% endif %}
 {% endmacro %}
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {% if redshift__use_show_apis() %}
+  {# relation from temp tables does not have a database or schema. #}
+  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+
+  {% if redshift__use_show_apis() and relation.database and relation.schema %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
@@ -362,6 +377,29 @@
 {% endmacro %}
 
 
+{% macro redshift__alter_column_type(relation, column_name, new_column_type) -%}
+  {#
+    Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
+    For those, use native ALTER; for any other type change, fall back to
+    default add/copy/drop/rename.
+
+    The native ALTER TABLE ALTER COLUMN cannot run inside a transaction block.
+    It is only safe to use when `redshift_skip_autocommit_transaction_statements`
+    is enabled (i.e. we are not wrapping statements in BEGIN/COMMIT).
+    When the flag is off, always use the default migration path.
+  #}
+  {% set type_lower = (new_column_type | lower) | trim %}
+  {% set skip_txn = adapter.behavior.redshift_skip_autocommit_transaction_statements.no_warn %}
+  {% if skip_txn and (type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte') %}
+    {% call statement('alter_column_type') %}
+      alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
+    {% endcall %}
+  {% else %}
+    {{ default__alter_column_type(relation, column_name, new_column_type) }}
+  {% endif %}
+{% endmacro %}
+
+
 {% macro redshift__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
   {% if add_columns %}
@@ -386,4 +424,12 @@
 
   {% endif %}
 
+{% endmacro %}
+
+
+{% macro redshift__show_tables_from_schema(database, schema) %}
+    {%- call statement('show_tables', fetch_result=True) -%}
+        SHOW TABLES FROM SCHEMA {{ database }}.{{ schema }}
+    {%- endcall -%}
+    {{ return(load_result('show_tables')) }}
 {% endmacro %}

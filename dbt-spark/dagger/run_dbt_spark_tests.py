@@ -102,6 +102,9 @@ async def test_spark(test_args):
             .with_directory("/scripts", client.host().directory("./dagger/scripts"))
             .with_exec(["./scripts/install_os_reqs.sh"])
             .with_exec(["pip", "install", "-U", "pip", "hatch"])
+            .with_exec(
+                ["pip", "install", "virtualenv<21"]
+            )  # TODO: remove once hatch releases a fix for https://github.com/pypa/hatch/issues/2193
             .with_(env_variables(TESTING_ENV_VARS))
         )
 
