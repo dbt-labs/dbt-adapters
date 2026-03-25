@@ -36,7 +36,7 @@ class UDFsBasic:
         assert "STABLE" not in sql
         assert "IMMUTABLE" not in sql
 
-    def test_udfs(self, project, adapter, sql_event_catcher):
+    def test_udfs(self, project, sql_event_catcher):
         result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
 
         assert len(result.results) == 1
@@ -254,7 +254,7 @@ class PythonUDFVolatilitySupport(PythonUDFSupported):
 
 
 class CanFindScalarFunctionRelation(UDFsBasic):
-    def test_udfs(self, project):
+    def test_udfs(self, project, adapter):
         result = run_dbt(["build", "--debug"])
 
         assert len(result.results) == 1
