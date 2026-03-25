@@ -373,11 +373,13 @@ class SnowflakeAdapter(SQLAdapter):
 
     def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
         return self.Relation.create(
             database=database,
             schema=schema,
             identifier=identifier,
             type=self.Relation.Function,
+            quote_policy=quote_policy,
         )
 
     def quote_seed_column(self, column: str, quote_config: Optional[bool]) -> str:
