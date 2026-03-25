@@ -80,5 +80,40 @@ class BaseUnitTestingTypes:
                 raise AssertionError(f"unit test failed when testing model with {sql_value}")
 
 
+class BaseUnitTestingVarcharFixtureNoTruncation:
+    """Regression test for https://github.com/dbt-labs/dbt-core/issues/11974
+
+    Verifies that unit test fixture string values are not silently truncated
+    when the upstream model's column has a narrow varchar type.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "my_model.sql": my_model_sql,
+            "my_upstream_model.sql": my_upstream_model_sql,
+            "schema.yml": test_my_model_yml,
+        }
+
+    def test_varchar_fixture_not_truncated(self, project):
+        # Upstream model produces a narrow varchar(5) column
+        write_file(
+            my_upstream_model_sql.format(sql_value="cast('short' as varchar(5))"),
+            "models",
+            "my_upstream_model.sql",
+        )
+        # Fixture value is longer than varchar(5)
+        write_file(
+            test_my_model_yml.format(yaml_value='"longer_string_value"'),
+            "models",
+            "schema.yml",
+        )
+
+        results = run_dbt(["run", "--select", "my_upstream_model"])
+        assert len(results) == 1
+
+        run_dbt(["test", "--select", "my_model"])
+
+
 class TestPostgresUnitTestingTypes(BaseUnitTestingTypes):
     pass
