@@ -276,7 +276,7 @@
     {% set show_result = load_result('show_tables').table %}
     {% set table_and_view_relations = adapter.transform_show_tables_for_list_relations(show_result) %}
     {% set function_relations = list_function_relations_without_caching(schema_relation) %}
-    {{ return(table_and_view_relations.merge([table_and_view_relations, function_relations])) }}
+    {{ return(adapter.combine_show_tables_and_function_relations(table_and_view_relations, function_relations)) }}
   {% else %}
     {% call statement('list_relations_without_caching', fetch_result=True) -%}
       select
