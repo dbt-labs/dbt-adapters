@@ -137,8 +137,8 @@ class RedshiftAdapter(SQLAdapter):
             and not self.config.credentials.datasharing
         ):
             logger.debug(
-                "The `redshift_use_show_apis` behavior flag is set. "
-                "Consider migrating to the `datasharing` profile credential instead."
+                "The `redshift_use_show_apis` behavior flag has been replaced by the 'datasharing' profile configuration. "
+                "Please migrate to `datasharing` as this flag will be removed in a future release."
             )
 
     @property
