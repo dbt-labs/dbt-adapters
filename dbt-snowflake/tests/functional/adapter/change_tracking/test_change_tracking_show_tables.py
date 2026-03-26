@@ -101,6 +101,5 @@ class TestIcebergTableChangeTrackingShowTables(BaseCatalogIntegrationValidation)
 
     def test_change_tracking_off_iceberg_from_model_config(self, project):
         assert (
-            query_change_tracking_from_show_tables(project, "iceberg_table_with_configs")
-            == "OFF"
+            query_change_tracking_from_show_tables(project, "iceberg_table_with_configs") == "OFF"
         )
