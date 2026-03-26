@@ -228,18 +228,16 @@ class TestSnowflakeCredentialsPATAuth:
 
     def test_pat_auth_no_spurious_warning(self, base_credentials):
         """PAT authenticator should not trigger the 'token set but authenticator wrong' warning"""
-        # This should not raise or warn — the validation in __post_init__ should
-        # recognize programmatic_access_token as a valid authenticator for token
-        creds = connections.SnowflakeCredentials(
-            **base_credentials,
-            authenticator="programmatic_access_token",
-            token="my-pat-token",
-        )
-        # If __post_init__ doesn't include 'programmatic_access_token' in the
-        # allowlist, it would emit a warning. We verify the credential was
-        # created without issue and auth_args works correctly.
-        args = creds.auth_args()
-        assert "token" in args
+        # Patch warn_or_error so we can assert it is NOT called during __post_init__.
+        # If 'programmatic_access_token' is ever accidentally removed from the allowlist,
+        # __post_init__ would call warn_or_error and this assertion would fail.
+        with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+            connections.SnowflakeCredentials(
+                **base_credentials,
+                authenticator="programmatic_access_token",
+                token="my-pat-token",
+            )
+            mock_warn.assert_not_called()
 
     def test_pat_auth_without_token(self, base_credentials):
         """PAT authenticator without a token should still produce auth args (connector will error)"""

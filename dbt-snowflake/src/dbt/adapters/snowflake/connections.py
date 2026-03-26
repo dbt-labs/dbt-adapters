@@ -145,7 +145,7 @@ class SnowflakeCredentials(Credentials):
                     AdapterEventWarning(
                         base_msg=(
                             "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth' or 'jwt'."
+                            "not set to 'oauth', 'jwt', or 'programmatic_access_token'."
                         )
                     )
                 )
