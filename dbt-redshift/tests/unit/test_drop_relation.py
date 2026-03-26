@@ -2,6 +2,8 @@ from contextlib import contextmanager
 from multiprocessing import get_context
 from unittest import TestCase, mock
 
+from dbt.adapters.sql import SQLAdapter
+
 from dbt.adapters.redshift import (
     Plugin as RedshiftPlugin,
     RedshiftAdapter,
@@ -58,9 +60,7 @@ class TestDropRelationLock(TestCase):
             yield
 
         with mock.patch.object(adapter.connections, "fresh_transaction", fake_fresh_transaction):
-            with mock.patch(
-                "dbt.adapters.protocol.AdapterProtocol.drop_relation", return_value=None
-            ):
+            with mock.patch.object(SQLAdapter, "drop_relation", return_value=None):
                 adapter.drop_relation(relation)
 
         self.assertTrue(fresh_txn_entered, "fresh_transaction() should have been entered")
@@ -78,9 +78,7 @@ class TestDropRelationLock(TestCase):
             yield
 
         with mock.patch.object(adapter.connections, "fresh_transaction", fake_fresh_transaction):
-            with mock.patch(
-                "dbt.adapters.protocol.AdapterProtocol.drop_relation", return_value=None
-            ):
+            with mock.patch.object(SQLAdapter, "drop_relation", return_value=None):
                 adapter.drop_relation(relation)
 
         self.assertFalse(fresh_txn_called, "fresh_transaction() should NOT have been called")
