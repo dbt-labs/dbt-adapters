@@ -345,3 +345,84 @@ DYNAMIC_TABLE_DEFAULT_TRANSIENT = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+# Scheduler fixtures
+DYNAMIC_TABLE_SCHEDULER_DISABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    scheduler='DISABLE',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_SCHEDULER_ENABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    scheduler='ENABLE',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_NO_TARGET_LAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_TARGET_LAG_ONLY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_SCHEDULER_DISABLED_TO_ENABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    scheduler='ENABLE',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Iceberg Scheduler fixtures
+DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    scheduler='DISABLE',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    scheduler='ENABLE',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
