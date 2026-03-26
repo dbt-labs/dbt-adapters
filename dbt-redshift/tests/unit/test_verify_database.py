@@ -51,5 +51,5 @@ class TestVerifyDatabase:
             adapter.verify_database("other_db")
 
     def test_cross_db_allowed_with_show_apis_flag(self, adapter, mocker):
-        mocker.patch.object(adapter, "use_show_apis", return_value=True)
+        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=True)
         assert adapter.verify_database("other_db") == ""

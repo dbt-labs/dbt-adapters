@@ -137,7 +137,7 @@ class RedshiftAdapter(SQLAdapter):
             and not self.config.credentials.datasharing
         ):
             logger.debug(
-                "The `redshift_use_show_apis` behavior flag has been replaced by the 'datasharing' profile configuration. "
+                "The `redshift_use_show_apis` behavior flag has been replaced by the `datasharing` profile configuration. "
                 "Please migrate to `datasharing` as this flag will be removed in a future release."
             )
 
@@ -304,15 +304,15 @@ class RedshiftAdapter(SQLAdapter):
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of a grants query to match the grants config format.
 
-        When ``datasharing`` is enabled or ``redshift_use_show_apis`` is set, ``SHOW GRANTS ON TABLE``
+        When ``datasharing`` is enabled, ``SHOW GRANTS ON TABLE``
         is used for cross-database support.  SHOW GRANTS conflates groups and
         roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
         on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
         Redshift behavior and may change across patches.
 
-        When the flag is disabled, ``svv_relation_privileges`` is used instead,
-        which correctly reports ``identity_type`` as ``user``, ``group``, or
-        ``role`` but only works within the current database.
+        When ``datasharing`` is disabled, ``svv_relation_privileges`` is used
+        instead, which correctly reports ``identity_type`` as ``user``,
+        ``group``, or ``role`` but only works within the current database.
         """
         grants_dict: Dict[str, List[str]] = {}
 
