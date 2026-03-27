@@ -3,10 +3,15 @@ import pytest
 from multiprocessing import get_context
 from unittest import mock
 
-from dbt.exceptions import DbtRuntimeError
+from dbt_common.exceptions import DbtRuntimeError
 from agate import Row
 from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkRelation
+from dbt.adapters.spark.impl import (
+    LIST_RELATIONS_MACRO_NAME,
+    SCHEMA_NOT_FOUND_MESSAGES,
+    TABLE_OR_VIEW_NOT_FOUND_MESSAGES,
+)
 from .utils import config_from_parts_or_dicts
 
 ENFORCED_SPARK_CONFIG = {"spark.sql.ansi.enabled": "false"}
@@ -677,3 +682,142 @@ class TestSparkAdapter(unittest.TestCase):
                 "stats:rows:value": 12345678,
             },
         )
+
+
+class TestListRelationsWithoutCaching(unittest.TestCase):
+    @pytest.fixture(autouse=True)
+    def set_up_fixtures(self, target_http):
+        self.target_http = target_http
+
+    def _make_adapter(self):
+        return SparkAdapter(self.target_http, get_context("spawn"))
+
+    def _make_schema_relation(self, adapter, schema="analytics"):
+        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+
+    def test_unknown_error_is_raised(self):
+        """An unexpected error from the metastore should propagate rather than
+        silently returning an empty list, which would cause incremental models
+        to recreate tables and lose data (issue #1289)."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        with mock.patch.object(
+            adapter,
+            "execute_macro",
+            side_effect=DbtRuntimeError("Connection to Hive Metastore failed"),
+        ):
+            with self.assertRaises(DbtRuntimeError):
+                adapter.list_relations_without_caching(schema_relation)
+
+    def test_schema_not_found_returns_empty(self):
+        """When the schema/database genuinely does not exist (legacy Hive
+        'Database not found' message), an empty list should be returned."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter, schema="nonexistent")
+
+        with mock.patch.object(
+            adapter,
+            "execute_macro",
+            side_effect=DbtRuntimeError("Database not found"),
+        ):
+            result = adapter.list_relations_without_caching(schema_relation)
+            self.assertEqual(result, [])
+
+
+@pytest.mark.parametrize("not_found_msg", SCHEMA_NOT_FOUND_MESSAGES)
+def test_all_schema_not_found_messages_return_empty(not_found_msg, target_http):
+    """Every message in SCHEMA_NOT_FOUND_MESSAGES should cause
+    list_relations_without_caching to return [] rather than raise.
+    This covers engine-specific variants such as Spark SQL's [SCHEMA_NOT_FOUND]."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="nonexistent", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=DbtRuntimeError(not_found_msg),
+    ):
+        result = adapter.list_relations_without_caching(schema_relation)
+        assert result == []
+
+
+@pytest.mark.parametrize("not_found_msg", TABLE_OR_VIEW_NOT_FOUND_MESSAGES)
+def test_all_table_or_view_not_found_messages_return_empty(not_found_msg, target_http):
+    """Every message in TABLE_OR_VIEW_NOT_FOUND_MESSAGES should cause
+    list_relations_without_caching to return [] rather than raise.
+    This covers Databricks/Simba errors like [TABLE_OR_VIEW_NOT_FOUND] that
+    surface when a schema has no matching tables."""
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    schema_relation = adapter.Relation.create(
+        schema="nonexistent", identifier=""
+    ).without_identifier()
+
+    with mock.patch.object(
+        adapter,
+        "execute_macro",
+        side_effect=DbtRuntimeError(not_found_msg),
+    ):
+        result = adapter.list_relations_without_caching(schema_relation)
+        assert result == []
+
+
+ICEBERG_V2_ERROR = "SHOW TABLE EXTENDED is not supported for v2 tables"
+
+
+class TestListRelationsIcebergV2Fallback(unittest.TestCase):
+    """Tests for the Iceberg v2 fallback path inside list_relations_without_caching.
+
+    When the primary SHOW TABLE EXTENDED macro raises the v2-table error, the adapter
+    falls back to a SHOW TABLES macro.  Unexpected errors from *that* fallback should
+    propagate rather than be swallowed.
+    """
+
+    @pytest.fixture(autouse=True)
+    def set_up_fixtures(self, target_http):
+        self.target_http = target_http
+
+    def _make_adapter(self):
+        return SparkAdapter(self.target_http, get_context("spawn"))
+
+    def _make_schema_relation(self, adapter, schema="analytics"):
+        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+
+    def test_iceberg_v2_fallback_returns_relations(self):
+        """When the primary macro raises the v2-table error, the fallback SHOW TABLES
+        macro is called and its results are returned successfully."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        fallback_rows = mock.MagicMock()
+        fallback_rows.__iter__ = mock.Mock(return_value=iter([]))
+
+        def execute_macro_side_effect(macro_name, *args, **kwargs):
+            if macro_name == LIST_RELATIONS_MACRO_NAME:
+                raise DbtRuntimeError(ICEBERG_V2_ERROR)
+            return fallback_rows
+
+        with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+            with mock.patch.object(
+                adapter, "_build_spark_relation_list", return_value=[]
+            ) as mock_build:
+                result = adapter.list_relations_without_caching(schema_relation)
+                self.assertEqual(result, [])
+                mock_build.assert_called_once()
+
+    def test_iceberg_v2_fallback_error_propagates(self):
+        """If the fallback SHOW TABLES macro itself raises an unexpected error, that
+        error should propagate rather than being silently swallowed."""
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(adapter)
+
+        def execute_macro_side_effect(macro_name, *args, **kwargs):
+            if macro_name == LIST_RELATIONS_MACRO_NAME:
+                raise DbtRuntimeError(ICEBERG_V2_ERROR)
+            raise DbtRuntimeError("Unexpected fallback failure")
+
+        with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+            with self.assertRaises(DbtRuntimeError):
+                adapter.list_relations_without_caching(schema_relation)
