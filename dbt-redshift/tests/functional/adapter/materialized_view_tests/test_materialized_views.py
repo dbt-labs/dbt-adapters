@@ -244,6 +244,19 @@ select * from {{ ref('my_seed') }}
 """
 
 
+class TestRedshiftMaterializedViewsBasicWithDatasharing(TestRedshiftMaterializedViewsBasic):
+    """Same materialized view basic tests with datasharing enabled.
+
+    Exercises list_relations_without_caching which uses SHOW TABLES in datasharing mode.
+    """
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
+
+
 class TestRedshiftMaterializedViewWithBackupConfig:
     @pytest.fixture(scope="class", autouse=True)
     def models(self):

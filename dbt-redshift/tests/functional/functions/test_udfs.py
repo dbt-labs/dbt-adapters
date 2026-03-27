@@ -75,3 +75,17 @@ class TestRedshiftDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
             "price_for_xlarge.sql": MY_UDF_SQL,
             "price_for_xlarge.yml": MY_UDF_WITH_DEFAULT_ARG_YML,
         }
+
+
+class TestRedshiftUDFsWithDatasharing(TestRedshiftUDFs):
+    """Same UDF tests with datasharing enabled.
+
+    Exercises metadata queries (get_columns_in_relation) which use SHOW COLUMNS
+    in datasharing mode.
+    """
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
