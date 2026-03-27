@@ -209,6 +209,55 @@ class TestStandardizeGrantsDictShowApi:
         result = adapter.standardize_grants_dict(table)
         assert result == {"select": ["user:alice"]}
 
+    def test_reserved_roles_skipped(self, adapter):
+        """Reserved roles (ds:*, sys:*) cannot be modified via GRANT/REVOKE."""
+        adapter.config.credentials.datasharing = True
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "200",
+                    "ds:named_datashare",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "300",
+                    "sys:dba",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
     def test_empty_table(self, adapter):
         adapter.config.credentials.datasharing = True
         table = _make_show_grants_table([])
@@ -252,6 +301,18 @@ class TestStandardizeGrantsDictSvv:
             [
                 ("alice", "user", "SELECT"),
                 ("PUBLIC", "public", "SELECT"),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
+    def test_reserved_roles_skipped(self, adapter):
+        """Reserved roles (ds:*, sys:*) cannot be modified via GRANT/REVOKE."""
+        table = _make_svv_table(
+            [
+                ("alice", "user", "SELECT"),
+                ("ds:named_datashare", "role", "SELECT"),
+                ("sys:superuser", "role", "SELECT"),
             ]
         )
         result = adapter.standardize_grants_dict(table)
