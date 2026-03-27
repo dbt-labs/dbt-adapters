@@ -1,0 +1,6 @@
+kind: Features
+body: Add configurable snapshot column backfill feature to automatically populate historical rows when new columns are added to snapshot sources. Includes JSON audit column support for tracking per-column backfill timestamps.
+time: 2026-01-20T00:00:00.000000000Z
+custom:
+  Author: ""
+  Issue: "1562"
