@@ -34,19 +34,16 @@ def _make_svv_table(rows):
 @pytest.fixture
 def adapter(mocker):
     mock_config = mocker.MagicMock()
+    mock_config.credentials.datasharing = False
     mock_mp_context = mocker.MagicMock()
     return RedshiftAdapter(mock_config, mock_mp_context)
 
 
-def _set_use_show_apis(adapter, mocker, enabled):
-    adapter.use_show_apis = lambda: enabled
-
-
 class TestStandardizeGrantsDictShowApi:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is enabled (SHOW GRANTS)."""
+    """Tests for standardize_grants_dict when use_show_apis() is True (SHOW GRANTS path)."""
 
-    def test_includes_all_privileges(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=True)
+    def test_includes_all_privileges(self, adapter):
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table(
             [
                 (
@@ -125,9 +122,9 @@ class TestStandardizeGrantsDictShowApi:
             "truncate": ["user:bob"],
         }
 
-    def test_group_detected_by_slash_prefix(self, adapter, mocker):
+    def test_group_detected_by_slash_prefix(self, adapter):
         """SHOW GRANTS reports groups as identity_type='role' with '/' prefix on identity_name."""
-        _set_use_show_apis(adapter, mocker, enabled=True)
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table(
             [
                 (
@@ -176,9 +173,9 @@ class TestStandardizeGrantsDictShowApi:
             "select": ["user:alice", "group:readonly_group", "role:readonly_role"],
         }
 
-    def test_public_grants_skipped(self, adapter, mocker):
+    def test_public_grants_skipped(self, adapter):
         """PUBLIC grants are not configurable via dbt and should be excluded."""
-        _set_use_show_apis(adapter, mocker, enabled=True)
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table(
             [
                 (
@@ -212,18 +209,17 @@ class TestStandardizeGrantsDictShowApi:
         result = adapter.standardize_grants_dict(table)
         assert result == {"select": ["user:alice"]}
 
-    def test_empty_table(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=True)
+    def test_empty_table(self, adapter):
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table([])
         result = adapter.standardize_grants_dict(table)
         assert result == {}
 
 
 class TestStandardizeGrantsDictSvv:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is disabled (SVV)."""
+    """Tests for standardize_grants_dict when use_show_apis() is False (SVV path)."""
 
-    def test_distinguishes_users_groups_roles(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=False)
+    def test_distinguishes_users_groups_roles(self, adapter):
         table = _make_svv_table(
             [
                 ("alice", "user", "SELECT"),
@@ -236,8 +232,7 @@ class TestStandardizeGrantsDictSvv:
             "select": ["user:alice", "group:readonly_group", "role:readonly_role"],
         }
 
-    def test_multiple_privileges(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=False)
+    def test_multiple_privileges(self, adapter):
         table = _make_svv_table(
             [
                 ("alice", "user", "SELECT"),
@@ -251,9 +246,8 @@ class TestStandardizeGrantsDictSvv:
             "insert": ["user:alice"],
         }
 
-    def test_public_grants_skipped(self, adapter, mocker):
+    def test_public_grants_skipped(self, adapter):
         """PUBLIC grants are not configurable via dbt and should be excluded."""
-        _set_use_show_apis(adapter, mocker, enabled=False)
         table = _make_svv_table(
             [
                 ("alice", "user", "SELECT"),
@@ -263,8 +257,7 @@ class TestStandardizeGrantsDictSvv:
         result = adapter.standardize_grants_dict(table)
         assert result == {"select": ["user:alice"]}
 
-    def test_empty_table(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=False)
+    def test_empty_table(self, adapter):
         table = _make_svv_table([])
         result = adapter.standardize_grants_dict(table)
         assert result == {}

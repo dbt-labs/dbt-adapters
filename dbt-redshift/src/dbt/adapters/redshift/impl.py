@@ -136,6 +136,15 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
+        if (
+            self.behavior.redshift_use_show_apis.no_warn
+            and not self.config.credentials.datasharing
+        ):
+            logger.debug(
+                "The `redshift_use_show_apis` behavior flag has been replaced by the `datasharing` profile configuration. "
+                "Please migrate to `datasharing` as this flag will be removed in a future release."
+            )
+
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
@@ -182,9 +191,13 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``redshift_use_show_apis`` behavior flag.
+        Returns True when the ``datasharing`` profile config is enabled
+        or the ``redshift_use_show_apis`` behavior flag is set.
         """
-        return self.behavior.redshift_use_show_apis.no_warn
+        return (
+            bool(self.config.credentials.datasharing)
+            or self.behavior.redshift_use_show_apis.no_warn
+        )
 
     @available
     def verify_database(self, database):
@@ -295,15 +308,15 @@ class RedshiftAdapter(SQLAdapter):
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of a grants query to match the grants config format.
 
-        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        When ``datasharing`` is enabled, ``SHOW GRANTS ON TABLE``
         is used for cross-database support.  SHOW GRANTS conflates groups and
         roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
         on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
         Redshift behavior and may change across patches.
 
-        When the flag is disabled, ``svv_relation_privileges`` is used instead,
-        which correctly reports ``identity_type`` as ``user``, ``group``, or
-        ``role`` but only works within the current database.
+        When ``datasharing`` is disabled, ``svv_relation_privileges`` is used
+        instead, which correctly reports ``identity_type`` as ``user``,
+        ``group``, or ``role`` but only works within the current database.
         """
         grants_dict: Dict[str, List[str]] = {}
 
