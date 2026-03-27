@@ -6,7 +6,6 @@ import time
 import redshift_connector
 import sqlparse
 
-from multiprocessing.synchronize import RLock
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Generator, Tuple, Union, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
@@ -189,8 +188,9 @@ class RedshiftCredentials(Credentials):
     # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
     query_group: Optional[str] = None
 
-    # Drop behavior: skip the global RLock on DROP statements.
-    # Safe only for projects with no downstream views (no CASCADE side-effects).
+    # Drop behavior: skip the global RLock on DROP statements (transaction
+    # boundary semantics are preserved). Safe only for projects with no
+    # downstream views (no CASCADE side-effects).
     allow_concurrent_drops: bool = False
 
     _ALIASES = {"dbname": "database", "pass": "password"}
@@ -610,9 +610,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         See drop_relation in RedshiftAdapter for more information.
         """
-        drop_lock: RLock = self.lock
-
-        with drop_lock:
+        with self.lock:
             connection = self.get_thread_connection()
 
             if connection.transaction_open:
@@ -623,6 +621,25 @@ class RedshiftConnectionManager(SQLConnectionManager):
             self.commit()
 
             self.begin()
+
+    @contextmanager
+    def fresh_transaction_without_lock(self) -> Generator[None, None, None]:
+        """Same transaction boundary semantics as fresh_transaction(), but
+        without acquiring the global RLock.
+
+        Only safe when the caller guarantees concurrent DROPs will not produce
+        CASCADE side-effects (i.e. no downstream views exist).
+        """
+        connection = self.get_thread_connection()
+
+        if connection.transaction_open:
+            self.commit()
+
+        self.begin()
+        yield
+        self.commit()
+
+        self.begin()
 
     @classmethod
     def open(cls, connection):

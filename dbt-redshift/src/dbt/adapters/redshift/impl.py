@@ -164,10 +164,13 @@ class RedshiftAdapter(SQLAdapter):
 
         Users with no downstream views (no CASCADE side-effects) can opt out
         of the lock via `allow_concurrent_drops: true` in their profile credentials
-        to allow DROP statements to run in parallel across threads.
+        to allow DROP statements to run in parallel across threads. The DROP
+        still runs inside a fresh transaction context — the lock is the only
+        thing skipped.
         """
         if self.config.credentials.allow_concurrent_drops:
-            return super().drop_relation(relation)
+            with self.connections.fresh_transaction_without_lock():
+                return super().drop_relation(relation)
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 

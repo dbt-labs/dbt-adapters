@@ -66,19 +66,35 @@ class TestDropRelationLock(TestCase):
         self.assertTrue(fresh_txn_entered, "fresh_transaction() should have been entered")
 
     def test_drop_relation_skips_lock_when_allow_concurrent_drops(self):
-        """allow_concurrent_drops=True: fresh_transaction() must NOT be called."""
+        """allow_concurrent_drops=True: fresh_transaction_without_lock() is used, not fresh_transaction()."""
         adapter = make_adapter({"allow_concurrent_drops": True})
         relation = mock.MagicMock()
 
-        fresh_txn_called = []
+        locked_txn_called = []
+        unlocked_txn_called = []
 
         @contextmanager
         def fake_fresh_transaction():
-            fresh_txn_called.append(True)
+            locked_txn_called.append(True)
+            yield
+
+        @contextmanager
+        def fake_fresh_transaction_without_lock():
+            unlocked_txn_called.append(True)
             yield
 
         with mock.patch.object(adapter.connections, "fresh_transaction", fake_fresh_transaction):
-            with mock.patch.object(SQLAdapter, "drop_relation", return_value=None):
-                adapter.drop_relation(relation)
+            with mock.patch.object(
+                adapter.connections,
+                "fresh_transaction_without_lock",
+                fake_fresh_transaction_without_lock,
+            ):
+                with mock.patch.object(SQLAdapter, "drop_relation", return_value=None):
+                    adapter.drop_relation(relation)
 
-        self.assertFalse(fresh_txn_called, "fresh_transaction() should NOT have been called")
+        self.assertFalse(
+            locked_txn_called, "fresh_transaction() (locked) should NOT have been called"
+        )
+        self.assertTrue(
+            unlocked_txn_called, "fresh_transaction_without_lock() should have been called"
+        )
