@@ -252,9 +252,7 @@ class TestRedshiftMaterializedViewsBasicWithDatasharing(TestRedshiftMaterialized
 
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+        return {"default": {**dbt_profile_target, "datasharing": True}}
 
 
 class TestRedshiftMaterializedViewWithBackupConfig:
