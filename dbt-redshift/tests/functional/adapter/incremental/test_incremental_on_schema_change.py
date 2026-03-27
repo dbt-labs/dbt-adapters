@@ -10,6 +10,17 @@ class TestIncrementalOnSchemaChange(BaseIncrementalOnSchemaChange):
     pass
 
 
+class TestIncrementalOnSchemaChangeWithDatasharing(TestIncrementalOnSchemaChange):
+    """Same incremental on_schema_change tests with datasharing enabled.
+
+    Exercises get_columns_in_relation which uses SHOW COLUMNS in datasharing mode.
+    """
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        return {"default": {**dbt_profile_target, "datasharing": True}}
+
+
 # ---- Column type change (redshift__alter_column_type): VARCHAR expand + int→bigint ----
 _INCREMENTAL_VARCHAR_EXPAND = """
 {{
