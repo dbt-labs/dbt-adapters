@@ -65,9 +65,11 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         def timestamp(x):
             if isinstance(x, str):
                 return x
-            if x.tzinfo is not None:
-                x = x.astimezone(timezone.utc).replace(tzinfo=None)
-            return f"TIMESTAMP '{x.strftime('%Y-%m-%d %H:%M:%S.%f')}'"
+            # Normalize all datetimes to UTC. If tz-naive, assume the value is in UTC.
+            if x.tzinfo is None:
+                x = x.replace(tzinfo=timezone.utc)
+            x = x.astimezone(timezone.utc)
+            return f"TIMESTAMP '{x.strftime('%Y-%m-%d %H:%M:%S.%f')} UTC'"
 
         def interval(x):
             return x
