@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix dbt_scd_id in snapshot as hash of unique_key and check_cols when check strategy is configured
+time: 2025-11-13T13:02:18.8291969+02:00
+custom:
+    Author: spyrosviz
+    Issue: "1436"
