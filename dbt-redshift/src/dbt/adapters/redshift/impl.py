@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 
@@ -509,13 +510,16 @@ class RedshiftAdapter(SQLAdapter):
     def _normalize_database(database: str) -> str:
         return database.strip('"').lower()
 
-    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
-        if config.get("database") is None:
+    def _is_different_database(self, database: Optional[str]) -> bool:
+        """Check if the given database differs from the default credentials database."""
+        if database is None:
             return False
+        return self._normalize_database(str(database)) != self._normalize_database(
+            self.config.credentials.database
+        )
 
-        model_database = self._normalize_database(str(config.get("database")))
-        default_database = self._normalize_database(self.config.credentials.database)
-        return model_database != default_database
+    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
+        return self._is_different_database(config.get("database"))
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
@@ -529,3 +533,23 @@ class RedshiftAdapter(SQLAdapter):
             self._apply_query_group(self.config.credentials.query_group)
         if self._needs_database_change(config):
             self._reset_database()
+
+    @contextmanager
+    def _use_database_context(self, relation):
+        """Issue USE <database> / RESET USE around cross-database operations."""
+        needs_use = self._is_different_database(relation.database)
+        if needs_use:
+            self._use_database(self._normalize_database(str(relation.database)))
+        try:
+            yield
+        finally:
+            if needs_use:
+                self._reset_database()
+
+    def create_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().create_schema(relation)
+
+    def drop_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().drop_schema(relation)
