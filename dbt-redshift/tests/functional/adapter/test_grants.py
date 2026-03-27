@@ -43,25 +43,33 @@ class TestInvalidGrantsRedshift(RedshiftGrantsMixin, BaseModelGrants):
     pass
 
 
-class TestModelGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseModelGrants):
+class TestModelGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseModelGrants):
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"redshift_use_show_apis": True}}
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
 
 
-class TestIncrementalGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseIncrementalGrants):
+class TestIncrementalGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseIncrementalGrants):
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"redshift_use_show_apis": True}}
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
 
 
-class TestSeedGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseSeedGrants):
+class TestSeedGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseSeedGrants):
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"redshift_use_show_apis": True}}
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
 
 
-class TestSnapshotGrantsRedshiftWithShowApis(RedshiftGrantsMixin, BaseSnapshotGrants):
+class TestSnapshotGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseSnapshotGrants):
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"flags": {"redshift_use_show_apis": True}}
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs

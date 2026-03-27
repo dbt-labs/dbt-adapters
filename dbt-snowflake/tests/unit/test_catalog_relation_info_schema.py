@@ -4,56 +4,20 @@ from types import SimpleNamespace
 import pytest
 
 from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.catalogs import BuiltInCatalogIntegration
+from dbt.adapters.snowflake.catalogs import InfoSchemaCatalogIntegration
 
 
 @pytest.fixture
-def fake_integration() -> BuiltInCatalogIntegration:
-    return BuiltInCatalogIntegration(constants.DEFAULT_BUILT_IN_CATALOG)
+def fake_integration() -> InfoSchemaCatalogIntegration:
+    return InfoSchemaCatalogIntegration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
 
 
 model_base = SimpleNamespace(
     database="my_database",
     schema="my_schema",
     identifier="my_table",
-    config={
-        "catalog": "snowflake",
-        "external_volume": "s3_iceberg_snow",
-    },
+    config={"materialized": "table"},
 )
-
-
-@pytest.mark.parametrize(
-    "config,expected",
-    [
-        (
-            {},
-            "_dbt/my_schema/my_table",
-        ),
-        (
-            {"base_location_root": None, "base_location_subpath": None},
-            "_dbt/my_schema/my_table",
-        ),
-        (
-            {"base_location_root": "root_path", "base_location_subpath": "subpath"},
-            "root_path/my_schema/my_table/subpath",
-        ),
-        (
-            {"base_location_subpath": "subpath"},
-            "_dbt/my_schema/my_table/subpath",
-        ),
-        (
-            {"base_location_root": "root_path"},
-            "root_path/my_schema/my_table",
-        ),
-    ],
-)
-def test_iceberg_base_location_built_in(fake_integration, config, expected):
-    """Test when base_location_root and base_location_subpath are provided"""
-    model = deepcopy(model_base)
-    model.config.update(config)
-    relation = fake_integration.build_relation(model)
-    assert relation.base_location == expected
 
 
 @pytest.mark.parametrize(
@@ -97,13 +61,13 @@ def test_change_tracking_not_set(fake_integration):
 
 def test_change_tracking_from_adapter_properties():
     catalog_config = SimpleNamespace(
-        name="SNOWFLAKE",
-        catalog_type="BUILT_IN",
-        external_volume="s3_iceberg_snow",
+        name="INFO_SCHEMA",
+        catalog_type="INFO_SCHEMA",
+        external_volume=None,
         file_format=None,
         adapter_properties={"change_tracking": True},
     )
-    integration = BuiltInCatalogIntegration(catalog_config)
+    integration = InfoSchemaCatalogIntegration(catalog_config)
     model = deepcopy(model_base)
     relation = integration.build_relation(model)
     assert relation.change_tracking == "TRUE"
@@ -111,13 +75,13 @@ def test_change_tracking_from_adapter_properties():
 
 def test_model_config_overrides_adapter_properties():
     catalog_config = SimpleNamespace(
-        name="SNOWFLAKE",
-        catalog_type="BUILT_IN",
-        external_volume="s3_iceberg_snow",
+        name="INFO_SCHEMA",
+        catalog_type="INFO_SCHEMA",
+        external_volume=None,
         file_format=None,
         adapter_properties={"change_tracking": True},
     )
-    integration = BuiltInCatalogIntegration(catalog_config)
+    integration = InfoSchemaCatalogIntegration(catalog_config)
     model = deepcopy(model_base)
     model.config.update({"change_tracking": False})
     relation = integration.build_relation(model)

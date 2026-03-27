@@ -143,14 +143,14 @@ class TestGetCatalog:
         assert len(catalog) == 17
 
 
-class TestGetCatalogShowApis(TestGetCatalog):
-    """Same catalog tests but with SHOW/SVV APIs enabled."""
+class TestGetCatalogDatasharing(TestGetCatalog):
+    """Same catalog tests but with datasharing enabled."""
 
     @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "flags": {"redshift_use_show_apis": True},
-        }
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["datasharing"] = True
+        return outputs
 
     def test_get_one_catalog_by_relations(
         self,
