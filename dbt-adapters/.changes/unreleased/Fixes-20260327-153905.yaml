@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix snapshot UNION ALL type mismatch when adding new source columns with hard_deletes=new_record by casting NULL placeholders to the correct data type
+time: 2026-03-27T15:39:05.70454+05:30
+custom:
+    Author: aahel
+    Issue: "852"
