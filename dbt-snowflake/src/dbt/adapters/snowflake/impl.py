@@ -13,6 +13,7 @@ from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
 )
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
@@ -304,6 +305,9 @@ class SnowflakeAdapter(SQLAdapter):
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
+            schema_functions = self.execute_macro(
+                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
             # Alternatively, we could query the list of schemas before we start
@@ -314,11 +318,30 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        object_columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
-        return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
+        object_relations = [
+            self._parse_list_relations_result(obj) for obj in schema_objects.select(object_columns)
+        ]
+        function_relations = [
+            self._parse_list_function_relations_result(obj)
+            for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
+        ]
+        return object_relations + function_relations
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
@@ -345,6 +368,17 @@ class SnowflakeAdapter(SQLAdapter):
             identifier=identifier,
             type=relation_type,
             table_format=table_format,
+            quote_policy=quote_policy,
+        )
+
+    def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
+        return self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier=identifier,
+            type=self.Relation.Function,
             quote_policy=quote_policy,
         )
 

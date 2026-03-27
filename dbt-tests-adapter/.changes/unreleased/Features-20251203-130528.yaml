@@ -1,0 +1,6 @@
+kind: Features
+body: Add test for checking that function relations can be found
+time: 2025-12-03T13:05:28.838376-08:00
+custom:
+  Author: QMalcolm
+  Issue: "1488"
