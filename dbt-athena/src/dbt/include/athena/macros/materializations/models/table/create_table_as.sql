@@ -164,35 +164,47 @@
     {%- do log('CREATE NON-PARTITIONED STAGING TABLE: ' ~ tmp_relation) -%}
     {%- do run_query(create_table_as(temporary, tmp_relation, compiled_code, language, true)) -%}
 
-    {% set partitions_batches = get_partition_batches(sql=tmp_relation, as_subquery=False) %}
-    {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
-
+    {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set dest_columns = adapter.get_columns_in_relation(tmp_relation) -%}
     {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
 
-    {%- for batch in partitions_batches -%}
-        {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches | length) -%}
+    {%- if partitioned_by is not none -%}
 
-        {%- if loop.index == 1 -%}
-            {%- set create_target_relation_sql -%}
-                select {{ dest_cols_csv }}
-                from {{ tmp_relation }}
-                where {{ batch }}
-            {%- endset -%}
-            {%- do run_query(create_table_as(temporary, relation, create_target_relation_sql, language)) -%}
-        {%- else -%}
-            {%- set insert_batch_partitions_sql -%}
-                insert into {{ relation }} ({{ dest_cols_csv }})
-                select {{ dest_cols_csv }}
-                from {{ tmp_relation }}
-                where {{ batch }}
-            {%- endset -%}
+        {% set partitions_batches = get_partition_batches(sql=tmp_relation, as_subquery=False) %}
+        {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
 
-            {%- do run_query(insert_batch_partitions_sql) -%}
-        {%- endif -%}
+        {%- for batch in partitions_batches -%}
+            {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches | length) -%}
 
+            {%- if loop.index == 1 -%}
+                {%- set create_target_relation_sql -%}
+                    select {{ dest_cols_csv }}
+                    from {{ tmp_relation }}
+                    where {{ batch }}
+                {%- endset -%}
+                {%- do run_query(create_table_as(temporary, relation, create_target_relation_sql, language)) -%}
+            {%- else -%}
+                {%- set insert_batch_partitions_sql -%}
+                    insert into {{ relation }} ({{ dest_cols_csv }})
+                    select {{ dest_cols_csv }}
+                    from {{ tmp_relation }}
+                    where {{ batch }}
+                {%- endset -%}
 
-    {%- endfor -%}
+                {%- do run_query(insert_batch_partitions_sql) -%}
+            {%- endif -%}
+
+        {%- endfor -%}
+
+    {%- else -%}
+
+        {%- do log('UNPARTITIONED MODEL: CREATE TARGET TABLE FROM STAGING TABLE') -%}
+        {%- set create_from_staging_sql -%}
+            select {{ dest_cols_csv }} from {{ tmp_relation }}
+        {%- endset -%}
+        {%- do run_query(create_table_as(temporary, relation, create_from_staging_sql, language)) -%}
+
+    {%- endif -%}
 
     {%- do drop_relation(tmp_relation) -%}
 
