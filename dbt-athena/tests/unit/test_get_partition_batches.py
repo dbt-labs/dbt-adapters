@@ -200,6 +200,68 @@ class TestNonBucketedBatching:
         ]
 
 
+class TestPartitionsLimitClamping:
+    """Tests verifying that partitions_limit is clamped to a minimum of 1."""
+
+    def test_limit_zero_non_bucketed(self):
+        """partitions_limit=0 should be clamped to 1, producing one partition per batch."""
+        result = _render_macro(
+            config={"partitioned_by": ["date_col"], "partitions_limit": 0},
+            rows=[["2024-01-01"], ["2024-01-02"], ["2024-01-03"]],
+            column_types=["date"],
+        )
+        assert result == [
+            "\"date_col\"=DATE'2024-01-01'",
+            "\"date_col\"=DATE'2024-01-02'",
+            "\"date_col\"=DATE'2024-01-03'",
+        ]
+
+    def test_negative_limit_non_bucketed(self):
+        """Negative partitions_limit should be clamped to 1."""
+        result = _render_macro(
+            config={"partitioned_by": ["date_col"], "partitions_limit": -5},
+            rows=[["2024-01-01"], ["2024-01-02"]],
+            column_types=["date"],
+        )
+        assert result == [
+            "\"date_col\"=DATE'2024-01-01'",
+            "\"date_col\"=DATE'2024-01-02'",
+        ]
+
+    def test_limit_zero_bucketed(self):
+        """partitions_limit=0 with buckets should be clamped to 1."""
+        result = _render_macro(
+            config={
+                "partitioned_by": ["bucket(col, 2)"],
+                "partitions_limit": 0,
+            },
+            rows=[["a"], ["b"], ["c"]],
+            column_types=["varchar"],
+        )
+        assert result == [
+            "col IN ('a')",
+            "col IN ('b')",
+            "col IN ('c')",
+        ]
+
+    def test_limit_zero_bucketed_with_partitions(self):
+        """partitions_limit=0 with bucket + non-bucket columns should be clamped to 1."""
+        result = _render_macro(
+            config={
+                "partitioned_by": ["date_col", "bucket(user_id, 2)"],
+                "partitions_limit": 0,
+            },
+            rows=[
+                ["2024-01-01", "alice"],
+                ["2024-01-02", "bob"],
+            ],
+            column_types=["date", "varchar"],
+        )
+        for batch in result:
+            num_or = batch.count(" or ") + 1
+            assert num_or == 1
+
+
 class TestBucketOnlyBatching:
     """Tests for bucket partitioning without non-bucket partition columns."""
 
@@ -366,9 +428,7 @@ class TestBucketWithPartitionsBatching:
                 "partitions_limit": 4,
             },
             rows=[
-                [date, f"user{i}"]
-                for date in ["2024-01-01", "2024-01-02"]
-                for i in range(1, 8)
+                [date, f"user{i}"] for date in ["2024-01-01", "2024-01-02"] for i in range(1, 8)
             ],
             column_types=["date", "varchar"],
         )
