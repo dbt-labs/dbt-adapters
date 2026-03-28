@@ -117,7 +117,7 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
 
         self.assertEqual(
             ddl_dict["expiration_timestamp"],
-            "TIMESTAMP '2025-07-18 18:56:22.153305'",
+            "TIMESTAMP '2025-07-18 18:56:22.153305 UTC'",
         )
         # Must not be a raw datetime object (which would cause a BigQuery syntax error)
         self.assertIsInstance(ddl_dict["expiration_timestamp"], str)
@@ -145,7 +145,7 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
 
         self.assertEqual(
             ddl_dict["expiration_timestamp"],
-            "TIMESTAMP '2025-07-18 18:56:22.153305'",
+            "TIMESTAMP '2025-07-18 18:56:22.153305 UTC'",
         )
 
 
