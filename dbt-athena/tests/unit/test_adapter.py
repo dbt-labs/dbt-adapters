@@ -676,6 +676,25 @@ class TestAthenaAdapter:
             "Parameters": {"catalog-id": DEFAULT_ACCOUNT_ID},
         } == res
 
+    @mock_aws
+    def test__get_data_catalog_without_thread_connection(self, mock_aws_service):
+        """_get_data_catalog must work without a pre-acquired thread connection.
+
+        With --no-populate-cache and threads > 1, adapter introspection methods
+        (e.g. get_columns_in_relation called by dbt_utils.star()) can be invoked
+        before a thread connection is established.  Previously this raised
+        'connection never acquired for thread'; the fix uses profile credentials
+        directly instead of get_thread_connection().
+        """
+        mock_aws_service.create_data_catalog()
+        # Intentionally do NOT call acquire_connection
+        res = self.adapter._get_data_catalog(DATA_CATALOG_NAME)
+        assert {
+            "Name": "awsdatacatalog",
+            "Type": "GLUE",
+            "Parameters": {"catalog-id": DEFAULT_ACCOUNT_ID},
+        } == res
+
     def _test_list_relations_without_caching(self, schema_relation):
         self.adapter.acquire_connection("dummy")
         relations = self.adapter.list_relations_without_caching(schema_relation)
