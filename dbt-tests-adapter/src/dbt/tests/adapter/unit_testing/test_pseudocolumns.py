@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 
 from dbt.adapters.base import Column
 from dbt.tests.util import run_dbt
@@ -84,18 +85,19 @@ class BasePseudocolumnUnitTest:
         This simulates real pseudocolumn behavior where columns are queryable but
         don't appear in the information schema.
         """
-        original_method = project.adapter.get_pseudocolumns_for_relation
+        adapter_class = project.adapter.__class__
 
-        def mock_get_pseudocolumns(relation):
+        def mock_get_pseudocolumns(_self, relation):
             # Return pseudocolumn only for our test source table
             if relation.identifier == "external_table":
                 return [Column("pseudocolumn_value", "text")]
             return []
 
-        project.adapter.get_pseudocolumns_for_relation = mock_get_pseudocolumns
-        yield
-        # Restore original method after test
-        project.adapter.get_pseudocolumns_for_relation = original_method
+        mock_get_pseudocolumns._is_available_ = True
+        mock_get_pseudocolumns._parse_replacement_ = lambda *a, **k: []
+
+        with patch.object(adapter_class, "get_pseudocolumns_for_relation", mock_get_pseudocolumns):
+            yield
 
     def test_pseudocolumn_in_unit_test(self, setup_pseudocolumn_override):
         """Test that pseudocolumns can be included in unit test fixtures.
