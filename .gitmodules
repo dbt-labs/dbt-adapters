@@ -1,0 +1,3 @@
+[submodule "dbt-bigquery/projects/always-sunny"]
+	path = dbt-bigquery/projects/always-sunny
+	url = https://github.com/dbt-labs/always-sunny-bigquery
