@@ -142,6 +142,7 @@ class RedshiftCredentials(Credentials):
     autocreate: bool = False
     db_groups: List[str] = field(default_factory=list)
     ra3_node: Optional[bool] = False
+    datasharing: Optional[bool] = False
     connect_timeout: Optional[int] = None
     role: Optional[str] = None
     sslmode: UserSSLMode = field(default_factory=UserSSLMode.default)
@@ -216,6 +217,7 @@ class RedshiftCredentials(Credentials):
             "autocreate",
             "db_groups",
             "ra3_node",
+            "datasharing",
             "connect_timeout",
             "role",
             "retries",

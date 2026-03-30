@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 
@@ -136,6 +137,15 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
+        if (
+            self.behavior.redshift_use_show_apis.no_warn
+            and not self.config.credentials.datasharing
+        ):
+            logger.debug(
+                "The `redshift_use_show_apis` behavior flag has been replaced by the `datasharing` profile configuration. "
+                "Please migrate to `datasharing` as this flag will be removed in a future release."
+            )
+
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
@@ -191,9 +201,13 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``redshift_use_show_apis`` behavior flag.
+        Returns True when the ``datasharing`` profile config is enabled
+        or the ``redshift_use_show_apis`` behavior flag is set.
         """
-        return self.behavior.redshift_use_show_apis.no_warn
+        return (
+            bool(self.config.credentials.datasharing)
+            or self.behavior.redshift_use_show_apis.no_warn
+        )
 
     @available
     def verify_database(self, database):
@@ -304,15 +318,15 @@ class RedshiftAdapter(SQLAdapter):
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of a grants query to match the grants config format.
 
-        When ``redshift_use_show_apis`` is enabled, ``SHOW GRANTS ON TABLE``
+        When ``datasharing`` is enabled, ``SHOW GRANTS ON TABLE``
         is used for cross-database support.  SHOW GRANTS conflates groups and
         roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
         on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
         Redshift behavior and may change across patches.
 
-        When the flag is disabled, ``svv_relation_privileges`` is used instead,
-        which correctly reports ``identity_type`` as ``user``, ``group``, or
-        ``role`` but only works within the current database.
+        When ``datasharing`` is disabled, ``svv_relation_privileges`` is used
+        instead, which correctly reports ``identity_type`` as ``user``,
+        ``group``, or ``role`` but only works within the current database.
         """
         grants_dict: Dict[str, List[str]] = {}
 
@@ -323,6 +337,11 @@ class RedshiftAdapter(SQLAdapter):
                 identity_type = row["identity_type"].lower()
                 # Skip PUBLIC grants — not configurable via dbt grants
                 if identity_type == "public":
+                    continue
+                # Skip Redshift reserved roles — these cannot be modified
+                # via GRANT/REVOKE.  Includes datashare roles (ds:*) and
+                # system-defined roles (sys:*).
+                if identity_name.startswith(("ds:", "sys:")):
                     continue
                 # SHOW GRANTS reports groups as identity_type='role' with a
                 # '/' prefix on identity_name.  This is undocumented behavior.
@@ -338,11 +357,17 @@ class RedshiftAdapter(SQLAdapter):
         else:
             # svv_relation_privileges path — identity_type is accurate
             for row in grants_table:
+                identity_name = row["identity_name"]
                 identity_type = row["identity_type"].lower()
                 # Skip PUBLIC grants — not configurable via dbt grants
                 if identity_type == "public":
                     continue
-                grantee = f"{identity_type}:{row['identity_name']}"
+                # Skip Redshift reserved roles — these cannot be modified
+                # via GRANT/REVOKE.  Includes datashare roles (ds:*) and
+                # system-defined roles (sys:*).
+                if identity_name.startswith(("ds:", "sys:")):
+                    continue
+                grantee = f"{identity_type}:{identity_name}"
                 privilege = row["privilege_type"].lower()
                 if privilege in grants_dict:
                     grants_dict[privilege].append(grantee)
@@ -356,7 +381,7 @@ class RedshiftAdapter(SQLAdapter):
         sources: List[BaseRelation],
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
-        if not self.behavior.redshift_use_show_apis.no_warn:
+        if not self.use_show_apis():
             return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
 
         source_lookup = {
@@ -505,13 +530,16 @@ class RedshiftAdapter(SQLAdapter):
     def _normalize_database(database: str) -> str:
         return database.strip('"').lower()
 
-    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
-        if config.get("database") is None:
+    def _is_different_database(self, database: Optional[str]) -> bool:
+        """Check if the given database differs from the default credentials database."""
+        if database is None:
             return False
+        return self._normalize_database(str(database)) != self._normalize_database(
+            self.config.credentials.database
+        )
 
-        model_database = self._normalize_database(str(config.get("database")))
-        default_database = self._normalize_database(self.config.credentials.database)
-        return model_database != default_database
+    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
+        return self._is_different_database(config.get("database"))
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
@@ -525,3 +553,23 @@ class RedshiftAdapter(SQLAdapter):
             self._apply_query_group(self.config.credentials.query_group)
         if self._needs_database_change(config):
             self._reset_database()
+
+    @contextmanager
+    def _use_database_context(self, relation):
+        """Issue USE <database> / RESET USE around cross-database operations."""
+        needs_use = self._is_different_database(relation.database)
+        if needs_use:
+            self._use_database(self._normalize_database(str(relation.database)))
+        try:
+            yield
+        finally:
+            if needs_use:
+                self._reset_database()
+
+    def create_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().create_schema(relation)
+
+    def drop_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().drop_schema(relation)
