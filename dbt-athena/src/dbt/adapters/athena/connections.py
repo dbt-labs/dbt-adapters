@@ -173,6 +173,8 @@ class AthenaCursor(Cursor):
                 lambda e: (
                     False
                     if catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e)
+                    else False
+                    if "Query timeout" in str(e)
                     else True
                 )
             ),
