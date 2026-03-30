@@ -33,7 +33,9 @@ def athena_cursor():
 
 class TestAthenaCursorRetry:
     def test_no_retry_on_query_timeout(self, athena_cursor):
-        with patch.object(athena_cursor, "_execute", side_effect=OperationalError("Query timeout")):
+        with patch.object(
+            athena_cursor, "_execute", side_effect=OperationalError("Query timeout")
+        ):
             with pytest.raises(OperationalError, match="Query timeout"):
                 athena_cursor.execute("SELECT 1")
             assert athena_cursor._execute.call_count == 1
