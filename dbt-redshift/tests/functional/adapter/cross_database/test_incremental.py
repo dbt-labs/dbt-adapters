@@ -1,5 +1,3 @@
-import os
-
 from dbt.tests.util import run_dbt
 import pytest
 
@@ -11,32 +9,15 @@ from tests.functional.adapter.incremental.test_incremental_on_schema_change impo
     TestIncrementalOnSchemaChangeSpecialChars as _BaseSpecialCharsTest,
 )
 
-
-REDSHIFT_TEST_CROSS_DBNAME = os.getenv("REDSHIFT_TEST_CROSS_DBNAME", "")
-
-_skip_reason = "REDSHIFT_TEST_CROSS_DBNAME not set — skipping cross-database tests"
-
-
-class _CrossDatabaseMixin:
-    """Shared fixtures for cross-database incremental tests."""
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {
-            "models": {
-                "+database": REDSHIFT_TEST_CROSS_DBNAME,
-            }
-        }
-
-    @pytest.fixture(scope="class")
-    def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+from tests.functional.adapter.cross_database.conftest import (
+    CrossDatabaseMixin,
+    assert_cross_db_relation_exists,
+    skip_if_no_cross_db,
+)
 
 
-@pytest.mark.skipif(not REDSHIFT_TEST_CROSS_DBNAME, reason=_skip_reason)
-class TestIncrementalCrossDatabaseOnSchemaChange(_CrossDatabaseMixin, _BaseOnSchemaChange):
+@skip_if_no_cross_db
+class TestIncrementalCrossDatabaseOnSchemaChange(CrossDatabaseMixin, _BaseOnSchemaChange):
     """Test incremental on_schema_change strategies (ignore, append, sync, fail)
     targeting a cross-database.
 
@@ -54,6 +35,8 @@ class TestIncrementalCrossDatabaseOnSchemaChange(_CrossDatabaseMixin, _BaseOnSch
         results_two = run_dbt(run_args)
         assert len(results_two) == 3
 
+        assert_cross_db_relation_exists(project.adapter, project.test_schema, compare_source)
+
     def test_run_incremental_fail_on_schema_change(self, project):
         select = "model_a incremental_fail"
         run_dbt(["run", "--models", select, "--full-refresh"])
@@ -61,8 +44,8 @@ class TestIncrementalCrossDatabaseOnSchemaChange(_CrossDatabaseMixin, _BaseOnSch
         assert "Error" in results_two[1].message
 
 
-@pytest.mark.skipif(not REDSHIFT_TEST_CROSS_DBNAME, reason=_skip_reason)
-class TestIncrementalCrossDatabaseColumnType(_CrossDatabaseMixin, _BaseColumnTypeTest):
+@skip_if_no_cross_db
+class TestIncrementalCrossDatabaseColumnType(CrossDatabaseMixin, _BaseColumnTypeTest):
     """Test incremental column type changes (varchar expand, int-to-bigint)
     targeting a cross-database.
 
@@ -74,15 +57,21 @@ class TestIncrementalCrossDatabaseColumnType(_CrossDatabaseMixin, _BaseColumnTyp
         select = "incremental_varchar_expand incremental_varchar_expand_target"
         run_dbt(["run", "--select", select])
         run_dbt(["run", "--select", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_varchar_expand"
+        )
 
     def test_incremental_int_to_bigint_succeeds_and_matches_target(self, project):
         select = "incremental_int_to_bigint incremental_int_to_bigint_target"
         run_dbt(["run", "--select", select])
         run_dbt(["run", "--select", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_int_to_bigint"
+        )
 
 
-@pytest.mark.skipif(not REDSHIFT_TEST_CROSS_DBNAME, reason=_skip_reason)
-class TestIncrementalCrossDatabaseSpecialChars(_CrossDatabaseMixin, _BaseSpecialCharsTest):
+@skip_if_no_cross_db
+class TestIncrementalCrossDatabaseSpecialChars(CrossDatabaseMixin, _BaseSpecialCharsTest):
     """Test incremental append/sync with special character column names
     targeting a cross-database.
 
@@ -94,8 +83,14 @@ class TestIncrementalCrossDatabaseSpecialChars(_CrossDatabaseMixin, _BaseSpecial
         select = "model_a_special_chars incremental_append_new_special_chars incremental_append_new_special_chars_target"
         run_dbt(["run", "--models", select])
         run_dbt(["run", "--models", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_append_new_special_chars"
+        )
 
     def test_incremental_sync_all_columns_with_special_characters(self, project):
         select = "model_a_special_chars incremental_sync_all_special_chars incremental_sync_all_special_chars_target"
         run_dbt(["run", "--models", select])
         run_dbt(["run", "--models", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_sync_all_special_chars"
+        )
