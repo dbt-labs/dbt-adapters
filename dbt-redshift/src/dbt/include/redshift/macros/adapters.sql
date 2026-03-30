@@ -274,7 +274,9 @@
       SHOW TABLES FROM SCHEMA {{ schema_relation.database }}.{{ schema_relation.schema }}
     {% endcall %}
     {% set show_result = load_result('show_tables').table %}
-    {{ return(adapter.transform_show_tables_for_list_relations(show_result)) }}
+    {% set table_and_view_relations = adapter.transform_show_tables_for_list_relations(show_result) %}
+    {% set function_relations = list_function_relations_without_caching(schema_relation) %}
+    {{ return(adapter.combine_show_tables_and_function_relations(table_and_view_relations, function_relations)) }}
   {% else %}
     {% call statement('list_relations_without_caching', fetch_result=True) -%}
       select
@@ -297,9 +299,33 @@
         end as type
       from information_schema.views
       where table_schema ilike '{{ schema_relation.schema }}'
+      union all
+      select distinct
+        '{{ schema_relation.database }}' as database,
+        proname as name,
+        ns.nspname as schema,
+        'function' as type
+      from pg_proc
+      join pg_namespace as ns on pronamespace = ns.oid
+      where ns.nspname ilike '{{ schema_relation.schema }}'
     {% endcall %}
     {{ return(load_result('list_relations_without_caching').table) }}
   {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__list_function_relations_without_caching(schema_relation) %}
+  {% call statement('list_function_relations_without_caching', fetch_result=True) -%}
+    select distinct
+      '{{ schema_relation.database }}' as database,
+      proname::varchar as name,
+      ns.nspname::varchar as schema,
+      'function' as type
+    from pg_proc
+    join pg_namespace as ns on pronamespace = ns.oid
+    where ns.nspname ilike '{{ schema_relation.schema }}'
+  {% endcall %}
+  {{ return(load_result('list_function_relations_without_caching').table) }}
 {% endmacro %}
 
 {% macro redshift__information_schema_name(database) -%}

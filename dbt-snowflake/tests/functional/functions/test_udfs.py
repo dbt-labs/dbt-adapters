@@ -18,6 +18,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     SqlUDFDefaultArgSupport,
     PythonUDFDefaultArgSupport,
     PythonUDFVolatilitySupport,
+    CanFindScalarFunctionRelation,
     PythonUDFWithPackagesSupported,
 )
 from dbt.tests.util import run_dbt
@@ -114,6 +115,15 @@ class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
 
 class TestSnowflakePythonUDFVolatilitySupport(PythonUDFVolatilitySupport):
     pass
+
+
+class TestSnowflakeCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
 
 
 class TestSnowflakePythonUDFWithPackages(PythonUDFWithPackagesSupported):

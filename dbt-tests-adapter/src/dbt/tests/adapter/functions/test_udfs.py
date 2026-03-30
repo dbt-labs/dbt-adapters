@@ -253,6 +253,30 @@ class PythonUDFVolatilitySupport(PythonUDFSupported):
         }
 
 
+class CanFindScalarFunctionRelation(UDFsBasic):
+    def test_udfs(self, project, adapter):
+        result = run_dbt(["build", "--debug"])
+
+        assert len(result.results) == 1
+        node = result.results[0].node
+        assert isinstance(node, FunctionNode)
+
+        with project.adapter.connection_named("_test_scalar_function_relation"):
+            schema_relation = project.adapter.Relation.create(
+                database=node.database, schema=node.schema
+            )
+            # Call list_relations_without_caching directly to get a fresh result
+            # that includes the function built above. Using get_relation would hit
+            # the stale pre-build cache (populated before the function existed).
+            relations = project.adapter.list_relations_without_caching(schema_relation)
+
+        relation = next(
+            (r for r in relations if r.identifier.lower() == node.name.lower()),
+            None,
+        )
+        assert relation is not None
+
+
 class PythonUDFWithPackagesSupported(PythonUDFSupported):
     """Verify that when packages are specified for a Python UDF, they are templated into the
     CREATE statement and the function runs using those packages. Adapters that support Python
