@@ -168,14 +168,12 @@ class AthenaCursor(Cursor):
         @retry(
             # No need to retry if TOO_MANY_OPEN_PARTITIONS occurs.
             # Otherwise, Athena throws ICEBERG_FILESYSTEM_ERROR after retry,
-            # because not all files are removed immediately after first try to create table
+            # because not all files are removed immediately after first try to create table.
+            # Also skip retry on query timeout since it is a deterministic failure.
             retry=retry_if_exception(
                 lambda e: (
-                    False
-                    if catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e)
-                    else False
-                    if "Query timeout" in str(e)
-                    else True
+                    not (catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e))
+                    and "Query timeout" not in str(e)
                 )
             ),
             stop=stop_after_attempt(self._retry_config.attempt),
