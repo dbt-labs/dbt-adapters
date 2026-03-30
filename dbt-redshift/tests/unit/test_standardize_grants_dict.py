@@ -3,7 +3,6 @@ import pytest
 
 from dbt.adapters.redshift.impl import RedshiftAdapter
 
-
 SHOW_GRANTS_COLUMNS = [
     "schema_name",
     "object_name",
@@ -20,34 +19,31 @@ SHOW_GRANTS_COLUMNS = [
 
 SHOW_GRANTS_TYPES = [agate.Text()] * len(SHOW_GRANTS_COLUMNS)
 
-LEGACY_COLUMNS = ["grantee", "privilege_type"]
-LEGACY_TYPES = [agate.Text()] * len(LEGACY_COLUMNS)
+SVV_COLUMNS = ["identity_name", "identity_type", "privilege_type"]
+SVV_TYPES = [agate.Text()] * len(SVV_COLUMNS)
 
 
 def _make_show_grants_table(rows):
     return agate.Table(rows, column_names=SHOW_GRANTS_COLUMNS, column_types=SHOW_GRANTS_TYPES)
 
 
-def _make_legacy_table(rows):
-    return agate.Table(rows, column_names=LEGACY_COLUMNS, column_types=LEGACY_TYPES)
+def _make_svv_table(rows):
+    return agate.Table(rows, column_names=SVV_COLUMNS, column_types=SVV_TYPES)
 
 
 @pytest.fixture
 def adapter(mocker):
     mock_config = mocker.MagicMock()
+    mock_config.credentials.datasharing = False
     mock_mp_context = mocker.MagicMock()
     return RedshiftAdapter(mock_config, mock_mp_context)
 
 
-def _set_use_show_apis(adapter, mocker, enabled):
-    adapter.use_show_apis = lambda: enabled
-
-
 class TestStandardizeGrantsDictShowApi:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is enabled."""
+    """Tests for standardize_grants_dict when use_show_apis() is True (SHOW GRANTS path)."""
 
-    def test_includes_all_privileges(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=True)
+    def test_includes_all_privileges(self, adapter):
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table(
             [
                 (
@@ -93,8 +89,21 @@ class TestStandardizeGrantsDictShowApi:
                     "public",
                     "t1",
                     "TABLE",
-                    "TRUNCATE",
+                    "INSERT",
                     "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "TRUNCATE",
+                    "102",
                     "bob",
                     "user",
                     "f",
@@ -106,39 +115,210 @@ class TestStandardizeGrantsDictShowApi:
         )
         result = adapter.standardize_grants_dict(table)
         assert result == {
-            "select": ["alice"],
-            "drop": ["alice"],
-            "alter": ["alice"],
-            "truncate": ["bob"],
+            "select": ["user:alice"],
+            "drop": ["user:alice"],
+            "alter": ["user:alice"],
+            "insert": ["user:alice"],
+            "truncate": ["user:bob"],
         }
 
-    def test_empty_table(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=True)
+    def test_group_detected_by_slash_prefix(self, adapter):
+        """SHOW GRANTS reports groups as identity_type='role' with '/' prefix on identity_name."""
+        adapter.config.credentials.datasharing = True
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "102",
+                    "/readonly_group",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "103",
+                    "readonly_role",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {
+            "select": ["user:alice", "group:readonly_group", "role:readonly_role"],
+        }
+
+    def test_public_grants_skipped(self, adapter):
+        """PUBLIC grants are not configurable via dbt and should be excluded."""
+        adapter.config.credentials.datasharing = True
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "0",
+                    "PUBLIC",
+                    "public",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
+    def test_reserved_roles_skipped(self, adapter):
+        """Reserved roles (ds:*, sys:*) cannot be modified via GRANT/REVOKE."""
+        adapter.config.credentials.datasharing = True
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "200",
+                    "ds:named_datashare",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "300",
+                    "sys:dba",
+                    "role",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
+    def test_empty_table(self, adapter):
+        adapter.config.credentials.datasharing = True
         table = _make_show_grants_table([])
         result = adapter.standardize_grants_dict(table)
         assert result == {}
 
 
-class TestStandardizeGrantsDictLegacy:
-    """Tests for standardize_grants_dict when redshift_use_show_apis is disabled."""
+class TestStandardizeGrantsDictSvv:
+    """Tests for standardize_grants_dict when use_show_apis() is False (SVV path)."""
 
-    def test_basic_grants(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=False)
-        table = _make_legacy_table(
+    def test_distinguishes_users_groups_roles(self, adapter):
+        table = _make_svv_table(
             [
-                ("alice", "select"),
-                ("alice", "insert"),
-                ("bob", "select"),
+                ("alice", "user", "SELECT"),
+                ("readonly_group", "group", "SELECT"),
+                ("readonly_role", "role", "SELECT"),
             ]
         )
         result = adapter.standardize_grants_dict(table)
         assert result == {
-            "select": ["alice", "bob"],
-            "insert": ["alice"],
+            "select": ["user:alice", "group:readonly_group", "role:readonly_role"],
         }
 
-    def test_empty_table(self, adapter, mocker):
-        _set_use_show_apis(adapter, mocker, enabled=False)
-        table = _make_legacy_table([])
+    def test_multiple_privileges(self, adapter):
+        table = _make_svv_table(
+            [
+                ("alice", "user", "SELECT"),
+                ("alice", "user", "INSERT"),
+                ("bob", "user", "SELECT"),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {
+            "select": ["user:alice", "user:bob"],
+            "insert": ["user:alice"],
+        }
+
+    def test_public_grants_skipped(self, adapter):
+        """PUBLIC grants are not configurable via dbt and should be excluded."""
+        table = _make_svv_table(
+            [
+                ("alice", "user", "SELECT"),
+                ("PUBLIC", "public", "SELECT"),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
+    def test_reserved_roles_skipped(self, adapter):
+        """Reserved roles (ds:*, sys:*) cannot be modified via GRANT/REVOKE."""
+        table = _make_svv_table(
+            [
+                ("alice", "user", "SELECT"),
+                ("ds:named_datashare", "role", "SELECT"),
+                ("sys:superuser", "role", "SELECT"),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
+    def test_empty_table(self, adapter):
+        table = _make_svv_table([])
         result = adapter.standardize_grants_dict(table)
         assert result == {}
