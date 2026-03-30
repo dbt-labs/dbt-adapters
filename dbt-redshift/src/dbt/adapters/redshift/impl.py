@@ -372,7 +372,7 @@ class RedshiftAdapter(SQLAdapter):
         sources: List[BaseRelation],
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
-        if not self.behavior.redshift_use_show_apis.no_warn:
+        if not self.use_show_apis():
             return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
 
         source_lookup = {

@@ -58,6 +58,7 @@ def databricks_cluster_target():
         "connect_timeout": 5,
         "retry_all": False,
         "user": os.getenv("DBT_DATABRICKS_USER"),
+        "connection_string_suffix": "ConnCatalog=hive_metastore",
     }
 
 
@@ -73,6 +74,7 @@ def databricks_sql_endpoint_target():
         "connect_retries": 3,
         "connect_timeout": 5,
         "retry_all": True,
+        "connection_string_suffix": "ConnCatalog=hive_metastore",
     }
 
 
@@ -106,7 +108,7 @@ def spark_http_odbc_target():
         "host": os.getenv("DBT_DATABRICKS_HOST_NAME"),
         "port": 443,
         "driver": os.getenv("ODBC_DRIVER"),
-        "connection_string_suffix": f'UID=token;PWD={os.getenv("DBT_DATABRICKS_TOKEN")};HTTPPath=/sql/1.0/endpoints/{os.getenv("DBT_DATABRICKS_ENDPOINT")};AuthMech=3;SparkServerType=3',
+        "connection_string_suffix": f'UID=token;PWD={os.getenv("DBT_DATABRICKS_TOKEN")};HTTPPath=/sql/1.0/endpoints/{os.getenv("DBT_DATABRICKS_ENDPOINT")};AuthMech=3;SparkServerType=3;ConnCatalog=hive_metastore',
         "connect_retries": 3,
         "connect_timeout": 5,
         "retry_all": True,
