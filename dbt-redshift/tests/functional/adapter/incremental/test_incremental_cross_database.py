@@ -58,7 +58,7 @@ class TestIncrementalCrossDatabaseOnSchemaChange(_CrossDatabaseMixin, _BaseOnSch
         select = "model_a incremental_fail"
         run_dbt(["run", "--models", select, "--full-refresh"])
         results_two = run_dbt(["run", "--models", select], expect_pass=False)
-        assert "Error" in results_two[1].message
+        assert "Database Error" in results_two[1].message
 
 
 @pytest.mark.skipif(not REDSHIFT_TEST_CROSS_DBNAME, reason=_skip_reason)
