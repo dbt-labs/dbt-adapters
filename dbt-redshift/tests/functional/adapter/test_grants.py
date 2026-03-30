@@ -46,30 +46,22 @@ class TestInvalidGrantsRedshift(RedshiftGrantsMixin, BaseModelGrants):
 class TestModelGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseModelGrants):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+        return {"default": {**dbt_profile_target, "datasharing": True}}
 
 
 class TestIncrementalGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseIncrementalGrants):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+        return {"default": {**dbt_profile_target, "datasharing": True}}
 
 
 class TestSeedGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseSeedGrants):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+        return {"default": {**dbt_profile_target, "datasharing": True}}
 
 
 class TestSnapshotGrantsRedshiftWithDatasharing(RedshiftGrantsMixin, BaseSnapshotGrants):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+        return {"default": {**dbt_profile_target, "datasharing": True}}
