@@ -8,7 +8,7 @@ from tests.functional.adapter.incremental.test_incremental_on_schema_change impo
     TestIncrementalOnSchemaChangeSpecialChars as _BaseSpecialCharsTest,
 )
 
-from tests.functional.adapter.cross_database.conftest import (
+from tests.functional.adapter.cross_database.fixtures import (
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
 )

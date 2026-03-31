@@ -3,7 +3,7 @@ from dbt.adapters.redshift.impl import CATALOG_COLUMNS
 from dbt.tests.util import get_connection
 import pytest
 
-from tests.functional.adapter.cross_database.conftest import (
+from tests.functional.adapter.cross_database.fixtures import (
     REDSHIFT_TEST_CROSS_DBNAME,
     CrossDatabaseMixin,
 )

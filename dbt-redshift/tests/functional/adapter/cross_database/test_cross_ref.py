@@ -1,7 +1,7 @@
 from dbt.tests.util import run_dbt
 import pytest
 
-from tests.functional.adapter.cross_database.conftest import (
+from tests.functional.adapter.cross_database.fixtures import (
     REDSHIFT_TEST_CROSS_DBNAME,
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
