@@ -51,5 +51,12 @@ class TestListSchemasWithDatasharing(TestListSchemas):
         return {"name": "test_list_schemas_datasharing"}
 
     @pytest.fixture(scope="class")
-    def profiles_config_update(self, dbt_profile_target):
-        return {"default": {**dbt_profile_target, "datasharing": True}}
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
+        }
