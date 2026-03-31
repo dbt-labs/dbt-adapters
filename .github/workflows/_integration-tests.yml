@@ -341,6 +341,7 @@ jobs:
             AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
             AWS_REGION: ${{ vars.AWS_REGION }}
             REDSHIFT_TEST_DBNAME: ${{ vars.REDSHIFT_TEST_DBNAME }}
+            REDSHIFT_TEST_CROSS_DBNAME: ${{ vars.REDSHIFT_TEST_CROSS_DBNAME }}
             REDSHIFT_TEST_PASS: ${{ secrets.REDSHIFT_TEST_PASS }}
             REDSHIFT_TEST_USER: ${{ vars.REDSHIFT_TEST_USER }}
             REDSHIFT_TEST_PORT: ${{ vars.REDSHIFT_TEST_PORT }}

@@ -27,13 +27,14 @@ def relation(database, schema, identifier):
 @pytest.fixture
 def adapter(mocker):
     a = RedshiftAdapter(mocker.MagicMock(), mocker.MagicMock())
-    a.behavior.redshift_use_show_apis._setting = True
+    a.config.credentials.datasharing = True
+    a.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=False)
     return a
 
 
 class TestCalculateFreshnessFromMetadataBatch:
     def test_delegates_to_super_when_show_apis_disabled(self, adapter, mocker):
-        adapter.behavior.redshift_use_show_apis._setting = False
+        adapter.config.credentials.datasharing = False
         super_mock = mocker.patch(
             "dbt.adapters.sql.SQLAdapter.calculate_freshness_from_metadata_batch",
             return_value=([], {}),

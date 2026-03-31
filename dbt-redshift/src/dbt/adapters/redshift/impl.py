@@ -171,7 +171,16 @@ class RedshiftAdapter(SQLAdapter):
         drop_relation() function.
 
         https://docs.aws.amazon.com/redshift/latest/dg/r_DROP_TABLE.html
+
+        Users with no downstream views (no CASCADE side-effects) can opt out
+        of the lock via `allow_concurrent_drops: true` in their profile credentials
+        to allow DROP statements to run in parallel across threads. The DROP
+        still runs inside a fresh transaction context — the lock is the only
+        thing skipped.
         """
+        if self.config.credentials.allow_concurrent_drops:
+            with self.connections.fresh_transaction_without_lock():
+                return super().drop_relation(relation)
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 
@@ -372,7 +381,7 @@ class RedshiftAdapter(SQLAdapter):
         sources: List[BaseRelation],
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
-        if not self.behavior.redshift_use_show_apis.no_warn:
+        if not self.use_show_apis():
             return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
 
         source_lookup = {
