@@ -1,5 +1,4 @@
 from dbt.tests.util import run_dbt
-import pytest
 
 from dbt.tests.adapter.incremental.test_incremental_on_schema_change import (
     BaseIncrementalOnSchemaChange as _BaseOnSchemaChange,
@@ -12,11 +11,9 @@ from tests.functional.adapter.incremental.test_incremental_on_schema_change impo
 from tests.functional.adapter.cross_database.conftest import (
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
-    skip_if_no_cross_db,
 )
 
 
-@skip_if_no_cross_db
 class TestIncrementalCrossDatabaseOnSchemaChange(CrossDatabaseMixin, _BaseOnSchemaChange):
     """Test incremental on_schema_change strategies (ignore, append, sync, fail)
     targeting a cross-database.
@@ -44,7 +41,6 @@ class TestIncrementalCrossDatabaseOnSchemaChange(CrossDatabaseMixin, _BaseOnSche
         assert "Error" in results_two[1].message
 
 
-@skip_if_no_cross_db
 class TestIncrementalCrossDatabaseColumnType(CrossDatabaseMixin, _BaseColumnTypeTest):
     """Test incremental column type changes (varchar expand, int-to-bigint)
     targeting a cross-database.
@@ -70,7 +66,6 @@ class TestIncrementalCrossDatabaseColumnType(CrossDatabaseMixin, _BaseColumnType
         )
 
 
-@skip_if_no_cross_db
 class TestIncrementalCrossDatabaseSpecialChars(CrossDatabaseMixin, _BaseSpecialCharsTest):
     """Test incremental append/sync with special character column names
     targeting a cross-database.

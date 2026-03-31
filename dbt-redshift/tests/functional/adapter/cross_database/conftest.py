@@ -6,10 +6,12 @@ import pytest
 
 REDSHIFT_TEST_CROSS_DBNAME = os.getenv("REDSHIFT_TEST_CROSS_DBNAME", "")
 
-skip_if_no_cross_db = pytest.mark.skipif(
-    not REDSHIFT_TEST_CROSS_DBNAME,
-    reason="REDSHIFT_TEST_CROSS_DBNAME not set — skipping cross-database tests",
-)
+
+@pytest.fixture(autouse=True, scope="session")
+def _skip_without_cross_db():
+    """Skip every test in this directory when the env var is not set."""
+    if not REDSHIFT_TEST_CROSS_DBNAME:
+        pytest.skip("REDSHIFT_TEST_CROSS_DBNAME not set")
 
 
 def assert_cross_db_relation_exists(adapter, schema, identifier):

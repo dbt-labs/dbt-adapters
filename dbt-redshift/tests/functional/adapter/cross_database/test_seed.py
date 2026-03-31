@@ -5,7 +5,6 @@ from tests.functional.adapter.cross_database.conftest import (
     REDSHIFT_TEST_CROSS_DBNAME,
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
-    skip_if_no_cross_db,
 )
 
 
@@ -16,7 +15,6 @@ _SEED_CSV = """id,name,value
 """.lstrip()
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseSeed(CrossDatabaseMixin):
     """Test seeding data into another database."""
 

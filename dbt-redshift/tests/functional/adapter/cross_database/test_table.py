@@ -4,7 +4,6 @@ import pytest
 from tests.functional.adapter.cross_database.conftest import (
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
-    skip_if_no_cross_db,
 )
 
 
@@ -15,7 +14,6 @@ union all select 2, 'Bob'
 """
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseTable(CrossDatabaseMixin):
     """Test creating and recreating a table in another database."""
 

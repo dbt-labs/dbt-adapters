@@ -6,11 +6,9 @@ import pytest
 from tests.functional.adapter.cross_database.conftest import (
     REDSHIFT_TEST_CROSS_DBNAME,
     CrossDatabaseMixin,
-    skip_if_no_cross_db,
 )
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseCatalog(CrossDatabaseMixin):
     """Test that catalog correctly introspects cross-database relations."""
 

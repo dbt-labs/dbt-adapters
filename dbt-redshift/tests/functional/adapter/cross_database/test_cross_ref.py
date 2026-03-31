@@ -5,7 +5,6 @@ from tests.functional.adapter.cross_database.conftest import (
     REDSHIFT_TEST_CROSS_DBNAME,
     CrossDatabaseMixin,
     assert_cross_db_relation_exists,
-    skip_if_no_cross_db,
 )
 
 
@@ -37,7 +36,6 @@ select * from {{ ref('model_in_cross_db') }}
 """
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseForwardRef(CrossDatabaseMixin):
     """Test a table in the cross-database selecting from the connected database.
 
@@ -74,7 +72,6 @@ class TestCrossDatabaseForwardRef(CrossDatabaseMixin):
         )
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseReverseRef(CrossDatabaseMixin):
     """Test a table in the connected database referencing a table in the cross-database.
 
@@ -109,7 +106,6 @@ class TestCrossDatabaseReverseRef(CrossDatabaseMixin):
         assert_cross_db_relation_exists(project.adapter, project.test_schema, "model_in_cross_db")
 
 
-@skip_if_no_cross_db
 class TestCrossDatabaseViewRefFromDefaultDb(CrossDatabaseMixin):
     """Test a view in the default database referencing a table in the cross-database.
 
