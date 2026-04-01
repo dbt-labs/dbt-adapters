@@ -20,8 +20,12 @@
 {#-- Override apply_grants to normalize config before delegating to default --#}
 {% macro redshift__apply_grants(relation, grant_config, should_revoke=True) %}
     {% if grant_config %}
-        {% set normalized_grant_config = redshift__normalize_grants_dict(grant_config) %}
-        {{ default__apply_grants(relation, normalized_grant_config, should_revoke) }}
+        {% if redshift__use_grants_extended() %}
+            {% set normalized_grant_config = redshift__normalize_grants_dict(grant_config) %}
+            {{ default__apply_grants(relation, normalized_grant_config, should_revoke) }}
+        {% else %}
+            {{ default__apply_grants(relation, grant_config, should_revoke) }}
+        {% endif %}
     {% endif %}
 {% endmacro %}
 
@@ -35,7 +39,7 @@
     method in RedshiftAdapter handles this translation.
 -#}
     SHOW GRANTS ON TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
-  {% else %}
+  {% elif redshift__use_grants_extended() %}
 {#-
     Use svv_relation_privileges for same-database grants. This view correctly
     distinguishes users, groups, and roles via the identity_type column.
@@ -50,6 +54,32 @@
     where namespace_name = '{{ relation.schema }}'
       and relation_name = '{{ relation.identifier }}'
       and not (identity_type = 'user' and identity_name = current_user)
+  {% else %}
+{#-
+    Legacy path: query pg_user with has_table_privilege(). Only detects user
+    grants; groups and roles are not visible. Returns a 'grantee' column
+    compatible with the base standardize_grants_dict implementation.
+-#}
+    with privileges as (
+         -- valid options per https://docs.aws.amazon.com/redshift/latest/dg/r_HAS_TABLE_PRIVILEGE.html
+        select 'select' as privilege_type
+        union all
+        select 'insert' as privilege_type
+        union all
+        select 'update' as privilege_type
+        union all
+        select 'delete' as privilege_type
+        union all
+        select 'references' as privilege_type
+    )
+    select
+        u.usename as grantee,
+        p.privilege_type
+    from pg_user u
+    cross join privileges p
+    where has_table_privilege(u.usename, '{{ relation }}', privilege_type)
+        and u.usename != current_user
+        and not u.usesuper
   {% endif %}
 {% endmacro %}
 
@@ -73,12 +103,19 @@
 
 
 {% macro redshift__get_grant_sql(relation, privilege, grantees) %}
-    {%- set formatted_grantees = redshift__format_grantees(grantees) -%}
-    grant {{ privilege }} on {{ relation.render() }} to {{ formatted_grantees | join(', ') }}
+    {% if redshift__use_grants_extended() %}
+        {%- set formatted_grantees = redshift__format_grantees(grantees) -%}
+        grant {{ privilege }} on {{ relation.render() }} to {{ formatted_grantees | join(', ') }}
+    {% else %}
+        {{ default__get_grant_sql(relation, privilege, grantees) }}
+    {% endif %}
 {% endmacro %}
 
-
 {% macro redshift__get_revoke_sql(relation, privilege, grantees) %}
-    {%- set formatted_grantees = redshift__format_grantees(grantees) -%}
-    revoke {{ privilege }} on {{ relation.render() }} from {{ formatted_grantees | join(', ') }}
+    {% if redshift__use_grants_extended() %}
+        {%- set formatted_grantees = redshift__format_grantees(grantees) -%}
+        revoke {{ privilege }} on {{ relation.render() }} from {{ formatted_grantees | join(', ') }}
+    {% else %}
+        {{ default__get_revoke_sql(relation, privilege, grantees) }}
+    {% endif %}
 {% endmacro %}
