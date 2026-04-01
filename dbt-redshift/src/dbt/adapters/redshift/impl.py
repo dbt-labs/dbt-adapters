@@ -349,6 +349,7 @@ class RedshiftAdapter(SQLAdapter):
         """
 
         grants_dict: Dict[str, List[str]] = {}
+        current_user = self.config.credentials.user.lower()
 
         if not self.use_grants_extended():
             if not self.use_show_apis():
@@ -359,7 +360,6 @@ class RedshiftAdapter(SQLAdapter):
                 # no prefix so the config comparison is unchanged from legacy.
                 # Filter to users only and exclude the current dbt runner to
                 # match the pg_user + has_table_privilege() path.
-                current_user = self.config.credentials.user.lower()
                 for row in grants_table:
                     if row["identity_type"].lower() != "user":
                         continue
@@ -385,6 +385,10 @@ class RedshiftAdapter(SQLAdapter):
                 # via GRANT/REVOKE.  Includes datashare roles (ds:*) and
                 # system-defined roles (sys:*).
                 if identity_name.startswith(("ds:", "sys:")):
+                    continue
+                # Skip the dbt runner — matches pg_user and SVV paths which
+                # exclude current_user to avoid spurious REVOKE-self drift.
+                if identity_type == "user" and identity_name.lower() == current_user:
                     continue
                 # SHOW GRANTS reports groups as identity_type='role' with a
                 # '/' prefix on identity_name.  This is undocumented behavior.

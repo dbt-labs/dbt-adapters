@@ -273,6 +273,41 @@ class TestStandardizeGrantsDictShowApi:
         result = adapter.standardize_grants_dict(table)
         assert result == {"select": ["user:alice"]}
 
+    def test_current_user_excluded(self, adapter):
+        """The dbt runner is excluded to avoid spurious REVOKE-self drift."""
+        table = _make_show_grants_table(
+            [
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "101",
+                    "alice",
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+                (
+                    "public",
+                    "t1",
+                    "TABLE",
+                    "SELECT",
+                    "102",
+                    "DBT_RUNNER",  # case variation — filter is case-insensitive
+                    "user",
+                    "f",
+                    "TABLE",
+                    "dev",
+                    "admin",
+                ),
+            ]
+        )
+        result = adapter.standardize_grants_dict(table)
+        assert result == {"select": ["user:alice"]}
+
     def test_empty_table(self, adapter):
         table = _make_show_grants_table([])
         result = adapter.standardize_grants_dict(table)
