@@ -31,3 +31,4 @@ class TestCrossDatabaseTable(CrossDatabaseMixin):
         # Second run — drops and recreates
         results = run_dbt(["run"])
         assert len(results) == 1
+        assert_cross_db_relation_exists(project.adapter, project.test_schema, "cross_db_table")

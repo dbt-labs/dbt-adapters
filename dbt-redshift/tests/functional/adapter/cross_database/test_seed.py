@@ -41,3 +41,4 @@ class TestCrossDatabaseSeed(CrossDatabaseMixin):
         run_dbt(["seed"])
         results = run_dbt(["seed"])
         assert len(results) == 1
+        assert_cross_db_relation_exists(project.adapter, project.test_schema, "cross_db_seed")
