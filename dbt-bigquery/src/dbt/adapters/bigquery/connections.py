@@ -629,10 +629,19 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 job_retry=None,
                 timeout=self._retry.create_job_creation_timeout(),
             )
-        except Conflict:
-            logger.info("Caught 409 Conflict for job_id=%s, recovering via get_job()", job_id)
-            query_job = client.get_job(job_id)
-            logger.info("Job recovered, state: %s", query_job.state)
+        except Conflict as conflict_exc:
+            logger.debug("Caught 409 Conflict for job_id=%s, recovering via get_job()", job_id)
+            try:
+                query_job = client.get_job(
+                    job_id,
+                    timeout=self._retry.create_job_creation_timeout(),
+                )
+            except Exception as get_job_exc:
+                raise DbtRuntimeError(
+                    f"BigQuery job conflict for job_id={job_id}, and failed to "
+                    f"recover existing job via get_job: {get_job_exc}"
+                ) from conflict_exc
+            logger.debug("Job recovered, state: %s", query_job.state)
         if (
             query_job.location is not None
             and query_job.job_id is not None
