@@ -32,11 +32,28 @@ def athena_cursor():
 
 
 class TestAthenaCursorRetry:
-    def test_no_retry_on_query_timeout(self, athena_cursor):
+    def test_retry_on_query_timeout_by_default(self, athena_cursor):
         with patch.object(
             athena_cursor, "_execute", side_effect=OperationalError("Query timeout")
         ):
             with pytest.raises(OperationalError, match="Query timeout"):
+                athena_cursor.execute("SELECT 1")
+            assert athena_cursor._execute.call_count == 3
+
+    def test_no_retry_on_query_timeout_when_skip_enabled(self, athena_cursor):
+        athena_cursor.connection.cursor_kwargs["skip_retry_on_query_timeout"] = True
+        with patch.object(
+            athena_cursor, "_execute", side_effect=OperationalError("Query timeout")
+        ):
+            with pytest.raises(OperationalError, match="Query timeout"):
+                athena_cursor.execute("SELECT 1")
+            assert athena_cursor._execute.call_count == 1
+
+    def test_no_retry_on_query_exhausted_resources(self, athena_cursor):
+        with patch.object(
+            athena_cursor, "_execute", side_effect=OperationalError("Query exhausted resources")
+        ):
+            with pytest.raises(OperationalError, match="Query exhausted resources"):
                 athena_cursor.execute("SELECT 1")
             assert athena_cursor._execute.call_count == 1
 
