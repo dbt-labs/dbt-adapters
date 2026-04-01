@@ -62,6 +62,18 @@ REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
     ),
 )
 
+REDSHIFT_GRANTS_EXTENDED = BehaviorFlag(
+    name="redshift_grants_extended",
+    default=False,
+    description=(
+        "Enable groups and roles support in dbt grants config. "
+        "When enabled, grantee names must use 'user:', 'group:', or 'role:' prefixes. "
+        "Unprefixed entries are treated as users for backward compatibility. "
+        "When disabled (default), the legacy behavior is preserved: all grantees are "
+        "treated as plain usernames and only user grants are detected."
+    ),
+)
+
 CATALOG_COLUMNS = [
     "table_database",
     "table_schema",
@@ -151,6 +163,7 @@ class RedshiftAdapter(SQLAdapter):
         return [
             REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
             REDSHIFT_USE_SHOW_APIS,
+            REDSHIFT_GRANTS_EXTENDED,
         ]
 
     @classmethod
@@ -208,6 +221,11 @@ class RedshiftAdapter(SQLAdapter):
             bool(self.config.credentials.datasharing)
             or self.behavior.redshift_use_show_apis.no_warn
         )
+
+    @available
+    def use_grants_extended(self) -> bool:
+        """Whether to use extended grants support for groups and roles."""
+        return self.behavior.redshift_grants_extended.no_warn
 
     @available
     def verify_database(self, database):
@@ -318,17 +336,42 @@ class RedshiftAdapter(SQLAdapter):
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         """Translate the result of a grants query to match the grants config format.
 
-        When ``datasharing`` is enabled, ``SHOW GRANTS ON TABLE``
-        is used for cross-database support.  SHOW GRANTS conflates groups and
-        roles: groups appear with ``identity_type='role'`` and a ``/`` prefix
-        on ``identity_name`` (e.g. ``/readonly_group``).  This is undocumented
-        Redshift behavior and may change across patches.
+        When ``redshift_grants_extended`` is disabled (default), the legacy
+        behavior is used: grantees are returned as plain names with no
+        ``user:``/``group:``/``role:`` prefixes, and only user grants are
+        detected (groups and roles are invisible to the legacy query).
 
-        When ``datasharing`` is disabled, ``svv_relation_privileges`` is used
-        instead, which correctly reports ``identity_type`` as ``user``,
-        ``group``, or ``role`` but only works within the current database.
+        When ``redshift_grants_extended`` is enabled, grantees are returned
+        with prefixes so that groups and roles can be distinguished and
+        idempotently managed.  ``SHOW GRANTS`` is used for cross-database
+        support when ``datasharing`` is enabled; ``svv_relation_privileges``
+        is used otherwise.
         """
+
         grants_dict: Dict[str, List[str]] = {}
+
+        if not self.use_grants_extended():
+            if not self.use_show_apis():
+                # pg_user query returns a 'grantee' column — delegate to base.
+                return super().standardize_grants_dict(grants_table)
+            else:
+                # SHOW GRANTS returns 'identity_name'; return plain names with
+                # no prefix so the config comparison is unchanged from legacy.
+                # Filter to users only and exclude the current dbt runner to
+                # match the pg_user + has_table_privilege() path.
+                current_user = self.config.credentials.user.lower()
+                for row in grants_table:
+                    if row["identity_type"].lower() != "user":
+                        continue
+                    if row["identity_name"].lower() == current_user:
+                        continue
+                    grantee = row["identity_name"]
+                    privilege = row["privilege_type"].lower()
+                    if privilege in grants_dict:
+                        grants_dict[privilege].append(grantee)
+                    else:
+                        grants_dict[privilege] = [grantee]
+                return grants_dict
 
         if self.use_show_apis():
             # SHOW GRANTS path — need to detect groups from the / prefix
