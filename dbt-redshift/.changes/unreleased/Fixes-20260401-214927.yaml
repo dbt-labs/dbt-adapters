@@ -1,5 +1,5 @@
 kind: Fixes
-body: Revert breaking grants behavior from 1597 behind opt-in flag `redshift_grants_extended` to prevent unintended revocation of externally-managed role grants
+body: Revert breaking grants behavior from 1597 behind opt-in flag `redshift_grants_extended` to prevent unintended revocation of externally-managed role and group grants
 time: 2026-04-01T21:49:27.086576+05:30
 custom:
     Author: tauhid621

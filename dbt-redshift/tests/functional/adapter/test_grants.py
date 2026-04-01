@@ -9,9 +9,9 @@ from dbt.tests.adapter.grants.test_snapshot_grants import BaseSnapshotGrants
 class RedshiftGrantsMixin:
     """Normalize expected grants to use 'user:' prefix for consistent comparison.
 
-    Redshift's get_show_grant_sql returns grantee names with 'user:' or 'group:'
-    prefixes when redshift_grants_extended is enabled. The base test expected
-    dicts use plain usernames, so we normalize them before comparison.
+    Redshift's get_show_grant_sql returns grantee names with 'user:', 'group:',
+    or 'role:' prefixes when redshift_grants_extended is enabled. The base test
+    expected dicts use plain usernames, so we normalize them before comparison.
     """
 
     @pytest.fixture(scope="class")
