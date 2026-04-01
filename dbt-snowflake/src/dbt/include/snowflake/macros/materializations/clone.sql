@@ -23,11 +23,13 @@
 
     {#- Cache miss: query Snowflake directly -#}
     {%- set show_sql -%}
-        show tables like '{{ relation.identifier }}' in {{ relation.database }}.{{ relation.schema }}
+        show tables like '{{ relation.identifier }}' in schema {{ relation.database }}.{{ relation.schema }}
     {%- endset -%}
     {%- set results = run_query(show_sql) -%}
-    {%- if results and results | length > 0 -%}
-        {{ return(results.columns.get('is_iceberg').values()[0] in ('Y', 'YES')) }}
-    {%- endif -%}
+    {%- for row in results -%}
+        {%- if row['name'] == relation.identifier -%}
+            {{ return(row['is_iceberg'] in ('Y', 'YES')) }}
+        {%- endif -%}
+    {%- endfor -%}
     {{ return(false) }}
 {% endmacro %}

@@ -27,6 +27,19 @@ class TestSnowflakeClonePossible(BaseClonePossible):
     pass
 
 
+def copy_state(project_root):
+    state_path = os.path.join(project_root, "state")
+    if not os.path.exists(state_path):
+        os.makedirs(state_path)
+    shutil.copyfile(f"{project_root}/target/manifest.json", f"{project_root}/state/manifest.json")
+
+
+def run_and_save_state(project_root):
+    results = run_dbt(["run"])
+    assert len(results) == 1
+    copy_state(project_root)
+
+
 table_model_1_sql = """
     {{ config(
         materialized='table',
@@ -55,23 +68,9 @@ class TestSnowflakeCloneTrainsentTable:
         outputs["otherschema"]["schema"] = other_schema
         return {"test": {"outputs": outputs, "target": "default"}}
 
-    def copy_state(self, project_root):
-        state_path = os.path.join(project_root, "state")
-        if not os.path.exists(state_path):
-            os.makedirs(state_path)
-        shutil.copyfile(
-            f"{project_root}/target/manifest.json", f"{project_root}/state/manifest.json"
-        )
-
-    def run_and_save_state(self, project_root, with_snapshot=False):
-        results = run_dbt(["run"])
-        assert len(results) == 1
-
-        self.copy_state(project_root)
-
     def test_can_clone_transient_table(self, project, other_schema):
         project.create_test_schema(other_schema)
-        self.run_and_save_state(project.project_root)
+        run_and_save_state(project.project_root)
 
         clone_args = [
             "clone",
@@ -85,13 +84,15 @@ class TestSnowflakeCloneTrainsentTable:
         assert len(results) == 1
 
 
-iceberg_table_model_sql = """
-    {{ config(
+ICEBERG_EXTERNAL_VOLUME = os.getenv("SNOWFLAKE_TEST_ICEBERG_EXTERNAL_VOLUME", "s3_iceberg_snow")
+
+iceberg_table_model_sql = f"""
+    {{{{ config(
         materialized='table',
         table_format='iceberg',
-        external_volume='s3_iceberg_snow',
+        external_volume='{ICEBERG_EXTERNAL_VOLUME}',
         base_location_subpath='clone_test',
-    ) }}
+    ) }}}}
 
     select 1 as id
     """
@@ -115,23 +116,9 @@ class TestSnowflakeCloneIcebergTable:
         outputs["otherschema"]["schema"] = other_schema
         return {"test": {"outputs": outputs, "target": "default"}}
 
-    def copy_state(self, project_root):
-        state_path = os.path.join(project_root, "state")
-        if not os.path.exists(state_path):
-            os.makedirs(state_path)
-        shutil.copyfile(
-            f"{project_root}/target/manifest.json", f"{project_root}/state/manifest.json"
-        )
-
-    def run_and_save_state(self, project_root):
-        results = run_dbt(["run"])
-        assert len(results) == 1
-
-        self.copy_state(project_root)
-
     def test_can_clone_iceberg_table(self, project, other_schema):
         project.create_test_schema(other_schema)
-        self.run_and_save_state(project.project_root)
+        run_and_save_state(project.project_root)
 
         clone_args = [
             "clone",
