@@ -31,7 +31,10 @@ def copy_state(project_root):
     state_path = os.path.join(project_root, "state")
     if not os.path.exists(state_path):
         os.makedirs(state_path)
-    shutil.copyfile(f"{project_root}/target/manifest.json", f"{project_root}/state/manifest.json")
+    shutil.copyfile(
+        os.path.join(project_root, "target", "manifest.json"),
+        os.path.join(project_root, "state", "manifest.json"),
+    )
 
 
 def run_and_save_state(project_root):

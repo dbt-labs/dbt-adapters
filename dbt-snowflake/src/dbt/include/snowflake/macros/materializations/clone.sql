@@ -21,15 +21,5 @@
         {{ return(source_relation.is_iceberg_format) }}
     {%- endif -%}
 
-    {#- Cache miss: query Snowflake directly -#}
-    {%- set show_sql -%}
-        show tables like '{{ relation.identifier }}' in schema {{ relation.database }}.{{ relation.schema }}
-    {%- endset -%}
-    {%- set results = run_query(show_sql) -%}
-    {%- for row in results -%}
-        {%- if row['name'] == relation.identifier -%}
-            {{ return(row['is_iceberg'] in ('Y', 'YES')) }}
-        {%- endif -%}
-    {%- endfor -%}
     {{ return(false) }}
 {% endmacro %}
