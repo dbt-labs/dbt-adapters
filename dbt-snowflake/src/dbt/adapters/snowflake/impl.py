@@ -311,7 +311,11 @@ class SnowflakeAdapter(SQLAdapter):
         from a page of all-table rows and `Text` from a page of all-NULL rows, causing
         agate.Table.merge() to raise "columns with the same names, but different types".
         """
-        return table.cast([(col.name, agate.Text()) for col in table.columns.values()])
+        return agate.Table(
+            [list(row) for row in table.rows],
+            column_names=table.column_names,
+            column_types=[agate.Text()] * len(table.column_names),
+        )
 
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation

@@ -805,6 +805,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
         empty_page = agate.Table(
             [],
             column_names=["rows", "name", "kind"],
+            column_types=[agate.Number(), agate.Text(), agate.Text()],
         )
         normalized = self.adapter._normalize_show_objects_result(empty_page)
         assert len(normalized) == 0
