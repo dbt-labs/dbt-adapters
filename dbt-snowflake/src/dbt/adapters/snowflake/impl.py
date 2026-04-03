@@ -300,6 +300,19 @@ class SnowflakeAdapter(SQLAdapter):
             stats=stats_dict,
         )
 
+    @available
+    def _normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+        """
+        Cast all columns in a SHOW OBJECTS result page to Text so that paginated
+        results have consistent types before merging.
+
+        SHOW OBJECTS returns numeric columns (e.g. `rows`, `bytes`, `retention_time`)
+        for tables, but those same columns are NULL for views.  agate infers `Number`
+        from a page of all-table rows and `Text` from a page of all-NULL rows, causing
+        agate.Table.merge() to raise "columns with the same names, but different types".
+        """
+        return table.cast([(col.name, agate.Text()) for col in table.columns.values()])
+
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:

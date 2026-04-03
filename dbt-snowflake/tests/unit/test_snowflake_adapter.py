@@ -768,6 +768,61 @@ class TestSnowflakeAdapter(unittest.TestCase):
             relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
             assert relation.render() == "test_database.test_schema.test_TABLE"
 
+    def test_normalize_show_objects_result_casts_all_columns_to_text(self):
+        # Simulate a page of SHOW OBJECTS results for tables: numeric `rows`/`bytes`
+        table_page = agate.Table(
+            [(1000, "MY_TABLE", "TABLE")],
+            column_names=["rows", "name", "kind"],
+            column_types=[agate.Number(), agate.Text(), agate.Text()],
+        )
+        # Simulate a page for views: `rows` is None → agate infers Text
+        view_page = agate.Table(
+            [(None, "MY_VIEW", "VIEW")],
+            column_names=["rows", "name", "kind"],
+            column_types=[agate.Text(), agate.Text(), agate.Text()],
+        )
+        # Before normalization the two pages have different types for `rows`,
+        # which would cause agate.Table.merge() to raise.
+        assert type(table_page.columns["rows"].data_type) is not type(
+            view_page.columns["rows"].data_type
+        )
+
+        normalized_table = self.adapter._normalize_show_objects_result(table_page)
+        normalized_view = self.adapter._normalize_show_objects_result(view_page)
+
+        # After normalization all columns should be Text on both pages.
+        for col in normalized_table.columns.values():
+            assert isinstance(col.data_type, agate.Text)
+        for col in normalized_view.columns.values():
+            assert isinstance(col.data_type, agate.Text)
+
+        # The merge should now succeed without raising.
+        merged = normalized_table.merge([normalized_table, normalized_view])
+        assert len(merged) == 2
+
+    def test_normalize_show_objects_result_handles_empty_page(self):
+        # An empty result set (no rows) should normalize without error and stay empty.
+        empty_page = agate.Table(
+            [],
+            column_names=["rows", "name", "kind"],
+        )
+        normalized = self.adapter._normalize_show_objects_result(empty_page)
+        assert len(normalized) == 0
+        for col in normalized.columns.values():
+            assert isinstance(col.data_type, agate.Text)
+
+    def test_normalize_show_objects_result_preserves_numeric_values_as_strings(self):
+        # Numeric column values should survive the cast and be readable as strings.
+        table_page = agate.Table(
+            [(42, 99, "MY_TABLE", "TABLE")],
+            column_names=["rows", "bytes", "name", "kind"],
+            column_types=[agate.Number(), agate.Number(), agate.Text(), agate.Text()],
+        )
+        normalized = self.adapter._normalize_show_objects_result(table_page)
+        assert normalized[0]["rows"] == "42"
+        assert normalized[0]["bytes"] == "99"
+        assert normalized[0]["name"] == "MY_TABLE"
+
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):
