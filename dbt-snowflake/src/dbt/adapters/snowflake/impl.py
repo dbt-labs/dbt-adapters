@@ -301,7 +301,7 @@ class SnowflakeAdapter(SQLAdapter):
         )
 
     @available
-    def _normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+    def normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
         """
         Cast all columns in a SHOW OBJECTS result page to Text so that paginated
         results have consistent types before merging.

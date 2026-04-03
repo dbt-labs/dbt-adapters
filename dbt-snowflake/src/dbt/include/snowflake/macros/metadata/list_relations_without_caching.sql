@@ -34,7 +34,7 @@
 
         {%- set show_objects_sql = snowflake__show_objects_sql(schema, max_results_per_iter, paginated_state.watermark) -%}
         {%- set paginated_result = run_query(show_objects_sql) -%}
-        {%- set paginated_result = adapter._normalize_show_objects_result(paginated_result) -%}
+        {%- set paginated_result = adapter.normalize_show_objects_result(paginated_result) -%}
         {%- do paginated_state.paginated_results.append(paginated_result) -%}
         {%- set paginated_state.watermark = paginated_result.columns.get('name').values()[-1] -%}
 

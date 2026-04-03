@@ -787,8 +787,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
             view_page.columns["rows"].data_type
         )
 
-        normalized_table = self.adapter._normalize_show_objects_result(table_page)
-        normalized_view = self.adapter._normalize_show_objects_result(view_page)
+        normalized_table = self.adapter.normalize_show_objects_result(table_page)
+        normalized_view = self.adapter.normalize_show_objects_result(view_page)
 
         # After normalization all columns should be Text on both pages.
         for col in normalized_table.columns.values():
@@ -807,7 +807,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
             column_names=["rows", "name", "kind"],
             column_types=[agate.Number(), agate.Text(), agate.Text()],
         )
-        normalized = self.adapter._normalize_show_objects_result(empty_page)
+        normalized = self.adapter.normalize_show_objects_result(empty_page)
         assert len(normalized) == 0
         for col in normalized.columns.values():
             assert isinstance(col.data_type, agate.Text)
@@ -819,7 +819,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
             column_names=["rows", "bytes", "name", "kind"],
             column_types=[agate.Number(), agate.Number(), agate.Text(), agate.Text()],
         )
-        normalized = self.adapter._normalize_show_objects_result(table_page)
+        normalized = self.adapter.normalize_show_objects_result(table_page)
         assert normalized[0]["rows"] == "42"
         assert normalized[0]["bytes"] == "99"
         assert normalized[0]["name"] == "MY_TABLE"
