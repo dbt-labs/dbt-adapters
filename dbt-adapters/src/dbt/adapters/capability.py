@@ -24,6 +24,11 @@ class Capability(str, Enum):
     MicrobatchConcurrency = "MicrobatchConcurrency"
     """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
 
+    SqlFunctionParameterColumnShadowing = "SqlFunctionParameterColumnShadowing"
+    """Indicates that the underlying database silently resolves a SQL function parameter to a
+    same-named column when both exist in scope. dbt uses this capability to warn when a SQL function
+    parameter name conflicts with a column name in a referenced model."""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"
