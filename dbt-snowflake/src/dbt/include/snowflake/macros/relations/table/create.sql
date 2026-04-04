@@ -48,6 +48,8 @@
     {%- set compiled_code = get_select_subquery(compiled_code) -%}
 {%- endif -%}
 
+{%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
@@ -56,8 +58,14 @@ create or replace temporary table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
 as (
-    {{ compiled_code }}
-    )
+    {%- if catalog_relation.cluster_by -%}
+        select * from (
+            {{ compiled_code }}
+        ) order by ({{ catalog_relation.cluster_by }})
+    {%- else -%}
+        {{ compiled_code }}
+    {%- endif %}
+)
 ;
 
 {%- endmacro %}
