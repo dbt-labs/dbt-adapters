@@ -73,6 +73,8 @@ jobs:
 
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+              with:
+                  version: "1.16.2"
 
             - name: "Configure AWS profile for upload"
               run: |
