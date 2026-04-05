@@ -1,0 +1,6 @@
+kind: Features
+body: Add source volume checks using INFORMATION_SCHEMA metadata (table, wildcard, partition modes)
+time: 2026-03-13T12:00:00.000000Z
+custom:
+    Author: RRap0so
+    Issue: "1754"

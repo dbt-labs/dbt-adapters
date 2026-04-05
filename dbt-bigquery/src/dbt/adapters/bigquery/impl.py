@@ -50,7 +50,15 @@ from dbt.adapters.base import (
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.impl import (
+    FreshnessResponse,
+    GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+    VOLUME_MACRO_NAME,
+    VOLUME_WILDCARD_MACRO_NAME,
+    VOLUME_PARTITION_MACRO_NAME,
+    VolumeCheckResult,
+    VolumeResponse,
+)
 from dbt.adapters.base.relation import ComponentName
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
@@ -206,6 +214,7 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            Capability.SourceVolumeMetadata: CapabilitySupport(support=Support.Full),
         }
     )
 
@@ -1106,6 +1115,112 @@ class BigQueryAdapter(BaseAdapter):
             freshness_responses[source_relation_for_result] = freshness_response
 
         return adapter_responses, freshness_responses
+
+    def calculate_source_volume(
+        self,
+        source: BaseRelation,
+        warn_below: Optional[int],
+        error_below: Optional[int],
+        **kwargs: Any,
+    ) -> "VolumeResponse":
+        """Calculate row-count volume for a source using BigQuery INFORMATION_SCHEMA metadata."""
+        table_pattern = kwargs.get("table_pattern")
+        partition_field = kwargs.get("partition_field")
+        partition_range = kwargs.get("partition_range", 7)
+
+        if table_pattern:
+            macro_name = VOLUME_WILDCARD_MACRO_NAME
+            macro_kwargs = {
+                "database": source.database,
+                "schema": source.schema,
+                "table_pattern": table_pattern,
+            }
+        elif partition_field:
+            macro_name = VOLUME_PARTITION_MACRO_NAME
+            macro_kwargs = {
+                "database": source.database,
+                "schema": source.schema,
+                "identifier": source.identifier,
+                "partition_field": partition_field,
+                "partition_range": partition_range,
+            }
+        else:
+            macro_name = VOLUME_MACRO_NAME
+            macro_kwargs = {
+                "database": source.database,
+                "schema": source.schema,
+                "identifier": source.identifier,
+            }
+
+        result = self.execute_macro(
+            macro_name,
+            kwargs=macro_kwargs,
+            needs_conn=True,
+        )
+        table = result.table  # type: ignore[attr-defined]
+
+        checked_at = datetime.now(tz=pytz.UTC)
+        if table and len(table) > 0:
+            first_row = table[0]
+            if hasattr(first_row, "checked_at") and first_row.checked_at is not None:
+                checked_at = first_row.checked_at
+
+        results = self._parse_volume_results(table, warn_below=warn_below, error_below=error_below)
+
+        if not results:
+            # No rows returned — table/pattern not found or empty schema.
+            # Treat as error so config mistakes don't silently pass.
+            status = "error"
+        else:
+            status = self._determine_volume_status(results)
+
+        min_rows = min((r["total_rows"] for r in results), default=0)
+
+        return VolumeResponse(
+            results=results,
+            min_rows=min_rows,
+            checked_at=checked_at,
+            status=status,
+        )
+
+    def _parse_volume_results(
+        self,
+        rows: Any,
+        warn_below: Optional[int],
+        error_below: Optional[int],
+    ) -> List[VolumeCheckResult]:
+        """Convert query result rows into a list of VolumeCheckResult dicts."""
+        results: List[VolumeCheckResult] = []
+        for row in rows:
+            total_rows = row.total_rows
+            if total_rows is None:
+                continue
+            entity_name = row.entity_name
+
+            if error_below is not None and total_rows < error_below:
+                status = "error"
+            elif warn_below is not None and total_rows < warn_below:
+                status = "warn"
+            else:
+                status = "pass"
+
+            results.append(
+                VolumeCheckResult(
+                    entity_name=entity_name,
+                    total_rows=total_rows,
+                    status=status,
+                )
+            )
+        return results
+
+    def _determine_volume_status(self, results: List[VolumeCheckResult]) -> str:
+        """Compute the worst aggregate status across all volume check results."""
+        severity = {"pass": 0, "warn": 1, "error": 2}
+        worst = "pass"
+        for r in results:
+            if severity.get(r["status"], 0) > severity[worst]:
+                worst = r["status"]
+        return worst
 
     @available.parse(lambda *a, **k: {})
     def get_common_options(
