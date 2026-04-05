@@ -57,10 +57,12 @@ class TestQueryTimeout:
     @pytest.fixture(scope="class")
     def dbt_profile_target(self, dbt_profile_target):
         """Override profile to add timeout configuration."""
-        dbt_profile_target["query_timeout"] = 1  # 1 second timeout
-        dbt_profile_target["poll_interval"] = 1  # Poll every second for faster test
-        dbt_profile_target["query_retries"] = 0  # Disable retries for clearer errors
-        return dbt_profile_target
+        return {
+            **dbt_profile_target,
+            "query_timeout": 1,
+            "poll_interval": 1,
+            "query_retries": 0,
+        }
 
     def test_query_timeout_exceeded(self, project):
         """Test that queries exceeding timeout raise appropriate error."""
