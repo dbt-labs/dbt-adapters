@@ -175,6 +175,7 @@ class BigqueryConfig(AdapterConfig):
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
+    enable_fine_grained_mutations: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
 
 
@@ -1160,6 +1161,8 @@ class BigQueryAdapter(BaseAdapter):
 
             if config.get("enable_change_history") is not None:
                 opts["enable_change_history"] = config.get("enable_change_history")
+            if config.get("enable_fine_grained_mutations") is not None:
+                opts["enable_fine_grained_mutations"] = config.get("enable_fine_grained_mutations")
 
             relation_config = getattr(config, "model", None)
             if not temporary and (
@@ -1180,6 +1183,10 @@ class BigQueryAdapter(BaseAdapter):
         if config.get("enable_change_history"):
             raise dbt_common.exceptions.DbtRuntimeError(
                 "`enable_change_history` is not supported for views on BigQuery."
+            )
+        if config.get("enable_fine_grained_mutations"):
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "`enable_fine_grained_mutations` is not supported for views on BigQuery."
             )
         return opts
 
