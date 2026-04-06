@@ -1,0 +1,6 @@
+kind: Features
+body: 'merge_select_exclude_columns config to exclude source-only columns from schema comparison and INSERT/UPDATE in merge strategy'
+time: 2026-04-07T00:24:04.858326+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1831"
