@@ -1,0 +1,6 @@
+kind: Fixes
+body: Filter out internal `pg.dropped` phantom columns from `SHOW COLUMNS` results to prevent schema-change errors during cross-database column type alterations
+time: 2026-03-30T17:03:09.343021+05:30
+custom:
+    Author: tauhid621
+    Issue: "1816"
