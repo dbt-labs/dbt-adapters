@@ -106,7 +106,7 @@ class AthenaConfig(AdapterConfig):
         temp_schema: Define in which schema to create temporary tables used in incremental runs.
         build_with_subquery: Use a subquery directly instead of staging data into __dbt_tmp.
             Creates an empty tmp table (WITH NO DATA) for schema comparison, then applies via subquery.
-            Supported for iceberg merge and append strategies. Incompatible with force_batch.
+            Supported for Iceberg merge and append strategies, and Hive append. Incompatible with force_batch.
     """
 
     work_group: Optional[str] = None
