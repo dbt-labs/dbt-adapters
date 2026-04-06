@@ -1,5 +1,5 @@
 """
-Unit tests for merge_select_exclude_columns:
+Unit tests for merge_exclude_source_columns:
 - Verify column filtering in schema change detection
 - Verify generated MERGE SQL excludes specified columns from INSERT/UPDATE
 """
@@ -65,14 +65,15 @@ def _load_patched_on_schema_change_sql():
 def _render_check_for_schema_changes(
     source_columns,
     target_columns,
-    merge_select_exclude_columns=None,
+    merge_exclude_source_columns=None,
     incremental_strategy="merge",
+    table_type="hive",
 ):
     result = {}
 
-    cfg = {"incremental_strategy": incremental_strategy}
-    if merge_select_exclude_columns:
-        cfg["merge_select_exclude_columns"] = merge_select_exclude_columns
+    cfg = {"incremental_strategy": incremental_strategy, "table_type": table_type}
+    if merge_exclude_source_columns:
+        cfg["merge_exclude_source_columns"] = merge_exclude_source_columns
 
     def mock_get_columns(relation):
         if "source" in str(relation):
@@ -122,7 +123,7 @@ class TestCheckForSchemaChanges:
         source = [MockColumn("id"), MockColumn("msg"), MockColumn("_is_deleted")]
         target = [MockColumn("id"), MockColumn("msg")]
         result = _render_check_for_schema_changes(
-            source, target, merge_select_exclude_columns=["_is_deleted"]
+            source, target, merge_exclude_source_columns=["_is_deleted"]
         )
         source_names = [c.column for c in result["source_columns"]]
         assert source_names == ["id", "msg"]
@@ -141,16 +142,28 @@ class TestCheckForSchemaChanges:
         result = _render_check_for_schema_changes(
             source,
             target,
-            merge_select_exclude_columns=["_is_deleted"],
+            merge_exclude_source_columns=["_is_deleted"],
             incremental_strategy="append",
         )
         assert result["schema_changed"] is True
+
+    def test_filtering_for_iceberg_microbatch_strategy(self):
+        source = [MockColumn("id"), MockColumn("msg"), MockColumn("_is_deleted")]
+        target = [MockColumn("id"), MockColumn("msg")]
+        result = _render_check_for_schema_changes(
+            source,
+            target,
+            merge_exclude_source_columns=["_is_deleted"],
+            incremental_strategy="microbatch",
+            table_type="iceberg",
+        )
+        assert result["schema_changed"] is False
 
     def test_case_insensitive_exclude(self):
         source = [MockColumn("id"), MockColumn("msg"), MockColumn("_Is_Deleted")]
         target = [MockColumn("id"), MockColumn("msg")]
         result = _render_check_for_schema_changes(
-            source, target, merge_select_exclude_columns=["_is_deleted"]
+            source, target, merge_exclude_source_columns=["_is_deleted"]
         )
         assert result["schema_changed"] is False
 
@@ -242,7 +255,7 @@ def _render_iceberg_merge(dest_columns, delete_condition=None):
 
 class TestIcebergMergeWithExcludedColumns:
     def test_merge_sql_excludes_column_from_insert_and_update(self):
-        """Simulates merge after merge_select_exclude_columns filtered _is_deleted from dest_columns."""
+        """Simulates merge after merge_exclude_source_columns filtered _is_deleted from dest_columns."""
         dest_columns = [MockColumn("id"), MockColumn("msg")]
         adapter = _render_iceberg_merge(dest_columns, delete_condition="src._is_deleted = true")
         assert _normalize(adapter.last_sql) == (

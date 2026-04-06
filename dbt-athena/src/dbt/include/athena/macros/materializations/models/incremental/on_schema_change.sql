@@ -5,13 +5,15 @@
   {%- set source_columns = adapter.get_columns_in_relation(source_relation) -%}
   {%- set target_columns = adapter.get_columns_in_relation(target_relation) -%}
 
-  {%- set merge_select_exclude_columns = config.get('merge_select_exclude_columns') -%}
+  {%- set merge_exclude_source_columns = config.get('merge_exclude_source_columns') -%}
   {%- set incremental_strategy = config.get('incremental_strategy') -%}
-  {%- if merge_select_exclude_columns and incremental_strategy == 'merge' -%}
-    {%- set merge_select_exclude_lower = merge_select_exclude_columns | map("lower") | list -%}
+  {%- set table_type = config.get('table_type', 'hive') -%}
+  {%- set is_merge_execution = incremental_strategy == 'merge' or (table_type == 'iceberg' and incremental_strategy == 'microbatch') -%}
+  {%- if merge_exclude_source_columns and is_merge_execution -%}
+    {%- set merge_insert_exclude_lower = merge_exclude_source_columns | map("lower") | list -%}
     {%- set filtered_source_columns = [] -%}
     {%- for col in source_columns -%}
-      {%- if col.column | lower not in merge_select_exclude_lower -%}
+      {%- if col.column | lower not in merge_insert_exclude_lower -%}
         {%- do filtered_source_columns.append(col) -%}
       {%- endif -%}
     {%- endfor -%}
@@ -23,11 +25,7 @@
 
   {% set new_target_types = diff_column_data_types(source_columns, target_columns) %}
 
-  {% if source_not_in_target != [] %}
-    {% set schema_changed = True %}
-  {% elif target_not_in_source != [] or new_target_types != [] %}
-    {% set schema_changed = True %}
-  {% elif new_target_types != [] %}
+  {% if source_not_in_target != [] or target_not_in_source != [] or new_target_types != [] %}
     {% set schema_changed = True %}
   {% endif %}
 

@@ -338,13 +338,13 @@ class TestIcebergMergeExcludeAllColumns(BaseMergeExcludeColumns):
         }
 
 
-models__merge_select_exclude_columns_sql = """
+models__merge_exclude_source_columns_sql = """
 {{ config(
     materialized = 'incremental',
     unique_key = 'id',
     incremental_strategy='merge',
     table_type='iceberg',
-    merge_select_exclude_columns=['_is_deleted'],
+    merge_exclude_source_columns=['_is_deleted'],
     on_schema_change='fail',
     delete_condition='src._is_deleted = true'
 ) }}
@@ -366,7 +366,7 @@ select 3 as id, 'new' as msg, false as _is_deleted
 {% endif %}
 """
 
-seeds__expected_merge_select_exclude_columns_csv = """id,msg
+seeds__expected_merge_exclude_source_columns_csv = """id,msg
 1,hey
 3,new
 """
@@ -376,22 +376,22 @@ class TestIcebergMergeSelectExcludeColumns:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "merge_select_exclude_columns.sql": models__merge_select_exclude_columns_sql,
+            "merge_exclude_source_columns.sql": models__merge_exclude_source_columns_sql,
         }
 
     @pytest.fixture(scope="class")
     def seeds(self):
         return {
-            "expected_merge_select_exclude_columns.csv": seeds__expected_merge_select_exclude_columns_csv,
+            "expected_merge_exclude_source_columns.csv": seeds__expected_merge_exclude_source_columns_csv,
         }
 
-    def test__merge_select_exclude_columns(self, project):
-        """merge_select_exclude_columns should be excluded from schema change detection"""
+    def test__merge_exclude_source_columns(self, project):
+        """merge_exclude_source_columns should be excluded from schema change detection"""
 
-        expected_seed_name = "expected_merge_select_exclude_columns"
+        expected_seed_name = "expected_merge_exclude_source_columns"
         run_dbt(["seed", "--select", expected_seed_name, "--full-refresh"])
 
-        relation_name = "merge_select_exclude_columns"
+        relation_name = "merge_exclude_source_columns"
         model_run = run_dbt(["run", "--select", relation_name])
         model_run_result = model_run.results[0]
         assert model_run_result.status == RunStatus.Success
