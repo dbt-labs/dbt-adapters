@@ -2,5 +2,5 @@ kind: Features
 body: Add BaseSnapshotNewColumnTimestampStrategy, BaseSnapshotNewColumnSpecificCheckCols, and BaseSnapshotNewColumnWithDeletes test classes for hard_deletes=new_record snapshot schema evolution
 time: 2026-03-27T16:40:21.850877+05:30
 custom:
-    Author: aahel
-    Issue: "852"
+  Author: aahel
+  Issue: "852"
