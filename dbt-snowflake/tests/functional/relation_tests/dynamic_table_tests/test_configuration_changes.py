@@ -312,6 +312,57 @@ class TestImmutableWhereChanges:
         assert dt_after.target_lag == "5 minutes"
 
 
+class TestImmutableWhereWithClusterByChanges:
+    """Tests for the immutable_where and cluster_by ALTER statements being applied simultaneously."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dynamic_table_imw_cluster.sql": models.DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_NO_CLUSTER,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(
+            project,
+            "dynamic_table_imw_cluster",
+            models.DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_NO_CLUSTER,
+        )
+
+    def test_alter_immutable_where_and_cluster_by_simultaneously(self, project):
+        """Verify immutable_where and cluster_by can be altered simultaneously."""
+        dt_before = describe_dynamic_table(project, "dynamic_table_imw_cluster")
+        assert dt_before.immutable_where == "id < 100"
+        assert dt_before.cluster_by is None
+
+        update_model(
+            project,
+            "dynamic_table_imw_cluster",
+            models.DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_AND_CLUSTER_ALTER,
+        )
+        run_dbt(["run"])
+
+        dt_after = describe_dynamic_table(project, "dynamic_table_imw_cluster")
+        assert dt_after.immutable_where == "id < 50"
+        assert dt_after.cluster_by is not None
+
+
 class TestClusterByChanges:
     """Tests for cluster_by configuration changes."""
 

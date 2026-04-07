@@ -54,7 +54,7 @@
         {% endif %}
 
         {#- Track if we've had any previous ALTER statements for semicolon placement -#}
-        {%- set has_prior_statements = has_set_changes or (snowflake_initialization_warehouse and not snowflake_initialization_warehouse.context) or (immutable_where and not immutable_where.context) -%}
+        {%- set has_prior_statements = has_set_changes or (snowflake_initialization_warehouse and not snowflake_initialization_warehouse.context) or immutable_where -%}
 
         {#- Handle CLUSTER BY changes (add/modify) -#}
         {% if cluster_by and cluster_by.context %}
