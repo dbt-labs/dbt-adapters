@@ -107,34 +107,37 @@ class TestFreshTransactionRetryResilience(TestCase):
     fresh_transaction must restore the flag so commit() does not crash.
     """
 
-    def test_fresh_transaction_no_crash_when_retry_resets_transaction(self):
-        adapter = make_adapter()
+    def _run_fresh_transaction_with_retry(self, extra_credentials=None, use_lock=True):
+        adapter = make_adapter(extra_credentials)
         mgr = adapter.connections
         conn = mock.MagicMock()
-        conn.transaction_open = False
+        conn.transaction_open = True
+
+        def mock_begin():
+            conn.transaction_open = True
+
+        def mock_commit():
+            if conn.transaction_open is False:
+                from dbt_common.exceptions import DbtRuntimeError
+
+                raise DbtRuntimeError("Tried to commit but no open transaction!")
+            conn.transaction_open = False
+
+        ctx = mgr.fresh_transaction if use_lock else mgr.fresh_transaction_without_lock
 
         with (
-            mock.patch.object(mgr, "begin"),
-            mock.patch.object(mgr, "commit"),
+            mock.patch.object(mgr, "begin", side_effect=mock_begin),
+            mock.patch.object(mgr, "commit", side_effect=mock_commit),
             mock.patch.object(mgr, "get_thread_connection", return_value=conn),
         ):
-            with mgr.fresh_transaction():
+            with ctx():
+                # Simulate retry: close/open resets transaction_open
                 conn.transaction_open = False
 
-        self.assertTrue(conn.transaction_open)
+    def test_fresh_transaction_no_crash_when_retry_resets_transaction(self):
+        self._run_fresh_transaction_with_retry()
 
     def test_fresh_transaction_without_lock_no_crash_when_retry_resets_transaction(self):
-        adapter = make_adapter({"allow_concurrent_drops": True})
-        mgr = adapter.connections
-        conn = mock.MagicMock()
-        conn.transaction_open = False
-
-        with (
-            mock.patch.object(mgr, "begin"),
-            mock.patch.object(mgr, "commit"),
-            mock.patch.object(mgr, "get_thread_connection", return_value=conn),
-        ):
-            with mgr.fresh_transaction_without_lock():
-                conn.transaction_open = False
-
-        self.assertTrue(conn.transaction_open)
+        self._run_fresh_transaction_with_retry(
+            extra_credentials={"allow_concurrent_drops": True}, use_lock=False
+        )
