@@ -205,3 +205,94 @@ class PythonUDFEntryPointRequired(PythonUDFRuntimeVersionRequired):
             "An `entry_point` is required for python functions"
             in run_result_error_catcher.caught_events[0].data.msg
         )
+
+
+class SqlUDFDefaultArgSupport(UDFsBasic):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
+        }
+
+    def test_udfs(self, project, sql_event_catcher):
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+        assert len(result.results) == 1
+
+        if not self.expect_default_arg_support:
+            assert "DEFAULT 100" not in sql_event_catcher.caught_events[0].data.sql
+        else:
+            assert "DEFAULT 100" in sql_event_catcher.caught_events[0].data.sql
+
+            result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}()"])
+            assert len(result.results) == 1
+            assert result.results[0].agate_table.rows[0].values()[0] == 200
+
+
+class PythonUDFDefaultArgSupport(SqlUDFDefaultArgSupport):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.py": files.MY_UDF_PYTHON,
+            "price_for_xlarge.yml": files.MY_UDF_PYTHON_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class PythonUDFVolatilitySupport(PythonUDFSupported):
+    def check_function_volatility(self, sql: str):
+        assert "VOLATILE" in sql
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "functions": {"+volatility": "non-deterministic"},
+        }
+
+
+class PythonUDFWithPackagesSupported(PythonUDFSupported):
+    """Verify that when packages are specified for a Python UDF, they are templated into the
+    CREATE statement and the function runs using those packages. Adapters that support Python
+    UDF packages should subclass and override expected_packages_sql_fragment() if their
+    SQL format differs from Snowflake's.
+    """
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sqrt_input.py": files.MY_UDF_PYTHON_WITH_NUMPY,
+            "sqrt_input.yml": files.MY_UDF_PYTHON_WITH_PACKAGES_YML,
+        }
+
+    def is_function_create_event(self, event: EventMsg) -> bool:
+        return (
+            event.data.node_info.node_name == "sqrt_input"
+            and "CREATE OR REPLACE FUNCTION" in event.data.sql
+        )
+
+    def expected_packages_sql_fragment(self) -> str:
+        """Subclass override: SQL snippet that must appear when packages are templated (e.g. Snowflake: PACKAGES = ('numpy'))."""
+        return "PACKAGES = ('numpy')"
+
+    def inline_select_and_expected_result(self):
+        """Subclass override: (inline_sql, expected_value) to run the UDF and assert the result."""
+        return "SELECT {{ function('sqrt_input') }}(4.0)", 2.0
+
+    def test_udfs(self, project, sql_event_catcher):
+        # Build the function and verify packages are templated
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+        assert len(result.results) == 1
+        assert result.results[0].status == RunStatus.Success
+        assert len(sql_event_catcher.caught_events) == 1
+        sql = sql_event_catcher.caught_events[0].data.sql
+        assert self.expected_packages_sql_fragment() in sql
+
+        # Run the function to prove it uses the package (numpy.sqrt(4) -> 2.0)
+        inline_sql, expected = self.inline_select_and_expected_result()
+        result = run_dbt(["show", "--inline", inline_sql])
+        assert len(result.results) == 1
+        got = result.results[0].agate_table.rows[0].values()[0]
+        assert got == expected

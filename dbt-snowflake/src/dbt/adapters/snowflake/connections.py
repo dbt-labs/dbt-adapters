@@ -47,6 +47,7 @@ from dbt_common.exceptions import DbtDatabaseError
 from dbt_common.record import get_record_mode_from_env, RecorderMode
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
+from dbt.adapters.snowflake.adapter_response import SnowflakeAdapterResponse
 from dbt.adapters.sql import SQLConnectionManager
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.events.functions import warn_or_error
@@ -138,13 +139,13 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt"]:
+        if self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]:
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
                         base_msg=(
                             "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth' or 'jwt'."
+                            "not set to 'oauth', 'jwt', or 'programmatic_access_token'."
                         )
                     )
                 )
@@ -155,7 +156,11 @@ class SnowflakeCredentials(Credentials):
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
 
-        self.account = self.account.replace("_", "-")
+        self.account, sub_count = re.subn("_", "-", self.account)
+        if sub_count:
+            logger.debug(
+                "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
+            )
 
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
         # having both of these set to `True` could lead to hanging open connections, so it should be opt-in behavior
@@ -246,6 +251,12 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator == "programmatic_access_token":
+                # Snowflake Programmatic Access Tokens (PATs) are passed directly
+                # to the connector via the `token` field. The connector handles
+                # PAT auth natively since snowflake-connector-python v3.12.0.
+                result["token"] = self.token
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
@@ -465,17 +476,40 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         logger.debug("Cancel query '{}': {}".format(connection_name, res))
 
     @classmethod
-    def get_response(cls, cursor) -> AdapterResponse:
+    def get_response(cls, cursor) -> SnowflakeAdapterResponse:
         code = cursor.sqlstate
 
         if code is None:
             code = "SUCCESS"
         query_id = str(cursor.sfqid) if cursor.sfqid is not None else None
-        return AdapterResponse(
-            _message="{} {}".format(code, cursor.rowcount),
-            rows_affected=cursor.rowcount,
+
+        # Extract DML stats from cursor.stats if available (snowflake-connector-python >= 4.2.0)
+        rows_inserted = None
+        rows_deleted = None
+        rows_updated = None
+        rows_duplicates = None
+        if hasattr(cursor, "stats") and cursor.stats is not None:
+            stats = cursor.stats
+            rows_inserted = getattr(stats, "num_rows_inserted", None)
+            rows_deleted = getattr(stats, "num_rows_deleted", None)
+            rows_updated = getattr(stats, "num_rows_updated", None)
+            rows_duplicates = getattr(stats, "num_dml_duplicates", None)
+
+        # For CTAS and similar operations, rowcount is typically 1 (the success message row)
+        # even when many rows are inserted. Use rows_inserted from stats for accurate reporting.
+        rows_affected = cursor.rowcount
+        if rows_inserted is not None and rows_inserted > 0:
+            rows_affected = rows_inserted
+
+        return SnowflakeAdapterResponse(
+            _message="{} {}".format(code, rows_affected),
+            rows_affected=rows_affected,
             code=code,
             query_id=query_id,
+            rows_inserted=rows_inserted,
+            rows_deleted=rows_deleted,
+            rows_updated=rows_updated,
+            rows_duplicates=rows_duplicates,
         )
 
     # disable transactional logic by default on Snowflake

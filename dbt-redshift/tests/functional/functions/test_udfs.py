@@ -1,5 +1,5 @@
 import pytest
-from dbt.tests.adapter.functions.files import MY_UDF_YML
+from dbt.tests.adapter.functions.files import MY_UDF_YML, MY_UDF_WITH_DEFAULT_ARG_YML
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
     DeterministicUDF,
@@ -7,6 +7,7 @@ from dbt.tests.adapter.functions.test_udfs import (
     NonDeterministicUDF,
     ErrorForUnsupportedType,
     PythonUDFNotSupported,
+    SqlUDFDefaultArgSupport,
 )
 from tests.functional.functions.files import MY_UDF_SQL
 
@@ -63,3 +64,33 @@ class TestRedshiftErrorForUnsupportedType(ErrorForUnsupportedType):
 
 class TestRedshiftPythonUDFNotSupported(PythonUDFNotSupported):
     pass
+
+
+class TestRedshiftDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class TestRedshiftUDFsWithDatasharing(TestRedshiftUDFs):
+    """Same UDF tests with datasharing enabled.
+
+    Exercises metadata queries (get_columns_in_relation) which use SHOW COLUMNS
+    in datasharing mode.
+    """
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
+        }

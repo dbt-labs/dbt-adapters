@@ -8,7 +8,7 @@
 {% macro default__create_columns(relation, columns) %}
   {% for column in columns %}
     {% call statement() %}
-      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.data_type }};
+      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.expanded_data_type }};
     {% endcall %}
   {% endfor %}
 {% endmacro %}
@@ -185,7 +185,7 @@
             {%- if col.name in snapshotted_cols -%}
             snapshotted_data.{{ adapter.quote(col.column) }},
             {%- else -%}
-            NULL as {{ adapter.quote(col.column) }},
+            {{ safe_cast('NULL', col.dtype) }} as {{ adapter.quote(col.column) }},
             {%- endif -%}
             {% endfor -%}
             {%- if strategy.unique_key | is_list -%}

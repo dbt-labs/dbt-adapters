@@ -7,8 +7,9 @@ from unittest import mock
 
 from dbt.adapters.snowflake import SnowflakeAdapter
 from dbt.adapters.snowflake import Plugin as SnowflakePlugin
+from dbt.adapters.snowflake import SnowflakeAdapterResponse
 from dbt.adapters.snowflake.column import SnowflakeColumn
-from dbt.adapters.snowflake.connections import SnowflakeCredentials
+from dbt.adapters.snowflake.connections import SnowflakeCredentials, SnowflakeConnectionManager
 from dbt.contracts.files import FileHash
 from dbt.context.query_header import generate_query_header_context
 from dbt.context.providers import generate_runtime_macro_context
@@ -59,6 +60,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
 
         self.handle = mock.MagicMock(spec=snowflake_connector.SnowflakeConnection)
         self.cursor = self.handle.cursor.return_value
+        self.cursor.stats = None  # Explicitly set to None to avoid MagicMock auto-creation
         self.mock_execute = self.cursor.execute
         self.mock_execute.return_value = mock.MagicMock(sfqid="42")
         self.patcher = mock.patch("dbt.adapters.snowflake.connections.snowflake.connector.connect")
@@ -766,6 +768,74 @@ class TestSnowflakeAdapter(unittest.TestCase):
             relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
             assert relation.render() == "test_database.test_schema.test_TABLE"
 
+    def test_normalize_show_objects_result_fixes_type_mismatch(self):
+        # Simulate the type mismatch that occurs across paginated SHOW OBJECTS pages.
+        # Page 1: tables have numeric `rows` — we construct with Number to simulate this.
+        table_page = agate.Table(
+            [(1000, "MY_TABLE", "TABLE")],
+            column_names=["rows", "name", "kind"],
+            column_types=[agate.Number(), agate.Text(), agate.Text()],
+        )
+        # Page 2: views have NULL `rows` — we construct with Text to simulate the
+        # mismatched type that agate would infer for an all-NULL column.
+        view_page = agate.Table(
+            [(None, "MY_VIEW", "VIEW")],
+            column_names=["rows", "name", "kind"],
+            column_types=[agate.Text(), agate.Text(), agate.Text()],
+        )
+        # Confirm the pre-existing mismatch that would cause merge() to raise.
+        assert type(table_page.columns["rows"].data_type) is not type(
+            view_page.columns["rows"].data_type
+        )
+
+        normalized_table = self.adapter.normalize_show_objects_result(table_page)
+        normalized_view = self.adapter.normalize_show_objects_result(view_page)
+
+        # `rows` is a known numeric column — both pages should now have Number.
+        assert isinstance(normalized_table.columns["rows"].data_type, agate.Number)
+        assert isinstance(normalized_view.columns["rows"].data_type, agate.Number)
+        # Unknown columns default to Text.
+        assert isinstance(normalized_table.columns["name"].data_type, agate.Text)
+        assert isinstance(normalized_table.columns["kind"].data_type, agate.Text)
+
+        # The merge should now succeed without raising.
+        merged = normalized_table.merge([normalized_table, normalized_view])
+        assert len(merged) == 2
+
+    def test_normalize_show_objects_result_handles_empty_page(self):
+        # An empty result set (0 rows) should normalize without error and stay empty.
+        # Without normalization, agate infers all columns as Number on empty pages,
+        # which mismatches non-empty pages and breaks the merge.
+        empty_page = agate.Table(
+            [],
+            column_names=["rows", "name", "kind"],
+            column_types=[agate.Number(), agate.Text(), agate.Text()],
+        )
+        normalized = self.adapter.normalize_show_objects_result(empty_page)
+        assert len(normalized) == 0
+        assert isinstance(normalized.columns["rows"].data_type, agate.Number)
+        assert isinstance(normalized.columns["name"].data_type, agate.Text)
+
+    def test_normalize_show_objects_result_applies_known_column_types(self):
+        # created_on → DateTime, rows/bytes → Number, everything else → Text.
+        table_page = agate.Table(
+            [("2024-01-01 00:00:00", 42, 99, "MY_TABLE", "TABLE")],
+            column_names=["created_on", "rows", "bytes", "name", "kind"],
+            column_types=[
+                agate.Text(),
+                agate.Number(),
+                agate.Number(),
+                agate.Text(),
+                agate.Text(),
+            ],
+        )
+        normalized = self.adapter.normalize_show_objects_result(table_page)
+        assert isinstance(normalized.columns["created_on"].data_type, agate.DateTime)
+        assert isinstance(normalized.columns["rows"].data_type, agate.Number)
+        assert isinstance(normalized.columns["bytes"].data_type, agate.Number)
+        assert isinstance(normalized.columns["name"].data_type, agate.Text)
+        assert isinstance(normalized.columns["kind"].data_type, agate.Text)
+
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):
@@ -1007,6 +1077,67 @@ class TestSnowflakeColumnStructuredTypes(unittest.TestCase):
         assert col.is_array() is False
 
 
+class TestSnowflakeColumnIcebergVarcharNormalization(unittest.TestCase):
+    """
+    Iceberg v3 tables store VARCHAR as VARCHAR(134217728) instead of Snowflake's
+    native VARCHAR(16777216). This causes false schema mismatch errors in structured
+    types during incremental runs. Verify normalization in from_description().
+    See: https://github.com/dbt-labs/dbt-adapters/issues/1721
+    """
+
+    def test_object_iceberg_varchar_normalized(self):
+        col = SnowflakeColumn.from_description(
+            "my_col", "OBJECT(name VARCHAR(134217728), amount NUMBER(38,0))"
+        )
+        assert col.dtype == "OBJECT(name VARCHAR(16777216), amount NUMBER(38,0))"
+
+    def test_object_multiple_iceberg_varchars_normalized(self):
+        col = SnowflakeColumn.from_description(
+            "my_col", "OBJECT(first VARCHAR(134217728), last VARCHAR(134217728))"
+        )
+        assert col.dtype == "OBJECT(first VARCHAR(16777216), last VARCHAR(16777216))"
+
+    def test_array_iceberg_varchar_normalized(self):
+        col = SnowflakeColumn.from_description("my_col", "ARRAY(VARCHAR(134217728) NOT NULL)")
+        assert col.dtype == "ARRAY(VARCHAR(16777216) NOT NULL)"
+
+    def test_map_iceberg_varchar_normalized(self):
+        col = SnowflakeColumn.from_description(
+            "my_col", "MAP(VARCHAR(134217728), VARCHAR(134217728))"
+        )
+        assert col.dtype == "MAP(VARCHAR(16777216), VARCHAR(16777216))"
+
+    def test_object_normal_varchar_unchanged(self):
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(name VARCHAR(100))")
+        assert col.dtype == "OBJECT(name VARCHAR(100))"
+
+    def test_object_snowflake_varchar_unchanged(self):
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(name VARCHAR(16777216))")
+        assert col.dtype == "OBJECT(name VARCHAR(16777216))"
+
+    def test_object_no_varchar_unchanged(self):
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(count NUMBER(38,0))")
+        assert col.dtype == "OBJECT(count NUMBER(38,0))"
+
+    def test_plain_object_unchanged(self):
+        col = SnowflakeColumn.from_description("my_col", "OBJECT")
+        assert col.dtype == "OBJECT"
+
+    def test_iceberg_varchar_case_insensitive(self):
+        col = SnowflakeColumn.from_description("my_col", "OBJECT(name varchar(134217728))")
+        assert col.dtype == "OBJECT(name VARCHAR(16777216))"
+
+    def test_iceberg_vs_snowflake_schema_comparison(self):
+        """The key scenario: columns from Iceberg DESC TABLE vs model definition should match."""
+        iceberg_col = SnowflakeColumn.from_description(
+            "MY_OBJECT_COL", "OBJECT(name VARCHAR(134217728), amount NUMBER(38,0))"
+        )
+        model_col = SnowflakeColumn.from_description(
+            "MY_OBJECT_COL", "OBJECT(name VARCHAR(16777216), amount NUMBER(38,0))"
+        )
+        assert iceberg_col.data_type == model_col.data_type
+
+
 class SnowflakeConnectionsTest(unittest.TestCase):
     def test_comment_stripping_regex(self):
         pattern = r"(\".*?\"|\'.*?\')|(/\*.*?\*/|--[^\r\n]*$)"
@@ -1137,3 +1268,208 @@ class TestSnowflakeAdapterCredentials(unittest.TestCase):
             private_key_path="/tmp/does/not/exist.p8",
         )
         self.assertRaises(FileNotFoundError, creds.auth_args)
+
+
+class TestSnowflakeGetResponse(unittest.TestCase):
+    """Tests for SnowflakeConnectionManager.get_response with cursor.stats support."""
+
+    def test_get_response_with_stats(self):
+        """Test get_response populates stats from cursor.stats for DML operations."""
+        # Create a mock cursor with stats (simulating snowflake-connector-python >= 4.2.0)
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        # Mock stats object (like QueryResultStats from snowflake connector)
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 100
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        # rows_affected uses rows_inserted when available and > 0
+        assert response.rows_affected == 100
+        assert response.query_id == "01abc123-0000-0000-0000-000000000000"
+        assert response.rows_inserted == 100
+        assert response.rows_deleted == 0
+        assert response.rows_updated == 0
+        assert response.rows_duplicates == 0
+
+    def test_get_response_with_stats_none_values(self):
+        """Test get_response when cursor.stats has None values (non-DML operations)."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        # Mock stats object with None values (like for CREATE VIEW)
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = None
+        stats.num_rows_deleted = None
+        stats.num_rows_updated = None
+        stats.num_dml_duplicates = None
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 1
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_without_stats_attribute(self):
+        """Test get_response when cursor doesn't have stats attribute (older connector)."""
+        cursor = mock.MagicMock(spec=["sqlstate", "rowcount", "sfqid"])
+        cursor.sqlstate = None
+        cursor.rowcount = 5
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 5
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_with_stats_none(self):
+        """Test get_response when cursor.stats is None."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 3
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "SUCCESS"
+        assert response.rows_affected == 3
+        assert response.rows_inserted is None
+        assert response.rows_deleted is None
+        assert response.rows_updated is None
+        assert response.rows_duplicates is None
+
+    def test_get_response_with_sqlstate(self):
+        """Test get_response preserves sqlstate code when present."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = "02000"
+        cursor.rowcount = 0
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert isinstance(response, SnowflakeAdapterResponse)
+        assert response.code == "02000"
+        assert str(response) == "02000 0"
+
+    def test_get_response_with_update_stats(self):
+        """Test get_response with UPDATE operation stats."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 50
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 50
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert response.rows_affected == 50
+        assert response.rows_inserted == 0
+        assert response.rows_updated == 50
+        assert response.rows_deleted == 0
+
+    def test_get_response_with_delete_stats(self):
+        """Test get_response with DELETE operation stats."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 25
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0
+        stats.num_rows_deleted = 25
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        assert response.rows_affected == 25
+        assert response.rows_inserted == 0
+        assert response.rows_deleted == 25
+        assert response.rows_updated == 0
+
+    def test_get_response_ctas_uses_rows_inserted(self):
+        """Test get_response uses rows_inserted for rows_affected for CTAS operations."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1  # CTAS returns 1 for rowcount (the success message row)
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 1000
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rows_inserted for accurate reporting
+        assert response.rows_affected == 1000
+        assert response.rows_inserted == 1000
+        assert str(response) == "SUCCESS 1000"
+
+    def test_get_response_uses_rowcount_when_no_rows_inserted(self):
+        """Test get_response uses rowcount when rows_inserted is 0 or None."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 1
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+
+        stats = mock.MagicMock()
+        stats.num_rows_inserted = 0  # No rows inserted
+        stats.num_rows_deleted = 0
+        stats.num_rows_updated = 0
+        stats.num_dml_duplicates = 0
+        cursor.stats = stats
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rowcount when rows_inserted is 0
+        assert response.rows_affected == 1
+        assert response.rows_inserted == 0
+        assert str(response) == "SUCCESS 1"
+
+    def test_get_response_rowcount_when_no_stats(self):
+        """Test get_response uses rowcount when no stats available."""
+        cursor = mock.MagicMock()
+        cursor.sqlstate = None
+        cursor.rowcount = 5
+        cursor.sfqid = "01abc123-0000-0000-0000-000000000000"
+        cursor.stats = None
+
+        response = SnowflakeConnectionManager.get_response(cursor)
+
+        # rows_affected should use rowcount when no stats
+        assert response.rows_affected == 5
+        assert response.rows_inserted is None
+        assert str(response) == "SUCCESS 5"

@@ -8,10 +8,10 @@
     CREATE OR REPLACE AGGREGATE FUNCTION {{ target_relation.render() }} ({{ get_formatted_aggregate_function_args()}})
     RETURNS {{ model.returns.data_type }}
     {{ get_function_language_specifier() }}
+    {{ get_aggregate_function_volatility_specifier() }}
     {% if model.get('language') == 'python' %}
         {{ get_function_python_options() }}
     {% endif %}
-    {{ scalar_function_volatility_sql() }}
     AS
 {% endmacro %}
 
@@ -62,4 +62,8 @@
 {% macro default__get_function_python_options() %}
     RUNTIME_VERSION = '{{ model.config.get('runtime_version') }}'
     HANDLER = '{{ model.config.get('entry_point') }}'
+    {% set packages = model.config.get('packages', []) %}
+    {% if packages %}
+    PACKAGES = ('{{ packages | join("','") }}')
+    {% endif %}
 {% endmacro %}

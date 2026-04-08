@@ -3,7 +3,7 @@ from dbt.contracts.graph.nodes import FunctionNode
 from dbt.contracts.results import RunStatus
 from dbt.events.types import JinjaLogWarning
 from dbt.tests.util import run_dbt
-from dbt.tests.adapter.functions.files import MY_UDF_PYTHON
+from dbt.tests.adapter.functions.files import MY_UDF_PYTHON, MY_UDF_PYTHON_WITH_NUMPY
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
     DeterministicUDF,
@@ -13,6 +13,8 @@ from dbt.tests.adapter.functions.test_udfs import (
     PythonUDFSupported,
     PythonUDFRuntimeVersionRequired,
     PythonUDFEntryPointRequired,
+    SqlUDFDefaultArgSupport,
+    PythonUDFWithPackagesSupported,
 )
 from dbt_common.events.event_catcher import EventCatcher
 from tests.functional.functions import files
@@ -197,3 +199,28 @@ class TestBigqueryPythonUDFEntryPointRequired(PythonUDFEntryPointRequired):
             "price_for_xlarge.py": MY_UDF_PYTHON,
             "price_for_xlarge.yml": files.MY_UDF_YML,
         }
+
+
+class TestBigqueryDefaultArgsSupportSQLUDFs(SqlUDFDefaultArgSupport):
+    expect_default_arg_support = False
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": files.MY_UDF_SQL,
+            "price_for_xlarge.yml": files.MY_UDF_WITH_DEFAULT_ARG_YML,
+        }
+
+
+class TestBigqueryPythonUDFWithPackages(PythonUDFWithPackagesSupported):
+    """Python UDF with packages: BigQuery uses OPTIONS(..., packages = ['numpy'])."""
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sqrt_input.py": MY_UDF_PYTHON_WITH_NUMPY,
+            "sqrt_input.yml": files.MY_UDF_PYTHON_WITH_PACKAGES_YML,
+        }
+
+    def expected_packages_sql_fragment(self) -> str:
+        return "packages = ['numpy']"

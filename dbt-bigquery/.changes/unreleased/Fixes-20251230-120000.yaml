@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix query retries on transient BigQuery errors (503, 500, rate limits) by wrapping
+  query execution with retry logic and adding retry parameter to result fetching
+time: 2025-12-30T12:00:00.000000-08:00
+custom:
+  Author: "dvryaboy"
+  Issue: "941"
