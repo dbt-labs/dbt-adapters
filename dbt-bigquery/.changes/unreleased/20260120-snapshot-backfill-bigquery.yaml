@@ -1,0 +1,6 @@
+kind: Features
+body: Add BigQuery adapter support for snapshot column backfill using MERGE syntax
+time: 2026-01-20T00:00:00.000000000Z
+custom:
+  Author: ""
+  Issue: "1562"

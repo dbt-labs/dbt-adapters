@@ -343,3 +343,150 @@
         {{ identifier }}.dbt_unique_key is not null
     {% endif %}
 {% endmacro %}
+
+
+{#
+    Snapshot Column Backfill Feature
+
+    When new columns are added to a snapshot source, this feature allows backfilling
+    historical rows with current source values. This is gated by a behavior flag
+    (var) and must be explicitly enabled.
+
+    WARNING: Backfilled data represents CURRENT source values, not historical
+    point-in-time values. Users must explicitly opt-in to this behavior.
+#}
+
+{# Check if snapshot column backfill feature is enabled #}
+{% macro snapshot_backfill_enabled() %}
+    {#--
+        Feature is enabled if:
+        1. The behavior flag var is set to true (global enablement)
+        2. AND the snapshot config has backfill_new_columns enabled
+
+        The var acts as a safety gate - even if config is set, the feature
+        won't work unless the var is also enabled.
+    --#}
+    {% set behavior_flag = var('dbt_snapshot_backfill_enabled', false) %}
+    {% set config_enabled = config.get('backfill_new_columns', false) %}
+
+    {# Config can be true, 'source', or a truthy value #}
+    {% set config_is_truthy = config_enabled and config_enabled != 'null' and config_enabled != 'false' %}
+
+    {{ return(behavior_flag and config_is_truthy) }}
+{% endmacro %}
+
+
+{# Get the audit column name if configured #}
+{% macro get_backfill_audit_column() %}
+    {{ return(config.get('backfill_audit_column', none)) }}
+{% endmacro %}
+
+
+{# Build ISO8601 timestamp string for audit JSON #}
+{% macro snapshot_backfill_timestamp() %}
+    {{ adapter.dispatch('snapshot_backfill_timestamp', 'dbt')() }}
+{% endmacro %}
+
+{% macro default__snapshot_backfill_timestamp() %}
+    {#-- Returns current timestamp as ISO8601 string for JSON audit column --#}
+    {{ return("to_char(current_timestamp, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')") }}
+{% endmacro %}
+
+
+{# Build JSON audit string for new columns being backfilled #}
+{% macro build_backfill_audit_json(columns) %}
+    {{ adapter.dispatch('build_backfill_audit_json', 'dbt')(columns) }}
+{% endmacro %}
+
+{% macro default__build_backfill_audit_json(columns) %}
+    {%- set entries = [] -%}
+    {%- for col in columns -%}
+        {%- do entries.append('"' ~ col.name ~ '": "' ~ "' || " ~ snapshot_backfill_timestamp() ~ " || '\"") -%}
+    {%- endfor -%}
+    {{ return("'{" ~ entries | join(', ') ~ "}'") }}
+{% endmacro %}
+
+
+{#
+    Main backfill macro - updates historical rows with current source values
+    and optionally tracks the backfill in an audit JSON column
+#}
+{% macro backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
+    {{ adapter.dispatch('backfill_snapshot_columns', 'dbt')(relation, columns, source_sql, unique_key, audit_column) }}
+{% endmacro %}
+
+{% macro default__backfill_snapshot_columns(relation, columns, source_sql, unique_key, audit_column) %}
+    {%- set column_names = columns | map(attribute='name') | list -%}
+
+    {# Build the JSON string for new columns with timestamps #}
+    {%- set json_entries = [] -%}
+    {%- for col in columns -%}
+        {%- do json_entries.append('"' ~ col.name ~ '": "') -%}
+    {%- endfor -%}
+
+    {% call statement('backfill_snapshot_columns') %}
+    UPDATE {{ relation.render() }} AS dbt_backfill_target
+    SET
+        {%- for col in columns %}
+        {{ adapter.quote(col.name) }} = dbt_backfill_source.{{ adapter.quote(col.name) }}
+        {%- if not loop.last or audit_column %},{% endif %}
+        {%- endfor %}
+        {%- if audit_column %}
+        {{ adapter.quote(audit_column) }} = CASE
+            WHEN dbt_backfill_target.{{ adapter.quote(audit_column) }} IS NULL THEN
+                '{' || {{ backfill_audit_json_entries(columns) }} || '}'
+            ELSE
+                SUBSTRING(dbt_backfill_target.{{ adapter.quote(audit_column) }}, 1, LENGTH(dbt_backfill_target.{{ adapter.quote(audit_column) }}) - 1)
+                || ', ' || {{ backfill_audit_json_entries(columns) }} || '}'
+        END
+        {%- endif %}
+    FROM ({{ source_sql }}) AS dbt_backfill_source
+    WHERE {{ backfill_unique_key_join(unique_key, 'dbt_backfill_target', 'dbt_backfill_source') }}
+    {% endcall %}
+
+    {# Log warning about backfill #}
+    {{ log("WARNING: Backfilling " ~ columns | length ~ " new column(s) [" ~ column_names | join(', ') ~ "] in snapshot '" ~ relation.identifier ~ "'. Historical rows will be populated with CURRENT source values, not point-in-time historical values.", info=true) }}
+{% endmacro %}
+
+
+{# Helper to build JSON entries for audit column #}
+{% macro backfill_audit_json_entries(columns) %}
+    {{ adapter.dispatch('backfill_audit_json_entries', 'dbt')(columns) }}
+{% endmacro %}
+
+{% macro default__backfill_audit_json_entries(columns) %}
+    {%- set entries = [] -%}
+    {%- for col in columns -%}
+        {%- do entries.append("'\"" ~ col.name ~ "\": \"' || " ~ snapshot_backfill_timestamp() ~ " || '\"'") -%}
+    {%- endfor -%}
+    {{ return(entries | join(" || ', ' || ")) }}
+{% endmacro %}
+
+
+{# Helper to build unique key join condition for backfill UPDATE #}
+{% macro backfill_unique_key_join(unique_key, target_alias, source_alias) %}
+    {% if unique_key | is_list %}
+        {% for key in unique_key %}
+            {{ target_alias }}.{{ adapter.quote(key) }} = {{ source_alias }}.{{ adapter.quote(key) }}
+            {%- if not loop.last %} AND {% endif %}
+        {% endfor %}
+    {% else %}
+        {{ target_alias }}.{{ adapter.quote(unique_key) }} = {{ source_alias }}.{{ adapter.quote(unique_key) }}
+    {% endif %}
+{% endmacro %}
+
+
+{# Add audit column to target table if it doesn't exist #}
+{% macro ensure_backfill_audit_column(relation, audit_column) %}
+    {{ adapter.dispatch('ensure_backfill_audit_column', 'dbt')(relation, audit_column) }}
+{% endmacro %}
+
+{% macro default__ensure_backfill_audit_column(relation, audit_column) %}
+    {%- set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute='name') | map('lower') | list -%}
+    {%- if audit_column | lower not in existing_columns -%}
+        {% call statement('add_backfill_audit_column') %}
+            ALTER TABLE {{ relation.render() }} ADD COLUMN {{ adapter.quote(audit_column) }} TEXT;
+        {% endcall %}
+        {{ log("Added backfill audit column '" ~ audit_column ~ "' to snapshot '" ~ relation.identifier ~ "'.", info=true) }}
+    {%- endif -%}
+{% endmacro %}
