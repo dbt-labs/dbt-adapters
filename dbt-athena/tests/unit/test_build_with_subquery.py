@@ -43,24 +43,22 @@ class MockColumn:
         self.data_type = "varchar"
 
 
-def _strip_line_ws(sql):
-    """Strip leading and trailing whitespace from each line. SQL semantics
-    don't depend on indentation outside of string literals, so this lets the
-    expected heredocs ignore Jinja's incidental indentation while still
-    asserting line structure (newlines, ordering, content) exactly."""
-    return "\n".join(line.strip() for line in sql.splitlines())
+def _normalize_sql_lines(sql):
+    """Strip per-line leading/trailing whitespace and drop blank lines. SQL
+    semantics don't depend on indentation or blank lines outside of string
+    literals, so this lets expected heredocs ignore Jinja's incidental
+    whitespace while still asserting line structure (ordering, content) exactly."""
+    return "\n".join(stripped for line in sql.splitlines() if (stripped := line.strip()))
 
 
 def _assert_sql_equal(actual, expected):
-    """Compare SQL line-by-line, ignoring per-line leading/trailing whitespace."""
-    assert _strip_line_ws(actual) == _strip_line_ws(expected)
+    """Compare SQL line-by-line, ignoring per-line whitespace and blank lines."""
+    assert _normalize_sql_lines(actual) == _normalize_sql_lines(expected)
 
 
 _EXPECTED_MERGE_TAIL = """\
     on (target.id = src.id
-
     )
-
     when matched
         then update set"msg" = src."msg","color" = src."color"
     when not matched
