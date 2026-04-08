@@ -98,3 +98,43 @@ class TestDropRelationLock(TestCase):
         self.assertTrue(
             unlocked_txn_called, "fresh_transaction_without_lock() should have been called"
         )
+
+
+class TestFreshTransactionRetryResilience(TestCase):
+    """Regression test for GitHub issue #1698.
+
+    When execute()'s retry resets transaction_open to False during yield,
+    fresh_transaction must restore the flag so commit() does not crash.
+    """
+
+    def test_fresh_transaction_no_crash_when_retry_resets_transaction(self):
+        adapter = make_adapter()
+        mgr = adapter.connections
+        conn = mock.MagicMock()
+        conn.transaction_open = False
+
+        with (
+            mock.patch.object(mgr, "begin"),
+            mock.patch.object(mgr, "commit"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=conn),
+        ):
+            with mgr.fresh_transaction():
+                conn.transaction_open = False
+
+        self.assertTrue(conn.transaction_open)
+
+    def test_fresh_transaction_without_lock_no_crash_when_retry_resets_transaction(self):
+        adapter = make_adapter({"allow_concurrent_drops": True})
+        mgr = adapter.connections
+        conn = mock.MagicMock()
+        conn.transaction_open = False
+
+        with (
+            mock.patch.object(mgr, "begin"),
+            mock.patch.object(mgr, "commit"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=conn),
+        ):
+            with mgr.fresh_transaction_without_lock():
+                conn.transaction_open = False
+
+        self.assertTrue(conn.transaction_open)
