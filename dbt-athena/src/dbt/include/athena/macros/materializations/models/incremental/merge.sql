@@ -146,7 +146,9 @@
     {%- else -%}
       {%- if source_sql is not none -%}
         {%- set src_part -%}
-            merge into {{ target_relation }} as target using ({{ source_sql }}) as src
+            merge into {{ target_relation }} as target using (
+              {{ source_sql }}
+            ) as src
         {%- endset -%}
       {%- else -%}
         {%- set src_part -%}

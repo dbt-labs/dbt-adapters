@@ -71,7 +71,9 @@
             insert into {{ target_relation }} ({{ dest_cols_csv }})
                 (
                    select {{ dest_cols_csv }}
-                   from ({{ source_sql }}) _dbt_sbq
+                   from (
+                     {{ source_sql }}
+                   ) _dbt_sbq
                 );
         {%- endset -%}
       {%- else -%}

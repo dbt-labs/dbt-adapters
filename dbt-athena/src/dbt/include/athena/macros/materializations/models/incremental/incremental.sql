@@ -163,7 +163,7 @@
       {% if old_tmp_relation is not none %}
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
-      {%- set empty_sql = 'SELECT * FROM (' ~ compiled_code ~ ') _dbt_sbq WITH NO DATA' -%}
+      {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
       {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
 
       {% set build_sql = incremental_insert(
@@ -219,7 +219,7 @@
       {% if old_tmp_relation is not none %}
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
-      {%- set empty_sql = 'SELECT * FROM (' ~ compiled_code ~ ') _dbt_sbq WITH NO DATA' -%}
+      {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
       {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
 
       {% set build_sql = iceberg_merge(

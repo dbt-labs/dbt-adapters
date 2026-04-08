@@ -24,6 +24,7 @@ _INCREMENTAL_DIR = os.path.normpath(
         "incremental",
     )
 )
+_INCREMENTAL_SQL_PATH = os.path.join(_INCREMENTAL_DIR, "incremental.sql")
 
 
 class MockRelation:
@@ -165,7 +166,23 @@ class TestIncrementalInsertWithSubquery:
             'insert into db.schema.tbl ("id", "msg", "color")'
             " ( select"
             ' "id", "msg", "color"'
-            " from (SELECT id, msg, color FROM src) _dbt_sbq );"
+            " from ( SELECT id, msg, color FROM src ) _dbt_sbq );"
+        )
+
+    def test_insert_subquery_isolates_trailing_line_comment(self):
+        """A trailing line comment in source_sql must not swallow the closing
+        paren of the subquery wrapper. Full SQL is asserted so any regression
+        in whitespace/newline handling is caught."""
+        source_sql = "SELECT id, msg, color FROM src -- trailing comment"
+        adapter, _ = _render_incremental_insert(source_sql=source_sql)
+        assert adapter.last_sql == (
+            'insert into db.schema.tbl ("id", "msg", "color")\n'
+            "                (\n"
+            '                   select "id", "msg", "color"\n'
+            "                   from (\n"
+            "                     SELECT id, msg, color FROM src -- trailing comment\n"
+            "                   ) _dbt_sbq\n"
+            "                );"
         )
 
     def test_insert_without_subquery_uses_tmp_relation(self):
@@ -207,7 +224,28 @@ class TestIcebergMergeWithSubquery:
         adapter, _ = _render_iceberg_merge(source_sql="SELECT id, msg, color FROM src")
         assert _normalize(adapter.last_sql) == (
             "merge into db.schema.tbl as target"
-            " using (SELECT id, msg, color FROM src) as src" + _EXPECTED_MERGE_CLAUSES
+            " using ( SELECT id, msg, color FROM src ) as src" + _EXPECTED_MERGE_CLAUSES
+        )
+
+    def test_merge_subquery_isolates_trailing_line_comment(self):
+        """A trailing line comment in source_sql must not swallow the closing
+        paren of the subquery wrapper. Full SQL is asserted so any regression
+        in whitespace/newline handling is caught."""
+        source_sql = "SELECT id, msg, color FROM src -- trailing comment"
+        adapter, _ = _render_iceberg_merge(source_sql=source_sql)
+        assert adapter.last_sql == (
+            "merge into db.schema.tbl as target using (\n"
+            "              SELECT id, msg, color FROM src -- trailing comment\n"
+            "            ) as src\n"
+            "          on (target.id = src.id\n"
+            "            \n"
+            "      )\n"
+            "      \n"
+            "      when matched \n"
+            '          then update set"msg" = src."msg","color" = src."color"\n'
+            "      when not matched \n"
+            '        then insert ("id", "msg", "color")\n'
+            '         values (src."id", src."msg", src."color")'
         )
 
     def test_merge_without_subquery_uses_tmp_relation(self):
@@ -229,3 +267,44 @@ class TestIcebergMergeWithSubquery:
     def test_without_subquery_too_many_partitions_falls_back_to_batch(self):
         _, context = _render_iceberg_merge(query_result="TOO_MANY_OPEN_PARTITIONS")
         context["exceptions"].raise_compiler_error.assert_not_called()
+
+
+# --- empty_sql in incremental.sql ---
+
+
+def _render_empty_sql(compiled_code):
+    """Render the same `{% set empty_sql ... %}` Jinja expression that lives in
+    incremental.sql for the build_with_subquery branches. We extract it from the
+    real file so the test catches drift if the line is rewritten."""
+    with open(_INCREMENTAL_SQL_PATH) as f:
+        src = f.read()
+    matches = re.findall(r"\{%-?\s*set\s+empty_sql\s*=.*?-?%\}", src)
+    assert matches, "expected at least one `{% set empty_sql = ... %}` in incremental.sql"
+    rendered = []
+    env = jinja2.Environment(extensions=["jinja2.ext.do"])
+    for fragment in matches:
+        template_src = fragment + "{{ empty_sql }}"
+        rendered.append(env.from_string(template_src).render(compiled_code=compiled_code))
+    return rendered
+
+
+class TestEmptySqlSubqueryWrapping:
+    def test_empty_sql_wraps_compiled_code(self):
+        renderings = _render_empty_sql("SELECT 1 AS id")
+        assert renderings, "no empty_sql fragments rendered"
+        for rendered in renderings:
+            assert rendered == "SELECT * FROM (\nSELECT 1 AS id\n) _dbt_sbq WITH NO DATA"
+
+    def test_empty_sql_isolates_trailing_line_comment(self):
+        """The closing paren of empty_sql must land on a fresh line so a
+        trailing -- line comment in compiled_code cannot comment it out."""
+        compiled_code = "SELECT 1 AS id\n-- trailing comment"
+        renderings = _render_empty_sql(compiled_code)
+        assert renderings, "no empty_sql fragments rendered"
+        for rendered in renderings:
+            assert rendered == (
+                "SELECT * FROM (\n"
+                "SELECT 1 AS id\n"
+                "-- trailing comment\n"
+                ") _dbt_sbq WITH NO DATA"
+            )
