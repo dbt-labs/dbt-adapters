@@ -43,8 +43,29 @@ class MockColumn:
         self.data_type = "varchar"
 
 
-def _normalize(sql):
-    return " ".join(sql.strip().split())
+def _strip_line_ws(sql):
+    """Strip leading and trailing whitespace from each line. SQL semantics
+    don't depend on indentation outside of string literals, so this lets the
+    expected heredocs ignore Jinja's incidental indentation while still
+    asserting line structure (newlines, ordering, content) exactly."""
+    return "\n".join(line.strip() for line in sql.splitlines())
+
+
+def _assert_sql_equal(actual, expected):
+    """Compare SQL line-by-line, ignoring per-line leading/trailing whitespace."""
+    assert _strip_line_ws(actual) == _strip_line_ws(expected)
+
+
+_EXPECTED_MERGE_TAIL = """\
+    on (target.id = src.id
+
+    )
+
+    when matched
+        then update set"msg" = src."msg","color" = src."color"
+    when not matched
+        then insert ("id", "msg", "color")
+        values (src."id", src."msg", src."color")"""
 
 
 class MockAdapter:
@@ -162,11 +183,16 @@ def _render_iceberg_merge(source_sql=None, query_result="OK"):
 class TestIncrementalInsertWithSubquery:
     def test_insert_uses_subquery(self):
         adapter, _ = _render_incremental_insert(source_sql="SELECT id, msg, color FROM src")
-        assert _normalize(adapter.last_sql) == (
-            'insert into db.schema.tbl ("id", "msg", "color")'
-            " ( select"
-            ' "id", "msg", "color"'
-            " from ( SELECT id, msg, color FROM src ) _dbt_sbq );"
+        _assert_sql_equal(
+            adapter.last_sql,
+            """\
+            insert into db.schema.tbl ("id", "msg", "color")
+                (
+                    select "id", "msg", "color"
+                    from (
+                        SELECT id, msg, color FROM src
+                    ) _dbt_sbq
+                );""",
         )
 
     def test_insert_subquery_isolates_trailing_line_comment(self):
@@ -175,23 +201,28 @@ class TestIncrementalInsertWithSubquery:
         in whitespace/newline handling is caught."""
         source_sql = "SELECT id, msg, color FROM src -- trailing comment"
         adapter, _ = _render_incremental_insert(source_sql=source_sql)
-        assert adapter.last_sql == (
-            'insert into db.schema.tbl ("id", "msg", "color")\n'
-            "                (\n"
-            '                   select "id", "msg", "color"\n'
-            "                   from (\n"
-            "                     SELECT id, msg, color FROM src -- trailing comment\n"
-            "                   ) _dbt_sbq\n"
-            "                );"
+        _assert_sql_equal(
+            adapter.last_sql,
+            """\
+            insert into db.schema.tbl ("id", "msg", "color")
+                (
+                    select "id", "msg", "color"
+                    from (
+                        SELECT id, msg, color FROM src -- trailing comment
+                    ) _dbt_sbq
+                );""",
         )
 
     def test_insert_without_subquery_uses_tmp_relation(self):
         adapter, _ = _render_incremental_insert()
-        assert _normalize(adapter.last_sql) == (
-            'insert into db.schema.tbl ("id", "msg", "color")'
-            " ( select"
-            ' "id", "msg", "color"'
-            " from db.schema.tbl__dbt_tmp );"
+        _assert_sql_equal(
+            adapter.last_sql,
+            """\
+            insert into db.schema.tbl ("id", "msg", "color")
+                (
+                    select "id", "msg", "color"
+                    from db.schema.tbl__dbt_tmp
+                );""",
         )
 
     def test_subquery_too_many_partitions_raises_error(self):
@@ -210,21 +241,18 @@ class TestIncrementalInsertWithSubquery:
 
 # --- iceberg_merge ---
 
-_EXPECTED_MERGE_CLAUSES = (
-    " on (target.id = src.id )"
-    " when matched"
-    ' then update set"msg" = src."msg","color" = src."color"'
-    ' when not matched then insert ("id", "msg", "color")'
-    ' values (src."id", src."msg", src."color")'
-)
-
 
 class TestIcebergMergeWithSubquery:
     def test_merge_uses_subquery(self):
         adapter, _ = _render_iceberg_merge(source_sql="SELECT id, msg, color FROM src")
-        assert _normalize(adapter.last_sql) == (
-            "merge into db.schema.tbl as target"
-            " using ( SELECT id, msg, color FROM src ) as src" + _EXPECTED_MERGE_CLAUSES
+        _assert_sql_equal(
+            adapter.last_sql,
+            """\
+            merge into db.schema.tbl as target using (
+                SELECT id, msg, color FROM src
+            ) as src
+            """
+            + _EXPECTED_MERGE_TAIL,
         )
 
     def test_merge_subquery_isolates_trailing_line_comment(self):
@@ -233,26 +261,22 @@ class TestIcebergMergeWithSubquery:
         in whitespace/newline handling is caught."""
         source_sql = "SELECT id, msg, color FROM src -- trailing comment"
         adapter, _ = _render_iceberg_merge(source_sql=source_sql)
-        assert adapter.last_sql == (
-            "merge into db.schema.tbl as target using (\n"
-            "              SELECT id, msg, color FROM src -- trailing comment\n"
-            "            ) as src\n"
-            "          on (target.id = src.id\n"
-            "            \n"
-            "      )\n"
-            "      \n"
-            "      when matched \n"
-            '          then update set"msg" = src."msg","color" = src."color"\n'
-            "      when not matched \n"
-            '        then insert ("id", "msg", "color")\n'
-            '         values (src."id", src."msg", src."color")'
+        _assert_sql_equal(
+            adapter.last_sql,
+            """\
+            merge into db.schema.tbl as target using (
+                SELECT id, msg, color FROM src -- trailing comment
+            ) as src
+            """
+            + _EXPECTED_MERGE_TAIL,
         )
 
     def test_merge_without_subquery_uses_tmp_relation(self):
         adapter, _ = _render_iceberg_merge()
-        assert _normalize(adapter.last_sql) == (
-            "merge into db.schema.tbl as target"
-            " using db.schema.tbl__dbt_tmp as src" + _EXPECTED_MERGE_CLAUSES
+        _assert_sql_equal(
+            adapter.last_sql,
+            "merge into db.schema.tbl as target using db.schema.tbl__dbt_tmp as src\n"
+            + _EXPECTED_MERGE_TAIL,
         )
 
     def test_subquery_too_many_partitions_raises_error(self):
@@ -292,8 +316,12 @@ class TestEmptySqlSubqueryWrapping:
     def test_empty_sql_wraps_compiled_code(self):
         renderings = _render_empty_sql("SELECT 1 AS id")
         assert renderings, "no empty_sql fragments rendered"
+        expected = """\
+            SELECT * FROM (
+                SELECT 1 AS id
+            ) _dbt_sbq WITH NO DATA"""
         for rendered in renderings:
-            assert rendered == "SELECT * FROM (\nSELECT 1 AS id\n) _dbt_sbq WITH NO DATA"
+            _assert_sql_equal(rendered, expected)
 
     def test_empty_sql_isolates_trailing_line_comment(self):
         """The closing paren of empty_sql must land on a fresh line so a
@@ -301,10 +329,10 @@ class TestEmptySqlSubqueryWrapping:
         compiled_code = "SELECT 1 AS id\n-- trailing comment"
         renderings = _render_empty_sql(compiled_code)
         assert renderings, "no empty_sql fragments rendered"
+        expected = """\
+            SELECT * FROM (
+                SELECT 1 AS id
+                -- trailing comment
+            ) _dbt_sbq WITH NO DATA"""
         for rendered in renderings:
-            assert rendered == (
-                "SELECT * FROM (\n"
-                "SELECT 1 AS id\n"
-                "-- trailing comment\n"
-                ") _dbt_sbq WITH NO DATA"
-            )
+            _assert_sql_equal(rendered, expected)
