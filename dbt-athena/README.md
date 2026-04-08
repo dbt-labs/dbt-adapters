@@ -161,6 +161,7 @@ A dbt profile can be configured to run against AWS Athena using the following co
 | spark_work_group      | Identifier of Athena Spark workgroup for running Python models                           | Optional  | `my-spark-workgroup`                       |
 | seed_s3_upload_args   | Dictionary containing boto3 ExtraArgs when uploading to S3                               | Optional  | `{"ACL": "bucket-owner-full-control"}`     |
 | lf_tags_database      | Default LF tags for new database if it's created by dbt                                  | Optional  | `tag_key: tag_value`                       |
+| connection_manager    | Which connection manager implementation to use (use to enable legacy PyAthena mode)      | Optional  | `pyathena`                                 |
 
 **Example profiles.yml entry:**
 
