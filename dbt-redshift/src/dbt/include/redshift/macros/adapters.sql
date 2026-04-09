@@ -138,13 +138,16 @@
   {% set table = load_result('get_columns_in_relation').table %}
   {% set columns = [] %}
   {% for row in table %}
-    {% do columns.append(api.Column(
-      column=row['column_name'],
-      dtype=row['data_type'],
-      char_size=row['character_maximum_length'],
-      numeric_precision=row['numeric_precision'],
-      numeric_scale=row['numeric_scale']
-    )) %}
+    {# filter out Redshift internal pg.dropped markers that can appear after ALTER TABLE DROP COLUMN #}
+    {% if 'pg.dropped.' not in row['column_name'] %}
+      {% do columns.append(api.Column(
+        column=row['column_name'],
+        dtype=row['data_type'],
+        char_size=row['character_maximum_length'],
+        numeric_precision=row['numeric_precision'],
+        numeric_scale=row['numeric_scale']
+      )) %}
+    {% endif %}
   {% endfor %}
   {{ return(columns) }}
 {% endmacro %}
