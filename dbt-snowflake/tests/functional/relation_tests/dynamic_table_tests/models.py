@@ -196,6 +196,44 @@ select * from {{ ref('my_seed') }}
 """
 
 
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_AND_LAG_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 50",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Fixtures for testing that the immutable_where and cluster_by ALTER statements can both be applied simultaneously.
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_NO_CLUSTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 100",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_AND_CLUSTER_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 50",
+    cluster_by="id",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
 # Immutable Where with Jinja variable substitution
 DYNAMIC_TABLE_WITH_IMMUTABLE_WHERE_JINJA = """
 {%- set cutoff_value = var('immutable_cutoff', 100) -%}
