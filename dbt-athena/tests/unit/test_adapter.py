@@ -1337,6 +1337,19 @@ class TestAthenaAdapter:
     def test_format_one_partition_key(self, partition_key, expected_result):
         assert self.adapter.format_one_partition_key(partition_key) == expected_result
 
+    @pytest.mark.parametrize(
+        "partition_key, prefix, expected_result",
+        [
+            ("month(hidden)", "target.", "date_trunc('month', target.hidden)"),
+            ("DAY(date_column)", "target.", "date_trunc('day', target.date_column)"),
+            ("bucket(bucket_col, 10)", "target.", "target.bucket_col"),
+            ("regular_col", "target.", "target.regular_col"),
+            ("year(ts)", "src.", "date_trunc('year', src.ts)"),
+        ],
+    )
+    def test_format_one_partition_key_with_prefix(self, partition_key, prefix, expected_result):
+        assert self.adapter.format_one_partition_key_with_prefix(partition_key, prefix) == expected_result
+
     def test_murmur3_hash_with_int(self):
         bucket_number = self.adapter.murmur3_hash(123, 100)
         assert isinstance(bucket_number, int)

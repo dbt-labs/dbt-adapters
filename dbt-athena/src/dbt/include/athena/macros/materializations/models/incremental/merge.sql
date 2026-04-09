@@ -48,8 +48,32 @@
 {%- endmacro -%}
 
 
-{% macro batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
-    {% set partitions_batches = get_partition_batches(tmp_relation) %}
+{% macro batch_iceberg_merge(tmp_relation, target_relation, merge_on_part, merge_actions_part, dest_cols_csv) %}
+    {%- set merge_with_target_partition_filter = config.get('merge_with_target_partition_filter', False) | as_bool -%}
+    {%- set partitioned_by = config.get('partitioned_by') -%}
+
+    {# Check if bucket partitions exist - skip target filter if so #}
+    {%- set has_bucket = namespace(value=false) -%}
+    {%- if partitioned_by is not none -%}
+        {%- for key in partitioned_by -%}
+            {%- if modules.re.search('bucket\\(', key) -%}
+                {%- set has_bucket.value = true -%}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- endif -%}
+
+    {%- set build_target = merge_with_target_partition_filter
+                           and partitioned_by is not none
+                           and not has_bucket.value -%}
+
+    {%- if build_target -%}
+        {% set batch_result = get_partition_batches(tmp_relation, build_target_conditions=True) %}
+        {% set partitions_batches = batch_result['source'] %}
+        {% set target_partitions_batches = batch_result['target'] %}
+    {%- else -%}
+        {% set partitions_batches = get_partition_batches(tmp_relation) %}
+    {%- endif -%}
+
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
     {%- for batch in partitions_batches -%}
         {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches | length) -%}
@@ -57,10 +81,23 @@
             merge into {{ target_relation }} as target
             using (select {{ dest_cols_csv }} from {{ tmp_relation }} where {{ batch }}) as src
         {%- endset -%}
-        {%- set merge_batch -%}
-          {{ src_batch_part }}
-          {{ merge_part }}
-        {%- endset -%}
+        {%- if build_target -%}
+            {%- set target_filter = target_partitions_batches[loop.index0] -%}
+            {%- set merge_batch -%}
+              {{ src_batch_part }}
+              {{ merge_on_part }}
+              and ({{ target_filter }})
+              )
+              {{ merge_actions_part }}
+            {%- endset -%}
+        {%- else -%}
+            {%- set merge_batch -%}
+              {{ src_batch_part }}
+              {{ merge_on_part }}
+              )
+              {{ merge_actions_part }}
+            {%- endset -%}
+        {%- endif -%}
         {%- do run_query(merge_batch) -%}
     {%- endfor -%}
 {%- endmacro -%}
@@ -106,7 +143,8 @@
     {%- set update_columns = get_merge_update_columns(merge_update_columns, merge_exclude_columns, dest_columns_wo_keys) -%}
     {%- set src_cols_csv = src_columns_quoted | join(', ') -%}
 
-    {%- set merge_part -%}
+    {# Build ON clause without closing paren - batch_iceberg_merge will close it #}
+    {%- set merge_on_part -%}
       on (
           {%- for key in unique_key_cols -%}
             target.{{ key }} = src.{{ key }}
@@ -119,7 +157,10 @@
           {%- endfor %}
           )
           {%- endif %}
-      )
+    {%- endset -%}
+
+    {# Build WHEN clauses separately #}
+    {%- set merge_actions_part -%}
       {% if delete_condition is not none -%}
           when matched and ({{ delete_condition }})
           then delete
@@ -141,20 +182,22 @@
     {%- endset -%}
 
     {%- if force_batch -%}
-      {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
+      {% do batch_iceberg_merge(tmp_relation, target_relation, merge_on_part, merge_actions_part, dest_cols_csv) %}
     {%- else -%}
       {%- set src_part -%}
           merge into {{ target_relation }} as target using {{ tmp_relation }} as src
       {%- endset -%}
       {%- set merge_full -%}
           {{ src_part }}
-          {{ merge_part }}
+          {{ merge_on_part }}
+          )
+          {{ merge_actions_part }}
       {%- endset -%}
 
       {%- set query_result =  adapter.run_query_with_partitions_limit_catching(merge_full) -%}
       {%- do log('QUERY RESULT: ' ~ query_result) -%}
       {%- if query_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
-        {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
+        {% do batch_iceberg_merge(tmp_relation, target_relation, merge_on_part, merge_actions_part, dest_cols_csv) %}
       {%- endif -%}
     {%- endif -%}
 
