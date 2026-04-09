@@ -986,6 +986,53 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         self.assertEqual(expected, actual)
 
 
+class TestGetPseudocolumnsForRelation(BaseTestBigQueryAdapter):
+    def _make_relation(self, identifier="my_table"):
+        relation = MagicMock()
+        relation.database = "my_project"
+        relation.schema = "my_dataset"
+        relation.identifier = identifier
+        return relation
+
+    def test_returns_file_name_for_external_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "EXTERNAL"
+        with patch.object(adapter.connections, "get_bq_table", return_value=mock_table):
+            result = adapter.get_pseudocolumns_for_relation(self._make_relation())
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "_FILE_NAME")
+        self.assertEqual(result[0].dtype, "STRING")
+
+    def test_returns_empty_for_regular_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "TABLE"
+        with patch.object(adapter.connections, "get_bq_table", return_value=mock_table):
+            result = adapter.get_pseudocolumns_for_relation(self._make_relation())
+        self.assertEqual(result, [])
+
+    def test_returns_empty_for_view(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "VIEW"
+        with patch.object(adapter.connections, "get_bq_table", return_value=mock_table):
+            result = adapter.get_pseudocolumns_for_relation(self._make_relation())
+        self.assertEqual(result, [])
+
+    def test_returns_empty_when_table_not_found(self):
+        import google.cloud.exceptions
+
+        adapter = self.get_adapter("oauth")
+        with patch.object(
+            adapter.connections,
+            "get_bq_table",
+            side_effect=google.cloud.exceptions.NotFound("table not found"),
+        ):
+            result = adapter.get_pseudocolumns_for_relation(self._make_relation())
+        self.assertEqual(result, [])
+
+
 class TestBigQueryFilterCatalog(unittest.TestCase):
     def test__catalog_filter_table(self):
         used_schemas = [["a", "B"], ["a", "1234"]]
