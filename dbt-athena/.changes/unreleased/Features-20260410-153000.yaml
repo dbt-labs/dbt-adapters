@@ -1,0 +1,6 @@
+kind: Features
+body: Add merge_with_target_partition_filter config option for batch iceberg merge to enable target-side partition pruning
+time: 2026-04-10T15:30:00.000000+09:00
+custom:
+    Author: bernard-choi
+    Issue: "1801"
