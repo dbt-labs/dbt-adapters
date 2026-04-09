@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
+from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -63,6 +63,7 @@ class SnowflakeConfig(AdapterConfig):
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
@@ -175,12 +176,14 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
-    def _get_warehouse(self) -> str:
+    def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
-            # can this happen?
-            raise DbtRuntimeError("Could not get current warehouse: no results")
-        return str(table[0][0])
+            return None
+        value = table[0][0]
+        if value is None or str(value).upper() == "NULL":
+            return None
+        return str(value)
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
@@ -295,6 +298,33 @@ class SnowflakeAdapter(SQLAdapter):
             metadata=table_metadata,
             columns=catalog_columns,
             stats=stats_dict,
+        )
+
+    # Fixed type map for SHOW OBJECTS columns.  Without this, agate infers types
+    # per-page from the data (e.g. `rows`/`bytes` → Number for table pages but Text
+    # when all-NULL on view-only pages, and everything → Number when the page is
+    # empty), causing agate.Table.merge() to raise
+    # "columns with the same names, but different types".
+    _SHOW_OBJECTS_COLUMN_TYPES: ClassVar[Dict[str, "agate.DataType"]] = {
+        "created_on": agate.DateTime(),
+        "rows": agate.Number(),
+        "bytes": agate.Number(),
+    }
+
+    @available
+    def normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+        """
+        Rebuild a SHOW OBJECTS result page with a fixed column-type schema so that
+        all paginated pages are type-homogeneous before merging.  Known columns are
+        given their natural types; all other columns default to Text.
+        """
+        column_types = [
+            self._SHOW_OBJECTS_COLUMN_TYPES.get(name, agate.Text()) for name in table.column_names
+        ]
+        return agate.Table(
+            [list(row) for row in table.rows],
+            column_names=table.column_names,
+            column_types=column_types,
         )
 
     def list_relations_without_caching(
