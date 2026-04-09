@@ -66,16 +66,22 @@ def _format_partition_keys(partitioned_by):
 
 def _format_one_partition_key(key):
     """Stub for adapter.format_one_partition_key."""
+    hidden = re.search(r"^(hour|day|month|year)\((.+)\)", key, re.IGNORECASE)
     bucket_match = re.search(r"bucket\((.+?),\s*(\d+)\)", key)
-    if bucket_match:
+    if hidden:
+        return f"date_trunc('{hidden.group(1).lower()}', {hidden.group(2)})"
+    elif bucket_match:
         return bucket_match.group(1)
     return f'"{key}"'
 
 
 def _format_one_partition_key_with_prefix(key, prefix):
     """Stub for adapter.format_one_partition_key_with_prefix."""
+    hidden = re.search(r"^(hour|day|month|year)\((.+)\)", key, re.IGNORECASE)
     bucket_match = re.search(r"bucket\((.+?),\s*(\d+)\)", key)
-    if bucket_match:
+    if hidden:
+        return f"date_trunc('{hidden.group(1).lower()}', {prefix}{hidden.group(2)})"
+    elif bucket_match:
         return f"{prefix}{bucket_match.group(1)}"
     return f'{prefix}"{key}"'
 
@@ -371,3 +377,40 @@ class TestBuildTargetConditions:
         )
         assert result["source"] == ["col IN ('a', 'b')"]
         assert result["target"] == []
+
+    def test_target_conditions_hidden_partition(self):
+        """Hidden partition (DAY) should produce date_trunc with target prefix."""
+        result = _render_macro(
+            config={"partitioned_by": ["DAY(date_col)"], "partitions_limit": 100},
+            rows=[["2024-01-01"], ["2024-01-02"]],
+            column_types=["date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "date_trunc('day', date_col)=DATE'2024-01-01' or "
+            "date_trunc('day', date_col)=DATE'2024-01-02'",
+        ]
+        assert result["target"] == [
+            "date_trunc('day', target.date_col)=DATE'2024-01-01' or "
+            "date_trunc('day', target.date_col)=DATE'2024-01-02'",
+        ]
+
+    def test_target_conditions_hidden_partition_multi_col(self):
+        """Hidden partition + plain column combination with target conditions."""
+        result = _render_macro(
+            config={"partitioned_by": ["region", "MONTH(date_col)"], "partitions_limit": 100},
+            rows=[
+                ["us-east-1", "2024-01-01"],
+                ["eu-west-1", "2024-02-01"],
+            ],
+            column_types=["varchar", "date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "\"region\"='us-east-1' and date_trunc('month', date_col)=DATE'2024-01-01' or "
+            "\"region\"='eu-west-1' and date_trunc('month', date_col)=DATE'2024-02-01'",
+        ]
+        assert result["target"] == [
+            "target.\"region\"='us-east-1' and date_trunc('month', target.date_col)=DATE'2024-01-01' or "
+            "target.\"region\"='eu-west-1' and date_trunc('month', target.date_col)=DATE'2024-02-01'",
+        ]
