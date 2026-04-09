@@ -23,6 +23,7 @@ from google.cloud.bigquery import (
     TableReference,
 )
 from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY
+from google.api_core.exceptions import Conflict
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
@@ -620,13 +621,27 @@ class BigQueryConnectionManager(BaseConnectionManager):
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
         # Cannot reuse job_config if destination is set and ddl is used
-        query_job = client.query(
-            query=sql,
-            job_config=query_job_config,
-            job_id=job_id,
-            job_retry=None,
-            timeout=self._retry.create_job_creation_timeout(),
-        )
+        try:
+            query_job = client.query(
+                query=sql,
+                job_config=query_job_config,
+                job_id=job_id,
+                job_retry=None,
+                timeout=self._retry.create_job_creation_timeout(),
+            )
+        except Conflict as conflict_exc:
+            logger.debug("Caught 409 Conflict for job_id=%s, recovering via get_job()", job_id)
+            try:
+                query_job = client.get_job(
+                    job_id,
+                    timeout=self._retry.create_job_creation_timeout(),
+                )
+            except Exception as get_job_exc:
+                raise DbtRuntimeError(
+                    f"BigQuery job conflict for job_id={job_id}, and failed to "
+                    f"recover existing job via get_job: {get_job_exc}"
+                ) from conflict_exc
+            logger.debug("Job recovered, state: %s", query_job.state)
         if (
             query_job.location is not None
             and query_job.job_id is not None
