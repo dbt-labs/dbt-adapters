@@ -3,4 +3,4 @@ body: Fix use_ssl=True SASL incompatibility by importing PureSASLClient from pyh
 time: 2026-04-10T11:59:16.000000+01:00
 custom:
   Author: mblackgeo
-  Issue: "0000"
+  Issue: "1846"
