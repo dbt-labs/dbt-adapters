@@ -113,8 +113,10 @@ class Changes:
     def test_full_refresh_is_always_successful(self, project):
         # this always passes and always changes the configuration, regardless of on_configuration_change
         # and regardless of whether the changes require a replace versus an alter
-        run_dbt(["run", "--full-refresh"])
+        _, logs = run_dbt_and_capture(["--debug", "run", "--full-refresh"])
         self.assert_changes_are_applied(project)
+        assert_message_in_logs("create or replace dynamic table", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
 
 
 class TestChangesApply(Changes):
@@ -124,8 +126,11 @@ class TestChangesApply(Changes):
 
     def test_changes_are_applied(self, project):
         # this passes and changes the configuration
-        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
         self.assert_changes_are_applied(project)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("create or replace dynamic table", logs, expected_pass=False)
 
 
 class TestChangesContinue(Changes):
@@ -538,10 +543,12 @@ class TestTransientChanges:
 
         # Update to non-transient
         update_model(project, "dynamic_table_transient", models.DYNAMIC_TABLE_NON_TRANSIENT)
-        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        # Verify transient was changed (requires full refresh/recreation)
+        # Verify transient was changed via CREATE OR REPLACE (not CREATE OR ALTER)
         assert query_transient_status(project, "dynamic_table_transient") is False
+        assert_message_in_logs("create or replace dynamic table", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
 
 
 class TestNonTransientChanges:
@@ -585,10 +592,12 @@ class TestNonTransientChanges:
 
         # Update to transient
         update_model(project, "dynamic_table_non_transient", models.DYNAMIC_TABLE_TRANSIENT)
-        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        # Verify transient was changed (requires full refresh/recreation)
+        # Verify transient was changed via CREATE OR REPLACE (not CREATE OR ALTER)
         assert query_transient_status(project, "dynamic_table_non_transient") is True
+        assert_message_in_logs("create or replace transient dynamic table", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
 
 
 class TestTransientBehaviorFlagDisabled:
@@ -750,3 +759,259 @@ class TestNoTransientConfigDoesNotRecreateNonTransientTable:
 
         # Table should still be non-transient -- untouched despite flag=ON
         assert query_transient_status(project, "dynamic_table_default") is False
+
+
+class TestSqlOnlyChangeIsNoop:
+    """Changing only the SQL body (query) must NOT trigger CREATE OR ALTER
+    because configuration change detection does not compare the SQL definition."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"dt_sql_only_change.sql": models.DYNAMIC_TABLE}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def test_sql_only_change_is_noop(self, project):
+        fqn = f"{project.database}.{project.test_schema}.dt_sql_only_change"
+        run_dbt(["run", "--full-refresh"])
+
+        # change only the SQL, not the config
+        update_model(project, "dt_sql_only_change", models.DYNAMIC_TABLE_EXTRA_COLUMN)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+        assert_message_in_logs(f"create or replace dynamic table {fqn}", logs, expected_pass=False)
+
+
+class _NoChangeIsNoopBase:
+    """Re-running with identical config must NOT trigger CREATE OR ALTER.
+
+    Subclasses set MODEL_SQL to exercise different cluster_by shapes and catch
+    format mismatches between dbt config and SHOW DYNAMIC TABLES output
+    (e.g. Snowflake wrapping simple columns with LINEAR(...)).
+    """
+
+    MODEL_SQL: str  # override in subclasses
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"dt_no_change.sql": self.MODEL_SQL}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def _assert_no_change(self, dbt_command):
+        run_dbt(["run", "--full-refresh"])
+        _, logs = run_dbt_and_capture(["--debug"] + dbt_command)
+
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+
+    def test_no_change_run_is_noop(self, project):
+        self._assert_no_change(["run"])
+
+    def test_no_change_build_is_noop(self, project):
+        self._assert_no_change(["build"])
+
+
+class TestNoChangeFullConfig(_NoChangeIsNoopBase):
+    """Full config with cluster_by=["HASH(id)", "id"], initialization_warehouse, scheduler."""
+
+    MODEL_SQL = models.DYNAMIC_TABLE_FULL_CONFIG
+
+
+class TestNoChangeClusterBySingleColumn(_NoChangeIsNoopBase):
+    """Single plain column cluster_by — Snowflake wraps it with LINEAR(...)."""
+
+    MODEL_SQL = models.DYNAMIC_TABLE_CLUSTER_BY_SINGLE
+
+
+class TestNoChangeClusterByTwoColumns(_NoChangeIsNoopBase):
+    """Two plain columns cluster_by — Snowflake wraps them with LINEAR(...)."""
+
+    MODEL_SQL = models.DYNAMIC_TABLE_CLUSTER_BY_TWO_COLUMNS
+
+
+class TestIcebergInitializationWarehouseChanges:
+    """Tests for initialization_warehouse ALTER on dynamic iceberg tables."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_init_wh.sql": models.DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "iceberg_init_wh", models.DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE)
+
+    def test_iceberg_create_with_initialization_warehouse(self, project):
+        dt = describe_dynamic_table(project, "iceberg_init_wh")
+        assert dt.snowflake_initialization_warehouse == ALT_WAREHOUSE
+
+    def test_iceberg_unset_initialization_warehouse(self, project):
+        dt_before = describe_dynamic_table(project, "iceberg_init_wh")
+        assert dt_before.snowflake_initialization_warehouse == ALT_WAREHOUSE
+
+        # Remove initialization_warehouse
+        update_model(
+            project, "iceberg_init_wh", models.DYNAMIC_ICEBERG_TABLE_WITHOUT_INIT_WAREHOUSE
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        assert_message_in_logs("alter dynamic table", logs)
+        dt_after = describe_dynamic_table(project, "iceberg_init_wh")
+        assert dt_after.snowflake_initialization_warehouse is None
+
+
+class TestIcebergImmutableWhereChanges:
+    """Tests for immutable_where ALTER on dynamic iceberg tables."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_immutable.sql": models.DYNAMIC_ICEBERG_TABLE_WITH_IMMUTABLE_WHERE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(
+            project, "iceberg_immutable", models.DYNAMIC_ICEBERG_TABLE_WITH_IMMUTABLE_WHERE
+        )
+
+    def test_iceberg_create_with_immutable_where(self, project):
+        dt = describe_dynamic_table(project, "iceberg_immutable")
+        assert dt.immutable_where == "id < 100"
+
+    def test_iceberg_alter_immutable_where(self, project):
+        # Change immutable_where from 'id < 100' to 'id < 50'
+        update_model(
+            project, "iceberg_immutable", models.DYNAMIC_ICEBERG_TABLE_WITH_IMMUTABLE_WHERE_ALTER
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        dt_after = describe_dynamic_table(project, "iceberg_immutable")
+        assert dt_after.immutable_where == "id < 50"
+
+    def test_iceberg_unset_immutable_where(self, project):
+        # Remove immutable_where entirely
+        update_model(
+            project, "iceberg_immutable", models.DYNAMIC_ICEBERG_TABLE_WITHOUT_IMMUTABLE_WHERE
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        dt_after = describe_dynamic_table(project, "iceberg_immutable")
+        assert dt_after.immutable_where is None
+
+
+class TestIcebergClusterByChanges:
+    """Tests for cluster_by ALTER on dynamic iceberg tables."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_cluster.sql": models.DYNAMIC_ICEBERG_TABLE_WITH_CLUSTER_BY,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "iceberg_cluster", models.DYNAMIC_ICEBERG_TABLE_WITH_CLUSTER_BY)
+
+    def test_iceberg_create_with_cluster_by(self, project):
+        dt = describe_dynamic_table(project, "iceberg_cluster")
+        assert dt.cluster_by == "id"
+
+    def test_iceberg_alter_cluster_by(self, project):
+        # Change cluster_by from 'id' to 'value'
+        update_model(
+            project, "iceberg_cluster", models.DYNAMIC_ICEBERG_TABLE_WITH_CLUSTER_BY_ALTER
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        dt_after = describe_dynamic_table(project, "iceberg_cluster")
+        assert dt_after.cluster_by == "value"
+
+    def test_iceberg_drop_cluster_by(self, project):
+        # Remove cluster_by entirely
+        update_model(project, "iceberg_cluster", models.DYNAMIC_ICEBERG_TABLE_WITHOUT_CLUSTER_BY)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        dt_after = describe_dynamic_table(project, "iceberg_cluster")
+        assert dt_after.cluster_by is None
