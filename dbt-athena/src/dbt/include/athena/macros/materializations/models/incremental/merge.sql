@@ -56,7 +56,7 @@
     {%- set has_bucket = namespace(value=false) -%}
     {%- if partitioned_by is not none -%}
         {%- for key in partitioned_by -%}
-            {%- if modules.re.search('bucket\\(', key) -%}
+            {%- if modules.re.search('bucket\\s*\\(', key, modules.re.IGNORECASE) -%}
                 {%- set has_bucket.value = true -%}
             {%- endif -%}
         {%- endfor -%}
