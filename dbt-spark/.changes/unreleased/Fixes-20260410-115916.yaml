@@ -2,5 +2,5 @@ kind: Fixes
 body: Fix use_ssl=True SASL incompatibility by importing PureSASLClient from pyhive.sasl_compat instead of puresasl.client
 time: 2026-04-10T11:59:16.000000+01:00
 custom:
-  Author: mblack-tts
+  Author: mblackgeo
   Issue: "0000"
