@@ -586,7 +586,7 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
-        return self._is_different_database(config.get("database"))
+        return self.use_show_apis() and self._is_different_database(config.get("database"))
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
@@ -604,7 +604,7 @@ class RedshiftAdapter(SQLAdapter):
     @contextmanager
     def _use_database_context(self, relation):
         """Issue USE <database> / RESET USE around cross-database operations."""
-        needs_use = self._is_different_database(relation.database)
+        needs_use = self.use_show_apis() and self._is_different_database(relation.database)
         if needs_use:
             self._use_database(self._normalize_database(str(relation.database)))
         try:
