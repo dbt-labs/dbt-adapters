@@ -1455,6 +1455,22 @@ class AthenaAdapter(SQLAdapter):
             return partition_key.lower()
 
     @available
+    def format_one_partition_key_with_prefix(self, partition_key: str, prefix: str) -> str:
+        """Like format_one_partition_key but prepends prefix to the column name.
+
+        Used to generate target-side partition conditions for MERGE ON clause.
+        e.g. DAY(date_column) with prefix='target.' -> date_trunc('day', target.date_column)
+        """
+        hidden = re.search(r"^(hour|day|month|year)\((.+)\)", partition_key.lower())
+        bucket = re.search(r"bucket\((.+),", partition_key.lower())
+        if hidden:
+            return f"date_trunc('{hidden.group(1)}', {prefix}{hidden.group(2)})"
+        elif bucket:
+            return f"{prefix}{bucket.group(1)}"
+        else:
+            return f"{prefix}{partition_key.lower()}"
+
+    @available
     def murmur3_hash(self, value: Any, num_buckets: int) -> int:
         """
         Computes a hash for the given value using the MurmurHash3 algorithm and returns a bucket number.
