@@ -365,7 +365,7 @@ class TestIcebergUpdateCondition:
         check_relations_equal(project.adapter, [relation_name, expected_seed_name])
 
 
-### Target partition filter tests ###
+# Target partition filter tests
 
 models__target_partition_filter_sql = """
 {{ config(
@@ -494,7 +494,9 @@ class TestIcebergTargetPartitionFilter:
 
     @pytest.fixture(scope="class")
     def seeds(self):
-        return {"expected_target_partition_filter.csv": seeds__expected_target_partition_filter_csv}
+        return {
+            "expected_target_partition_filter.csv": seeds__expected_target_partition_filter_csv
+        }
 
     def test__merge_target_partition_filter(self, project):
         """Target partition filter should produce correct merge results with partition pruning."""

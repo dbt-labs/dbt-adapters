@@ -1348,7 +1348,10 @@ class TestAthenaAdapter:
         ],
     )
     def test_format_one_partition_key_with_prefix(self, partition_key, prefix, expected_result):
-        assert self.adapter.format_one_partition_key_with_prefix(partition_key, prefix) == expected_result
+        assert (
+            self.adapter.format_one_partition_key_with_prefix(partition_key, prefix)
+            == expected_result
+        )
 
     def test_murmur3_hash_with_int(self):
         bucket_number = self.adapter.murmur3_hash(123, 100)

@@ -152,7 +152,9 @@ def _render_macro(config, rows, column_types, build_target_conditions=False):
 
     # Load and render the main macro
     template = env.get_template("get_partition_batches.sql", globals=context)
-    template.module.get_partition_batches(sql="test", build_target_conditions=build_target_conditions)
+    template.module.get_partition_batches(
+        sql="test", build_target_conditions=build_target_conditions
+    )
 
     return result_holder["value"]
 
