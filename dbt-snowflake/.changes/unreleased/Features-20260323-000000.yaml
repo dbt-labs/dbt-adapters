@@ -1,0 +1,6 @@
+kind: Features
+body: Add refresh_warehouse config for Snowflake dynamic tables, allowing a separate warehouse for self-refresh independent of the DDL execution warehouse
+time: 2026-03-23T00:00:00.000000-00:00
+custom:
+    Author: colinrogers
+    Issue: "1193"
