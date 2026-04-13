@@ -10,6 +10,49 @@ from dbt.tests.util import (
 from dbt.adapters.snowflake.relation_configs import SnowflakeDynamicTableConfig
 
 
+def query_change_tracking_from_show_tables(project, name: str) -> str:
+    """
+    Return Snowflake change_tracking for a table as 'ON' or 'OFF' using SHOW TABLES.
+
+    Uses IN SCHEMA IDENTIFIER('DB.SCHEMA') with uppercase database/schema names (dbt
+    creates test schemas as unquoted identifiers → uppercase in Snowflake).
+    """
+    relation = relation_from_name(project.adapter, name)
+    adapter = project.adapter
+    creds = adapter.config.credentials
+    # LIKE '%name%' filters tables (Snowflake LIKE); '_' is a wildcard in LIKE, so we
+    # then pick the row whose "name" column matches the relation exactly.
+    like_pattern = f"%{relation.identifier.upper()}%".replace("'", "''")
+    # dbt creates test schemas as unquoted identifiers → uppercase in Snowflake.
+    db_upper = creds.database.upper()
+    schema_upper = creds.schema.upper()
+    fq_schema_literal = f"{db_upper}.{schema_upper}".replace("'", "''")
+    sql = f"SHOW TABLES LIKE '{like_pattern}' " f"IN SCHEMA IDENTIFIER('{fq_schema_literal}')"
+    with get_connection(adapter) as conn:
+        cursor = conn.handle.cursor()
+        cursor.execute(sql)
+        rows = cursor.fetchall()
+        description = cursor.description
+    assert description is not None
+    col_names = [col[0] for col in description]
+    name_idx = next(
+        (i for i, c in enumerate(col_names) if c and c.lower() == "name"),
+        None,
+    )
+    assert name_idx is not None, f"name column not in SHOW TABLES: {col_names}"
+    target_name = relation.identifier.upper()
+    rows = [r for r in rows if str(r[name_idx]).upper() == target_name]
+    idx = next(
+        (i for i, c in enumerate(col_names) if c and c.lower() == "change_tracking"),
+        None,
+    )
+    assert idx is not None, f"change_tracking column not in SHOW TABLES: {col_names}"
+    assert len(rows) == 1, f"Expected one table for {relation}, got {len(rows)}: {rows}"
+    raw = rows[0][idx]
+    assert raw is not None
+    return str(raw).upper()
+
+
 def query_relation_type(project, name: str) -> Optional[str]:
     relation = relation_from_name(project.adapter, name)
     sql = f"""
