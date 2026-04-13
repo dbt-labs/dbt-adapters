@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from unittest import mock
 
 import jinja2
-import pytest
 
 _VIEW_MACROS_DIR = os.path.normpath(
     os.path.join(
