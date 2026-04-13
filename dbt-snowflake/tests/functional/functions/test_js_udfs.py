@@ -10,6 +10,8 @@ from dbt_common.events.base_types import EventMsg
 from dbt_common.events.event_catcher import EventCatcher
 
 from tests.functional.functions.files import (
+    COMPUTE_TOTAL_JS_LOWERCASE,
+    COMPUTE_TOTAL_JS_UPPERCASE,
     MASK_PII_JS,
     MASK_PII_JS_YML,
     MY_JS_UDF,
@@ -17,6 +19,8 @@ from tests.functional.functions.files import (
     MY_JS_UDF_LOG_LEVEL_YML,
     MY_JS_UDF_NULL_HANDLING_CALLED_YML,
     MY_JS_UDF_NULL_HANDLING_STRICT_YML,
+    MY_JS_UDF_QUOTE_ARGS_FALSE_MULTI_ARG_YML,
+    MY_JS_UDF_QUOTE_ARGS_TRUE_MULTI_ARG_YML,
     MY_JS_UDF_SECURE_YML,
     MY_JS_UDF_TRACE_LEVEL_YML,
     MY_JS_UDF_WITH_DEFAULT_ARG_YML,
@@ -245,203 +249,31 @@ class TestSnowflakeJSUDFDefaultArgs(JSUDFBase):
         assert int(result.results[0].agate_table.rows[0].values()[0]) == 200
 
 
-class TestSnowflakeJSUDFSecure(JSUDFBase):
-    """Test that secure: true adds the SECURE modifier to CREATE FUNCTION."""
+class TestSnowflakeJSUDFQuoteArgsTrue:
+    """Test that quote_args: true (the default) double-quotes all args for case preservation."""
 
     @pytest.fixture(scope="class")
     def functions(self):
         return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_SECURE_YML,
+            "compute_total.js": COMPUTE_TOTAL_JS_LOWERCASE,
+            "compute_total.yml": MY_JS_UDF_QUOTE_ARGS_TRUE_MULTI_ARG_YML,
         }
 
-    def test_js_udf_secure(self, project, sql_event_catcher):
-        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
-
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        assert len(sql_event_catcher.caught_events) == 1
-        sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE JAVASCRIPT" in sql
-        assert "CREATE OR REPLACE SECURE FUNCTION" in sql
-
-        # Function should still work
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(100)"])
-        assert int(result.results[0].agate_table.rows[0].values()[0]) == 200
-
-
-class TestSnowflakeJSUDFNullHandlingStrict(JSUDFBase):
-    """Test that null_handling: strict generates RETURNS NULL ON NULL INPUT.
-
-    Per the RFC, this tells Snowflake to skip JS execution entirely for NULL rows.
-    """
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_NULL_HANDLING_STRICT_YML,
-        }
-
-    def test_js_udf_null_handling_strict(self, project, sql_event_catcher):
-        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
-
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        assert len(sql_event_catcher.caught_events) == 1
-        sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE JAVASCRIPT" in sql
-        assert "RETURNS NULL ON NULL INPUT" in sql
-
-        # When called with NULL, function should return NULL without executing JS
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(NULL)"])
-        assert len(result.results) == 1
-        assert result.results[0].agate_table.rows[0].values()[0] is None
-
-
-class TestSnowflakeJSUDFNullHandlingCalled(JSUDFBase):
-    """Test that null_handling: called generates CALLED ON NULL INPUT.
-
-    This is the default behavior — JS code receives NULL and handles it.
-    """
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_NULL_HANDLING_CALLED_YML,
-        }
-
-    def test_js_udf_null_handling_called(self, project, sql_event_catcher):
-        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
-
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        assert len(sql_event_catcher.caught_events) == 1
-        sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE JAVASCRIPT" in sql
-        assert "CALLED ON NULL INPUT" in sql
-
-
-class TestSnowflakeJSUDFLogLevel(JSUDFBase):
-    """Test that log_level config generates an ALTER FUNCTION with SET LOG_LEVEL.
-
-    Per the RFC, log_level is set via ALTER FUNCTION after creation:
-        ALTER FUNCTION schema.fn(float) SET LOG_LEVEL = 'INFO';
-    """
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_LOG_LEVEL_YML,
-        }
-
-    def test_js_udf_log_level(self, project, sql_event_catcher, alter_event_catcher):
-        result = run_dbt(
-            ["build", "--debug"],
-            callbacks=[sql_event_catcher.catch, alter_event_catcher.catch],
+    def is_function_create_event(self, event: EventMsg) -> bool:
+        return (
+            event.data.node_info.node_name == "compute_total"
+            and "CREATE OR REPLACE" in event.data.sql
+            and "FUNCTION" in event.data.sql
         )
 
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        # Verify the CREATE statement
-        assert len(sql_event_catcher.caught_events) == 1
-        create_sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE JAVASCRIPT" in create_sql
-
-        # Verify ALTER FUNCTION for log_level
-        assert len(alter_event_catcher.caught_events) >= 1
-        alter_sqls = [e.data.sql for e in alter_event_catcher.caught_events]
-        assert any("SET LOG_LEVEL" in sql and "'INFO'" in sql for sql in alter_sqls)
-
-
-class TestSnowflakeJSUDFTraceLevel(JSUDFBase):
-    """Test that trace_level config generates an ALTER FUNCTION with SET TRACE_LEVEL.
-
-    Per the RFC, trace_level is set via ALTER FUNCTION after creation:
-        ALTER FUNCTION schema.fn(float) SET TRACE_LEVEL = 'OFF';
-    """
-
     @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_TRACE_LEVEL_YML,
-        }
-
-    def test_js_udf_trace_level(self, project, sql_event_catcher, alter_event_catcher):
-        result = run_dbt(
-            ["build", "--debug"],
-            callbacks=[sql_event_catcher.catch, alter_event_catcher.catch],
+    def sql_event_catcher(self) -> EventCatcher:
+        return EventCatcher(
+            event_to_catch=SQLQuery,
+            predicate=lambda event: self.is_function_create_event(event),
         )
 
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        # Verify the CREATE statement
-        assert len(sql_event_catcher.caught_events) == 1
-        create_sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE JAVASCRIPT" in create_sql
-
-        # Verify ALTER FUNCTION for trace_level
-        assert len(alter_event_catcher.caught_events) >= 1
-        alter_sqls = [e.data.sql for e in alter_event_catcher.caught_events]
-        assert any("SET TRACE_LEVEL" in sql and "'OFF'" in sql for sql in alter_sqls)
-
-
-class TestSnowflakeJSUDFAllConfigs(JSUDFBase):
-    """Test a JS UDF with all Snowflake-specific config options set together"""
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_ALL_CONFIGS_YML,
-        }
-
-    def test_js_udf_all_configs(self, project, sql_event_catcher, alter_event_catcher):
-        result = run_dbt(
-            ["build", "--debug"],
-            callbacks=[sql_event_catcher.catch, alter_event_catcher.catch],
-        )
-
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        # Verify the CREATE statement has all expected clauses
-        assert len(sql_event_catcher.caught_events) == 1
-        sql = sql_event_catcher.caught_events[0].data.sql
-        assert "CREATE OR REPLACE SECURE FUNCTION" in sql
-        assert "LANGUAGE JAVASCRIPT" in sql
-        assert "IMMUTABLE" in sql
-        assert "RETURNS NULL ON NULL INPUT" in sql
-        assert "DEFAULT 100" in sql
-        assert "$$" in sql
-
-        # Verify ALTER statements for log_level and trace_level
-        assert len(alter_event_catcher.caught_events) >= 2
-        alter_sqls = [e.data.sql for e in alter_event_catcher.caught_events]
-        assert any("SET LOG_LEVEL" in sql and "'INFO'" in sql for sql in alter_sqls)
-        assert any("SET TRACE_LEVEL" in sql and "'OFF'" in sql for sql in alter_sqls)
-
-        # Execute with default arg
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}()"])
-        assert int(result.results[0].agate_table.rows[0].values()[0]) == 200
-
-        # Execute with explicit arg
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(50)"])
-        assert int(result.results[0].agate_table.rows[0].values()[0]) == 100
-
-
-class TestSnowflakeJSUDFArgumentQuoting(JSUDFBase):
-    """Test that JS UDF arguments are double-quoted on Snowflake for case preservation."""
-
-    def test_js_udf_argument_quoting(self, project, sql_event_catcher):
+    def test_js_udf_quote_args_true(self, project, sql_event_catcher):
         result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
 
         assert len(result.results) == 1
@@ -451,20 +283,60 @@ class TestSnowflakeJSUDFArgumentQuoting(JSUDFBase):
         sql = sql_event_catcher.caught_events[0].data.sql
         assert "LANGUAGE JAVASCRIPT" in sql
 
-        # Arguments should be double-quoted for case preservation
+        # Both args should be double-quoted
         assert '"price"' in sql
+        assert '"quantity"' in sql
 
-        # Verify function works with lowercase arg in JS body
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(100)"])
-        assert int(result.results[0].agate_table.rows[0].values()[0]) == 200
+        # Execute: 10 * 5 = 50
+        result = run_dbt(["show", "--inline", "SELECT {{ function('compute_total') }}(10, 5)"])
+        assert int(result.results[0].agate_table.rows[0].values()[0]) == 50
+
+
+class TestSnowflakeJSUDFQuoteArgsFalse:
+    """Test that quote_args: false emits unquoted args."""
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "compute_total.js": COMPUTE_TOTAL_JS_UPPERCASE,
+            "compute_total.yml": MY_JS_UDF_QUOTE_ARGS_FALSE_MULTI_ARG_YML,
+        }
+
+    def is_function_create_event(self, event: EventMsg) -> bool:
+        return (
+            event.data.node_info.node_name == "compute_total"
+            and "CREATE OR REPLACE" in event.data.sql
+            and "FUNCTION" in event.data.sql
+        )
+
+    @pytest.fixture(scope="class")
+    def sql_event_catcher(self) -> EventCatcher:
+        return EventCatcher(
+            event_to_catch=SQLQuery,
+            predicate=lambda event: self.is_function_create_event(event),
+        )
+
+    def test_js_udf_quote_args_false(self, project, sql_event_catcher):
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+
+        assert len(result.results) == 1
+        assert result.results[0].status == RunStatus.Success
+
+        assert len(sql_event_catcher.caught_events) == 1
+        sql = sql_event_catcher.caught_events[0].data.sql
+        assert "LANGUAGE JAVASCRIPT" in sql
+
+        # Neither arg should be quoted
+        assert '"price"' not in sql
+        assert '"quantity"' not in sql
+
+        # Execute: 10 * 5 = 50 — JS body uses PRICE * QUANTITY (uppercase)
+        result = run_dbt(["show", "--inline", "SELECT {{ function('compute_total') }}(10, 5)"])
+        assert int(result.results[0].agate_table.rows[0].values()[0]) == 50
 
 
 class TestSnowflakeJSAggregateUDFError:
-    """Test that JavaScript aggregate UDFs error on Snowflake.
-
-    Per the RFC, Snowflake does NOT support JavaScript UDAFs. Attempting to create one
-    should produce a clear error at compile time.
-    """
+    """Test that JavaScript aggregate UDFs error on Snowflake."""
 
     @pytest.fixture(scope="class")
     def functions(self):

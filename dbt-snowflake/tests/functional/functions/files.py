@@ -121,6 +121,46 @@ functions:
       data_type: float
 """
 
+MY_JS_UDF_QUOTE_ARGS_FALSE_MULTI_ARG_YML = """
+functions:
+  - name: compute_total
+    description: Multiplies price by quantity
+    config:
+      snowflake:
+        quote_args: false
+    arguments:
+      - name: price
+        data_type: float
+      - name: quantity
+        data_type: float
+    returns:
+      data_type: float
+"""
+
+MY_JS_UDF_QUOTE_ARGS_TRUE_MULTI_ARG_YML = """
+functions:
+  - name: compute_total
+    description: Multiplies price by quantity
+    config:
+      snowflake:
+        quote_args: true
+    arguments:
+      - name: price
+        data_type: float
+      - name: quantity
+        data_type: float
+    returns:
+      data_type: float
+"""
+
+COMPUTE_TOTAL_JS_LOWERCASE = """
+return price * quantity;
+""".strip()
+
+COMPUTE_TOTAL_JS_UPPERCASE = """
+return PRICE * QUANTITY;
+""".strip()
+
 MASK_PII_JS = """
 if (value === null || value === undefined) {
     return null;
