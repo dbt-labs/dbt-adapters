@@ -138,13 +138,16 @@
   {% set table = load_result('get_columns_in_relation').table %}
   {% set columns = [] %}
   {% for row in table %}
-    {% do columns.append(api.Column(
-      column=row['column_name'],
-      dtype=row['data_type'],
-      char_size=row['character_maximum_length'],
-      numeric_precision=row['numeric_precision'],
-      numeric_scale=row['numeric_scale']
-    )) %}
+    {# filter out Redshift internal pg.dropped markers that can appear after ALTER TABLE DROP COLUMN #}
+    {% if 'pg.dropped.' not in row['column_name'] %}
+      {% do columns.append(api.Column(
+        column=row['column_name'],
+        dtype=row['data_type'],
+        char_size=row['character_maximum_length'],
+        numeric_precision=row['numeric_precision'],
+        numeric_scale=row['numeric_scale']
+      )) %}
+    {% endif %}
   {% endfor %}
   {{ return(columns) }}
 {% endmacro %}
@@ -347,7 +350,12 @@
   {# Override: do not set column comments for LBVs #}
   {% set is_lbv = relation.type == 'view' and config.get('bind') == false %}
   {% if for_columns and config.persist_column_docs() and model.columns and not is_lbv %}
-    {% do run_query(alter_column_comment(relation, model.columns)) %}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% set filtered_columns = validate_doc_columns(relation, model.columns, existing_columns) %}
+    {% set alter_comment_sql = alter_column_comment(relation, filtered_columns) %}
+    {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
+      {% do run_query(alter_comment_sql) %}
+    {% endif %}
   {% endif %}
 {% endmacro %}
 
@@ -424,4 +432,12 @@
 
   {% endif %}
 
+{% endmacro %}
+
+
+{% macro redshift__show_tables_from_schema(database, schema) %}
+    {%- call statement('show_tables', fetch_result=True) -%}
+        SHOW TABLES FROM SCHEMA {{ database }}.{{ schema }}
+    {%- endcall -%}
+    {{ return(load_result('show_tables')) }}
 {% endmacro %}
