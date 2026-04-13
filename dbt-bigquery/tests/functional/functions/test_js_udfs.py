@@ -62,6 +62,9 @@ class TestBigQueryBasicJSUDF(JSUDFBase):
         sql = sql_event_catcher.caught_events[0].data.sql
         assert "LANGUAGE js" in sql
 
+        # Verify body is wrapped in r'''...''' delimiters (BigQuery raw string)
+        assert "r'''" in sql
+
         # Verify no volatility clause by default
         assert "DETERMINISTIC" not in sql
         assert "NOT DETERMINISTIC" not in sql
@@ -208,11 +211,17 @@ class TestBigQueryJSUDFDefaultArgsNotSupported(JSUDFBase):
     def test_js_udf_default_args_not_supported(self, project, sql_event_catcher):
         result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
         assert len(result.results) == 1
+        assert result.results[0].status == RunStatus.Success
 
         # BigQuery doesn't support default args — DEFAULT should not appear in SQL
         assert len(sql_event_catcher.caught_events) == 1
         sql = sql_event_catcher.caught_events[0].data.sql
         assert "DEFAULT 100" not in sql
+
+        # Function should still work when called with an explicit argument
+        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(100.0)"])
+        assert len(result.results) == 1
+        assert float(result.results[0].agate_table.rows[0].values()[0]) == 200.0
 
 
 class TestBigQueryJSAggregateUDF:

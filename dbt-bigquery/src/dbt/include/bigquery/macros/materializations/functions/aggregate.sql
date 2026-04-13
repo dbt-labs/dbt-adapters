@@ -6,6 +6,6 @@
 
 {% macro bigquery__aggregate_function_javascript(target_relation) %}
     {{ get_aggregate_function_create_replace_signature(target_relation) }}
-    {# conveniently we can reuse the sql scalar function body #}
+    {# conveniently we can reuse the python scalar function body #}
     {{ bigquery__get_scalar_function_body_python() }}
 {% endmacro %}
