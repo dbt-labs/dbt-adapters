@@ -41,6 +41,27 @@ class TestCatchAsCompleted:
         assert len(result) == 1
         assert result[0]["column_name"] == "id"
 
+    def test_empty_table_with_conflicting_column_types_excluded(self):
+        """An empty table with explicit column schema whose types conflict with
+        a non-empty table should be excluded. This covers the case where an adapter
+        builds an empty table with column definitions (e.g. column_name as Number)
+        that would conflict with Text in non-empty tables during merge."""
+        non_empty = _make_catalog_table([{"column_name": "id", "column_type": "integer"}])
+        # Build an empty table with explicit columns where column_name is Number —
+        # this is the type conflict that causes the RuntimeError in agate.Table.merge()
+        empty_with_schema = agate.Table(
+            rows=[],
+            column_names=["column_name", "column_type"],
+            column_types=[agate.Number(), agate.Number()],
+        )
+
+        futures = [_resolved_future(non_empty), _resolved_future(empty_with_schema)]
+        result, exceptions = catch_as_completed(futures)
+
+        assert len(exceptions) == 0
+        assert len(result) == 1
+        assert result[0]["column_name"] == "id"
+
     def test_all_empty_tables(self):
         """When every schema returns empty results, merge should still succeed."""
         empty1 = _make_catalog_table([])
