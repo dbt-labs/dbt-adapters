@@ -53,6 +53,15 @@
     {{ return(adapter.dispatch('scalar_function_volatility_sql', 'dbt')()) }}
 {% endmacro %}
 
+{% macro scalar_function_volatility_javascript() %}
+    {{ return(adapter.dispatch('scalar_function_volatility_javascript', 'dbt')()) }}
+{% endmacro %}
+
+{% macro default__scalar_function_volatility_javascript() %}
+    {% set msg = "Volatility is not supported by " ~ adapter.type() ~ " in javascript UDF and will be ignored" %}
+    {% do exceptions.warn(msg) %}
+{% endmacro %}
+
 {% macro default__scalar_function_volatility_sql() %}
     {% set volatility = model.config.get('volatility') %}
     {% if volatility == 'deterministic' %}
