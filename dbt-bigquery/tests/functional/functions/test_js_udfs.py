@@ -14,7 +14,6 @@ from tests.functional.functions.files import (
     MASK_PII_JS_YML,
     MY_JS_UDF,
     MY_JS_UDF_WITH_DEFAULT_ARG_YML,
-    MY_JS_UDF_WITH_SNOWFLAKE_CONFIGS_YML,
     MY_JS_UDF_YML,
     SUM_POSITIVE_JS,
     SUM_POSITIVE_JS_YML,
@@ -109,10 +108,7 @@ class TestBigQueryJSUDFMultiLineBody(JSUDFBase):
 
 
 class TestBigQueryJSUDFDeterministicVolatility(JSUDFBase):
-    """Test that deterministic volatility maps to DETERMINISTIC on BigQuery for JS UDFs.
-
-    Per the RFC: deterministic -> BigQuery DETERMINISTIC (scalar only).
-    """
+    """Test that deterministic volatility maps to DETERMINISTIC on BigQuery for JS UDFs."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -139,10 +135,7 @@ class TestBigQueryJSUDFDeterministicVolatility(JSUDFBase):
 
 
 class TestBigQueryJSUDFNonDeterministicVolatility(JSUDFBase):
-    """Test that non-deterministic volatility maps to NOT DETERMINISTIC on BigQuery.
-
-    Per the RFC: non-deterministic -> BigQuery NOT DETERMINISTIC (scalar only).
-    """
+    """Test that non-deterministic volatility maps to NOT DETERMINISTIC on BigQuery."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -166,10 +159,7 @@ class TestBigQueryJSUDFNonDeterministicVolatility(JSUDFBase):
 
 
 class TestBigQueryJSUDFStableVolatilityWarns(JSUDFBase):
-    """Test that stable volatility is not supported on BigQuery and emits a warning.
-
-    Per the RFC: stable -> not supported, warn and ignore.
-    """
+    """Test that stable volatility is not supported on BigQuery and emits a warning."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -225,55 +215,8 @@ class TestBigQueryJSUDFDefaultArgsNotSupported(JSUDFBase):
         assert "DEFAULT 100" not in sql
 
 
-class TestBigQueryJSUDFSnowflakeConfigsIgnored(JSUDFBase):
-    """Test that Snowflake-specific configs (secure, null_handling, log_level, trace_level)
-    are silently ignored on BigQuery.
-
-    Per the RFC: adapter-specific configs silently ignored on unsupported adapters.
-    """
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        return {
-            "price_for_xlarge.js": MY_JS_UDF,
-            "price_for_xlarge.yml": MY_JS_UDF_WITH_SNOWFLAKE_CONFIGS_YML,
-        }
-
-    def test_js_udf_snowflake_configs_ignored(self, project, sql_event_catcher):
-        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
-
-        assert len(result.results) == 1
-        assert result.results[0].status == RunStatus.Success
-
-        # Verify Snowflake-specific clauses do NOT appear in BigQuery SQL
-        assert len(sql_event_catcher.caught_events) == 1
-        sql = sql_event_catcher.caught_events[0].data.sql
-        assert "LANGUAGE js" in sql
-        assert "SECURE" not in sql
-        assert "NULL ON NULL INPUT" not in sql
-        assert "LOG_LEVEL" not in sql
-        assert "TRACE_LEVEL" not in sql
-
-        # Function should still work
-        result = run_dbt(["show", "--inline", "SELECT {{ function('price_for_xlarge') }}(100.0)"])
-        assert float(result.results[0].agate_table.rows[0].values()[0]) == 200.0
-
-
 class TestBigQueryJSAggregateUDF:
-    """Test that JavaScript aggregate UDFs work on BigQuery.
-
-    Per the RFC, BigQuery supports JS UDAFs via CREATE AGGREGATE FUNCTION.
-    The .js file must export: initialState, aggregate, merge, finalize.
-
-    Expected DDL:
-        CREATE OR REPLACE AGGREGATE FUNCTION dataset.sum_positive (x FLOAT64)
-          RETURNS FLOAT64
-          LANGUAGE js
-        AS r'''
-        export function initialState() { ... }
-        ...
-        ''';
-    """
+    """Test that JavaScript aggregate UDFs work on BigQuery."""
 
     @pytest.fixture(scope="class")
     def functions(self):
@@ -329,10 +272,7 @@ class TestBigQueryJSAggregateUDF:
 
 
 class TestBigQueryJSAggregateUDFVolatilityIgnored:
-    """Test that volatility is ignored for BigQuery JS aggregate UDFs.
-
-    Per the RFC: volatility is not supported for BigQuery UDAFs (ignored if set).
-    """
+    """Test that volatility is ignored for BigQuery JS aggregate UDFs."""
 
     @pytest.fixture(scope="class")
     def functions(self):

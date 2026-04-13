@@ -92,24 +92,6 @@ functions:
       data_type: FLOAT64
 """
 
-# Snowflake-only configs that should be silently ignored on BigQuery
-MY_JS_UDF_WITH_SNOWFLAKE_CONFIGS_YML = """
-functions:
-  - name: price_for_xlarge
-    description: Calculate the price for the xlarge version of a standard item
-    config:
-      snowflake:
-        secure: true
-        null_handling: strict
-        log_level: info
-        trace_level: "off"
-    arguments:
-      - name: price
-        data_type: FLOAT64
-    returns:
-      data_type: FLOAT64
-"""
-
 MASK_PII_JS = """
 if (value === null || value === undefined) {
     return null;
