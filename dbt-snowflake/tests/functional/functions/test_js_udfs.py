@@ -15,14 +15,8 @@ from tests.functional.functions.files import (
     MASK_PII_JS,
     MASK_PII_JS_YML,
     MY_JS_UDF,
-    MY_JS_UDF_ALL_CONFIGS_YML,
-    MY_JS_UDF_LOG_LEVEL_YML,
-    MY_JS_UDF_NULL_HANDLING_CALLED_YML,
-    MY_JS_UDF_NULL_HANDLING_STRICT_YML,
     MY_JS_UDF_QUOTE_ARGS_FALSE_MULTI_ARG_YML,
     MY_JS_UDF_QUOTE_ARGS_TRUE_MULTI_ARG_YML,
-    MY_JS_UDF_SECURE_YML,
-    MY_JS_UDF_TRACE_LEVEL_YML,
     MY_JS_UDF_WITH_DEFAULT_ARG_YML,
     MY_JS_UDF_YML,
     SUM_POSITIVE_JS,
@@ -47,24 +41,11 @@ class JSUDFBase:
             and "FUNCTION" in event.data.sql
         )
 
-    def is_function_alter_event(self, event: EventMsg) -> bool:
-        return (
-            event.data.node_info.node_name == "price_for_xlarge"
-            and "ALTER FUNCTION" in event.data.sql
-        )
-
     @pytest.fixture(scope="class")
     def sql_event_catcher(self) -> EventCatcher:
         return EventCatcher(
             event_to_catch=SQLQuery,
             predicate=lambda event: self.is_function_create_event(event),
-        )
-
-    @pytest.fixture(scope="class")
-    def alter_event_catcher(self) -> EventCatcher:
-        return EventCatcher(
-            event_to_catch=SQLQuery,
-            predicate=lambda event: self.is_function_alter_event(event),
         )
 
 
@@ -368,6 +349,5 @@ class TestSnowflakeJSAggregateUDFError:
         assert len(run_result_error_catcher.caught_events) >= 1
         error_msgs = [e.data.msg for e in run_result_error_catcher.caught_events]
         assert any(
-            "not supported" in msg.lower() or "aggregate_function_javascript" in msg.lower()
-            for msg in error_msgs
+            "JS aggregate functions not supported in snowflake" in msg for msg in error_msgs
         )
