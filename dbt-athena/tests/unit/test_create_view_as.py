@@ -119,9 +119,7 @@ class TestCreateViewAsContract:
             "contract": SimpleNamespace(enforced=True),
             "is_data_catalog_view": False,
         }
-        result = _render_create_view_as(
-            "my_schema.my_view", "select 1 as id", config_overrides
-        )
+        result = _render_create_view_as("my_schema.my_view", "select 1 as id", config_overrides)
         assert result == "create or replace view my_schema.my_view as select 1 as id"
 
     def test_contract_enforced_data_catalog_view(self):
@@ -129,8 +127,6 @@ class TestCreateViewAsContract:
             "contract": SimpleNamespace(enforced=True),
             "is_data_catalog_view": True,
         }
-        result = _render_create_view_as(
-            "my_schema.my_view", "select 1 as id", config_overrides
-        )
+        result = _render_create_view_as("my_schema.my_view", "select 1 as id", config_overrides)
         assert "protected multi dialect view" in result
         assert "security definer" in result
