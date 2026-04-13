@@ -22,12 +22,21 @@
     {{ return(adapter.dispatch('formatted_scalar_function_args_sql', 'dbt')()) }}
 {% endmacro %}
 
+{% macro formatted_scalar_function_args_javascript() %}
+    {{ return(adapter.dispatch('formatted_scalar_function_args_javascript', 'dbt')()) }}
+{% endmacro %}
+
 {% macro default__formatted_scalar_function_args_sql() %}
     {% set args = [] %}
     {% for arg in model.arguments -%}
         {%- do args.append(arg.name ~ ' ' ~ arg.data_type) -%}
     {%- endfor %}
     {{ args | join(', ') }}
+{% endmacro %}
+
+{% macro default__formatted_scalar_function_args_javascript() %}
+    {% set msg = "formatted_scalar_function_args_javascript not implemented for adapter " ~ adapter.type() %}
+    {% do exceptions.raise_compiler_error(msg) %}
 {% endmacro %}
 
 {% macro scalar_function_body_sql() %}

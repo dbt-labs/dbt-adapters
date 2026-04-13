@@ -50,3 +50,34 @@
     {{ snowflake__scalar_function_create_replace_signature_python(target_relation) }}
     {{ scalar_function_body_sql() }}
 {% endmacro %}
+
+{% macro quoted(name) %}
+    {{ '"' ~ name ~ '"' }}
+{% endmacro %}
+
+{% macro snowflake__formatted_scalar_function_args_javascript() %}
+    {% set args = [] %}
+    {% for arg in model.arguments -%}
+        {% set default_value = arg.get('default_value', none) %}
+        {% if default_value != none %}
+            {%- do args.append(quoted(arg.name) ~ ' ' ~ arg.data_type ~ ' DEFAULT ' ~ default_value) -%}
+        {% else %}
+            {%- do args.append(quoted(arg.name) ~ ' ' ~ arg.data_type) -%}
+        {% endif %}
+    {%- endfor %}
+    {{ args | join(', ') }}
+{% endmacro %}
+
+{% macro snowflake__scalar_function_create_replace_signature_javascript(target_relation) %}
+    CREATE OR REPLACE FUNCTION {{ target_relation.render() }} ({{ formatted_scalar_function_args_javascript()}})
+    RETURNS {{ model.returns.data_type }}
+    LANGUAGE JAVASCRIPT
+    {{ scalar_function_volatility_sql() }}
+    AS
+{% endmacro %}
+
+
+{% macro snowflake__scalar_function_javascript(target_relation) %}
+    {{ snowflake__scalar_function_create_replace_signature_javascript(target_relation) }}
+    {{ scalar_function_body_sql() }}
+{% endmacro %}
