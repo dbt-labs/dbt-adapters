@@ -43,12 +43,20 @@ class TestListSchemas:
         assert not exists
 
 
-class TestListSchemasWithShowApis(TestListSchemas):
-    """Same tests but with show_apis flag enabled."""
+class TestListSchemasWithDatasharing(TestListSchemas):
+    """Same tests but with datasharing config enabled."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
+        return {"name": "test_list_schemas_datasharing"}
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
         return {
-            "name": "test_list_schemas_show_apis",
-            "flags": {"redshift_use_show_apis": True},
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
         }
