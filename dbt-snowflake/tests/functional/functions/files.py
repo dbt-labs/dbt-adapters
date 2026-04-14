@@ -1,13 +1,13 @@
+from dbt.tests.adapter.functions.files import MASK_PII_JS  # noqa: F401
+from dbt.tests.adapter.functions.files import MY_JS_UDF  # noqa: F401
+from dbt.tests.adapter.functions.files import SUM_POSITIVE_JS  # noqa: F401
+
 MY_UDF_SQL = """
 price * 2
 """.strip()
 
 
-# --- JavaScript UDF fixtures ---
-
-MY_JS_UDF = """
-return price * 2;
-""".strip()
+# --- JavaScript UDF YAML configs (Snowflake-specific types) ---
 
 MY_JS_UDF_YML = """
 functions:
@@ -161,17 +161,6 @@ COMPUTE_TOTAL_JS_UPPERCASE = """
 return PRICE * QUANTITY;
 """.strip()
 
-MASK_PII_JS = """
-if (value === null || value === undefined) {
-    return null;
-}
-var masked = value.substring(0, 2);
-for (var i = 2; i < value.length; i++) {
-    masked += '*';
-}
-return masked;
-""".strip()
-
 MASK_PII_JS_YML = """
 functions:
   - name: mask_pii
@@ -184,21 +173,6 @@ functions:
 """
 
 # JS aggregate UDF — not supported on Snowflake, should error
-SUM_POSITIVE_JS = """
-export function initialState() {
-  return {sum: 0}
-}
-export function aggregate(state, x) {
-  if (x > 0) { state.sum += x; }
-}
-export function merge(state, partialState) {
-  state.sum += partialState.sum;
-}
-export function finalize(state) {
-  return state.sum;
-}
-""".strip()
-
 SUM_POSITIVE_JS_YML = """
 functions:
   - name: sum_positive
