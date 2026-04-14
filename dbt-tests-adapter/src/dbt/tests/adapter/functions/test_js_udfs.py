@@ -314,10 +314,7 @@ class JSAggregateUDFNotSupported:
 
         assert len(run_result_error_catcher.caught_events) >= 1
         error_msgs = [e.data.msg for e in run_result_error_catcher.caught_events]
-        assert any(
-            "not supported" in msg.lower() or "aggregate_function_javascript" in msg.lower()
-            for msg in error_msgs
-        )
+        assert any("JS aggregate functions not supported" in msg for msg in error_msgs)
 
 
 class JSAggregateUDFVolatilityIgnored(JSAggregateUDFBase):
