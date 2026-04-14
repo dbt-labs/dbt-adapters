@@ -110,12 +110,34 @@
     {% do alter_relation_comment(relation, model.description) %}
   {% endif %}
   {% if for_columns and config.persist_column_docs() and model.columns %}
-    {% do alter_column_comment(relation, model.columns) %}
+    {#-- BigQuery: build STRUCT-aware valid column names (leaves + intermediate paths) --#}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) %}
+    {% set valid_names = [] %}
+    {% for col in existing_columns %}
+      {% for flat_col in col.flatten() %}
+        {% set parts = flat_col.name.split(".") %}
+        {% for i in range(1, parts | length + 1) %}
+          {% set prefix = parts[:i] | join(".") | lower %}
+          {% if prefix not in valid_names %}
+            {% do valid_names.append(prefix) %}
+          {% endif %}
+        {% endfor %}
+      {% endfor %}
+    {% endfor %}
+    {% set filtered_columns = validate_doc_columns(relation, model.columns, valid_names) %}
+    {% do alter_column_comment(relation, filtered_columns) %}
   {% endif %}
 {% endmacro %}
 
 {% macro bigquery__alter_relation_comment(relation, relation_comment) -%}
-  {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
+  {%- if adapter.behavior.bigquery_noop_alter_relation_comment.no_warn -%}
+    {#-
+      No-op to avoid unnecessary update calls when relation descriptions are already set
+      in DDL (e.g. OPTIONS(description=...)).
+    -#}
+  {%- else -%}
+    {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
+  {%- endif -%}
 {% endmacro %}
 
 {% macro bigquery__alter_column_comment(relation, column_dict) -%}
@@ -213,4 +235,35 @@ having count(*) > 1
 
   {% do adapter.upload_file(local_file_path, database, table_schema, table_name, kwargs=kwargs) %}
 
+{% endmacro %}
+
+{% macro bigquery__make_relation_with_suffix(base_relation, suffix, dstring) %}
+    {% if dstring %}
+      {% set dt = modules.datetime.datetime.now() %}
+      {% set dtstring = dt.strftime("%H%M%S%f") %}
+      {% set suffix = suffix ~ dtstring %}
+    {% endif %}
+    {% set suffix_length = suffix|length %}
+    {% set relation_max_name_length = 1024 %}  {# BigQuery limit #}
+    {% if suffix_length > relation_max_name_length %}
+        {% do exceptions.raise_compiler_error('Relation suffix is too long (' ~ suffix_length ~ ' characters). Maximum length is ' ~ relation_max_name_length ~ ' characters.') %}
+    {% endif %}
+    {% set identifier = base_relation.identifier[:relation_max_name_length - suffix_length] ~ suffix %}
+
+    {{ return(base_relation.incorporate(path={"identifier": identifier })) }}
+
+{% endmacro %}
+
+{% macro bigquery__make_temp_relation(base_relation, suffix) %}
+    {% set temp_relation = bigquery__make_relation_with_suffix(base_relation, suffix, dstring=True) %}
+    {{ return(temp_relation) }}
+{% endmacro %}
+
+{% macro bigquery__make_intermediate_relation(base_relation, suffix) %}
+    {{ return(bigquery__make_relation_with_suffix(base_relation, suffix, dstring=False)) }}
+{% endmacro %}
+
+{% macro bigquery__make_backup_relation(base_relation, backup_relation_type, suffix) %}
+    {% set backup_relation = bigquery__make_relation_with_suffix(base_relation, suffix, dstring=False) %}
+    {{ return(backup_relation.incorporate(type=backup_relation_type)) }}
 {% endmacro %}

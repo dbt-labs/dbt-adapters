@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Add bigquery_noop_alter_relation_comment behavior flag to avoid an unnecessary
+  table description update call
+time: 2026-01-14T11:37:02.0024-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1548"

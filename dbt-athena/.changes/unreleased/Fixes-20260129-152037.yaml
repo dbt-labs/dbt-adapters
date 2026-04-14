@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix table and column description truncation to respect Athena limits by using ellipsis_comment helper
+time: 2026-01-29T15:20:37.150501507-03:00
+custom:
+    Author: arodrber-ds
+    Issue: "1460"

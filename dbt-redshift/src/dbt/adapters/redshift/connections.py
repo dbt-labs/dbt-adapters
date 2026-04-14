@@ -6,7 +6,6 @@ import time
 import redshift_connector
 import sqlparse
 
-from multiprocessing.synchronize import RLock
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Generator, Tuple, Union, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
@@ -143,6 +142,7 @@ class RedshiftCredentials(Credentials):
     autocreate: bool = False
     db_groups: List[str] = field(default_factory=list)
     ra3_node: Optional[bool] = False
+    datasharing: Optional[bool] = False
     connect_timeout: Optional[int] = None
     role: Optional[str] = None
     sslmode: UserSSLMode = field(default_factory=UserSSLMode.default)
@@ -186,6 +186,14 @@ class RedshiftCredentials(Credentials):
     tcp_keepalive_interval: Optional[int] = None
     tcp_keepalive_count: Optional[int] = None
 
+    # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
+    query_group: Optional[str] = None
+
+    # Drop behavior: skip the global RLock on DROP statements (transaction
+    # boundary semantics are preserved). Safe only for projects with no
+    # downstream views (no CASCADE side-effects).
+    allow_concurrent_drops: bool = False
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -209,6 +217,7 @@ class RedshiftCredentials(Credentials):
             "autocreate",
             "db_groups",
             "ra3_node",
+            "datasharing",
             "connect_timeout",
             "role",
             "retries",
@@ -222,6 +231,8 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_idle",
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
+            "query_group",
+            "allow_concurrent_drops",
         )
 
     @property
@@ -448,6 +459,9 @@ def get_connection_method(
             c.autocommit = True
         if credentials.role:
             c.cursor().execute(f"set role {credentials.role}")
+        if credentials.query_group:
+            value = str(credentials.query_group).replace("'", "''")
+            c.cursor().execute(f"SET query_group TO '{value}'")
         return c
 
     return connect
@@ -455,6 +469,36 @@ def get_connection_method(
 
 class RedshiftConnectionManager(SQLConnectionManager):
     TYPE = "redshift"
+
+    def __init__(self, profile, mp_context):
+        super().__init__(profile, mp_context)
+        # Callable that returns whether to skip transaction statements
+        # Set by the adapter after initialization via set_skip_transactions_checker
+        self._skip_transactions_checker: Optional[Callable[[], bool]] = None
+
+    def set_skip_transactions_checker(self, checker: Callable[[], bool]) -> None:
+        """Set the checker function that determines if transaction statements should be skipped.
+
+        This is called by the adapter to pass the behavior flag check.
+        """
+        self._skip_transactions_checker = checker
+
+    def _should_skip_transaction_statements(self) -> bool:
+        """Check if we should skip BEGIN/COMMIT/ROLLBACK statements.
+
+        Returns True if:
+        1. autocommit is enabled (each statement auto-commits)
+        2. The behavior flag is set (checked via _skip_transactions_checker)
+
+        Both conditions must be true to skip transaction statements.
+        """
+        if not self._is_autocommit_enabled():
+            return False
+
+        if self._skip_transactions_checker is None:
+            return False
+
+        return self._skip_transactions_checker()
 
     def cancel(self, connection: Connection):
         pid = connection.backend_pid
@@ -487,6 +531,57 @@ class RedshiftConnectionManager(SQLConnectionManager):
         message = "SUCCESS"
         return AdapterResponse(_message=message, rows_affected=rows)
 
+    def _is_autocommit_enabled(self) -> bool:
+        """Check if autocommit is enabled for the current connection."""
+        connection = self.get_thread_connection()
+        return connection.credentials.autocommit is True
+
+    def begin(self) -> None:
+        """Begin a transaction.
+
+        When autocommit is enabled and the behavior flag is set, we skip sending
+        the BEGIN statement since each statement is automatically committed.
+        However, we still set transaction_open = True to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only skip BEGIN if autocommit + behavior flag is set
+            super().begin()
+
+        connection.transaction_open = True
+
+    def commit(self) -> None:
+        """Commit the current transaction.
+
+        When autocommit is enabled and the behavior flag is set, we skip sending
+        the COMMIT statement since each statement is automatically committed.
+        However, we still set transaction_open = False to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only skip COMMIT if autocommit + behavior flag is set
+            super().commit()
+        connection.transaction_open = False
+
+    def rollback_if_open(self) -> None:
+        """Rollback the current transaction if one is open.
+
+        When autocommit is enabled and the behavior flag is set, there's no
+        transaction to rollback since each statement is independently committed.
+        We still reset the transaction_open flag to maintain framework state
+        consistency.
+        """
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            # Only perform ROLLBACK if autocommit + behavior flag is not set
+            super().rollback_if_open()
+        connection.transaction_open = False
+
     @contextmanager
     def exception_handler(self, sql):
         try:
@@ -517,9 +612,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         See drop_relation in RedshiftAdapter for more information.
         """
-        drop_lock: RLock = self.lock
-
-        with drop_lock:
+        with self.lock:
             connection = self.get_thread_connection()
 
             if connection.transaction_open:
@@ -531,6 +624,25 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
 
+    @contextmanager
+    def fresh_transaction_without_lock(self) -> Generator[None, None, None]:
+        """Same transaction boundary semantics as fresh_transaction(), but
+        without acquiring the global RLock.
+
+        Only safe when the caller guarantees concurrent DROPs will not produce
+        CASCADE side-effects (i.e. no downstream views exist).
+        """
+        connection = self.get_thread_connection()
+
+        if connection.transaction_open:
+            self.commit()
+
+        self.begin()
+        yield
+        self.commit()
+
+        self.begin()
+
     @classmethod
     def open(cls, connection):
         if connection.state == "open":
@@ -539,15 +651,15 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         credentials = connection.credentials
 
-        retryable_exceptions = (
-            redshift_connector.OperationalError,
-            redshift_connector.DatabaseError,
-            redshift_connector.DataError,
-            redshift_connector.InterfaceError,
-        )
         if credentials.retry_all:
-            retryable_exceptions = redshift_connector.Error
-
+            retryable_exceptions = (redshift_connector.Error,)
+        else:
+            retryable_exceptions = (
+                redshift_connector.OperationalError,
+                redshift_connector.DatabaseError,
+                redshift_connector.DataError,
+                redshift_connector.InterfaceError,
+            )
         open_connection = cls.retry_connection(
             connection,
             connect=get_connection_method(credentials),
@@ -571,9 +683,12 @@ class RedshiftConnectionManager(SQLConnectionManager):
             e: Exception, retries: int, backoff: int, retry_all: bool
         ) -> Tuple[int, int]:
             oid_not_found_msg = "could not open relation with OID"
+            err_str = str(e)
             if retries == 0:
                 raise e
-            if oid_not_found_msg in str(e):
+            if oid_not_found_msg in err_str:
+                pass
+            elif "schema" in err_str and "does not exist" in err_str:
                 pass
             elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass
