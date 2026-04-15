@@ -1,6 +1,11 @@
 
 {% macro bigquery__create_csv_table(model, agate_table) %}
-    -- no-op
+  {# When load_csv_rows runs, BigQuery's load job creates the table implicitly.
+     When the table has no rows (e.g. --empty), load_csv_rows is skipped,
+     so we must create the table explicitly via DDL. #}
+  {% if (agate_table.rows | length) == 0 %}
+    {{ return(default__create_csv_table(model, agate_table)) }}
+  {% endif %}
 {% endmacro %}
 
 {% macro bigquery__reset_csv_table(model, full_refresh, old_relation, agate_table) %}

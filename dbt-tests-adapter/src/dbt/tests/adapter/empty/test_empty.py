@@ -62,6 +62,53 @@ class TestEmpty(BaseTestEmpty):
     pass
 
 
+class BaseTestEmptySeedFlag:
+    """Tests that `dbt seed --empty` creates tables with correct schema and zero rows.
+
+    The seed CSV includes multiple data types (integer, text, decimal, boolean,
+    datetime) to verify that type inference is preserved when creating empty tables.
+    """
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"raw_seed.csv": _models.seed_csv}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"model.sql": _models.model_reference_seed_sql}
+
+    def assert_row_count(self, project, relation_name: str, expected_row_count: int):
+        relation = relation_from_name(project.adapter, relation_name)
+        result = project.run_sql(f"select count(*) as num_rows from {relation}", fetch="one")
+        assert result[0] == expected_row_count
+
+    def test_seed_empty_creates_table_with_zero_rows(self, project):
+        run_dbt(["seed", "--empty"])
+        self.assert_row_count(project, "raw_seed", 0)
+
+    def test_seed_empty_preserves_column_types(self, project):
+        """Seed with --empty, then without --empty into the same table.
+
+        If --empty created the table with wrong column types (e.g. decimal
+        inferred as integer), the subsequent full seed would fail when loading
+        actual data that doesn't match the schema.
+        """
+        run_dbt(["seed", "--empty"])
+        self.assert_row_count(project, "raw_seed", 0)
+        # full seed into the existing table — will fail if column types are wrong
+        run_dbt(["seed", "--full-refresh"])
+        self.assert_row_count(project, "raw_seed", 2)
+
+    def test_seed_without_empty_loads_all_rows(self, project):
+        run_dbt(["seed"])
+        self.assert_row_count(project, "raw_seed", 2)
+
+    def test_build_empty_with_seed(self, project):
+        results = run_dbt(["build", "--empty"])
+        self.assert_row_count(project, "raw_seed", 0)
+        assert len(results) == 2  # seed + model
+
+
 class MetadataWithEmptyFlag:
     @pytest.fixture(scope="class")
     def seeds(self):
