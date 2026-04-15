@@ -59,6 +59,7 @@ class SnowflakeConfig(AdapterConfig):
     partition_by: Optional[Union[str, List[str]]] = None
     cluster_by: Optional[Union[str, List[str]]] = None
     automatic_clustering: Optional[bool] = None
+    order_tmp_tables_by_cluster_keys: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None

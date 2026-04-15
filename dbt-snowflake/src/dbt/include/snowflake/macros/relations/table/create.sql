@@ -58,7 +58,7 @@ create or replace temporary table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
 as (
-    {%- if catalog_relation.cluster_by -%}
+    {%- if catalog_relation.cluster_by and config.get('order_tmp_tables_by_cluster_keys', false) -%}
         select * from (
             {{ compiled_code }}
         ) order by ({{ catalog_relation.cluster_by }})
