@@ -106,6 +106,48 @@ class TestBigQueryOptionsConfig(unittest.TestCase):
         self.assertEqual(config_dict["labels"], {"env": "prod"})
         self.assertFalse(config_dict["enable_refresh"])
 
+    def test_expiration_timestamp_formatted_as_bq_literal(self):
+        """Test that expiration_timestamp is rendered as a BigQuery TIMESTAMP literal, not a raw datetime."""
+        from datetime import datetime
+
+        dt = datetime(2025, 7, 18, 18, 56, 22, 153305)
+        options = BigQueryOptionsConfig(expiration_timestamp=dt)
+
+        ddl_dict = options.as_ddl_dict()
+
+        self.assertEqual(
+            ddl_dict["expiration_timestamp"],
+            "TIMESTAMP '2025-07-18 18:56:22.153305 UTC'",
+        )
+        # Must not be a raw datetime object (which would cause a BigQuery syntax error)
+        self.assertIsInstance(ddl_dict["expiration_timestamp"], str)
+
+    def test_expiration_timestamp_string_expression_preserved(self):
+        """Test that a SQL string expression for expiration_timestamp is passed through unchanged."""
+        sql_expr = "TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 4 HOUR)"
+        options = BigQueryOptionsConfig(expiration_timestamp=sql_expr)
+
+        ddl_dict = options.as_ddl_dict()
+
+        self.assertIn("expiration_timestamp", ddl_dict)
+        self.assertEqual(ddl_dict["expiration_timestamp"], sql_expr)
+
+    def test_expiration_timestamp_tz_aware_normalized_to_utc(self):
+        """Test that a tz-aware datetime is normalized to UTC before formatting."""
+        from datetime import datetime, timezone, timedelta
+
+        # +02:00 offset — 2025-07-18 20:56:22 local == 2025-07-18 18:56:22 UTC
+        tz_plus2 = timezone(timedelta(hours=2))
+        dt_aware = datetime(2025, 7, 18, 20, 56, 22, 153305, tzinfo=tz_plus2)
+        options = BigQueryOptionsConfig(expiration_timestamp=dt_aware)
+
+        ddl_dict = options.as_ddl_dict()
+
+        self.assertEqual(
+            ddl_dict["expiration_timestamp"],
+            "TIMESTAMP '2025-07-18 18:56:22.153305 UTC'",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
