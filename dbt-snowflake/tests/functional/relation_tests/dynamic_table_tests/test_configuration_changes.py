@@ -888,6 +888,162 @@ class TestIcebergImmutableWhereChanges:
         assert dt_after.immutable_where is None
 
 
+CREATE_ROW_ACCESS_POLICY = """
+create or replace row access policy always_true as (id integer) returns boolean ->
+  case
+      when id = 1 then true
+      else false
+  end
+;
+"""
+
+CREATE_TAG = """
+create or replace tag tag_name COMMENT = 'testing'
+"""
+
+
+class TestRowAccessPolicyWithCreateOrAlter:
+    """Tests that CREATE OR ALTER succeeds when row_access_policy is configured.
+
+    Validates that:
+    - A config change (target_lag) on a DT with row_access_policy triggers CREATE OR ALTER
+    - The CREATE OR ALTER DDL includes the policy and succeeds
+    - A policy-only change (no other config change) is a no-op (known limitation)
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_policy(self, project):
+        project.run_sql(CREATE_ROW_ACCESS_POLICY)
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dt_with_policy.sql": models.DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "dt_with_policy", models.DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY)
+
+    def test_config_change_with_policy_uses_create_or_alter(self, project):
+        """Changing target_lag on a DT with row_access_policy should use CREATE OR ALTER.
+
+        Snowflake error 001506: CREATE OR ALTER does not support setting policies or tags.
+        The CREATE OR ALTER DDL must omit row_access_policy/table_tag clauses.
+        The policy remains attached to the table from the initial CREATE.
+        """
+        dt_before = describe_dynamic_table(project, "dt_with_policy")
+        assert dt_before.target_lag == "2 minutes"
+
+        update_model(project, "dt_with_policy", models.DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY_ALTER)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("with row access policy", logs, expected_pass=False)
+
+        dt_after = describe_dynamic_table(project, "dt_with_policy")
+        assert dt_after.target_lag == "5 minutes"
+
+    def test_policy_only_change_is_noop(self, project):
+        """Removing row_access_policy (with no other config change) does NOT trigger a rebuild.
+
+        TODO: row_access_policy is not tracked by SnowflakeDynamicTableConfigChangeset and
+        SHOW DYNAMIC TABLES does not return policy information, so dbt cannot detect
+        policy-only changes. Changing row_access_policy requires --full-refresh.
+        This limitation applies to all relation types (tables, views, dynamic tables).
+        """
+        update_model(project, "dt_with_policy", models.DYNAMIC_TABLE_WITHOUT_ROW_ACCESS_POLICY)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+
+
+class TestTableTagWithCreateOrAlter:
+    """Tests that CREATE OR ALTER succeeds when table_tag is configured."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_tag(self, project):
+        project.run_sql(CREATE_TAG)
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dt_with_tag.sql": models.DYNAMIC_TABLE_WITH_TAG,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "dt_with_tag", models.DYNAMIC_TABLE_WITH_TAG)
+
+    def test_config_change_with_tag_uses_create_or_alter(self, project):
+        """Changing target_lag on a DT with table_tag should use CREATE OR ALTER.
+
+        Snowflake error 001506: CREATE OR ALTER does not support setting policies or tags.
+        The CREATE OR ALTER DDL must omit table_tag clauses.
+        The tag remains attached to the table from the initial CREATE.
+        """
+        dt_before = describe_dynamic_table(project, "dt_with_tag")
+        assert dt_before.target_lag == "2 minutes"
+
+        update_model(project, "dt_with_tag", models.DYNAMIC_TABLE_WITH_TAG_ALTER)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("with tag", logs, expected_pass=False)
+
+        dt_after = describe_dynamic_table(project, "dt_with_tag")
+        assert dt_after.target_lag == "5 minutes"
+
+    def test_tag_only_change_is_noop(self, project):
+        """Removing table_tag (with no other config change) does NOT trigger a rebuild.
+
+        TODO: table_tag is not tracked by SnowflakeDynamicTableConfigChangeset and
+        SHOW DYNAMIC TABLES does not return tag information, so dbt cannot detect
+        tag-only changes. Changing table_tag requires --full-refresh.
+        This limitation applies to all relation types (tables, views, dynamic tables).
+        """
+        update_model(project, "dt_with_tag", models.DYNAMIC_TABLE_WITHOUT_TAG)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+
+
 class TestIcebergClusterByChanges:
     """Tests for cluster_by ALTER on dynamic iceberg tables."""
 

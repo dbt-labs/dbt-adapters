@@ -50,8 +50,8 @@ create or alter {{ transient_keyword }}dynamic table {{ relation }}
     {% elif dynamic_table.target_lag is none %}
     scheduler = 'DISABLE'
     {% endif %}
-    {{ optional('with row access policy', dynamic_table.row_access_policy, equals_char='') }}
-    {{ optional('with tag', dynamic_table.table_tag, quote_char='(', equals_char='') }}
+    {#- Snowflake error 001506: CREATE OR ALTER does not support setting policies or tags.
+        row_access_policy and table_tag must be managed via separate ALTER TABLE statements. -#}
     {{ optional('cluster by', dynamic_table.cluster_by, quote_char='(', equals_char='') }}
     {{ optional('immutable where', dynamic_table.immutable_where, quote_char='(', equals_char='') }}
     as (

@@ -607,3 +607,74 @@ DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+# Row access policy / table tag fixtures (INFO_SCHEMA)
+DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    row_access_policy='always_true on (id)',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+    row_access_policy='always_true on (id)',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_ROW_ACCESS_POLICY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_TAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_tag="tag_name = 'tag_value'",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_TAG_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+    table_tag="tag_name = 'tag_value'",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_TAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
