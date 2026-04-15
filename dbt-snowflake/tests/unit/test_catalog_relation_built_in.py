@@ -87,3 +87,38 @@ def test_change_tracking_invalid_model_config(fake_integration, user_input):
     with pytest.raises(ValueError) as e:
         fake_integration.build_relation(model)
     assert "Invalid value for change_tracking" in str(e.value)
+
+
+def test_change_tracking_not_set(fake_integration):
+    model = deepcopy(model_base)
+    relation = fake_integration.build_relation(model)
+    assert relation.change_tracking is None
+
+
+def test_change_tracking_from_adapter_properties():
+    catalog_config = SimpleNamespace(
+        name="SNOWFLAKE",
+        catalog_type="BUILT_IN",
+        external_volume="s3_iceberg_snow",
+        file_format=None,
+        adapter_properties={"change_tracking": True},
+    )
+    integration = BuiltInCatalogIntegration(catalog_config)
+    model = deepcopy(model_base)
+    relation = integration.build_relation(model)
+    assert relation.change_tracking == "TRUE"
+
+
+def test_model_config_overrides_adapter_properties():
+    catalog_config = SimpleNamespace(
+        name="SNOWFLAKE",
+        catalog_type="BUILT_IN",
+        external_volume="s3_iceberg_snow",
+        file_format=None,
+        adapter_properties={"change_tracking": True},
+    )
+    integration = BuiltInCatalogIntegration(catalog_config)
+    model = deepcopy(model_base)
+    model.config.update({"change_tracking": False})
+    relation = integration.build_relation(model)
+    assert relation.change_tracking == "FALSE"

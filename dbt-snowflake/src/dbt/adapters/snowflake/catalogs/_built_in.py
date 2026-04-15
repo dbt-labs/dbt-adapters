@@ -8,14 +8,8 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.contracts.relation import RelationConfig
 
 from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.snowflake.catalogs._common import resolve_change_tracking
 from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
-
-_BOOL_TO_STR_MAP = {
-    True: "TRUE",
-    False: "FALSE",
-    "true": "TRUE",
-    "false": "FALSE",
-}
 
 
 def _validate_storage_serialization_policy(policy: str) -> None:
@@ -121,30 +115,6 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             automatic_clustering=parse_model.automatic_clustering(model),
             storage_serialization_policy=storage_serialization_policy,
             max_data_extension_time_in_days=max_data_extension_time_in_days,
-            change_tracking=self._resolve_change_tracking(model),
+            change_tracking=resolve_change_tracking(model, self.change_tracking),
             data_retention_time_in_days=data_retention_time_in_days,
         )
-
-    def _resolve_change_tracking(self, model: RelationConfig) -> Optional[str]:
-        """
-        Resolves the change tracking for the catalog integration.
-        If `change_tracking` is set in the model config, it will override the default.
-        If 'change_tracking' is not set on either the model or integration, it will return None.
-        """
-        if (
-            model.config
-            and (
-                change_tracking := model.config.get(
-                    SnowflakeIcebergTableRelationParameters.change_tracking, self.change_tracking
-                )
-            )
-            is not None
-        ):
-            if isinstance(change_tracking, str):
-                change_tracking = change_tracking.lower()
-            try:
-                return _BOOL_TO_STR_MAP[change_tracking]
-            except KeyError:
-                raise ValueError("Invalid value for change_tracking. Expected 'true' or 'false'.")
-        else:
-            return None
