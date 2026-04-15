@@ -1,11 +1,13 @@
 from dbt.adapters.redshift import RedshiftAdapter
 
 
-def _make_adapter(mocker, default_query_group=None, default_database="dev"):
+def _make_adapter(mocker, default_query_group=None, default_database="dev", use_show_apis=False):
     mock_config = mocker.MagicMock()
     mock_config.credentials.query_group = default_query_group
     mock_config.credentials.database = default_database
-    return RedshiftAdapter(mock_config, mocker.MagicMock())
+    adapter = RedshiftAdapter(mock_config, mocker.MagicMock())
+    mocker.patch.object(adapter, "use_show_apis", return_value=use_show_apis)
+    return adapter
 
 
 class TestNeedsQueryGroupChange:
@@ -36,24 +38,28 @@ class TestNeedsDatabaseChange:
     """Unit tests for RedshiftAdapter._needs_database_change."""
 
     def test_no_model_database(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         assert adapter._needs_database_change({}) is False
 
     def test_model_same_as_default(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         assert adapter._needs_database_change({"database": "dev"}) is False
 
     def test_model_same_as_default_case_insensitive(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         assert adapter._needs_database_change({"database": "DEV"}) is False
 
     def test_model_quoted_same_as_default(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         assert adapter._needs_database_change({"database": '"dev"'}) is False
 
     def test_model_differs_from_default(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         assert adapter._needs_database_change({"database": "other_db"}) is True
+
+    def test_model_differs_but_show_apis_disabled(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=False)
+        assert adapter._needs_database_change({"database": "other_db"}) is False
 
 
 class TestModelHooks:
@@ -68,7 +74,7 @@ class TestModelHooks:
         mock_execute.assert_called_once_with("SET query_group TO 'model_qg'")
 
     def test_pre_model_hook_uses_database(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.pre_model_hook({"database": "other_db"})
@@ -76,15 +82,25 @@ class TestModelHooks:
         mock_execute.assert_called_once_with('USE "other_db"')
 
     def test_pre_model_hook_uses_quoted_database(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.pre_model_hook({"database": '"other_db"'})
 
         mock_execute.assert_called_once_with('USE "other_db"')
 
+    def test_pre_model_hook_skips_use_when_show_apis_disabled(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=False)
+        mock_execute = mocker.patch.object(adapter, "execute")
+
+        adapter.pre_model_hook({"database": "other_db"})
+
+        mock_execute.assert_not_called()
+
     def test_pre_model_hook_sets_both(self, mocker):
-        adapter = _make_adapter(mocker, default_query_group=None, default_database="dev")
+        adapter = _make_adapter(
+            mocker, default_query_group=None, default_database="dev", use_show_apis=True
+        )
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.pre_model_hook({"query_group": "model_qg", "database": "other_db"})
@@ -94,7 +110,9 @@ class TestModelHooks:
         mock_execute.assert_any_call('USE "other_db"')
 
     def test_pre_model_hook_no_change(self, mocker):
-        adapter = _make_adapter(mocker, default_query_group="qg", default_database="dev")
+        adapter = _make_adapter(
+            mocker, default_query_group="qg", default_database="dev", use_show_apis=True
+        )
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.pre_model_hook({"query_group": "qg", "database": "dev"})
@@ -118,15 +136,25 @@ class TestModelHooks:
         mock_execute.assert_called_once_with("SET query_group TO 'default_qg'")
 
     def test_post_model_hook_resets_database(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.post_model_hook({"database": "other_db"}, None)
 
         mock_execute.assert_called_once_with("RESET USE")
 
+    def test_post_model_hook_skips_reset_when_show_apis_disabled(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=False)
+        mock_execute = mocker.patch.object(adapter, "execute")
+
+        adapter.post_model_hook({"database": "other_db"}, None)
+
+        mock_execute.assert_not_called()
+
     def test_post_model_hook_no_change(self, mocker):
-        adapter = _make_adapter(mocker, default_query_group="qg", default_database="dev")
+        adapter = _make_adapter(
+            mocker, default_query_group="qg", default_database="dev", use_show_apis=True
+        )
         mock_execute = mocker.patch.object(adapter, "execute")
 
         adapter.post_model_hook({"query_group": "qg", "database": "dev"}, None)
