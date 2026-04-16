@@ -1,7 +1,7 @@
 import json
 import unittest
 from requests.exceptions import ConnectionError
-from unittest.mock import patch, MagicMock, Mock, ANY
+from unittest.mock import patch, MagicMock, Mock, ANY, create_autospec
 
 import dbt.adapters
 import google.cloud.bigquery
@@ -262,7 +262,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         could be re-submitted multiple times, each with a fresh polling_timeout window,
         causing total runtime to far exceed job_execution_timeout.
         """
-        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job = create_autospec(google.cloud.bigquery.QueryJob, instance=True)
+        mock_job.job_id = "test_job"
+        mock_job.location = "US"
+        mock_job.project = "project"
         mock_job.result.return_value = iter([])
         self.mock_client.query.return_value = mock_job
 

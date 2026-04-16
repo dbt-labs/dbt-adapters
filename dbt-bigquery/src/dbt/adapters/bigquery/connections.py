@@ -644,7 +644,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 max_results=limit,
                 timeout=polling_timeout,
                 retry=DEFAULT_JOB_RETRY.with_timeout(timeout),
-                job_retry=None,  # dbt manages retries via create_reopen_with_deadline
+                job_retry=None,  # dbt manages job resubmission retries via create_reopen_with_deadline
             )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
