@@ -10,6 +10,7 @@ dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "ddtrace==2.3.0",
     'pre-commit==3.7.0',
+    "hypothesis>=6.0,<7",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",
@@ -53,6 +54,7 @@ protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events .
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
     "ddtrace==2.3.0",
+    "hypothesis>=6.0,<7",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",
@@ -64,6 +66,7 @@ unit-tests = "python -m pytest tests/unit --ddtrace"
 pre-install-commands = []
 dependencies = [
     "ddtrace==2.3.0",
+    "hypothesis>=6.0,<7",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",
