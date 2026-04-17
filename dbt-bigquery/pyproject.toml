@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "dbt-common>=1.10,<2.0",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@c66e91a3d7d953c5ae46ce324e137a92a0d49fd7",
     "dbt-adapters>=1.19.0,<2.0",
     # 3.20 introduced pyarrow>=3.0 under the `pandas` extra
     "google-cloud-bigquery[pandas]>=3.0,<4.0",
