@@ -318,6 +318,12 @@
 
 
 {% macro redshift__list_function_relations_without_caching(schema_relation) %}
+  {#
+    There is no SHOW API equivalent for functions in Redshift (unlike `SHOW TABLES FROM SCHEMA`),
+    so we always use pg_proc regardless of the `use_show_apis` flag. This is safe because
+    Redshift datasharing does not support sharing UDFs or stored procedures across databases,
+    meaning functions are always local to the current database.
+  #}
   {% call statement('list_function_relations_without_caching', fetch_result=True) -%}
     select distinct
       '{{ schema_relation.database }}' as database,
