@@ -127,7 +127,7 @@ DEFAULT_BASE_BEHAVIOR_FLAGS = [
     },
     {
         "name": "enable_truthy_nulls_equals_macro",
-        "default": False,
+        "default": True,
         "docs_url": "",
     },
 ]
