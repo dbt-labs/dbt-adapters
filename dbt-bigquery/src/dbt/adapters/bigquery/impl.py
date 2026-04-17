@@ -391,7 +391,9 @@ class BigQueryAdapter(BaseAdapter):
         try:
             table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
             function_relations = [
-                self._bq_routine_to_relation(routine) for routine in all_routines
+                relation
+                for routine in all_routines
+                if (relation := self._bq_routine_to_relation(routine)) is not None
             ]  # type: ignore[misc]
             return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
@@ -585,6 +587,9 @@ class BigQueryAdapter(BaseAdapter):
 
     def _bq_routine_to_relation(self, bq_routine) -> Union[BigQueryRelation, None]:
         if bq_routine is None:
+            return None
+
+        if bq_routine.routine_type == "PROCEDURE":
             return None
 
         return self.Relation.create(
