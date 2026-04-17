@@ -112,6 +112,25 @@ group by 1, 2
 order by 1, 2
 """
 
+_MODEL_UNITY_ICEBERG_REST_TABLE = """
+{{
+  config(
+    materialized='table',
+    catalog_name='unity_iceberg_rest_catalog',
+    partition_by=['order_date']
+) }}
+
+select
+  order_date,
+  region,
+  count(*) as num_orders,
+  sum(amount) as total_sales,
+  avg(amount) as avg_order_value
+from {{ ref('seed') }}
+group by 1, 2
+order by 1, 2
+"""
+
 
 class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
     @pytest.fixture(scope="class")
@@ -172,6 +191,26 @@ class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
                                     "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE"
                                 ),
                                 "catalog_linked_database_type": "glue",  # Glue requires 4-step process
+                                "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
+                                "auto_refresh": "true",
+                            },
+                        }
+                    ],
+                },
+                {
+                    "name": "unity_iceberg_rest_catalog",
+                    "active_write_integration": "unity_iceberg_rest_catalog_integration",
+                    "write_integrations": [
+                        {
+                            "name": "unity_iceberg_rest_catalog_integration",
+                            "catalog_type": "iceberg_rest",
+                            "table_format": "iceberg",
+                            "adapter_properties": {
+                                "catalog_linked_database": os.getenv(
+                                    "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE"  # ideally can be driven by Catalog linked DB with Unity catalog. Reusing Glue for now, as behaviour is same.
+                                ),
+                                "ctas_not_supported": True,  # allows to use same insert-into process like Glue, without being vendor specific
                                 "max_data_extension_time_in_days": 1,
                                 "target_file_size": "AUTO",
                                 "auto_refresh": "true",
@@ -306,4 +345,59 @@ class TestPartitionByIcebergRestGlueCatalog(TestIcebergPartitionBy):
     def test_partition_by_glue_iceberg_rest_catalog(self, project, setup_class):
         run_dbt(["run", "--log-level", "debug"])
         iceberg_sql = get_cleaned_model_ddl_from_file("glue_table.sql")
+        assert 'partition by ("order_date")' in iceberg_sql
+
+
+class TestPartitionByIcebergRestUnityCatalog(TestIcebergPartitionBy):
+    # Unity Catalog uses the same insert-into process as Glue
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed", "--log-level", "debug"])
+        yield
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "quoting": {
+                "database": False,
+                "schema": True,
+                "identifier": True,
+            }
+        }
+
+    @pytest.fixture(scope="class", autouse=True)
+    def setup_unity_seed(self, project):
+        """Pre-create schema with quoted lowercase identifier for Unity CLD"""
+        adapter = project.adapter
+        seed_database = os.getenv("SNOWFLAKE_TEST_DATABASE")
+        schema_name = project.test_schema.lower()
+
+        create_schema_sql = f'CREATE SCHEMA IF NOT EXISTS {seed_database}."{schema_name}"'
+        adapter.execute(create_schema_sql, fetch=False)
+
+        yield
+
+        drop_schema_sql = f'DROP SCHEMA IF EXISTS {seed_database}."{schema_name}"'
+        try:
+            adapter.execute(drop_schema_sql, fetch=False)
+        except:
+            pass  # Ignore cleanup errors
+
+    @pytest.fixture(scope="class")
+    def unique_schema(self, request, prefix) -> str:
+        test_file = request.module.__name__
+        test_file = test_file.split(".")[-1]
+        unique_schema = f"{prefix}_{test_file}_unity"
+        return unique_schema.replace("_", "").lower()
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "unity_table.sql": _MODEL_UNITY_ICEBERG_REST_TABLE,
+        }
+
+    def test_partition_by_unity_iceberg_rest_catalog(self, project, setup_class):
+        run_dbt(["run", "--log-level", "debug"])
+        iceberg_sql = get_cleaned_model_ddl_from_file("unity_table.sql")
         assert 'partition by ("order_date")' in iceberg_sql

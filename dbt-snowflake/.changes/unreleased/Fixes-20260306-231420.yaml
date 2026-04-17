@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix ApproximateMatchError for Iceberg REST catalog linked databases with lowercase identifiers
+time: 2026-03-06T23:14:20.839665+11:00
+custom:
+    Author: ameyk
+    Issue: "1480"

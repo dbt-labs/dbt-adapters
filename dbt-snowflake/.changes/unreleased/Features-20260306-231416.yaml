@@ -1,0 +1,6 @@
+kind: Features
+body: Add Unity Catalog support for Iceberg REST catalog linked databases with ctas_not_supported and preserve_identifier_case adapter properties
+time: 2026-03-06T23:14:16.965285+11:00
+custom:
+    Author: ameyk
+    Issue: "1480"
