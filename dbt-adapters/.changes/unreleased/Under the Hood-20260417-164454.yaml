@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: enable_truthy_nulls_equals_macro is now enabled by default
+time: 2026-04-17T16:44:54.257701+05:30
+custom:
+    Author: sriramr98
+    Issue: "1875"
