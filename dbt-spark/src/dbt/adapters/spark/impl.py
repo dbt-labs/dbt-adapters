@@ -368,11 +368,15 @@ class SparkAdapter(SQLAdapter):
         columns = self.parse_columns_from_information(relation)
 
         if not columns:
-            # The DESCRIBE EXTENDED fallback path (e.g. Iceberg v2 tables) does not
-            # embed column definitions in the information string, so the regex-based
-            # parse_columns_from_information returns nothing.  Fall back to querying
-            # the table schema directly via DESCRIBE EXTENDED.
-            columns = self.get_columns_in_relation(relation)
+            # The DESCRIBE EXTENDED fallback path (e.g. Iceberg v2 tables) embeds
+            # column definitions in the information string as flat "col: type"
+            # lines, which INFORMATION_COLUMNS_REGEX does not match.  Fall back
+            # to querying the table schema directly via DESCRIBE EXTENDED.
+            try:
+                columns = self.get_columns_in_relation(relation)
+            except DbtRuntimeError as e:
+                logger.debug(f"Error retrieving columns for catalog entry {relation}: {e.msg}")
+                columns = []
 
         for column in columns:
             # convert SparkColumns into catalog dicts

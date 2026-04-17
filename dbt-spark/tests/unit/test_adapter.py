@@ -912,3 +912,24 @@ class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["column_name"], "id")
         self.assertEqual(result[1]["column_name"], "name")
+
+    def test_fallback_swallows_runtime_error(self):
+        """If the fallback get_columns_in_relation raises DbtRuntimeError"""
+        adapter = self._make_adapter()
+
+        relation = SparkRelation.create(
+            schema="default",
+            identifier="orders",
+            type=SparkRelation.get_relation_type.Table,
+            information="Provider: iceberg\n",
+            is_iceberg=True,
+        )
+
+        with mock.patch.object(
+            adapter,
+            "get_columns_in_relation",
+            side_effect=DbtRuntimeError("describe failed"),
+        ):
+            result = list(adapter._get_columns_for_catalog(relation))
+
+        self.assertEqual(result, [])
