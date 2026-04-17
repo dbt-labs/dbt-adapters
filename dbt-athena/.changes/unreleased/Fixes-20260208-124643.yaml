@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixes a bug where truncate() was incorrectly used for string-based partition keys in Athena by implementing a fallback to substr().
+time: 2026-02-08T12:46:43.81315+11:00
+custom:
+    Author: fyang2223
+    Issue: "429"
