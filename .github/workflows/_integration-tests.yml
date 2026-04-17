@@ -352,6 +352,7 @@ jobs:
             REDSHIFT_TEST_IAM_USER_ACCESS_KEY_ID: ${{ vars.AWS_USER_ACCESS_KEY_ID }}
             REDSHIFT_TEST_IAM_USER_SECRET_ACCESS_KEY: ${{ secrets.AWS_USER_SECRET_ACCESS_KEY }}
             REDSHIFT_TEST_IAM_ROLE_PROFILE: ${{ vars.AWS_ROLE_PROFILE }}
+            DBT_TEST_GROUP_1: ${{ vars.DBT_TEST_GROUP_1 }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
