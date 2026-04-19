@@ -8,7 +8,7 @@ sources = ["src"]
 [envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     'pre-commit==3.7.0',
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
@@ -52,7 +52,7 @@ protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events .
 [envs.ci]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",
@@ -63,7 +63,7 @@ unit-tests = "python -m pytest tests/unit --ddtrace"
 [envs.cd]
 pre-install-commands = []
 dependencies = [
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
     "pytest-xdist",

@@ -13,7 +13,7 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     "ipdb~=0.13.13",
     "pre-commit==3.7.0",
     "freezegun",
@@ -70,7 +70,7 @@ pre-install-commands = [
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
@@ -91,7 +91,7 @@ integration-tests = [
 [envs.cd]
 pre-install-commands = []
 dependencies = [
-    "ddtrace==2.3.0",
+    "ddtrace<=3.17",
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
