@@ -25,12 +25,12 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
-    "dbt-adapters>=1.22.4,<2.0",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@ash2shukla/feat/py-3-14-compat#subdirectory=dbt-adapters",
     # cursor.stats support requires >= 4.2.0 (SNOW-295953)
     "snowflake-connector-python[secure-local-storage]>=4.2.0,<5.0.0",
     "certifi<2025.4.26",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
-    "dbt-core>=1.10.0rc0",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     # installed via dbt-core but referenced directly; don't pin to avoid version conflicts with dbt-core
     "agate",
 ]

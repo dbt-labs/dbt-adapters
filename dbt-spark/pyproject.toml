@@ -25,9 +25,9 @@ classifiers = [
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
-    "dbt-adapters>=1.7,<2.0",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@ash2shukla/feat/py-3-14-compat#subdirectory=dbt-adapters",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
-    "dbt-core>=1.8.0",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     "sqlparams>=3.0.0",
 ]
 [project.optional-dependencies]
