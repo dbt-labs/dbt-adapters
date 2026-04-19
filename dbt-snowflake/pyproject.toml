@@ -24,7 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
     "dbt-adapters>=1.22.4,<2.0",
     # cursor.stats support requires >= 4.2.0 (SNOW-295953)
     "snowflake-connector-python[secure-local-storage]>=4.2.0,<5.0.0",

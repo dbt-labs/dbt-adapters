@@ -10,7 +10,7 @@ pre-install-commands = [
     "pip install -e ../dbt-adapters",
 ]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
+    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pre-commit==3.7.0",
     "pytest>=7.0,<8.0"
