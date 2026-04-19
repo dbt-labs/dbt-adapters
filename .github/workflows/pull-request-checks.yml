@@ -151,12 +151,13 @@ jobs:
             fail-fast: false
             matrix:
                 package: ${{ fromJSON(needs.affected-packages.outputs.unit-tests) }}
+                python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ github.event.pull_request.head.sha }}
             repository: ${{ github.event.pull_request.head.repo.full_name }}
             os: ${{ vars.DEFAULT_RUNNER }}
-            python-version: ${{ vars.DEFAULT_PYTHON_VERSION }}
+            python-version: ${{ matrix.python-version }}
             hatch-env: "ci"
         secrets: inherit
 
