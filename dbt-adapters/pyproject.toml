@@ -28,7 +28,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@c66e91a3d7d953c5ae46ce324e137a92a0d49fd7",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
     "dbt-protos>=1.0.291,<2.0",
     "pytz>=2015.7",
     # installed via dbt-common but used directly
@@ -43,6 +43,9 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-adapters/CHANGELOG.md"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]

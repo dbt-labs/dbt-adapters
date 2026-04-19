@@ -11,7 +11,7 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@c66e91a3d7d953c5ae46ce324e137a92a0d49fd7",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "moto~=5.0.13",
@@ -60,7 +60,7 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@c66e91a3d7d953c5ae46ce324e137a92a0d49fd7",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "moto~=5.0.13",

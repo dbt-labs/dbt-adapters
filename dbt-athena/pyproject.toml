@@ -29,7 +29,7 @@ classifiers = [
 ]
 dependencies=[
     "dbt-adapters>=1.0.0,<2.0",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@c66e91a3d7d953c5ae46ce324e137a92a0d49fd7",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/feat/py-3-14-compat",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0",
     "boto3>=1.28",
@@ -45,6 +45,9 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-athena"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-athena/CHANGELOG.md"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
