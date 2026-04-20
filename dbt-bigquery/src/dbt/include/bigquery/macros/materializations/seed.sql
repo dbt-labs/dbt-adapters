@@ -10,6 +10,11 @@
 
 {% macro bigquery__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
     {{ adapter.drop_relation(old_relation) }}
+    {# When --empty is used, load_csv_rows is skipped so the table won't be
+       recreated implicitly by load_dataframe. Create it explicitly via DDL. #}
+    {% if (agate_table.rows | length) == 0 %}
+        {{ return(default__create_csv_table(model, agate_table)) }}
+    {% endif %}
 {% endmacro %}
 
 {% macro bigquery__load_csv_rows(model, agate_table) %}
