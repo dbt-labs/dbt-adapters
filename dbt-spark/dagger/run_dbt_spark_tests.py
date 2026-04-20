@@ -46,7 +46,7 @@ def get_postgres_container(client: dagger.Client) -> Tuple[dagger.Container, str
     return ctr, "postgres_db"
 
 
-def get_spark_container(client: dagger.Client) -> Tuple[dagger.Service, str]:
+async def get_spark_container(client: dagger.Client) -> Tuple[dagger.Service, str]:
     spark_dir = client.host().directory("./dagger/spark-container")
     spark_ctr_base = (
         client.container()
@@ -74,18 +74,19 @@ def get_spark_container(client: dagger.Client) -> Tuple[dagger.Service, str]:
 
     spark_ctr = (
         spark_ctr_base.with_service_binding(alias=pg_host, service=pg_ctr)
-        .with_exec(
-            [
+        .with_exposed_port(10000)
+        .as_service(
+            args=[
                 "/scripts/entrypoint.sh",
                 "--class",
                 "org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
                 "--name",
                 "Thrift JDBC/ODBC Server",
-            ]
+            ],
         )
-        .with_exposed_port(10000)
-        .as_service()
     )
+
+    spark_ctr = await spark_ctr.start()
 
     return spark_ctr, "spark_db"
 
@@ -138,7 +139,7 @@ async def test_spark(test_args):
 
         # install profile-specific system dependencies last since tests usually rotate through profiles
         if test_args.profile == "apache_spark":
-            spark_ctr, spark_host = get_spark_container(client)
+            spark_ctr, spark_host = await get_spark_container(client)
             tst_container = tst_container.with_service_binding(alias=spark_host, service=spark_ctr)
 
         elif test_args.profile in [

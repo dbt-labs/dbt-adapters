@@ -43,7 +43,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ inputs.branch }}
@@ -67,7 +67,7 @@ jobs:
                 -   "dbt-snowflake"
                 -   "dbt-spark"
                 os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ inputs.branch }}

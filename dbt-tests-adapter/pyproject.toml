@@ -25,15 +25,16 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "dbt-common>=1.34.0,<2.0",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
     # TODO: remove `dbt-core` dependency
-    "dbt-core>=1.8.0a1",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     # `dbt-tests-adapter` will ultimately depend on the packages below
     # `dbt-tests-adapter` temporarily uses `dbt-core` for a dbt runner
     # `dbt-core` takes the packages below as dependencies, so they are unpinned to avoid conflicts
-    "dbt-adapters>=1.14.0,<2.0",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@ash2shukla/feat/py-3-14-compat#subdirectory=dbt-adapters",
     "pyyaml",
     "freezegun",
 ]
@@ -43,3 +44,6 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-tests-adapter/CHANGELOG.md"
+
+[tool.hatch.metadata]
+allow-direct-references = true

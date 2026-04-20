@@ -21,12 +21,13 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-    "dbt-common>=1.10,<2.0",
-    "dbt-adapters>=1.7,<2.0",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
+    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@ash2shukla/feat/py-3-14-compat#subdirectory=dbt-adapters",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
-    "dbt-core>=1.8.0",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     "sqlparams>=3.0.0",
 ]
 [project.optional-dependencies]
@@ -49,6 +50,9 @@ Documentation = "https://docs.getdbt.com"
 Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-spark"
 Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
 Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-spark/CHANGELOG.md"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit", "tests/functional"]
