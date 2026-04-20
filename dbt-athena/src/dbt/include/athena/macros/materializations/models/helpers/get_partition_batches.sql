@@ -1,4 +1,4 @@
-{% macro get_partition_batches(sql, as_subquery=True) -%}
+{% macro get_partition_batches(sql, as_subquery=True, build_target_conditions=False) -%}
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
     {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
@@ -17,11 +17,12 @@
     {# Initialize variables to store partition info #}
     {%- set table = load_result('get_partitions').table -%}
     {%- set rows = table.rows -%}
-    {%- set ns = namespace(partitions = [], bucket_conditions = {}, bucket_numbers = [], bucket_column = None, is_bucketed = false) -%}
+    {%- set ns = namespace(partitions = [], target_partitions = [], bucket_conditions = {}, bucket_numbers = [], bucket_column = None, is_bucketed = false) -%}
 
     {# Process each partition row #}
     {%- for row in rows -%}
         {%- set single_partition = [] -%}
+        {%- set single_target_partition = [] -%}
         {# Use Namespace to hold the counter for loop index #}
         {%- set counter = namespace(value=0) -%}
         {# Loop through each column in the row #}
@@ -37,6 +38,12 @@
                 {%- set value, comp_func = adapter.format_value_for_partition(col, column_type) -%}
                 {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value]) -%}
                 {%- do single_partition.append(partition_key_formatted + comp_func + value) -%}
+
+                {# Build target-side condition with 'target.' prefix #}
+                {%- if build_target_conditions -%}
+                    {%- set target_key_formatted = adapter.format_one_partition_key_with_prefix(partitioned_by[counter.value], 'target.') -%}
+                    {%- do single_target_partition.append(target_key_formatted + comp_func + value) -%}
+                {%- endif -%}
             {%- endif -%}
             {# Increment the counter #}
             {%- set counter.value = counter.value + 1 -%}
@@ -47,10 +54,18 @@
         {%- if single_partition_expression not in ns.partitions %}
             {%- do ns.partitions.append(single_partition_expression) -%}
         {%- endif -%}
+
+        {%- if build_target_conditions -%}
+            {%- set single_target_expression = single_target_partition | join(' and ') -%}
+            {%- if single_target_expression not in ns.target_partitions %}
+                {%- do ns.target_partitions.append(single_target_expression) -%}
+            {%- endif -%}
+        {%- endif -%}
     {%- endfor -%}
 
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
+    {%- set target_partitions_batches = [] -%}
     {%- if ns.is_bucketed -%}
         {# Group non-empty partition conditions into batches respecting athena_partitions_limit #}
         {%- set partition_batches = [] -%}
@@ -87,9 +102,22 @@
             {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
             {%- do partitions_batches.append(batch | join(' or ')) -%}
         {%- endfor -%}
+
+        {# Build target batches in the same order #}
+        {%- if build_target_conditions -%}
+            {%- set non_empty_target_partitions = ns.target_partitions | select | list -%}
+            {%- for i in range(0, non_empty_target_partitions | length, athena_partitions_limit) -%}
+                {%- set batch = non_empty_target_partitions[i:i + athena_partitions_limit] -%}
+                {%- do target_partitions_batches.append(batch | join(' or ')) -%}
+            {%- endfor -%}
+        {%- endif -%}
     {%- endif -%}
     {% do log('TOTAL PARTITIONS TO PROCESS: ' ~ partitions_batches | length) %}
 
-    {{ return(partitions_batches) }}
+    {%- if build_target_conditions -%}
+        {{ return({'source': partitions_batches, 'target': target_partitions_batches}) }}
+    {%- else -%}
+        {{ return(partitions_batches) }}
+    {%- endif -%}
 
 {%- endmacro %}

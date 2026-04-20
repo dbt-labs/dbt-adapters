@@ -66,10 +66,24 @@ def _format_partition_keys(partitioned_by):
 
 def _format_one_partition_key(key):
     """Stub for adapter.format_one_partition_key."""
+    hidden = re.search(r"^(hour|day|month|year)\((.+)\)", key, re.IGNORECASE)
     bucket_match = re.search(r"bucket\((.+?),\s*(\d+)\)", key)
-    if bucket_match:
+    if hidden:
+        return f"date_trunc('{hidden.group(1).lower()}', {hidden.group(2)})"
+    elif bucket_match:
         return bucket_match.group(1)
     return f'"{key}"'
+
+
+def _format_one_partition_key_with_prefix(key, prefix):
+    """Stub for adapter.format_one_partition_key_with_prefix."""
+    hidden = re.search(r"^(hour|day|month|year)\((.+)\)", key, re.IGNORECASE)
+    bucket_match = re.search(r"bucket\((.+?),\s*(\d+)\)", key)
+    if hidden:
+        return f"date_trunc('{hidden.group(1).lower()}', {prefix}{hidden.group(2)})"
+    elif bucket_match:
+        return f"{prefix}{bucket_match.group(1)}"
+    return f'{prefix}"{key}"'
 
 
 def _format_value_for_partition(value, column_type):
@@ -86,16 +100,18 @@ def _format_value_for_partition(value, column_type):
     return (f"'{value}'", "=")
 
 
-def _render_macro(config, rows, column_types):
+def _render_macro(config, rows, column_types, build_target_conditions=False):
     """Load and render the full get_partition_batches macro with stubs.
 
     Args:
         config: Dict with keys like 'partitioned_by', 'partitions_limit'.
         rows: List of lists representing partition rows returned by the query.
         column_types: List of column type strings (e.g. ['date', 'varchar']).
+        build_target_conditions: If True, return dict with 'source' and 'target' keys.
 
     Returns:
-        List of partition batch strings (WHERE clause fragments).
+        List of partition batch strings (WHERE clause fragments),
+        or dict with 'source' and 'target' keys when build_target_conditions=True.
     """
     table = MockTable(rows, column_types)
     result_holder = {}
@@ -120,6 +136,7 @@ def _render_macro(config, rows, column_types):
     )
     context["adapter"].format_partition_keys = _format_partition_keys
     context["adapter"].format_one_partition_key = _format_one_partition_key
+    context["adapter"].format_one_partition_key_with_prefix = _format_one_partition_key_with_prefix
     context["adapter"].convert_type = mock_convert_type
     context["adapter"].format_value_for_partition = _format_value_for_partition
     context["adapter"].murmur3_hash = _deterministic_hash
@@ -135,7 +152,9 @@ def _render_macro(config, rows, column_types):
 
     # Load and render the main macro
     template = env.get_template("get_partition_batches.sql", globals=context)
-    template.module.get_partition_batches(sql="test")
+    template.module.get_partition_batches(
+        sql="test", build_target_conditions=build_target_conditions
+    )
 
     return result_holder["value"]
 
@@ -275,4 +294,125 @@ class TestBucketWithPartitionsBatching:
             "(\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02') and user_id IN ('user4')",
             "(\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04') and user_id IN ('user4')",
             "(\"date_col\"=DATE'2024-01-05') and user_id IN ('user4')",
+        ]
+
+
+class TestBuildTargetConditions:
+    """Tests for build_target_conditions=True (target partition filter generation)."""
+
+    def test_target_conditions_single_column(self):
+        result = _render_macro(
+            config={"partitioned_by": ["date_col"], "partitions_limit": 100},
+            rows=[["2024-01-01"], ["2024-01-02"], ["2024-01-03"]],
+            column_types=["date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "\"date_col\"=DATE'2024-01-01' or "
+            "\"date_col\"=DATE'2024-01-02' or "
+            "\"date_col\"=DATE'2024-01-03'",
+        ]
+        assert result["target"] == [
+            "target.\"date_col\"=DATE'2024-01-01' or "
+            "target.\"date_col\"=DATE'2024-01-02' or "
+            "target.\"date_col\"=DATE'2024-01-03'",
+        ]
+
+    def test_target_conditions_multiple_batches(self):
+        result = _render_macro(
+            config={"partitioned_by": ["date_col"], "partitions_limit": 2},
+            rows=[[f"2024-01-{i:02d}"] for i in range(1, 6)],
+            column_types=["date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "\"date_col\"=DATE'2024-01-01' or \"date_col\"=DATE'2024-01-02'",
+            "\"date_col\"=DATE'2024-01-03' or \"date_col\"=DATE'2024-01-04'",
+            "\"date_col\"=DATE'2024-01-05'",
+        ]
+        assert result["target"] == [
+            "target.\"date_col\"=DATE'2024-01-01' or target.\"date_col\"=DATE'2024-01-02'",
+            "target.\"date_col\"=DATE'2024-01-03' or target.\"date_col\"=DATE'2024-01-04'",
+            "target.\"date_col\"=DATE'2024-01-05'",
+        ]
+
+    def test_target_conditions_multi_column_partition(self):
+        result = _render_macro(
+            config={"partitioned_by": ["date_col", "region"], "partitions_limit": 100},
+            rows=[
+                ["2024-01-01", "us-east-1"],
+                ["2024-01-01", "eu-west-1"],
+            ],
+            column_types=["date", "varchar"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "\"date_col\"=DATE'2024-01-01' and \"region\"='us-east-1' or "
+            "\"date_col\"=DATE'2024-01-01' and \"region\"='eu-west-1'",
+        ]
+        assert result["target"] == [
+            "target.\"date_col\"=DATE'2024-01-01' and target.\"region\"='us-east-1' or "
+            "target.\"date_col\"=DATE'2024-01-01' and target.\"region\"='eu-west-1'",
+        ]
+
+    def test_target_conditions_aligned_batch_count(self):
+        """Source and target batch lists must have the same length."""
+        result = _render_macro(
+            config={"partitioned_by": ["date_col"], "partitions_limit": 2},
+            rows=[[f"2024-01-{i:02d}"] for i in range(1, 8)],
+            column_types=["date"],
+            build_target_conditions=True,
+        )
+        assert len(result["source"]) == len(result["target"])
+        assert len(result["source"]) == 4
+
+    def test_bucketed_returns_empty_target(self):
+        """Bucketed partitions should return empty target conditions."""
+        result = _render_macro(
+            config={
+                "partitioned_by": ["bucket(col, 2)"],
+                "partitions_limit": 100,
+            },
+            rows=[["a"], ["b"]],
+            column_types=["varchar"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == ["col IN ('a', 'b')"]
+        assert result["target"] == []
+
+    def test_target_conditions_hidden_partition(self):
+        """Hidden partition (DAY) should produce date_trunc with target prefix."""
+        result = _render_macro(
+            config={"partitioned_by": ["DAY(date_col)"], "partitions_limit": 100},
+            rows=[["2024-01-01"], ["2024-01-02"]],
+            column_types=["date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "date_trunc('day', date_col)=DATE'2024-01-01' or "
+            "date_trunc('day', date_col)=DATE'2024-01-02'",
+        ]
+        assert result["target"] == [
+            "date_trunc('day', target.date_col)=DATE'2024-01-01' or "
+            "date_trunc('day', target.date_col)=DATE'2024-01-02'",
+        ]
+
+    def test_target_conditions_hidden_partition_multi_col(self):
+        """Hidden partition + plain column combination with target conditions."""
+        result = _render_macro(
+            config={"partitioned_by": ["region", "MONTH(date_col)"], "partitions_limit": 100},
+            rows=[
+                ["us-east-1", "2024-01-01"],
+                ["eu-west-1", "2024-02-01"],
+            ],
+            column_types=["varchar", "date"],
+            build_target_conditions=True,
+        )
+        assert result["source"] == [
+            "\"region\"='us-east-1' and date_trunc('month', date_col)=DATE'2024-01-01' or "
+            "\"region\"='eu-west-1' and date_trunc('month', date_col)=DATE'2024-02-01'",
+        ]
+        assert result["target"] == [
+            "target.\"region\"='us-east-1' and date_trunc('month', target.date_col)=DATE'2024-01-01' or "
+            "target.\"region\"='eu-west-1' and date_trunc('month', target.date_col)=DATE'2024-02-01'",
         ]

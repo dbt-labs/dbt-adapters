@@ -365,6 +365,219 @@ class TestIcebergUpdateCondition:
         check_relations_equal(project.adapter, [relation_name, expected_seed_name])
 
 
+# Target partition filter tests
+
+models__target_partition_filter_sql = """
+{{ config(
+        table_type='iceberg',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['id'],
+        partitioned_by=['DAY(date_column)'],
+        force_batch=True,
+        merge_with_target_partition_filter=True
+    )
+}}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', cast('2024-01-01' as date)),
+    (2, 'updated_2', cast('2024-01-02' as date)),
+    (5, 'new_5',     cast('2024-01-01' as date))
+) as t (id, name, date_column)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', cast('2024-01-01' as date)),
+    (2, 'original_2', cast('2024-01-02' as date)),
+    (3, 'original_3', cast('2024-01-01' as date)),
+    (4, 'original_4', cast('2024-01-02' as date))
+) as t (id, name, date_column)
+
+{% endif %}
+"""
+
+seeds__expected_target_partition_filter_csv = """id,name,date_column
+1,updated_1,2024-01-01
+2,updated_2,2024-01-02
+3,original_3,2024-01-01
+4,original_4,2024-01-02
+5,new_5,2024-01-01
+"""
+
+models__target_partition_filter_with_predicates_sql = """
+{{ config(
+        table_type='iceberg',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['id'],
+        partitioned_by=['DAY(date_column)'],
+        force_batch=True,
+        merge_with_target_partition_filter=True,
+        incremental_predicates=["src.id <> 999"]
+    )
+}}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', cast('2024-01-01' as date)),
+    (5, 'new_5',     cast('2024-01-01' as date))
+) as t (id, name, date_column)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', cast('2024-01-01' as date)),
+    (2, 'original_2', cast('2024-01-02' as date))
+) as t (id, name, date_column)
+
+{% endif %}
+"""
+
+seeds__expected_target_partition_filter_with_predicates_csv = """id,name,date_column
+1,updated_1,2024-01-01
+2,original_2,2024-01-02
+5,new_5,2024-01-01
+"""
+
+models__target_partition_filter_multi_col_sql = """
+{{ config(
+        table_type='iceberg',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['id'],
+        partitioned_by=['region', 'DAY(date_column)'],
+        force_batch=True,
+        merge_with_target_partition_filter=True
+    )
+}}
+
+{% if is_incremental() %}
+
+select * from (
+    values
+    (1, 'updated_1', 'us-east-1', cast('2024-01-01' as date)),
+    (5, 'new_5',     'eu-west-1', cast('2024-01-02' as date))
+) as t (id, name, region, date_column)
+
+{% else %}
+
+select * from (
+    values
+    (1, 'original_1', 'us-east-1', cast('2024-01-01' as date)),
+    (2, 'original_2', 'eu-west-1', cast('2024-01-02' as date)),
+    (3, 'original_3', 'us-east-1', cast('2024-01-01' as date))
+) as t (id, name, region, date_column)
+
+{% endif %}
+"""
+
+seeds__expected_target_partition_filter_multi_col_csv = """id,name,region,date_column
+1,updated_1,us-east-1,2024-01-01
+2,original_2,eu-west-1,2024-01-02
+3,original_3,us-east-1,2024-01-01
+5,new_5,eu-west-1,2024-01-02
+"""
+
+
+class TestIcebergTargetPartitionFilter:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"merge_target_partition_filter.sql": models__target_partition_filter_sql}
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "expected_target_partition_filter.csv": seeds__expected_target_partition_filter_csv
+        }
+
+    def test__merge_target_partition_filter(self, project):
+        """Target partition filter should produce correct merge results with partition pruning."""
+
+        expected_seed_name = "expected_target_partition_filter"
+        run_dbt(["seed", "--select", expected_seed_name, "--full-refresh"])
+
+        relation_name = "merge_target_partition_filter"
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        model_update = run_dbt(["run", "--select", relation_name])
+        model_update_result = model_update.results[0]
+        assert model_update_result.status == RunStatus.Success
+
+        check_relations_equal(project.adapter, [relation_name, expected_seed_name])
+
+
+class TestIcebergTargetPartitionFilterWithPredicates:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "merge_target_partition_filter_predicates.sql": models__target_partition_filter_with_predicates_sql
+        }
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "expected_target_partition_filter_predicates.csv": seeds__expected_target_partition_filter_with_predicates_csv
+        }
+
+    def test__merge_target_partition_filter_with_predicates(self, project):
+        """Target partition filter should coexist with incremental_predicates."""
+
+        expected_seed_name = "expected_target_partition_filter_predicates"
+        run_dbt(["seed", "--select", expected_seed_name, "--full-refresh"])
+
+        relation_name = "merge_target_partition_filter_predicates"
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        model_update = run_dbt(["run", "--select", relation_name])
+        model_update_result = model_update.results[0]
+        assert model_update_result.status == RunStatus.Success
+
+        check_relations_equal(project.adapter, [relation_name, expected_seed_name])
+
+
+class TestIcebergTargetPartitionFilterMultiCol:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "merge_target_partition_filter_multi_col.sql": models__target_partition_filter_multi_col_sql
+        }
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "expected_target_partition_filter_multi_col.csv": seeds__expected_target_partition_filter_multi_col_csv
+        }
+
+    def test__merge_target_partition_filter_multi_col(self, project):
+        """Target partition filter should work with multi-column partitions."""
+
+        expected_seed_name = "expected_target_partition_filter_multi_col"
+        run_dbt(["seed", "--select", expected_seed_name, "--full-refresh"])
+
+        relation_name = "merge_target_partition_filter_multi_col"
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        model_update = run_dbt(["run", "--select", relation_name])
+        model_update_result = model_update.results[0]
+        assert model_update_result.status == RunStatus.Success
+
+        check_relations_equal(project.adapter, [relation_name, expected_seed_name])
+
+
 def replace_cast_date(model: str) -> str:
     """Wrap all date strings with a cast date function"""
 
