@@ -4,6 +4,7 @@ NOTE: These tests only work with PyHive-based connections (http/thrift methods).
 ODBC connections use PyodbcConnectionWrapper which doesn't have timeout/retry support yet.
 """
 
+import copy
 import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtRuntimeError
@@ -62,7 +63,7 @@ class TestQueryTimeout:
         in-place mutation leaks query_timeout=1 into every later test on
         the same worker and makes their seeds/queries time out.
         """
-        overrides = dict(dbt_profile_target)
+        overrides = copy.deepcopy(dbt_profile_target)
         overrides["query_timeout"] = 1  # 1 second timeout
         overrides["poll_interval"] = 1  # Poll every second for faster test
         overrides["query_retries"] = 0  # Disable retries for clearer errors
