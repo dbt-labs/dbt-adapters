@@ -1,4 +1,4 @@
 beartype<0.23.0
-gql[httpx]>=4.0.0
+gql[httpx]>=4.0.0,<4.4.0
 dagger-io~=0.20.0
 python-dotenv
