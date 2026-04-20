@@ -1,4 +1,4 @@
-beartype<0.18.0
+beartype<0.23.0
 gql[httpx]~=3.5.0
-dagger-io~=0.9.7
+dagger-io~=0.20.0
 python-dotenv
