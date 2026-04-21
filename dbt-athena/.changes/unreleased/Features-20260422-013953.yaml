@@ -1,0 +1,6 @@
+kind: Features
+body: Add use_iceberg_write_to config for Iceberg Python models
+time: 2026-04-22T01:39:53.640855+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1882"
