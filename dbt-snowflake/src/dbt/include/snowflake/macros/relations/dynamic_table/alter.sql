@@ -1,4 +1,4 @@
-{% macro snowflake__alter_dynamic_table_built_in_sql(existing_relation, configuration_changes) -%}
+{% macro snowflake__get_alter_dynamic_table_as_sql(existing_relation, configuration_changes) -%}
 {#-
     Produce DDL that alters a dynamic iceberg table using ALTER DYNAMIC TABLE statements.
 

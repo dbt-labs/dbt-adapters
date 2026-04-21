@@ -982,7 +982,7 @@ class TestRowAccessPolicyWithCreateOrAlter:
 
     Validates that:
     - A config change (target_lag) on a DT with row_access_policy triggers CREATE OR ALTER
-    - The CREATE OR ALTER DDL includes the policy and succeeds
+    - The CREATE OR ALTER DDL omits the policy (Snowflake error 001506) and succeeds
     - A policy-only change (no other config change) is a no-op (known limitation)
     """
 
@@ -1171,3 +1171,264 @@ class TestIcebergClusterByChanges:
         assert_message_in_logs("Applying ALTER to:", logs)
         dt_after = describe_dynamic_table(project, "iceberg_cluster")
         assert dt_after.cluster_by is None
+
+
+class TestIcebergRefreshModeChangeTriggersReplace:
+    """Tests that changing refresh_mode on an Iceberg DT triggers CREATE OR REPLACE.
+
+    Snowflake's ALTER DYNAMIC TABLE ... SET does not support refresh_mode,
+    so the Iceberg ALTER path falls back to CREATE OR REPLACE when refresh_mode changes.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_refresh.sql": models.DYNAMIC_ICEBERG_TABLE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "iceberg_refresh", models.DYNAMIC_ICEBERG_TABLE)
+
+    def test_refresh_mode_change_triggers_replace(self, project):
+        """Changing refresh_mode on an Iceberg DT should fall back to CREATE OR REPLACE."""
+        dt_before = describe_dynamic_table(project, "iceberg_refresh")
+        assert dt_before.refresh_mode == "INCREMENTAL"
+
+        update_model(project, "iceberg_refresh", models.DYNAMIC_ICEBERG_TABLE_REPLACE)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("refresh_mode cannot be altered on Iceberg tables", logs)
+        assert_message_in_logs("create or replace dynamic iceberg table", logs)
+        assert_message_in_logs("Applying ALTER to:", logs, expected_pass=False)
+
+        dt_after = describe_dynamic_table(project, "iceberg_refresh")
+        assert dt_after.refresh_mode == "FULL"
+
+
+class TestSqlAndConfigChangeAppliesBoth:
+    """Tests that simultaneous SQL + config change applies both via CREATE OR ALTER.
+
+    Validates that when a dynamic table's SQL definition and a tracked
+    configuration field (target_lag) change in the same run, CREATE OR ALTER
+    is used and both the new SQL and the new config take effect.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dt_sql_and_config.sql": models.DYNAMIC_TABLE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "dt_sql_and_config", models.DYNAMIC_TABLE)
+
+    def test_sql_and_config_change_applies_both(self, project):
+        dt_before = describe_dynamic_table(project, "dt_sql_and_config")
+        assert dt_before.target_lag == "2 minutes"
+
+        update_model(
+            project, "dt_sql_and_config", models.DYNAMIC_TABLE_EXTRA_COLUMN_TARGET_LAG_FIVE
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+
+        dt_after = describe_dynamic_table(project, "dt_sql_and_config")
+        assert dt_after.target_lag == "5 minutes"
+
+        columns = project.run_sql(
+            f"select column_name from information_schema.columns "
+            f"where table_schema = upper('{project.test_schema}') "
+            f"and table_name = upper('dt_sql_and_config')",
+            fetch="all",
+        )
+        column_names = {row[0].upper() for row in columns}
+        assert "EXTRA_COL" in column_names
+
+
+class TestIcebergTargetLagChangeUsesAlter:
+    """Tests that target_lag change on Iceberg DT uses ALTER SET (not REPLACE)."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_lag.sql": models.DYNAMIC_ICEBERG_TABLE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "iceberg_lag", models.DYNAMIC_ICEBERG_TABLE)
+
+    def test_iceberg_target_lag_change_uses_alter(self, project):
+        dt_before = describe_dynamic_table(project, "iceberg_lag")
+        assert dt_before.target_lag == "2 minutes"
+
+        update_model(project, "iceberg_lag", models.DYNAMIC_ICEBERG_TABLE_ALTER)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        assert_message_in_logs("alter dynamic table", logs)
+        assert_message_in_logs(
+            "create or replace dynamic iceberg table", logs, expected_pass=False
+        )
+
+        dt_after = describe_dynamic_table(project, "iceberg_lag")
+        assert dt_after.target_lag == "5 minutes"
+
+
+class TestWarehouseChangeAppliesAlter:
+    """Tests that snowflake_warehouse change is applied via CREATE OR ALTER (INFO_SCHEMA).
+
+    Skipped gracefully if SNOWFLAKE_TEST_ALT_WAREHOUSE is not distinct from DBT_TESTING.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "dt_warehouse.sql": models.DYNAMIC_TABLE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(project, "dt_warehouse", models.DYNAMIC_TABLE)
+
+    def test_warehouse_change_applies_alter(self, project):
+        if ALT_WAREHOUSE.upper() == "DBT_TESTING":
+            pytest.skip(
+                "SNOWFLAKE_TEST_ALT_WAREHOUSE is not distinct from DBT_TESTING; "
+                "cannot validate warehouse change."
+            )
+
+        dt_before = describe_dynamic_table(project, "dt_warehouse")
+        assert dt_before.snowflake_warehouse == "DBT_TESTING"
+
+        update_model(project, "dt_warehouse", models.DYNAMIC_TABLE_ALT_WAREHOUSE)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+
+        dt_after = describe_dynamic_table(project, "dt_warehouse")
+        assert dt_after.snowflake_warehouse.upper() == ALT_WAREHOUSE.upper()
+
+
+class TestIcebergInitWarehouseAlter:
+    """Tests that Iceberg initialization_warehouse value change uses ALTER SET."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {
+            "iceberg_init_wh_alter.sql": models.DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_class(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup_method(self, project, setup_class):
+        run_dbt(["run", "--full-refresh"])
+        yield
+        update_model(
+            project, "iceberg_init_wh_alter", models.DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE
+        )
+
+    def test_iceberg_init_warehouse_value_change(self, project):
+        if ALT_WAREHOUSE.upper() == "DBT_TESTING":
+            pytest.skip(
+                "SNOWFLAKE_TEST_ALT_WAREHOUSE is not distinct from DBT_TESTING; "
+                "cannot validate initialization_warehouse value change."
+            )
+
+        dt_before = describe_dynamic_table(project, "iceberg_init_wh_alter")
+        assert dt_before.snowflake_initialization_warehouse == ALT_WAREHOUSE
+
+        update_model(
+            project,
+            "iceberg_init_wh_alter",
+            models.DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE_ALTER,
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("Applying ALTER to:", logs)
+        assert_message_in_logs("alter dynamic table", logs)
+
+        dt_after = describe_dynamic_table(project, "iceberg_init_wh_alter")
+        assert dt_after.snowflake_initialization_warehouse == "DBT_TESTING"

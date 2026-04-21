@@ -18,8 +18,14 @@
             {{- log('Applying CREATE OR ALTER to: ' ~ existing_relation) -}}
             {{ snowflake__create_or_alter_dynamic_table_info_schema_sql(dynamic_table, target_relation, sql) }}
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
-            {{- log('Applying ALTER to: ' ~ existing_relation) -}}
-            {{ snowflake__alter_dynamic_table_built_in_sql(existing_relation, configuration_changes) }}
+            {%- if configuration_changes.refresh_mode -%}
+                {#- Snowflake's ALTER DYNAMIC TABLE ... SET does not support refresh_mode -#}
+                {{- log('Applying full refresh (CREATE OR REPLACE) to: ' ~ existing_relation ~ ' because refresh_mode cannot be altered on Iceberg tables') -}}
+                {{- get_replace_sql(existing_relation, target_relation, sql) -}}
+            {%- else -%}
+                {{- log('Applying ALTER to: ' ~ existing_relation) -}}
+                {{ snowflake__get_alter_dynamic_table_as_sql(existing_relation, configuration_changes) }}
+            {%- endif -%}
         {%- else -%}
             {% do exceptions.raise_compiler_error('Unexpected model config for: ' ~ target_relation) %}
         {%- endif -%}
