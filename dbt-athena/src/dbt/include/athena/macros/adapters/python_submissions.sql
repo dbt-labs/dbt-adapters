@@ -64,7 +64,7 @@ def materialize(spark_session, df, target_relation):
     {% if partitioned_by is not none %}
     _writer = _writer.partitionedBy(
         {%- for part_expr in partitioned_by %}
-        _parse_iceberg_partition("{{ part_expr }}"){{ "," if not loop.last }}
+        _parse_iceberg_partition({{ part_expr | tojson }}){{ "," if not loop.last }}
         {%- endfor %}
     )
     {% endif %}

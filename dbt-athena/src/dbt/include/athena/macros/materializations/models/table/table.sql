@@ -103,6 +103,9 @@
       {%- if old_bkp_relation is not none -%}
         {%- do drop_relation(old_bkp_relation) -%}
       {%- endif -%}
+      {%- if old_relation is not none and old_relation.is_view -%}
+        {%- do drop_relation(old_relation) -%}
+      {%- endif -%}
       {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
       {% call statement('create_table', language=language) %}
         {{ query_result }}

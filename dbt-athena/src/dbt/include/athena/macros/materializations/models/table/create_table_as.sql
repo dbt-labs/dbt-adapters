@@ -44,6 +44,9 @@
 
   {%- if language == 'python' -%}
     {%- set use_iceberg_write_to = config.get('use_iceberg_write_to', false) -%}
+    {%- if use_iceberg_write_to and table_type != 'iceberg' -%}
+      {{ exceptions.raise_compiler_error("The 'use_iceberg_write_to' config is only supported when table_type='iceberg'.") }}
+    {%- endif -%}
     {%- set spark_ctas = '' -%}
     {%- if table_type == 'iceberg' and not use_iceberg_write_to -%}
       {%- set spark_ctas -%}
