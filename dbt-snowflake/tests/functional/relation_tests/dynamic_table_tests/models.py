@@ -716,3 +716,31 @@ DYNAMIC_TABLE_WITHOUT_TAG = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+# Warehouse change fixture (uses alt warehouse env var)
+DYNAMIC_TABLE_ALT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Iceberg initialization_warehouse alter fixture (literal warehouse, like INFO_SCHEMA equivalent)
+DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
