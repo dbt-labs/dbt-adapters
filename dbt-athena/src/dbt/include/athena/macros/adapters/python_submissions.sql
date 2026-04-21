@@ -9,6 +9,9 @@
     {% set merge_schema = optional_args.get("merge_schema", true) %}
     {% set bucket_count = optional_args.get("bucket_count") %}
     {% set field_delimiter = optional_args.get("field_delimiter") %}
+    {% set table_type = optional_args.get("table_type", "") %}
+    {% set extra_table_properties = optional_args.get("extra_table_properties") %}
+    {% set use_iceberg_write_to = optional_args.get("use_iceberg_write_to", false) %}
     {% set spark_ctas = optional_args.get("spark_ctas", "") %}
 
 import pyspark
@@ -25,7 +28,48 @@ def materialize(spark_session, df, target_relation):
         msg = f"{type(df)} is not a supported type for dbt Python materialization"
         raise Exception(msg)
 
-{% if spark_ctas|length > 0 %}
+{% if use_iceberg_write_to %}
+    import re
+    from pyspark.sql import functions as F
+
+    def _parse_iceberg_partition(expr_str):
+        expr_str = expr_str.strip()
+        m = re.match(r"(\w+)\((.+)\)", expr_str)
+        if not m:
+            return F.col(expr_str)
+        func = m.group(1).lower()
+        args = [a.strip() for a in m.group(2).split(",")]
+        if func in ("day", "days"):
+            return F.days(F.col(args[0]))
+        if func in ("month", "months"):
+            return F.months(F.col(args[0]))
+        if func in ("year", "years"):
+            return F.years(F.col(args[0]))
+        if func in ("hour", "hours"):
+            return F.hours(F.col(args[0]))
+        if func == "bucket":
+            return F.bucket(int(args[1]), F.col(args[0]))
+        if func == "truncate":
+            return F.truncate(int(args[1]), F.col(args[0]))
+        raise ValueError(f"Unknown Iceberg partition transform: {func}")
+
+    _writer = df.writeTo("{{ target_relation.schema | replace('\"', '`') }}.{{ target_relation.identifier | replace('\"', '`') }}")
+    _writer = _writer.using("iceberg")
+    _writer = _writer.tableProperty("location", "{{ location }}/")
+    {% if extra_table_properties is not none %}
+    {% for prop_name, prop_value in extra_table_properties.items() %}
+    _writer = _writer.tableProperty("{{ prop_name }}", "{{ prop_value }}")
+    {% endfor %}
+    {% endif %}
+    {% if partitioned_by is not none %}
+    _writer = _writer.partitionedBy(
+        {%- for part_expr in partitioned_by %}
+        _parse_iceberg_partition("{{ part_expr }}"){{ "," if not loop.last }}
+        {%- endfor %}
+    )
+    {% endif %}
+    _writer.createOrReplace()
+{% elif spark_ctas|length > 0 %}
     df.createOrReplaceTempView("{{ target_relation.schema}}_{{ target_relation.identifier }}_tmpvw")
     spark_session.sql("""
     {{ spark_ctas }}

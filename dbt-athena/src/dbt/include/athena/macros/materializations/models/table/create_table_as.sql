@@ -43,8 +43,9 @@
   {%- endif -%}
 
   {%- if language == 'python' -%}
+    {%- set use_iceberg_write_to = config.get('use_iceberg_write_to', false) -%}
     {%- set spark_ctas = '' -%}
-    {%- if table_type == 'iceberg' -%}
+    {%- if table_type == 'iceberg' and not use_iceberg_write_to -%}
       {%- set spark_ctas -%}
           create table {{ relation.schema | replace('\"', '`') }}.{{ relation.identifier | replace('\"', '`') }}
           using iceberg
@@ -85,7 +86,10 @@
           'write_compression': write_compression,
           'bucket_count': bucket_count,
           'field_delimiter': field_delimiter,
-          'spark_ctas': spark_ctas
+          'table_type': table_type,
+          'extra_table_properties': extra_table_properties,
+          'use_iceberg_write_to': use_iceberg_write_to,
+          'spark_ctas': spark_ctas,
         }
       )
     }}
