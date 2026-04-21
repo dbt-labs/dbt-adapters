@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
+from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -22,6 +22,7 @@ from dbt_common.contracts.metadata import (
     CatalogTable,
     ColumnMetadata,
 )
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
@@ -38,10 +39,18 @@ from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
 from dbt.adapters.snowflake import SnowflakeRelation
 
-if TYPE_CHECKING:
-    import agate
+import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
+    name="snowflake_default_transient_dynamic_tables",
+    default=False,
+    description=(
+        "When enabled, dynamic tables default to transient (matching regular table behavior). "
+        "This is a breaking change from previous behavior where dynamic tables were non-transient."
+    ),
+)
 
 
 @dataclass
@@ -54,10 +63,12 @@ class SnowflakeConfig(AdapterConfig):
     copy_grants: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     immutable_where: Optional[str] = None
@@ -67,6 +78,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
@@ -98,6 +110,10 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
         }
     )
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -161,12 +177,14 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
-    def _get_warehouse(self) -> str:
+    def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
-            # can this happen?
-            raise DbtRuntimeError("Could not get current warehouse: no results")
-        return str(table[0][0])
+            return None
+        value = table[0][0]
+        if value is None or str(value).upper() == "NULL":
+            return None
+        return str(value)
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
@@ -281,6 +299,33 @@ class SnowflakeAdapter(SQLAdapter):
             metadata=table_metadata,
             columns=catalog_columns,
             stats=stats_dict,
+        )
+
+    # Fixed type map for SHOW OBJECTS columns.  Without this, agate infers types
+    # per-page from the data (e.g. `rows`/`bytes` → Number for table pages but Text
+    # when all-NULL on view-only pages, and everything → Number when the page is
+    # empty), causing agate.Table.merge() to raise
+    # "columns with the same names, but different types".
+    _SHOW_OBJECTS_COLUMN_TYPES: ClassVar[Dict[str, "agate.DataType"]] = {
+        "created_on": agate.DateTime(),
+        "rows": agate.Number(),
+        "bytes": agate.Number(),
+    }
+
+    @available
+    def normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+        """
+        Rebuild a SHOW OBJECTS result page with a fixed column-type schema so that
+        all paginated pages are type-homogeneous before merging.  Known columns are
+        given their natural types; all other columns default to Text.
+        """
+        column_types = [
+            self._SHOW_OBJECTS_COLUMN_TYPES.get(name, agate.Text()) for name in table.column_names
+        ]
+        return agate.Table(
+            [list(row) for row in table.rows],
+            column_names=table.column_names,
+            column_types=column_types,
         )
 
     def list_relations_without_caching(
@@ -512,7 +557,9 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+    def describe_dynamic_table(
+        self, relation: SnowflakeRelation, include_transient: bool = False
+    ) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
@@ -542,12 +589,43 @@ CALL {proc_name}();
             "warehouse",
             "refresh_mode",
             "immutable_where",
+            "cluster_by",
         ]
         available_columns = [c.lower() for c in dt_table.column_names]
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+        if "scheduler" in available_columns:
+            base_columns.append("scheduler")
 
-        return {"dynamic_table": dt_table.select(base_columns)}
+        selected = dt_table.select(base_columns)
+
+        if include_transient:
+            is_transient = self._query_dynamic_table_transient_status(relation)
+            # choosing a future proof column name
+            selected = selected.compute(
+                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
+            )
+
+        return {"dynamic_table": selected}
+
+    def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
+        """
+        Query SHOW TABLES to determine if a dynamic table is transient.
+
+        SHOW DYNAMIC TABLES does not expose transient status, so we fall back to
+        SHOW TABLES where the "kind" column contains "TRANSIENT" for transient tables.
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        _, tables_table = self.execute(show_tables_sql, fetch=True)
+        if len(tables_table.rows) > 0:
+            tables_table = tables_table.rename(
+                column_names=[name.lower() for name in tables_table.column_names]
+            )
+            return tables_table.rows[0].get("kind") == "TRANSIENT"
+        return False
 
     def expand_column_types(self, goal, current):
         reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}

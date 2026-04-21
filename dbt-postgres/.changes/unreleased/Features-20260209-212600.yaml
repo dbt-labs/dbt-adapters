@@ -1,0 +1,6 @@
+kind: Features
+body: Add autocommit support to eliminate idle-in-transaction states
+time: 2026-02-09T21:26:00.000000-05:00
+custom:
+  Author: gmr
+  Issue: "1608"
