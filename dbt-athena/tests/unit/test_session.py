@@ -11,8 +11,8 @@ from dbt.adapters.athena import AthenaCredentials
 from dbt.adapters.athena.session import (
     AthenaSparkSessionManager,
     _EXPIRY_BUFFER_SECONDS,
-    _assume_role_session,
     _get_assume_role_session,
+    _assume_role_session,
     get_boto3_session,
     get_boto3_session_from_credentials,
 )
@@ -108,15 +108,20 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.side_effect = [base_session, MagicMock()]
 
-        _assume_role_session(credentials)
+        _assume_role_session(base_session, credentials)
 
         base_session.client.assert_called_once_with("sts")
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
             RoleSessionName="dbt-athena",
             DurationSeconds=3600,
+        )
+        mock_session_cls.assert_called_once_with(
+            aws_access_key_id="ASSUMED_ACCESS_KEY",
+            aws_secret_access_key="ASSUMED_SECRET_KEY",
+            aws_session_token="ASSUMED_SESSION_TOKEN",
+            region_name="ap-northeast-1",
         )
 
     @patch("dbt.adapters.athena.session.boto3.session.Session")
@@ -129,9 +134,8 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.side_effect = [base_session, MagicMock()]
 
-        _assume_role_session(credentials)
+        _assume_role_session(base_session, credentials)
 
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
@@ -150,9 +154,8 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.side_effect = [base_session, MagicMock()]
 
-        _assume_role_session(credentials)
+        _assume_role_session(base_session, credentials)
 
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
@@ -160,9 +163,12 @@ class TestAssumeRoleSession:
             DurationSeconds=3600,
         )
 
+    @patch("dbt.adapters.athena.session.boto3.session.Session")
     @patch("dbt.adapters.athena.session._assume_role_session")
-    def test_get_boto3_session_calls_assume_role(self, mock_assume):
+    def test_get_boto3_session_calls_assume_role(self, mock_assume, mock_session_cls):
+        mock_base = MagicMock()
         mock_assumed = MagicMock()
+        mock_session_cls.return_value = mock_base
         mock_assume.return_value = mock_assumed
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -175,12 +181,17 @@ class TestAssumeRoleSession:
 
         result = get_boto3_session(connection)
 
-        mock_assume.assert_called_once_with(credentials)
+        mock_assume.assert_called_once_with(mock_base, credentials)
         assert result is mock_assumed
 
+    @patch("dbt.adapters.athena.session.boto3.session.Session")
     @patch("dbt.adapters.athena.session._assume_role_session")
-    def test_get_boto3_session_from_credentials_calls_assume_role(self, mock_assume):
+    def test_get_boto3_session_from_credentials_calls_assume_role(
+        self, mock_assume, mock_session_cls
+    ):
+        mock_base = MagicMock()
         mock_assumed = MagicMock()
+        mock_session_cls.return_value = mock_base
         mock_assume.return_value = mock_assumed
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -188,11 +199,10 @@ class TestAssumeRoleSession:
 
         result = get_boto3_session_from_credentials(credentials)
 
-        mock_assume.assert_called_once_with(credentials)
+        mock_assume.assert_called_once_with(mock_base, credentials)
         assert result is mock_assumed
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
-    def test_assume_role_sts_error_raises_dbt_runtime_error(self, mock_session_cls):
+    def test_assume_role_sts_error_raises_dbt_runtime_error(self):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
         )
@@ -203,10 +213,9 @@ class TestAssumeRoleSession:
         )
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.return_value = base_session
 
         with pytest.raises(DbtRuntimeError, match="Failed to assume role"):
-            _assume_role_session(credentials)
+            _assume_role_session(base_session, credentials)
 
     @pytest.mark.parametrize(
         "duration",
@@ -225,9 +234,8 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.side_effect = [base_session, MagicMock()]
 
-        _assume_role_session(credentials)
+        _assume_role_session(base_session, credentials)
 
         mock_sts.assume_role.assert_called_once()
 
@@ -243,9 +251,10 @@ class TestAssumeRoleSession:
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
             assume_role_duration_seconds=duration,
         )
+        base_session = MagicMock()
 
         with pytest.raises(DbtRuntimeError, match="assume_role_duration_seconds must be between"):
-            _assume_role_session(credentials)
+            _assume_role_session(base_session, credentials)
 
     @patch("dbt.adapters.athena.session.boto3.session.Session")
     def test_assume_role_with_all_options(self, mock_session_cls):
@@ -259,9 +268,8 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        mock_session_cls.side_effect = [base_session, MagicMock()]
 
-        _assume_role_session(credentials)
+        _assume_role_session(base_session, credentials)
 
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
@@ -281,11 +289,9 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        assumed_session = MagicMock()
-        mock_session_cls.side_effect = [base_session, assumed_session]
 
-        session1 = _assume_role_session(credentials)
-        session2 = _assume_role_session(credentials)
+        session1 = _assume_role_session(base_session, credentials)
+        session2 = _assume_role_session(base_session, credentials)
 
         assert session1 is session2
         mock_sts.assume_role.assert_called_once()
@@ -298,20 +304,19 @@ class TestAssumeRoleSession:
         )
         ttl = credentials.assume_role_duration_seconds - _EXPIRY_BUFFER_SECONDS
 
+        session_old = MagicMock(name="old_session")
+        session_new = MagicMock(name="new_session")
+        mock_session_cls.side_effect = [session_old, session_new]
+
         mock_sts = MagicMock()
         mock_sts.assume_role.return_value = self.STS_RESPONSE
-        base_session_1 = MagicMock()
-        base_session_1.client.return_value = mock_sts
-        session_old = MagicMock(name="old_session")
-        base_session_2 = MagicMock()
-        base_session_2.client.return_value = mock_sts
-        session_new = MagicMock(name="new_session")
-        mock_session_cls.side_effect = [base_session_1, session_old, base_session_2, session_new]
+        base_session = MagicMock()
+        base_session.client.return_value = mock_sts
 
         mock_time.time.return_value = 0.0  # _ttl_hash = 0
-        session1 = _assume_role_session(credentials)
+        session1 = _assume_role_session(base_session, credentials)
         mock_time.time.return_value = float(ttl)  # _ttl_hash = 1 → cache miss
-        session2 = _assume_role_session(credentials)
+        session2 = _assume_role_session(base_session, credentials)
 
         assert session1 is session_old
         assert session2 is session_new
@@ -325,16 +330,40 @@ class TestAssumeRoleSession:
         creds_b = self._make_credentials(
             assume_role_arn="arn:aws:iam::222222222222:role/RoleB",
         )
+        session_a_mock = MagicMock(name="session_a")
+        session_b_mock = MagicMock(name="session_b")
+        mock_session_cls.side_effect = [session_a_mock, session_b_mock]
+
         mock_sts = MagicMock()
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
+
+        session_a = _assume_role_session(base_session, creds_a)
+        session_b = _assume_role_session(base_session, creds_b)
+
+        assert session_a is session_a_mock
+        assert session_b is session_b_mock
+        assert mock_sts.assume_role.call_count == 2
+
+    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    def test_different_base_sessions_use_separate_cache_entries(self, mock_session_cls):
+        credentials = self._make_credentials(
+            assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
+        )
         session_a_mock = MagicMock(name="session_a")
         session_b_mock = MagicMock(name="session_b")
-        mock_session_cls.side_effect = [base_session, session_a_mock, base_session, session_b_mock]
+        mock_session_cls.side_effect = [session_a_mock, session_b_mock]
 
-        session_a = _assume_role_session(creds_a)
-        session_b = _assume_role_session(creds_b)
+        mock_sts = MagicMock()
+        mock_sts.assume_role.return_value = self.STS_RESPONSE
+        base_session_1 = MagicMock()
+        base_session_1.client.return_value = mock_sts
+        base_session_2 = MagicMock()
+        base_session_2.client.return_value = mock_sts
+
+        session_a = _assume_role_session(base_session_1, credentials)
+        session_b = _assume_role_session(base_session_2, credentials)
 
         assert session_a is session_a_mock
         assert session_b is session_b_mock
@@ -350,16 +379,17 @@ class TestAssumeRoleSession:
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
             region_name="us-east-1",
         )
+        session_a_mock = MagicMock(name="session_a")
+        session_b_mock = MagicMock(name="session_b")
+        mock_session_cls.side_effect = [session_a_mock, session_b_mock]
+
         mock_sts = MagicMock()
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        session_a_mock = MagicMock(name="session_a")
-        session_b_mock = MagicMock(name="session_b")
-        mock_session_cls.side_effect = [base_session, session_a_mock, base_session, session_b_mock]
 
-        session_a = _assume_role_session(creds_a)
-        session_b = _assume_role_session(creds_b)
+        session_a = _assume_role_session(base_session, creds_a)
+        session_b = _assume_role_session(base_session, creds_b)
 
         assert session_a is session_a_mock
         assert session_b is session_b_mock
@@ -375,44 +405,21 @@ class TestAssumeRoleSession:
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
             assume_role_external_id="ext-id-b",
         )
+        session_a_mock = MagicMock(name="session_a")
+        session_b_mock = MagicMock(name="session_b")
+        mock_session_cls.side_effect = [session_a_mock, session_b_mock]
+
         mock_sts = MagicMock()
         mock_sts.assume_role.return_value = self.STS_RESPONSE
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
-        session_a_mock = MagicMock(name="session_a")
-        session_b_mock = MagicMock(name="session_b")
-        mock_session_cls.side_effect = [base_session, session_a_mock, base_session, session_b_mock]
 
-        session_a = _assume_role_session(creds_a)
-        session_b = _assume_role_session(creds_b)
+        session_a = _assume_role_session(base_session, creds_a)
+        session_b = _assume_role_session(base_session, creds_b)
 
         assert session_a is session_a_mock
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
-
-    @patch("dbt.adapters.athena.session.time")
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
-    def test_get_boto3_session_from_credentials_caches_across_calls(
-        self, mock_session_cls, mock_time
-    ):
-        """get_boto3_session_from_credentials is called multiple times with the same
-        credentials. The cache must hit, i.e. STS assume_role is called only once."""
-        mock_time.time.return_value = 0.0
-        credentials = self._make_credentials(
-            assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
-        )
-        mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = self.STS_RESPONSE
-        base_session = MagicMock()
-        base_session.client.return_value = mock_sts
-        assumed_session = MagicMock(name="assumed_session")
-        mock_session_cls.side_effect = [base_session, assumed_session]
-
-        session1 = get_boto3_session_from_credentials(credentials)
-        session2 = get_boto3_session_from_credentials(credentials)
-
-        assert session1 is session2
-        assert mock_sts.assume_role.call_count == 1
 
 
 @pytest.mark.usefixtures("athena_credentials", "athena_client")

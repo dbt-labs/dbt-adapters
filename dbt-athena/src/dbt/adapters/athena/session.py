@@ -28,11 +28,7 @@ spark_session_load: Dict[UUID, int] = {}
 _EXPIRY_BUFFER_SECONDS = 300
 
 
-class _AssumeRoleKey(NamedTuple):
-    aws_access_key_id: Optional[str]
-    aws_secret_access_key: Optional[str]
-    aws_session_token: Optional[str]
-    aws_profile_name: Optional[str]
+class _AssumeRoleParams(NamedTuple):
     assume_role_arn: Optional[str]
     assume_role_external_id: Optional[str]
     assume_role_session_name: str
@@ -40,7 +36,10 @@ class _AssumeRoleKey(NamedTuple):
     region_name: str
 
 
-def _assume_role_session(credentials: Any) -> boto3.session.Session:
+def _assume_role_session(
+    base_session: boto3.session.Session,
+    credentials: Any,
+) -> boto3.session.Session:
     duration = credentials.assume_role_duration_seconds
     # Valid range is 900–43200 seconds per AWS STS docs:
     # https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRole.html#API_AssumeRole_RequestParameters
@@ -49,11 +48,7 @@ def _assume_role_session(credentials: Any) -> boto3.session.Session:
             f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
         )
     ttl = duration - _EXPIRY_BUFFER_SECONDS
-    key = _AssumeRoleKey(
-        aws_access_key_id=credentials.aws_access_key_id,
-        aws_secret_access_key=credentials.aws_secret_access_key,
-        aws_session_token=credentials.aws_session_token,
-        aws_profile_name=credentials.aws_profile_name,
+    key = _AssumeRoleParams(
         assume_role_arn=credentials.assume_role_arn,
         assume_role_external_id=credentials.assume_role_external_id,
         assume_role_session_name=credentials.assume_role_session_name,
@@ -62,22 +57,16 @@ def _assume_role_session(credentials: Any) -> boto3.session.Session:
     )
     # Increments every ttl seconds, causing lru_cache to treat each period as a distinct call
     ttl_bucket = int(time.time() / ttl)
-    return _get_assume_role_session(key, ttl_bucket)
+    return _get_assume_role_session(base_session, key, ttl_bucket)
 
 
 @lru_cache(maxsize=1)
 def _get_assume_role_session(
-    key: _AssumeRoleKey,
+    base_session: boto3.session.Session,
+    key: _AssumeRoleParams,
     _ttl_hash: int,  # artificial value that changes every ttl seconds to force cache invalidation
 ) -> boto3.session.Session:
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
-    base_session = boto3.session.Session(
-        aws_access_key_id=key.aws_access_key_id,
-        aws_secret_access_key=key.aws_secret_access_key,
-        aws_session_token=key.aws_session_token,
-        region_name=key.region_name,
-        profile_name=key.aws_profile_name,
-    )
     sts_client = base_session.client("sts")
     kwargs: Dict[str, Any] = {
         "RoleArn": key.assume_role_arn,
@@ -100,27 +89,29 @@ def _get_assume_role_session(
 
 
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
-    if connection.credentials.assume_role_arn:
-        return _assume_role_session(connection.credentials)
-    return boto3.session.Session(
+    base_session = boto3.session.Session(
         aws_access_key_id=connection.credentials.aws_access_key_id,
         aws_secret_access_key=connection.credentials.aws_secret_access_key,
         aws_session_token=connection.credentials.aws_session_token,
         region_name=connection.credentials.region_name,
         profile_name=connection.credentials.aws_profile_name,
     )
+    if connection.credentials.assume_role_arn:
+        return _assume_role_session(base_session, connection.credentials)
+    return base_session
 
 
 def get_boto3_session_from_credentials(credentials: Any) -> boto3.session.Session:
-    if credentials.assume_role_arn:
-        return _assume_role_session(credentials)
-    return boto3.session.Session(
+    base_session = boto3.session.Session(
         aws_access_key_id=credentials.aws_access_key_id,
         aws_secret_access_key=credentials.aws_secret_access_key,
         aws_session_token=credentials.aws_session_token,
         region_name=credentials.region_name,
         profile_name=credentials.aws_profile_name,
     )
+    if credentials.assume_role_arn:
+        return _assume_role_session(base_session, credentials)
+    return base_session
 
 
 class AthenaSparkSessionManager:
