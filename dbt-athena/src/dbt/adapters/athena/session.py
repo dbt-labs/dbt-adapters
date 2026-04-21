@@ -67,7 +67,10 @@ def _get_assume_role_session(
     _ttl_hash: int,  # artificial value that changes every ttl seconds to force cache invalidation
 ) -> boto3.session.Session:
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
-    sts_client = base_session.client("sts")
+    sts_client = base_session.client(
+        "sts",
+        config=get_boto3_config(DEFAULT_THREAD_COUNT),
+    )
     kwargs: Dict[str, Any] = {
         "RoleArn": key.assume_role_arn,
         "RoleSessionName": key.assume_role_session_name,
