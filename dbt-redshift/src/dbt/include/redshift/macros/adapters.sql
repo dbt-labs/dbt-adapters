@@ -312,8 +312,13 @@
 
 {% macro redshift__list_schemas(database) %}
   {% if redshift__use_show_apis() %}
+    {# dbt-core's create_schemas passes a pre-quoted identifier via str(relation);
+       other callers pass the raw database name. Normalize by stripping any surrounding
+       double-quotes before re-applying adapter.quote so the identifier is always quoted
+       exactly once — required for databases with hyphens. #}
+    {%- set _database = database | replace('"', '') -%}
     {% call statement('list_schemas', fetch_result=True) -%}
-      SHOW SCHEMAS FROM DATABASE {{ adapter.quote(database) }}
+      SHOW SCHEMAS FROM DATABASE {{ adapter.quote(_database) }}
     {% endcall %}
     {%- set table = load_result('list_schemas').table -%}
     {%- set schemas = [] -%}
