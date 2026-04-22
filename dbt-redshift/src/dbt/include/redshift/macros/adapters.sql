@@ -313,7 +313,7 @@
 {% macro redshift__list_schemas(database) %}
   {% if redshift__use_show_apis() %}
     {% call statement('list_schemas', fetch_result=True) -%}
-      SHOW SCHEMAS FROM DATABASE {{ database }}
+      SHOW SCHEMAS FROM DATABASE {{ adapter.quote(database) }}
     {% endcall %}
     {%- set table = load_result('list_schemas').table -%}
     {%- set schemas = [] -%}

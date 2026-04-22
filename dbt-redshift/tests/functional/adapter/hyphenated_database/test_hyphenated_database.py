@@ -35,10 +35,15 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
             "simple_table.sql": _SIMPLE_TABLE,
         }
 
-    def test_run(self, project):
-        results = run_dbt(["run"])
-        assert len(results) == 1
+    @pytest.fixture(scope="class")
+    def dbt_run_results(self, project):
+        """Run dbt once per worker/class; other tests in this class use it as a prerequisite."""
+        return run_dbt(["run"])
 
+    def test_run(self, dbt_run_results):
+        assert len(dbt_run_results) == 1
+
+    @pytest.mark.usefixtures("dbt_run_results")
     def test_list_relations_uses_show_api(self, project):
         """list_relations_without_caching (SHOW TABLES) works with a hyphenated database."""
         with project.adapter.connection_named("_test"):
@@ -51,6 +56,7 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
         identifiers = {rel.identifier for rel in relations}
         assert "simple_table" in identifiers
 
+    @pytest.mark.usefixtures("dbt_run_results")
     def test_check_schema_exists(self, project):
         """check_schema_exists (SHOW SCHEMAS) works with a hyphenated database."""
         with project.adapter.connection_named("_test"):
@@ -59,6 +65,7 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
             )
         assert exists
 
+    @pytest.mark.usefixtures("dbt_run_results")
     def test_list_schemas(self, project):
         """list_schemas (SHOW SCHEMAS) works with a hyphenated database."""
         with project.adapter.connection_named("_test"):
