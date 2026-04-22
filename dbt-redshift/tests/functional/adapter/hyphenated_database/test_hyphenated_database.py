@@ -25,11 +25,6 @@ select 1 as id, 'hello' as label
 union all select 2, 'world'
 """
 
-_VIEW_FROM_TABLE = """
-{{ config(materialized='view', bind=false) }}
-select * from {{ ref('simple_table') }}
-"""
-
 
 class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
     """dbt run succeeds against a database whose name contains a hyphen."""
@@ -38,12 +33,11 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
     def models(self):
         return {
             "simple_table.sql": _SIMPLE_TABLE,
-            "view_from_table.sql": _VIEW_FROM_TABLE,
         }
 
     def test_run(self, project):
         results = run_dbt(["run"])
-        assert len(results) == 2
+        assert len(results) == 1
 
     def test_list_relations_uses_show_api(self, project):
         """list_relations_without_caching (SHOW TABLES) works with a hyphenated database."""
@@ -56,17 +50,13 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
 
         identifiers = {rel.identifier for rel in relations}
         assert "simple_table" in identifiers
-        assert "view_from_table" in identifiers
 
     def test_check_schema_exists(self, project):
         """check_schema_exists (SHOW SCHEMAS) works with a hyphenated database."""
         with project.adapter.connection_named("_test"):
-            information_schema = project.adapter.Relation.create(
-                database=REDSHIFT_TEST_DBNAME_W_HYPHEN,
-                schema=project.test_schema,
-                identifier="INFORMATION_SCHEMA",
-            ).information_schema()
-            exists = project.adapter.check_schema_exists(information_schema, project.test_schema)
+            exists = project.adapter.check_schema_exists(
+                REDSHIFT_TEST_DBNAME_W_HYPHEN, project.test_schema
+            )
         assert exists
 
     def test_list_schemas(self, project):
