@@ -69,6 +69,12 @@ class TestHyphenatedDatabaseRun(HyphenatedDatabaseMixin):
             exists = project.adapter.check_schema_exists(information_schema, project.test_schema)
         assert exists
 
+    def test_list_schemas(self, project):
+        """list_schemas (SHOW SCHEMAS) works with a hyphenated database."""
+        with project.adapter.connection_named("_test"):
+            schemas = project.adapter.list_schemas(REDSHIFT_TEST_DBNAME_W_HYPHEN)
+        assert project.test_schema.lower() in [s.lower() for s in schemas]
+
 
 class TestHyphenatedDatabaseCatalog(HyphenatedDatabaseMixin):
     """Catalog introspection (SHOW TABLES / SHOW COLUMNS) works with a hyphenated database."""
@@ -112,6 +118,13 @@ class TestHyphenatedDatabaseCatalog(HyphenatedDatabaseMixin):
             schema=hyphen_db_schema.schema,
             identifier="INFORMATION_SCHEMA",
         ).information_schema()
+
+    def test_get_columns_in_relation(self, adapter, hyphen_db_table):
+        """get_columns_in_relation (SHOW COLUMNS) works with a hyphenated database."""
+        with get_connection(adapter):
+            columns = adapter.get_columns_in_relation(hyphen_db_table)
+        column_names = {col.name for col in columns}
+        assert column_names == {"id", "name", "value"}
 
     def test_catalog_by_relations(
         self, adapter, hyphen_db_schema, hyphen_db_table, hyphen_db_information_schema
