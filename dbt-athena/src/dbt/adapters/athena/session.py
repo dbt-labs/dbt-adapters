@@ -34,6 +34,7 @@ class _AssumeRoleParams(NamedTuple):
     assume_role_session_name: str
     assume_role_duration_seconds: int
     region_name: str
+    num_retries: int
 
 
 def _assume_role_session(
@@ -54,6 +55,7 @@ def _assume_role_session(
         assume_role_session_name=credentials.assume_role_session_name,
         assume_role_duration_seconds=duration,
         region_name=credentials.region_name,
+        num_retries=credentials.effective_num_retries,
     )
     # Increments every ttl seconds, causing lru_cache to treat each period as a distinct call
     ttl_bucket = int(time.time() / ttl)
@@ -69,7 +71,7 @@ def _get_assume_role_session(
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
     sts_client = base_session.client(
         "sts",
-        config=get_boto3_config(DEFAULT_THREAD_COUNT),
+        config=get_boto3_config(key.num_retries),
     )
     kwargs: Dict[str, Any] = {
         "RoleArn": key.assume_role_arn,
