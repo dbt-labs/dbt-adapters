@@ -2,10 +2,10 @@ import pytest
 
 from dbt.adapters.events.types import SQLQuery
 from dbt.artifacts.schemas.results import RunStatus
+from dbt.exceptions import ParsingError
 from dbt.tests.adapter.functions.test_js_udfs import (
     BasicJSAggregateUDF,
     BasicJSUDF,
-    JSAggregateUDFNotSupported,
     JSUDFDefaultArgSupport,
     JSUDFDeterministicVolatility,
     JSUDFMultiLineBody,
@@ -218,8 +218,8 @@ class TestSnowflakeJSUDFQuoteArgsFalse:
         assert int(result.results[0].agate_table.rows[0].values()[0]) == 50
 
 
-class TestSnowflakeJSAggregateUDFError(JSAggregateUDFNotSupported):
-    """Test that JavaScript aggregate UDFs error on Snowflake."""
+class TestSnowflakeJSAggregateUDFError:
+    """Test that JavaScript aggregate UDFs raise a parsing error on Snowflake."""
 
     @pytest.fixture(scope="class")
     def functions(self):
@@ -227,3 +227,7 @@ class TestSnowflakeJSAggregateUDFError(JSAggregateUDFNotSupported):
             "sum_positive.js": SUM_POSITIVE_JS,
             "sum_positive.yml": SUM_POSITIVE_JS_YML,
         }
+
+    def test_js_aggregate_udf_errors(self, project):
+        with pytest.raises(ParsingError):
+            run_dbt(["build"])
