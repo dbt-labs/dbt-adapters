@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import ANY, Mock, patch, MagicMock
 from uuid import UUID
 
 import botocore.session
@@ -111,7 +111,7 @@ class TestAssumeRoleSession:
 
         _assume_role_session(base_session, credentials)
 
-        base_session.client.assert_called_once_with("sts")
+        base_session.client.assert_called_once_with("sts", config=ANY)
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
             RoleSessionName="dbt-athena",
