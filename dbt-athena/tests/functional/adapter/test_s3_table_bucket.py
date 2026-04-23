@@ -20,8 +20,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-# ── Model SQL ─────────────────────────────────────────────────────
-
 TABLE_MODEL = """
 {{ config(
     materialized='table',
@@ -77,9 +75,6 @@ select 1 as id, 'snap' as name
 """
 
 
-# ── Profile fixture ───────────────────────────────────────────────
-
-
 @pytest.fixture(scope="class")
 def dbt_profile_target():
     """Override profile to point at the S3TB catalog."""
@@ -96,9 +91,6 @@ def dbt_profile_target():
         "num_retries": int(os.getenv("DBT_TEST_ATHENA_NUM_RETRIES", "2")),
         "aws_profile_name": os.getenv("DBT_TEST_ATHENA_AWS_PROFILE_NAME") or None,
     }
-
-
-# ── Test classes ──────────────────────────────────────────────────
 
 
 class TestS3TableBucketTable:

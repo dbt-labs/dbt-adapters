@@ -62,7 +62,7 @@ class TestS3TableBucket:
         }
         return config_from_parts_or_dicts(project_cfg, profile_cfg)
 
-    # ── is_s3_table_bucket detection ──────────────────────────────
+    # is_s3_table_bucket detection
 
     @mock_aws
     def test_is_s3_table_bucket_true(self):
@@ -126,7 +126,7 @@ class TestS3TableBucket:
         self.adapter.acquire_connection("dummy")
         assert self.adapter.is_s3_table_bucket("shared_glue") is False
 
-    # ── list_schemas with CatalogId ──────────────────────────────
+    # list_schemas with CatalogId
 
     @mock_aws
     def test_list_schemas_passes_catalog_id(self):
@@ -147,7 +147,7 @@ class TestS3TableBucket:
         result = self.adapter.list_schemas("shared_catalog")
         assert sorted(result) == ["ns_alpha", "ns_beta"]
 
-    # ── _get_data_catalog caching ─────────────────────────────────
+    # _get_data_catalog caching
 
     @mock_aws
     def test_get_data_catalog_is_cached(self):
@@ -158,7 +158,7 @@ class TestS3TableBucket:
         result2 = self.adapter._get_data_catalog(S3TB_CATALOG_NAME)
         assert result1 is result2  # same object, not just equal
 
-    # ── Multi-catalog detection ───────────────────────────────────
+    # multi-catalog detection
 
     @mock_aws
     def test_multi_catalog_detection(self):
@@ -169,7 +169,7 @@ class TestS3TableBucket:
         assert self.adapter.is_s3_table_bucket(S3TB_CATALOG_NAME) is True
         assert self.adapter.is_s3_table_bucket("awsdatacatalog") is False
 
-    # ── Helpers ────────────────────────────────────────────────────
+    # helpers
 
     def _create_s3tb_catalog(self):
         conn = boto3.client("athena", region_name=AWS_REGION)

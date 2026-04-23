@@ -123,7 +123,7 @@ def get_table_type(table: TableTypeDef) -> TableType:
         filter(None, [table.get("CatalogId"), table.get("DatabaseName"), table["Name"]])
     )
 
-    # Check for Iceberg first — S3 Table Bucket tables report TableType="customer"
+    # check for iceberg first - s3 table bucket tables report TableType="customer"
     # which is not in RELATION_TYPE_MAP, but Parameters.table_type is set to "ICEBERG"
     if table.get("Parameters", {}).get("table_type", "").lower() == "iceberg":
         _type = TableType.ICEBERG

@@ -103,7 +103,7 @@
   {%- else -%}
 
     {%- if is_s3tb -%}
-      {# S3 Table Buckets: drop-and-recreate (ALTER TABLE RENAME not supported by AWS) #}
+      -- s3 table buckets: drop-and-recreate (ALTER TABLE RENAME not supported by AWS)
       {%- if old_relation is not none -%}
         {{ drop_relation(old_relation) }}
       {%- endif -%}

@@ -52,7 +52,7 @@
   {%- endif -%}
 
   {%- if is_s3tb -%}
-    {# S3 Table Buckets manage their own storage — skip S3 cleanup #}
+    {# s3 table buckets manage their own storage - skip s3 cleanup #}
   {%- elif native_drop and table_type == 'iceberg' -%}
     {% do log('Config native_drop enabled, skipping direct S3 delete') %}
   {%- else -%}
