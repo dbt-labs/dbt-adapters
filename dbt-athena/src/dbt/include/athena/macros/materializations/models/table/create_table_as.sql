@@ -227,7 +227,7 @@
         {% do exceptions.raise_compiler_error("force_batch is not supported with S3 Table Buckets.") %}
       {%- endif -%}
       {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
-      {%- set query_result = relation ~ ' with many partitions created' -%}
+      {%- set compiled_code_result = relation ~ ' with many partitions created' -%}
     {%- else -%}
         {%- if temporary -%}
           {%- do run_query(create_table_as(temporary, relation, compiled_code, language, true)) -%}
