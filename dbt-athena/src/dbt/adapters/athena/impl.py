@@ -1035,7 +1035,9 @@ class AthenaAdapter(SQLAdapter):
         # Update table description
         if persist_relation_docs:
             # Prepare dbt description
-            clean_table_description = ellipsis_comment(clean_sql_comment(model["description"]))
+            clean_table_description = ellipsis_comment(
+                clean_sql_comment(model["description"]), 2048
+            )
             # Get current description from Glue
             glue_table_description = table.get("Description", "")
             # Get current description parameter from Glue
@@ -1085,7 +1087,7 @@ class AthenaAdapter(SQLAdapter):
                 if col_name in model["columns"]:
                     col_comment = model["columns"][col_name]["description"]
                     # Prepare column description from dbt
-                    clean_col_comment = ellipsis_comment(clean_sql_comment(col_comment))
+                    clean_col_comment = ellipsis_comment(clean_sql_comment(col_comment), 255)
                     # Get current column comment from Glue
                     glue_col_comment = col_obj.get("Comment", "")
                     # Check that column description is already attached to Glue table
@@ -1166,6 +1168,43 @@ class AthenaAdapter(SQLAdapter):
         for page in paginator.paginate():
             result.extend([schema["Name"] for schema in page["DatabaseList"]])
         return result
+
+    @available.parse(lambda *a, **k: False)
+    def check_schema_exists(self, database: str, schema: str) -> bool:
+        """
+        Check if a schema exists using the Glue GetDatabase API.
+
+        This avoids the default SQL-based implementation which would trigger
+        Athena's StartQueryExecution, requiring unnecessary IAM permissions.
+        For non-Glue data catalogs, falls back to the default SQL-based implementation.
+        """
+        data_catalog = self._get_data_catalog(database)
+        if data_catalog and data_catalog["Type"] != "GLUE":
+            return super().check_schema_exists(database, schema)
+
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        catalog_id = get_catalog_id(data_catalog)
+
+        with boto3_client_lock:
+            glue_client = client.session.client(
+                "glue",
+                region_name=client.region_name,
+                config=get_boto3_config(num_retries=creds.effective_num_retries),
+            )
+
+        try:
+            kwargs: Dict[str, str] = {"Name": schema}
+            if catalog_id:
+                kwargs["CatalogId"] = catalog_id
+            response = glue_client.get_database(**kwargs)
+            LOGGER.debug(f"Glue GetDatabase response for schema '{schema}': {response}")
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "EntityNotFoundException":
+                return False
+            raise e
 
     @staticmethod
     def _is_current_column(col: ColumnTypeDef) -> bool:

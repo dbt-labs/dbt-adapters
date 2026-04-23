@@ -80,7 +80,7 @@ jobs:
 
             - name: "Parse semantic version"
               id: semver
-              uses: dbt-labs/actions/parse-semver@v1.1.1
+              uses: dbt-labs/actions/parse-semver@v1
               with:
                   version: ${{ steps.version.outputs.raw }}
 
