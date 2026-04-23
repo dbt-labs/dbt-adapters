@@ -1,0 +1,6 @@
+kind: Features
+body: Set dbt.query_comment as Spark property for Python models.
+time: 2026-04-23T13:05:47.480447+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1890"

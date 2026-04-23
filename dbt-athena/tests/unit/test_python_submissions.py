@@ -416,3 +416,124 @@ class TestSessionStateErrorHandling:
             assert result == {"ResultS3Uri": "test_results_s3_uri"}
             # Verify we made two attempts (once failed with BUSY, then succeeded)
             assert call_count[0] == 2
+
+
+class TestPrependQueryComment:
+    """Tests for _prepend_query_comment and query comment propagation through submit()."""
+
+    @pytest.fixture
+    def mock_credentials(self):
+        credentials = Mock()
+        credentials.aws_access_key_id = None
+        credentials.aws_secret_access_key = None
+        credentials.aws_session_token = None
+        credentials.region_name = "us-east-1"
+        credentials.aws_profile_name = None
+        credentials.spark_work_group = "test-workgroup"
+        credentials.poll_interval = 1
+        credentials.num_retries = 3
+        credentials.effective_num_retries = 3
+        return credentials
+
+    def _make_helper(self, mock_credentials, query_comment=""):
+        parsed_model = {
+            "alias": "test_model",
+            "relation_name": "test_relation",
+            "schema": "test_schema",
+            "query_comment": query_comment,
+            "config": {
+                "timeout": 10,
+                "polling_interval": 1,
+                "engine_config": {
+                    "CoordinatorDpuSize": 1,
+                    "MaxConcurrentDpus": 2,
+                    "DefaultExecutorDpuSize": 1,
+                },
+            },
+        }
+        with patch("dbt.adapters.athena.python_submissions.AthenaSparkSessionManager"):
+            return AthenaPythonJobHelper(parsed_model, mock_credentials)
+
+    def test_no_query_comment(self, mock_credentials):
+        helper = self._make_helper(mock_credentials, query_comment="")
+        code = "print('hello')"
+        assert helper._prepend_query_comment(code) == code
+
+    def test_no_query_comment_key_missing(self, mock_credentials):
+        """When parsed_model has no query_comment key, defaults to empty string."""
+        parsed_model = {
+            "alias": "test_model",
+            "relation_name": "test_relation",
+            "schema": "test_schema",
+            "config": {
+                "timeout": 10,
+                "polling_interval": 1,
+                "engine_config": {
+                    "CoordinatorDpuSize": 1,
+                    "MaxConcurrentDpus": 2,
+                    "DefaultExecutorDpuSize": 1,
+                },
+            },
+        }
+        with patch("dbt.adapters.athena.python_submissions.AthenaSparkSessionManager"):
+            helper = AthenaPythonJobHelper(parsed_model, mock_credentials)
+        code = "print('hello')"
+        assert helper._prepend_query_comment(code) == code
+
+    def test_prepends_query_comment(self, mock_credentials):
+        helper = self._make_helper(mock_credentials, query_comment="my_comment")
+        result = helper._prepend_query_comment("print('hello')")
+        assert result == 'spark.conf.set("dbt.query_comment", "my_comment")\nprint(\'hello\')'
+
+    def test_escapes_special_characters(self, mock_credentials):
+        helper = self._make_helper(mock_credentials, query_comment='has "quotes" and \\backslash')
+        result = helper._prepend_query_comment("x = 1")
+        assert (
+            result
+            == 'spark.conf.set("dbt.query_comment", "has \\"quotes\\" and \\\\backslash")\nx = 1'
+        )
+
+    def test_submit_passes_query_comment_to_calculation_api(self, mock_credentials):
+        """submit() prepends query comment to the code sent to StartCalculationExecution."""
+        helper = self._make_helper(mock_credentials, query_comment="test_comment")
+
+        mock_athena_client = Mock()
+        mock_athena_client.start_calculation_execution = Mock(
+            return_value={"CalculationExecutionId": "exec-id"}
+        )
+        mock_athena_client.get_calculation_execution = Mock(
+            return_value={
+                "Result": {"ResultS3Uri": "s3://bucket/result"},
+                "Status": {"State": "COMPLETED"},
+            }
+        )
+        helper.__dict__["athena_client"] = mock_athena_client
+        helper.__dict__["session_id"] = "session-id"
+
+        helper.submit("x = 1")
+
+        submitted_code = mock_athena_client.start_calculation_execution.call_args[1]["CodeBlock"]
+        assert submitted_code.startswith('spark.conf.set("dbt.query_comment", "test_comment")')
+        assert "x = 1" in submitted_code
+
+    def test_submit_without_query_comment_sends_original_code(self, mock_credentials):
+        """submit() sends original code when no query comment is set."""
+        helper = self._make_helper(mock_credentials, query_comment="")
+
+        mock_athena_client = Mock()
+        mock_athena_client.start_calculation_execution = Mock(
+            return_value={"CalculationExecutionId": "exec-id"}
+        )
+        mock_athena_client.get_calculation_execution = Mock(
+            return_value={
+                "Result": {"ResultS3Uri": "s3://bucket/result"},
+                "Status": {"State": "COMPLETED"},
+            }
+        )
+        helper.__dict__["athena_client"] = mock_athena_client
+        helper.__dict__["session_id"] = "session-id"
+
+        helper.submit("x = 1")
+
+        submitted_code = mock_athena_client.start_calculation_execution.call_args[1]["CodeBlock"]
+        assert submitted_code == "x = 1"

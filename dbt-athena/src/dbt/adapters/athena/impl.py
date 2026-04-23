@@ -1142,6 +1142,12 @@ class AthenaAdapter(SQLAdapter):
             return AdapterResponse(_message="ERROR")
         return AdapterResponse(_message="OK")
 
+    def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
+        query_header = self.connections.query_header
+        if query_header and query_header.comment.query_comment:
+            parsed_model["query_comment"] = query_header.comment.query_comment.strip()
+        return super().submit_python_job(parsed_model, compiled_code)
+
     @property
     def default_python_submission_method(self) -> str:
         return "athena_helper"

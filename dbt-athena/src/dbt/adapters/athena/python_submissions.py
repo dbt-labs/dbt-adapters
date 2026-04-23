@@ -31,6 +31,7 @@ class AthenaPythonJobHelper(PythonJobHelper):
             credentials (AthenaCredentials): Credentials for Athena connection.
         """
         self.relation_name = parsed_model.get("relation_name", None)
+        self.query_comment = parsed_model.get("query_comment", "")
         self.config = AthenaSparkSessionConfig(
             parsed_model.get("config", {}),
             polling_interval=credentials.poll_interval,
@@ -103,6 +104,12 @@ class AthenaPythonJobHelper(PythonJobHelper):
         """
         return self.spark_connection.get_session_status(self.session_id)
 
+    def _prepend_query_comment(self, compiled_code: str) -> str:
+        if self.query_comment:
+            escaped = self.query_comment.replace("\\", "\\\\").replace('"', '\\"')
+            return f'spark.conf.set("dbt.query_comment", "{escaped}")\n{compiled_code}'
+        return compiled_code
+
     def submit(self, compiled_code: str) -> Any:
         """
         Submit a calculation to Athena.
@@ -123,6 +130,7 @@ class AthenaPythonJobHelper(PythonJobHelper):
             DbtRuntimeError: If the execution ends in a state other than "COMPLETED".
 
         """
+        compiled_code = self._prepend_query_comment(compiled_code)
         # Seeing an empty calculation along with main python model code calculation is submitted for almost every model
         # Also, if not returning the result json, we are getting green ERROR messages instead of OK messages.
         # And with this handling, the run model code in target folder every model under run folder seems to be empty
