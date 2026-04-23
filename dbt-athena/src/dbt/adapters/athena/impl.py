@@ -702,11 +702,14 @@ class AthenaAdapter(SQLAdapter):
             info_schema_name_map.add(relation)
         return info_schema_name_map
 
-    @lru_cache()
     def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
-        # database may arrive quoted from the base adapter (e.g. '"my_catalog"')
+        # normalize before hitting cache to avoid duplicate entries for quoted/unquoted variants
         if database:
             database = database.strip('"')
+        return self._get_data_catalog_cached(database)
+
+    @lru_cache()
+    def _get_data_catalog_cached(self, database: str) -> Optional[DataCatalogTypeDef]:
         if database:
             conn = self.connections.get_thread_connection()
             creds = conn.credentials
