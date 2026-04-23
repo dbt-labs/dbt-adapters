@@ -3,6 +3,7 @@
 from multiprocessing import get_context
 
 import boto3
+import pytest
 from moto import mock_aws
 from moto.core import DEFAULT_ACCOUNT_ID
 
@@ -21,6 +22,7 @@ S3TB_CATALOG_NAME = "my_s3tb_catalog"
 S3TB_CATALOG_ID = f"{DEFAULT_ACCOUNT_ID}:s3tablescatalog/my-table-bucket"
 
 
+@pytest.mark.usefixtures("aws_credentials")
 class TestS3TableBucket:
     """Tests for S3 Table Bucket detection and behavior."""
 

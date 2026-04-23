@@ -702,10 +702,11 @@ class AthenaAdapter(SQLAdapter):
             info_schema_name_map.add(relation)
         return info_schema_name_map
 
-    def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
+    def _get_data_catalog(self, database: Optional[str]) -> Optional[DataCatalogTypeDef]:
+        if not database:
+            return None
         # normalize before hitting cache to avoid duplicate entries for quoted/unquoted variants
-        if database:
-            database = database.strip('"')
+        database = database.strip('"')
         return self._get_data_catalog_cached(database)
 
     @lru_cache()
@@ -733,7 +734,7 @@ class AthenaAdapter(SQLAdapter):
         return None
 
     @available
-    def is_s3_table_bucket(self, database: str) -> bool:
+    def is_s3_table_bucket(self, database: Optional[str]) -> bool:
         """Detect if a database/catalog targets an S3 Table Bucket.
 
         S3 Table Buckets are accessed via named Athena data catalogs registered with
