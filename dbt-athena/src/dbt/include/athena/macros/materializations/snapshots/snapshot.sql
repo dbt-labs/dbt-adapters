@@ -125,7 +125,15 @@
   {%- set target_table = model.get('alias', model.get('name')) -%}
   {%- set strategy_name = config.get('strategy') -%}
   {%- set file_format = config.get('file_format', 'parquet') -%}
-  {%- set table_type = config.get('table_type', 'hive') -%}
+  {%- set raw_table_type = config.get('table_type') -%}
+  {%- set is_s3tb = adapter.is_s3_table_bucket(model.database) -%}
+  {%- if is_s3tb and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
+    {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
+  {%- elif is_s3tb -%}
+    {%- set table_type = 'iceberg' -%}
+  {%- else -%}
+    {%- set table_type = raw_table_type or 'hive' -%}
+  {%- endif -%}
 
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}

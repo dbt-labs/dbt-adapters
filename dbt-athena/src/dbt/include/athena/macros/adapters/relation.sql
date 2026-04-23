@@ -1,13 +1,22 @@
 {% macro athena__drop_relation(relation) -%}
   {%- set native_drop = config.get('native_drop', default=false) -%}
-  {%- set rel_type_object = adapter.get_glue_table_type(relation) -%}
-  {%- set rel_type = none if rel_type_object == none else rel_type_object.value -%}
-  {%- set natively_droppable = rel_type == 'iceberg_table' or relation.type == 'view' -%}
 
-  {%- if native_drop and natively_droppable -%}
-    {%- do drop_relation_sql(relation) -%}
+  {%- if adapter.is_s3_table_bucket(relation.database) -%}
+    {%- if native_drop -%}
+      {% do log('native_drop is ignored for S3 Table Bucket targets — SQL DROP TABLE is not supported by AWS. Using Glue API deletion.', info=True) %}
+    {%- endif -%}
+    {%- do log('Dropping S3 Table Bucket relation via Glue API') -%}
+    {%- do adapter.delete_from_glue_catalog(relation) -%}
   {%- else -%}
-    {%- do drop_relation_glue(relation) -%}
+    {%- set rel_type_object = adapter.get_glue_table_type(relation) -%}
+    {%- set rel_type = none if rel_type_object == none else rel_type_object.value -%}
+    {%- set natively_droppable = rel_type == 'iceberg_table' or relation.type == 'view' -%}
+
+    {%- if native_drop and natively_droppable -%}
+      {%- do drop_relation_sql(relation) -%}
+    {%- else -%}
+      {%- do drop_relation_glue(relation) -%}
+    {%- endif -%}
   {%- endif -%}
 {% endmacro %}
 
@@ -52,6 +61,9 @@
 {% endmacro %}
 
 {% macro athena__rename_relation(from_relation, to_relation) %}
+  {%- if adapter.is_s3_table_bucket(from_relation.database) -%}
+    {% do exceptions.raise_compiler_error("ALTER TABLE RENAME is not supported on S3 Table Bucket catalogs by AWS.") %}
+  {%- endif -%}
   {% call statement('rename_relation') -%}
     alter table {{ from_relation.render_hive() }} rename to `{{ to_relation.schema }}`.`{{ to_relation.identifier }}`
   {%- endcall %}
