@@ -10,6 +10,8 @@
   {%- else -%}
     {%- set table_type = (raw_table_type or 'hive') | lower -%}
   {%- endif -%}
+  {# persist resolved table_type so downstream macros (e.g. on_schema_change) see it #}
+  {%- do config.update({'table_type': table_type}) -%}
   {% set model_language = model['language'] %}
   {%- if is_s3tb and model_language == 'python' -%}
     {% do exceptions.raise_compiler_error("Python models targeting S3 Table Buckets are not yet supported.") %}

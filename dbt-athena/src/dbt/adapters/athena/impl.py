@@ -704,6 +704,9 @@ class AthenaAdapter(SQLAdapter):
 
     @lru_cache()
     def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
+        # database may arrive quoted from the base adapter (e.g. '"my_catalog"')
+        if database:
+            database = database.strip('"')
         if database:
             conn = self.connections.get_thread_connection()
             creds = conn.credentials
@@ -1167,8 +1170,6 @@ class AthenaAdapter(SQLAdapter):
 
     @available
     def list_schemas(self, database: str) -> List[str]:
-        # database may arrive quoted from the base adapter (e.g. '"my_catalog"')
-        database = database.strip('"') if database else database
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
