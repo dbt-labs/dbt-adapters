@@ -1,0 +1,6 @@
+kind: Features
+body: Add COPY GRANTS support for dynamic tables to inherit object-level privileges during table creation and replacement
+time: 2025-07-07T13:19:18.6N+1000
+custom:
+  Author: shaariqch
+  Issue: "1154"
