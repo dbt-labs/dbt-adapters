@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix 'Tried to commit transaction but it does not have one open' crash when a transient Redshift error triggers a retry during DROP in fresh_transaction
+time: 2026-04-08T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "1698"

@@ -620,6 +620,11 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
             yield
+            # The execute() retry mechanism may have closed and reopened
+            # the connection during yield, resetting transaction_open to
+            # False. Restore the flag so commit() can proceed as expected.
+            if not connection.transaction_open:
+                connection.transaction_open = True
             self.commit()
 
             self.begin()
@@ -639,6 +644,9 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         self.begin()
         yield
+        # See comment in fresh_transaction().
+        if not connection.transaction_open:
+            connection.transaction_open = True
         self.commit()
 
         self.begin()
