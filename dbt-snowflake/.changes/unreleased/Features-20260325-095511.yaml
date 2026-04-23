@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for `iceberg_version` config to enable Iceberg V3 table creation via model config or `catalogs.yml` `adapter_properties`.
+time: 2026-03-25T09:55:11.462677+05:30
+custom:
+    Author: aahel
+    Issue: "1779"
