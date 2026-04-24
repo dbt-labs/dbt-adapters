@@ -153,6 +153,7 @@ class RedshiftCredentials(Credentials):
     autocommit: Optional[bool] = True
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
+    application_name: Optional[str] = 'dbt'
 
     #
     # IAM identity center methods
@@ -232,6 +233,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
             "query_group",
+            "application_name",
             "allow_concurrent_drops",
         )
 
@@ -275,6 +277,7 @@ def get_connection_method(
             "db_groups": credentials.db_groups,
             "timeout": credentials.connect_timeout,
             "is_serverless": is_serverless(credentials),
+            "application_name": credentials.application_name,
             **redshift_ssl_config,
         }
 
