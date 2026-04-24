@@ -143,6 +143,19 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     ),
 )
 
+USE_CONCURRENT_MICROBATCH = BehaviorFlag(
+    name="use_concurrent_microbatch",
+    default=False,
+    description=(
+        "Enable concurrent execution of microbatch incremental batches on BigQuery. "
+        "When enabled, dbt will run microbatch batches in parallel threads instead "
+        "of sequentially. Safe when batches write to disjoint partitions (as implied "
+        "by a well-chosen `partition_by`) — BigQuery applies concurrent MERGE "
+        "statements atomically under snapshot isolation. Users are responsible for "
+        "ensuring batches do not overlap in partition_key range."
+    ),
+)  # type: ignore[typeddict-item]
+
 _dataset_lock = threading.Lock()
 
 
@@ -209,6 +222,12 @@ class BigQueryAdapter(BaseAdapter):
         }
     )
 
+    def supports(self, capability: Capability) -> bool:
+        # Gate MicrobatchConcurrency on the use_concurrent_microbatch behavior flag.
+        if capability == Capability.MicrobatchConcurrency:
+            return bool(self.behavior.use_concurrent_microbatch)
+        return super().supports(capability)
+
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
@@ -226,6 +245,7 @@ class BigQueryAdapter(BaseAdapter):
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
             BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
             BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS,
+            USE_CONCURRENT_MICROBATCH,
         ]
 
     def get_partitions_metadata(self, table):
