@@ -1,0 +1,6 @@
+kind: Fixes
+body: Quote database, schema, and table identifiers in SHOW TABLES/SHOW COLUMNS/SHOW GRANTS/SHOW SCHEMAS so hyphenated names are accepted by Redshift's SHOW APIs
+time: 2026-04-22T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "1884"
