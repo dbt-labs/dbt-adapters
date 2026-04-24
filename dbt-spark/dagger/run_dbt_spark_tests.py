@@ -9,6 +9,11 @@ import dagger as dagger
 from dotenv import find_dotenv, load_dotenv
 
 PG_PORT = 5432
+# Resolve absolute paths to sibling packages (Dagger blocks relative ".." paths)
+_SPARK_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # dbt-spark/
+_REPO_ROOT = os.path.dirname(_SPARK_DIR)  # monorepo root
+_DBT_ADAPTERS_DIR = os.path.join(_REPO_ROOT, "dbt-adapters")
+_DBT_TESTS_ADAPTER_DIR = os.path.join(_REPO_ROOT, "dbt-tests-adapter")
 load_dotenv(find_dotenv("test.env"))
 # if env vars aren't specified in test.env (i.e. in github actions worker), use the ones from the host
 TESTING_ENV_VARS = {
@@ -102,6 +107,9 @@ async def test_spark(test_args):
             .with_directory("/scripts", client.host().directory("./dagger/scripts"))
             .with_exec(["./scripts/install_os_reqs.sh"])
             .with_exec(["pip", "install", "-U", "pip", "hatch"])
+            .with_exec(
+                ["pip", "install", "virtualenv<21"]
+            )  # TODO: remove once hatch releases a fix for https://github.com/pypa/hatch/issues/2193
             .with_(env_variables(TESTING_ENV_VARS))
         )
 
@@ -123,6 +131,9 @@ async def test_spark(test_args):
                     ],
                 ),
             )
+            # mount sibling packages so pre-install-commands can find them
+            .with_directory("/dbt-adapters", client.host().directory(_DBT_ADAPTERS_DIR))
+            .with_directory("/dbt-tests-adapter", client.host().directory(_DBT_TESTS_ADAPTER_DIR))
         )
 
         # install profile-specific system dependencies last since tests usually rotate through profiles

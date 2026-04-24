@@ -6,7 +6,6 @@ import time
 import redshift_connector
 import sqlparse
 
-from multiprocessing.synchronize import RLock
 from contextlib import contextmanager
 from typing import Any, Callable, Dict, Generator, Tuple, Union, Optional, List, TYPE_CHECKING
 from dataclasses import dataclass, field
@@ -143,6 +142,7 @@ class RedshiftCredentials(Credentials):
     autocreate: bool = False
     db_groups: List[str] = field(default_factory=list)
     ra3_node: Optional[bool] = False
+    datasharing: Optional[bool] = False
     connect_timeout: Optional[int] = None
     role: Optional[str] = None
     sslmode: UserSSLMode = field(default_factory=UserSSLMode.default)
@@ -186,6 +186,14 @@ class RedshiftCredentials(Credentials):
     tcp_keepalive_interval: Optional[int] = None
     tcp_keepalive_count: Optional[int] = None
 
+    # Query group for WLM and query logging (appears in STL_QUERY, SVL_QLOG, etc.)
+    query_group: Optional[str] = None
+
+    # Drop behavior: skip the global RLock on DROP statements (transaction
+    # boundary semantics are preserved). Safe only for projects with no
+    # downstream views (no CASCADE side-effects).
+    allow_concurrent_drops: bool = False
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -209,6 +217,7 @@ class RedshiftCredentials(Credentials):
             "autocreate",
             "db_groups",
             "ra3_node",
+            "datasharing",
             "connect_timeout",
             "role",
             "retries",
@@ -222,6 +231,8 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_idle",
             "tcp_keepalive_interval",
             "tcp_keepalive_count",
+            "query_group",
+            "allow_concurrent_drops",
         )
 
     @property
@@ -448,6 +459,9 @@ def get_connection_method(
             c.autocommit = True
         if credentials.role:
             c.cursor().execute(f"set role {credentials.role}")
+        if credentials.query_group:
+            value = str(credentials.query_group).replace("'", "''")
+            c.cursor().execute(f"SET query_group TO '{value}'")
         return c
 
     return connect
@@ -598,9 +612,7 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         See drop_relation in RedshiftAdapter for more information.
         """
-        drop_lock: RLock = self.lock
-
-        with drop_lock:
+        with self.lock:
             connection = self.get_thread_connection()
 
             if connection.transaction_open:
@@ -608,9 +620,36 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
             yield
+            # The execute() retry mechanism may have closed and reopened
+            # the connection during yield, resetting transaction_open to
+            # False. Restore the flag so commit() can proceed as expected.
+            if not connection.transaction_open:
+                connection.transaction_open = True
             self.commit()
 
             self.begin()
+
+    @contextmanager
+    def fresh_transaction_without_lock(self) -> Generator[None, None, None]:
+        """Same transaction boundary semantics as fresh_transaction(), but
+        without acquiring the global RLock.
+
+        Only safe when the caller guarantees concurrent DROPs will not produce
+        CASCADE side-effects (i.e. no downstream views exist).
+        """
+        connection = self.get_thread_connection()
+
+        if connection.transaction_open:
+            self.commit()
+
+        self.begin()
+        yield
+        # See comment in fresh_transaction().
+        if not connection.transaction_open:
+            connection.transaction_open = True
+        self.commit()
+
+        self.begin()
 
     @classmethod
     def open(cls, connection):
@@ -652,9 +691,15 @@ class RedshiftConnectionManager(SQLConnectionManager):
             e: Exception, retries: int, backoff: int, retry_all: bool
         ) -> Tuple[int, int]:
             oid_not_found_msg = "could not open relation with OID"
+            concurrent_txn_msg = "conflict with concurrent transaction"
+            err_str = str(e)
             if retries == 0:
                 raise e
-            if oid_not_found_msg in str(e):
+            if oid_not_found_msg in err_str:
+                pass
+            elif concurrent_txn_msg in err_str:
+                pass
+            elif "schema" in err_str and "does not exist" in err_str:
                 pass
             elif isinstance(e, DbtDatabaseError) and retry_all:
                 pass

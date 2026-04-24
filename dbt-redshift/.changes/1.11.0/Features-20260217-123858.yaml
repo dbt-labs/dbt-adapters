@@ -1,0 +1,6 @@
+kind: Features
+body: 'Added behavior flag `redshift_use_show_apis` (default: false) for opting into SVV_*-based metadata queries, required for Datasharing/cross-database.'
+time: 2026-02-17T12:38:58.918461+05:30
+custom:
+    Author: tauhid621
+    Issue: "1621"
