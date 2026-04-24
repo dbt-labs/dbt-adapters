@@ -50,9 +50,9 @@
     {{ return("table") }}
   {% endif %}
 
-  {#-- Always use transient for catalog-linked databases (Iceberg) --#}
+  {#-- CLD schemas only support Iceberg tables; use table (not transient) --#}
   {% if snowflake__is_catalog_linked_database(relation=config.model) %}
-    {{ return("transient") }}
+    {{ return("table") }}
   {% endif %}
 
   {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type not in ("table", "transient") and unique_key is not none %}
