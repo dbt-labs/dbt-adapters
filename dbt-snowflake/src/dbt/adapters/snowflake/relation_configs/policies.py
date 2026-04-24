@@ -11,7 +11,6 @@ class SnowflakeRelationType(StrEnum):
     External = "external"
     DynamicTable = "dynamic_table"
     Function = "function"
-    Transient = "transient"
 
 
 class SnowflakeIncludePolicy(Policy):

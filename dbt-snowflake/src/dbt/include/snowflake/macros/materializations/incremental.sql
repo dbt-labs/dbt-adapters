@@ -26,8 +26,8 @@
        as part of the statement. Otherwise, play it safe by using a table.
 
        Catalog-linked databases (Iceberg tables) do not support temporary
-       relations. A transient table is used instead to avoid the fail-safe
-       storage costs of permanent tables.
+       relations or transient tables — only Iceberg tables are allowed. A
+       permanent table is used as the tmp relation for CLD models.
 
        'transient' is also available as a user-facing tmp_relation_type for
        non-Iceberg models. Unlike session-scoped temporary tables, transient
