@@ -559,7 +559,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
         except TimeoutError as timeout_error:
             raise TimeoutError(f"The dbt operation encountered a timeout: {timeout_error}")
         except Exception as e:
-            raise DbtRuntimeError(f"An unexpected error occured while executing the notebook: {e}")
+            raise DbtRuntimeError(f"An unexpected error occurred while executing the notebook: {e}")
 
         job_id = job_name.split("/")[-1]
         gcs_log_uri = f"{notebook_execution_job.gcs_output_uri}/{job_id}/{self._model_name}.py"
