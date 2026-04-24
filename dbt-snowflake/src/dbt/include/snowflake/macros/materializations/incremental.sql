@@ -38,16 +38,21 @@
        multiple runs share the same target schema.
   #} */
 
-  {#-- Always use transient for catalog-linked databases (Iceberg) --#}
-  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
-    {{ return("transient") }}
-  {% endif %}
-
   {% if language == "python" and tmp_relation_type is not none %}
     {% do exceptions.raise_compiler_error(
       "Python models currently only support 'table' for tmp_relation_type but "
        ~ tmp_relation_type ~ " was specified."
     ) %}
+  {% endif %}
+
+  {#-- Python always uses a temporary table, regardless of other conditions --#}
+  {% if language != "sql" %}
+    {{ return("table") }}
+  {% endif %}
+
+  {#-- Always use transient for catalog-linked databases (Iceberg) --#}
+  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+    {{ return("transient") }}
   {% endif %}
 
   {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type not in ("table", "transient") and unique_key is not none %}
@@ -59,9 +64,7 @@
   %}
   {% endif %}
 
-  {% if language != "sql" %}
-    {{ return("table") }}
-  {% elif tmp_relation_type == "table" %}
+  {% if tmp_relation_type == "table" %}
     {{ return("table") }}
   {% elif tmp_relation_type == "view" %}
     {{ return("view") }}
