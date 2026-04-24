@@ -11,6 +11,7 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
+    "azure-identity",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@main",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@main#subdirectory=core",
     "ddtrace==2.3.0",
