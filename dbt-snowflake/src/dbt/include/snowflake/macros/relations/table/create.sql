@@ -35,6 +35,27 @@
 {% endmacro %}
 
 
+{% macro snowflake__create_table_transient_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE TRANSIENT TABLE ... AS SELECT for use as an incremental
+    tmp relation. Unlike session-scoped temporary tables, transient tables
+    persist in the catalog (enabling Snowflake lineage tracking) but have no
+    fail-safe period, avoiding the storage costs of permanent tables.
+    https://docs.snowflake.com/en/sql-reference/sql/create-table
+-#}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace transient table {{ relation }}
+as (
+    {{ compiled_code }}
+    )
+;
+
+{%- endmacro %}
+
+
 {% macro snowflake__create_table_temporary_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE TEMPORARY TABLE and CREATE TEMPORARY TABLE ... AS SELECT:

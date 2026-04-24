@@ -12,24 +12,35 @@
 
        Low-level specifics:
        If an invalid option is specified, then we will raise an
-       excpetion with corresponding message.
+       exception with a corresponding message.
 
        Languages other than SQL (like Python) will use a temporary table.
-       With the default strategy of merge, the user may choose between a temporary
-       table and view (defaulting to view).
+       With the default strategy of merge, the user may choose between a
+       temporary table and view (defaulting to view).
 
-       The append strategy can use a view because it will run a single INSERT statement.
+       The append strategy can use a view because it will run a single INSERT
+       statement.
 
-       When unique_key is none, the delete+insert and microbatch strategies can use a view beacuse a
-       single INSERT statement is run with no DELETES as part of the statement.
-       Otherwise, play it safe by using a temporary table.
+       When unique_key is none, the delete+insert and microbatch strategies
+       can use a view because a single INSERT statement is run with no DELETES
+       as part of the statement. Otherwise, play it safe by using a table.
 
-       Catalog-linked databases (Iceberg tables) does not support using temporary relations.
+       Catalog-linked databases (Iceberg tables) do not support temporary
+       relations. A transient table is used instead to avoid the fail-safe
+       storage costs of permanent tables.
+
+       'transient' is also available as a user-facing tmp_relation_type for
+       non-Iceberg models. Unlike session-scoped temporary tables, transient
+       tables are visible to Snowflake's lineage tracking. Note that transient
+       tables share the regular schema namespace; use the
+       snowflake__resolve_incremental_tmp_relation dispatch macro to redirect
+       tmp relations to a dedicated schema to avoid name collisions when
+       multiple runs share the same target schema.
   #} */
 
-  {#-- Always use table for catalog-linked databases (Iceberg) --#}
+  {#-- Always use transient for catalog-linked databases (Iceberg) --#}
   {% if snowflake__is_catalog_linked_database(relation=config.model) %}
-    {{ return("table") }}
+    {{ return("transient") }}
   {% endif %}
 
   {% if language == "python" and tmp_relation_type is not none %}
@@ -39,10 +50,10 @@
     ) %}
   {% endif %}
 
-  {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type != "table" and unique_key is not none %}
+  {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type not in ("table", "transient") and unique_key is not none %}
     {% do exceptions.raise_compiler_error(
       "In order to maintain consistent results when `unique_key` is not none,
-      the `" ~ strategy ~ "` strategy only supports `table` for `tmp_relation_type` but "
+      the `" ~ strategy ~ "` strategy only supports `table` or `transient` for `tmp_relation_type` but "
       ~ tmp_relation_type ~ " was specified."
       )
   %}
@@ -54,6 +65,8 @@
     {{ return("table") }}
   {% elif tmp_relation_type == "view" %}
     {{ return("view") }}
+  {% elif tmp_relation_type == "transient" %}
+    {{ return("transient") }}
   {% elif strategy in ("default", "merge", "append", "insert_overwrite") %}
     {{ return("view") }}
   {% elif strategy in ["delete+insert", "microbatch"] and unique_key is none %}
@@ -61,6 +74,22 @@
   {% else %}
     {{ return("table") }}
   {% endif %}
+{% endmacro %}
+
+
+{% macro snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+  {#--
+    Dispatch hook for controlling where the incremental tmp relation is
+    created. Override in your project to redirect to a dedicated scratch
+    schema and avoid name collisions when multiple runs share the same
+    target schema.
+
+    Example override:
+      {% macro my_project__snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+        {{ return(tmp_relation.incorporate(schema='scratch')) }}
+      {% endmacro %}
+  --#}
+  {{ return(tmp_relation) }}
 {% endmacro %}
 
 {% materialization incremental, adapter='snowflake', supported_languages=['sql', 'python'] -%}
@@ -96,6 +125,7 @@
   {% else %}
     {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
   {% endif %}
+  {% set tmp_relation = snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
 
   {% set grant_config = config.get('grants') %}
 
@@ -131,14 +161,14 @@
     %}
 
   {% else %}
-    {#-- Create the temp relation, either as a view or as a temp table --#}
-    {% if is_catalog_linked_db %}
-        {%- call statement('create_tmp_relation', language=language) -%}
-          {{ create_table_as(False, tmp_relation, compiled_code, language) }}
-        {%- endcall -%}
-    {% elif tmp_relation_type == 'view' %}
+    {#-- Create the temp relation as a view, temp table, or transient table --#}
+    {% if tmp_relation_type == 'view' %}
         {%- call statement('create_tmp_relation') -%}
           {{ snowflake__create_view_as_with_temp_flag(tmp_relation, compiled_code, True) }}
+        {%- endcall -%}
+    {% elif tmp_relation_type == 'transient' %}
+        {%- call statement('create_tmp_relation', language=language) -%}
+          {{ snowflake__create_table_transient_sql(tmp_relation, compiled_code) }}
         {%- endcall -%}
     {% else %}
         {%- call statement('create_tmp_relation', language=language) -%}
