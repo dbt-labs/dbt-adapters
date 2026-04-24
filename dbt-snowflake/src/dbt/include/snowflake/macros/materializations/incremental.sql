@@ -77,15 +77,20 @@
 {% endmacro %}
 
 
+{% macro resolve_incremental_tmp_relation(tmp_relation) %}
+  {{ return(adapter.dispatch('resolve_incremental_tmp_relation', 'dbt')(tmp_relation)) }}
+{% endmacro %}
+
+
 {% macro snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
   {#--
-    Dispatch hook for controlling where the incremental tmp relation is
-    created. Override in your project to redirect to a dedicated scratch
-    schema and avoid name collisions when multiple runs share the same
+    Override this macro in your project to control where the incremental
+    tmp relation is created. Useful for redirecting to a dedicated scratch
+    schema to avoid name collisions when multiple runs share the same
     target schema.
 
-    Example override:
-      {% macro my_project__snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+    Example:
+      {% macro snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
         {{ return(tmp_relation.incorporate(schema='scratch')) }}
       {% endmacro %}
   --#}
@@ -125,7 +130,7 @@
   {% else %}
     {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
   {% endif %}
-  {% set tmp_relation = snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+  {% set tmp_relation = resolve_incremental_tmp_relation(tmp_relation) %}
 
   {% set grant_config = config.get('grants') %}
 
