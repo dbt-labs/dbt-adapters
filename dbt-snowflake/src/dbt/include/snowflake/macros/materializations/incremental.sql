@@ -131,7 +131,9 @@
   {% if is_catalog_linked_db %}
     {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog=catalog_relation.catalog_name, is_table=true) %}
   {% else %}
-    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
+    {#-- Transient tables are dropped with DROP TABLE, so the relation type must be 'table' --#}
+    {% set tmp_relation_object_type = 'table' if tmp_relation_type == 'transient' else tmp_relation_type %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_object_type) %}
   {% endif %}
   {% set tmp_relation = resolve_incremental_tmp_relation(tmp_relation) %}
 

@@ -1,5 +1,5 @@
 import pytest
-from dbt.tests.util import run_dbt, relation_from_name
+from dbt.tests.util import run_dbt
 
 
 _MODEL_TRANSIENT_TMP = """
@@ -41,12 +41,7 @@ class TestIncrementalTransientTmpRelation:
     def models(self):
         return {"transient_incremental.sql": _MODEL_TRANSIENT_TMP}
 
-    def test_incremental_transient_runs(self, project):
-        run_dbt(["run"])
-        run_dbt(["run"])
-        run_dbt(["test"])
-
-    def test_incremental_transient_initial_row_count(self, project):
+    def test_incremental_transient(self, project):
         run_dbt(["run"])
         result = project.run_sql(
             "select count(*) as cnt from {database}.{schema}.transient_incremental",
@@ -54,14 +49,14 @@ class TestIncrementalTransientTmpRelation:
         )
         assert result[0] == 1
 
-    def test_incremental_transient_second_run_row_count(self, project):
-        run_dbt(["run"])
         run_dbt(["run"])
         result = project.run_sql(
             "select count(*) as cnt from {database}.{schema}.transient_incremental",
             fetch="one",
         )
         assert result[0] == 2
+
+        run_dbt(["test"])
 
 
 class TestIncrementalTransientTmpRelationDeleteInsert:
