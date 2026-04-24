@@ -1,5 +1,5 @@
 import pytest
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 
 _MODEL_TRANSIENT_TMP = """
@@ -49,7 +49,9 @@ class TestIncrementalTransientTmpRelation:
         )
         assert result[0] == 1
 
-        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert "create or replace transient table" in logs.lower()
+
         result = project.run_sql(
             "select count(*) as cnt from {database}.{schema}.transient_incremental",
             fetch="one",
@@ -69,5 +71,8 @@ class TestIncrementalTransientTmpRelationDeleteInsert:
 
     def test_incremental_transient_delete_insert_runs(self, project):
         run_dbt(["run"])
-        run_dbt(["run"])
+
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert "create or replace transient table" in logs.lower()
+
         run_dbt(["test"])
