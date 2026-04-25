@@ -481,10 +481,30 @@ class TestAthenaAdapter:
         )
         expected_rows = [
             ("awsdatacatalog", "foo", "bar", "table", None, "id", 0, "string", None),
-            ("awsdatacatalog", "foo", "bar", "table", None, "country", 1, "string", None),
+            (
+                "awsdatacatalog",
+                "foo",
+                "bar",
+                "table",
+                None,
+                "country",
+                1,
+                "string",
+                None,
+            ),
             ("awsdatacatalog", "foo", "bar", "table", None, "dt", 2, "date", None),
             ("awsdatacatalog", "quux", "bar", "table", None, "id", 0, "string", None),
-            ("awsdatacatalog", "quux", "bar", "table", None, "country", 1, "string", None),
+            (
+                "awsdatacatalog",
+                "quux",
+                "bar",
+                "table",
+                None,
+                "country",
+                1,
+                "string",
+                None,
+            ),
             ("awsdatacatalog", "quux", "bar", "table", None, "dt", 2, "date", None),
         ]
         assert actual.column_names == expected_column_names
@@ -530,7 +550,17 @@ class TestAthenaAdapter:
 
         expected_rows = [
             ("awsdatacatalog", "foo", "bar", "table", None, "id", 0, "string", None),
-            ("awsdatacatalog", "foo", "bar", "table", None, "country", 1, "string", None),
+            (
+                "awsdatacatalog",
+                "foo",
+                "bar",
+                "table",
+                None,
+                "country",
+                1,
+                "string",
+                None,
+            ),
             ("awsdatacatalog", "foo", "bar", "table", None, "dt", 2, "date", None),
         ]
 
@@ -584,7 +614,8 @@ class TestAthenaAdapter:
     @mock_aws
     def test__get_one_catalog_federated_query_catalog(self, mock_aws_service):
         mock_aws_service.create_data_catalog(
-            catalog_name=FEDERATED_QUERY_CATALOG_NAME, catalog_type=AthenaCatalogType.LAMBDA
+            catalog_name=FEDERATED_QUERY_CATALOG_NAME,
+            catalog_type=AthenaCatalogType.LAMBDA,
         )
         mock_information_schema = mock.MagicMock()
         mock_information_schema.database = FEDERATED_QUERY_CATALOG_NAME
@@ -625,7 +656,8 @@ class TestAthenaAdapter:
 
         self.adapter.acquire_connection("dummy")
         with patch(
-            "botocore.client.BaseClient._make_api_call", new=mock_athena_list_table_metadata
+            "botocore.client.BaseClient._make_api_call",
+            new=mock_athena_list_table_metadata,
         ):
             actual = self.adapter._get_one_catalog(
                 mock_information_schema,
@@ -645,7 +677,17 @@ class TestAthenaAdapter:
             "column_comment",
         )
         expected_rows = [
-            (FEDERATED_QUERY_CATALOG_NAME, "foo", "bar", "table", None, "id", 0, "string", None),
+            (
+                FEDERATED_QUERY_CATALOG_NAME,
+                "foo",
+                "bar",
+                "table",
+                None,
+                "id",
+                0,
+                "string",
+                None,
+            ),
             (
                 FEDERATED_QUERY_CATALOG_NAME,
                 "foo",
@@ -657,7 +699,17 @@ class TestAthenaAdapter:
                 "string",
                 None,
             ),
-            (FEDERATED_QUERY_CATALOG_NAME, "foo", "bar", "table", None, "dt", 2, "date", None),
+            (
+                FEDERATED_QUERY_CATALOG_NAME,
+                "foo",
+                "bar",
+                "table",
+                None,
+                "dt",
+                2,
+                "date",
+                None,
+            ),
         ]
 
         assert actual.column_names == expected_column_names
@@ -744,7 +796,10 @@ class TestAthenaAdapter:
         assert relations == []
 
     @mock_aws
-    @patch("dbt.adapters.athena.impl.SQLAdapter.list_relations_without_caching", return_value=[])
+    @patch(
+        "dbt.adapters.athena.impl.SQLAdapter.list_relations_without_caching",
+        return_value=[],
+    )
     def test_list_relations_without_caching_with_non_glue_data_catalog(
         self, parent_list_relations_without_caching, mock_aws_service
     ):
@@ -1234,7 +1289,9 @@ class TestAthenaAdapter:
         mock_aws_service.create_table("tbl_name")
         self.adapter.acquire_connection("dummy")
         relation = self.adapter.Relation.create(
-            database=DATA_CATALOG_NAME, schema=DATABASE_NAME, identifier="tbl_does_not_exist"
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier="tbl_does_not_exist",
         )
         delete_table = self.adapter.delete_from_glue_catalog(relation)
         assert delete_table is None
@@ -1344,7 +1401,8 @@ class TestAthenaAdapter:
         assert bucket_number == 54
 
     @pytest.mark.skipif(
-        sys.platform == "win32", reason="%s (seconds from epoch) is not supported on Windows"
+        sys.platform == "win32",
+        reason="%s (seconds from epoch) is not supported on Windows",
     )
     def test_murmur3_hash_with_date(self):
         d = datetime.date.today()
@@ -1384,7 +1442,11 @@ class TestAthenaAdapter:
             ("O'Reilly", "string", ("'O''Reilly'", "=")),
             ("test", "string", ("'test'", "=")),
             ("2021-01-01", "date", ("DATE'2021-01-01'", "=")),
-            ("2021-01-01 12:00:00", "timestamp", ("TIMESTAMP'2021-01-01 12:00:00'", "=")),
+            (
+                "2021-01-01 12:00:00",
+                "timestamp",
+                ("TIMESTAMP'2021-01-01 12:00:00'", "="),
+            ),
         ],
     )
     def test_format_value_for_partition(self, value, column_type, expected_result):
@@ -1483,3 +1545,62 @@ class TestAthenaAdapterConversions(TestAdapterConversions):
         expected = ["date", "date", "date"]
         for col_idx, expect in enumerate(expected):
             assert AthenaAdapter.convert_date_type(agate_table, col_idx) == expect
+
+
+class TestGeneratePythonSubmissionResponse:
+    """generate_python_submission_response surfaces Spark metrics to run_results.json.
+
+    The method is pure (does not read adapter state), so we invoke it as an
+    unbound function via a minimal mock instance rather than spinning up a
+    full AthenaAdapter with credentials.
+    """
+
+    @pytest.fixture
+    def adapter(self):
+        return mock.MagicMock(spec=AthenaAdapter)
+
+    def _call(self, adapter, submission_result):
+        return AthenaAdapter.generate_python_submission_response(adapter, submission_result)
+
+    def test_returns_error_response_when_submission_result_is_empty(self, adapter):
+        response = self._call(adapter, None)
+        assert response._message == "ERROR"
+        assert response.dpu_execution_in_millis is None
+        assert response.spark_session_id is None
+        assert response.spark_calculation_execution_id is None
+
+    def test_returns_ok_response_with_statistics_and_session_id(self, adapter):
+        submission_result = {
+            "Statistics": {"DpuExecutionInMillis": 12345},
+            "SparkSessionId": "abc-123",
+            "SparkCalculationExecutionId": "calc-456",
+        }
+        response = self._call(adapter, submission_result)
+        assert response._message == "OK"
+        assert response.dpu_execution_in_millis == 12345
+        assert response.spark_session_id == "abc-123"
+        assert response.spark_calculation_execution_id == "calc-456"
+
+    def test_returns_ok_response_when_statistics_missing(self, adapter):
+        response = self._call(adapter, {"SparkSessionId": "abc-123"})
+        assert response._message == "OK"
+        assert response.dpu_execution_in_millis is None
+        assert response.spark_session_id == "abc-123"
+        assert response.spark_calculation_execution_id is None
+
+    def test_returns_ok_response_for_spark_connect_result(self, adapter):
+        response = self._call(
+            adapter,
+            {"SparkConnect": True, "SparkSessionId": "spark-connect-session"},
+        )
+        assert response._message == "OK"
+        assert response.dpu_execution_in_millis is None
+        assert response.spark_session_id == "spark-connect-session"
+        assert response.spark_calculation_execution_id is None
+
+    def test_handles_non_dict_submission_result(self, adapter):
+        response = self._call(adapter, "truthy")
+        assert response._message == "OK"
+        assert response.dpu_execution_in_millis is None
+        assert response.spark_session_id is None
+        assert response.spark_calculation_execution_id is None

@@ -48,6 +48,9 @@ from dbt.adapters.sql import SQLConnectionManager
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
+    dpu_execution_in_millis: Optional[int] = None
+    spark_session_id: Optional[str] = None
+    spark_calculation_execution_id: Optional[str] = None
 
 
 @dataclass
@@ -70,11 +73,35 @@ class AthenaCredentials(Credentials):
     s3_data_dir: Optional[str] = None
     s3_data_naming: str = "schema_table_unique"
     spark_work_group: Optional[str] = None
+    spark_connect_max_sessions: Optional[int] = None
+    spark_connect_session_concurrency: Optional[int] = None
     s3_tmp_table_dir: Optional[str] = None
     # Unfortunately we can not just use dict, must be Dict because we'll get the following error:
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
+
+    def __post_init__(self) -> None:
+        # Surface mis-configured Spark Connect integer fields at profile-load
+        # time rather than waiting until a python model runs — the misconfig
+        # would otherwise only manifest once a Spark 3.5 model is submitted,
+        # potentially minutes into a long dbt run.
+        self._validate_positive_int_field("spark_connect_max_sessions")
+        self._validate_positive_int_field("spark_connect_session_concurrency")
+
+    def _validate_positive_int_field(self, field_name: str) -> None:
+        raw = getattr(self, field_name)
+        if raw is None:
+            return
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as e:
+            raise DbtRuntimeError(f"{field_name} must be an integer (got {raw!r}).") from e
+        if value < 1:
+            raise DbtRuntimeError(
+                f"{field_name} must be >= 1 (got {value}). Omit the field to use the default."
+            )
+        setattr(self, field_name, value)
 
     @property
     def type(self) -> str:
@@ -107,6 +134,8 @@ class AthenaCredentials(Credentials):
             "seed_s3_upload_args",
             "lf_tags_database",
             "spark_work_group",
+            "spark_connect_max_sessions",
+            "spark_connect_session_concurrency",
         )
 
 
@@ -333,6 +362,26 @@ class AthenaConnectionManager(SQLConnectionManager):
                 LOGGER.debug(f"There was an error parsing query stats {err}")
                 return -1, 0
         return cursor.rowcount, cursor.data_scanned_in_bytes
+
+    def cleanup_all(self) -> None:
+        # Terminate Spark Connect sessions owned by THIS invocation so DPUs
+        # are released immediately instead of waiting for idle timeout.
+        # Scoping by invocation id prevents multi-invocation hosts (dbt Cloud
+        # workers, test harnesses) from killing sessions belonging to other
+        # live invocations that share the singleton pool.
+        #
+        # ``spark_connect_session`` is imported lazily because it pulls in the
+        # pyspark runtime lookup path; importing at module load time would
+        # force every user of the Athena connection manager (including pure
+        # SQL workflows) to pay for Spark imports.
+        from dbt_common.invocation import get_invocation_id
+
+        from dbt.adapters.athena.spark_connect_session import (
+            SparkConnectSessionPool,
+        )
+
+        SparkConnectSessionPool().terminate_by_invocation(get_invocation_id())
+        super().cleanup_all()
 
     def cancel(self, connection: Connection) -> None:
         pass

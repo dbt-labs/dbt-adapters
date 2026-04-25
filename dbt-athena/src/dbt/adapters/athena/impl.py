@@ -9,7 +9,18 @@ from datetime import date, datetime
 from functools import lru_cache
 from textwrap import dedent
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+)
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -32,7 +43,7 @@ from pyathena.error import OperationalError
 from dbt.adapters.athena import AthenaConnectionManager
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.connections import AthenaCursor
+from dbt.adapters.athena.connections import AthenaAdapterResponse, AthenaCursor
 from dbt.adapters.athena.constants import LOGGER
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
@@ -65,7 +76,6 @@ from dbt.adapters.athena.utils import (
 from dbt.adapters.base import ConstraintSupport, PythonJobHelper, available
 from dbt.adapters.base.impl import AdapterConfig
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
-from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 
@@ -266,7 +276,10 @@ class AthenaAdapter(SQLAdapter):
             return False
 
     def _s3_table_prefix(
-        self, s3_data_dir: Optional[str], s3_tmp_table_dir: Optional[str], is_temporary_table: bool
+        self,
+        s3_data_dir: Optional[str],
+        s3_tmp_table_dir: Optional[str],
+        is_temporary_table: bool,
     ) -> str:
         """
         Returns the root location for storing tables in S3.
@@ -321,15 +334,25 @@ class AthenaAdapter(SQLAdapter):
 
         mapping = {
             S3DataNaming.UNIQUE: path.join(table_prefix, str(uuid4())),
-            S3DataNaming.TABLE: path.join(table_prefix, s3_path_table_part),  # type:ignore
+            S3DataNaming.TABLE: path.join(
+                table_prefix,
+                s3_path_table_part,  # type:ignore[arg-type]
+            ),
             S3DataNaming.TABLE_UNIQUE: path.join(
-                table_prefix, s3_path_table_part, str(uuid4())  # type:ignore
+                table_prefix,
+                s3_path_table_part,  # type:ignore[arg-type]
+                str(uuid4()),
             ),
             S3DataNaming.SCHEMA_TABLE: path.join(
-                table_prefix, schema_name, s3_path_table_part  # type:ignore
+                table_prefix,
+                schema_name,  # type:ignore[arg-type]
+                s3_path_table_part,  # type:ignore[arg-type]
             ),
             S3DataNaming.SCHEMA_TABLE_UNIQUE: path.join(
-                table_prefix, schema_name, s3_path_table_part, str(uuid4())  # type:ignore
+                table_prefix,
+                schema_name,  # type:ignore[arg-type]
+                s3_path_table_part,  # type:ignore[arg-type]
+                str(uuid4()),
             ),
         }
 
@@ -356,7 +379,9 @@ class AthenaAdapter(SQLAdapter):
 
         try:
             table = glue_client.get_table(
-                CatalogId=catalog_id, DatabaseName=relation.schema, Name=relation.identifier
+                CatalogId=catalog_id,
+                DatabaseName=relation.schema,
+                Name=relation.identifier,
             )
         except ClientError as e:
             if e.response["Error"]["Code"] == "EntityNotFoundException":
@@ -450,7 +475,10 @@ class AthenaAdapter(SQLAdapter):
 
     @available
     def quote_seed_column(
-        self, column: str, quote_config: Optional[bool], quote_character: Optional[str] = None
+        self,
+        column: str,
+        quote_config: Optional[bool],
+        quote_character: Optional[str] = None,
     ) -> str:
         if quote_character:
             old_value = self.quote_character
@@ -657,7 +685,8 @@ class AthenaAdapter(SQLAdapter):
                     for table in page["TableList"]:
                         catalog.extend(
                             self._get_one_table_for_catalog(
-                                table, information_schema.database  # type:ignore
+                                table,
+                                information_schema.database,  # type:ignore
                             )
                         )
             table = agate.Table.from_object(catalog)
@@ -680,7 +709,9 @@ class AthenaAdapter(SQLAdapter):
                     for table in page["TableMetadataList"]:
                         catalog.extend(
                             self._get_one_table_for_non_glue_catalog(
-                                table, schema, information_schema.database  # type:ignore
+                                table,
+                                schema,
+                                information_schema.database,  # type:ignore
                             )
                         )
             table = agate.Table.from_object(catalog)
@@ -715,7 +746,11 @@ class AthenaAdapter(SQLAdapter):
                         config=get_boto3_config(num_retries=creds.effective_num_retries),
                     )
                 catalog_id = sts.get_caller_identity()["Account"]
-                return {"Name": database, "Type": "GLUE", "Parameters": {"catalog-id": catalog_id}}
+                return {
+                    "Name": database,
+                    "Type": "GLUE",
+                    "Parameters": {"catalog-id": catalog_id},
+                }
             with boto3_client_lock:
                 athena = client.session.client(
                     "athena",
@@ -801,7 +836,8 @@ class AthenaAdapter(SQLAdapter):
             glue_table_definition = self.get_glue_table(_rel)
             if glue_table_definition:
                 _table_definition = self._get_one_table_for_catalog(
-                    glue_table_definition["Table"], _rel.database  # type:ignore
+                    glue_table_definition["Table"],
+                    _rel.database,  # type:ignore
                 )
                 _table_definitions.extend(_table_definition)
         table = agate.Table.from_object(_table_definitions)
@@ -1137,10 +1173,25 @@ class AthenaAdapter(SQLAdapter):
                 SkipArchive=skip_archive_table_version,
             )
 
-    def generate_python_submission_response(self, submission_result: Any) -> AdapterResponse:
+    def generate_python_submission_response(self, submission_result: Any) -> AthenaAdapterResponse:
+        # ``code`` is intentionally left unset: AdapterResponse.code is
+        # reserved for driver-level status codes (SQLSTATE-style).  We
+        # surface the success/failure signal via ``_message`` instead.
         if not submission_result:
-            return AdapterResponse(_message="ERROR")
-        return AdapterResponse(_message="OK")
+            return AthenaAdapterResponse(_message="ERROR")
+        result = submission_result if isinstance(submission_result, dict) else {}
+        statistics = result.get("Statistics") or {}
+        dpu_execution_in_millis = (
+            statistics.get("DpuExecutionInMillis") if isinstance(statistics, dict) else None
+        )
+        spark_session_id = result.get("SparkSessionId")
+        spark_calculation_execution_id = result.get("SparkCalculationExecutionId")
+        return AthenaAdapterResponse(
+            _message="OK",
+            dpu_execution_in_millis=dpu_execution_in_millis,
+            spark_session_id=spark_session_id,
+            spark_calculation_execution_id=spark_calculation_execution_id,
+        )
 
     @property
     def default_python_submission_method(self) -> str:

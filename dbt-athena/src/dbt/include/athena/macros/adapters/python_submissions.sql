@@ -10,6 +10,7 @@
     {% set bucket_count = optional_args.get("bucket_count") %}
     {% set field_delimiter = optional_args.get("field_delimiter") %}
     {% set spark_ctas = optional_args.get("spark_ctas", "") %}
+    {% set spark_engine_version = optional_args.get("spark_engine_version") %}
 
 import pyspark
 
@@ -17,8 +18,13 @@ import pyspark
 {{ compiled_code }}
 def materialize(spark_session, df, target_relation):
     import pandas
+{% if spark_engine_version|string == "3.5" %}
+    if isinstance(df, pyspark.sql.connect.dataframe.DataFrame):
+        pass
+{% else %}
     if isinstance(df, pyspark.sql.dataframe.DataFrame):
         pass
+{% endif %}
     elif isinstance(df, pandas.core.frame.DataFrame):
         df = spark_session.createDataFrame(df)
     else:
