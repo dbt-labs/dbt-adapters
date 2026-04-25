@@ -48,7 +48,7 @@ def fake_reattach_module(monkeypatch):
 def _reset_patch_state():
     # The patch module tracks application via a process-wide flag; reset it so each
     # test exercises a fresh first-application path.
-    import dbt.adapters.athena.spark_connect_pyspark_patches as m
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
 
     m._patches_applied = False
     yield
@@ -56,7 +56,7 @@ def _reset_patch_state():
 
 
 def test_shutdown_becomes_noop_after_patch(fake_reattach_module):
-    from dbt.adapters.athena.spark_connect_pyspark_patches import apply_pyspark_workarounds
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
 
     apply_pyspark_workarounds()
 
@@ -70,7 +70,7 @@ def test_shutdown_becomes_noop_after_patch(fake_reattach_module):
 
 
 def test_apply_is_idempotent(fake_reattach_module):
-    from dbt.adapters.athena.spark_connect_pyspark_patches import apply_pyspark_workarounds
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
 
     apply_pyspark_workarounds()
     patched_shutdown = fake_reattach_module.__dict__["shutdown"]

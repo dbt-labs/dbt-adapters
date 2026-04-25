@@ -9,7 +9,7 @@ from dbt.adapters.athena.config import AthenaSparkSessionConfig
 from dbt.adapters.athena.connections import AthenaCredentials
 from dbt.adapters.athena.constants import LOGGER
 from dbt.adapters.athena.session import AthenaSparkSessionManager
-from dbt.adapters.athena.spark_connect_job import SparkConnectSubmitter
+from dbt.adapters.athena.spark_connect import SparkConnectSubmitter
 from dbt.adapters.base import PythonJobHelper
 
 SUBMISSION_LANGUAGE = "python"

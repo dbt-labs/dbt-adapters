@@ -29,9 +29,9 @@ from dbt.adapters.athena.constants import (
     DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY,
     LOGGER,
 )
-from dbt.adapters.athena.spark_connect_channel import create_athena_channel_builder
-from dbt.adapters.athena.spark_connect_errors import is_transient_spark_error
-from dbt.adapters.athena.spark_connect_session import SparkConnectSessionPool
+from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
+from dbt.adapters.athena.spark_connect.errors import is_transient_spark_error
+from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 
 _MAX_RETRIES = 3
 

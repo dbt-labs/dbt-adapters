@@ -29,7 +29,7 @@ def _get_athena_channel_builder_cls() -> Any:
 
         from pyspark.sql.connect.client.core import ChannelBuilder
 
-        from dbt.adapters.athena.spark_connect_pyspark_patches import (
+        from dbt.adapters.athena.spark_connect.pyspark_patches import (
             apply_pyspark_workarounds,
         )
 

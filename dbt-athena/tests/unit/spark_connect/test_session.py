@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
-from dbt.adapters.athena.spark_connect_session import SparkConnectSessionPool
+from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 
 
 @pytest.fixture(autouse=True)

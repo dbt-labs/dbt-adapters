@@ -370,13 +370,13 @@ class AthenaConnectionManager(SQLConnectionManager):
         # workers, test harnesses) from killing sessions belonging to other
         # live invocations that share the singleton pool.
         #
-        # ``spark_connect_session`` is imported lazily because it pulls in the
+        # ``spark_connect.session`` is imported lazily because it pulls in the
         # pyspark runtime lookup path; importing at module load time would
         # force every user of the Athena connection manager (including pure
         # SQL workflows) to pay for Spark imports.
         from dbt_common.invocation import get_invocation_id
 
-        from dbt.adapters.athena.spark_connect_session import (
+        from dbt.adapters.athena.spark_connect.session import (
             SparkConnectSessionPool,
         )
 
