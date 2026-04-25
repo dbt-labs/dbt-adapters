@@ -16,7 +16,7 @@ import time
 import traceback
 from functools import cached_property
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional, Tuple
 
 import botocore
 from dbt_common.exceptions import DbtRuntimeError
@@ -92,7 +92,7 @@ class SparkConnectSubmitter:
         ).hexdigest()
 
     @cached_property
-    def _session_key(self) -> tuple:
+    def _session_key(self) -> Tuple[str, str]:
         return (get_invocation_id(), self._session_fingerprint)
 
     @cached_property
@@ -106,9 +106,9 @@ class SparkConnectSubmitter:
             or DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY
         )
 
+    @cached_property
     def _session_description(self) -> str:
-        invocation = get_invocation_id()
-        return f"dbt: {invocation} - {self._session_fingerprint}"
+        return f"dbt: {get_invocation_id()} - {self._session_fingerprint}"
 
     def submit(self, compiled_code: str) -> Any:
         """Submit code via Spark Connect (Apache Spark 3.5+).
@@ -140,9 +140,6 @@ class SparkConnectSubmitter:
             backoff = min(2**attempt, 30) + random.uniform(0, 1)
             remaining = self.timeout - (time.monotonic() - start_time)
             if backoff >= remaining:
-                # No budget left to retry; surface the last error as
-                # "failed after N attempts" rather than silently sleeping
-                # past the execution timeout.
                 LOGGER.warning(
                     f"Model {self.relation_name} (session {last_session_id}) - "
                     f"Transient Spark Connect error on "
@@ -160,9 +157,6 @@ class SparkConnectSubmitter:
             )
             time.sleep(backoff)
 
-        # All retries exhausted — re-raise the last error with a wrapping
-        # message so operators can distinguish "failed once" from "failed
-        # after N attempts".
         raise DbtRuntimeError(
             f"Spark Connect execution failed after {_MAX_RETRIES} "
             f"attempts (last session {last_session_id}): "
@@ -176,9 +170,6 @@ class SparkConnectSubmitter:
 
         spark_work_group = self.credentials.spark_work_group
         if not spark_work_group:
-            # Spark Connect cannot target an Athena workgroup if none is
-            # configured; fail fast with a clear message rather than letting
-            # boto3 surface a less helpful validation error.
             raise DbtRuntimeError(
                 "spark_work_group must be set in the Athena profile to submit "
                 "python models via Spark Connect (spark_engine_version=3.5)."
@@ -188,7 +179,7 @@ class SparkConnectSubmitter:
             athena_client=self.athena_client,
             spark_work_group=spark_work_group,
             engine_config=self.engine_config,
-            session_description=self._session_description(),
+            session_description=self._session_description,
             max_sessions=self._max_sessions,
             timeout=self.timeout,
             polling_interval=self.polling_interval,
@@ -204,9 +195,6 @@ class SparkConnectSubmitter:
         """
         deadline_seconds = min(self.timeout, _ENDPOINT_READY_TIMEOUT_SECONDS)
         timer: float = 0
-        # ``throttle_base`` is the exponential-backoff base (without jitter),
-        # so successive throttles compute 1→2→4→…→30 rather than doubling a
-        # jittered value that drifts unpredictably.
         throttle_base: float = 0
         while True:
             throttled = False
@@ -353,8 +341,6 @@ class SparkConnectSubmitter:
                         f"{type(e).__name__}: {e}"
                     ) from e
 
-            # Transient + not last attempt → let the caller retry with a new
-            # session.
             return _AttemptResult(result=None, error=e, done=False, session_id=session_id)
         finally:
             # Cancel the watchdog timer first and wait for any already-fired
@@ -369,8 +355,6 @@ class SparkConnectSubmitter:
                 except Exception as e:  # noqa: BLE001 - best-effort cleanup
                     LOGGER.debug(f"Ignoring error while stopping Spark session: {e}")
             if terminate_session:
-                # Terminate the failed session so DPUs are released;
-                # the next attempt acquires a fresh one from the pool.
                 self._pool.terminate_and_remove(session_id)
             else:
                 self._pool.release(session_id)

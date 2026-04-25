@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
 
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -24,6 +24,12 @@ from dbt.adapters.athena.constants import LOGGER, SESSION_IDLE_TIMEOUT_MIN
 SessionKey = Tuple[str, str]
 
 _PLACEHOLDER_PREFIX = "__creating_"
+
+
+class _SessionInfo(TypedDict):
+    key: SessionKey
+    client: Any
+    load: int
 
 
 def _is_placeholder(session_id: str) -> bool:
@@ -56,8 +62,7 @@ class SparkConnectSessionPool:
 
     def _initialize(self) -> None:
         self._lock = threading.Lock()
-        # session_id -> {"key": SessionKey, "client": athena_client, "load": int}
-        self._sessions: Dict[str, Dict[str, Any]] = {}
+        self._sessions: Dict[str, _SessionInfo] = {}
 
     def acquire(
         self,
@@ -196,18 +201,20 @@ class SparkConnectSessionPool:
             }
         return session_id
 
-    def _is_session_alive(self, athena_client: Any, session_id: str) -> bool:
-        """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
+    def _get_session_state(self, athena_client: Any, session_id: str) -> str:
+        """Return the Athena session state, or empty string on lookup failure."""
         try:
-            state = athena_client.get_session_status(SessionId=session_id)["Status"].get(
+            return athena_client.get_session_status(SessionId=session_id)["Status"].get(
                 "State", ""
             )
         except Exception as e:  # noqa: BLE001 - treat unknown state as dead
             LOGGER.warning(f"Could not verify Spark Connect session {session_id} state: {e}")
-            return False
-        if state in self._DEAD_SESSION_STATES or not state:
-            return False
-        return True
+            return ""
+
+    def _is_session_alive(self, athena_client: Any, session_id: str) -> bool:
+        """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
+        state = self._get_session_state(athena_client, session_id)
+        return bool(state) and state not in self._DEAD_SESSION_STATES
 
     def _start_session(
         self,
@@ -279,7 +286,7 @@ class SparkConnectSessionPool:
                 self._sessions.pop(sid, None)
         self._terminate_entries(entries)
 
-    def _terminate_entries(self, entries: List[Tuple[str, Dict[str, Any]]]) -> None:
+    def _terminate_entries(self, entries: List[Tuple[str, _SessionInfo]]) -> None:
         for session_id, info in entries:
             try:
                 info["client"].terminate_session(SessionId=session_id)
@@ -294,14 +301,8 @@ class SparkConnectSessionPool:
 
         evicted = 0
         for session_id in session_ids:
-            try:
-                state = athena_client.get_session_status(SessionId=session_id)["Status"].get(
-                    "State", ""
-                )
-            except Exception:  # noqa: BLE001 - treat as dead
-                state = ""
-
-            if state in self._DEAD_SESSION_STATES or not state:
+            state = self._get_session_state(athena_client, session_id)
+            if not state or state in self._DEAD_SESSION_STATES:
                 with self._lock:
                     if session_id in self._sessions:
                         LOGGER.debug(
