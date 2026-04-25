@@ -1180,17 +1180,10 @@ class AthenaAdapter(SQLAdapter):
         if not submission_result:
             return AthenaAdapterResponse(_message="ERROR")
         result = submission_result if isinstance(submission_result, dict) else {}
-        statistics = result.get("Statistics") or {}
-        dpu_execution_in_millis = (
-            statistics.get("DpuExecutionInMillis") if isinstance(statistics, dict) else None
-        )
         spark_session_id = result.get("SparkSessionId")
-        spark_calculation_execution_id = result.get("SparkCalculationExecutionId")
         return AthenaAdapterResponse(
             _message="OK",
-            dpu_execution_in_millis=dpu_execution_in_millis,
             spark_session_id=spark_session_id,
-            spark_calculation_execution_id=spark_calculation_execution_id,
         )
 
     @property

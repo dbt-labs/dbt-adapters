@@ -48,9 +48,7 @@ from dbt.adapters.sql import SQLConnectionManager
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
-    dpu_execution_in_millis: Optional[int] = None
     spark_session_id: Optional[str] = None
-    spark_calculation_execution_id: Optional[str] = None
 
 
 @dataclass

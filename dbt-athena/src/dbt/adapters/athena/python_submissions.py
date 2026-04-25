@@ -194,19 +194,10 @@ class AthenaPythonJobHelper(PythonJobHelper):
                         CalculationExecutionId=calculation_execution_id
                     )
                     result = execution_response.get("Result") or {}
-                    statistics = execution_response.get("Statistics")
-                    if statistics is not None:
-                        result["Statistics"] = statistics
                     result["SparkSessionId"] = self.session_id
-                    result["SparkCalculationExecutionId"] = calculation_execution_id
                 except Exception as e:
                     LOGGER.error(f"Unable to retrieve results: Got: {e}")
-                    # Preserve identifiers so CloudWatch / Athena console can
-                    # still be used to debug the failed fetch.
-                    result = {
-                        "SparkSessionId": self.session_id,
-                        "SparkCalculationExecutionId": calculation_execution_id,
-                    }
+                    result = {"SparkSessionId": self.session_id}
             return result
         else:
             # dbt submits an empty "ghost" calculation alongside every python
@@ -218,7 +209,6 @@ class AthenaPythonJobHelper(PythonJobHelper):
                 "StdErrorS3Uri": "string",
                 "StdOutS3Uri": "string",
                 "SparkSessionId": self.session_id,
-                "SparkCalculationExecutionId": None,
             }
 
     def poll_until_session_idle(self) -> None:
