@@ -43,6 +43,7 @@ class _AttemptResult(NamedTuple):
     result: Optional[Dict[str, Any]]
     error: Optional[BaseException]
     done: bool
+    session_id: Optional[str] = None
 
 
 class SparkConnectSubmitter:
@@ -136,12 +137,14 @@ class SparkConnectSubmitter:
 
         start_time = time.monotonic()
         last_error: Optional[BaseException] = None
+        last_session_id: Optional[str] = None
 
         for attempt in range(1, _MAX_RETRIES + 1):
             outcome = self._attempt(compiled_code, attempt, start_time)
             if outcome.done:
                 return outcome.result
             last_error = outcome.error
+            last_session_id = outcome.session_id
 
             is_last_attempt = attempt >= _MAX_RETRIES
             if is_last_attempt:
@@ -154,14 +157,16 @@ class SparkConnectSubmitter:
                 # "failed after N attempts" rather than silently sleeping
                 # past the execution timeout.
                 LOGGER.warning(
-                    f"Model {self.relation_name} - Transient Spark Connect error on "
+                    f"Model {self.relation_name} (session {last_session_id}) - "
+                    f"Transient Spark Connect error on "
                     f"attempt {attempt}/{_MAX_RETRIES}, "
                     f"but remaining budget ({remaining:.1f}s) is below backoff "
                     f"({backoff:.1f}s); giving up."
                 )
                 break
             LOGGER.warning(
-                f"Model {self.relation_name} - Transient Spark Connect error "
+                f"Model {self.relation_name} (session {last_session_id}) - "
+                f"Transient Spark Connect error "
                 f"(attempt {attempt}/{_MAX_RETRIES}), "
                 f"retrying in {backoff:.1f}s with new session: "
                 f"{type(last_error).__name__}: {last_error}"
@@ -173,7 +178,8 @@ class SparkConnectSubmitter:
         # after N attempts".
         raise DbtRuntimeError(
             f"Spark Connect execution failed after {_MAX_RETRIES} "
-            f"attempts: {type(last_error).__name__}: {last_error}"
+            f"attempts (last session {last_session_id}): "
+            f"{type(last_error).__name__}: {last_error}"
         ) from last_error
 
     def _acquire_session(self) -> str:
@@ -316,7 +322,8 @@ class SparkConnectSubmitter:
             def _on_timeout() -> None:
                 timeout_event.set()
                 LOGGER.warning(
-                    f"Model {self.relation_name} - " f"Execution timed out after {self.timeout}s"
+                    f"Model {self.relation_name} (session {session_id}) - "
+                    f"Execution timed out after {self.timeout}s"
                 )
                 if spark is not None:
                     spark.interruptAll()
@@ -350,18 +357,20 @@ class SparkConnectSubmitter:
 
             if not transient or is_last_attempt:
                 LOGGER.error(
-                    f"Model {self.relation_name} - Spark Connect execution failed "
+                    f"Model {self.relation_name} (session {session_id}) - "
+                    f"Spark Connect execution failed "
                     f"(attempt {attempt}/{_MAX_RETRIES}): "
                     f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
                 )
                 if not transient:
                     raise DbtRuntimeError(
-                        f"Spark Connect execution failed: {type(e).__name__}: {e}"
+                        f"Spark Connect execution failed (session {session_id}): "
+                        f"{type(e).__name__}: {e}"
                     ) from e
 
             # Transient + not last attempt → let the caller retry with a new
             # session.
-            return _AttemptResult(result=None, error=e, done=False)
+            return _AttemptResult(result=None, error=e, done=False, session_id=session_id)
         finally:
             # Cancel the watchdog timer first and wait for any already-fired
             # callback to finish.  Otherwise spark.interruptAll() running in
