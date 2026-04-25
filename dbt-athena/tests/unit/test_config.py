@@ -45,11 +45,7 @@ class TestAthenaSparkSessionConfig:
             "polling_interval": request.param.get("polling_interval", 5),
             "engine_config": request.param.get(
                 "engine_config",
-                {
-                    "CoordinatorDpuSize": 1,
-                    "MaxConcurrentDpus": 2,
-                    "DefaultExecutorDpuSize": 1,
-                },
+                {"CoordinatorDpuSize": 1, "MaxConcurrentDpus": 2, "DefaultExecutorDpuSize": 1},
             ),
         }
 

@@ -30,11 +30,7 @@ class TestAthenaPythonJobHelper:
                 "polling_interval": config["polling_interval"],
                 "engine_config": request.param.get(
                     "engine_config",
-                    {
-                        "CoordinatorDpuSize": 1,
-                        "MaxConcurrentDpus": 2,
-                        "DefaultExecutorDpuSize": 1,
-                    },
+                    {"CoordinatorDpuSize": 1, "MaxConcurrentDpus": 2, "DefaultExecutorDpuSize": 1},
                 ),
             },
         }
