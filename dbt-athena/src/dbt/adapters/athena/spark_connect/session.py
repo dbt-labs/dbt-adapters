@@ -87,7 +87,7 @@ class SparkConnectSessionPool:
         deadline = time.monotonic() + timeout
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
         placeholder_id: Optional[str] = None
-        stale_to_terminate: List[Tuple[str, Any]] = []
+        stale_to_terminate: List[Tuple[str, _SessionInfo]] = []
 
         while True:
             reuse_candidate: Optional[str] = None
@@ -105,8 +105,7 @@ class SparkConnectSessionPool:
                         f"sessions from prior invocations"
                     )
                     for sid in stale_sids:
-                        info = self._sessions.pop(sid)
-                        stale_to_terminate.append((sid, info["client"]))
+                        stale_to_terminate.append((sid, self._sessions.pop(sid)))
 
                 # Reuse a session with the same key that still has room
                 # for another concurrent model.
@@ -136,12 +135,7 @@ class SparkConnectSessionPool:
 
             # Terminate stale sessions outside the lock (API calls are slow).
             if stale_to_terminate:
-                for sid, client in stale_to_terminate:
-                    try:
-                        client.terminate_session(SessionId=sid)
-                        LOGGER.debug(f"Terminated stale Spark Connect session {sid}")
-                    except Exception as e:  # noqa: BLE001 - best-effort cleanup
-                        LOGGER.warning(f"Failed to terminate stale session {sid}: {e}")
+                self._terminate_entries(stale_to_terminate)
                 stale_to_terminate = []
 
             # Verify the reuse candidate is actually alive before handing it
