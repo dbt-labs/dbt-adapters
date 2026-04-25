@@ -95,7 +95,7 @@ def get_spark_df(identifier):
 class SparkdbtObj(dbtObj):
     def __init__(self):
         super().__init__(load_df_function=get_spark_df)
-        self.source = lambda *args: source(*args, dbt_load_df_function=get_spark_df)
-        self.ref = lambda *args: ref(*args, dbt_load_df_function=get_spark_df)
+        self.source = lambda *args, **kwargs: source(*args, dbt_load_df_function=get_spark_df, **kwargs)
+        self.ref = lambda *args, **kwargs: ref(*args, dbt_load_df_function=get_spark_df, **kwargs)
 
 {%- endmacro -%}
