@@ -97,21 +97,14 @@ class SparkConnectSubmitter:
 
     @cached_property
     def _max_sessions(self) -> int:
-        return self._resolve_int_credential(
-            "spark_connect_max_sessions", DEFAULT_SPARK_CONNECT_MAX_SESSIONS
-        )
+        return self.credentials.spark_connect_max_sessions or DEFAULT_SPARK_CONNECT_MAX_SESSIONS
 
     @cached_property
     def _session_concurrency(self) -> int:
-        return self._resolve_int_credential(
-            "spark_connect_session_concurrency", DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY
+        return (
+            self.credentials.spark_connect_session_concurrency
+            or DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY
         )
-
-    def _resolve_int_credential(self, field_name: str, default: int) -> int:
-        # AthenaCredentials.__post_init__ normalizes these fields to int,
-        # so here we only apply the default when the user didn't set them.
-        configured = getattr(self.credentials, field_name, None)
-        return default if configured is None else configured
 
     def _session_description(self) -> str:
         invocation = get_invocation_id()
@@ -120,18 +113,12 @@ class SparkConnectSubmitter:
     def submit(self, compiled_code: str) -> Any:
         """Submit code via Spark Connect (Apache Spark 3.5+).
 
-        Transient Spark Connect errors (credential propagation failures,
-        gRPC pool shutdown) are retried with a new session up to
-        ``_MAX_RETRIES`` times.  ``self.timeout`` is a hard execution-time
-        limit that covers both endpoint wait and code execution.
-
-        Empty ``compiled_code`` bypasses both Athena and the session pool —
-        dbt submits a "ghost" empty calculation alongside every python
-        model and we have nothing to run.  No session is acquired in this
-        case because starting one would cost DPUs for no benefit; models
-        with real code will still fingerprint-match and share a session
-        via the pool.
+        Transient errors (credential propagation, gRPC pool shutdown) are
+        retried with a fresh session up to ``_MAX_RETRIES`` times, bounded
+        by ``self.timeout`` covering both endpoint wait and execution.
         """
+        # dbt submits a ghost empty calculation alongside every python model;
+        # skip pool acquisition to avoid spending DPUs on nothing.
         if not compiled_code.strip():
             return {"SparkConnect": True, "SparkSessionId": None}
 
@@ -250,8 +237,6 @@ class SparkConnectSubmitter:
                     LOGGER.debug(f"Waiting for session {session_id} endpoint: {e}")
 
             if not throttled:
-                # Non-throttle path (success-without-token or transient error):
-                # reset the backoff so we don't inherit stale pressure.
                 throttle_base = 0
 
             if timer >= deadline_seconds:

@@ -28,6 +28,11 @@ def _make_client(session_ids, state="IDLE"):
     return client
 
 
+def _register(pool, session_id, key, athena_client):
+    """Inject a session into the pool for tests, bypassing acquire()."""
+    pool._sessions[session_id] = {"key": key, "client": athena_client, "load": 1}
+
+
 class TestSingleton:
     def test_returns_same_instance(self):
         pool_a = SparkConnectSessionPool()
@@ -323,7 +328,7 @@ class TestEviction:
     def test_dead_sessions_are_evicted(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
-        pool.register("sid-dead", ("inv", "fp"), client)
+        _register(pool, "sid-dead", ("inv", "fp"), client)
         client.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
 
         evicted = pool._evict_dead_sessions(client)
@@ -334,7 +339,7 @@ class TestEviction:
     def test_unknown_state_is_evicted(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
-        pool.register("sid-x", ("inv", "fp"), client)
+        _register(pool, "sid-x", ("inv", "fp"), client)
         client.get_session_status.side_effect = Exception("boom")
 
         evicted = pool._evict_dead_sessions(client)
@@ -345,7 +350,7 @@ class TestEviction:
     def test_idle_session_is_not_evicted(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
-        pool.register("sid-ok", ("inv", "fp"), client)
+        _register(pool, "sid-ok", ("inv", "fp"), client)
         client.get_session_status.return_value = {"Status": {"State": "IDLE"}}
 
         evicted = pool._evict_dead_sessions(client)
@@ -358,7 +363,7 @@ class TestTerminate:
     def test_terminate_and_remove_calls_athena(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
-        pool.register("sid-1", ("inv", "fp"), client)
+        _register(pool, "sid-1", ("inv", "fp"), client)
 
         pool.terminate_and_remove("sid-1")
 
@@ -369,24 +374,11 @@ class TestTerminate:
         pool = SparkConnectSessionPool()
         client = MagicMock()
         client.terminate_session.side_effect = Exception("boom")
-        pool.register("sid-1", ("inv", "fp"), client)
+        _register(pool, "sid-1", ("inv", "fp"), client)
 
         pool.terminate_and_remove("sid-1")  # Must not raise.
 
         assert "sid-1" not in pool._snapshot()
-
-    def test_terminate_all_empties_pool(self):
-        pool = SparkConnectSessionPool()
-        client_a = MagicMock()
-        client_b = MagicMock()
-        pool.register("sid-a", ("inv", "fp1"), client_a)
-        pool.register("sid-b", ("inv", "fp2"), client_b)
-
-        pool.terminate_all()
-
-        client_a.terminate_session.assert_called_once_with(SessionId="sid-a")
-        client_b.terminate_session.assert_called_once_with(SessionId="sid-b")
-        assert pool._snapshot() == {}
 
     def test_terminate_by_invocation_preserves_other_invocations(self):
         """The singleton is shared across invocations on multi-invocation hosts
@@ -395,8 +387,8 @@ class TestTerminate:
         pool = SparkConnectSessionPool()
         mine = MagicMock()
         theirs = MagicMock()
-        pool.register("sid-mine", ("inv-mine", "fp"), mine)
-        pool.register("sid-theirs", ("inv-theirs", "fp"), theirs)
+        _register(pool, "sid-mine", ("inv-mine", "fp"), mine)
+        _register(pool, "sid-theirs", ("inv-theirs", "fp"), theirs)
 
         pool.terminate_by_invocation("inv-mine")
 
@@ -409,7 +401,7 @@ class TestTerminate:
     def test_terminate_by_invocation_is_idempotent_when_no_match(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
-        pool.register("sid-1", ("inv-a", "fp"), client)
+        _register(pool, "sid-1", ("inv-a", "fp"), client)
 
         pool.terminate_by_invocation("inv-nonexistent")
 
@@ -535,7 +527,7 @@ class TestCrossInvocationCleanup:
     def test_sessions_from_prior_invocations_are_evicted_on_acquire(self):
         pool = SparkConnectSessionPool()
         stale_client = MagicMock()
-        pool.register("sid-stale", ("old-inv", "fp"), stale_client)
+        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client)
 
         new_client = _make_client(["sid-new"])
         sid = pool.acquire(
@@ -563,7 +555,7 @@ class TestReuseLivenessCheck:
         client = _make_client(["sid-replacement"])
 
         # Pre-register an idle session, then make the liveness check report FAILED.
-        pool.register("sid-stale", ("inv", "fp"), client)
+        _register(pool, "sid-stale", ("inv", "fp"), client)
         pool.release("sid-stale")
         client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
 
@@ -586,7 +578,7 @@ class TestReuseLivenessCheck:
         pool = SparkConnectSessionPool()
         client = MagicMock()
         client.get_session_status.return_value = {"Status": {"State": "IDLE"}}
-        pool.register("sid-1", ("inv", "fp"), client)
+        _register(pool, "sid-1", ("inv", "fp"), client)
         pool.release("sid-1")
 
         sid = pool.acquire(

@@ -96,7 +96,7 @@ class SparkConnectSessionPool:
                 ]
                 if stale_sids:
                     LOGGER.debug(
-                        f"[pool] Removing {len(stale_sids)} stale Spark Connect "
+                        f"Removing {len(stale_sids)} stale Spark Connect "
                         f"sessions from prior invocations"
                     )
                     for sid in stale_sids:
@@ -243,14 +243,6 @@ class SparkConnectSessionPool:
             f"{last_error}"
         )
 
-    def register(self, session_id: str, key: SessionKey, athena_client: Any) -> None:
-        with self._lock:
-            self._sessions[session_id] = {
-                "key": key,
-                "client": athena_client,
-                "load": 1,
-            }
-
     def release(self, session_id: str) -> None:
         """Mark the session as idle so it can be reused."""
         with self._lock:
@@ -267,28 +259,8 @@ class SparkConnectSessionPool:
         """Terminate the Athena session and remove it from the pool."""
         with self._lock:
             info = self._sessions.pop(session_id, None)
-        if info is None:
-            return
-        client = info["client"]
-        try:
-            client.terminate_session(SessionId=session_id)
-            LOGGER.debug(f"Terminated Spark Connect session {session_id}")
-        except Exception as e:  # noqa: BLE001 - best-effort cleanup
-            LOGGER.warning(f"Failed to terminate Spark Connect session {session_id}: {e}")
-
-    def terminate_all(self) -> None:
-        """Terminate every pooled session.
-
-        Prefer ``terminate_by_invocation`` from adapter cleanup — this
-        method drops sessions owned by other invocations too, which is
-        only safe at true process shutdown.
-        """
-        with self._lock:
-            entries = [
-                (sid, info) for sid, info in self._sessions.items() if not _is_placeholder(sid)
-            ]
-            self._sessions.clear()
-        self._terminate_entries(entries)
+        if info is not None:
+            self._terminate_entries([(session_id, info)])
 
     def terminate_by_invocation(self, invocation_id: str) -> None:
         """Terminate only sessions owned by the given dbt invocation.
