@@ -61,6 +61,7 @@ class SnowflakeConfig(AdapterConfig):
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
+    copy_tags: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
     refresh_warehouse: Optional[str] = None

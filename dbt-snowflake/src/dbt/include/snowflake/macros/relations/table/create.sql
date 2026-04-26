@@ -79,6 +79,7 @@ as (
 {%- endif -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
+{%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -98,6 +99,7 @@ create or replace {{ transient }}table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
+    {% if copy_tags -%} copy tags {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
@@ -145,6 +147,7 @@ alter table {{ relation }} resume recluster;
 {%- endif -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
+{%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -174,6 +177,7 @@ create or replace iceberg table {{ relation }}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
+    {% if copy_tags -%} copy tags {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}
     select * from (
