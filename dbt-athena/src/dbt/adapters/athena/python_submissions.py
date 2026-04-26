@@ -190,10 +190,12 @@ class AthenaPythonJobHelper(PythonJobHelper):
             )
             if execution_status == "COMPLETED":
                 try:
-                    execution_response = self.athena_client.get_calculation_execution(
-                        CalculationExecutionId=calculation_execution_id
+                    result = (
+                        self.athena_client.get_calculation_execution(
+                            CalculationExecutionId=calculation_execution_id
+                        ).get("Result")
+                        or {}
                     )
-                    result = execution_response.get("Result") or {}
                     result["SparkSessionId"] = self.session_id
                 except Exception as e:
                     LOGGER.error(f"Unable to retrieve results: Got: {e}")
