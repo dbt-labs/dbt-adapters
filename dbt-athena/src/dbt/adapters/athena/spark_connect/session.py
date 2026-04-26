@@ -1,15 +1,4 @@
-"""Thread-safe singleton pool for Athena Spark Connect sessions.
-
-The pool is keyed by ``(invocation_id, fingerprint)`` where ``fingerprint``
-is an md5 of the engine configuration.  Sessions with the same fingerprint
-can be reused across models within a single dbt invocation, so long as
-the per-fingerprint limit is not exceeded.
-
-Unlike the Calculations API, Spark Connect uses a persistent gRPC channel
-bound to a single session, so a dedicated pool (separate from
-``AthenaSparkSessionManager``) is required to coordinate session lifecycle
-across concurrent dbt threads.
-"""
+"""Thread-safe pool for Athena Spark Connect sessions, keyed by ``(invocation_id, fingerprint)``."""
 
 from __future__ import annotations
 

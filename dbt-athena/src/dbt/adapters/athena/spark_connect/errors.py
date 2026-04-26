@@ -1,8 +1,4 @@
-"""Transient-error classification for Spark Connect.
-
-Used by the Spark Connect submitter to decide whether a failure should be
-retried with a fresh session.
-"""
+"""Transient-error classification for Spark Connect retries."""
 
 from __future__ import annotations
 

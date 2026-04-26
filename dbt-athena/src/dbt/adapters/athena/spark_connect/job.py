@@ -1,10 +1,4 @@
-"""Spark Connect submitter for Athena Apache Spark 3.5+ python models.
-
-Owns the Spark Connect-specific submission path: session acquisition from
-the pool, GetSessionEndpoint readiness wait, gRPC channel construction,
-user-code execution, and transient-error retry.  ``AthenaPythonJobHelper``
-delegates to this class when ``spark_engine_version`` is ``"3.5"``.
-"""
+"""Spark Connect submitter for Athena Apache Spark 3.5+ python models."""
 
 from __future__ import annotations
 

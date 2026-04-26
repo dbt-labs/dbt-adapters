@@ -1,8 +1,4 @@
-"""Runtime patches for pyspark Spark Connect bugs that affect parallel execution.
-
-pyspark is imported lazily so this module stays importable without the optional
-Spark Connect dependency installed.
-"""
+"""Runtime patches for pyspark Spark Connect bugs (pyspark imported lazily)."""
 
 from __future__ import annotations
 
@@ -14,11 +10,6 @@ _patch_lock = threading.Lock()
 
 
 def apply_pyspark_workarounds() -> None:
-    """Idempotently apply runtime patches to pyspark Spark Connect.
-
-    Call once before opening any Spark Connect session.  Safe to call from
-    any thread; subsequent calls are no-ops.
-    """
     global _patches_applied
     if _patches_applied:
         return
