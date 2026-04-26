@@ -1,0 +1,6 @@
+kind: Features
+body: 'Snowflake dynamic tables: use CREATE OR REPLACE only with --full-refresh (and when replacing an existing non-dynamic-table relation of the same name). For existing dynamic tables without --full-refresh, configuration-driven updates use CREATE OR ALTER instead of CREATE OR REPLACE. Dynamic iceberg tables continue to use ALTER DYNAMIC TABLE because Snowflake does not yet support CREATE OR ALTER DYNAMIC ICEBERG TABLE. Note: dbt does not compare compiled SQL to SHOW DYNAMIC TABLES text, so model body-only changes with identical config still require --full-refresh.'
+time: 2026-04-08T15:44:51.442042-07:00
+custom:
+    Author: igorbelianski-cyber
+    Issue: "1825"
