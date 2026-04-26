@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for AWS S3 Table Buckets as materialization targets via named Athena data catalogs.
+time: 2026-04-23T16:58:40.418495+02:00
+custom:
+    Author: skillicinski
+    Issue: "1186"

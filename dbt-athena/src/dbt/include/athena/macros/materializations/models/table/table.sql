@@ -6,7 +6,15 @@
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
 
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
+  {%- set raw_table_type = config.get('table_type') -%}
+  {%- set is_s3tb = adapter.is_s3_table_bucket(database) -%}
+  {%- if is_s3tb and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
+    {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
+  {%- elif is_s3tb -%}
+    {%- set table_type = 'iceberg' -%}
+  {%- else -%}
+    {%- set table_type = (raw_table_type or 'hive') | lower -%}
+  {%- endif -%}
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
   {%- set old_tmp_relation = adapter.get_relation(identifier=identifier ~ '__ha',
                                              schema=schema,
@@ -22,6 +30,9 @@
   {%- set versions_to_keep = config.get('versions_to_keep', default=4) -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- set force_batch = config.get('force_batch', False) | as_bool -%}
+  {%- if is_s3tb and language == 'python' -%}
+    {% do exceptions.raise_compiler_error("Python models targeting S3 Table Buckets are not yet supported.") %}
+  {%- endif -%}
   {%- set target_relation = api.Relation.create(identifier=identifier,
                                                 schema=schema,
                                                 database=database,
@@ -91,7 +102,14 @@
     {%- endif -%}
   {%- else -%}
 
-    {%- if old_relation is none -%}
+    {%- if is_s3tb -%}
+      -- s3 table buckets: drop-and-recreate (ALTER TABLE RENAME not supported by AWS)
+      {%- if old_relation is not none -%}
+        {{ drop_relation(old_relation) }}
+      {%- endif -%}
+      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
+
+    {%- elif old_relation is none -%}
       {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
       -- Execute python code that is available in query result object
       {%- if language == 'python' -%}
