@@ -197,7 +197,9 @@ class AthenaAdapter(SQLAdapter):
                     client.region_name,
                     config=get_boto3_config(num_retries=creds.effective_num_retries),
                 )
-            manager = LfTagsManager(lf_client, relation, config)
+            data_catalog = self._get_data_catalog(relation.database)
+            catalog_id = get_catalog_id(data_catalog)
+            manager = LfTagsManager(lf_client, relation, config, catalog_id)
             manager.process_lf_tags_database()
         else:
             LOGGER.debug(f"Lakeformation is disabled for {relation}")
@@ -215,7 +217,9 @@ class AthenaAdapter(SQLAdapter):
                     client.region_name,
                     config=get_boto3_config(num_retries=creds.effective_num_retries),
                 )
-            manager = LfTagsManager(lf_client, relation, config)
+            data_catalog = self._get_data_catalog(relation.database)
+            catalog_id = get_catalog_id(data_catalog)
+            manager = LfTagsManager(lf_client, relation, config, catalog_id)
             manager.process_lf_tags()
             return
         LOGGER.debug(f"Lakeformation is disabled for {relation}")
@@ -1058,6 +1062,9 @@ class AthenaAdapter(SQLAdapter):
         creds = conn.credentials
         client = conn.handle
 
+        data_catalog = self._get_data_catalog(relation.database)
+        catalog_id = get_catalog_id(data_catalog)
+
         with boto3_client_lock:
             glue_client = client.session.client(
                 "glue",
@@ -1065,13 +1072,14 @@ class AthenaAdapter(SQLAdapter):
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
 
+        paginate_kwargs: Dict[str, Any] = {
+            "DatabaseName": relation.schema,
+            "TableName": relation.identifier,
+        }
+        if catalog_id:
+            paginate_kwargs["CatalogId"] = catalog_id
         paginator = glue_client.get_paginator("get_table_versions")
-        response_iterator = paginator.paginate(
-            **{
-                "DatabaseName": relation.schema,
-                "TableName": relation.identifier,
-            }
-        )
+        response_iterator = paginator.paginate(**paginate_kwargs)
         table_versions = response_iterator.build_full_result().get("TableVersions")
         LOGGER.debug(f"Total table versions: {[v['VersionId'] for v in table_versions]}")
         table_versions_ordered = sorted(
