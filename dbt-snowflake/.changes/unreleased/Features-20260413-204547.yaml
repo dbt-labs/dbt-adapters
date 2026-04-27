@@ -1,0 +1,6 @@
+kind: Features
+body: Added support for JS UDFs
+time: 2026-04-13T20:45:47.706505+05:30
+custom:
+    Author: sriramr98
+    Issue: "1859"
