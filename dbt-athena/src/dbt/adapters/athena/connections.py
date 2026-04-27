@@ -79,6 +79,7 @@ class AthenaCredentials(Credentials):
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
+    skip_retry_on_query_timeout: bool = False
 
     @property
     def type(self) -> str:
@@ -117,6 +118,7 @@ class AthenaCredentials(Credentials):
             "seed_s3_upload_args",
             "lf_tags_database",
             "spark_work_group",
+            "skip_retry_on_query_timeout",
         )
 
 
@@ -178,12 +180,18 @@ class AthenaCursor(Cursor):
         @retry(
             # No need to retry if TOO_MANY_OPEN_PARTITIONS occurs.
             # Otherwise, Athena throws ICEBERG_FILESYSTEM_ERROR after retry,
-            # because not all files are removed immediately after first try to create table
+            # because not all files are removed immediately after first try to create table.
+            # Also skip retry on non-transient errors:
+            # - Query timeout: opt-in via skip_retry_on_query_timeout profile config.
+            # - Query exhausted resources: always skip (deterministic failure).
             retry=retry_if_exception(
                 lambda e: (
-                    False
-                    if catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e)
-                    else True
+                    not (catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e))
+                    and not (
+                        self.connection.cursor_kwargs.get("skip_retry_on_query_timeout", False)
+                        and "Query timeout" in str(e)
+                    )
+                    and "Query exhausted resources" not in str(e)
                 )
             ),
             stop=stop_after_attempt(self._retry_config.attempt),
@@ -284,6 +292,7 @@ class AthenaConnectionManager(SQLConnectionManager):
                 cursor_kwargs={
                     "debug_query_state": creds.debug_query_state,
                     "num_iceberg_retries": creds.num_iceberg_retries,
+                    "skip_retry_on_query_timeout": creds.skip_retry_on_query_timeout,
                 },
                 formatter=AthenaParameterFormatter(),
                 poll_interval=creds.poll_interval,
