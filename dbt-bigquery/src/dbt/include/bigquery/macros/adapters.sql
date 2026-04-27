@@ -211,13 +211,17 @@
 
 {# When a column has the same name as its table, BigQuery resolves an unqualified
    column reference to the row STRUCT instead of the column value. Aliasing the
-   relation and qualifying the column reference forces resolution to the column. #}
+   relation and qualifying the column reference forces resolution to the column.
+   `model` is wrapped in a subquery before aliasing because `get_where_subquery`
+   may already render it as `(...) dbt_subquery` for `where:`-filtered tests; a
+   bare `{{ model }} dbt_test__source` would then produce an invalid double
+   alias. #}
 {% macro bigquery__test_unique(model, column_name) %}
 
 with dbt_test__target as (
 
   select dbt_test__source.{{ column_name }} as unique_field
-  from {{ model }} dbt_test__source
+  from (select * from {{ model }}) dbt_test__source
   where dbt_test__source.{{ column_name }} is not null
 
 )
@@ -232,14 +236,16 @@ having count(*) > 1
 
 {% endmacro %}
 
-{# Same row-vs-column resolution issue as bigquery__test_unique: alias the
-   relation and qualify the column reference. #}
+{# Same row-vs-column resolution issue as bigquery__test_unique. `model` is
+   wrapped in a subquery before aliasing so `where:`-filtered tests, where
+   `get_where_subquery` already adds a `dbt_subquery` alias, do not produce an
+   invalid double alias. #}
 {% macro bigquery__test_not_null(model, column_name) %}
 
 {% set column_list = '*' if should_store_failures() else 'dbt_test__source.' ~ column_name %}
 
 select {{ column_list }}
-from {{ model }} dbt_test__source
+from (select * from {{ model }}) dbt_test__source
 where dbt_test__source.{{ column_name }} is null
 
 {% endmacro %}
