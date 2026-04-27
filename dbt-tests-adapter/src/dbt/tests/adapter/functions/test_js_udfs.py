@@ -3,7 +3,7 @@ import pytest
 from dbt.adapters.events.types import SQLQuery
 from dbt.artifacts.schemas.results import RunStatus
 from dbt.contracts.graph.nodes import FunctionNode
-from dbt.events.types import JinjaLogWarning, RunResultError
+from dbt.events.types import JinjaLogWarning
 from dbt.tests.adapter.functions import files
 from dbt.tests.util import run_dbt
 from dbt_common.events.base_types import EventMsg
@@ -247,7 +247,7 @@ class JSAggregateUDFBase:
     def is_function_create_event(self, event: EventMsg) -> bool:
         return (
             event.data.node_info.node_name == "sum_positive"
-            and "CREATE OR REPLACE" in event.data.sql
+            and "CREATE OR REPLACE AGGREGATE FUNCTION" in event.data.sql
             and "FUNCTION" in event.data.sql
         )
 
@@ -285,36 +285,6 @@ class BasicJSAggregateUDF(JSAggregateUDFBase):
         )
         assert len(result.results) == 1
         assert float(result.results[0].agate_table.rows[0].values()[0]) == 6.0
-
-
-class JSAggregateUDFNotSupported:
-    """Base class for adapters that do NOT support JS aggregate UDFs."""
-
-    @pytest.fixture(scope="class")
-    def functions(self):
-        raise NotImplementedError("Subclass must provide functions fixture")
-
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {
-            "basic_model.sql": files.BASIC_MODEL_SQL,
-        }
-
-    def test_js_aggregate_udf_errors(self, project):
-        run_result_error_catcher = EventCatcher(RunResultError)
-        result = run_dbt(
-            ["build", "--debug"],
-            expect_pass=False,
-            callbacks=[run_result_error_catcher.catch],
-        )
-
-        js_func_results = [r for r in result.results if r.node.name == "sum_positive"]
-        assert len(js_func_results) == 1
-        assert js_func_results[0].status == RunStatus.Error
-
-        assert len(run_result_error_catcher.caught_events) >= 1
-        error_msgs = [e.data.msg for e in run_result_error_catcher.caught_events]
-        assert any("JS aggregate functions not supported" in msg for msg in error_msgs)
 
 
 class JSAggregateUDFVolatilityIgnored(JSAggregateUDFBase):
