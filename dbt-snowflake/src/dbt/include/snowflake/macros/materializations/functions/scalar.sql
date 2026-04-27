@@ -51,16 +51,12 @@
     {{ scalar_function_body_sql() }}
 {% endmacro %}
 
-{% macro quoted(name) %}
-    {{ '"' ~ name ~ '"' }}
-{% endmacro %}
-
 {% macro snowflake__formatted_scalar_function_args_javascript() %}
     {% set args = [] %}
     {% set should_quote = model.config.get('snowflake', {}).get('quote_args', true) %}
     {% for arg in model.arguments -%}
         {% set default_value = arg.get('default_value', none) %}
-        {% set arg_name = quoted(arg.name) if should_quote else arg.name %}
+        {% set arg_name = adapter.quote(arg.name) if should_quote else arg.name %}
         {% if default_value != none %}
             {%- do args.append(arg_name ~ ' ' ~ arg.data_type ~ ' DEFAULT ' ~ default_value) -%}
         {% else %}
