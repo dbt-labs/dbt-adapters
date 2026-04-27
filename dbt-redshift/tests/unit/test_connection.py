@@ -3,6 +3,7 @@ from unittest import TestCase, mock
 
 import pytest
 from dbt.adapters.exceptions import FailedToConnectError
+from dbt_common.exceptions import DbtDatabaseError
 from unittest.mock import MagicMock, call
 
 import redshift_connector
@@ -604,3 +605,99 @@ class TestAutocommitBehavior(TestCase):
         assert redshift_connector.Error in retryable
         # Verify tuple() works on it (this is what the base class does)
         assert tuple(retryable) == retryable
+
+
+class TestExecuteRetryTransientErrors(TestCase):
+    """Tests for retry behavior of execute() when transient errors are encountered."""
+
+    def setUp(self):
+        profile_cfg = {
+            "outputs": {
+                "test": {
+                    "type": "redshift",
+                    "dbname": "redshift",
+                    "user": "root",
+                    "host": "thishostshouldnotexist.test.us-east-1",
+                    "pass": "password",
+                    "port": 5439,
+                    "schema": "public",
+                    "retries": 2,
+                }
+            },
+            "target": "test",
+        }
+        project_cfg = {
+            "name": "X",
+            "version": "0.1",
+            "profile": "test",
+            "project-root": "/tmp/dbt/does-not-exist",
+            "quoting": {"identifier": False, "schema": True},
+            "config-version": 2,
+        }
+        self.config = config_from_parts_or_dicts(project_cfg, profile_cfg)
+        self._adapter = None
+
+    @property
+    def adapter(self):
+        if self._adapter is None:
+            self._adapter = RedshiftAdapter(self.config, get_context("spawn"))
+            inject_adapter(self._adapter, RedshiftPlugin)
+        return self._adapter
+
+    def _run_execute_with_error(self, error_msg, expect_retry=True, always_fail=False):
+        """Run execute() where add_query raises with error_msg.
+
+        Args:
+            error_msg: The error message to raise from add_query.
+            expect_retry: Whether the error should be retried.
+            always_fail: If True, every call fails (tests retry exhaustion).
+        """
+        mgr = self.adapter.connections
+        call_count = {"n": 0}
+        cursor_mock = MagicMock()
+        cursor_mock.description = [["id"]]
+
+        def fake_add_query(sql, auto_begin=True):
+            call_count["n"] += 1
+            if always_fail or call_count["n"] == 1:
+                raise DbtDatabaseError(error_msg)
+            return None, cursor_mock
+
+        with (
+            mock.patch.object(mgr, "add_query", side_effect=fake_add_query),
+            mock.patch.object(mgr, "get_response", return_value=MagicMock()),
+            mock.patch.object(mgr, "close"),
+            mock.patch.object(mgr, "open"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=MagicMock()),
+            mock.patch.object(mgr, "get_if_exists", return_value=MagicMock()),
+            mock.patch("time.sleep"),
+        ):
+            if always_fail:
+                with pytest.raises(DbtDatabaseError, match=error_msg):
+                    mgr.execute("drop table if exists foo cascade")
+                # retries=2: original call + 2 retries = 3 total attempts
+                assert call_count["n"] == 3, "Should have exhausted all retries"
+            elif not expect_retry:
+                with pytest.raises(DbtDatabaseError, match=error_msg):
+                    mgr.execute("drop table if exists foo cascade")
+                assert call_count["n"] == 1, "Should NOT have retried"
+            else:
+                mgr.execute("drop table if exists foo cascade")
+                assert call_count["n"] == 2, "Should have retried once"
+
+    def test_retries_on_concurrent_transaction_conflict(self):
+        self._run_execute_with_error(
+            "could not complete because of conflict with concurrent transaction"
+        )
+
+    def test_retries_on_oid_not_found(self):
+        self._run_execute_with_error("could not open relation with OID 12345")
+
+    def test_does_not_retry_on_unrecognized_error(self):
+        self._run_execute_with_error("permission denied for relation foo", expect_retry=False)
+
+    def test_raises_after_retries_exhausted(self):
+        self._run_execute_with_error(
+            "could not complete because of conflict with concurrent transaction",
+            always_fail=True,
+        )
