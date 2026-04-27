@@ -172,7 +172,11 @@
 
   {% else %}
     {#-- Create the temp relation as a view, temp table, or transient table --#}
-    {% if tmp_relation_type == 'view' %}
+    {% if is_catalog_linked_db %}
+        {%- call statement('create_tmp_relation', language=language) -%}
+          {{ create_table_as(False, tmp_relation, compiled_code, language) }}
+        {%- endcall -%}
+    {% elif tmp_relation_type == 'view' %}
         {%- call statement('create_tmp_relation') -%}
           {{ snowflake__create_view_as_with_temp_flag(tmp_relation, compiled_code, True) }}
         {%- endcall -%}
