@@ -75,66 +75,28 @@ class SparkConnectSessionPool:
         invocation_id = key[0]
         deadline = time.monotonic() + timeout
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
-        placeholder_id: Optional[str] = None
-        stale_to_terminate: List[Tuple[str, _SessionInfo]] = []
 
         while True:
-            reuse_candidate: Optional[str] = None
             with self._lock:
-                # Purge sessions from prior invocations so the singleton
-                # doesn't carry cruft across dbt runs in long-lived processes.
-                stale_sids = [
-                    sid
-                    for sid, info in self._sessions.items()
-                    if not _is_placeholder(sid) and info["key"][0] != invocation_id
-                ]
-                if stale_sids:
-                    LOGGER.debug(
-                        f"Removing {len(stale_sids)} stale Spark Connect "
-                        f"sessions from prior invocations"
-                    )
-                    for sid in stale_sids:
-                        stale_to_terminate.append((sid, self._sessions.pop(sid)))
+                stale_entries = self._collect_stale_invocations(invocation_id)
+                reuse_candidate = self._reserve_reuse_slot(key, session_concurrency)
+                placeholder_id = (
+                    self._reserve_placeholder(key, athena_client, max_sessions)
+                    if reuse_candidate is None
+                    else None
+                )
 
-                # Reuse a session with the same key that still has room
-                # for another concurrent model.
-                for sid, info in self._sessions.items():
-                    if _is_placeholder(sid):
-                        continue
-                    if info["key"] == key and info["load"] < session_concurrency:
-                        info["load"] += 1  # reserve optimistically for liveness check
-                        reuse_candidate = sid
-                        break
+            # Slow Athena API calls happen outside the lock.
+            if stale_entries:
+                self._terminate_entries(stale_entries)
 
-                if reuse_candidate is None:
-                    # Under the per-key limit: reserve a placeholder slot so
-                    # concurrent acquires see the in-flight session and don't
-                    # oversubscribe max_sessions while start_session runs
-                    # outside the lock.
-                    count = sum(1 for info in self._sessions.values() if info["key"] == key)
-                    if count < max_sessions:
-                        placeholder_id = (
-                            f"{_PLACEHOLDER_PREFIX}{threading.get_ident()}_{time.monotonic_ns()}__"
-                        )
-                        self._sessions[placeholder_id] = {
-                            "key": key,
-                            "client": athena_client,
-                            "load": 1,
-                        }
-
-            # Terminate stale sessions outside the lock (API calls are slow).
-            if stale_to_terminate:
-                self._terminate_entries(stale_to_terminate)
-                stale_to_terminate = []
-
-            # Verify the reuse candidate is actually alive before handing it
-            # back; Athena may have terminated it for idle timeout or other
-            # reasons while it sat in the pool.
             if reuse_candidate is not None:
+                # Verify the reuse candidate is actually alive before handing
+                # it back; Athena may have terminated it for idle timeout or
+                # other reasons while it sat in the pool.
                 if self._is_session_alive(athena_client, reuse_candidate):
                     LOGGER.debug(f"Reusing Spark Connect session {reuse_candidate} for key {key}")
                     return reuse_candidate
-                # Dead - evict and try again.
                 LOGGER.debug(
                     f"Discarding stale Spark Connect session {reuse_candidate} during reuse"
                 )
@@ -142,7 +104,22 @@ class SparkConnectSessionPool:
                 continue
 
             if placeholder_id is not None:
-                break
+                try:
+                    session_id = self._start_session(
+                        athena_client, spark_work_group, engine_config, session_description
+                    )
+                except Exception:
+                    with self._lock:
+                        self._sessions.pop(placeholder_id, None)
+                    raise
+                with self._lock:
+                    self._sessions.pop(placeholder_id, None)
+                    self._sessions[session_id] = {
+                        "key": key,
+                        "client": athena_client,
+                        "load": 1,
+                    }
+                return session_id
 
             # Pool is full for this key.  Periodically evict dead sessions
             # so stuck slots don't block indefinitely.
@@ -161,28 +138,58 @@ class SparkConnectSessionPool:
             time.sleep(polling_interval)
             time_since_eviction += polling_interval
 
-        # We reserved a placeholder - start a new session outside the lock so
-        # slow Athena calls don't block other threads, then swap the
-        # placeholder for the real session id.
-        assert placeholder_id is not None
-        try:
-            session_id = self._start_session(
-                athena_client, spark_work_group, engine_config, session_description
-            )
-        except Exception:
-            # Free the reserved slot on failure.
-            with self._lock:
-                self._sessions.pop(placeholder_id, None)
-            raise
+    def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
+        """Pop sessions from prior invocations.  Caller must hold ``self._lock``.
 
-        with self._lock:
-            self._sessions.pop(placeholder_id, None)
-            self._sessions[session_id] = {
-                "key": key,
-                "client": athena_client,
-                "load": 1,
-            }
-        return session_id
+        Prevents the singleton from carrying cruft across dbt runs in
+        long-lived processes (e.g. dbt Cloud workers).
+        """
+        stale_sids = [
+            sid
+            for sid, info in self._sessions.items()
+            if not _is_placeholder(sid) and info["key"][0] != invocation_id
+        ]
+        if not stale_sids:
+            return []
+        LOGGER.debug(
+            f"Removing {len(stale_sids)} stale Spark Connect sessions from prior invocations"
+        )
+        return [(sid, self._sessions.pop(sid)) for sid in stale_sids]
+
+    def _reserve_reuse_slot(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
+        """Find a reusable session and increment its load.  Caller must hold ``self._lock``.
+
+        The optimistic load increment reserves the slot before the
+        out-of-lock liveness check so concurrent acquires can't
+        oversubscribe ``session_concurrency``.
+        """
+        for sid, info in self._sessions.items():
+            if _is_placeholder(sid):
+                continue
+            if info["key"] == key and info["load"] < session_concurrency:
+                info["load"] += 1
+                return sid
+        return None
+
+    def _reserve_placeholder(
+        self, key: SessionKey, athena_client: Any, max_sessions: int
+    ) -> Optional[str]:
+        """Insert a placeholder if under the per-key limit.  Caller must hold ``self._lock``.
+
+        Concurrent acquires see the in-flight session via the placeholder
+        and won't oversubscribe ``max_sessions`` while ``start_session``
+        runs outside the lock.
+        """
+        count = sum(1 for info in self._sessions.values() if info["key"] == key)
+        if count >= max_sessions:
+            return None
+        placeholder_id = f"{_PLACEHOLDER_PREFIX}{threading.get_ident()}_{time.monotonic_ns()}__"
+        self._sessions[placeholder_id] = {
+            "key": key,
+            "client": athena_client,
+            "load": 1,
+        }
+        return placeholder_id
 
     def _get_session_state(self, athena_client: Any, session_id: str) -> str:
         """Return the Athena session state, or empty string on lookup failure."""
