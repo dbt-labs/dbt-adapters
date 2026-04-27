@@ -514,8 +514,9 @@ class TestConcurrency:
         assert client.start_session.call_count <= 2
         # Unique sessions must not exceed max_sessions.
         assert len(set(successful)) <= 2
-        # Exactly (threads - max_sessions) should time out: placeholder
-        # reservation makes the cap deterministic even under races.
+        # Exactly (threads - max_sessions) should time out: holding the
+        # pool lock across StartSession serializes session creation so the
+        # cap is deterministic even under races.
         assert len(successful) == 2
         assert len(errors) == 3
         for err in errors:
@@ -547,6 +548,31 @@ class TestCrossInvocationCleanup:
         snapshot = pool._snapshot()
         assert "sid-stale" not in snapshot
         assert "sid-new" in snapshot
+
+    def test_stale_sessions_are_terminated_even_when_start_session_fails(self):
+        """Non-transient start_session failures must not leak prior-invocation sessions."""
+        pool = SparkConnectSessionPool()
+        stale_client = MagicMock()
+        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client)
+
+        new_client = MagicMock()
+        new_client.start_session.side_effect = Exception("AccessDeniedException: nope")
+
+        with pytest.raises(Exception, match="AccessDeniedException"):
+            pool.acquire(
+                key=("new-inv", "fp"),
+                athena_client=new_client,
+                spark_work_group="wg",
+                engine_config={},
+                session_description="desc",
+                max_sessions=1,
+                timeout=5,
+                polling_interval=0.01,
+                session_concurrency=1,
+            )
+
+        stale_client.terminate_session.assert_called_once_with(SessionId="sid-stale")
+        assert "sid-stale" not in pool._snapshot()
 
 
 class TestReuseLivenessCheck:

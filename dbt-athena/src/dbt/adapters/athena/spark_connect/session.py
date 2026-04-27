@@ -12,8 +12,6 @@ from dbt.adapters.athena.constants import LOGGER, SESSION_IDLE_TIMEOUT_MIN
 
 SessionKey = Tuple[str, str]
 
-_PLACEHOLDER_PREFIX = "__creating_"
-
 
 class _SessionInfo(TypedDict):
     key: SessionKey
@@ -21,8 +19,8 @@ class _SessionInfo(TypedDict):
     load: int
 
 
-def _is_placeholder(session_id: str) -> bool:
-    return session_id.startswith(_PLACEHOLDER_PREFIX)
+class _GlobalSessionLimitReached(Exception):
+    """Raised when Athena returns ``Maximum allowed sessions reached``."""
 
 
 class SparkConnectSessionPool:
@@ -33,8 +31,7 @@ class SparkConnectSessionPool:
 
     _DEAD_SESSION_STATES = frozenset({"FAILED", "TERMINATED", "TERMINATING", "DEGRADED"})
     _EVICTION_INTERVAL = 30.0
-    _MAX_SESSION_RETRIES = 5
-    _SESSION_RETRY_BASE_SECONDS = 5
+    _GLOBAL_LIMIT_BACKOFF_SECONDS = 5.0
 
     def __new__(cls) -> "SparkConnectSessionPool":
         # Single check under the lock.  The "double-checked locking with a
@@ -77,18 +74,33 @@ class SparkConnectSessionPool:
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
 
         while True:
+            new_session_id: Optional[str] = None
+            global_limit_hit = False
+            start_error: Optional[BaseException] = None
             with self._lock:
                 stale_entries = self._collect_stale_invocations(invocation_id)
                 reuse_candidate = self._reserve_reuse_slot(key, session_concurrency)
-                placeholder_id = (
-                    self._reserve_placeholder(key, athena_client, max_sessions)
-                    if reuse_candidate is None
-                    else None
-                )
+                if reuse_candidate is None and self._has_room(key, max_sessions):
+                    try:
+                        new_session_id = self._start_and_register(
+                            key,
+                            athena_client,
+                            spark_work_group,
+                            engine_config,
+                            session_description,
+                        )
+                    except _GlobalSessionLimitReached:
+                        global_limit_hit = True
+                    except Exception as e:  # noqa: BLE001 - re-raised after cleanup
+                        start_error = e
 
-            # Slow Athena API calls happen outside the lock.
+            # Slow Athena API calls happen outside the lock.  Stale cleanup
+            # runs even when start_session raised so we don't leak prior
+            # invocations' sessions to Athena's idle timeout.
             if stale_entries:
                 self._terminate_entries(stale_entries)
+            if start_error is not None:
+                raise start_error
 
             if reuse_candidate is not None:
                 # Verify the reuse candidate is actually alive before handing
@@ -103,23 +115,8 @@ class SparkConnectSessionPool:
                 self.remove(reuse_candidate)
                 continue
 
-            if placeholder_id is not None:
-                try:
-                    session_id = self._start_session(
-                        athena_client, spark_work_group, engine_config, session_description
-                    )
-                except Exception:
-                    with self._lock:
-                        self._sessions.pop(placeholder_id, None)
-                    raise
-                with self._lock:
-                    self._sessions.pop(placeholder_id, None)
-                    self._sessions[session_id] = {
-                        "key": key,
-                        "client": athena_client,
-                        "load": 1,
-                    }
-                return session_id
+            if new_session_id is not None:
+                return new_session_id
 
             # Pool is full for this key.  Periodically evict dead sessions
             # so stuck slots don't block indefinitely.
@@ -135,8 +132,13 @@ class SparkConnectSessionPool:
                     f"(max_sessions={max_sessions})"
                 )
 
-            time.sleep(polling_interval)
-            time_since_eviction += polling_interval
+            # Account-level limit needs a longer wait than the per-key polling
+            # interval; otherwise we hammer StartSession on every tick.
+            sleep_for = (
+                self._GLOBAL_LIMIT_BACKOFF_SECONDS if global_limit_hit else polling_interval
+            )
+            time.sleep(sleep_for)
+            time_since_eviction += sleep_for
 
     def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
         """Pop sessions from prior invocations.  Caller must hold ``self._lock``.
@@ -145,9 +147,7 @@ class SparkConnectSessionPool:
         long-lived processes (e.g. dbt Cloud workers).
         """
         stale_sids = [
-            sid
-            for sid, info in self._sessions.items()
-            if not _is_placeholder(sid) and info["key"][0] != invocation_id
+            sid for sid, info in self._sessions.items() if info["key"][0] != invocation_id
         ]
         if not stale_sids:
             return []
@@ -164,32 +164,51 @@ class SparkConnectSessionPool:
         oversubscribe ``session_concurrency``.
         """
         for sid, info in self._sessions.items():
-            if _is_placeholder(sid):
-                continue
             if info["key"] == key and info["load"] < session_concurrency:
                 info["load"] += 1
                 return sid
         return None
 
-    def _reserve_placeholder(
-        self, key: SessionKey, athena_client: Any, max_sessions: int
-    ) -> Optional[str]:
-        """Insert a placeholder if under the per-key limit.  Caller must hold ``self._lock``.
+    def _has_room(self, key: SessionKey, max_sessions: int) -> bool:
+        """Return True if the per-key session count is below ``max_sessions``.
 
-        Concurrent acquires see the in-flight session via the placeholder
-        and won't oversubscribe ``max_sessions`` while ``start_session``
-        runs outside the lock.
+        Caller must hold ``self._lock``.
         """
         count = sum(1 for info in self._sessions.values() if info["key"] == key)
-        if count >= max_sessions:
-            return None
-        placeholder_id = f"{_PLACEHOLDER_PREFIX}{threading.get_ident()}_{time.monotonic_ns()}__"
-        self._sessions[placeholder_id] = {
-            "key": key,
-            "client": athena_client,
-            "load": 1,
-        }
-        return placeholder_id
+        return count < max_sessions
+
+    def _start_and_register(
+        self,
+        key: SessionKey,
+        athena_client: Any,
+        spark_work_group: str,
+        engine_config: Dict[str, Any],
+        session_description: str,
+    ) -> str:
+        """Start a session and register it under the lock.
+
+        Caller must hold ``self._lock``.  Raises ``_GlobalSessionLimitReached``
+        when Athena reports the account-level limit so the outer loop can
+        sleep and retry; non-transient errors propagate.  Holding the lock
+        across ``StartSession`` is acceptable because the API is asynchronous
+        and returns within a few hundred milliseconds.
+        """
+        try:
+            response = athena_client.start_session(
+                Description=session_description,
+                WorkGroup=spark_work_group,
+                EngineConfiguration=engine_config,
+                SessionIdleTimeoutInMinutes=SESSION_IDLE_TIMEOUT_MIN,
+            )
+        except Exception as e:  # noqa: BLE001 - global-limit handled below
+            if "Maximum allowed sessions" in str(e):
+                LOGGER.warning(f"Athena session limit reached, will retry: {e}")
+                raise _GlobalSessionLimitReached() from e
+            raise
+
+        session_id = str(response["SessionId"])
+        self._sessions[session_id] = {"key": key, "client": athena_client, "load": 1}
+        return session_id
 
     def _get_session_state(self, athena_client: Any, session_id: str) -> str:
         """Return the Athena session state, or empty string on lookup failure."""
@@ -205,40 +224,6 @@ class SparkConnectSessionPool:
         """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
         state = self._get_session_state(athena_client, session_id)
         return bool(state) and state not in self._DEAD_SESSION_STATES
-
-    def _start_session(
-        self,
-        athena_client: Any,
-        spark_work_group: str,
-        engine_config: Dict[str, Any],
-        session_description: str,
-    ) -> str:
-        """Start a new Athena Spark session with retries on transient errors."""
-        last_error: Optional[Exception] = None
-        for attempt in range(1, self._MAX_SESSION_RETRIES + 1):
-            try:
-                response = athena_client.start_session(
-                    Description=session_description,
-                    WorkGroup=spark_work_group,
-                    EngineConfiguration=engine_config,
-                    SessionIdleTimeoutInMinutes=SESSION_IDLE_TIMEOUT_MIN,
-                )
-                return str(response["SessionId"])
-            except Exception as e:  # noqa: BLE001 - retried below
-                last_error = e
-                if "Maximum allowed sessions" in str(e) and attempt < self._MAX_SESSION_RETRIES:
-                    backoff = self._SESSION_RETRY_BASE_SECONDS * attempt
-                    LOGGER.warning(
-                        f"Athena session limit reached, retrying in {backoff}s "
-                        f"(attempt {attempt}/{self._MAX_SESSION_RETRIES}): {e}"
-                    )
-                    time.sleep(backoff)
-                    continue
-                raise
-        raise DbtRuntimeError(
-            f"Failed to start Spark Connect session after {self._MAX_SESSION_RETRIES} attempts: "
-            f"{last_error}"
-        )
 
     def release(self, session_id: str) -> None:
         """Mark the session as idle so it can be reused."""
@@ -270,7 +255,7 @@ class SparkConnectSessionPool:
             entries = [
                 (sid, info)
                 for sid, info in self._sessions.items()
-                if not _is_placeholder(sid) and info["key"][0] == invocation_id
+                if info["key"][0] == invocation_id
             ]
             for sid, _ in entries:
                 self._sessions.pop(sid, None)
@@ -287,7 +272,7 @@ class SparkConnectSessionPool:
     def _evict_dead_sessions(self, athena_client: Any) -> int:
         """Remove sessions that Athena has already terminated or degraded."""
         with self._lock:
-            session_ids = [sid for sid in self._sessions if not _is_placeholder(sid)]
+            session_ids = list(self._sessions)
 
         evicted = 0
         for session_id in session_ids:
