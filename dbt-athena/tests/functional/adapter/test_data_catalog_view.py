@@ -29,6 +29,7 @@ select 1 as id, 'test' as name
 """
 
 
+@pytest.mark.skip(reason="requires Lake Formation permissions not available in CI")
 class TestDataCatalogView:
     """Verify that is_data_catalog_view=True produces a protected multi dialect view."""
 
