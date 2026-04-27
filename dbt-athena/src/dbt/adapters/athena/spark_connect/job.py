@@ -180,14 +180,15 @@ class SparkConnectSubmitter:
             session_concurrency=self._session_concurrency,
         )
 
-    def _wait_for_endpoint(self, session_id: str) -> Dict[str, Any]:
+    def _wait_for_endpoint(self, session_id: str, remaining_budget: float) -> Dict[str, Any]:
         """Poll GetSessionEndpoint until the endpoint is ready.
 
-        Bounded by ``min(self.timeout, _ENDPOINT_READY_TIMEOUT_SECONDS)`` so
-        slow endpoint provisioning cannot consume the full execution budget
-        reserved for user code.
+        Bounded by ``min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)``
+        so endpoint-wait stays within the caller's remaining attempt budget
+        and never exceeds the per-endpoint cap, regardless of time already
+        spent on session acquisition or prior retries.
         """
-        deadline_seconds = min(self.timeout, _ENDPOINT_READY_TIMEOUT_SECONDS)
+        deadline_seconds = min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)
         timer: float = 0
         throttle_base: float = 0
         while True:
@@ -265,7 +266,7 @@ class SparkConnectSubmitter:
                     f"Spark Connect execution timed out after {self.timeout} seconds."
                 )
 
-            response = self._wait_for_endpoint(session_id)
+            response = self._wait_for_endpoint(session_id, remaining)
             channel_builder = create_athena_channel_builder(
                 self.athena_client,
                 session_id,
