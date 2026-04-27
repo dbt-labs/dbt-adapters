@@ -2039,7 +2039,11 @@ def catch_as_completed(
         # we want to re-raise on ctrl+c and BaseException
         if exc is None:
             catalog = future.result()
-            tables.append(catalog)
+            # Skip empty catalog results to avoid agate type conflicts.
+            # Empty results cause agate to infer text columns (e.g. column_name)
+            # as Number, which conflicts with Text when merged with non-empty tables.
+            if len(catalog) > 0:
+                tables.append(catalog)
         elif isinstance(exc, KeyboardInterrupt) or not isinstance(exc, Exception):
             raise exc
         else:
