@@ -23,6 +23,7 @@ import google.auth
 import google.oauth2
 import google.cloud.bigquery
 from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
+from google.cloud.bigquery.routine import RoutineType
 import google.cloud.exceptions
 import pytz
 
@@ -589,7 +590,7 @@ class BigQueryAdapter(BaseAdapter):
         if bq_routine is None:
             return None
 
-        if bq_routine.routine_type == "PROCEDURE":
+        if bq_routine.type_ == RoutineType.PROCEDURE:
             return None
 
         return self.Relation.create(
