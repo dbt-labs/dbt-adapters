@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix snapshot hard_deletes='new_record' failing on tables with STRUCT or ARRAY columns
+time: 2026-03-18T12:00:00.000000+00:00
+custom:
+    Author: antoniabadarau
+    Issue: "1702"
