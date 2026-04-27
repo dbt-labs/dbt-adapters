@@ -91,7 +91,27 @@
     {%- endif -%}
   {%- else -%}
 
-    {%- if old_relation is none -%}
+    {%- set use_iceberg_write_to = language == 'python' and config.get('use_iceberg_write_to', false) -%}
+
+    {%- if use_iceberg_write_to -%}
+      -- Python + use_iceberg_write_to: writeTo().createOrReplace() handles atomic replacement,
+      -- so we skip the __ha intermediate table and write directly to target.
+      -- Clean up leftover __ha / __bkp tables from previous HA-flow failures.
+      {%- if old_tmp_relation is not none -%}
+        {%- do drop_relation(old_tmp_relation) -%}
+      {%- endif -%}
+      {%- if old_bkp_relation is not none -%}
+        {%- do drop_relation(old_bkp_relation) -%}
+      {%- endif -%}
+      {%- if old_relation is not none and old_relation.is_view -%}
+        {%- do drop_relation(old_relation) -%}
+      {%- endif -%}
+      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
+      {% call statement('create_table', language=language) %}
+        {{ query_result }}
+      {% endcall %}
+
+    {%- elif old_relation is none -%}
       {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
       -- Execute python code that is available in query result object
       {%- if language == 'python' -%}
