@@ -269,7 +269,7 @@ class AthenaCursor:
     def execute(
         self,
         operation: str,
-        parameters: Optional[List[str]] = None,
+        parameters: Optional[List[Any]] = None,
     ) -> Self:
         self._reset()
         self.query = self._formatter.format(operation, parameters)
