@@ -15,6 +15,13 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple
 import botocore
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.invocation import get_invocation_id
+from tenacity import (
+    RetryError,
+    Retrying,
+    retry_if_exception_type,
+    stop_after_delay,
+    wait_random_exponential,
+)
 
 from dbt.adapters.athena.config import AthenaSparkSessionConfig
 from dbt.adapters.athena.connections import AthenaCredentials
@@ -31,6 +38,14 @@ _MAX_RETRIES = 3
 
 # Cap GetSessionEndpoint wait so it cannot consume the whole execution budget.
 _ENDPOINT_READY_TIMEOUT_SECONDS = 180
+
+# Cap the per-poll backoff so a long throttle storm cannot stretch any single
+# wait past 30s; the deadline still bounds total wait.
+_ENDPOINT_POLL_MAX_WAIT_SECONDS = 30
+
+
+class _EndpointNotReady(Exception):
+    """Internal sentinel: GetSessionEndpoint should be polled again."""
 
 
 class _AttemptResult(NamedTuple):
@@ -189,50 +204,44 @@ class SparkConnectSubmitter:
         spent on session acquisition or prior retries.
         """
         deadline_seconds = min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)
-        timer: float = 0
-        throttle_base: float = 0
-        while True:
-            throttled = False
+
+        def _poll() -> Dict[str, Any]:
             try:
                 response = self.athena_client.get_session_endpoint(SessionId=session_id)
-                endpoint_url = response.get("EndpointUrl")
-                if endpoint_url:
-                    if not response.get("AuthToken"):
-                        # Retry instead of failing fast: Athena occasionally
-                        # returns an endpoint_url a moment before AuthToken
-                        # is populated.
-                        LOGGER.debug(
-                            f"Session {session_id} endpoint returned without AuthToken, "
-                            f"retrying"
-                        )
-                    else:
-                        return response
             except botocore.exceptions.ClientError as e:
                 error_code = e.response.get("Error", {}).get("Code", "")
                 if error_code == "ThrottlingException":
-                    throttled = True
-                    throttle_base = min(max(throttle_base, 1) * 2, 30)
-                    LOGGER.debug(
-                        f"Session {session_id} endpoint throttled, "
-                        f"backing off ~{throttle_base:.1f}s"
-                    )
+                    LOGGER.debug(f"Session {session_id} endpoint throttled, backing off")
                 else:
                     LOGGER.debug(f"Waiting for session {session_id} endpoint: {e}")
+                raise _EndpointNotReady() from e
+            if response.get("EndpointUrl") and response.get("AuthToken"):
+                return response
+            if response.get("EndpointUrl"):
+                # Athena occasionally returns endpoint_url a moment before
+                # AuthToken is populated; treat as not-ready and retry.
+                LOGGER.debug(f"Session {session_id} endpoint returned without AuthToken, retrying")
+            raise _EndpointNotReady()
 
-            if not throttled:
-                throttle_base = 0
+        try:
+            for attempt in Retrying(
+                stop=stop_after_delay(deadline_seconds),
+                wait=wait_random_exponential(
+                    multiplier=self.polling_interval,
+                    max=_ENDPOINT_POLL_MAX_WAIT_SECONDS,
+                ),
+                retry=retry_if_exception_type(_EndpointNotReady),
+                reraise=False,
+            ):
+                with attempt:
+                    return _poll()
+        except RetryError:
+            pass
 
-            if timer >= deadline_seconds:
-                raise DbtRuntimeError(
-                    f"Session {session_id} endpoint did not become ready within "
-                    f"{deadline_seconds}s (endpoint-wait deadline, not execution "
-                    f"timeout)"
-                )
-            sleep_time = (
-                throttle_base + random.uniform(0, 1) if throttled else self.polling_interval
-            )
-            time.sleep(sleep_time)
-            timer += sleep_time
+        raise DbtRuntimeError(
+            f"Session {session_id} endpoint did not become ready within "
+            f"{deadline_seconds}s (endpoint-wait deadline, not execution timeout)"
+        )
 
     def _attempt(
         self,

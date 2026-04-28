@@ -367,7 +367,10 @@ class TestWaitForEndpoint:
 
     @pytest.fixture(autouse=True)
     def _no_real_sleep(self, monkeypatch):
-        monkeypatch.setattr("dbt.adapters.athena.spark_connect.job.time.sleep", lambda *_: None)
+        # tenacity reads ``time.sleep`` from ``tenacity.nap`` at module load,
+        # so patching the namespace import there is the only place that
+        # actually short-circuits the retry sleeps.
+        monkeypatch.setattr("tenacity.nap.time.sleep", lambda *_: None)
 
     def _make_submitter(self, athena_client, polling_interval=0.01):
         submitter = SparkConnectSubmitter.__new__(SparkConnectSubmitter)
