@@ -282,6 +282,85 @@ class TestSparkConnectSubmission:
         assert submitter_a._session_fingerprint == submitter_b._session_fingerprint
         assert submitter_a._session_key == submitter_b._session_key
 
+    def test_watchdog_interrupts_and_raises_when_timer_fires(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception("interrupted by watchdog")
+        self._set_spark_create(return_value=fake_spark)
+
+        # Force the watchdog to fire synchronously so timeout_event is set
+        # before exec() raises; the except branch then turns this into a
+        # timeout error rather than a transient retry.
+        class _ImmediateTimer:
+            def __init__(self, interval, function):
+                self._fn = function
+
+            def start(self):
+                self._fn()
+
+            def cancel(self):
+                pass
+
+            def join(self, timeout=None):
+                pass
+
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.threading.Timer",
+            _ImmediateTimer,
+        )
+
+        with pytest.raises(DbtRuntimeError, match="timed out after"):
+            submitter.submit("spark.run()")
+
+        fake_spark.interruptAll.assert_called()
+
+    def test_watchdog_does_not_interrupt_on_successful_execution(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        fake_spark = MagicMock()
+        self._set_spark_create(return_value=fake_spark)
+
+        submitter.submit("x = 1")
+
+        fake_spark.interruptAll.assert_not_called()
+
+    def test_retry_loop_aborts_when_budget_below_backoff(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        # timeout=1s ensures the 2s backoff after attempt 1 exceeds remaining
+        # budget, so the loop gives up before attempt 2.
+        short_budget_model = dict(spark_connect_parsed_model)
+        short_budget_model["config"] = dict(spark_connect_parsed_model["config"])
+        short_budget_model["config"]["timeout"] = 1
+
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(short_budget_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception("Session not active")
+        self._set_spark_create(return_value=fake_spark)
+
+        with pytest.raises(DbtRuntimeError, match="failed after 3 attempts"):
+            submitter.submit("spark.run()")
+
+        # Only the first attempt actually ran; backoff guard skipped attempts 2-3.
+        assert mock_pool.acquire.call_count == 1
+        mock_pool.terminate_and_remove.assert_called_once_with("sid-1")
+
 
 class TestWaitForEndpoint:
     """Direct tests for ``SparkConnectSubmitter._wait_for_endpoint``."""
