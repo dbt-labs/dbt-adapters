@@ -28,7 +28,6 @@ def relation(database, schema, identifier):
 def adapter(mocker):
     a = RedshiftAdapter(mocker.MagicMock(), mocker.MagicMock())
     a.config.credentials.datasharing = True
-    a.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=False)
     return a
 
 

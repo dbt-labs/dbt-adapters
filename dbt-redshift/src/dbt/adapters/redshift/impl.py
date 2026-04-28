@@ -53,15 +53,6 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
-REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
-    name="redshift_use_show_apis",
-    default=False,
-    description=(
-        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
-        "for metadata queries. Required for cross-database operations with Datasharing. "
-    ),
-)
-
 REDSHIFT_GRANTS_EXTENDED = BehaviorFlag(
     name="redshift_grants_extended",
     default=False,
@@ -149,20 +140,10 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
-        if (
-            self.behavior.redshift_use_show_apis.no_warn
-            and not self.config.credentials.datasharing
-        ):
-            logger.debug(
-                "The `redshift_use_show_apis` behavior flag has been replaced by the `datasharing` profile configuration. "
-                "Please migrate to `datasharing` as this flag will be removed in a future release."
-            )
-
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
             REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
-            REDSHIFT_USE_SHOW_APIS,
             REDSHIFT_GRANTS_EXTENDED,
         ]
 
@@ -214,13 +195,9 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``datasharing`` profile config is enabled
-        or the ``redshift_use_show_apis`` behavior flag is set.
+        Returns True when the ``datasharing`` profile config is enabled.
         """
-        return (
-            bool(self.config.credentials.datasharing)
-            or self.behavior.redshift_use_show_apis.no_warn
-        )
+        return bool(self.config.credentials.datasharing)
 
     @available
     def use_grants_extended(self) -> bool:
