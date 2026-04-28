@@ -45,6 +45,13 @@ from dbt.adapters.contracts.connection import (
 from dbt.adapters.sql import SQLConnectionManager
 
 
+def _is_positive_int(value: Any) -> bool:
+    try:
+        return int(value) >= 1
+    except (TypeError, ValueError):
+        return False
+
+
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
@@ -88,19 +95,12 @@ class AthenaCredentials(Credentials):
             raw = getattr(self, field_name)
             if raw is None:
                 continue
-            if not self._is_positive_int(raw):
+            if not _is_positive_int(raw):
                 raise DbtRuntimeError(
                     f"{field_name} must be a positive integer (got {raw!r}). "
                     "Omit the field to use the default."
                 )
             setattr(self, field_name, int(raw))
-
-    @staticmethod
-    def _is_positive_int(value: Any) -> bool:
-        try:
-            return int(value) >= 1
-        except (TypeError, ValueError):
-            return False
 
     @property
     def type(self) -> str:
