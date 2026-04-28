@@ -362,22 +362,16 @@ class AthenaConnectionManager(SQLConnectionManager):
         return cursor.rowcount, cursor.data_scanned_in_bytes
 
     def cleanup_all(self) -> None:
-        # Terminate Spark Connect sessions owned by THIS invocation so DPUs
-        # are released immediately instead of waiting for idle timeout.
-        # Scoping by invocation id prevents multi-invocation hosts (dbt Cloud
-        # workers, test harnesses) from killing sessions belonging to other
-        # live invocations that share the singleton pool.
-        #
-        # ``spark_connect.session`` is imported lazily because it pulls in the
-        # pyspark runtime lookup path; importing at module load time would
-        # force every user of the Athena connection manager (including pure
-        # SQL workflows) to pay for Spark imports.
+        # Release DPUs immediately instead of waiting for the 10-min idle timeout.
+        # Lazy import keeps SQL-only users from paying for pyspark imports.
         from dbt_common.invocation import get_invocation_id
 
         from dbt.adapters.athena.spark_connect.session import (
             SparkConnectSessionPool,
         )
 
+        # Scope to this invocation; the singleton is shared across invocations
+        # in dbt Cloud workers and test harnesses.
         SparkConnectSessionPool().terminate_by_invocation(get_invocation_id())
         super().cleanup_all()
 
