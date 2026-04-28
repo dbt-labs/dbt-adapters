@@ -7,6 +7,7 @@ imported and exercised without pyspark installed.
 
 import sys
 import threading
+import time
 import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
@@ -73,18 +74,28 @@ def _future(seconds: int) -> datetime:
     return datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
 
-def test_url_is_rewritten_to_spark_connect_scheme(fake_pyspark):
+@pytest.mark.parametrize(
+    "endpoint_url,expected_url",
+    [
+        ("https://athena.example.com", "sc://athena.example.com:443/;use_ssl=true"),
+        (
+            "https://athena.us-east-1.amazonaws.com",
+            "sc://athena.us-east-1.amazonaws.com:443/;use_ssl=true",
+        ),
+    ],
+)
+def test_url_is_rewritten_to_spark_connect_scheme(fake_pyspark, endpoint_url, expected_url):
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     builder = create_athena_channel_builder(
         athena_client=Mock(),
         session_id="sid",
-        endpoint_url="https://athena.example.com",
+        endpoint_url=endpoint_url,
         initial_auth_token="tok",
         initial_token_expiry=_future(3600),
     )
 
-    assert builder.url == "sc://athena.example.com:443/;use_ssl=true"
+    assert builder.url == expected_url
 
 
 def test_metadata_appends_current_auth_token_and_drops_stale(fake_pyspark):
@@ -195,18 +206,18 @@ def test_refresh_raises_when_endpoint_returns_no_token(fake_pyspark):
 
 
 def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
-    """Both threads see a stale token; refresh runs once thanks to the lock."""
+    """Two simultaneous metadata() calls trigger exactly one refresh."""
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
-    refresh_started = threading.Event()
-    let_refresh_proceed = threading.Event()
+    barrier = threading.Barrier(2)
     call_count = 0
 
     def slow_refresh(SessionId):
         nonlocal call_count
         call_count += 1
-        refresh_started.set()
-        let_refresh_proceed.wait(timeout=2)
+        # Hold the lock long enough that the second thread is guaranteed
+        # to be blocked on it before this returns.
+        time.sleep(0.05)
         return {
             "AuthToken": "post-refresh",
             "AuthTokenExpirationTime": _future(3600),
@@ -226,17 +237,14 @@ def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
     results = []
 
     def call_metadata():
+        barrier.wait()
         results.append(builder.metadata())
 
-    t1 = threading.Thread(target=call_metadata)
-    t2 = threading.Thread(target=call_metadata)
-    t1.start()
-    refresh_started.wait(timeout=2)
-    t2.start()
-    # Give t2 a moment to reach the lock so it observes the in-flight refresh.
-    let_refresh_proceed.set()
-    t1.join(timeout=5)
-    t2.join(timeout=5)
+    threads = [threading.Thread(target=call_metadata) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
 
     assert call_count == 1
     for md in results:
