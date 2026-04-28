@@ -59,11 +59,7 @@ class TestSparkConnectPythonModel(BasePythonModelTests):
 
 _iceberg_seed_sql = """
 {{ config(materialized='table', table_type='iceberg') }}
-select 1 as id union all
-select 2 as id union all
-select 3 as id union all
-select 4 as id union all
-select 5 as id
+select id from (values 1, 2, 3, 4, 5) as t(id)
 """
 
 _incremental_python = """
