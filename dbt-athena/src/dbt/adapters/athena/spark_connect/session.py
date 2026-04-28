@@ -76,7 +76,7 @@ class SparkConnectSessionPool:
             start_error: Optional[BaseException] = None
             with self._lock:
                 stale_entries = self._collect_stale_invocations(invocation_id)
-                reuse_candidate = self._reserve_for_reuse(key, session_concurrency)
+                reuse_candidate = self._attach(key, session_concurrency)
                 if reuse_candidate is None and self._has_room(key, max_sessions):
                     try:
                         new_session_id = self._start(
@@ -147,8 +147,8 @@ class SparkConnectSessionPool:
         )
         return [(sid, self._sessions.pop(sid)) for sid in stale_sids]
 
-    def _reserve_for_reuse(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
-        """Reserve a reusable session by incrementing its load.
+    def _attach(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
+        """Attach to a reusable session by incrementing its load.
 
         Caller must hold ``self._lock``. Increments load before the
         out-of-lock liveness check to prevent oversubscription.
