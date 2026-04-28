@@ -110,8 +110,9 @@ def model(dbt, _):
 
 @requires_spark_workgroup
 class TestSparkConnectPythonMultiModel:
-    """Two python models with the same fingerprint should share / reuse
-    a Spark Connect session from the pool rather than spawning two."""
+    """End-to-end smoke test: two python models with matching fingerprints
+    both succeed via the Spark Connect path (session reuse semantics are
+    covered by the unit tests in ``tests/unit/spark_connect/test_session.py``)."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
