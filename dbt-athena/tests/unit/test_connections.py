@@ -5,6 +5,7 @@ import math
 from ipaddress import ip_address
 from unittest import mock
 from uuid import UUID
+import dataclasses
 
 from botocore.exceptions import ClientError
 import pytest
@@ -65,6 +66,11 @@ class TestAthenaCredentials:
         unique1 = credentials.unique_field
         unique2 = credentials.unique_field
         assert unique1 == unique2
+        
+    def test_connection_info_returns_all_properties(self, credentials):
+        connection_info_keys = set([key for (key, _) in credentials.connection_info()])
+        class_field_names = set([field.name for field in dataclasses.fields(AthenaCredentials)])
+        assert connection_info_keys == class_field_names
 
 class TestAthenaConnection:
     @pytest.fixture
