@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
 
 _patches_applied = False
 _patch_lock = threading.Lock()
@@ -38,7 +37,7 @@ def _neutralize_release_thread_pool_shutdown() -> None:
         ExecutePlanResponseReattachableIterator,
     )
 
-    def _noop_shutdown(cls: Any) -> None:  # noqa: ARG001
+    def _noop_shutdown(cls: type) -> None:  # noqa: ARG001
         return None
 
     ExecutePlanResponseReattachableIterator.shutdown = classmethod(_noop_shutdown)

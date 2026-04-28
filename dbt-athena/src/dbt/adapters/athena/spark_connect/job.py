@@ -10,11 +10,16 @@ import time
 import traceback
 from functools import cached_property
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional, Tuple
+from typing import Any, Dict, NamedTuple, Optional, Tuple, TypedDict
 
 import botocore
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.invocation import get_invocation_id
+from mypy_boto3_athena.client import AthenaClient
+from mypy_boto3_athena.type_defs import (
+    EngineConfigurationTypeDef,
+    GetSessionEndpointResponseTypeDef,
+)
 from tenacity import (
     RetryError,
     Retrying,
@@ -34,6 +39,12 @@ from dbt.adapters.athena.spark_connect.channel import create_athena_channel_buil
 from dbt.adapters.athena.spark_connect.errors import is_transient_spark_error
 from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 
+
+class SparkConnectResult(TypedDict):
+    SparkConnect: bool
+    SparkSessionId: Optional[str]
+
+
 _MAX_RETRIES = 3
 
 # Cap GetSessionEndpoint wait so it cannot consume the whole execution budget.
@@ -49,7 +60,7 @@ class _EndpointNotReady(Exception):
 
 
 class _AttemptResult(NamedTuple):
-    result: Optional[Dict[str, Any]]
+    result: Optional[SparkConnectResult]
     error: Optional[BaseException]
     done: bool
     session_id: Optional[str] = None
@@ -60,10 +71,10 @@ class SparkConnectSubmitter:
 
     def __init__(
         self,
-        athena_client: Any,
+        athena_client: AthenaClient,
         credentials: AthenaCredentials,
         config: AthenaSparkSessionConfig,
-        engine_config: Dict[str, Any],
+        engine_config: EngineConfigurationTypeDef,
         timeout: int,
         polling_interval: float,
         relation_name: Optional[str],
@@ -119,17 +130,12 @@ class SparkConnectSubmitter:
     def _session_description(self) -> str:
         return f"dbt: {get_invocation_id()} - {self._session_fingerprint}"
 
-    def submit(self, compiled_code: str) -> Any:
-        """Submit code via Spark Connect (Apache Spark 3.5+).
-
-        Transient errors (credential propagation, gRPC pool shutdown) are
-        retried with a fresh session up to ``_MAX_RETRIES`` times, bounded
-        by ``self.timeout`` covering both endpoint wait and execution.
-        """
+    def submit(self, compiled_code: str) -> SparkConnectResult:
+        """Submit code, retrying transient errors with a fresh session."""
         # dbt submits a ghost empty calculation alongside every python model;
         # skip pool acquisition to avoid spending DPUs on nothing.
         if not compiled_code.strip():
-            return {"SparkConnect": True, "SparkSessionId": None}
+            return SparkConnectResult(SparkConnect=True, SparkSessionId=None)
 
         start_time = time.monotonic()
         last_error: Optional[BaseException] = None
@@ -137,7 +143,7 @@ class SparkConnectSubmitter:
 
         for attempt in range(1, _MAX_RETRIES + 1):
             outcome = self._attempt(compiled_code, attempt, start_time)
-            if outcome.done:
+            if outcome.done and outcome.result is not None:
                 return outcome.result
             last_error = outcome.error
             last_session_id = outcome.session_id
@@ -195,7 +201,9 @@ class SparkConnectSubmitter:
             session_concurrency=self._session_concurrency,
         )
 
-    def _wait_for_endpoint(self, session_id: str, remaining_budget: float) -> Dict[str, Any]:
+    def _wait_for_endpoint(
+        self, session_id: str, remaining_budget: float
+    ) -> GetSessionEndpointResponseTypeDef:
         """Poll GetSessionEndpoint until the endpoint is ready.
 
         Bounded by ``min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)``
@@ -205,7 +213,7 @@ class SparkConnectSubmitter:
         """
         deadline_seconds = min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)
 
-        def _poll() -> Dict[str, Any]:
+        def _poll() -> GetSessionEndpointResponseTypeDef:
             try:
                 response = self.athena_client.get_session_endpoint(SessionId=session_id)
             except botocore.exceptions.ClientError as e:
@@ -249,18 +257,10 @@ class SparkConnectSubmitter:
         attempt: int,
         start_time: float,
     ) -> _AttemptResult:
-        """Run one Spark Connect attempt.
+        """Run one attempt; ``done=True`` on success, ``done=False`` on transient failure.
 
-        Returns an ``_AttemptResult`` whose semantics are:
-          * ``done=True, result=<dict>`` — success, caller should return result.
-          * ``done=False, error=<exc>`` — transient failure, caller may retry.
-
-        Non-retriable failures and timeouts raise directly (caller sees the
-        exception instead of a return value).
-
-        Session lifecycle: on transient failure the session is terminated
-        (it is likely broken); on success or acquire failure it is released
-        back to the pool for reuse.
+        Non-retriable failures and timeouts raise; broken sessions are
+        terminated, healthy ones released back to the pool.
         """
         session_id = self._acquire_session()
         spark = None
@@ -311,7 +311,7 @@ class SparkConnectSubmitter:
             exec_globals: Dict[str, Any] = {"spark": spark}
             exec(compiled_code, exec_globals)  # noqa: S102 - user model code
             return _AttemptResult(
-                result={"SparkConnect": True, "SparkSessionId": session_id},
+                result=SparkConnectResult(SparkConnect=True, SparkSessionId=session_id),
                 error=None,
                 done=True,
             )

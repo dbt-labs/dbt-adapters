@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import threading
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import List, Optional, Tuple
 
 from dbt_common.exceptions import DbtRuntimeError
+from mypy_boto3_athena.client import AthenaClient
 from pyspark.sql.connect.client.core import ChannelBuilder
 
 from dbt.adapters.athena.spark_connect.channel import _TOKEN_REFRESH_MARGIN_SECONDS
@@ -24,11 +25,11 @@ class AthenaChannelBuilder(ChannelBuilder):
 
     def __init__(
         self,
-        client: Any,
+        client: AthenaClient,
         sid: str,
         url: str,
         auth_token: Optional[str],
-        token_expiry: Any,
+        token_expiry: Optional[datetime],
     ) -> None:
         sc_url = url.replace("https://", "sc://", 1) + ":443/;use_ssl=true"
         super().__init__(sc_url)
@@ -61,7 +62,7 @@ class AthenaChannelBuilder(ChannelBuilder):
         remaining = (self._token_expiry - datetime.now(timezone.utc)).total_seconds()
         return remaining > _TOKEN_REFRESH_MARGIN_SECONDS
 
-    def metadata(self) -> Any:
+    def metadata(self) -> List[Tuple[str, str]]:
         self._refresh_token_if_needed()
         with self._token_lock:
             token = self._auth_token

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 from dbt_common.exceptions import DbtRuntimeError
+from mypy_boto3_athena.client import AthenaClient
+from mypy_boto3_athena.type_defs import EngineConfigurationTypeDef
 
 from dbt.adapters.athena.constants import LOGGER, SESSION_IDLE_TIMEOUT_MIN
 
@@ -15,7 +17,7 @@ SessionKey = Tuple[str, str]
 
 class _SessionInfo(TypedDict):
     key: SessionKey
-    client: Any
+    client: AthenaClient
     load: int
 
 
@@ -50,9 +52,9 @@ class SparkConnectSessionPool:
     def acquire(
         self,
         key: SessionKey,
-        athena_client: Any,
+        athena_client: AthenaClient,
         spark_work_group: str,
-        engine_config: Dict[str, Any],
+        engine_config: EngineConfigurationTypeDef,
         session_description: str,
         max_sessions: int,
         timeout: float,
@@ -165,9 +167,9 @@ class SparkConnectSessionPool:
     def _start_and_register(
         self,
         key: SessionKey,
-        athena_client: Any,
+        athena_client: AthenaClient,
         spark_work_group: str,
-        engine_config: Dict[str, Any],
+        engine_config: EngineConfigurationTypeDef,
         session_description: str,
     ) -> str:
         """Start a session and register it. Caller must hold ``self._lock``.
@@ -192,7 +194,7 @@ class SparkConnectSessionPool:
         self._sessions[session_id] = {"key": key, "client": athena_client, "load": 1}
         return session_id
 
-    def _get_session_state(self, athena_client: Any, session_id: str) -> str:
+    def _get_session_state(self, athena_client: AthenaClient, session_id: str) -> str:
         """Return the Athena session state, or empty string on lookup failure."""
         try:
             return athena_client.get_session_status(SessionId=session_id)["Status"].get(
@@ -202,7 +204,7 @@ class SparkConnectSessionPool:
             LOGGER.warning(f"Could not verify Spark Connect session {session_id} state: {e}")
             return ""
 
-    def _is_session_alive(self, athena_client: Any, session_id: str) -> bool:
+    def _is_session_alive(self, athena_client: AthenaClient, session_id: str) -> bool:
         """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
         state = self._get_session_state(athena_client, session_id)
         return bool(state) and state not in self._DEAD_SESSION_STATES
@@ -250,7 +252,7 @@ class SparkConnectSessionPool:
             except Exception as e:  # noqa: BLE001 - best-effort cleanup
                 LOGGER.warning(f"Failed to terminate Spark Connect session {session_id}: {e}")
 
-    def _evict_dead_sessions(self, athena_client: Any) -> int:
+    def _evict_dead_sessions(self, athena_client: AthenaClient) -> int:
         """Remove sessions that Athena has already terminated or degraded."""
         with self._lock:
             session_ids = list(self._sessions)
@@ -270,9 +272,9 @@ class SparkConnectSessionPool:
 
     # -- test helpers -----------------------------------------------------
 
-    def _snapshot(self) -> Dict[str, Dict[str, Any]]:
+    def _snapshot(self) -> Dict[str, _SessionInfo]:
         with self._lock:
-            return {sid: dict(info) for sid, info in self._sessions.items()}
+            return {sid: _SessionInfo(**info) for sid, info in self._sessions.items()}
 
     @classmethod
     def _reset_for_tests(cls) -> None:
