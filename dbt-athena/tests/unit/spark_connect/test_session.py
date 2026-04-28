@@ -211,6 +211,39 @@ class TestEviction:
         assert evicted == 0
         assert "sid-ok" in pool._snapshot()
 
+    def test_release_during_eviction_keeps_pool_consistent(self):
+        """A release() racing with eviction must not leave a half-removed entry."""
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+
+        gate = threading.Event()
+        unblock = threading.Event()
+
+        def slow_get_session_status(SessionId):
+            # Hold eviction inside the API call so release() runs between the
+            # lock-released state lookup and the lock-reacquired pop.
+            gate.set()
+            unblock.wait(timeout=2)
+            return {"Status": {"State": "FAILED"}}
+
+        client.get_session_status.side_effect = slow_get_session_status
+        _register(pool, "sid-doomed", ("inv", "fp"), client)
+
+        evicted: list = []
+
+        def evict_thread():
+            evicted.append(pool._evict_dead_sessions(client))
+
+        t = threading.Thread(target=evict_thread)
+        t.start()
+        gate.wait(timeout=2)
+        pool.release("sid-doomed")
+        unblock.set()
+        t.join(timeout=2)
+
+        assert evicted == [1]
+        assert "sid-doomed" not in pool._snapshot()
+
 
 class TestTerminate:
     def test_terminate_and_remove_calls_athena(self):
@@ -419,3 +452,27 @@ class TestReuseLivenessCheck:
 
         assert sid == "sid-1"
         client.start_session.assert_not_called()
+
+    def test_liveness_failure_does_not_affect_other_sessions_with_same_key(self):
+        """Discarding a dead session must not touch sibling sessions for the same key."""
+        pool = SparkConnectSessionPool()
+
+        client = _make_client(["sid-fresh"])
+
+        def status(SessionId):
+            return {"Status": {"State": "FAILED" if SessionId == "sid-dead" else "IDLE"}}
+
+        client.get_session_status.side_effect = status
+        _register(pool, "sid-dead", ("inv", "fp"), client)
+        _register(pool, "sid-alive", ("inv", "fp"), client)
+        pool.release("sid-dead")
+        pool.release("sid-alive")
+
+        sid = _acquire(pool, client, max_sessions=3)
+
+        # Whichever of the two reuse candidates was checked first, the alive
+        # one must still be present in the pool afterwards.
+        snapshot = pool._snapshot()
+        assert "sid-dead" not in snapshot
+        assert "sid-alive" in snapshot
+        assert sid in {"sid-alive", "sid-fresh"}
