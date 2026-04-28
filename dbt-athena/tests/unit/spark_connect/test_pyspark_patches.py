@@ -2,6 +2,7 @@
 
 import sys
 import types
+import warnings
 
 import pytest
 
@@ -77,3 +78,17 @@ def test_apply_is_idempotent(fake_reattach_module):
     apply_pyspark_workarounds()
 
     assert fake_reattach_module.__dict__["shutdown"] is patched_shutdown
+
+
+def test_release_execute_warning_is_filtered(fake_reattach_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        apply_pyspark_workarounds()
+        warnings.warn("ReleaseExecute failed with exception: Channel closed!")
+        warnings.warn("some other warning")
+
+    messages = [str(w.message) for w in caught]
+    assert "some other warning" in messages
+    assert not any("ReleaseExecute failed" in m for m in messages)
