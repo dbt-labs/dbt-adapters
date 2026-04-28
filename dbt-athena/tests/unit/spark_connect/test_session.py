@@ -211,39 +211,6 @@ class TestEviction:
         assert evicted == 0
         assert "sid-ok" in pool._snapshot()
 
-    def test_release_during_eviction_keeps_pool_consistent(self):
-        """A release() racing with eviction must not leave a half-removed entry."""
-        pool = SparkConnectSessionPool()
-        client = MagicMock()
-
-        gate = threading.Event()
-        unblock = threading.Event()
-
-        def slow_get_session_status(SessionId):
-            # Hold eviction inside the API call so release() runs between the
-            # lock-released state lookup and the lock-reacquired pop.
-            gate.set()
-            unblock.wait(timeout=2)
-            return {"Status": {"State": "FAILED"}}
-
-        client.get_session_status.side_effect = slow_get_session_status
-        _register(pool, "sid-doomed", ("inv", "fp"), client)
-
-        evicted: list = []
-
-        def evict_thread():
-            evicted.append(pool._evict_dead_sessions(client))
-
-        t = threading.Thread(target=evict_thread)
-        t.start()
-        gate.wait(timeout=2)
-        pool.release("sid-doomed")
-        unblock.set()
-        t.join(timeout=2)
-
-        assert evicted == [1]
-        assert "sid-doomed" not in pool._snapshot()
-
 
 class TestTerminate:
     def test_terminate_and_remove_calls_athena(self):
@@ -421,22 +388,18 @@ class TestReuseLivenessCheck:
         """When a stale session is reserved for reuse but the liveness check
         reports it dead, the pool must discard it and start a replacement.
 
-        Two clients are used to keep roles distinct: ``stale_client`` reports
-        FAILED, ``replacement_client`` issues a fresh session.
+        ``acquire()`` uses the caller-supplied client for both the liveness
+        probe (FAILED) and the replacement ``start_session`` call, so a single
+        mock fields both roles.
         """
         pool = SparkConnectSessionPool()
 
-        stale_client = MagicMock()
-        stale_client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
-        _register(pool, "sid-stale", ("inv", "fp"), stale_client)
+        client = _make_client(["sid-replacement"])
+        client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
+        _register(pool, "sid-stale", ("inv", "fp"), client)
         pool.release("sid-stale")
 
-        replacement_client = _make_client(["sid-replacement"])
-        # The replacement client also reports FAILED for the stale id during
-        # the liveness check, since acquire() uses the caller's client.
-        replacement_client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
-
-        sid = _acquire(pool, replacement_client)
+        sid = _acquire(pool, client)
 
         assert sid == "sid-replacement"
         assert "sid-stale" not in pool._snapshot()

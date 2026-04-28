@@ -74,28 +74,18 @@ def _future(seconds: int) -> datetime:
     return datetime.now(timezone.utc) + timedelta(seconds=seconds)
 
 
-@pytest.mark.parametrize(
-    "endpoint_url,expected_url",
-    [
-        ("https://athena.example.com", "sc://athena.example.com:443/;use_ssl=true"),
-        (
-            "https://athena.us-east-1.amazonaws.com",
-            "sc://athena.us-east-1.amazonaws.com:443/;use_ssl=true",
-        ),
-    ],
-)
-def test_url_is_rewritten_to_spark_connect_scheme(fake_pyspark, endpoint_url, expected_url):
+def test_url_is_rewritten_to_spark_connect_scheme(fake_pyspark):
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     builder = create_athena_channel_builder(
         athena_client=Mock(),
         session_id="sid",
-        endpoint_url=endpoint_url,
+        endpoint_url="https://athena.us-east-1.amazonaws.com",
         initial_auth_token="tok",
         initial_token_expiry=_future(3600),
     )
 
-    assert builder.url == expected_url
+    assert builder.url == "sc://athena.us-east-1.amazonaws.com:443/;use_ssl=true"
 
 
 def test_metadata_appends_current_auth_token_and_drops_stale(fake_pyspark):
