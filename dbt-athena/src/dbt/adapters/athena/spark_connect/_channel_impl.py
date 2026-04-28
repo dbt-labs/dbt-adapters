@@ -40,7 +40,7 @@ class AthenaChannelBuilder(ChannelBuilder):
         # pyspark invokes metadata() from concurrent gRPC executor threads.
         self._token_lock = threading.Lock()
 
-    def _refresh_token_if_needed(self) -> None:
+    def _refresh_token(self) -> None:
         if self._token_is_fresh():
             return
         with self._token_lock:
@@ -63,7 +63,7 @@ class AthenaChannelBuilder(ChannelBuilder):
         return remaining > _TOKEN_REFRESH_MARGIN_SECONDS
 
     def metadata(self) -> List[Tuple[str, str]]:
-        self._refresh_token_if_needed()
+        self._refresh_token()
         with self._token_lock:
             token = self._auth_token
             base = [(k, v) for k, v in super().metadata() if k != "x-aws-proxy-auth"]

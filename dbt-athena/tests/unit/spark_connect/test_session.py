@@ -213,23 +213,23 @@ class TestEviction:
 
 
 class TestTerminate:
-    def test_terminate_and_remove_calls_athena(self):
+    def test_terminate_calls_athena(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
         _register(pool, "sid-1", ("inv", "fp"), client)
 
-        pool.terminate_and_remove("sid-1")
+        pool.terminate("sid-1")
 
         client.terminate_session.assert_called_once_with(SessionId="sid-1")
         assert "sid-1" not in pool._snapshot()
 
-    def test_terminate_and_remove_ignores_client_errors(self):
+    def test_terminate_ignores_client_errors(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
         client.terminate_session.side_effect = Exception("boom")
         _register(pool, "sid-1", ("inv", "fp"), client)
 
-        pool.terminate_and_remove("sid-1")  # Must not raise.
+        pool.terminate("sid-1")  # Must not raise.
 
         assert "sid-1" not in pool._snapshot()
 

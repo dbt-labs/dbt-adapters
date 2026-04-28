@@ -359,6 +359,6 @@ class SparkConnectSubmitter:
                 except Exception as e:  # noqa: BLE001 - best-effort cleanup
                     LOGGER.debug(f"Ignoring error while stopping Spark session: {e}")
             if terminate_session:
-                self._pool.terminate_and_remove(session_id)
+                self._pool.terminate(session_id)
             else:
                 self._pool.release(session_id)

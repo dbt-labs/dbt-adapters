@@ -184,7 +184,7 @@ class TestSparkConnectSubmission:
         assert result == {"SparkConnect": True, "SparkSessionId": "sid-1"}
         mock_pool.acquire.assert_called_once()
         mock_pool.release.assert_called_once_with("sid-1")
-        mock_pool.terminate_and_remove.assert_not_called()
+        mock_pool.terminate.assert_not_called()
 
     def test_transient_error_retries_with_new_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
@@ -205,7 +205,7 @@ class TestSparkConnectSubmission:
         assert result == {"SparkConnect": True, "SparkSessionId": "sid-2"}
         assert mock_pool.acquire.call_count == 2
         # First session was transient-failed, so it should be terminated.
-        mock_pool.terminate_and_remove.assert_called_once_with("sid-1")
+        mock_pool.terminate.assert_called_once_with("sid-1")
         # Second session succeeded, so it should be released.
         mock_pool.release.assert_called_once_with("sid-2")
 
@@ -227,7 +227,7 @@ class TestSparkConnectSubmission:
         assert mock_pool.acquire.call_count == 1
         # Non-transient failures release the session instead of terminating it.
         mock_pool.release.assert_called_once_with("sid-1")
-        mock_pool.terminate_and_remove.assert_not_called()
+        mock_pool.terminate.assert_not_called()
 
     def test_all_retries_exhausted_raises(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
@@ -250,7 +250,7 @@ class TestSparkConnectSubmission:
         # Every transient failure — including the final one — terminates the
         # broken session so later models don't pick it up from the pool.
         assert mock_pool.acquire.call_count == 3
-        assert mock_pool.terminate_and_remove.call_count == 3
+        assert mock_pool.terminate.call_count == 3
         mock_pool.release.assert_not_called()
 
     def test_session_key_varies_with_engine_config(
@@ -359,7 +359,7 @@ class TestSparkConnectSubmission:
 
         # Only the first attempt actually ran; backoff guard skipped attempts 2-3.
         assert mock_pool.acquire.call_count == 1
-        mock_pool.terminate_and_remove.assert_called_once_with("sid-1")
+        mock_pool.terminate.assert_called_once_with("sid-1")
 
 
 class TestWaitForEndpoint:

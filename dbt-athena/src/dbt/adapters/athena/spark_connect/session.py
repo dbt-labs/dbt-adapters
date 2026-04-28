@@ -76,10 +76,10 @@ class SparkConnectSessionPool:
             start_error: Optional[BaseException] = None
             with self._lock:
                 stale_entries = self._collect_stale_invocations(invocation_id)
-                reuse_candidate = self._reserve_reuse_slot(key, session_concurrency)
+                reuse_candidate = self._reserve_for_reuse(key, session_concurrency)
                 if reuse_candidate is None and self._has_room(key, max_sessions):
                     try:
-                        new_session_id = self._start_and_register(
+                        new_session_id = self._start(
                             key,
                             athena_client,
                             spark_work_group,
@@ -106,7 +106,7 @@ class SparkConnectSessionPool:
                 LOGGER.debug(
                     f"Discarding stale Spark Connect session {reuse_candidate} during reuse"
                 )
-                self.remove(reuse_candidate)
+                self.unregister(reuse_candidate)
                 continue
 
             if new_session_id is not None:
@@ -147,7 +147,7 @@ class SparkConnectSessionPool:
         )
         return [(sid, self._sessions.pop(sid)) for sid in stale_sids]
 
-    def _reserve_reuse_slot(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
+    def _reserve_for_reuse(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
         """Reserve a reusable session by incrementing its load.
 
         Caller must hold ``self._lock``. Increments load before the
@@ -164,7 +164,7 @@ class SparkConnectSessionPool:
         count = sum(1 for info in self._sessions.values() if info["key"] == key)
         return count < max_sessions
 
-    def _start_and_register(
+    def _start(
         self,
         key: SessionKey,
         athena_client: AthenaClient,
@@ -216,13 +216,13 @@ class SparkConnectSessionPool:
             if info is not None:
                 info["load"] = max(info["load"] - 1, 0)
 
-    def remove(self, session_id: str) -> None:
-        """Remove a session from the pool without terminating it on Athena."""
+    def unregister(self, session_id: str) -> None:
+        """Drop a session from the pool without terminating it on Athena."""
         with self._lock:
             self._sessions.pop(session_id, None)
 
-    def terminate_and_remove(self, session_id: str) -> None:
-        """Terminate the Athena session and remove it from the pool."""
+    def terminate(self, session_id: str) -> None:
+        """Terminate the Athena session and drop it from the pool."""
         with self._lock:
             info = self._sessions.pop(session_id, None)
         if info is not None:

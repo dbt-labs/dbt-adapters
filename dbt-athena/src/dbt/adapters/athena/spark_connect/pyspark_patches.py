@@ -16,7 +16,7 @@ def apply_pyspark_workarounds() -> None:
         if _patches_applied:
             return
         _neutralize_release_thread_pool_shutdown()
-        _quiet_release_all_warning()
+        _silence_release_all_warning()
         _patches_applied = True
 
 
@@ -43,7 +43,7 @@ def _neutralize_release_thread_pool_shutdown() -> None:
     ExecutePlanResponseReattachableIterator.shutdown = classmethod(_noop_shutdown)
 
 
-def _quiet_release_all_warning() -> None:
+def _silence_release_all_warning() -> None:
     """Silence pyspark's ``_release_all`` ReleaseExecute warning.
 
     pyspark fires ``warnings.warn(...)`` from a fire-and-forget RPC its own
