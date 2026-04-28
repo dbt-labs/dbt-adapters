@@ -84,22 +84,23 @@ class AthenaCredentials(Credentials):
         # time rather than waiting until a python model runs — the misconfig
         # would otherwise only manifest once a Spark 3.5 model is submitted,
         # potentially minutes into a long dbt run.
-        self._validate_positive_int_field("spark_connect_max_sessions")
-        self._validate_positive_int_field("spark_connect_session_concurrency")
+        for field_name in ("spark_connect_max_sessions", "spark_connect_session_concurrency"):
+            raw = getattr(self, field_name)
+            if raw is None:
+                continue
+            if not self._is_positive_int(raw):
+                raise DbtRuntimeError(
+                    f"{field_name} must be a positive integer (got {raw!r}). "
+                    "Omit the field to use the default."
+                )
+            setattr(self, field_name, int(raw))
 
-    def _validate_positive_int_field(self, field_name: str) -> None:
-        raw = getattr(self, field_name)
-        if raw is None:
-            return
+    @staticmethod
+    def _is_positive_int(value: Any) -> bool:
         try:
-            value = int(raw)
-        except (TypeError, ValueError) as e:
-            raise DbtRuntimeError(f"{field_name} must be an integer (got {raw!r}).") from e
-        if value < 1:
-            raise DbtRuntimeError(
-                f"{field_name} must be >= 1 (got {value}). Omit the field to use the default."
-            )
-        setattr(self, field_name, value)
+            return int(value) >= 1
+        except (TypeError, ValueError):
+            return False
 
     @property
     def type(self) -> str:
