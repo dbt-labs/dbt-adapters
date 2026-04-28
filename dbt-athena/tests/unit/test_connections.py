@@ -64,6 +64,16 @@ class TestAthenaConnection:
             "athena", region_name=AWS_REGION, config=config_factory()
         )
 
+    def test_connect_creates_athena_client_with_endpoint(self, credentials, session_factory, config_factory):
+        credentials.endpoint_url = 'athena.ab-fake-9.amazonaws.none'
+        connection = AthenaConnection(credentials, boto_session_factory=session_factory)
+        connection.connect(boto_config_factory=config_factory)
+        session_factory.assert_called_once_with(connection)
+        session = session_factory()
+        session.client.assert_called_once_with(
+            "athena", region_name=AWS_REGION, config=config_factory(), endpoint_url='athena.ab-fake-9.amazonaws.none'
+        )
+
     def test_connect_returns_self(self, credentials, session_factory, config_factory):
         connection = AthenaConnection(credentials, boto_session_factory=session_factory)
         connection.connect(boto_config_factory=config_factory)
@@ -190,6 +200,20 @@ class TestAthenaCursor:
         athena_client.start_query_execution.assert_called_once_with(
             QueryString="SELECT NOW()",
             WorkGroup=ATHENA_WORKGROUP,
+            ResultConfiguration={
+                "OutputLocation": "s3://test-bucket/staging-location",
+            },
+            QueryExecutionContext={
+                "Catalog": "my_database",
+                "Database": "my_schema",
+            },
+        )
+        
+    def test_execute_skips_workgroup_when_not_set(self, cursor, athena_client, credentials):
+        credentials.work_group = None
+        cursor.execute("SELECT NOW()")
+        athena_client.start_query_execution.assert_called_once_with(
+            QueryString="SELECT NOW()",
             ResultConfiguration={
                 "OutputLocation": "s3://test-bucket/staging-location",
             },

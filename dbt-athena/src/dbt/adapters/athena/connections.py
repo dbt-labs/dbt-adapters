@@ -284,12 +284,13 @@ class AthenaCursor:
     def _start_execution(self) -> None:
         request = {
             "QueryString": self.query,
-            "WorkGroup": self._credentials.work_group,
             "QueryExecutionContext": {
                 "Catalog": self._credentials.database,
                 "Database": self._credentials.schema,
             },
         }
+        if self._credentials.work_group is not None:
+            request["WorkGroup"] = self._credentials.work_group
         if self._credentials.s3_staging_dir is not None:
             request["ResultConfiguration"] = {
                 "OutputLocation": self._credentials.s3_staging_dir,
@@ -645,9 +646,13 @@ class AthenaConnection(Connection):
         boto_config = boto_config_factory(
             num_retries=self._athena_credentials.effective_num_retries
         )
-        self._client = self.session.client(
-            "athena", region_name=self.region_name, config=boto_config
-        )
+        client_kwargs = {
+            "region_name": self.region_name,
+            "config": boto_config,
+        }
+        if self._athena_credentials.endpoint_url:
+            client_kwargs["endpoint_url"] = self._athena_credentials.endpoint_url
+        self._client = self.session.client("athena", **client_kwargs)
         return self
 
     def cursor(self) -> AthenaCursor:
