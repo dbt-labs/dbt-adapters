@@ -116,6 +116,28 @@ class TestSparkConnectSubmission:
         submitter.__dict__["_pool"] = mock_pool
         return submitter
 
+    def _stub_endpoint_and_channel(self, submitter, monkeypatch):
+        """Stub the endpoint wait and channel builder so submit() reaches the pyspark layer."""
+        monkeypatch.setattr(
+            submitter,
+            "_wait_for_endpoint",
+            Mock(return_value={"EndpointUrl": "https://x", "AuthToken": "tok"}),
+        )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
+            Mock(return_value=Mock()),
+        )
+
+    def _set_spark_create(self, *, return_value=None, side_effect=None):
+        """Wire the fake ``SparkSession.builder.channelBuilder(...).create()`` chain."""
+        create_mock = sys.modules[
+            "pyspark.sql.connect.session"
+        ].SparkSession.builder.channelBuilder.return_value.create
+        if side_effect is not None:
+            create_mock.side_effect = side_effect
+        if return_value is not None:
+            create_mock.return_value = return_value
+
     def test_dispatches_to_spark_connect_for_engine_version_35(
         self, mock_credentials, spark_connect_parsed_model
     ):
@@ -154,16 +176,7 @@ class TestSparkConnectSubmission:
         mock_pool = Mock()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
-
-        monkeypatch.setattr(
-            submitter,
-            "_wait_for_endpoint",
-            Mock(return_value={"EndpointUrl": "https://x", "AuthToken": "tok"}),
-        )
-        monkeypatch.setattr(
-            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
-            Mock(return_value=Mock()),
-        )
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
 
         result = submitter.submit("x = 1")
 
@@ -178,26 +191,13 @@ class TestSparkConnectSubmission:
         mock_pool = Mock()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
-
-        monkeypatch.setattr(
-            submitter,
-            "_wait_for_endpoint",
-            Mock(return_value={"EndpointUrl": "https://x", "AuthToken": "tok"}),
-        )
-        monkeypatch.setattr(
-            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
-            Mock(return_value=Mock()),
-        )
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
         monkeypatch.setattr(time, "sleep", lambda *_: None)
 
         first_spark = MagicMock()
         first_spark.run.side_effect = Exception("Session not active")
         second_spark = MagicMock()
-        fake_session_mod = sys.modules["pyspark.sql.connect.session"]
-        fake_session_mod.SparkSession.builder.channelBuilder.return_value.create.side_effect = [
-            first_spark,
-            second_spark,
-        ]
+        self._set_spark_create(side_effect=[first_spark, second_spark])
 
         result = submitter.submit("spark.run()")
 
@@ -214,23 +214,11 @@ class TestSparkConnectSubmission:
         mock_pool = Mock()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
-
-        monkeypatch.setattr(
-            submitter,
-            "_wait_for_endpoint",
-            Mock(return_value={"EndpointUrl": "https://x", "AuthToken": "tok"}),
-        )
-        monkeypatch.setattr(
-            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
-            Mock(return_value=Mock()),
-        )
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
 
         fake_spark = MagicMock()
         fake_spark.run.side_effect = ValueError("boom - not transient")
-        fake_session_mod = sys.modules["pyspark.sql.connect.session"]
-        fake_session_mod.SparkSession.builder.channelBuilder.return_value.create.return_value = (
-            fake_spark
-        )
+        self._set_spark_create(return_value=fake_spark)
 
         with pytest.raises(DbtRuntimeError, match="Spark Connect execution failed"):
             submitter.submit("spark.run()")
@@ -246,24 +234,12 @@ class TestSparkConnectSubmission:
         mock_pool = Mock()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2", "sid-3"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
-
-        monkeypatch.setattr(
-            submitter,
-            "_wait_for_endpoint",
-            Mock(return_value={"EndpointUrl": "https://x", "AuthToken": "tok"}),
-        )
-        monkeypatch.setattr(
-            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
-            Mock(return_value=Mock()),
-        )
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
         monkeypatch.setattr(time, "sleep", lambda *_: None)
 
         fake_spark = MagicMock()
         fake_spark.run.side_effect = Exception("Unable to load credentials")
-        fake_session_mod = sys.modules["pyspark.sql.connect.session"]
-        fake_session_mod.SparkSession.builder.channelBuilder.return_value.create.return_value = (
-            fake_spark
-        )
+        self._set_spark_create(return_value=fake_spark)
 
         with pytest.raises(
             DbtRuntimeError, match="Spark Connect execution failed after 3 attempts"
