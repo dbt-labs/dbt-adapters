@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,6 +34,23 @@ def _register(pool, session_id, key, athena_client):
     pool._sessions[session_id] = {"key": key, "client": athena_client, "load": 1}
 
 
+def _acquire(pool: SparkConnectSessionPool, athena_client: Any, **overrides: Any) -> str:
+    """Call ``pool.acquire`` with sensible defaults; override per-test as needed."""
+    kwargs = dict(
+        key=("inv", "fp"),
+        athena_client=athena_client,
+        spark_work_group="wg",
+        engine_config={},
+        session_description="desc",
+        max_sessions=5,
+        timeout=5,
+        polling_interval=0.01,
+        session_concurrency=1,
+    )
+    kwargs.update(overrides)
+    return pool.acquire(**kwargs)
+
+
 class TestSingleton:
     def test_returns_same_instance(self):
         pool_a = SparkConnectSessionPool()
@@ -51,16 +69,12 @@ class TestAcquire:
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1"])
 
-        sid = pool.acquire(
+        sid = _acquire(
+            pool,
+            client,
             key=("inv-a", "fp-a"),
-            athena_client=client,
-            spark_work_group="wg",
             engine_config={"CoordinatorDpuSize": 1},
-            session_description="desc",
             max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
         )
 
         assert sid == "sid-1"
@@ -73,61 +87,22 @@ class TestAcquire:
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1"])
 
-        first = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        first = _acquire(pool, client)
         pool.release(first)
-
-        second = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        second = _acquire(pool, client)
 
         assert first == second
         assert client.start_session.call_count == 1
 
-    def test_starts_new_session_when_existing_is_busy(self):
+    def test_starts_new_session_when_concurrency_is_saturated(self):
+        """When the only session is at ``session_concurrency``, acquire must
+        spill to a new session rather than oversubscribing."""
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1", "sid-2"])
 
-        first = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
-        # First session is still loaded.
-        second = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        first = _acquire(pool, client, max_sessions=2)
+        # First session still loaded (no release); concurrency=1 forces spill.
+        second = _acquire(pool, client, max_sessions=2)
 
         assert first != second
         assert client.start_session.call_count == 2
@@ -136,40 +111,9 @@ class TestAcquire:
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1"])
 
-        first = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=3,
-        )
-        # First session still loaded, but concurrency=3 allows reuse.
-        second = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=3,
-        )
-        third = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=3,
-        )
+        first = _acquire(pool, client, max_sessions=2, session_concurrency=3)
+        second = _acquire(pool, client, max_sessions=2, session_concurrency=3)
+        third = _acquire(pool, client, max_sessions=2, session_concurrency=3)
 
         assert first == second == third
         assert client.start_session.call_count == 1
@@ -179,41 +123,11 @@ class TestAcquire:
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1", "sid-2"])
 
-        first = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=2,
-        )
-        second = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=2,
-        )
+        first = _acquire(pool, client, max_sessions=2, session_concurrency=2)
+        second = _acquire(pool, client, max_sessions=2, session_concurrency=2)
         # First session is at concurrency limit (2); next acquire must spill
         # to a new session rather than overloading the first.
-        third = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=2,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=2,
-        )
+        third = _acquire(pool, client, max_sessions=2, session_concurrency=2)
 
         assert first == second
         assert third != first
@@ -223,61 +137,20 @@ class TestAcquire:
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1", "sid-2"])
 
-        first = pool.acquire(
-            key=("inv-a", "fp-a"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        first = _acquire(pool, client, key=("inv-a", "fp-a"))
         pool.release(first)
-        second = pool.acquire(
-            key=("inv-b", "fp-b"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        second = _acquire(pool, client, key=("inv-b", "fp-b"))
 
         assert first != second
 
     def test_times_out_when_pool_full_and_no_session_freed(self):
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1"])
-        client.get_session_status.return_value = {"Status": {"State": "IDLE"}}
 
-        pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=1,
-            timeout=0.05,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        _acquire(pool, client, max_sessions=1, timeout=0.05)
 
         with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
-            pool.acquire(
-                key=("inv", "fp"),
-                athena_client=client,
-                spark_work_group="wg",
-                engine_config={},
-                session_description="desc",
-                max_sessions=1,
-                timeout=0.05,
-                polling_interval=0.01,
-                session_concurrency=1,
-            )
+            _acquire(pool, client, max_sessions=1, timeout=0.05)
 
 
 class TestSessionStartRetry:
@@ -290,17 +163,7 @@ class TestSessionStartRetry:
         ]
         monkeypatch.setattr(time, "sleep", lambda *_: None)
 
-        sid = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=1,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        sid = _acquire(pool, client, max_sessions=1)
 
         assert sid == "sid-ok"
         assert client.start_session.call_count == 2
@@ -311,17 +174,7 @@ class TestSessionStartRetry:
         client.start_session.side_effect = Exception("AccessDeniedException: nope")
 
         with pytest.raises(Exception, match="AccessDeniedException"):
-            pool.acquire(
-                key=("inv", "fp"),
-                athena_client=client,
-                spark_work_group="wg",
-                engine_config={},
-                session_description="desc",
-                max_sessions=1,
-                timeout=5,
-                polling_interval=0.01,
-                session_concurrency=1,
-            )
+            _acquire(pool, client, max_sessions=1)
 
 
 class TestEviction:
@@ -431,17 +284,7 @@ class TestConcurrency:
 
         def worker():
             try:
-                sid = pool.acquire(
-                    key=("inv", "fp"),
-                    athena_client=client,
-                    spark_work_group="wg",
-                    engine_config={},
-                    session_description="desc",
-                    max_sessions=3,
-                    timeout=5,
-                    polling_interval=0.01,
-                    session_concurrency=1,
-                )
+                sid = _acquire(pool, client, max_sessions=3)
                 results.append(sid)
             except Exception as e:  # pragma: no cover
                 errors.append(e)
@@ -458,21 +301,26 @@ class TestConcurrency:
         assert len(issued) == 3
 
     def test_concurrent_acquires_reserve_slots_during_start(self):
-        """A slow start_session call must not allow other threads to oversubscribe
-        max_sessions while the slot is being filled."""
+        """5 threads race against an in-flight ``start_session``; the pool lock
+        must serialize creation so exactly ``max_sessions`` threads succeed and
+        the remainder time out.
+
+        This is deterministic, not a "best-effort" check: the 2 success / 3
+        timeout split is exact because acquire holds ``self._lock`` across
+        ``start_session`` and timeout=2 is well below the 5s test budget.
+        """
         pool = SparkConnectSessionPool()
         start_gate = threading.Event()
+        all_workers_queued = threading.Barrier(parties=6)  # 5 workers + main
         counter = {"n": 0}
         counter_lock = threading.Lock()
 
         def slow_start_session(**_):
-            # Block until main thread signals; concurrent acquires race with
-            # the in-flight start in the meantime.
-            start_gate.wait(timeout=2.0)
+            # Block until main signals; concurrent acquires race in the meantime.
+            start_gate.wait(timeout=5.0)
             with counter_lock:
                 counter["n"] += 1
-                sid = f"sid-{counter['n']}"
-            return {"SessionId": sid, "State": "IDLE"}
+                return {"SessionId": f"sid-{counter['n']}", "State": "IDLE"}
 
         client = MagicMock()
         client.start_session.side_effect = slow_start_session
@@ -483,44 +331,24 @@ class TestConcurrency:
 
         def worker():
             try:
-                sid = pool.acquire(
-                    key=("inv", "fp"),
-                    athena_client=client,
-                    spark_work_group="wg",
-                    engine_config={},
-                    session_description="desc",
-                    max_sessions=2,
-                    timeout=2,
-                    polling_interval=0.01,
-                    session_concurrency=1,
-                )
+                all_workers_queued.wait(timeout=5.0)
+                sid = _acquire(pool, client, max_sessions=2, timeout=2)
                 results.append(sid)
-            except Exception as e:  # pragma: no cover
+            except DbtRuntimeError as e:
                 errors.append(e)
 
         threads = [threading.Thread(target=worker) for _ in range(5)]
         for t in threads:
             t.start()
-        # Give workers a moment to queue up before releasing start_session.
-        time.sleep(0.05)
+        all_workers_queued.wait(timeout=5.0)
         start_gate.set()
         for t in threads:
             t.join()
 
-        # Only max_sessions (2) distinct sessions can ever be created, even
-        # though 5 threads raced.  The extras time out.
-        successful = [r for r in results if r is not None]
-        # At most 2 started.
-        assert client.start_session.call_count <= 2
-        # Unique sessions must not exceed max_sessions.
-        assert len(set(successful)) <= 2
-        # Exactly (threads - max_sessions) should time out: holding the
-        # pool lock across StartSession serializes session creation so the
-        # cap is deterministic even under races.
-        assert len(successful) == 2
+        assert len(set(results)) == 2
         assert len(errors) == 3
+        assert client.start_session.call_count == 2
         for err in errors:
-            assert isinstance(err, DbtRuntimeError)
             assert "No Spark Connect session available" in str(err)
 
 
@@ -531,17 +359,7 @@ class TestCrossInvocationCleanup:
         _register(pool, "sid-stale", ("old-inv", "fp"), stale_client)
 
         new_client = _make_client(["sid-new"])
-        sid = pool.acquire(
-            key=("new-inv", "fp"),
-            athena_client=new_client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=1,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        sid = _acquire(pool, new_client, key=("new-inv", "fp"), max_sessions=1)
 
         assert sid == "sid-new"
         stale_client.terminate_session.assert_called_once_with(SessionId="sid-stale")
@@ -559,17 +377,7 @@ class TestCrossInvocationCleanup:
         new_client.start_session.side_effect = Exception("AccessDeniedException: nope")
 
         with pytest.raises(Exception, match="AccessDeniedException"):
-            pool.acquire(
-                key=("new-inv", "fp"),
-                athena_client=new_client,
-                spark_work_group="wg",
-                engine_config={},
-                session_description="desc",
-                max_sessions=1,
-                timeout=5,
-                polling_interval=0.01,
-                session_concurrency=1,
-            )
+            _acquire(pool, new_client, key=("new-inv", "fp"), max_sessions=1)
 
         stale_client.terminate_session.assert_called_once_with(SessionId="sid-stale")
         assert "sid-stale" not in pool._snapshot()
@@ -577,25 +385,25 @@ class TestCrossInvocationCleanup:
 
 class TestReuseLivenessCheck:
     def test_dead_session_is_discarded_during_reuse(self):
+        """When a stale session is reserved for reuse but the liveness check
+        reports it dead, the pool must discard it and start a replacement.
+
+        Two clients are used to keep roles distinct: ``stale_client`` reports
+        FAILED, ``replacement_client`` issues a fresh session.
+        """
         pool = SparkConnectSessionPool()
-        client = _make_client(["sid-replacement"])
 
-        # Pre-register an idle session, then make the liveness check report FAILED.
-        _register(pool, "sid-stale", ("inv", "fp"), client)
+        stale_client = MagicMock()
+        stale_client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
+        _register(pool, "sid-stale", ("inv", "fp"), stale_client)
         pool.release("sid-stale")
-        client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
 
-        sid = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        replacement_client = _make_client(["sid-replacement"])
+        # The replacement client also reports FAILED for the stale id during
+        # the liveness check, since acquire() uses the caller's client.
+        replacement_client.get_session_status.return_value = {"Status": {"State": "FAILED"}}
+
+        sid = _acquire(pool, replacement_client)
 
         assert sid == "sid-replacement"
         assert "sid-stale" not in pool._snapshot()
@@ -607,17 +415,7 @@ class TestReuseLivenessCheck:
         _register(pool, "sid-1", ("inv", "fp"), client)
         pool.release("sid-1")
 
-        sid = pool.acquire(
-            key=("inv", "fp"),
-            athena_client=client,
-            spark_work_group="wg",
-            engine_config={},
-            session_description="desc",
-            max_sessions=5,
-            timeout=5,
-            polling_interval=0.01,
-            session_concurrency=1,
-        )
+        sid = _acquire(pool, client)
 
         assert sid == "sid-1"
         client.start_session.assert_not_called()
