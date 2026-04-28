@@ -1,13 +1,7 @@
 """pyspark-dependent ``AthenaChannelBuilder`` definition.
 
-This module imports pyspark at module load, so importing it requires
-the optional Spark Connect dependency.  ``channel.create_athena_channel_builder``
-defers that import via a function-local statement so the public
-``channel`` module stays importable without pyspark installed.
-
-Python's import system caches this module in ``sys.modules`` and serialises
-first-time loads via the import lock, so there is no need for a hand-written
-double-checked-locking pattern around the class definition.
+Imported lazily from ``channel.create_athena_channel_builder`` so the
+public ``channel`` module stays importable without pyspark installed.
 """
 
 from __future__ import annotations

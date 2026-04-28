@@ -59,12 +59,7 @@ def fake_pyspark(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_module_state():
-    """Reset lazy-import caches so each test re-builds against fake pyspark.
-
-    ``_channel_impl`` imports pyspark at module load and is cached by
-    ``sys.modules`` on first import; popping it forces a fresh import
-    against whichever fake pyspark the current test injects.
-    """
+    """Force a fresh ``_channel_impl`` import against each test's fake pyspark."""
     import dbt.adapters.athena.spark_connect.pyspark_patches as patch_mod
 
     sys.modules.pop("dbt.adapters.athena.spark_connect._channel_impl", None)
@@ -246,11 +241,7 @@ def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
 
 
 def test_class_is_cached_across_calls(fake_pyspark):
-    """Two builds against the same fake pyspark produce the same class object.
-
-    sys.modules caches ``_channel_impl`` after first import, so subsequent
-    calls re-use the same ``AthenaChannelBuilder`` class.
-    """
+    """Two builds against the same fake pyspark produce the same class object."""
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     first = create_athena_channel_builder(
