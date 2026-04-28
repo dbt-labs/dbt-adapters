@@ -96,10 +96,6 @@ class AthenaPythonJobHelper(PythonJobHelper):
         """
         return self.spark_connection.athena_client
 
-    @cached_property
-    def _is_spark_connect(self) -> bool:
-        return self.config.is_spark_connect
-
     def get_current_session_status(self) -> Any:
         """
         Get the current session status.
@@ -128,7 +124,7 @@ class AthenaPythonJobHelper(PythonJobHelper):
             DbtRuntimeError: If the execution ends in a state other than "COMPLETED".
 
         """
-        if self._is_spark_connect:
+        if self.config.is_spark_connect:
             return SparkConnectSubmitter(
                 athena_client=self.athena_client,
                 credentials=self.credentials,

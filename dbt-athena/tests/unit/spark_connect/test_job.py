@@ -71,7 +71,7 @@ class TestSparkConnectSubmission:
 
     @pytest.fixture
     def calculations_parsed_model(self):
-        # Same shape but without spark_engine_version, so _is_spark_connect is False.
+        # Same shape but without spark_engine_version, so is_spark_connect is False.
         return {
             "alias": "test_model",
             "relation_name": "test_relation",
@@ -143,7 +143,7 @@ class TestSparkConnectSubmission:
         self, mock_credentials, spark_connect_parsed_model
     ):
         helper = self._make_helper(spark_connect_parsed_model, mock_credentials)
-        assert helper._is_spark_connect is True
+        assert helper.config.is_spark_connect is True
 
         with patch(
             "dbt.adapters.athena.python_submissions.SparkConnectSubmitter"
@@ -158,7 +158,7 @@ class TestSparkConnectSubmission:
         self, mock_credentials, calculations_parsed_model
     ):
         helper = self._make_helper(calculations_parsed_model, mock_credentials)
-        assert helper._is_spark_connect is False
+        assert helper.config.is_spark_connect is False
 
     def test_empty_code_returns_marker_without_acquiring_session(
         self, mock_credentials, spark_connect_parsed_model
