@@ -23,6 +23,49 @@ from dbt.adapters.athena.connections import (
 from .constants import ATHENA_WORKGROUP, AWS_REGION
 
 
+class TestAthenaCredentials:
+    @pytest.fixture
+    def credentials(self):
+        return AthenaCredentials(
+            database="my_database",
+            schema="my_schema",
+            region_name=AWS_REGION,
+        )
+
+    def test_effective_num_retries_returns_num_boto3_retries(self, credentials):
+        credentials.num_boto3_retries = 5
+        assert credentials.effective_num_retries == 5
+        
+    def test_effective_num_retries_returns_num_retries_when_num_boto3_retries_is_not_set(self, credentials):
+        credentials.num_retries = 9
+        assert credentials.effective_num_retries == 9
+        
+    def test_unique_field_varies_with_staging_dir(self, credentials):
+        credentials.s3_staging_dir = "s3://test-bucket/staging-location-1"
+        unique1 = credentials.unique_field
+        credentials.s3_staging_dir = "s3://test-bucket/staging-location-2"
+        unique2 = credentials.unique_field
+        assert unique1 != unique2
+        
+    def test_unique_field_uses_data_dir_when_staging_dir_is_not_set(self, credentials):
+        credentials.s3_data_dir = "s3://test-bucket/data-location-1"
+        unique1 = credentials.unique_field
+        credentials.s3_data_dir = "s3://test-bucket/data-location-2"
+        unique2 = credentials.unique_field
+        assert unique1 != unique2
+        
+    def test_unique_field_uses_work_group_when_staging_and_data_dir_are_not_set(self, credentials):
+        credentials.work_group = "wg1"
+        unique1 = credentials.unique_field
+        credentials.work_group = "wg2"
+        unique2 = credentials.unique_field
+        assert unique1 != unique2
+        
+    def test_unique_field_is_same_when_none_of_staging_dir_data_dir_or_work_group_is_set(self, credentials):
+        unique1 = credentials.unique_field
+        unique2 = credentials.unique_field
+        assert unique1 == unique2
+
 class TestAthenaConnection:
     @pytest.fixture
     def credentials(self):

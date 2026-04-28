@@ -104,7 +104,15 @@ class AthenaCredentials(Credentials):
 
     @property
     def unique_field(self) -> str:
-        return f"athena-{md5(self.s3_staging_dir)}"
+        if self.s3_staging_dir is not None:
+            str = self.s3_staging_dir
+        elif self.s3_data_dir is not None:
+            str = self.s3_data_dir
+        elif self.work_group is not None:
+            str = self.work_group
+        else:
+            str = "primary"
+        return f"athena-{md5(str)}"
 
     @property
     def effective_num_retries(self) -> int:
