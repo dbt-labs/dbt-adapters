@@ -59,14 +59,18 @@ def fake_pyspark(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_module_state():
-    """Reset the lazily-initialised class cache and patch flag between tests."""
-    import dbt.adapters.athena.spark_connect.channel as channel_mod
+    """Reset lazy-import caches so each test re-builds against fake pyspark.
+
+    ``_channel_impl`` imports pyspark at module load and is cached by
+    ``sys.modules`` on first import; popping it forces a fresh import
+    against whichever fake pyspark the current test injects.
+    """
     import dbt.adapters.athena.spark_connect.pyspark_patches as patch_mod
 
-    channel_mod._athena_channel_builder_cls = None
+    sys.modules.pop("dbt.adapters.athena.spark_connect._channel_impl", None)
     patch_mod._patches_applied = False
     yield
-    channel_mod._athena_channel_builder_cls = None
+    sys.modules.pop("dbt.adapters.athena.spark_connect._channel_impl", None)
     patch_mod._patches_applied = False
 
 
@@ -242,10 +246,25 @@ def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
 
 
 def test_class_is_cached_across_calls(fake_pyspark):
-    from dbt.adapters.athena.spark_connect.channel import (
-        _get_athena_channel_builder_cls,
-    )
+    """Two builds against the same fake pyspark produce the same class object.
 
-    first = _get_athena_channel_builder_cls()
-    second = _get_athena_channel_builder_cls()
-    assert first is second
+    sys.modules caches ``_channel_impl`` after first import, so subsequent
+    calls re-use the same ``AthenaChannelBuilder`` class.
+    """
+    from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
+
+    first = create_athena_channel_builder(
+        athena_client=Mock(),
+        session_id="sid",
+        endpoint_url="https://x",
+        initial_auth_token="tok",
+        initial_token_expiry=_future(3600),
+    )
+    second = create_athena_channel_builder(
+        athena_client=Mock(),
+        session_id="sid",
+        endpoint_url="https://x",
+        initial_auth_token="tok",
+        initial_token_expiry=_future(3600),
+    )
+    assert type(first) is type(second)
