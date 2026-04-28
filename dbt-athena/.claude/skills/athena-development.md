@@ -15,6 +15,7 @@ dbt-athena/
 │   │   ├── __init__.py              # Plugin registration
 │   │   ├── __version__.py           # Version info
 │   │   ├── connections.py           # AthenaConnectionManager
+│   │   ├── connections_legacy.py    # Legacy AthenaConnectionManager using PyAthena
 │   │   ├── impl.py                  # AthenaAdapter
 │   │   ├── relation.py              # AthenaRelation
 │   │   ├── column.py                # AthenaColumn
@@ -48,7 +49,7 @@ Extends `SQLAdapter` with Athena-specific features:
 
 ### AthenaConnectionManager (`connections.py`)
 
-Uses `pyathena` driver with support for:
+Implements an Athena client with support for:
 
 - AWS credentials (access key, profile, role)
 - Workgroup configuration
@@ -73,6 +74,7 @@ aws_secret_access_key: str   # AWS secret key
 poll_interval: float         # Query status poll interval
 num_retries: int             # Number of retries
 threads: int                 # Concurrent threads
+connection_manager: str      # Which connection manager to use (defaults to direct API calls)
 ```
 
 ### AthenaRelation (`relation.py`)
@@ -224,7 +226,7 @@ changie new
 | File | Purpose |
 |------|---------|
 | `impl.py` | Main adapter with S3, Glue integration |
-| `connections.py` | PyAthena connection handling |
+| `connections.py` | Athena connection handling |
 | `relation.py` | S3 location, partition configs |
 | `column.py` | Athena SQL type handling |
 | `s3.py` | S3 operations (delete, list) |
@@ -241,7 +243,7 @@ changie new
 
 ## Dependencies
 
-- **pyathena** - Athena Python driver
+- **pyathena** - Athena Python driver, used for legacy projects
 - **boto3** - AWS SDK for S3, Glue operations
 - **dbt-adapters**, **dbt-common**, **dbt-core** - Core dbt packages
 
