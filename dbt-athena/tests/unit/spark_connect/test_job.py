@@ -4,6 +4,7 @@ import sys
 import time
 from unittest.mock import MagicMock, Mock, patch
 
+import botocore.exceptions
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -270,3 +271,107 @@ class TestSparkConnectSubmission:
 
         assert submitter_a._session_fingerprint != submitter_b._session_fingerprint
         assert submitter_a._session_key != submitter_b._session_key
+
+    def test_session_fingerprint_is_stable_for_identical_config(
+        self, mock_credentials, spark_connect_parsed_model
+    ):
+        mock_pool = Mock()
+        submitter_a = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        submitter_b = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+
+        assert submitter_a._session_fingerprint == submitter_b._session_fingerprint
+        assert submitter_a._session_key == submitter_b._session_key
+
+
+class TestWaitForEndpoint:
+    """Direct tests for ``SparkConnectSubmitter._wait_for_endpoint``."""
+
+    @pytest.fixture(autouse=True)
+    def _no_real_sleep(self, monkeypatch):
+        monkeypatch.setattr("dbt.adapters.athena.spark_connect.job.time.sleep", lambda *_: None)
+
+    def _make_submitter(self, athena_client, polling_interval=0.01):
+        submitter = SparkConnectSubmitter.__new__(SparkConnectSubmitter)
+        submitter.athena_client = athena_client
+        submitter.polling_interval = polling_interval
+        return submitter
+
+    def _client_error(self, code):
+        return botocore.exceptions.ClientError(
+            error_response={"Error": {"Code": code, "Message": code}},
+            operation_name="GetSessionEndpoint",
+        )
+
+    def test_returns_response_when_endpoint_and_token_present(self):
+        client = Mock()
+        client.get_session_endpoint.return_value = {
+            "EndpointUrl": "https://x",
+            "AuthToken": "tok",
+        }
+        submitter = self._make_submitter(client)
+
+        response = submitter._wait_for_endpoint("sid", remaining_budget=10)
+
+        assert response == {"EndpointUrl": "https://x", "AuthToken": "tok"}
+        assert client.get_session_endpoint.call_count == 1
+
+    def test_retries_when_endpoint_url_present_but_auth_token_missing(self):
+        client = Mock()
+        client.get_session_endpoint.side_effect = [
+            {"EndpointUrl": "https://x", "AuthToken": None},
+            {"EndpointUrl": "https://x", "AuthToken": "tok"},
+        ]
+        submitter = self._make_submitter(client)
+
+        response = submitter._wait_for_endpoint("sid", remaining_budget=10)
+
+        assert response["AuthToken"] == "tok"
+        assert client.get_session_endpoint.call_count == 2
+
+    def test_remaining_budget_caps_wait_time(self):
+        client = Mock()
+        client.get_session_endpoint.return_value = {"EndpointUrl": None}
+        submitter = self._make_submitter(client, polling_interval=0.05)
+
+        with pytest.raises(DbtRuntimeError, match="endpoint did not become ready within 0.1s"):
+            submitter._wait_for_endpoint("sid", remaining_budget=0.1)
+
+    def test_endpoint_cap_applies_when_budget_is_larger(self, monkeypatch):
+        # Force the cap to a small value so the test runs quickly while still
+        # asserting that _ENDPOINT_READY_TIMEOUT_SECONDS bounds the wait.
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job._ENDPOINT_READY_TIMEOUT_SECONDS",
+            0.1,
+        )
+        client = Mock()
+        client.get_session_endpoint.return_value = {"EndpointUrl": None}
+        submitter = self._make_submitter(client, polling_interval=0.05)
+
+        with pytest.raises(DbtRuntimeError, match="endpoint did not become ready within 0.1s"):
+            submitter._wait_for_endpoint("sid", remaining_budget=999)
+
+    def test_throttling_exception_keeps_polling(self):
+        client = Mock()
+        client.get_session_endpoint.side_effect = [
+            self._client_error("ThrottlingException"),
+            {"EndpointUrl": "https://x", "AuthToken": "tok"},
+        ]
+        submitter = self._make_submitter(client)
+
+        response = submitter._wait_for_endpoint("sid", remaining_budget=10)
+
+        assert response["AuthToken"] == "tok"
+        assert client.get_session_endpoint.call_count == 2
+
+    def test_non_throttling_client_error_keeps_polling(self):
+        client = Mock()
+        client.get_session_endpoint.side_effect = [
+            self._client_error("ResourceNotFoundException"),
+            {"EndpointUrl": "https://x", "AuthToken": "tok"},
+        ]
+        submitter = self._make_submitter(client)
+
+        response = submitter._wait_for_endpoint("sid", remaining_budget=10)
+
+        assert response["AuthToken"] == "tok"
+        assert client.get_session_endpoint.call_count == 2
