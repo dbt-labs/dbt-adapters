@@ -34,11 +34,8 @@ class SparkConnectSessionPool:
     _GLOBAL_LIMIT_BACKOFF_SECONDS = 5.0
 
     def __new__(cls) -> "SparkConnectSessionPool":
-        # Single check under the lock.  The "double-checked locking with a
-        # fast-path read" pattern is unsafe here because assigning
-        # ``cls._instance`` before ``_initialize`` finishes would let another
-        # thread return a half-built instance whose attributes (``_lock``,
-        # ``_sessions``) are not yet set.
+        # Avoid double-checked locking: another thread could see
+        # ``cls._instance`` set before ``_initialize`` finishes.
         with cls._singleton_lock:
             if cls._instance is None:
                 instance = super().__new__(cls)
@@ -62,12 +59,10 @@ class SparkConnectSessionPool:
         polling_interval: float,
         session_concurrency: int,
     ) -> str:
-        """Acquire a session matching ``key``.
+        """Acquire a session for ``key``, reusing or starting one.
 
-        Reuses a session with the same key whose in-flight model count is
-        below ``session_concurrency``.  Otherwise starts a new session if
-        the per-key session count is below ``max_sessions``.  Waits up to
-        ``timeout`` seconds for a slot to open.
+        Reuses when load < ``session_concurrency``; starts new when
+        per-key count < ``max_sessions``; waits up to ``timeout``.
         """
         invocation_id = key[0]
         deadline = time.monotonic() + timeout
@@ -94,18 +89,15 @@ class SparkConnectSessionPool:
                     except Exception as e:  # noqa: BLE001 - re-raised after cleanup
                         start_error = e
 
-            # Slow Athena API calls happen outside the lock.  Stale cleanup
-            # runs even when start_session raised so we don't leak prior
-            # invocations' sessions to Athena's idle timeout.
+            # Slow Athena calls run outside the lock. Stale cleanup runs
+            # even on start_session failure to avoid leaking prior sessions.
             if stale_entries:
                 self._terminate_entries(stale_entries)
             if start_error is not None:
                 raise start_error
 
             if reuse_candidate is not None:
-                # Verify the reuse candidate is actually alive before handing
-                # it back; Athena may have terminated it for idle timeout or
-                # other reasons while it sat in the pool.
+                # Athena may have killed the session while it sat in the pool.
                 if self._is_session_alive(athena_client, reuse_candidate):
                     LOGGER.debug(f"Reusing Spark Connect session {reuse_candidate} for key {key}")
                     return reuse_candidate
@@ -118,8 +110,7 @@ class SparkConnectSessionPool:
             if new_session_id is not None:
                 return new_session_id
 
-            # Pool is full for this key.  Periodically evict dead sessions
-            # so stuck slots don't block indefinitely.
+            # Periodically evict dead sessions so stuck slots don't block.
             if time_since_eviction >= self._EVICTION_INTERVAL:
                 evicted = self._evict_dead_sessions(athena_client)
                 time_since_eviction = 0
@@ -132,8 +123,7 @@ class SparkConnectSessionPool:
                     f"(max_sessions={max_sessions})"
                 )
 
-            # Account-level limit needs a longer wait than the per-key polling
-            # interval; otherwise we hammer StartSession on every tick.
+            # Longer wait on account-level limit so we don't hammer StartSession.
             sleep_for = (
                 self._GLOBAL_LIMIT_BACKOFF_SECONDS if global_limit_hit else polling_interval
             )
@@ -141,10 +131,9 @@ class SparkConnectSessionPool:
             time_since_eviction += sleep_for
 
     def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
-        """Pop sessions from prior invocations.  Caller must hold ``self._lock``.
+        """Pop sessions from prior invocations. Caller must hold ``self._lock``.
 
-        Prevents the singleton from carrying cruft across dbt runs in
-        long-lived processes (e.g. dbt Cloud workers).
+        Prevents cruft across dbt runs in long-lived processes (e.g. dbt Cloud).
         """
         stale_sids = [
             sid for sid, info in self._sessions.items() if info["key"][0] != invocation_id
@@ -157,11 +146,10 @@ class SparkConnectSessionPool:
         return [(sid, self._sessions.pop(sid)) for sid in stale_sids]
 
     def _reserve_reuse_slot(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
-        """Find a reusable session and increment its load.  Caller must hold ``self._lock``.
+        """Reserve a reusable session by incrementing its load.
 
-        The optimistic load increment reserves the slot before the
-        out-of-lock liveness check so concurrent acquires can't
-        oversubscribe ``session_concurrency``.
+        Caller must hold ``self._lock``. Increments load before the
+        out-of-lock liveness check to prevent oversubscription.
         """
         for sid, info in self._sessions.items():
             if info["key"] == key and info["load"] < session_concurrency:
@@ -170,10 +158,7 @@ class SparkConnectSessionPool:
         return None
 
     def _has_room(self, key: SessionKey, max_sessions: int) -> bool:
-        """Return True if the per-key session count is below ``max_sessions``.
-
-        Caller must hold ``self._lock``.
-        """
+        """Return True if per-key count < ``max_sessions``. Caller must hold ``self._lock``."""
         count = sum(1 for info in self._sessions.values() if info["key"] == key)
         return count < max_sessions
 
@@ -185,13 +170,10 @@ class SparkConnectSessionPool:
         engine_config: Dict[str, Any],
         session_description: str,
     ) -> str:
-        """Start a session and register it under the lock.
+        """Start a session and register it. Caller must hold ``self._lock``.
 
-        Caller must hold ``self._lock``.  Raises ``_GlobalSessionLimitReached``
-        when Athena reports the account-level limit so the outer loop can
-        sleep and retry; non-transient errors propagate.  Holding the lock
-        across ``StartSession`` is acceptable because the API is asynchronous
-        and returns within a few hundred milliseconds.
+        Translates the account-level session limit into
+        ``_GlobalSessionLimitReached``; other errors propagate.
         """
         try:
             response = athena_client.start_session(
@@ -245,11 +227,10 @@ class SparkConnectSessionPool:
             self._terminate_entries([(session_id, info)])
 
     def terminate_by_invocation(self, invocation_id: str) -> None:
-        """Terminate only sessions owned by the given dbt invocation.
+        """Terminate only sessions for the given dbt invocation.
 
-        Safe to call from adapter cleanup in multi-invocation processes
-        (e.g. dbt Cloud workers, test harnesses) where other invocations
-        may still be using the singleton.
+        Safe in multi-invocation processes (dbt Cloud, test harnesses)
+        where other invocations may share the singleton.
         """
         with self._lock:
             entries = [
