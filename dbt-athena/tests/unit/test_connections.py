@@ -1067,6 +1067,18 @@ class TestAthenaCursor:
         assert rows[1] == ({"a": "1", "b": "2", "c": "3"},)
         assert rows[2] == ({"a": "1", "b": {"c": "3"}, "c": {}},)
 
+    def test_fetch_converts_nested_complex_types(self, cursor, athena_client):
+        data = [
+            ["{a=[{a=1}, {b=2}], c=[[1, 3]]}"],
+            ["{a=1, b={c=[{d=[1, 2, 3]}]}}"],
+        ]
+        page = self._create_page(athena_client, [("m", "map")], data)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        rows = list(cursor.fetchall())
+        assert rows[0] == ({"a": [{"a": "1"}, {"b": "2"}], "c": [["1", "3"]]},)
+        assert rows[1] == ({"a": "1", "b": {"c": [{"d": ["1", "2", "3"]}]}},)
+
     def test_fetch_converts_uuids(self, cursor, athena_client):
         data = [
             ["e50e499b-982f-4cbe-9f50-e11b1c83572e"],

@@ -568,9 +568,9 @@ class AthenaResultSet(Iterator[Row]):
         nesting = 0
 
         for char in value[1:-1]:
-            if char == "[":
+            if char in ("[", "{"):
                 nesting += 1
-            elif char == "]":
+            elif char in ("]", "}"):
                 nesting -= 1
             
             if char == "," and nesting == 0:
@@ -596,9 +596,9 @@ class AthenaResultSet(Iterator[Row]):
         nesting = 0
 
         for char in value[1:-1]:
-            if char == "{":
+            if char in ("{", "["):
                 nesting += 1
-            elif char == "}":
+            elif char in ("}", "]"):
                 nesting -= 1
 
             if char == "=" and nesting == 0:
