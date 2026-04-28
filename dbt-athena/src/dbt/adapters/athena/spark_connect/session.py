@@ -26,7 +26,12 @@ class _GlobalSessionLimitReached(Exception):
 
 
 class SparkConnectSessionPool:
-    """Singleton pool of Athena Spark Connect sessions."""
+    """Singleton pool of Athena Spark Connect sessions.
+
+    Singleton so dbt Cloud's long-lived process can share sessions across
+    invocations; ``(invocation_id, fingerprint)`` keying keeps each
+    invocation logically isolated within the shared registry.
+    """
 
     _instance: Optional["SparkConnectSessionPool"] = None
     _singleton_lock = threading.Lock()
