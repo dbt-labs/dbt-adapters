@@ -321,9 +321,18 @@ class TestAthenaCursor:
         assert athena_client.get_query_results.call_count == 1
 
     def test_rowcount_returns_negative_when_there_is_no_update_count(self, cursor):
-        assert cursor.rowcount == -1
         cursor.execute("SELECT NOW()")
         assert cursor.rowcount == -1
+
+    def test_rowcount_returns_zero_when_the_update_count_is_zero(self, cursor, athena_client):
+        athena_client.get_query_results = mock.Mock(
+            return_value={
+                "ResultSet": {"Rows": [], "ResultSetMetadata": {"ColumnInfo": []}},
+                "UpdateCount": 0,
+            }
+        )
+        cursor.execute("SELECT NOW()")
+        assert cursor.rowcount == 0
 
     def test_state_returns_the_final_query_state_when_succeeded(self, cursor, athena_client):
         state_sequence = [
@@ -533,6 +542,13 @@ class TestAthenaCursor:
                 }
             }
         )
+
+    def test_fetchone_returns_none_when_no_rows(self, cursor, athena_client):
+        page = self._create_page(athena_client, [("_", "string")], [], include_header=True)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        row = cursor.fetchone()
+        assert row is None
 
     @pytest.mark.parametrize("query", DDL_AND_UTILITY_QUERIES)
     def test_fetchone_does_not_skip_the_first_row_of_utility_query_results(

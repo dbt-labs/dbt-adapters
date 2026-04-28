@@ -362,7 +362,7 @@ class AthenaCursor:
 
     def fetchone(self) -> Optional[Row]:
         rows = self.fetchmany(1)
-        return rows[0]
+        return rows[0] if rows else None
 
     def fetchmany(self, limit: Optional[int] = None) -> List[Row]:
         if self._result_set:
@@ -426,7 +426,7 @@ class AthenaResultSet(Iterator[Row]):
     def update_count(self) -> int:
         if self._update_count is None:
             self._load_page()
-        if self._update_count:
+        if self._update_count is not None:
             return self._update_count
         else:
             return -1
