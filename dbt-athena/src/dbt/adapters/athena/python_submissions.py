@@ -98,8 +98,7 @@ class AthenaPythonJobHelper(PythonJobHelper):
 
     @cached_property
     def _is_spark_connect(self) -> bool:
-        """True when the model requests Apache Spark 3.5+ via Spark Connect."""
-        return str(self.config.config.get("spark_engine_version", "")) == "3.5"
+        return self.config.is_spark_connect
 
     def get_current_session_status(self) -> Any:
         """

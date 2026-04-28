@@ -32,6 +32,15 @@ class AthenaSparkSessionConfig:
         self.config = config
         self.session_kwargs = session_kwargs
 
+    @property
+    def spark_engine_version(self) -> str:
+        return str(self.config.get("spark_engine_version", ""))
+
+    @property
+    def is_spark_connect(self) -> bool:
+        """True when the model requests Apache Spark 3.5+ via Spark Connect."""
+        return self.spark_engine_version == "3.5"
+
     def set_timeout(self) -> int:
         """
         Get the timeout value.
@@ -133,15 +142,12 @@ class AthenaSparkSessionConfig:
         # DefaultExecutorDpuSize, or SparkProperties in EngineConfiguration.
         # Spark properties must be supplied via Classifications instead.
         # https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-getting-started.html
-        spark_engine_version = str(self.config.get("spark_engine_version", ""))
-        is_spark_35 = spark_engine_version == "3.5"
-
         user_engine_config = self.config.get("engine_config", None) or {}
         provided_spark_properties = user_engine_config.pop("SparkProperties", None)
         if provided_spark_properties:
             default_spark_properties.update(provided_spark_properties)
 
-        if is_spark_35:
+        if self.is_spark_connect:
             engine_config = self._build_spark_connect_engine_config(
                 default_spark_properties, user_engine_config
             )

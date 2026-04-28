@@ -102,7 +102,7 @@ class SparkConnectSubmitter:
         payload = {
             "engine_config": self.engine_config,
             "spark_work_group": self.credentials.spark_work_group,
-            "spark_engine_version": str(self.config.config.get("spark_engine_version", "")),
+            "spark_engine_version": self.config.spark_engine_version,
         }
         # ``usedforsecurity=False`` is required on FIPS-enforced Python builds
         # (e.g. RHEL in FIPS mode); md5 here is purely a session-key fingerprint.
