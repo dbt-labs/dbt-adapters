@@ -6,9 +6,8 @@ spark_ctas SQL path, enabling Iceberg-native partition transforms
 (day/bucket/...) and atomic replacement without the __ha intermediate
 table.
 
-Gated on DBT_TEST_ATHENA_SPARK_WORK_GROUP — same workgroup the Spark
-Connect tests use, since both paths require an Athena Spark workgroup
-with Iceberg support.
+Gated on DBT_TEST_ATHENA_SPARK_WORK_GROUP — must point to an Athena
+Spark workgroup with Iceberg support.
 """
 
 import os
@@ -28,7 +27,6 @@ def model(dbt, spark_session):
     dbt.config(
         materialized='table',
         table_type='iceberg',
-        spark_engine_version='3.5',
         use_iceberg_write_to=True,
         partitioned_by=['day(created_at)', 'bucket(user_id, 4)'],
     )
@@ -68,14 +66,15 @@ class TestUseIcebergWriteToPartitioned:
 
         # SHOW CREATE TABLE confirms day()/bucket() were applied as Iceberg
         # partition transforms — not coerced into plain identity partitions
-        # (which is what the spark_ctas SQL path produces).
+        # (which is what the spark_ctas SQL path produces). Athena renders
+        # the column names with backticks in the partition spec.
         ddl = project.run_sql(
             f"show create table {project.test_schema}.iceberg_writeto_partitioned",
             fetch="all",
         )
         ddl_text = "\n".join(row[0] for row in ddl)
-        assert "day(created_at)" in ddl_text
-        assert "bucket(4, user_id)" in ddl_text
+        assert "day(`created_at`)" in ddl_text
+        assert "bucket(4, `user_id`)" in ddl_text
 
     def test_idempotent_replace(self, project):
         # createOrReplace must succeed against an existing target without
@@ -90,7 +89,6 @@ def model(dbt, spark_session):
     dbt.config(
         materialized='table',
         table_type='iceberg',
-        spark_engine_version='3.5',
         use_iceberg_write_to=True,
     )
     return spark_session.createDataFrame([(1,), (2,), (3,)], ['id'])
@@ -125,9 +123,8 @@ def model(dbt, spark_session):
     dbt.config(
         materialized='table',
         table_type='iceberg',
-        spark_engine_version='3.5',
         use_iceberg_write_to=True,
-        table_properties={'format-version': '2'},
+        table_properties={'write.parquet.compression-codec': 'zstd'},
     )
     return spark_session.createDataFrame([(1,), (2,)], ['id'])
 """
@@ -155,12 +152,14 @@ class TestUseIcebergWriteToTableProperties:
         )
         assert records == [(1,), (2,)]
 
+        # Iceberg surfaces table properties through the $properties metadata
+        # table rather than Glue TBLPROPERTIES.
         props = project.run_sql(
-            f"show tblproperties {project.test_schema}.iceberg_writeto_props",
+            f'select key, value from "{project.test_schema}"."iceberg_writeto_props$properties"',
             fetch="all",
         )
-        props_dict = {row[0]: row[1] for row in props}
-        assert props_dict.get("format-version") == "2"
+        props_dict = dict(props)
+        assert props_dict.get("write.parquet.compression-codec") == "zstd"
 
 
 _iceberg_writeto_on_hive_table = """
@@ -168,7 +167,6 @@ def model(dbt, spark_session):
     dbt.config(
         materialized='table',
         table_type='hive',
-        spark_engine_version='3.5',
         use_iceberg_write_to=True,
     )
     return spark_session.createDataFrame([(1,)], ['id'])
