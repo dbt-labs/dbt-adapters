@@ -925,6 +925,18 @@ class TestAthenaAdapter:
             "Parameters": {"catalog-id": DEFAULT_ACCOUNT_ID},
         } == res
 
+    @mock_aws
+    def test__get_data_catalog_is_cached(self, mock_aws_service):
+        mock_aws_service.create_data_catalog()
+        self.adapter.acquire_connection("dummy")
+        # Clear any existing cache from previous tests
+        self.adapter._get_data_catalog.cache_clear()
+        res1 = self.adapter._get_data_catalog(DATA_CATALOG_NAME)
+        res2 = self.adapter._get_data_catalog(DATA_CATALOG_NAME)
+        assert res1 == res2
+        assert self.adapter._get_data_catalog.cache_info().hits == 1
+        assert self.adapter._get_data_catalog.cache_info().misses == 1
+
     def _test_list_relations_without_caching(self, schema_relation):
         self.adapter.acquire_connection("dummy")
         relations = self.adapter.list_relations_without_caching(schema_relation)

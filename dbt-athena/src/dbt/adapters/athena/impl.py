@@ -838,6 +838,7 @@ class AthenaAdapter(SQLAdapter):
             info_schema_name_map.add(relation)
         return info_schema_name_map
 
+    @lru_cache(maxsize=32)
     def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
         if database:
             conn = self.connections.get_thread_connection()
