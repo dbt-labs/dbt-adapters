@@ -200,9 +200,50 @@
 
 {%- endmacro %}
 
-{% macro safe_create_table_as(temporary, relation, compiled_code, language='sql', force_batch=False) -%}
+{% macro create_table_as_with_subquery(temporary, relation, compiled_code) -%}
+
+    {%- do log('CREATE TABLE WITH SUBQUERY (CTAS): ' ~ relation) -%}
+    {%- set query_result = adapter.run_query_with_partitions_limit_catching(create_table_as(temporary, relation, compiled_code)) -%}
+    {%- do log('QUERY RESULT: ' ~ query_result) -%}
+
+    {%- if query_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
+        {%- do log('TOO_MANY_OPEN_PARTITIONS: falling back to batch insert with subquery') -%}
+
+        {%- do drop_relation(relation) -%}
+
+        {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
+        {%- do run_query(create_table_as(temporary, relation, empty_sql)) -%}
+
+        {%- set dest_columns = adapter.get_columns_in_relation(relation) -%}
+        {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
+
+        {%- set partitions_batches = get_partition_batches(sql=compiled_code, as_subquery=True) -%}
+        {%- do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) -%}
+
+        {%- for batch in partitions_batches -%}
+            {%- do log('BATCH PROCESSING: ' ~ loop.index ~ ' OF ' ~ partitions_batches | length) -%}
+            {%- set insert_batch_sql -%}
+                insert into {{ relation }} ({{ dest_cols_csv }})
+                    select {{ dest_cols_csv }}
+                    from (
+                      {{ compiled_code }}
+                    ) _dbt_sbq
+                    where {{ batch }};
+            {%- endset -%}
+            {%- do run_query(insert_batch_sql) -%}
+        {%- endfor -%}
+    {%- endif -%}
+
+    select 'SUCCESSFULLY CREATED TABLE {{ relation }} with subquery'
+
+{%- endmacro %}
+
+{% macro safe_create_table_as(temporary, relation, compiled_code, language='sql', force_batch=False, build_strategy='tmp_table') -%}
     {%- if language != 'sql' -%}
         {{ return(create_table_as(temporary, relation, compiled_code, language)) }}
+    {%- elif build_strategy == 'subquery' -%}
+      {%- do create_table_as_with_subquery(temporary, relation, compiled_code) -%}
+      {%- set compiled_code_result = relation ~ ' created with subquery' -%}
     {%- elif force_batch -%}
       {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
       {%- set query_result = relation ~ ' with many partitions created' -%}
