@@ -9,7 +9,7 @@ from unittest import mock
 import jinja2
 
 
-_INCREMENTAL_DIR = os.path.normpath(
+_MACROS_DIR = os.path.normpath(
     os.path.join(
         os.path.dirname(__file__),
         os.pardir,
@@ -21,10 +21,12 @@ _INCREMENTAL_DIR = os.path.normpath(
         "macros",
         "materializations",
         "models",
-        "incremental",
     )
 )
+_INCREMENTAL_DIR = os.path.join(_MACROS_DIR, "incremental")
+_TABLE_DIR = os.path.join(_MACROS_DIR, "table")
 _INCREMENTAL_SQL_PATH = os.path.join(_INCREMENTAL_DIR, "incremental.sql")
+_CREATE_TABLE_AS_SQL_PATH = os.path.join(_TABLE_DIR, "create_table_as.sql")
 
 
 class MockRelation:
@@ -326,6 +328,47 @@ class TestEmptySqlSubqueryWrapping:
         trailing -- line comment in compiled_code cannot comment it out."""
         compiled_code = "SELECT 1 AS id\n-- trailing comment"
         renderings = _render_empty_sql(compiled_code)
+        assert renderings, "no empty_sql fragments rendered"
+        expected = """\
+            SELECT * FROM (
+                SELECT 1 AS id
+                -- trailing comment
+            ) _dbt_sbq WITH NO DATA"""
+        for rendered in renderings:
+            _assert_sql_equal(rendered, expected)
+
+
+# --- empty_sql in create_table_as.sql ---
+
+
+def _render_table_empty_sql(compiled_code):
+    """Render the `{% set empty_sql ... %}` expression from create_table_as.sql."""
+    with open(_CREATE_TABLE_AS_SQL_PATH) as f:
+        src = f.read()
+    matches = re.findall(r"\{%-?\s*set\s+empty_sql\s*=.*?-?%\}", src)
+    assert matches, "expected at least one `{% set empty_sql = ... %}` in create_table_as.sql"
+    rendered = []
+    env = jinja2.Environment(extensions=["jinja2.ext.do"])
+    for fragment in matches:
+        template_src = fragment + "{{ empty_sql }}"
+        rendered.append(env.from_string(template_src).render(compiled_code=compiled_code))
+    return rendered
+
+
+class TestTableEmptySqlSubqueryWrapping:
+    def test_empty_sql_wraps_compiled_code(self):
+        renderings = _render_table_empty_sql("SELECT 1 AS id")
+        assert renderings, "no empty_sql fragments rendered"
+        expected = """\
+            SELECT * FROM (
+                SELECT 1 AS id
+            ) _dbt_sbq WITH NO DATA"""
+        for rendered in renderings:
+            _assert_sql_equal(rendered, expected)
+
+    def test_empty_sql_isolates_trailing_line_comment(self):
+        compiled_code = "SELECT 1 AS id\n-- trailing comment"
+        renderings = _render_table_empty_sql(compiled_code)
         assert renderings, "no empty_sql fragments rendered"
         expected = """\
             SELECT * FROM (

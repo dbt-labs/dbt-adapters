@@ -158,6 +158,94 @@ class TestIcebergAppendWithSubqueryIncompatibleForceBatch:
         assert "incompatible with force_batch" in results[0].message
 
 
+models__iceberg_table_sql = """
+{{ config(
+    materialized = 'table',
+    table_type = 'iceberg',
+    build_with_subquery = True,
+) }}
+
+select 1 as id, 'hello' as msg, 'blue' as color
+union all
+select 2 as id, 'goodbye' as msg, 'red' as color
+"""
+
+models__iceberg_table_force_batch_sql = """
+{{ config(
+    materialized = 'table',
+    table_type = 'iceberg',
+    build_with_subquery = True,
+    force_batch = True,
+) }}
+
+select 1 as id, 'hello' as msg
+"""
+
+models__hive_table_sql = """
+{{ config(
+    materialized = 'table',
+    table_type = 'hive',
+    build_with_subquery = True,
+) }}
+
+select 1 as id, 'hello' as msg, 'blue' as color
+"""
+
+
+class TestIcebergTableWithSubquery:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"iceberg_table.sql": models__iceberg_table_sql}
+
+    def test_create_table(self, project):
+        result = run_dbt(["run", "--select", "iceberg_table"])
+        assert result.results[0].status == RunStatus.Success
+
+        row_count = project.run_sql(
+            f"select count(*) from {project.test_schema}.iceberg_table", fetch="one"
+        )[0]
+        assert row_count == 2
+
+    def test_recreate_table(self, project):
+        run_dbt(["run", "--select", "iceberg_table"])
+        result = run_dbt(["run", "--select", "iceberg_table"])
+        assert result.results[0].status == RunStatus.Success
+
+        row_count = project.run_sql(
+            f"select count(*) from {project.test_schema}.iceberg_table", fetch="one"
+        )[0]
+        assert row_count == 2
+
+
+class TestIcebergTableWithSubqueryIncompatibleForceBatch:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"iceberg_table_force_batch.sql": models__iceberg_table_force_batch_sql}
+
+    def test_force_batch_fails(self, project):
+        results = run_dbt(
+            ["run", "--select", "iceberg_table_force_batch"],
+            expect_pass=False,
+        )
+        assert len(results) == 1
+        assert "incompatible with force_batch" in results[0].message
+
+
+class TestHiveTableWithSubquery:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"hive_table.sql": models__hive_table_sql}
+
+    def test_create_table(self, project):
+        result = run_dbt(["run", "--select", "hive_table"])
+        assert result.results[0].status == RunStatus.Success
+
+        row_count = project.run_sql(
+            f"select count(*) from {project.test_schema}.hive_table", fetch="one"
+        )[0]
+        assert row_count == 2
+
+
 class TestHiveAppendWithSubquery:
     @pytest.fixture(scope="class")
     def models(self):

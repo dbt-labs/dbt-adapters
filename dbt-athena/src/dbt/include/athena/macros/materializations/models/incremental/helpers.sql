@@ -102,10 +102,16 @@
 {%- endmacro %}
 
 
-{% macro delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
+{% macro delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by, source_sql=none) %}
   {%- set partitioned_keys = partitioned_by | tojson | replace('\"', '') | replace('[', '') | replace(']', '') -%}
   {% call statement('get_partitions', fetch_result=True) %}
+    {%- if source_sql is not none -%}
+    select distinct {{partitioned_keys}} from (
+      {{ source_sql }}
+    ) _dbt_sbq;
+    {%- else -%}
     select distinct {{partitioned_keys}} from {{ tmp_relation }};
+    {%- endif -%}
   {% endcall %}
   {%- set table = load_result('get_partitions').table -%}
   {%- set rows = table.rows -%}

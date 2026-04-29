@@ -54,9 +54,6 @@
     {% if force_batch %}
       {% do exceptions.raise_compiler_error('build_with_subquery is incompatible with force_batch. Batching requires data in the tmp table.') %}
     {% endif %}
-    {% if strategy == 'insert_overwrite' %}
-      {% do exceptions.raise_compiler_error('build_with_subquery is not supported with insert_overwrite strategy.') %}
-    {% endif %}
   {% endif %}
 
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
@@ -68,7 +65,7 @@
 
   -- Relation doesn't exist, do full build --
   {% if existing_relation is none %}
-    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
+    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -103,7 +100,7 @@
     {%- endif -%}
 
     -- create the full refresh version of the incremental iceberg table
-    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -131,7 +128,7 @@
   -- Running in full refresh, drop existing relation, and do full build --
   {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
-    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch) -%}
+    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -141,21 +138,36 @@
 
   -- Insert Overwrite Strategy --
   {% elif strategy in ("insert_overwrite") %}
-    {% if old_tmp_relation is not none %}
-      {% do drop_relation(old_tmp_relation) %}
+    {% if build_with_subquery %}
+      {% if old_tmp_relation is not none %}
+        {% do drop_relation(old_tmp_relation) %}
+      {% endif %}
+      {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
+      {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
+
+      {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by, source_sql=compiled_code) %}
+      {% set build_sql = incremental_insert(
+          on_schema_change, tmp_relation, target_relation, existing_relation, false, source_sql=compiled_code
+        )
+      %}
+      {% do to_drop.append(tmp_relation) %}
+    {% else %}
+      {% if old_tmp_relation is not none %}
+        {% do drop_relation(old_tmp_relation) %}
+      {% endif %}
+      {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
+      {%- if model_language == 'python' -%}
+        {% call statement('create_table', language=model_language) %}
+          {{ query_result }}
+        {% endcall %}
+      {%- endif -%}
+      {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
+      {% set build_sql = incremental_insert(
+          on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
+        )
+      %}
+      {% do to_drop.append(tmp_relation) %}
     {% endif %}
-    {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
-    {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
-    {% set build_sql = incremental_insert(
-        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
-      )
-    %}
-    {% do to_drop.append(tmp_relation) %}
 
   -- Append Strategy --
   {% elif strategy == 'append' %}

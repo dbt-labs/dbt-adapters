@@ -1,5 +1,5 @@
 kind: Features
-body: build_with_subquery config option to skip tmp table staging for incremental merge and append strategies
+body: build_with_subquery config option to skip tmp table staging for incremental and table materializations
 time: 2026-04-06T22:54:58.739286+09:00
 custom:
     Author: dtaniwaki
