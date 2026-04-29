@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for Snowflake COPY TAGS parameter in CREATE OR REPLACE TABLE
+time: 2026-04-13T12:00:00.000000+00:00
+custom:
+  Author: yostrinsky
+  Issue: "1857"
