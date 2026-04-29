@@ -53,10 +53,29 @@ class TestUseIcebergWriteToPartitioned:
     def models(self):
         return {"iceberg_writeto_partitioned.py": _iceberg_writeto_partitioned}
 
-    def test_creates_partitioned_iceberg_table(self, project):
+    def test_writes_rows_and_applies_iceberg_partition_transforms(self, project):
         results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
+
+        records = sorted(
+            project.run_sql(
+                f"select user_id, name from {project.test_schema}.iceberg_writeto_partitioned",
+                fetch="all",
+            )
+        )
+        assert records == [(1, "a"), (2, "b"), (3, "c")]
+
+        # SHOW CREATE TABLE confirms day()/bucket() were applied as Iceberg
+        # partition transforms — not coerced into plain identity partitions
+        # (which is what the spark_ctas SQL path produces).
+        ddl = project.run_sql(
+            f"show create table {project.test_schema}.iceberg_writeto_partitioned",
+            fetch="all",
+        )
+        ddl_text = "\n".join(row[0] for row in ddl)
+        assert "day(created_at)" in ddl_text
+        assert "bucket(4, user_id)" in ddl_text
 
     def test_idempotent_replace(self, project):
         # createOrReplace must succeed against an existing target without
@@ -87,10 +106,18 @@ class TestUseIcebergWriteToUnpartitioned:
     def models(self):
         return {"iceberg_writeto_unpartitioned.py": _iceberg_writeto_unpartitioned}
 
-    def test_creates_unpartitioned_iceberg_table(self, project):
+    def test_writes_rows_without_partitions(self, project):
         results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
+
+        records = sorted(
+            project.run_sql(
+                f"select id from {project.test_schema}.iceberg_writeto_unpartitioned",
+                fetch="all",
+            )
+        )
+        assert records == [(1,), (2,), (3,)]
 
 
 _iceberg_writeto_with_table_properties = """
@@ -115,10 +142,25 @@ class TestUseIcebergWriteToTableProperties:
     def models(self):
         return {"iceberg_writeto_props.py": _iceberg_writeto_with_table_properties}
 
-    def test_writeto_with_table_properties(self, project):
+    def test_table_properties_are_propagated(self, project):
         results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
+
+        records = sorted(
+            project.run_sql(
+                f"select id from {project.test_schema}.iceberg_writeto_props",
+                fetch="all",
+            )
+        )
+        assert records == [(1,), (2,)]
+
+        props = project.run_sql(
+            f"show tblproperties {project.test_schema}.iceberg_writeto_props",
+            fetch="all",
+        )
+        props_dict = {row[0]: row[1] for row in props}
+        assert props_dict.get("format-version") == "2"
 
 
 _iceberg_writeto_on_hive_table = """
