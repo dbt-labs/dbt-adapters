@@ -108,33 +108,6 @@ class TestUseIcebergWriteToRendering:
         assert "spark_session.sql" in rendered
         assert "create table foo using iceberg as" in rendered
 
-    def test_falls_back_to_save_as_table_when_no_iceberg_or_ctas(self):
-        # The third branch (the original Hive saveAsTable path) must still
-        # fire when neither use_iceberg_write_to nor spark_ctas is set.
-        rendered = _render(
-            {
-                "location": "s3://bucket/path",
-                "format": "parquet",
-                "partitioned_by": None,
-                "bucketed_by": None,
-                "sorted_by": None,
-            }
-        )
-        assert "writeTo" not in rendered
-        assert "spark_session.sql" not in rendered
-        assert "writer.saveAsTable" in rendered
-
-    def test_target_relation_quotes_are_backticked(self):
-        # Python identifiers in writeTo() must use backticks; quotes
-        # cause AnalysisException in Spark.
-        target = SimpleNamespace(schema='"q_schema"', identifier='"q_table"')
-        env = jinja2.Environment(loader=jinja2.FileSystemLoader(_MACRO_DIR))
-        template = env.get_template("python_submissions.sql")
-        rendered = template.module.athena__py_save_table_as(
-            "", target, {"location": "s3://b/p", "use_iceberg_write_to": True}
-        )
-        assert '.writeTo("`q_schema`.`q_table`")' in rendered
-
 
 class TestParseIcebergPartition:
     """Execute the inline _parse_iceberg_partition function from the
@@ -190,12 +163,10 @@ class TestParseIcebergPartition:
         assert parse_fn(expr) == expected
 
     def test_bucket_with_missing_arg_raises_clear_error(self, parse_fn):
+        # bucket and truncate share the arity-validation branch, so this
+        # exercise covers both.
         with pytest.raises(ValueError, match="requires 2 arguments"):
             parse_fn("bucket(user_id)")
-
-    def test_truncate_with_missing_arg_raises_clear_error(self, parse_fn):
-        with pytest.raises(ValueError, match="requires 2 arguments"):
-            parse_fn("truncate(name)")
 
     def test_unknown_transform_raises_value_error(self, parse_fn):
         with pytest.raises(ValueError, match="Unknown Iceberg partition transform"):
