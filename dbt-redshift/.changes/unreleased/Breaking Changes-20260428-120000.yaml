@@ -3,4 +3,4 @@ body: Remove the `redshift_use_show_apis` behavior flag. Use the `datasharing` p
 time: 2026-04-28T12:00:00.000000+05:30
 custom:
     Author: tauhid621
-    Issue: NA
+    Issue: "1621"
