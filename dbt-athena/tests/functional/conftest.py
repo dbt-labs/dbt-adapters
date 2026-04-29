@@ -22,5 +22,7 @@ def dbt_profile_target():
         "poll_interval": float(os.getenv("DBT_TEST_ATHENA_POLL_INTERVAL", "1.0")),
         "num_retries": int(os.getenv("DBT_TEST_ATHENA_NUM_RETRIES", "2")),
         "aws_profile_name": os.getenv("DBT_TEST_ATHENA_AWS_PROFILE_NAME") or None,
+        "assume_role_arn": os.getenv("DBT_TEST_ATHENA_ASSUME_ROLE_ARN") or None,
+        "assume_role_external_id": os.getenv("DBT_TEST_ATHENA_ASSUME_ROLE_EXTERNAL_ID") or None,
         "spark_work_group": os.getenv("DBT_TEST_ATHENA_SPARK_WORK_GROUP"),
     }
