@@ -164,7 +164,7 @@
       {%- do log('QUERY RESULT: ' ~ query_result) -%}
       {%- if query_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
         {%- if source_sql is not none -%}
-          {% do exceptions.raise_compiler_error('Runtime error: TOO_MANY_OPEN_PARTITIONS encountered with build_with_subquery=True. Disable build_with_subquery to enable automatic batching.') %}
+          {% do exceptions.raise_compiler_error("Runtime error: TOO_MANY_OPEN_PARTITIONS encountered with build_strategy='subquery'. Switch to build_strategy='tmp_table' to enable automatic batching.") %}
         {%- else -%}
           {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
         {%- endif -%}

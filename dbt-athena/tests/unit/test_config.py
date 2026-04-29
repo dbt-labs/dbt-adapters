@@ -18,13 +18,13 @@ class TestConfig:
 
 
 class TestAthenaConfig:
-    def test_build_with_subquery_default_false(self):
+    def test_build_strategy_default_tmp_table(self):
         config = AthenaConfig()
-        assert config.build_with_subquery is False
+        assert config.build_strategy == "tmp_table"
 
-    def test_build_with_subquery_set_true(self):
-        config = AthenaConfig(build_with_subquery=True)
-        assert config.build_with_subquery is True
+    def test_build_strategy_set_subquery(self):
+        config = AthenaConfig(build_strategy="subquery")
+        assert config.build_strategy == "subquery"
 
 
 class TestAthenaSparkSessionConfig:

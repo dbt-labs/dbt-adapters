@@ -238,10 +238,10 @@
 
 {%- endmacro %}
 
-{% macro safe_create_table_as(temporary, relation, compiled_code, language='sql', force_batch=False, build_with_subquery=False) -%}
+{% macro safe_create_table_as(temporary, relation, compiled_code, language='sql', force_batch=False, build_strategy='tmp_table') -%}
     {%- if language != 'sql' -%}
         {{ return(create_table_as(temporary, relation, compiled_code, language)) }}
-    {%- elif build_with_subquery -%}
+    {%- elif build_strategy == 'subquery' -%}
       {%- do create_table_as_with_subquery(temporary, relation, compiled_code) -%}
       {%- set compiled_code_result = relation ~ ' created with subquery' -%}
     {%- elif force_batch -%}

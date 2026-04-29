@@ -22,7 +22,10 @@
   {%- set versions_to_keep = config.get('versions_to_keep', default=4) -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- set force_batch = config.get('force_batch', False) | as_bool -%}
-  {%- set build_with_subquery = config.get('build_with_subquery', False) | as_bool -%}
+  {%- set build_strategy = config.get('build_strategy', 'tmp_table') -%}
+  {%- if build_strategy not in ['tmp_table', 'subquery'] -%}
+    {% do exceptions.raise_compiler_error("Invalid build_strategy: '" ~ build_strategy ~ "'. Expected one of: 'tmp_table', 'subquery'.") %}
+  {%- endif -%}
   {%- set target_relation = api.Relation.create(identifier=identifier,
                                                 schema=schema,
                                                 database=database,
@@ -46,12 +49,12 @@
       {% do exceptions.raise_compiler_error(error_unique_location_hive_ha) %}
   {%- endif -%}
 
-  {% if build_with_subquery %}
+  {% if build_strategy == 'subquery' %}
     {% if language != 'sql' %}
-      {% do exceptions.raise_compiler_error('build_with_subquery is not supported with Python models.') %}
+      {% do exceptions.raise_compiler_error("build_strategy='subquery' is not supported with Python models.") %}
     {% endif %}
     {% if force_batch %}
-      {% do exceptions.raise_compiler_error('build_with_subquery is incompatible with force_batch. Batching is handled automatically with subquery.') %}
+      {% do exceptions.raise_compiler_error("build_strategy='subquery' is incompatible with force_batch. Batching is handled automatically with subquery.") %}
     {% endif %}
   {% endif %}
 
@@ -67,7 +70,7 @@
       {%- endif -%}
 
       -- create tmp table
-      {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_with_subquery) -%}
+      {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_strategy) -%}
       -- Execute python code that is available in query result object
       {%- if language == 'python' -%}
         {% call statement('create_table', language=language) %}
@@ -87,7 +90,7 @@
       {%- if old_relation is not none -%}
         {{ drop_relation(old_relation) }}
       {%- endif -%}
-      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch, build_with_subquery) -%}
+      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch, build_strategy) -%}
       -- Execute python code that is available in query result object
       {%- if language == 'python' -%}
         {% call statement('create_table', language=language) %}
@@ -102,7 +105,7 @@
   {%- else -%}
 
     {%- if old_relation is none -%}
-      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch, build_with_subquery) -%}
+      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch, build_strategy) -%}
       -- Execute python code that is available in query result object
       {%- if language == 'python' -%}
         {% call statement('create_table', language=language) %}
@@ -111,7 +114,7 @@
       {%- endif -%}
     {%- else -%}
       {%- if old_relation.is_view -%}
-        {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_with_subquery) -%}
+        {%- set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_strategy) -%}
         -- Execute python code that is available in query result object
         {%- if language == 'python' -%}
           {% call statement('create_table', language=language) %}
@@ -134,7 +137,7 @@
           {%- do drop_relation(old_bkp_relation) -%}
         {%- endif -%}
 
-        {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_with_subquery) %}
+        {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, language, force_batch, build_strategy) %}
         -- Execute python code that is available in query result object
         {%- if language == 'python' -%}
           {% call statement('create_table', language=language) %}

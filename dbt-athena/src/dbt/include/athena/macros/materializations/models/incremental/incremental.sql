@@ -10,7 +10,10 @@
   {% set lf_grants = config.get('lf_grants') %}
   {% set partitioned_by = config.get('partitioned_by') %}
   {% set force_batch = config.get('force_batch', False) | as_bool -%}
-  {% set build_with_subquery = config.get('build_with_subquery', False) | as_bool -%}
+  {% set build_strategy = config.get('build_strategy', 'tmp_table') -%}
+  {% if build_strategy not in ['tmp_table', 'subquery'] -%}
+    {% do exceptions.raise_compiler_error("Invalid build_strategy: '" ~ build_strategy ~ "'. Expected one of: 'tmp_table', 'subquery'.") %}
+  {%- endif %}
   {% set unique_tmp_table_suffix = config.get('unique_tmp_table_suffix', False) | as_bool -%}
   {% set temp_schema = config.get('temp_schema') %}
   {% set target_relation = this.incorporate(type='table') %}
@@ -47,12 +50,12 @@
     {% endif %}
   {% endif %}
 
-  {% if build_with_subquery %}
+  {% if build_strategy == 'subquery' %}
     {% if model_language == 'python' %}
-      {% do exceptions.raise_compiler_error('build_with_subquery is not supported with Python models.') %}
+      {% do exceptions.raise_compiler_error("build_strategy='subquery' is not supported with Python models.") %}
     {% endif %}
     {% if force_batch %}
-      {% do exceptions.raise_compiler_error('build_with_subquery is incompatible with force_batch. Batching requires data in the tmp table.') %}
+      {% do exceptions.raise_compiler_error("build_strategy='subquery' is incompatible with force_batch. Batching requires a tmp table.") %}
     {% endif %}
   {% endif %}
 
@@ -65,7 +68,7 @@
 
   -- Relation doesn't exist, do full build --
   {% if existing_relation is none %}
-    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
+    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_strategy) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -100,7 +103,7 @@
     {%- endif -%}
 
     -- create the full refresh version of the incremental iceberg table
-    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
+    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch, build_strategy) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -128,7 +131,7 @@
   -- Running in full refresh, drop existing relation, and do full build --
   {% elif existing_relation.is_view or should_full_refresh() %}
     {% do drop_relation(existing_relation) %}
-    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_with_subquery) -%}
+    {% set query_result = safe_create_table_as(False, target_relation, compiled_code, model_language, force_batch, build_strategy) -%}
     {%- if model_language == 'python' -%}
       {% call statement('create_table', language=model_language) %}
         {{ query_result }}
@@ -138,7 +141,7 @@
 
   -- Insert Overwrite Strategy --
   {% elif strategy in ("insert_overwrite") %}
-    {% if build_with_subquery %}
+    {% if build_strategy == 'subquery' %}
       {% if old_tmp_relation is not none %}
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
@@ -171,7 +174,7 @@
 
   -- Append Strategy --
   {% elif strategy == 'append' %}
-    {% if build_with_subquery %}
+    {% if build_strategy == 'subquery' %}
       {% if old_tmp_relation is not none %}
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
@@ -226,7 +229,7 @@
       {% endif %}
     {% endif %}
 
-    {% if build_with_subquery %}
+    {% if build_strategy == 'subquery' %}
       -- Create empty tmp table for schema comparison (no data scan)
       {% if old_tmp_relation is not none %}
         {% do drop_relation(old_tmp_relation) %}

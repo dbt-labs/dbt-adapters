@@ -10,7 +10,7 @@ models__iceberg_merge_sql = """
     unique_key = 'id',
     incremental_strategy = 'merge',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
 ) }}
 
 {% if not is_incremental() %}
@@ -36,7 +36,7 @@ models__iceberg_merge_force_batch_sql = """
     unique_key = 'id',
     incremental_strategy = 'merge',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
     force_batch = True,
 ) }}
 
@@ -48,7 +48,7 @@ models__iceberg_append_sql = """
     materialized = 'incremental',
     incremental_strategy = 'append',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
 ) }}
 
 select 1 as id, 'hello' as msg, 'blue' as color
@@ -59,7 +59,7 @@ models__iceberg_append_force_batch_sql = """
     materialized = 'incremental',
     incremental_strategy = 'append',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
     force_batch = True,
 ) }}
 
@@ -71,7 +71,7 @@ models__hive_append_sql = """
     materialized = 'incremental',
     incremental_strategy = 'append',
     table_type = 'hive',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
 ) }}
 
 select 1 as id, 'hello' as msg, 'blue' as color
@@ -162,7 +162,7 @@ models__iceberg_table_sql = """
 {{ config(
     materialized = 'table',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
 ) }}
 
 select 1 as id, 'hello' as msg, 'blue' as color
@@ -174,7 +174,7 @@ models__iceberg_table_force_batch_sql = """
 {{ config(
     materialized = 'table',
     table_type = 'iceberg',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
     force_batch = True,
 ) }}
 
@@ -185,7 +185,7 @@ models__hive_table_sql = """
 {{ config(
     materialized = 'table',
     table_type = 'hive',
-    build_with_subquery = True,
+    build_strategy = 'subquery',
 ) }}
 
 select 1 as id, 'hello' as msg, 'blue' as color
