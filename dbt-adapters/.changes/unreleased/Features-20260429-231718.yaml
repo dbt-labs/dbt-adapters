@@ -1,0 +1,6 @@
+kind: Features
+body: Add v2 catalog config registry so adapter packages can register platform-specific catalogs.yml v2 schemas for parse-time validation
+time: 2026-04-29T23:17:18.000000+00:00
+custom:
+    Author: aahel
+    Issue: "12878"
