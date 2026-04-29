@@ -1,23 +1,23 @@
 import pytest
 
-from dbt.adapters.catalogs import get_catalog_config
 from dbt.adapters.snowflake.catalogs._v2 import (
     HorizonSnowflakeConfig,
     LinkedSnowflakeConfig,
 )
+from dbt.adapters.snowflake.impl import SnowflakeAdapter
 from dbt_common.exceptions import DbtValidationError
 
 
-# ===== Registration =====
+# ===== CATALOG_V2_CONFIGS class attribute =====
 
 
 def test_horizon_registered():
-    assert get_catalog_config("horizon", "snowflake") is HorizonSnowflakeConfig
+    assert SnowflakeAdapter.CATALOG_V2_CONFIGS["horizon"] is HorizonSnowflakeConfig
 
 
 @pytest.mark.parametrize("v2_type", ["glue", "iceberg_rest", "unity"])
 def test_linked_types_registered(v2_type):
-    assert get_catalog_config(v2_type, "snowflake") is LinkedSnowflakeConfig
+    assert SnowflakeAdapter.CATALOG_V2_CONFIGS[v2_type] is LinkedSnowflakeConfig
 
 
 # ===== HorizonSnowflakeConfig =====

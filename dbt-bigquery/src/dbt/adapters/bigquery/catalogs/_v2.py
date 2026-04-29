@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from dbt.adapters.catalogs import register_catalog_config
 from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.exceptions import DbtValidationError
 
@@ -23,6 +22,3 @@ class BiglakeMetastoreBigqueryConfig(dbtClassMixin):
             raise DbtValidationError("file_format must be 'parquet'")
         if self.base_location_root is not None and not self.base_location_root.strip():
             raise DbtValidationError("'base_location_root' cannot be blank")
-
-
-register_catalog_config("biglake_metastore", "bigquery", BiglakeMetastoreBigqueryConfig)

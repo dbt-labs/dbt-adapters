@@ -1,12 +1,14 @@
 import pytest
 
 from dbt.adapters.bigquery.catalogs._v2 import BiglakeMetastoreBigqueryConfig
-from dbt.adapters.catalogs import get_catalog_config
+from dbt.adapters.bigquery.impl import BigQueryAdapter
 from dbt_common.exceptions import DbtValidationError
 
 
 def test_biglake_registered():
-    assert get_catalog_config("biglake_metastore", "bigquery") is BiglakeMetastoreBigqueryConfig
+    assert (
+        BigQueryAdapter.CATALOG_V2_CONFIGS["biglake_metastore"] is BiglakeMetastoreBigqueryConfig
+    )
 
 
 def test_biglake_minimal_valid():

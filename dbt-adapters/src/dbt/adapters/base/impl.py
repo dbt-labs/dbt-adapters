@@ -37,6 +37,7 @@ from dbt.adapters.record.base import (
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
+from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.contracts.constraints import (
     ColumnLevelConstraint,
     ConstraintType,
@@ -309,6 +310,8 @@ class BaseAdapter(metaclass=AdapterMeta):
     Column: Type[BaseColumn] = BaseColumn
     ConnectionManager: Type[BaseConnectionManager]
     CATALOG_INTEGRATIONS: Iterable[Type[CatalogIntegration]] = []
+    # catalogs.yml v2 schema by catalog_type, validated at parse time when use_catalogs_v2 is on
+    CATALOG_V2_CONFIGS: Dict[str, Type[dbtClassMixin]] = {}
 
     # A set of clobber config fields accepted by this adapter
     # for use in materializations

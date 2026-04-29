@@ -10,6 +10,7 @@ from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogIntegration,
     IcebergRestCatalogRelation,
 )
-
-# Import _v2 for its side effect of registering platform configs
-from dbt.adapters.snowflake.catalogs import _v2  # noqa: F401
+from dbt.adapters.snowflake.catalogs._v2 import (
+    HorizonSnowflakeConfig,
+    LinkedSnowflakeConfig,
+)

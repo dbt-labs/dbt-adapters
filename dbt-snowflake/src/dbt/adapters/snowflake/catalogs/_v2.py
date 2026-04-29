@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from dbt.adapters.catalogs import register_catalog_config
 from dbt_common.dataclass_schema import dbtClassMixin
 from dbt_common.exceptions import DbtValidationError
 
@@ -68,9 +67,3 @@ class LinkedSnowflakeConfig(dbtClassMixin):
                 self.target_file_size,
                 {"auto", "16mb", "32mb", "64mb", "128mb"},
             )
-
-
-register_catalog_config("horizon", "snowflake", HorizonSnowflakeConfig)
-register_catalog_config("glue", "snowflake", LinkedSnowflakeConfig)
-register_catalog_config("iceberg_rest", "snowflake", LinkedSnowflakeConfig)
-register_catalog_config("unity", "snowflake", LinkedSnowflakeConfig)
