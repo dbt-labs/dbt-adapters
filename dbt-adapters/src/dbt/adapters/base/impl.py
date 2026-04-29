@@ -1339,7 +1339,6 @@ class BaseAdapter(metaclass=AdapterMeta):
                 "table_name",
                 "table_type",
                 "table_comment",
-                "table_owner",
                 "column_name",
                 "column_type",
                 "column_comment",
