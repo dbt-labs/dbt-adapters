@@ -9,7 +9,6 @@
     {% set merge_schema = optional_args.get("merge_schema", true) %}
     {% set bucket_count = optional_args.get("bucket_count") %}
     {% set field_delimiter = optional_args.get("field_delimiter") %}
-    {% set table_type = optional_args.get("table_type", "") %}
     {% set extra_table_properties = optional_args.get("extra_table_properties") %}
     {% set use_iceberg_write_to = optional_args.get("use_iceberg_write_to", false) %}
     {% set spark_ctas = optional_args.get("spark_ctas", "") %}
