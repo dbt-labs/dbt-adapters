@@ -55,7 +55,7 @@
       {% do exceptions.raise_compiler_error("build_strategy='subquery' is not supported with Python models.") %}
     {% endif %}
     {% if force_batch %}
-      {% do exceptions.raise_compiler_error("build_strategy='subquery' is incompatible with force_batch. Batching requires a tmp table.") %}
+      {% do exceptions.raise_compiler_error("build_strategy='subquery' is incompatible with force_batch. Batching requires a temp table.") %}
     {% endif %}
   {% endif %}
 
