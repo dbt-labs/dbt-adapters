@@ -46,18 +46,21 @@ def materialize(spark_session, df, target_relation):
             return F.years(F.col(args[0]))
         if func in ("hour", "hours"):
             return F.hours(F.col(args[0]))
-        if func == "bucket":
-            return F.bucket(int(args[1]), F.col(args[0]))
-        if func == "truncate":
-            return F.truncate(int(args[1]), F.col(args[0]))
+        if func in ("bucket", "truncate"):
+            if len(args) != 2:
+                raise ValueError(
+                    f"Iceberg partition transform '{func}' requires 2 arguments (column, n), got: {expr_str}"
+                )
+            n = int(args[1])
+            return F.bucket(n, F.col(args[0])) if func == "bucket" else F.truncate(n, F.col(args[0]))
         raise ValueError(f"Unknown Iceberg partition transform: {func}")
 
     _writer = df.writeTo("{{ target_relation.schema | replace('\"', '`') }}.{{ target_relation.identifier | replace('\"', '`') }}")
     _writer = _writer.using("iceberg")
-    _writer = _writer.tableProperty("location", "{{ location }}/")
+    _writer = _writer.tableProperty("location", {{ (location ~ "/") | tojson }})
     {% if extra_table_properties is not none %}
     {% for prop_name, prop_value in extra_table_properties.items() %}
-    _writer = _writer.tableProperty("{{ prop_name }}", "{{ prop_value }}")
+    _writer = _writer.tableProperty({{ prop_name | tojson }}, {{ prop_value | string | tojson }})
     {% endfor %}
     {% endif %}
     {% if partitioned_by is not none %}
