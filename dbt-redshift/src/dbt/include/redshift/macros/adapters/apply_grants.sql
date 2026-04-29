@@ -38,7 +38,7 @@
     prefix on identity_name and identity_type='role'. The standardize_grants_dict
     method in RedshiftAdapter handles this translation.
 -#}
-    SHOW GRANTS ON TABLE {{ relation.database }}.{{ relation.schema }}.{{ relation.identifier }}
+    SHOW GRANTS ON TABLE {{ adapter.quote(relation.database) }}.{{ adapter.quote(relation.schema) }}.{{ adapter.quote(relation.identifier) }}
   {% elif redshift__use_grants_extended() %}
 {#-
     Use svv_relation_privileges for same-database grants. This view correctly

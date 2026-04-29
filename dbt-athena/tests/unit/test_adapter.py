@@ -1,9 +1,10 @@
 import datetime
 import decimal
+from datetime import date, timedelta
 from multiprocessing import get_context
 import sys
 from unittest import mock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import agate
 import boto3
@@ -368,16 +369,12 @@ class TestAthenaAdapter:
         self.adapter.clean_up_partitions(relation, "dt < '2022-01-03'")
         log_records = dbt_debug_caplog.getvalue()
         assert (
-            "Deleting table data: path="
-            "'s3://test-dbt-athena/tables/table/dt=2022-01-01', "
-            "bucket='test-dbt-athena', "
-            "prefix='tables/table/dt=2022-01-01/'" in log_records
+            "Listing files for deletion: "
+            "s3://test-dbt-athena/tables/table/dt=2022-01-01" in log_records
         )
         assert (
-            "Deleting table data: path="
-            "'s3://test-dbt-athena/tables/table/dt=2022-01-02', "
-            "bucket='test-dbt-athena', "
-            "prefix='tables/table/dt=2022-01-02/'" in log_records
+            "Listing files for deletion: "
+            "s3://test-dbt-athena/tables/table/dt=2022-01-02" in log_records
         )
         s3 = boto3.client("s3", region_name=AWS_REGION)
         keys = [obj["Key"] for obj in s3.list_objects_v2(Bucket=BUCKET)["Contents"]]
@@ -385,6 +382,258 @@ class TestAthenaAdapter:
             "tables/table/dt=2022-01-03/data1.parquet",
             "tables/table/dt=2022-01-03/data2.parquet",
         }
+
+    @mock_aws
+    def test_clean_up_partitions_with_list_input(self, dbt_debug_caplog, mock_aws_service):
+        """Test clean_up_partitions with List[str] input for backwards compatibility."""
+        table_name = "table"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+        mock_aws_service.add_data_in_table(table_name)
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        # Call with a list of conditions (new API)
+        self.adapter.clean_up_partitions(relation, ["dt = '2022-01-01'", "dt = '2022-01-02'"])
+
+        log_records = dbt_debug_caplog.getvalue()
+        assert (
+            "Listing files for deletion: "
+            "s3://test-dbt-athena/tables/table/dt=2022-01-01" in log_records
+        )
+        assert (
+            "Listing files for deletion: "
+            "s3://test-dbt-athena/tables/table/dt=2022-01-02" in log_records
+        )
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        keys = [obj["Key"] for obj in s3.list_objects_v2(Bucket=BUCKET)["Contents"]]
+        assert set(keys) == {
+            "tables/table/dt=2022-01-03/data1.parquet",
+            "tables/table/dt=2022-01-03/data2.parquet",
+        }
+
+    @mock_aws
+    def test_clean_up_partitions_with_many_partitions(self, dbt_debug_caplog, mock_aws_service):
+        """Test clean_up_partitions with enough partitions to trigger chunking logic."""
+        table_name = "table_many_partitions"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+
+        # Create 1100 partitions to test chunking across chunk boundary
+        # (PARTITION_PROCESSING_CHUNK_SIZE=1000, so this creates 2 chunks: 1000 + 100)
+        # This also tests S3 batch deletion across multiple partition batches
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+
+        partition_inputs = []
+        start_date = date(2020, 1, 1)
+        for i in range(1100):
+            dt = (start_date + timedelta(days=i)).isoformat()
+            partition_inputs.append(
+                {
+                    "Values": [dt],
+                    "StorageDescriptor": {
+                        "Columns": [
+                            {"Name": "id", "Type": "string"},
+                            {"Name": "country", "Type": "string"},
+                        ],
+                        "Location": f"s3://{BUCKET}/tables/{table_name}/dt={dt}",
+                    },
+                }
+            )
+            # Add one S3 object per partition
+            s3.put_object(
+                Body=b"{}", Bucket=BUCKET, Key=f"tables/{table_name}/dt={dt}/data.parquet"
+            )
+
+        # Glue only allows 100 partitions per batch_create_partition call
+        glue = boto3.client("glue", region_name=AWS_REGION)
+        for i in range(0, len(partition_inputs), 100):
+            batch = partition_inputs[i : i + 100]
+            glue.batch_create_partition(
+                DatabaseName=DATABASE_NAME, TableName=table_name, PartitionInputList=batch
+            )
+
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        # Delete all partitions to test chunking
+        self.adapter.clean_up_partitions(relation, "dt >= '2020-01-01'")
+
+        # Verify all S3 objects were deleted
+        objs = s3.list_objects_v2(Bucket=BUCKET)
+        assert objs.get("KeyCount", 0) == 0
+
+        # Verify all Glue partitions were deleted
+        partitions_after = glue.get_partitions(
+            DatabaseName=DATABASE_NAME, TableName=table_name
+        ).get("Partitions", [])
+        assert len(partitions_after) == 0
+
+    @mock_aws
+    def test_bulk_delete_from_s3_handles_delete_errors(self, mock_aws_service, dbt_error_caplog):
+        """Test that bulk_delete_from_s3 properly parses and handles S3 delete errors."""
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        table_name = "table"
+        mock_aws_service.create_table(table_name)
+        mock_aws_service.add_data_in_table(table_name)
+
+        self.adapter.acquire_connection("dummy")
+
+        # Create actual S3 objects so the filter returns results
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.put_object(Body=b"{}", Bucket=BUCKET, Key="tables/table/dt=2022-01-01/data1.parquet")
+
+        # Mock delete_objects to return an error response in AWS format
+        error_response = {
+            "Deleted": [],
+            "Errors": [
+                {
+                    "Key": "tables/table/dt=2022-01-01/data1.parquet",
+                    "Code": "AccessDenied",
+                    "Message": "Access Denied",
+                }
+            ],
+        }
+
+        # Create a mock bucket with a delete_objects method that returns errors
+        mock_bucket = MagicMock()
+        mock_bucket.delete_objects.return_value = error_response
+
+        # Also need to mock objects.filter to return something
+        mock_obj = MagicMock()
+        mock_obj.key = "tables/table/dt=2022-01-01/data1.parquet"
+        mock_bucket.objects.filter.return_value = [mock_obj]
+
+        # Patch the Bucket creation to return our mock
+        with patch("boto3.session.Session.resource") as mock_resource:
+            mock_s3_resource = MagicMock()
+            mock_s3_resource.Bucket.return_value = mock_bucket
+            mock_resource.return_value = mock_s3_resource
+
+            with pytest.raises(
+                DbtRuntimeError,
+                match=r"Failed to delete 1 object\(s\) from S3 bucket 'test-dbt-athena'",
+            ):
+                self.adapter.bulk_delete_from_s3(
+                    ["s3://test-dbt-athena/tables/table/dt=2022-01-01/"]
+                )
+
+            # Verify error was logged with details
+            assert "Failed to delete S3 object" in dbt_error_caplog.getvalue()
+            assert "Key='tables/table/dt=2022-01-01/data1.parquet'" in dbt_error_caplog.getvalue()
+            assert "Code='AccessDenied'" in dbt_error_caplog.getvalue()
+            assert "Message='Access Denied'" in dbt_error_caplog.getvalue()
+
+    @mock_aws
+    def test_clean_up_partitions_glue_batch_delete_errors_are_raised(
+        self, mock_aws_service, dbt_error_caplog
+    ):
+        """batch_delete_partition can return per-partition errors without raising; verify they are surfaced."""
+        table_name = "table"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+        mock_aws_service.add_data_in_table(table_name)
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        batch_delete_error_response = {
+            "Errors": [
+                {
+                    "PartitionValues": ["2022-01-01"],
+                    "ErrorDetail": {
+                        "ErrorCode": "EntityNotFoundException",
+                        "ErrorMessage": "Partition not found",
+                    },
+                }
+            ]
+        }
+
+        original_make_api_call = botocore.client.BaseClient._make_api_call
+
+        def mock_make_api_call(self, operation_name, api_params):
+            if operation_name == "BatchDeletePartition":
+                return batch_delete_error_response
+            return original_make_api_call(self, operation_name, api_params)
+
+        with patch.object(botocore.client.BaseClient, "_make_api_call", mock_make_api_call):
+            with pytest.raises(
+                DbtRuntimeError,
+                match=r"Failed to delete 1 partition\(s\) from Glue table",
+            ):
+                self.adapter.clean_up_partitions(relation, "dt = '2022-01-01'")
+
+        assert "EntityNotFoundException" in dbt_error_caplog.getvalue()
+        assert "Partition not found" in dbt_error_caplog.getvalue()
+
+    @mock_aws
+    def test_bulk_delete_from_s3_supports_multiple_buckets(self, mock_aws_service):
+        """Partitions spanning multiple S3 buckets should all be deleted without error."""
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        self.adapter.acquire_connection("dummy")
+
+        second_bucket = "test-dbt-athena-second"
+        s3 = boto3.client("s3", region_name=AWS_REGION)
+        s3.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3.create_bucket(
+            Bucket=second_bucket, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3.put_object(Body=b"{}", Bucket=BUCKET, Key="tables/table/dt=2022-01-01/data.parquet")
+        s3.put_object(
+            Body=b"{}", Bucket=second_bucket, Key="tables/table/dt=2022-01-02/data.parquet"
+        )
+
+        # Before fix this raised DbtRuntimeError due to bucket mismatch
+        self.adapter.bulk_delete_from_s3(
+            [
+                f"s3://{BUCKET}/tables/table/dt=2022-01-01/",
+                f"s3://{second_bucket}/tables/table/dt=2022-01-02/",
+            ]
+        )
+
+        assert s3.list_objects_v2(Bucket=BUCKET).get("KeyCount", 0) == 0
+        assert s3.list_objects_v2(Bucket=second_bucket).get("KeyCount", 0) == 0
+
+    @mock_aws
+    def test_clean_up_partitions_raises_for_oversized_single_condition(self, mock_aws_service):
+        """A single partition condition exceeding the Glue expression limit should raise clearly."""
+        table_name = "table"
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        mock_aws_service.create_table(table_name)
+        relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=table_name,
+        )
+        self.adapter.acquire_connection("dummy")
+
+        # Construct a single condition that is longer than the 2048-char limit
+        oversized_condition = "dt = '" + "x" * 2100 + "'"
+
+        with pytest.raises(DbtRuntimeError, match="Glue API expression limit"):
+            self.adapter.clean_up_partitions(relation, [oversized_condition])
 
     @mock_aws
     def test_clean_up_table_table_does_not_exist(self, dbt_debug_caplog, mock_aws_service):

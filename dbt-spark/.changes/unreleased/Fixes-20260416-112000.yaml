@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix empty catalog.json when using Iceberg v2 tables with dbt docs generate
+time: 2026-04-16T11:20:00.000000-07:00
+custom:
+  Author: tauhidanjum
+  Issue: "485"

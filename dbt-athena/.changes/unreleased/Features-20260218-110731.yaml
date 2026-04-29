@@ -1,0 +1,6 @@
+kind: Features
+body: Add STS AssumeRole support for cross-account access
+time: 2026-02-18T11:07:31.136966+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1657"

@@ -78,6 +78,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
 
 class SnowflakeAdapter(SQLAdapter):

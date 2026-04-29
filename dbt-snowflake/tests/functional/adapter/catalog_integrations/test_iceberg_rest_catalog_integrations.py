@@ -13,7 +13,7 @@ MODEL__BASIC_ICEBERG_TABLE = """
 
 MODEL__ICEBERG_TABLE_WITH_CATALOG_CONFIG = """
                             {{ config(materialized='table', catalog_name='basic_iceberg_rest_catalog',
-                            max_data_extension_time_in_days=1, auto_refresh='true') }}
+                            target_file_size='16MB', max_data_extension_time_in_days=1, auto_refresh='true') }}
                             select 1 as id
                             """
 
@@ -70,6 +70,7 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
                                 ),
                                 # No catalog_linked_database_type means standard CTAS is used
                                 "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
                                 "auto_refresh": "true",
                             },
                         }
@@ -125,6 +126,7 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                                 ),
                                 "catalog_linked_database_type": "glue",  # Glue requires 4-step process
                                 "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
                                 "auto_refresh": "true",
                             },
                         }
@@ -186,7 +188,7 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                 """,
                 "glue_iceberg_table_with_catalog_config.sql": """
                     {{ config(materialized='table', catalog_name='glue_iceberg_rest_catalog',
-                    max_data_extension_time_in_days=1, auto_refresh='true') }}
+                    target_file_size='16MB', max_data_extension_time_in_days=1, auto_refresh='true') }}
                     select 1 as id
                 """,
             }

@@ -153,7 +153,7 @@
     {% set show_tables_results = [] %}
     {% for schema in schemas %}
         {%- call statement('show_tables_' ~ loop.index, fetch_result=True) -%}
-            SHOW TABLES FROM SCHEMA {{ database }}.{{ schema }}
+            SHOW TABLES FROM SCHEMA {{ adapter.quote(database) }}.{{ adapter.quote(schema) }}
         {%- endcall -%}
         {% do show_tables_results.append(load_result('show_tables_' ~ loop.index).table) %}
     {% endfor %}

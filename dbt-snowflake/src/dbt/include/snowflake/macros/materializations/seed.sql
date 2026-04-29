@@ -4,11 +4,16 @@
         snowflake__load_csv_rows will atomically clear and repopulate the table in a
         single DML statement, closing the window where concurrent readers see an empty table.
         (TRUNCATE is DDL in Snowflake and auto-commits, creating that window.)
+
+        Exception: when --empty is used, load_csv_rows is skipped entirely, so we
+        must truncate here to clear the table.
     --#}
     {% set sql = "" %}
     {% if full_refresh %}
         {{ adapter.drop_relation(old_relation) }}
         {% set sql = create_csv_table(model, agate_table) %}
+    {% elif (agate_table.rows | length) == 0 %}
+        {{ adapter.truncate_relation(old_relation) }}
     {% endif %}
     {{ return(sql) }}
 {% endmacro %}

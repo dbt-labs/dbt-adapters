@@ -1,0 +1,6 @@
+kind: Fixes
+body: Auto-retry 'conflict with concurrent transaction' errors during DROP statements in Redshift
+time: 2026-04-17T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "626"

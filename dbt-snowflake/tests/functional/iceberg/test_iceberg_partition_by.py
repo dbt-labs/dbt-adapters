@@ -153,6 +153,7 @@ class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
                                     "SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE"
                                 ),
                                 "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
                                 "auto_refresh": "true",
                             },
                         }
@@ -172,6 +173,7 @@ class TestIcebergPartitionBy(BaseCatalogIntegrationValidation):
                                 ),
                                 "catalog_linked_database_type": "glue",  # Glue requires 4-step process
                                 "max_data_extension_time_in_days": 1,
+                                "target_file_size": "AUTO",
                                 "auto_refresh": "true",
                             },
                         }

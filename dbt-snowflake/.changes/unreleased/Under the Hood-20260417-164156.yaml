@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Remove target_file_size from Iceberg REST catalog test fixtures to fix privilege errors caused by a Snowflake platform change
-time: 2026-04-17T16:41:56.525658+05:30
-custom:
-    Author: aahel
-    Issue: N/A

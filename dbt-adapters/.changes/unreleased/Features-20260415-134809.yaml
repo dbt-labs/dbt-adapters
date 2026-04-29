@@ -1,0 +1,6 @@
+kind: Features
+body: Added --empty support for dbt seed
+time: 2026-04-15T13:48:09.244397+05:30
+custom:
+    Author: sriramr98
+    Issue: "1865"

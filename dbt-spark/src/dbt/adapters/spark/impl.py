@@ -367,6 +367,17 @@ class SparkAdapter(SQLAdapter):
     def _get_columns_for_catalog(self, relation: BaseRelation) -> Iterable[Dict[str, Any]]:
         columns = self.parse_columns_from_information(relation)
 
+        if not columns:
+            # The DESCRIBE EXTENDED fallback path (e.g. Iceberg v2 tables) embeds
+            # column definitions in the information string as flat "col: type"
+            # lines, which INFORMATION_COLUMNS_REGEX does not match.  Fall back
+            # to querying the table schema directly via DESCRIBE EXTENDED.
+            try:
+                columns = self.get_columns_in_relation(relation)
+            except DbtRuntimeError as e:
+                logger.debug(f"Error retrieving columns for catalog entry {relation}: {e.msg}")
+                columns = []
+
         for column in columns:
             # convert SparkColumns into catalog dicts
             as_dict = column.to_column_dict()

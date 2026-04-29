@@ -6,7 +6,7 @@ from unittest import mock
 from dbt_common.exceptions import DbtRuntimeError
 from agate import Row
 from pyhive import hive
-from dbt.adapters.spark import SparkAdapter, SparkRelation
+from dbt.adapters.spark import SparkAdapter, SparkColumn, SparkRelation
 from dbt.adapters.spark.impl import (
     LIST_RELATIONS_MACRO_NAME,
     SCHEMA_NOT_FOUND_MESSAGES,
@@ -821,3 +821,115 @@ class TestListRelationsIcebergV2Fallback(unittest.TestCase):
         with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
             with self.assertRaises(DbtRuntimeError):
                 adapter.list_relations_without_caching(schema_relation)
+
+
+class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
+    """Tests for _get_columns_for_catalog falling back to get_columns_in_relation
+    when the information string (from the DESCRIBE EXTENDED / Iceberg v2 path)
+    does not contain column definitions in the regex-parseable format."""
+
+    @pytest.fixture(autouse=True)
+    def set_up_fixtures(self, target_http):
+        self.target_http = target_http
+
+    def _make_adapter(self):
+        return SparkAdapter(self.target_http, get_context("spawn"))
+
+    def test_falls_back_to_get_columns_in_relation(self):
+        """When parse_columns_from_information returns nothing (Iceberg v2 path),
+        _get_columns_for_catalog should fall back to get_columns_in_relation."""
+        adapter = self._make_adapter()
+
+        # Iceberg v2 information string: no ' |-- col: type (nullable = ...)' lines,
+        # so parse_columns_from_information will return an empty list.
+        information = "id: int\n" "name: string\n" "Provider: iceberg\n" "Owner: root\n"
+        relation = SparkRelation.create(
+            schema="default",
+            identifier="orders",
+            type=SparkRelation.get_relation_type.Table,
+            information=information,
+            is_iceberg=True,
+        )
+
+        fallback_columns = [
+            SparkColumn(
+                table_database=None,
+                table_schema="default",
+                table_name="orders",
+                table_type=SparkRelation.get_relation_type.Table,
+                column_index=0,
+                table_owner="root",
+                column="id",
+                dtype="int",
+            ),
+            SparkColumn(
+                table_database=None,
+                table_schema="default",
+                table_name="orders",
+                table_type=SparkRelation.get_relation_type.Table,
+                column_index=1,
+                table_owner="root",
+                column="name",
+                dtype="string",
+            ),
+        ]
+
+        with mock.patch.object(
+            adapter, "get_columns_in_relation", return_value=fallback_columns
+        ) as mock_get_cols:
+            result = list(adapter._get_columns_for_catalog(relation))
+
+        mock_get_cols.assert_called_once_with(relation)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["column_name"], "id")
+        self.assertEqual(result[0]["column_type"], "int")
+        self.assertEqual(result[1]["column_name"], "name")
+        self.assertEqual(result[1]["column_type"], "string")
+
+    def test_does_not_fall_back_when_information_has_columns(self):
+        """When parse_columns_from_information succeeds (SHOW TABLE EXTENDED path),
+        get_columns_in_relation should NOT be called."""
+        adapter = self._make_adapter()
+
+        # Standard information string with the regex-parseable format
+        information = (
+            "Owner: root\n"
+            "Schema: root\n"
+            " |-- id: int (nullable = true)\n"
+            " |-- name: string (nullable = true)\n"
+        )
+        relation = SparkRelation.create(
+            schema="default",
+            identifier="orders",
+            type=SparkRelation.get_relation_type.Table,
+            information=information,
+        )
+
+        with mock.patch.object(adapter, "get_columns_in_relation") as mock_get_cols:
+            result = list(adapter._get_columns_for_catalog(relation))
+
+        mock_get_cols.assert_not_called()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["column_name"], "id")
+        self.assertEqual(result[1]["column_name"], "name")
+
+    def test_fallback_swallows_runtime_error(self):
+        """If the fallback get_columns_in_relation raises DbtRuntimeError"""
+        adapter = self._make_adapter()
+
+        relation = SparkRelation.create(
+            schema="default",
+            identifier="orders",
+            type=SparkRelation.get_relation_type.Table,
+            information="Provider: iceberg\n",
+            is_iceberg=True,
+        )
+
+        with mock.patch.object(
+            adapter,
+            "get_columns_in_relation",
+            side_effect=DbtRuntimeError("describe failed"),
+        ):
+            result = list(adapter._get_columns_for_catalog(relation))
+
+        self.assertEqual(result, [])
