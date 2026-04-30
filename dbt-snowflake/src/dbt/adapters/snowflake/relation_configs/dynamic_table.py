@@ -209,11 +209,16 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
                 # Strip "IMMUTABLE WHERE (" prefix and ")" suffix
                 immutable_where = immutable_where_str[17:-1]  # len("IMMUTABLE WHERE (") = 17
 
-        # Snowflake may return empty string for unset cluster_by
-        # Normalize to Python None for consistency
+        # Snowflake may return empty string for unset cluster_by — normalize to None.
+        # When all cluster_by elements are plain column references, Snowflake wraps
+        # the entire expression with LINEAR(...) as the default clustering method
+        # (e.g. "id" → "LINEAR(id)", "id, value" → "LINEAR(id, value)").
+        # Strip the wrapper so the value matches the user's config.
         cluster_by = dynamic_table.get("cluster_by")
         if cluster_by is not None and str(cluster_by).strip() not in ("", "NONE", "None"):
             cluster_by = str(cluster_by).strip()
+            if cluster_by.upper().startswith("LINEAR(") and cluster_by.endswith(")"):
+                cluster_by = cluster_by[7:-1]
         else:
             cluster_by = None
 
@@ -278,7 +283,7 @@ class SnowflakeDynamicTableRefreshModeConfigChange(RelationConfigChange):
 
     @property
     def requires_full_refresh(self) -> bool:
-        return True
+        return False
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
