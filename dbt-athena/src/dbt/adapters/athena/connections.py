@@ -45,9 +45,17 @@ from dbt.adapters.contracts.connection import (
 from dbt.adapters.sql import SQLConnectionManager
 
 
+def _is_positive_int(value: Any) -> bool:
+    try:
+        return int(value) >= 1
+    except (TypeError, ValueError):
+        return False
+
+
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
+    spark_session_id: Optional[str] = None
 
 
 @dataclass
@@ -74,11 +82,29 @@ class AthenaCredentials(Credentials):
     s3_data_dir: Optional[str] = None
     s3_data_naming: str = "schema_table_unique"
     spark_work_group: Optional[str] = None
+    spark_connect_max_sessions: Optional[int] = None
+    spark_connect_session_concurrency: Optional[int] = None
     s3_tmp_table_dir: Optional[str] = None
     # Unfortunately we can not just use dict, must be Dict because we'll get the following error:
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
+
+    def __post_init__(self) -> None:
+        # Surface mis-configured Spark Connect integer fields at profile-load
+        # time rather than waiting until a python model runs — the misconfig
+        # would otherwise only manifest once a Spark 3.5 model is submitted,
+        # potentially minutes into a long dbt run.
+        for field_name in ("spark_connect_max_sessions", "spark_connect_session_concurrency"):
+            raw = getattr(self, field_name)
+            if raw is None:
+                continue
+            if not _is_positive_int(raw):
+                raise DbtRuntimeError(
+                    f"{field_name} must be a positive integer (got {raw!r}). "
+                    "Omit the field to use the default."
+                )
+            setattr(self, field_name, int(raw))
 
     @property
     def type(self) -> str:
@@ -117,6 +143,8 @@ class AthenaCredentials(Credentials):
             "seed_s3_upload_args",
             "lf_tags_database",
             "spark_work_group",
+            "spark_connect_max_sessions",
+            "spark_connect_session_concurrency",
         )
 
 
@@ -343,6 +371,20 @@ class AthenaConnectionManager(SQLConnectionManager):
                 LOGGER.debug(f"There was an error parsing query stats {err}")
                 return -1, 0
         return cursor.rowcount, cursor.data_scanned_in_bytes
+
+    def cleanup_all(self) -> None:
+        # Release DPUs immediately instead of waiting for the 10-min idle timeout.
+        # Lazy import keeps SQL-only users from paying for pyspark imports.
+        from dbt_common.invocation import get_invocation_id
+
+        from dbt.adapters.athena.spark_connect.session import (
+            SparkConnectSessionPool,
+        )
+
+        # Scope to this invocation; the singleton is shared across invocations
+        # in dbt Cloud workers and test harnesses.
+        SparkConnectSessionPool().terminate_by_invocation(get_invocation_id())
+        super().cleanup_all()
 
     def cancel(self, connection: Connection) -> None:
         pass

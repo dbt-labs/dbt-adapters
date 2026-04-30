@@ -1732,3 +1732,42 @@ class TestAthenaAdapterConversions(TestAdapterConversions):
         expected = ["date", "date", "date"]
         for col_idx, expect in enumerate(expected):
             assert AthenaAdapter.convert_date_type(agate_table, col_idx) == expect
+
+
+class TestGeneratePythonSubmissionResponse:
+    """generate_python_submission_response surfaces Spark metrics to run_results.json.
+
+    The method is pure (does not read adapter state), so we invoke it as an
+    unbound function via a minimal mock instance rather than spinning up a
+    full AthenaAdapter with credentials.
+    """
+
+    @pytest.fixture
+    def adapter(self):
+        return mock.MagicMock(spec=AthenaAdapter)
+
+    def _call(self, adapter, submission_result):
+        return AthenaAdapter.generate_python_submission_response(adapter, submission_result)
+
+    def test_returns_error_response_when_submission_result_is_empty(self, adapter):
+        response = self._call(adapter, None)
+        assert response._message == "ERROR"
+        assert response.spark_session_id is None
+
+    def test_returns_ok_response_with_session_id(self, adapter):
+        response = self._call(adapter, {"SparkSessionId": "abc-123"})
+        assert response._message == "OK"
+        assert response.spark_session_id == "abc-123"
+
+    def test_returns_ok_response_for_spark_connect_result(self, adapter):
+        response = self._call(
+            adapter,
+            {"SparkConnect": True, "SparkSessionId": "spark-connect-session"},
+        )
+        assert response._message == "OK"
+        assert response.spark_session_id == "spark-connect-session"
+
+    def test_handles_non_dict_submission_result(self, adapter):
+        response = self._call(adapter, "truthy")
+        assert response._message == "OK"
+        assert response.spark_session_id is None

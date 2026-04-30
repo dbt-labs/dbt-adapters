@@ -9,6 +9,7 @@ from dbt.adapters.athena.config import AthenaSparkSessionConfig
 from dbt.adapters.athena.connections import AthenaCredentials
 from dbt.adapters.athena.constants import LOGGER
 from dbt.adapters.athena.session import AthenaSparkSessionManager
+from dbt.adapters.athena.spark_connect import SparkConnectSubmitter
 from dbt.adapters.base import PythonJobHelper
 
 SUBMISSION_LANGUAGE = "python"
@@ -31,6 +32,7 @@ class AthenaPythonJobHelper(PythonJobHelper):
             credentials (AthenaCredentials): Credentials for Athena connection.
         """
         self.relation_name = parsed_model.get("relation_name", None)
+        self.credentials = credentials
         self.config = AthenaSparkSessionConfig(
             parsed_model.get("config", {}),
             polling_interval=credentials.poll_interval,
@@ -107,22 +109,32 @@ class AthenaPythonJobHelper(PythonJobHelper):
         """
         Submit a calculation to Athena.
 
-        This function submits a calculation to Athena for execution using the provided compiled code.
-        It starts a calculation execution with the current session ID and the compiled code as the code block.
-        The function then polls until the calculation execution is completed, and retrieves the result.
-        If the execution is successful and completed, the result S3 URI is returned. Otherwise, a DbtRuntimeError
-        is raised with the execution status.
+        For PySpark engine version 3, executes via the Calculations API
+        (StartCalculationExecution).  For Apache Spark 3.5+, delegates to
+        ``SparkConnectSubmitter`` which executes via Spark Connect over a
+        gRPC channel obtained from GetSessionEndpoint.
 
         Args:
             compiled_code (str): The compiled code to submit for execution.
 
         Returns:
-            dict: The result S3 URI if the execution is successful and completed.
+            dict: The execution result.
 
         Raises:
             DbtRuntimeError: If the execution ends in a state other than "COMPLETED".
 
         """
+        if self.config.is_spark_connect:
+            return SparkConnectSubmitter(
+                athena_client=self.athena_client,
+                credentials=self.credentials,
+                config=self.config,
+                engine_config=self.engine_config,
+                timeout=self.timeout,
+                polling_interval=self.polling_interval,
+                relation_name=self.relation_name,
+            ).submit(compiled_code)
+
         # Seeing an empty calculation along with main python model code calculation is submitted for almost every model
         # Also, if not returning the result json, we are getting green ERROR messages instead of OK messages.
         # And with this handling, the run model code in target folder every model under run folder seems to be empty
@@ -173,19 +185,27 @@ class AthenaPythonJobHelper(PythonJobHelper):
             )
             if execution_status == "COMPLETED":
                 try:
-                    result = self.athena_client.get_calculation_execution(
-                        CalculationExecutionId=calculation_execution_id
-                    )["Result"]
+                    result = (
+                        self.athena_client.get_calculation_execution(
+                            CalculationExecutionId=calculation_execution_id
+                        ).get("Result")
+                        or {}
+                    )
+                    result["SparkSessionId"] = self.session_id
                 except Exception as e:
                     LOGGER.error(f"Unable to retrieve results: Got: {e}")
-                    result = {}
+                    result = {"SparkSessionId": self.session_id}
             return result
         else:
+            # dbt submits an empty "ghost" calculation alongside every python
+            # model to keep the adapter response shape consistent.  This
+            # branch returns placeholder data without hitting Athena.
             return {
                 "ResultS3Uri": "string",
                 "ResultType": "string",
                 "StdErrorS3Uri": "string",
                 "StdOutS3Uri": "string",
+                "SparkSessionId": self.session_id,
             }
 
     def poll_until_session_idle(self) -> None:
