@@ -171,7 +171,7 @@
 
     {%- if strategy.hard_deletes == 'new_record' %}
         {% set snapshotted_cols = get_list_of_column_names(get_columns_in_relation(target_relation)) %}
-        {% set source_sql_cols = get_column_schema_from_query(source_sql) %}
+        {% set source_col_names = get_columns_in_query(source_sql) %}
     ,
     deletion_records as (
 
@@ -181,11 +181,11 @@
                 If a column has been added to the source it won't yet exist in the
                 snapshotted table so we insert a null value as a placeholder for the column.
              */#}
-            {%- for col in source_sql_cols -%}
-            {%- if col.name in snapshotted_cols -%}
-            snapshotted_data.{{ adapter.quote(col.column) }},
+            {%- for col_name in source_col_names -%}
+            {%- if col_name in snapshotted_cols -%}
+            snapshotted_data.{{ adapter.quote(col_name) }},
             {%- else -%}
-            {{ safe_cast('NULL', col.dtype) }} as {{ adapter.quote(col.column) }},
+            source_data.{{ adapter.quote(col_name) }},
             {%- endif -%}
             {% endfor -%}
             {%- if strategy.unique_key | is_list -%}
