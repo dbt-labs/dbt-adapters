@@ -5,10 +5,12 @@ from unittest.mock import patch, MagicMock, Mock, ANY
 
 import dbt.adapters
 import google.cloud.bigquery
+from google.api_core.exceptions import Conflict, NotFound
 
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
+from dbt_common.exceptions import DbtRuntimeError
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -330,3 +332,43 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         # Clean up
         self.mock_connection._bq_model_timeout = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_recovers_on_409_conflict(self, MockQueryJobConfig):
+        """Test that 409 Conflict triggers get_job recovery and the recovered job is polled."""
+        self.mock_client.query.side_effect = Conflict("Already Exists: Job project:job_123")
+
+        recovered_job = Mock(job_id="job_123", location="US", project="project", state="DONE")
+        recovered_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = recovered_job
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="job_123",
+        )
+
+        self.mock_client.get_job.assert_called_once_with(
+            "job_123",
+            timeout=self.credentials.job_creation_timeout_seconds,
+        )
+        recovered_job.result.assert_called_once()
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_conflict_recovery_failure_raises(self, MockQueryJobConfig):
+        """Test that failed get_job after 409 Conflict raises DbtRuntimeError with original cause."""
+        self.mock_client.query.side_effect = Conflict("Already Exists: Job project:job_123")
+        self.mock_client.get_job.side_effect = NotFound("Job not found")
+
+        with self.assertRaises(DbtRuntimeError) as ctx:
+            self.connections._query_and_results(
+                self.mock_connection,
+                "SELECT 1",
+                {"dry_run": False},
+                job_id="job_123",
+            )
+
+        self.assertIn("job_123", str(ctx.exception))
+        self.assertIn("failed to recover", str(ctx.exception).lower())
+        self.assertIsInstance(ctx.exception.__cause__, Conflict)
