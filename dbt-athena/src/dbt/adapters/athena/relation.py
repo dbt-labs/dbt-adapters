@@ -123,17 +123,18 @@ def get_table_type(table: TableTypeDef) -> TableType:
         filter(None, [table.get("CatalogId"), table.get("DatabaseName"), table["Name"]])
     )
 
-    input_table_type = table.get("TableType")
-    if input_table_type and input_table_type not in RELATION_TYPE_MAP:
-        raise ValueError(
-            f"Table type {table['TableType']} is not supported for table {table_full_name}"
-        )
-
+    # check for iceberg first - s3 table bucket tables report TableType="customer"
+    # which is not in RELATION_TYPE_MAP, but Parameters.table_type is set to "ICEBERG"
     if table.get("Parameters", {}).get("table_type", "").lower() == "iceberg":
         _type = TableType.ICEBERG
-    elif not input_table_type:
-        raise ValueError(f"Table type cannot be None for table {table_full_name}")
     else:
+        input_table_type = table.get("TableType")
+        if not input_table_type:
+            raise ValueError(f"Table type cannot be None for table {table_full_name}")
+        if input_table_type not in RELATION_TYPE_MAP:
+            raise ValueError(
+                f"Table type {table['TableType']} is not supported for table {table_full_name}"
+            )
         _type = RELATION_TYPE_MAP[input_table_type]
 
     LOGGER.debug(f"table_name : {table_full_name}")

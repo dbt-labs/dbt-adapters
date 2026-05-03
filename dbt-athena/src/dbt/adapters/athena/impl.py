@@ -838,7 +838,15 @@ class AthenaAdapter(SQLAdapter):
             info_schema_name_map.add(relation)
         return info_schema_name_map
 
-    def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
+    def _get_data_catalog(self, database: Optional[str]) -> Optional[DataCatalogTypeDef]:
+        if not database:
+            return None
+        # normalize before hitting cache to avoid duplicate entries for quoted/unquoted variants
+        database = database.strip('"')
+        return self._get_data_catalog_cached(database)
+
+    @lru_cache()
+    def _get_data_catalog_cached(self, database: str) -> Optional[DataCatalogTypeDef]:
         if database:
             conn = self.connections.get_thread_connection()
             creds = conn.credentials
@@ -860,6 +868,20 @@ class AthenaAdapter(SQLAdapter):
                 )
             return athena.get_data_catalog(Name=database)["DataCatalog"]
         return None
+
+    @available
+    def is_s3_table_bucket(self, database: Optional[str]) -> bool:
+        """Detect if a database/catalog targets an S3 Table Bucket.
+
+        S3 Table Buckets are accessed via named Athena data catalogs registered with
+        --type GLUE --parameters catalog-id=<account>:s3tablescatalog/<bucket>.
+        Detection checks for 's3tablescatalog/' in the catalog-id parameter.
+        """
+        catalog = self._get_data_catalog(database)
+        if not catalog or catalog.get("Type") != "GLUE":
+            return False
+        catalog_id = catalog.get("Parameters", {}).get("catalog-id", "")
+        return "s3tablescatalog/" in catalog_id
 
     @available
     def list_relations_without_caching(
@@ -1299,9 +1321,15 @@ class AthenaAdapter(SQLAdapter):
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
 
+        data_catalog = self._get_data_catalog(database)
+        catalog_id = get_catalog_id(data_catalog)
+
         paginator = glue_client.get_paginator("get_databases")
+        kwargs = {}
+        if catalog_id:
+            kwargs["CatalogId"] = catalog_id
         result = []
-        for page in paginator.paginate():
+        for page in paginator.paginate(**kwargs):
             result.extend([schema["Name"] for schema in page["DatabaseList"]])
         return result
 

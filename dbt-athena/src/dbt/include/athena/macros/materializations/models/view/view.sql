@@ -1,4 +1,7 @@
 {% materialization view, adapter='athena' -%}
+    {%- if adapter.is_s3_table_bucket(database) -%}
+      {% do exceptions.raise_compiler_error("CREATE VIEW is not supported on S3 Table Bucket catalogs by AWS.") %}
+    {%- endif -%}
     {%- set identifier = model['alias'] -%}
     {%- set versions_to_keep = config.get('versions_to_keep', default=4) -%}
     {%- set target_relation = api.Relation.create(identifier=identifier,

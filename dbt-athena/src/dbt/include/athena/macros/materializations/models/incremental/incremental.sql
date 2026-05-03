@@ -1,8 +1,21 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
   {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
   {% set is_microbatch = raw_strategy == 'microbatch' %}
-  {% set table_type = config.get('table_type', default='hive') | lower %}
+  {% set raw_table_type = config.get('table_type') %}
+  {% set is_s3tb = adapter.is_s3_table_bucket(database) %}
+  {%- if is_s3tb and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
+    {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
+  {%- elif is_s3tb -%}
+    {%- set table_type = 'iceberg' -%}
+  {%- else -%}
+    {%- set table_type = (raw_table_type or 'hive') | lower -%}
+  {%- endif -%}
+  {# persist resolved table_type so downstream macros (e.g. on_schema_change) see it #}
+  {%- do config.update({'table_type': table_type}) -%}
   {% set model_language = model['language'] %}
+  {%- if is_s3tb and model_language == 'python' -%}
+    {% do exceptions.raise_compiler_error("Python models targeting S3 Table Buckets are not yet supported.") %}
+  {%- endif -%}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
   {% set versions_to_keep = config.get('versions_to_keep', 1) | as_number %}
@@ -67,7 +80,8 @@
   -- Must use s3_data_naming schema_table_unique in order to support high availability --
   -- on a full fresh for an incremental iceberg table --
   {%- elif (
-    should_full_refresh()
+    not is_s3tb
+    and should_full_refresh()
     and table_type == 'iceberg'
     and ('unique' not in s3_data_naming or external_location is not none)
   ) -%}
@@ -246,7 +260,9 @@
 
   {% do persist_docs(target_relation, model) %}
 
-  {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) %}
+  {%- if not is_s3tb -%}
+    {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) %}
+  {%- endif -%}
 
   {{ return({'relations': [target_relation]}) }}
 

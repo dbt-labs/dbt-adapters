@@ -5,13 +5,24 @@
 
 {% macro athena__create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false) -%}
   {%- set materialized = config.get('materialized', default='table') -%}
+  {%- set is_s3tb = adapter.is_s3_table_bucket(relation.database) -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- do log("Skip partitioning: " ~ skip_partitioning) -%}
   {%- set partitioned_by = config.get('partitioned_by', default=none) if not skip_partitioning else none -%}
   {%- set bucketed_by = config.get('bucketed_by', default=none) -%}
   {%- set bucket_count = config.get('bucket_count', default=none) -%}
   {%- set field_delimiter = config.get('field_delimiter', default=none) -%}
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
+  {%- set raw_table_type = config.get('table_type') -%}
+  {%- if is_s3tb and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
+    {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
+  {%- elif is_s3tb -%}
+    {%- set table_type = 'iceberg' -%}
+  {%- else -%}
+    {%- set table_type = (raw_table_type or 'hive') | lower -%}
+  {%- endif -%}
+  {%- if is_s3tb and language == 'python' -%}
+    {% do exceptions.raise_compiler_error("Python models targeting S3 Table Buckets are not yet supported.") %}
+  {%- endif -%}
   {%- set format = config.get('format', default='parquet') -%}
   {%- set write_compression = config.get('write_compression', default=none) -%}
   {%- set s3_data_dir = config.get('s3_data_dir', default=target.s3_data_dir) -%}
@@ -22,13 +33,17 @@
   {%- set location_property = 'external_location' -%}
   {%- set partition_property = 'partitioned_by' -%}
   {%- set work_group_output_location_enforced = adapter.is_work_group_output_location_enforced() -%}
-  {%- set location = adapter.generate_s3_location(relation,
-                                                 s3_data_dir,
-                                                 s3_data_naming,
-                                                 s3_tmp_table_dir,
-                                                 external_location,
-                                                 temporary,
-                                                 ) -%}
+  {%- if is_s3tb -%}
+    {%- set location = none -%}
+  {%- else -%}
+    {%- set location = adapter.generate_s3_location(relation,
+                                                   s3_data_dir,
+                                                   s3_data_naming,
+                                                   s3_tmp_table_dir,
+                                                   external_location,
+                                                   temporary,
+                                                   ) -%}
+  {%- endif -%}
   {%- set native_drop = config.get('native_drop', default=false) -%}
 
   {%- set contract_config = config.get('contract') -%}
@@ -36,7 +51,9 @@
     {{ get_assert_columns_equivalent(compiled_code) }}
   {%- endif -%}
 
-  {%- if native_drop and table_type == 'iceberg' -%}
+  {%- if is_s3tb -%}
+    {# s3 table buckets manage their own storage - skip s3 cleanup #}
+  {%- elif native_drop and table_type == 'iceberg' -%}
     {% do log('Config native_drop enabled, skipping direct S3 delete') %}
   {%- else -%}
     {% do adapter.delete_from_s3(location) %}
@@ -102,7 +119,7 @@
         {%- set bucket_count = none -%}
         {% do log(ignored_bucket_iceberg) %}
       {%- endif -%}
-      {%- if materialized == 'table' and ( 'unique' not in s3_data_naming or external_location is not none) -%}
+      {%- if not is_s3tb and materialized == 'table' and ( 'unique' not in s3_data_naming or external_location is not none) -%}
         {%- set error_unique_location_iceberg -%}
           You need to have an unique table location when creating Iceberg table since we use the RENAME feature
           to have near-zero downtime.
@@ -113,11 +130,13 @@
 
     create table {{ relation }}
     with (
+    {%- if not is_s3tb -%}
       table_type='{{ table_type }}',
       is_external={%- if table_type == 'iceberg' -%}false{%- else -%}true{%- endif %},
     {%- if not work_group_output_location_enforced or table_type == 'iceberg' -%}
       {{ location_property }}='{{ location }}',
     {%- endif %}
+    {%- endif -%}
     {%- if partitioned_by is not none %}
       {{ partition_property }}=ARRAY{{ partitioned_by | tojson | replace('\"', '\'') }},
     {%- endif %}
@@ -204,8 +223,11 @@
     {%- if language != 'sql' -%}
         {{ return(create_table_as(temporary, relation, compiled_code, language)) }}
     {%- elif force_batch -%}
+      {%- if adapter.is_s3_table_bucket(relation.database) -%}
+        {% do exceptions.raise_compiler_error("force_batch is not supported with S3 Table Buckets.") %}
+      {%- endif -%}
       {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
-      {%- set query_result = relation ~ ' with many partitions created' -%}
+      {%- set compiled_code_result = relation ~ ' with many partitions created' -%}
     {%- else -%}
         {%- if temporary -%}
           {%- do run_query(create_table_as(temporary, relation, compiled_code, language, true)) -%}
