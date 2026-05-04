@@ -122,3 +122,12 @@ class TestBigQueryScripting(SeedConfigBase):
             project.adapter, "incremental_overwrite_day_with_time_partition_expected"
         )
         assert created == expected
+
+
+class TestBigQueryScriptingTruthyNullsEquals(TestBigQueryScripting):
+    """Same scenario as TestBigQueryScripting but with the truthy-nulls equals
+    behavior flag enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
