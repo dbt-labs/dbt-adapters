@@ -76,6 +76,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
+    copy_grants: Optional[bool] = None
     immutable_where: Optional[str] = None
     transient: Optional[bool] = None
 
@@ -114,6 +115,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
+            "copy_grants": config_dict.get("copy_grants"),
             "immutable_where": config_dict.get("immutable_where"),
             "transient": config_dict.get("transient"),
         }
@@ -142,6 +144,7 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
             "cluster_by": cluster_by(relation_config),
+            "copy_grants": relation_config.config.extra.get("copy_grants"),  # type:ignore
             "immutable_where": relation_config.config.extra.get(  # type:ignore
                 "immutable_where"
             ),

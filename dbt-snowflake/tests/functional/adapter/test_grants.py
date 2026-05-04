@@ -62,3 +62,18 @@ class TestSnapshotGrants(BaseSnapshotGrants):
 
 class TestSnapshotCopyGrantsSnowflake(BaseCopyGrantsSnowflake, BaseSnapshotGrants):
     pass
+
+
+class TestDynamicTableCopyGrantsSnowflake(BaseCopyGrantsSnowflake):
+    """Test copy_grants functionality for dynamic tables"""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "+copy_grants": True,
+                "+materialized": "dynamic_table",
+                "+target_lag": "1 minute",
+                "+snowflake_warehouse": "DBT_TESTING_ALT",
+            },
+        }
