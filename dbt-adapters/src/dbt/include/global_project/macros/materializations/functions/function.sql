@@ -1,4 +1,4 @@
-{% materialization function, default, supported_languages=['sql', 'python'] %}
+{% materialization function, default, supported_languages=['sql', 'python', 'javascript'] %}
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.Function) %}
 
