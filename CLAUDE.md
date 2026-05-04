@@ -211,7 +211,7 @@ Extends `PostgresAdapter`. Uses `redshift_connector` (>=2.1.8,<2.2).
 
 **Auth providers:** `IAMRoleAuthProvider`, `BrowserIdentityCenterAuthProvider`
 
-**Behavior flag:** `REDSHIFT_USE_SHOW_APIS` in `impl.py` gates SHOW TABLES / SVV_* APIs vs legacy PostgreSQL catalog queries. Jinja: `redshift__use_show_apis()`. Python: `adapter.use_show_apis()`.
+**Datasharing:** The `datasharing` profile credential gates SHOW TABLES / SVV_* APIs vs legacy PostgreSQL catalog queries (required for cross-database operations). Jinja: `redshift__use_show_apis()`. Python: `adapter.use_show_apis()`.
 
 **Extra test command:** `hatch run integration-tests-flaky` (runs flaky tests sequentially)
 

@@ -49,7 +49,3 @@ class TestVerifyDatabase:
         adapter.config.credentials.datasharing = False
         with pytest.raises(dbt_common.exceptions.NotImplementedError, match="Cross-db"):
             adapter.verify_database("other_db")
-
-    def test_cross_db_allowed_with_show_apis_flag(self, adapter, mocker):
-        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=True)
-        assert adapter.verify_database("other_db") == ""
