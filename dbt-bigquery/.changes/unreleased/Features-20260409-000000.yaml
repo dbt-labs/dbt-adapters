@@ -1,0 +1,6 @@
+kind: Features
+body: Add `reservation` config option to the BigQuery adapter, enabling jobs to be routed to a specific BigQuery reservation at the target (profiles.yml), project (+reservation), or model level ({{ config(reservation=...) }})
+time: 2026-04-09T00:00:00.000000+00:00
+custom:
+  Author: max-ostapenko
+  Issue: "1228"

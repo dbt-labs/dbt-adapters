@@ -265,6 +265,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
+        model_reservation = getattr(conn, "_bq_model_reservation", None)
+        reservation = (
+            model_reservation if model_reservation is not None else conn.credentials.reservation
+        )
+
+        if reservation is not None:
+            job_params["reservation"] = reservation
+
         model_timeout = getattr(conn, "_bq_model_timeout", None)
         if model_timeout is not None:
             job_params["job_timeout_ms"] = int(model_timeout * 1000)

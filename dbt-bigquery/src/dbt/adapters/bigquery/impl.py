@@ -176,6 +176,7 @@ class BigqueryConfig(AdapterConfig):
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
+    reservation: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -283,17 +284,22 @@ class BigQueryAdapter(BaseAdapter):
         client.delete_table(from_table_ref)
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
-        """Override the connection's query execution timeout based on the model config"""
+        """Override the connection's query execution timeout and reservation based on the model config"""
         timeout = config.get("job_execution_timeout_seconds")
         if timeout is not None:
             conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = float(timeout)
+        reservation = config.get("reservation")
+        if reservation is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_reservation = reservation
         return timeout
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        conn = self.connections.get_thread_connection()
         if context is not None:
-            conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = None
+        conn._bq_model_reservation = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:

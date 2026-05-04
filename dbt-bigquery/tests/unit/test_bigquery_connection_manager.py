@@ -330,3 +330,84 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         # Clean up
         self.mock_connection._bq_model_timeout = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_uses_credential_reservation(self, MockQueryJobConfig):
+        """Test that reservation from credentials flows into job_params"""
+        self.credentials.reservation = (
+            "projects/project1/locations/US/reservations/test-reservation"
+        )
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = None
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/test-reservation",
+        )
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_uses_model_reservation(self, MockQueryJobConfig):
+        """Test that a model-level reservation stored on the connection flows into job_params"""
+        self.credentials.reservation = None
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = (
+            "projects/project1/locations/US/reservations/model-reservation"
+        )
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/model-reservation",
+        )
+        # Clean up
+        self.mock_connection._bq_model_reservation = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_model_reservation_overrides_credential(self, MockQueryJobConfig):
+        """Test that model-level reservation takes priority over credential-level"""
+        self.credentials.reservation = (
+            "projects/project1/locations/US/reservations/credential-reservation"
+        )
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = (
+            "projects/project1/locations/US/reservations/model-reservation"
+        )
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertEqual(
+            call_kwargs["reservation"],
+            "projects/project1/locations/US/reservations/model-reservation",
+        )
+        # Clean up
+        self.mock_connection._bq_model_reservation = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_no_reservation_when_not_set(self, MockQueryJobConfig):
+        """Test that reservation is absent from job_params when not configured"""
+        self.credentials.reservation = None
+        self.credentials.maximum_bytes_billed = None
+        self.mock_connection._bq_model_reservation = None
+        mock_job = Mock(job_id="job1", location="US", project="project1")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        call_kwargs = MockQueryJobConfig.call_args[1]
+        self.assertNotIn("reservation", call_kwargs)
