@@ -1,0 +1,6 @@
+kind: Features
+body: Add CATALOG_V2_CONFIGS class attribute on BaseAdapter so adapter packages can declare platform-specific catalogs.yml v2 schemas for parse-time validation
+time: 2026-04-29T23:17:18.000000+00:00
+custom:
+    Author: aahel
+    Issue: "12878"

@@ -10,3 +10,7 @@ from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogIntegration,
     IcebergRestCatalogRelation,
 )
+from dbt.adapters.snowflake.catalogs._v2 import (
+    HorizonSnowflakeConfig,
+    LinkedSnowflakeConfig,
+)

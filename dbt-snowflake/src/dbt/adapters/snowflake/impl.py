@@ -30,8 +30,10 @@ from dbt_common.utils import filter_null_values
 from dbt.adapters.snowflake import constants, parse_model
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
+    HorizonSnowflakeConfig,
     InfoSchemaCatalogIntegration,
     IcebergRestCatalogIntegration,
+    LinkedSnowflakeConfig,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
 
@@ -93,6 +95,12 @@ class SnowflakeAdapter(SQLAdapter):
         InfoSchemaCatalogIntegration,
         IcebergRestCatalogIntegration,
     ]
+    CATALOG_V2_CONFIGS = {
+        "horizon": HorizonSnowflakeConfig,
+        "glue": LinkedSnowflakeConfig,
+        "iceberg_rest": LinkedSnowflakeConfig,
+        "unity": LinkedSnowflakeConfig,
+    }
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,

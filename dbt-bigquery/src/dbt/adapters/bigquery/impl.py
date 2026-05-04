@@ -63,6 +63,7 @@ from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 
 from dbt.adapters.bigquery import constants, parse_model
 from dbt.adapters.bigquery.catalogs import (
+    BiglakeMetastoreBigqueryConfig,
     BigLakeCatalogIntegration,
     BigQueryInfoSchemaCatalogIntegration,
     BigQueryCatalogRelation,
@@ -193,6 +194,7 @@ class BigQueryAdapter(BaseAdapter):
     AdapterSpecificConfigs = BigqueryConfig
 
     CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
+    CATALOG_V2_CONFIGS = {"biglake_metastore": BiglakeMetastoreBigqueryConfig}
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,

@@ -1,0 +1,6 @@
+kind: Features
+body: Declare BiglakeMetastoreBigqueryConfig on BigQueryAdapter.CATALOG_V2_CONFIGS for parse-time validation of catalogs.yml v2
+time: 2026-04-29T23:17:18.000000+00:00
+custom:
+    Author: aahel
+    Issue: "12878"
