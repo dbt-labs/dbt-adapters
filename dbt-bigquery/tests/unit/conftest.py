@@ -6,11 +6,3 @@ settings.register_profile("ci", max_examples=200, suppress_health_check=[HealthC
 settings.register_profile("nightly", max_examples=1000)
 settings.register_profile("dev", max_examples=50)
 settings.load_profile(os.getenv("HYPOTHESIS_PROFILE", "ci"))
-
-from tests.unit.fixtures import (
-    adapter,
-    adapter_default_behaviour_flags,
-    behavior_flags,
-    config,
-    flags,
-)
