@@ -3,7 +3,6 @@ from typing import List
 from dbt.contracts.graph.manifest import Manifest
 from dbt.tests.util import write_file
 from dbt_common.events.base_types import BaseEvent
-from dbt_semantic_interfaces.type_enums.time_granularity import TimeGranularity
 import pytest
 
 from tests.functional.dbt_runner import dbtTestRunner
@@ -84,7 +83,7 @@ class TestSemanticModelPartialParsing:
         # Finally, verify that the manifest reflects the partially parsed change
         manifest = result.result
         semantic_model = manifest.semantic_models["semantic_model.test.revenue"]
-        assert semantic_model.dimensions[0].type_params.time_granularity == TimeGranularity.WEEK
+        assert semantic_model.dimensions[0].type_params.time_granularity.value == "week"
 
     def test_semantic_model_deleted_partial_parsing(self, project):
         # First, use the default schema.yml to define our semantic model, and
