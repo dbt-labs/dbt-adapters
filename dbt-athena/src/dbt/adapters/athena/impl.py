@@ -118,6 +118,7 @@ class AthenaConfig(AdapterConfig):
         force_batch: Skip creating the table as ctas and run the operation directly in batch insert mode.
         unique_tmp_table_suffix: Enforce the use of a unique id as tmp table suffix instead of __dbt_tmp.
         temp_schema: Define in which schema to create temporary tables used in incremental runs.
+        is_data_catalog_view: If True, create a Protected Multi Dialect View (Data Catalog View) instead of a standard view.
     """
 
     work_group: Optional[str] = None
@@ -141,6 +142,7 @@ class AthenaConfig(AdapterConfig):
     force_batch: bool = False
     unique_tmp_table_suffix: bool = False
     temp_schema: Optional[str] = None
+    is_data_catalog_view: bool = False
 
 
 class AthenaAdapter(SQLAdapter):
