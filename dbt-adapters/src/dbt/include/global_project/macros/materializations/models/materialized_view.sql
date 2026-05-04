@@ -56,7 +56,7 @@
 
     -- determine the scenario we're in: create, full_refresh, alter, refresh data
     {% if existing_relation is none %}
-        {% if contract_config and contract_config.enforced %}
+        {% if contract_config and contract_config.enforced and adapter.behavior.enforce_contract_on_materialized_view.no_warn %}
             {#-
               Enforce the model contract on initial creation. Most warehouses
               (postgres, redshift, bigquery, snowflake dynamic tables) do not
@@ -70,7 +70,7 @@
         {% endif %}
         {% set build_sql = get_create_materialized_view_as_sql(target_relation, sql) %}
     {% elif full_refresh_mode or not existing_relation.is_materialized_view %}
-        {% if contract_config and contract_config.enforced %}
+        {% if contract_config and contract_config.enforced and adapter.behavior.enforce_contract_on_materialized_view.no_warn %}
             {{ get_assert_columns_equivalent(sql) }}
         {% endif %}
         {% set build_sql = get_replace_sql(existing_relation, target_relation, sql) %}
