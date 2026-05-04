@@ -283,6 +283,31 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     @available
+    def combine_show_tables_and_function_relations(
+        self,
+        table_and_view_relations: "agate.Table",
+        function_relations: "agate.Table",
+    ) -> "agate.Table":
+        """Combine table/view relations with function relations into a single agate.Table.
+
+        Uses explicit agate.Text() column types to avoid type inference issues when
+        function_relations is empty (no user-defined functions in the schema). An empty
+        agate table loaded from SQL has no rows to infer types from, so agate defaults
+        to Integer—which mismatches the explicit Text() types in table_and_view_relations
+        and causes agate.Table.merge() to raise DataTypeError.
+        """
+        all_rows = []
+        for row in table_and_view_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        for row in function_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        return agate.Table(
+            all_rows,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
+        )
+
+    @available
     def build_catalog_from_show_tables_and_svv_columns(
         self,
         show_tables_results: List["agate.Table"],
