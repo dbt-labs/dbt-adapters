@@ -6,6 +6,11 @@ import pytest
 
 class TestGetCatalog:
     @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
+
+    @pytest.fixture(scope="class")
     def my_schema(self, project, adapter):
         schema = adapter.Relation.create(
             database=project.database,
@@ -151,7 +156,12 @@ class TestGetCatalogDatasharing(TestGetCatalog):
         return {
             "test": {
                 "outputs": {
-                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                    "default": {
+                        **dbt_profile_target,
+                        "schema": unique_schema,
+                        "datasharing": True,
+                        "retry_all": True,
+                    }
                 },
                 "target": "default",
             }

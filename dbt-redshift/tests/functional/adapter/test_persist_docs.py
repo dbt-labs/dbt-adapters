@@ -28,18 +28,32 @@ models:
 
 
 class TestPersistDocs(BasePersistDocs):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
 
 
 class TestPersistDocsLateBinding(BasePersistDocsBase):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
+
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
@@ -74,6 +88,11 @@ class TestPersistDocsLateBinding(BasePersistDocsBase):
 
 
 class TestPersistDocsWithMaterializedView(BasePersistDocs):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        dbt_profile_target["retry_all"] = True
+        return {}
+
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
         return {"my_seed.csv": files.MY_SEED}
