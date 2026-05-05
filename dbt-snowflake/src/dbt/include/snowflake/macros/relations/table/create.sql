@@ -35,6 +35,36 @@
 {% endmacro %}
 
 
+{% macro snowflake__create_table_transient_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE TRANSIENT TABLE ... AS SELECT for use as an incremental
+    tmp relation. Unlike session-scoped temporary tables, transient tables
+    persist in the catalog (enabling Snowflake lineage tracking) but have no
+    fail-safe period, avoiding the storage costs of permanent tables.
+    https://docs.snowflake.com/en/sql-reference/sql/create-table
+-#}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace transient table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
+    {%- endif %}
+as (
+    {{ compiled_code }}
+    )
+;
+
+{%- endmacro %}
+
+
 {% macro snowflake__create_table_temporary_sql(relation, compiled_code) -%}
 {#-
     Implements CREATE TEMPORARY TABLE and CREATE TEMPORARY TABLE ... AS SELECT:
@@ -166,6 +196,7 @@ create or replace iceberg table {{ relation }}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
     catalog = 'SNOWFLAKE'  -- required, and always SNOWFLAKE for built-in Iceberg tables
     base_location = '{{ catalog_relation.base_location }}'
+    {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
     {{ optional('storage_serialization_policy', catalog_relation.storage_serialization_policy, "'")}}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
@@ -252,6 +283,7 @@ create iceberg table {{ relation }}
     {%- endif %}
     {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
@@ -321,6 +353,7 @@ create iceberg table {{ relation }} (
 )
 {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
 {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+{{ optional('iceberg_version', catalog_relation.iceberg_version) }}
 {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
 {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
 {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
