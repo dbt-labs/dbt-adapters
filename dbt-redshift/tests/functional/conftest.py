@@ -15,7 +15,7 @@ def dbt_profile_target():
         "pass": os.getenv("REDSHIFT_TEST_PASS"),
         "region": os.getenv("REDSHIFT_TEST_REGION"),
         "threads": 1,
-        "retries": 6,
+        "retries": 3,
         "retry_all": True,
         "tcp_keepalive": True,
         "tcp_keepalive_idle": 200,
