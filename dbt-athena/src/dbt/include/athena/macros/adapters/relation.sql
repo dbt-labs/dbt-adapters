@@ -1,7 +1,7 @@
 {% macro athena__drop_relation(relation) -%}
   {%- set native_drop = config.get('native_drop', default=false) -%}
 
-  {%- if adapter.is_s3_table_bucket(relation.database) -%}
+  {%- if is_s3_table_bucket(relation.database) -%}
     {%- if native_drop -%}
       {% do log('native_drop is ignored for S3 Table Bucket targets — SQL DROP TABLE is not supported by AWS. Using Glue API deletion.', info=True) %}
     {%- endif -%}
@@ -61,7 +61,7 @@
 {% endmacro %}
 
 {% macro athena__rename_relation(from_relation, to_relation) %}
-  {%- if adapter.is_s3_table_bucket(from_relation.database) -%}
+  {%- if is_s3_table_bucket(from_relation.database) -%}
     {% do exceptions.raise_compiler_error("ALTER TABLE RENAME is not supported on S3 Table Bucket catalogs by AWS.") %}
   {%- endif -%}
   {% call statement('rename_relation') -%}

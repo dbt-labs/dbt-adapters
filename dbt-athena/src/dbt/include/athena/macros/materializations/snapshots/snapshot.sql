@@ -126,7 +126,7 @@
   {%- set strategy_name = config.get('strategy') -%}
   {%- set file_format = config.get('file_format', 'parquet') -%}
   {%- set raw_table_type = config.get('table_type') -%}
-  {%- set is_s3_table = adapter.is_s3_table_bucket(model.database) -%}
+  {%- set is_s3_table = is_s3_table_bucket(model.database) -%}
   {%- if is_s3_table and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
     {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
   {%- elif is_s3_table -%}

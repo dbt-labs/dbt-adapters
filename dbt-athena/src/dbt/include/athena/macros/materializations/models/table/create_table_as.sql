@@ -5,7 +5,7 @@
 
 {% macro athena__create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false) -%}
   {%- set materialized = config.get('materialized', default='table') -%}
-  {%- set is_s3_table = adapter.is_s3_table_bucket(relation.database) -%}
+  {%- set is_s3_table = is_s3_table_bucket(relation.database) -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- do log("Skip partitioning: " ~ skip_partitioning) -%}
   {%- set partitioned_by = config.get('partitioned_by', default=none) if not skip_partitioning else none -%}
@@ -223,7 +223,7 @@
     {%- if language != 'sql' -%}
         {{ return(create_table_as(temporary, relation, compiled_code, language)) }}
     {%- elif force_batch -%}
-      {%- if adapter.is_s3_table_bucket(relation.database) -%}
+      {%- if is_s3_table_bucket(relation.database) -%}
         {% do exceptions.raise_compiler_error("force_batch is not supported with S3 Table Buckets.") %}
       {%- endif -%}
       {%- do create_table_as_with_partitions(temporary, relation, compiled_code, language) -%}
