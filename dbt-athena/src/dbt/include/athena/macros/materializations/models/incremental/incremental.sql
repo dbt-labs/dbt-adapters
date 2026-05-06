@@ -79,6 +79,8 @@
   -- Running in full refresh, support High Availability for Iceberg table type --
   -- Must use s3_data_naming schema_table_unique in order to support high availability --
   -- on a full fresh for an incremental iceberg table --
+  {# S3TB full-refresh drops and recreates in the table namespace;
+     the user cannot control external_location or s3_data_naming #}
   {%- elif (
     not is_s3_table
     and should_full_refresh()

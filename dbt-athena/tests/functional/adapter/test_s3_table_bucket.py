@@ -21,6 +21,7 @@ pytestmark = pytest.mark.skipif(
 
 
 TABLE_MODEL = """
+{# table_type intentionally omitted to prove S3TB auto-detection forces Iceberg #}
 {{ config(
     materialized='table',
     format='parquet'
