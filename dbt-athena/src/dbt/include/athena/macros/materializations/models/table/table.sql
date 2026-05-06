@@ -7,10 +7,10 @@
   {%- set lf_grants = config.get('lf_grants') -%}
 
   {%- set raw_table_type = config.get('table_type') -%}
-  {%- set is_s3tb = adapter.is_s3_table_bucket(database) -%}
-  {%- if is_s3tb and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
+  {%- set is_s3_table = adapter.is_s3_table_bucket(database) -%}
+  {%- if is_s3_table and raw_table_type is not none and raw_table_type | lower == 'hive' -%}
     {% do exceptions.raise_compiler_error("S3 Table Buckets only support Iceberg tables. Set table_type='iceberg' or omit it.") %}
-  {%- elif is_s3tb -%}
+  {%- elif is_s3_table -%}
     {%- set table_type = 'iceberg' -%}
   {%- else -%}
     {%- set table_type = (raw_table_type or 'hive') | lower -%}
@@ -30,7 +30,7 @@
   {%- set versions_to_keep = config.get('versions_to_keep', default=4) -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- set force_batch = config.get('force_batch', False) | as_bool -%}
-  {%- if is_s3tb and language == 'python' -%}
+  {%- if is_s3_table and language == 'python' -%}
     {% do exceptions.raise_compiler_error("Python models targeting S3 Table Buckets are not yet supported.") %}
   {%- endif -%}
   {%- set target_relation = api.Relation.create(identifier=identifier,
@@ -102,7 +102,7 @@
     {%- endif -%}
   {%- else -%}
 
-    {%- if is_s3tb -%}
+    {%- if is_s3_table -%}
       -- s3 table buckets: drop-and-recreate (ALTER TABLE RENAME not supported by AWS)
       {%- if old_relation is not none -%}
         {{ drop_relation(old_relation) }}
