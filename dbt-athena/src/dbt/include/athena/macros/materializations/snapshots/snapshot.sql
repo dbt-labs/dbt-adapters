@@ -134,6 +134,8 @@
   {%- else -%}
     {%- set table_type = raw_table_type or 'hive' -%}
   {%- endif -%}
+  {# persist resolved table_type so downstream macros see it #}
+  {%- do config.update({'table_type': table_type}) -%}
 
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}

@@ -15,6 +15,8 @@
   {%- else -%}
     {%- set table_type = (raw_table_type or 'hive') | lower -%}
   {%- endif -%}
+  {# persist resolved table_type so downstream macros see it #}
+  {%- do config.update({'table_type': table_type}) -%}
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
   {%- set old_tmp_relation = adapter.get_relation(identifier=identifier ~ '__ha',
                                              schema=schema,
