@@ -1,0 +1,6 @@
+kind: Fixes
+body: Skip empty catalog tables before merge to prevent agate type conflicts during `dbt docs generate`
+time: 2026-04-13T12:00:00.000000+00:00
+custom:
+  Author: tauhidanjum
+  Issue: "1833"

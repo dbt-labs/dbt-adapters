@@ -66,3 +66,16 @@ show objects in {{ schema }}
 {%- do return(_sql) -%}
 
 {% endmacro %}
+
+
+{% macro snowflake__list_function_relations_without_caching(schema_relation) %}
+
+    {%- if schema_relation is string -%}
+        {%- set schema = schema_relation -%}
+    {%- else -%}
+        {%- set schema = schema_relation.include(identifier=False) -%}
+    {%- endif -%}
+
+    {%- do return(run_query("show functions in " ~ schema)) -%}
+
+{% endmacro %}

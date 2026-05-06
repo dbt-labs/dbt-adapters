@@ -23,6 +23,7 @@ import google.auth
 import google.oauth2
 import google.cloud.bigquery
 from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
+from google.cloud.bigquery.routine import RoutineType
 import google.cloud.exceptions
 import pytz
 
@@ -384,11 +385,18 @@ class BigQueryAdapter(BaseAdapter):
             #       won't need to do this
             max_results=100000,
         )
+        all_routines = client.list_routines(dataset_ref)
 
         # This will 404 if the dataset does not exist. This behavior mirrors
         # the implementation of list_relations for other adapters
         try:
-            return [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            function_relations = [
+                relation
+                for routine in all_routines
+                if (relation := self._bq_routine_to_relation(routine)) is not None
+            ]  # type: ignore[misc]
+            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
@@ -407,7 +415,21 @@ class BigQueryAdapter(BaseAdapter):
             table = self.connections.get_bq_table(database, schema, identifier)
         except google.api_core.exceptions.NotFound:
             table = None
-        return self._bq_table_to_relation(table)
+
+        if table is not None:
+            return self._bq_table_to_relation(table)
+
+        # Fall back to checking if it's a routine (function/procedure)
+        connection = self.connections.get_thread_connection()
+        client = connection.handle
+        routine_ref = google.cloud.bigquery.RoutineReference.from_string(
+            f"{database}.{schema}.{identifier}"
+        )
+        try:
+            routine = client.get_routine(routine_ref)
+        except google.api_core.exceptions.NotFound:
+            routine = None
+        return self._bq_routine_to_relation(routine)
 
     # BigQuery added SQL support for 'create schema' + 'drop schema' in March 2021
     # Unfortunately, 'drop schema' runs into permissions issues during tests
@@ -562,6 +584,21 @@ class BigQueryAdapter(BaseAdapter):
             type=self.RELATION_TYPES.get(
                 bq_table.table_type, RelationType.External
             ),  # type:ignore
+        )
+
+    def _bq_routine_to_relation(self, bq_routine) -> Union[BigQueryRelation, None]:
+        if bq_routine is None:
+            return None
+
+        if bq_routine.type_ == RoutineType.PROCEDURE:
+            return None
+
+        return self.Relation.create(
+            database=bq_routine.project,
+            schema=bq_routine.dataset_id,
+            identifier=bq_routine.routine_id,
+            quote_policy={"schema": True, "identifier": True},
+            type=RelationType.Function,  # type: ignore[arg-type]
         )
 
     @classmethod
