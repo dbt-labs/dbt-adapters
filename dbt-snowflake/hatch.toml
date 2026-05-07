@@ -11,7 +11,7 @@ pre-install-commands = [
     "pip install -e ../dbt-tests-adapter",
 ]
 dependencies = [
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
+    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@main",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     "ddtrace<=3.17",
     "ipdb~=0.13.13",
@@ -66,7 +66,7 @@ docker-prod = "docker build -f docker/Dockerfile -t dbt-snowflake ."
 
 [envs.ci]
 pre-install-commands = [
-    "pip install git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
+    "pip install git+https://github.com/dbt-labs/dbt-common.git",
     "pip install -e ../dbt-adapters",
     "pip install git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     "pip install -e ../dbt-adapters",

@@ -29,7 +29,7 @@ classifiers = [
 ]
 dependencies=[
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git@ash2shukla/feat/py-3-14-compat#subdirectory=dbt-adapters",
-    "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git@ash2shukla/fix/py-3-14-compat",
+    "dbt-common>=1.0.0,<2.0",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@ash2shukla/feat/py-3-14-compat#subdirectory=core",
     "boto3>=1.28",
