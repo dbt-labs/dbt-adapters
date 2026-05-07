@@ -1,4 +1,3 @@
-#! /bin/bash
 set -e
 
 SPARK_VERSION=3.1.3
