@@ -4,7 +4,6 @@ from dbt.adapters.events.types import SQLQuery
 from dbt.artifacts.schemas.results import RunStatus
 from dbt.exceptions import ParsingError
 from dbt.tests.adapter.functions.test_js_udfs import (
-    BasicJSAggregateUDF,
     BasicJSUDF,
     JSUDFDefaultArgSupport,
     JSUDFDeterministicVolatility,

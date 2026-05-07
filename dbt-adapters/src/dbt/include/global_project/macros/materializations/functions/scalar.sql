@@ -58,8 +58,11 @@
 {% endmacro %}
 
 {% macro default__scalar_function_volatility_javascript() %}
-    {% set msg = "Volatility is not supported by " ~ adapter.type() ~ " in javascript UDF and will be ignored" %}
-    {% do exceptions.warn(msg) %}
+    {% set volatility = model.config.get('volatility') %}
+    {% if volatility != none %}
+        {% set msg = "Volatility is not supported by " ~ adapter.type() ~ " in javascript UDF and will be ignored" %}
+        {% do exceptions.warn(msg) %}
+    {% endif %}
 {% endmacro %}
 
 {% macro default__scalar_function_volatility_sql() %}

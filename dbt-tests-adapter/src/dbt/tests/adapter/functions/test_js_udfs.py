@@ -13,8 +13,8 @@ from dbt_common.events.event_catcher import EventCatcher
 class JSUDFBase:
     """Fixture-only base class for JavaScript scalar UDF tests."""
 
-    expected_language_keyword = ""
-    expected_body_delimiter = ""
+    expected_language_keyword = None
+    expected_body_delimiter = None
 
     @pytest.fixture(scope="class")
     def functions(self):
@@ -69,7 +69,7 @@ class BasicJSUDF(JSUDFBase):
 class JSUDFMultiLineBody:
     """Test a JS UDF with multi-line body (mask_pii)."""
 
-    expected_language_keyword = ""
+    expected_language_keyword = None
 
     @pytest.fixture(scope="class")
     def functions(self):
@@ -232,7 +232,7 @@ class JSUDFDefaultArgSupport(JSUDFBase):
 class JSAggregateUDFBase:
     """Fixture-only base class for JS aggregate UDF tests."""
 
-    expected_language_keyword = ""
+    expected_language_keyword = None
 
     @pytest.fixture(scope="class")
     def functions(self):
