@@ -1,5 +1,3 @@
-import pytest
-
 from dbt.adapters.snowflake.impl import SnowflakeConfig
 
 
