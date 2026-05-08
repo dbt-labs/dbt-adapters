@@ -1,12 +1,10 @@
 """
 Tests for BigQuery snapshots with STRUCT and ARRAY columns using hard_deletes='new_record'.
 
-The default snapshot_staging_table macro has two issues on BigQuery:
-1. get_column_schema_from_query() flattens STRUCT fields, causing column count mismatches.
-2. Bare `NULL as col` is typed as INT64, incompatible with STRUCT/ARRAY columns.
-
-The bigquery__snapshot_staging_table override fixes both by using get_columns_in_query()
-(top-level names only) and source_data.<col> instead of NULL for new columns.
+The default snapshot_staging_table macro uses get_columns_in_query() (top-level names only)
+and source_data.<col> instead of NULL for new columns, which avoids:
+1. get_column_schema_from_query() flattening STRUCT fields and causing column count mismatches.
+2. Bare `NULL as col` being typed as INT64, incompatible with STRUCT/ARRAY columns.
 """
 
 import pytest
@@ -158,10 +156,10 @@ class TestSnapshotStructArrayHardDeletes(BaseSimpleSnapshotBase):
         """
         Add a new STRUCT column to fact, then delete rows and re-snapshot.
 
-        This exercises Change 2 of the fix: when a column exists in the source but
-        not yet in the snapshot, the default macro emits `NULL as col` which BigQuery
-        types as INT64 — incompatible with the STRUCT type in the other UNION ALL arms.
-        Our override uses `source_data.col` instead, preserving the correct type.
+        This accounts for the following issue: for columns that exist in the source but
+        not yet in the snapshot, the default macro uses `source_data.col` instead
+        of `NULL as col` — avoiding BigQuery typing bare NULL as INT64, which is
+        incompatible with STRUCT types in the other UNION ALL arms.
         """
         # Recreate fact with an additional STRUCT column not present in the snapshot.
         fact = relation_from_name(project.adapter, "fact")
