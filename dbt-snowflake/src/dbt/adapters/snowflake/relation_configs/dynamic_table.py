@@ -49,7 +49,8 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     - name: name of the dynamic table
     - query: the query behind the table
     - target_lag: the maximum amount of time that the dynamic table’s content should lag behind updates to the base tables
-    - snowflake_warehouse: the name of the warehouse that provides the compute resources for refreshing the dynamic table
+    - snowflake_warehouse: the name of the warehouse used to execute DDL (CREATE/ALTER); also used as the dynamic table's refresh warehouse when refresh_warehouse is not set
+    - refresh_warehouse: when set, used as the WAREHOUSE = parameter in the DDL (the table's self-refresh warehouse); snowflake_warehouse still executes the DDL
     - snowflake_initialization_warehouse: the name of the warehouse used for the initializations and reinitializations of the dynamic table
     - refresh_mode: specifies the refresh type for the dynamic table
     - initialize: specifies the behavior of the initial refresh of the dynamic table
@@ -68,14 +69,26 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     snowflake_warehouse: str
     target_lag: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     refresh_mode: Optional[RefreshMode] = RefreshMode.default()
     initialize: Optional[Initialize] = Initialize.default()
     scheduler: Optional[Scheduler] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     cluster_by: Optional[Union[str, list[str]]] = None
+    copy_grants: Optional[bool] = None
     immutable_where: Optional[str] = None
     transient: Optional[bool] = None
+
+    @property
+    def warehouse_parameter(self) -> str:
+        """The value used for the WAREHOUSE = parameter in CREATE/REPLACE DYNAMIC TABLE DDL.
+
+        When refresh_warehouse is set it is used here, so the dynamic table's self-refresh
+        runs on a different warehouse than the one executing the DDL (snowflake_warehouse).
+        When only snowflake_warehouse is set it serves both roles, preserving existing behaviour.
+        """
+        return self.refresh_warehouse or self.snowflake_warehouse
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -95,12 +108,14 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_initialization_warehouse": config_dict.get(
                 "snowflake_initialization_warehouse"
             ),
+            "refresh_warehouse": config_dict.get("refresh_warehouse"),
             "refresh_mode": config_dict.get("refresh_mode"),
             "initialize": config_dict.get("initialize"),
             "scheduler": config_dict.get("scheduler"),
             "row_access_policy": config_dict.get("row_access_policy"),
             "table_tag": config_dict.get("table_tag"),
             "cluster_by": config_dict.get("cluster_by"),
+            "copy_grants": config_dict.get("copy_grants"),
             "immutable_where": config_dict.get("immutable_where"),
             "transient": config_dict.get("transient"),
         }
@@ -121,11 +136,15 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_initialization_warehouse"
             ),
+            "refresh_warehouse": relation_config.config.extra.get(  # type:ignore
+                "refresh_warehouse"
+            ),
             "row_access_policy": relation_config.config.extra.get(  # type:ignore
                 "row_access_policy"
             ),
             "table_tag": relation_config.config.extra.get("table_tag"),  # type:ignore
             "cluster_by": cluster_by(relation_config),
+            "copy_grants": relation_config.config.extra.get("copy_grants"),  # type:ignore
             "immutable_where": relation_config.config.extra.get(  # type:ignore
                 "immutable_where"
             ),

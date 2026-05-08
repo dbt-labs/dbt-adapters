@@ -1,0 +1,6 @@
+kind: Fixes
+body: Normalize show objects results to avoid type inference edge cases
+time: 2026-04-03T15:50:52.842846-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1826"

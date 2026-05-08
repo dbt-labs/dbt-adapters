@@ -3,11 +3,13 @@ import pytest
 from dbt.adapters.redshift import RedshiftAdapter
 
 
-def _make_adapter(mocker, default_database="dev"):
+def _make_adapter(mocker, default_database="dev", use_show_apis=False):
     mock_config = mocker.MagicMock()
     mock_config.credentials.query_group = None
     mock_config.credentials.database = default_database
-    return RedshiftAdapter(mock_config, mocker.MagicMock())
+    adapter = RedshiftAdapter(mock_config, mocker.MagicMock())
+    mocker.patch.object(adapter, "use_show_apis", return_value=use_show_apis)
+    return adapter
 
 
 def _make_relation(mocker, database):
@@ -44,7 +46,7 @@ class TestSchemaOperations:
     """Unit tests for create_schema / drop_schema cross-database support."""
 
     def test_create_schema_cross_db_issues_use(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="other_db")
         mock_execute = mocker.patch.object(adapter, "execute")
         mock_super = mocker.patch("dbt.adapters.sql.SQLAdapter.create_schema")
@@ -56,7 +58,7 @@ class TestSchemaOperations:
         mock_execute.assert_any_call("RESET USE")
 
     def test_create_schema_same_db_no_use(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="dev")
         mock_execute = mocker.patch.object(adapter, "execute")
         mocker.patch("dbt.adapters.sql.SQLAdapter.create_schema")
@@ -65,8 +67,19 @@ class TestSchemaOperations:
 
         mock_execute.assert_not_called()
 
+    def test_create_schema_cross_db_skips_use_when_show_apis_disabled(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=False)
+        relation = _make_relation(mocker, database="other_db")
+        mock_execute = mocker.patch.object(adapter, "execute")
+        mock_super = mocker.patch("dbt.adapters.sql.SQLAdapter.create_schema")
+
+        adapter.create_schema(relation)
+
+        mock_execute.assert_not_called()
+        mock_super.assert_called_once_with(relation)
+
     def test_drop_schema_cross_db_issues_use(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="other_db")
         mock_execute = mocker.patch.object(adapter, "execute")
         mock_super = mocker.patch("dbt.adapters.sql.SQLAdapter.drop_schema")
@@ -78,7 +91,7 @@ class TestSchemaOperations:
         mock_execute.assert_any_call("RESET USE")
 
     def test_drop_schema_same_db_no_use(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="dev")
         mock_execute = mocker.patch.object(adapter, "execute")
         mocker.patch("dbt.adapters.sql.SQLAdapter.drop_schema")
@@ -87,8 +100,19 @@ class TestSchemaOperations:
 
         mock_execute.assert_not_called()
 
+    def test_drop_schema_cross_db_skips_use_when_show_apis_disabled(self, mocker):
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=False)
+        relation = _make_relation(mocker, database="other_db")
+        mock_execute = mocker.patch.object(adapter, "execute")
+        mock_super = mocker.patch("dbt.adapters.sql.SQLAdapter.drop_schema")
+
+        adapter.drop_schema(relation)
+
+        mock_execute.assert_not_called()
+        mock_super.assert_called_once_with(relation)
+
     def test_create_schema_resets_on_error(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="other_db")
         mock_execute = mocker.patch.object(adapter, "execute")
         mocker.patch(
@@ -102,7 +126,7 @@ class TestSchemaOperations:
         mock_execute.assert_any_call("RESET USE")
 
     def test_drop_schema_resets_on_error(self, mocker):
-        adapter = _make_adapter(mocker, default_database="dev")
+        adapter = _make_adapter(mocker, default_database="dev", use_show_apis=True)
         relation = _make_relation(mocker, database="other_db")
         mock_execute = mocker.patch.object(adapter, "execute")
         mocker.patch(

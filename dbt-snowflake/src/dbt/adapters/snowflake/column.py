@@ -7,6 +7,12 @@ from dbt_common.exceptions import DbtRuntimeError
 
 COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
 
+SNOWFLAKE_MAX_VARCHAR_LENGTH = 16777216
+ICEBERG_MAX_VARCHAR_LENGTH = 134217728
+ICEBERG_VARCHAR_PATTERN = re.compile(
+    r"\bVARCHAR\(" + str(ICEBERG_MAX_VARCHAR_LENGTH) + r"\)", re.IGNORECASE
+)
+
 
 @dataclass
 class SnowflakeColumn(Column):
@@ -44,7 +50,7 @@ class SnowflakeColumn(Column):
             raise DbtRuntimeError("Called string_size() on non-string field!")
 
         if self.dtype == "text" or self.char_size is None:
-            return 16777216
+            return SNOWFLAKE_MAX_VARCHAR_LENGTH
         else:
             return int(self.char_size)
 
@@ -68,9 +74,11 @@ class SnowflakeColumn(Column):
             NUMBER(38,0)
         """
 
-        # We want to pass through numeric parsing for composite types
+        # For composite types, skip numeric parsing and treat the type opaquely,
+        # only normalizing Iceberg-sized VARCHARs within the definition.
         if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
-            return cls(name, raw_data_type, None, None, None)
+            normalized = cls._normalize_iceberg_varchar(raw_data_type)
+            return cls(name, normalized, None, None, None)
 
         collation = None
         # Check if there's a COLLATE clause and extract it
@@ -92,6 +100,15 @@ class SnowflakeColumn(Column):
             numeric_precision=base_column.numeric_precision,
             numeric_scale=base_column.numeric_scale,
             collation=collation,
+        )
+
+    @staticmethod
+    def _normalize_iceberg_varchar(raw_data_type: str) -> str:
+        """Normalize Iceberg VARCHAR(134217728) to Snowflake VARCHAR(16777216) in composite types
+        (OBJECT, ARRAY, MAP, VECTOR)."""
+        return ICEBERG_VARCHAR_PATTERN.sub(
+            f"VARCHAR({SNOWFLAKE_MAX_VARCHAR_LENGTH})",
+            raw_data_type,
         )
 
     def is_array(self) -> bool:

@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix expiration_timestamp rendered as unquoted Python datetime in materialized
+  view OPTIONS clause, causing BigQuery syntax error; now formatted as TIMESTAMP literal
+time: 2026-03-13T01:00:00.000000+00:00
+custom:
+  Author: "mehdigati"
+  Issue: "1209"

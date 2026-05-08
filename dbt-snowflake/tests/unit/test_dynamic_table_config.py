@@ -1,6 +1,7 @@
 """
 Unit tests for SnowflakeDynamicTableConfig, testing:
 - snowflake_initialization_warehouse parameter
+- refresh_warehouse parameter and warehouse_parameter property
 - immutable_where parameter
 - transient parameter
 - scheduler parameter
@@ -16,6 +17,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
+    SnowflakeDynamicTableWarehouseConfigChange,
 )
 from dbt_common.exceptions import CompilationError
 
@@ -809,3 +811,202 @@ class TestSchedulerChangeDetectionLogic:
         assert changeset.scheduler is not None
         assert changeset.scheduler.context == "ENABLE"
         assert changeset.requires_full_refresh is False
+
+
+class TestRefreshWarehouseOptional:
+    """Tests to verify refresh_warehouse is an optional parameter."""
+
+    def test_refresh_warehouse_is_optional(self):
+        """refresh_warehouse should be optional and default to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_EXECUTION_WH",
+            }
+        )
+        assert config.refresh_warehouse is None
+
+    def test_refresh_warehouse_can_be_set(self):
+        """refresh_warehouse can be set independently of snowflake_warehouse."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_LARGE_EXECUTION_WH",
+                "refresh_warehouse": "MY_SMALL_REFRESH_WH",
+            }
+        )
+        assert config.snowflake_warehouse == "MY_LARGE_EXECUTION_WH"
+        assert config.refresh_warehouse == "MY_SMALL_REFRESH_WH"
+
+    def test_warehouse_parameter_falls_back_to_snowflake_warehouse(self):
+        """warehouse_parameter returns snowflake_warehouse when refresh_warehouse is not set."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+            }
+        )
+        assert config.warehouse_parameter == "MY_WH"
+
+    def test_warehouse_parameter_uses_refresh_warehouse_when_set(self):
+        """warehouse_parameter returns refresh_warehouse when it is set."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_LARGE_EXECUTION_WH",
+                "refresh_warehouse": "MY_SMALL_REFRESH_WH",
+            }
+        )
+        assert config.warehouse_parameter == "MY_SMALL_REFRESH_WH"
+
+    def test_refresh_warehouse_can_be_explicit_none(self):
+        """refresh_warehouse can be explicitly set to None."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "snowflake_warehouse": "MY_WH",
+                "refresh_warehouse": None,
+            }
+        )
+        assert config.refresh_warehouse is None
+        assert config.warehouse_parameter == "MY_WH"
+
+
+class TestRefreshWarehouseChangeset:
+    """Tests for refresh_warehouse change detection via warehouse_parameter comparison."""
+
+    def test_changeset_without_warehouse_change_has_no_changes(self):
+        """A changeset with no warehouse change should not have changes."""
+        changeset = SnowflakeDynamicTableConfigChangeset()
+        assert changeset.snowflake_warehouse is None
+        assert not changeset.has_changes
+        assert not changeset.requires_full_refresh
+
+    def test_changeset_with_warehouse_change_does_not_require_full_refresh(self):
+        """A warehouse changeset entry should have changes but not require full refresh."""
+        changeset = SnowflakeDynamicTableConfigChangeset(
+            snowflake_warehouse=SnowflakeDynamicTableWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,
+                context="NEW_REFRESH_WH",
+            )
+        )
+        assert changeset.snowflake_warehouse is not None
+        assert changeset.has_changes
+        assert not changeset.requires_full_refresh
+
+    @staticmethod
+    def _make_relation_results(warehouse="MY_WH"):
+        import agate
+
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": "1 hour",
+            "warehouse": warehouse,
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+        }
+        column_types = [agate.Text()] * len(dt_row_data)
+        return {
+            "dynamic_table": agate.Table(
+                [list(dt_row_data.values())],
+                list(dt_row_data.keys()),
+                column_types,
+            )
+        }
+
+    @staticmethod
+    def _make_relation_config(snowflake_warehouse="MY_WH", refresh_warehouse=None):
+        from unittest.mock import MagicMock
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        extra = {
+            "target_lag": "1 hour",
+            "snowflake_warehouse": snowflake_warehouse,
+        }
+        if refresh_warehouse is not None:
+            extra["refresh_warehouse"] = refresh_warehouse
+        relation_config.config.extra = extra
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return relation_config
+
+    def test_no_refresh_warehouse_no_change(self):
+        """When refresh_warehouse is not set and the existing warehouse matches, no change."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(warehouse="MY_WH")
+        relation_config = self._make_relation_config(snowflake_warehouse="MY_WH")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_warehouse is None
+
+    def test_refresh_warehouse_differs_from_existing_triggers_change(self):
+        """Setting refresh_warehouse to a value different from the existing warehouse triggers a change."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        # Existing table has MY_WH as its refresh warehouse
+        relation_results = self._make_relation_results(warehouse="MY_WH")
+        # User now wants MY_SMALL_REFRESH_WH as the refresh warehouse
+        relation_config = self._make_relation_config(
+            snowflake_warehouse="MY_LARGE_WH",
+            refresh_warehouse="MY_SMALL_REFRESH_WH",
+        )
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.snowflake_warehouse is not None
+        assert changeset.snowflake_warehouse.context == "MY_SMALL_REFRESH_WH"
+        assert changeset.has_changes
+        assert not changeset.requires_full_refresh
+
+    def test_refresh_warehouse_matches_existing_no_change(self):
+        """When refresh_warehouse equals the existing warehouse, no change is detected."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(warehouse="MY_SMALL_WH")
+        relation_config = self._make_relation_config(
+            snowflake_warehouse="MY_LARGE_WH",
+            refresh_warehouse="MY_SMALL_WH",
+        )
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_warehouse is None

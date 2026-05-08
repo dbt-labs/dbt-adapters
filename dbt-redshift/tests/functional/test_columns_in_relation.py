@@ -55,10 +55,15 @@ class TestColumnsInRelationDatasharingOn(ColumnsInRelation):
         }
 
     @pytest.fixture(scope="class")
-    def profiles_config_update(self, dbt_profile_target):
-        outputs = {"default": dbt_profile_target}
-        outputs["default"]["datasharing"] = True
-        return outputs
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
+        }
 
     @pytest.fixture(scope="class")
     def expected_columns(self):

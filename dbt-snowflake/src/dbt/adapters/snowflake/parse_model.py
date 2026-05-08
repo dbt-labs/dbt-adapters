@@ -128,5 +128,13 @@ def table_format(model: RelationConfig) -> Optional[str]:
     return None
 
 
+def iceberg_version(model: RelationConfig) -> Optional[int]:
+    return (
+        model.config.get(SnowflakeIcebergTableRelationParameters.iceberg_version)
+        if model.config
+        else None
+    )
+
+
 def target_file_size(model: RelationConfig) -> Optional[str]:
     return model.config.get("target_file_size") if model.config else None

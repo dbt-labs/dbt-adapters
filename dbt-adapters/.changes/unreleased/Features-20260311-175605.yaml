@@ -1,7 +1,0 @@
-kind: Features
-body: Add packages support to default__get_function_python_options() so adapters can
-  template PyPI packages into Python UDF CREATE statements
-time: 2026-03-11T17:56:05.030321-05:00
-custom:
-  Author: QMalcolm
-  Issue: "1737"
