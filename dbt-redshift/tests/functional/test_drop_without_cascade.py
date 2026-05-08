@@ -10,7 +10,6 @@ file name, which contains the substring "cascade". We therefore use
 substring inside the schema name does not confound the assertion.
 """
 
-import os
 import re
 
 import pytest
@@ -66,19 +65,10 @@ class TestDropWithoutCascadeProfileLevel:
     """`drop_without_cascade=True` in the profile → DROP must omit CASCADE."""
 
     @pytest.fixture(scope="class")
-    def dbt_profile_target(self):
-        return {
-            "type": "redshift",
-            "host": os.getenv("REDSHIFT_TEST_HOST"),
-            "port": int(os.getenv("REDSHIFT_TEST_PORT", "5439")),
-            "dbname": os.getenv("REDSHIFT_TEST_DBNAME"),
-            "user": os.getenv("REDSHIFT_TEST_USER"),
-            "pass": os.getenv("REDSHIFT_TEST_PASS"),
-            "region": os.getenv("REDSHIFT_TEST_REGION"),
-            "threads": 1,
-            "retries": 6,
-            "drop_without_cascade": True,
-        }
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["drop_without_cascade"] = True
+        return outputs
 
     @pytest.fixture(scope="class")
     def models(self):

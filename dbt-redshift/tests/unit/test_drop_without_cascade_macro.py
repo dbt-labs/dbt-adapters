@@ -53,12 +53,10 @@ def _render(subdir, filename, macro_name, drop_without_cascade):
 def test_drop_macros_include_cascade_by_default():
     for subdir, filename, macro_name, prefix in DROP_MACROS:
         rendered = _render(subdir, filename, macro_name, False).strip()
-        assert rendered.startswith(prefix), rendered
-        assert rendered.endswith("cascade"), rendered
+        assert rendered == f"{prefix} cascade", rendered
 
 
 def test_drop_macros_omit_cascade_when_opted_in():
     for subdir, filename, macro_name, prefix in DROP_MACROS:
         rendered = _render(subdir, filename, macro_name, True).strip()
-        assert rendered.startswith(prefix), rendered
-        assert "cascade" not in rendered, rendered
+        assert rendered == prefix, rendered
