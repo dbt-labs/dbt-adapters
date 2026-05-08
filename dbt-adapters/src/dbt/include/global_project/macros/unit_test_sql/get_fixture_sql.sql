@@ -84,6 +84,11 @@ union all
 
         {%- set column_type = column_name_to_data_types[column_name] %}
 
+        {#-- For string fixture values, strip varchar length to prevent silent truncation (GH-11974) --#}
+        {%- if column_value is string and 'varying' in column_type -%}
+            {%- set column_type = column_type.split('(')[0] -%}
+        {%- endif -%}
+
         {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
         {%- set column_value_clean = column_value -%}
         {%- if column_value is string -%}

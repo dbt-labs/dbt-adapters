@@ -1,6 +1,6 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
+from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -13,6 +13,7 @@ from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
 )
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
@@ -61,12 +62,15 @@ class SnowflakeConfig(AdapterConfig):
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
+    copy_tags: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     immutable_where: Optional[str] = None
@@ -76,6 +80,7 @@ class SnowflakeConfig(AdapterConfig):
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
@@ -174,12 +179,14 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
-    def _get_warehouse(self) -> str:
+    def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
-            # can this happen?
-            raise DbtRuntimeError("Could not get current warehouse: no results")
-        return str(table[0][0])
+            return None
+        value = table[0][0]
+        if value is None or str(value).upper() == "NULL":
+            return None
+        return str(value)
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
@@ -296,6 +303,33 @@ class SnowflakeAdapter(SQLAdapter):
             stats=stats_dict,
         )
 
+    # Fixed type map for SHOW OBJECTS columns.  Without this, agate infers types
+    # per-page from the data (e.g. `rows`/`bytes` → Number for table pages but Text
+    # when all-NULL on view-only pages, and everything → Number when the page is
+    # empty), causing agate.Table.merge() to raise
+    # "columns with the same names, but different types".
+    _SHOW_OBJECTS_COLUMN_TYPES: ClassVar[Dict[str, "agate.DataType"]] = {
+        "created_on": agate.DateTime(),
+        "rows": agate.Number(),
+        "bytes": agate.Number(),
+    }
+
+    @available
+    def normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+        """
+        Rebuild a SHOW OBJECTS result page with a fixed column-type schema so that
+        all paginated pages are type-homogeneous before merging.  Known columns are
+        given their natural types; all other columns default to Text.
+        """
+        column_types = [
+            self._SHOW_OBJECTS_COLUMN_TYPES.get(name, agate.Text()) for name in table.column_names
+        ]
+        return agate.Table(
+            [list(row) for row in table.rows],
+            column_names=table.column_names,
+            column_types=column_types,
+        )
+
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:
@@ -303,6 +337,9 @@ class SnowflakeAdapter(SQLAdapter):
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
+            schema_functions = self.execute_macro(
+                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
             # Alternatively, we could query the list of schemas before we start
@@ -313,11 +350,31 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        tabular_columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
-        return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
+        tabular_relations = [
+            self._parse_list_relations_result(obj)
+            for obj in schema_objects.select(tabular_columns)
+        ]
+        function_relations = [
+            self._parse_list_function_relations_result(obj)
+            for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
+        ]
+        return tabular_relations + function_relations
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
@@ -344,6 +401,17 @@ class SnowflakeAdapter(SQLAdapter):
             identifier=identifier,
             type=relation_type,
             table_format=table_format,
+            quote_policy=quote_policy,
+        )
+
+    def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
+        return self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier=identifier,
+            type=self.Relation.Function,
             quote_policy=quote_policy,
         )
 
@@ -562,6 +630,8 @@ CALL {proc_name}();
         available_columns = [c.lower() for c in dt_table.column_names]
         if "initialization_warehouse" in available_columns:
             base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+        if "scheduler" in available_columns:
+            base_columns.append("scheduler")
 
         selected = dt_table.select(base_columns)
 

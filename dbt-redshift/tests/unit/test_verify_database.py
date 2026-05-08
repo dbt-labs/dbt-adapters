@@ -9,10 +9,10 @@ def adapter(mocker):
     mock_config = mocker.MagicMock()
     mock_config.credentials.database = "dev"
     mock_config.credentials.ra3_node = False
+    mock_config.credentials.datasharing = False
+    mock_config.flags = {}
     mock_mp_context = mocker.MagicMock()
-    adapter = RedshiftAdapter(mock_config, mock_mp_context)
-    adapter.use_show_apis = lambda: False
-    return adapter
+    return RedshiftAdapter(mock_config, mock_mp_context)
 
 
 class TestVerifyDatabase:
@@ -35,17 +35,21 @@ class TestVerifyDatabase:
         adapter.config.credentials.ra3_node = True
         assert adapter.verify_database("other_db") == ""
 
-    def test_cross_db_allowed_with_use_show_apis(self, adapter):
-        adapter.use_show_apis = lambda: True
+    def test_cross_db_allowed_with_datasharing(self, adapter):
+        adapter.config.credentials.datasharing = True
         assert adapter.verify_database("other_db") == ""
 
-    def test_cross_db_allowed_with_both_flags(self, adapter):
+    def test_cross_db_allowed_with_both_configs(self, adapter):
         adapter.config.credentials.ra3_node = True
-        adapter.use_show_apis = lambda: True
+        adapter.config.credentials.datasharing = True
         assert adapter.verify_database("other_db") == ""
 
-    def test_cross_db_blocked_without_either_flag(self, adapter):
+    def test_cross_db_blocked_without_either_config(self, adapter):
         adapter.config.credentials.ra3_node = False
-        adapter.use_show_apis = lambda: False
+        adapter.config.credentials.datasharing = False
         with pytest.raises(dbt_common.exceptions.NotImplementedError, match="Cross-db"):
             adapter.verify_database("other_db")
+
+    def test_cross_db_allowed_with_show_apis_flag(self, adapter, mocker):
+        adapter.behavior.redshift_use_show_apis = mocker.MagicMock(no_warn=True)
+        assert adapter.verify_database("other_db") == ""

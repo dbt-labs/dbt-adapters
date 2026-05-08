@@ -54,12 +54,20 @@ class TestListRelationsWithoutCaching:
         assert relation_map["my_materialized_view"] == "materialized_view"
 
 
-class TestListRelationsWithShowApis(TestListRelationsWithoutCaching):
-    """Same tests but with show_apis flag enabled."""
+class TestListRelationsWithDatasharing(TestListRelationsWithoutCaching):
+    """Same tests but with datasharing config enabled."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
+        return {"name": "test_list_relations_datasharing"}
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
         return {
-            "name": "test_list_relations_show_apis",
-            "flags": {"redshift_use_show_apis": True},
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
         }

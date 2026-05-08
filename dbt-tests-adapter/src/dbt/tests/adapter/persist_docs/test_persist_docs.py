@@ -3,7 +3,7 @@ import os
 import pytest
 
 from dbt.tests.adapter.persist_docs import fixtures
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 
 class BasePersistDocsBase:
@@ -136,6 +136,14 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
         table_node = catalog_data["nodes"]["model.test.missing_column"]
         table_id_comment = table_node["columns"]["id"]["comment"]
         assert table_id_comment.startswith("test id column description")
+
+    def test_missing_column_warning(self, project):
+        _, logs = run_dbt_and_capture(["run"])
+        print(logs)
+        assert (
+            "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
+            in logs
+        )
 
 
 class BasePersistDocsCommentOnQuotedColumn:

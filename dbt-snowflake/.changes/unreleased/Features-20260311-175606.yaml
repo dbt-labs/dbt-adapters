@@ -1,0 +1,8 @@
+kind: Features
+body: Support PyPI packages for Python UDFs - when packages are specified in function
+  config, they are templated into the CREATE statement (PACKAGES = (...)) for scalar
+  and aggregate Python UDFs
+time: 2026-03-11T17:56:06.476604-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1737"

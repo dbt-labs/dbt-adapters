@@ -14,11 +14,20 @@ def dbt_profile_target():
         "type": "snowflake",
         "threads": 4,
         "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-        "user": os.getenv("SNOWFLAKE_TEST_USER"),
-        "password": os.getenv("SNOWFLAKE_TEST_PASSWORD"),
         "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
         "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
     }
+
+    # Support PAT or password authentication
+    authenticator = os.getenv("SNOWFLAKE_TEST_AUTHENTICATOR")
+    if authenticator:
+        profile["authenticator"] = authenticator
+        if os.getenv("SNOWFLAKE_TEST_TOKEN"):
+            profile["token"] = os.getenv("SNOWFLAKE_TEST_TOKEN")
+    if os.getenv("SNOWFLAKE_TEST_USER"):
+        profile["user"] = os.getenv("SNOWFLAKE_TEST_USER")
+    if os.getenv("SNOWFLAKE_TEST_PASSWORD"):
+        profile["password"] = os.getenv("SNOWFLAKE_TEST_PASSWORD")
 
     # Optional parameters allow testing against local DEV Snowflake instances.
     if os.getenv("SNOWFLAKE_TEST_HOST"):

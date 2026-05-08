@@ -251,3 +251,72 @@ class PythonUDFVolatilitySupport(PythonUDFSupported):
         return {
             "functions": {"+volatility": "non-deterministic"},
         }
+
+
+class CanFindScalarFunctionRelation(UDFsBasic):
+    def test_udfs(self, project, adapter):
+        result = run_dbt(["build", "--debug"])
+
+        assert len(result.results) == 1
+        node = result.results[0].node
+        assert isinstance(node, FunctionNode)
+
+        with project.adapter.connection_named("_test_scalar_function_relation"):
+            schema_relation = project.adapter.Relation.create(
+                database=node.database, schema=node.schema
+            )
+            # Call list_relations_without_caching directly to get a fresh result
+            # that includes the function built above. Using get_relation would hit
+            # the stale pre-build cache (populated before the function existed).
+            relations = project.adapter.list_relations_without_caching(schema_relation)
+
+        relation = next(
+            (r for r in relations if r.identifier.lower() == node.name.lower()),
+            None,
+        )
+        assert relation is not None
+
+
+class PythonUDFWithPackagesSupported(PythonUDFSupported):
+    """Verify that when packages are specified for a Python UDF, they are templated into the
+    CREATE statement and the function runs using those packages. Adapters that support Python
+    UDF packages should subclass and override expected_packages_sql_fragment() if their
+    SQL format differs from Snowflake's.
+    """
+
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "sqrt_input.py": files.MY_UDF_PYTHON_WITH_NUMPY,
+            "sqrt_input.yml": files.MY_UDF_PYTHON_WITH_PACKAGES_YML,
+        }
+
+    def is_function_create_event(self, event: EventMsg) -> bool:
+        return (
+            event.data.node_info.node_name == "sqrt_input"
+            and "CREATE OR REPLACE FUNCTION" in event.data.sql
+        )
+
+    def expected_packages_sql_fragment(self) -> str:
+        """Subclass override: SQL snippet that must appear when packages are templated (e.g. Snowflake: PACKAGES = ('numpy'))."""
+        return "PACKAGES = ('numpy')"
+
+    def inline_select_and_expected_result(self):
+        """Subclass override: (inline_sql, expected_value) to run the UDF and assert the result."""
+        return "SELECT {{ function('sqrt_input') }}(4.0)", 2.0
+
+    def test_udfs(self, project, sql_event_catcher):
+        # Build the function and verify packages are templated
+        result = run_dbt(["build", "--debug"], callbacks=[sql_event_catcher.catch])
+        assert len(result.results) == 1
+        assert result.results[0].status == RunStatus.Success
+        assert len(sql_event_catcher.caught_events) == 1
+        sql = sql_event_catcher.caught_events[0].data.sql
+        assert self.expected_packages_sql_fragment() in sql
+
+        # Run the function to prove it uses the package (numpy.sqrt(4) -> 2.0)
+        inline_sql, expected = self.inline_select_and_expected_result()
+        result = run_dbt(["show", "--inline", inline_sql])
+        assert len(result.results) == 1
+        got = result.results[0].agate_table.rows[0].values()[0]
+        assert got == expected

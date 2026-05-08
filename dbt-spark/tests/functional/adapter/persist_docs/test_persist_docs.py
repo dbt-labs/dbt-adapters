@@ -1,6 +1,6 @@
 import pytest
 
-from dbt.tests.util import run_dbt
+from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 from fixtures import (
     _MODELS__MY_FUN_DOCS,
@@ -8,6 +8,7 @@ from fixtures import (
     _MODELS__TABLE_DELTA_MODEL,
     _MODELS__TABLE_DELTA_MODEL_MISSING_COLUMN,
     _PROPERTIES__MODELS,
+    _PROPERTIES__MISSING_COLUMN,
     _PROPERTIES__SEEDS,
     _SEEDS__BASIC,
     _MODELS__VIEW_DELTA_MODEL,
@@ -147,24 +148,16 @@ class TestPersistDocsMissingColumn:
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": _PROPERTIES__MODELS}
+        return {"schema.yml": _PROPERTIES__MISSING_COLUMN}
 
     def test_missing_column(self, project):
         """
-        spark will use our schema to verify all columns exist rather than fail silently
-
-        "resolve" vs "resolved" is intentional; example error message:
-            ('42000', '[42000] [Simba][Hardy] (80) Syntax or semantic analysis error thrown in server while executing query.
-            Error message from server:
-                org.apache.hive.service.cli.HiveSQLException: Error running query: [UNRESOLVED_COLUMN.WITH_SUGGESTION]
-                org.apache.spark.sql.AnalysisException: [UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with name `name` cannot be resolve (80) (SQLExecDirectW)'
-            )
+        With column filtering in alter_column_comment, non-existent columns
+        are now skipped instead of causing DB errors, and a warning is emitted.
         """
         run_dbt(["seed"])
-        res = run_dbt(["run"], expect_pass=False)
-        assert any(
-            [
-                "[UNRESOLVED_COLUMN.WITH_SUGGESTION]" in res[0].message,
-                "Missing field name in table" in res[0].message,
-            ]
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
+            in logs
         )

@@ -1,0 +1,7 @@
+kind: Fixes
+body: Add regression test for unit test fixture string values being silently truncated
+  when database column has a narrow varchar type
+time: 2026-03-25T11:00:01.000000-04:00
+custom:
+  Author: aahel
+  Issue: "1806"

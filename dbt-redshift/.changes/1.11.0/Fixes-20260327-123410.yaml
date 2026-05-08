@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix grant reconciliation failure on clusters with datashares by filtering reserved Redshift roles (ds:*, sys:*) from standardize_grants_dict
+time: 2026-03-27T12:34:10.161883+05:30
+custom:
+    Author: tauhid621
+    Issue: "1808"

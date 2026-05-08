@@ -62,7 +62,15 @@ models:
 """
 
 
-class TestRedshiftGroupGrants:
+class RedshiftGrantsExtendedMixin:
+    """Enable the redshift_grants_extended flag for all group/role grant tests."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_grants_extended": True}}
+
+
+class TestRedshiftGroupGrants(RedshiftGrantsExtendedMixin):
     """Test granting privileges to Redshift groups."""
 
     @pytest.fixture(scope="class")
@@ -86,7 +94,7 @@ class TestRedshiftGroupGrants:
         assert model.config.materialized == "table"
 
 
-class TestRedshiftMixedGrants:
+class TestRedshiftMixedGrants(RedshiftGrantsExtendedMixin):
     """Test granting privileges to both users and groups in the same config."""
 
     @pytest.fixture(scope="class")
@@ -113,7 +121,7 @@ class TestRedshiftMixedGrants:
         assert model.config.materialized == "table"
 
 
-class TestRedshiftExplicitUserPrefix:
+class TestRedshiftExplicitUserPrefix(RedshiftGrantsExtendedMixin):
     """Test that explicit 'user:' prefix works and is backward compatible."""
 
     @pytest.fixture(scope="class")
