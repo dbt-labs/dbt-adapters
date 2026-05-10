@@ -33,6 +33,7 @@ from dbt.adapters.record.base import (
     AdapterStandardizeGrantsDictRecord,
     AdapterListRelationsWithoutCachingRecord,
     AdapterGetColumnsInRelationRecord,
+    AdapterGetPseudocolumnsForRelationRecord,
     SubmitPythonJobRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
@@ -768,6 +769,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
 
+    @record_function(
+        AdapterGetPseudocolumnsForRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @available.parse_list
     def get_pseudocolumns_for_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of queryable pseudocolumns for the given relation.
