@@ -67,7 +67,7 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
 
     @pytest.fixture(scope="class")
     def setup_pseudocolumn_override(self, project):
-        """Patch BigQueryAdapter at the class level to return _FILE_NAME for external_table.
+        """Patch BigQueryAdapter at the class level to return columns + _FILE_NAME for external_table.
 
         Instance-level patching (project.adapter.X) doesn't work because dbtRunner
         creates its own adapter instance. Class-level patching affects all instances.
@@ -75,15 +75,17 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
         from dbt.adapters.bigquery.column import BigQueryColumn
         from dbt.adapters.bigquery.impl import BigQueryAdapter
 
-        original_method = BigQueryAdapter.get_pseudocolumns_for_relation
-
-        def mock_pseudocolumns(self_adapter, relation):
+        def mock_columns_and_pseudocolumns(_self, relation):
             if relation.identifier == "external_table":
-                return [BigQueryColumn("_FILE_NAME", "STRING")]
-            return original_method(self_adapter, relation)
+                return [BigQueryColumn("id", "INTEGER"), BigQueryColumn("_FILE_NAME", "STRING")]
+            return []
 
-        mock_pseudocolumns._is_available_ = True
-        mock_pseudocolumns._parse_replacement_ = lambda *a, **k: []
+        mock_columns_and_pseudocolumns._is_available_ = True
+        mock_columns_and_pseudocolumns._parse_replacement_ = lambda *a, **k: []
 
-        with patch.object(BigQueryAdapter, "get_pseudocolumns_for_relation", mock_pseudocolumns):
+        with patch.object(
+            BigQueryAdapter,
+            "get_columns_and_pseudocolumns_for_relation",
+            mock_columns_and_pseudocolumns,
+        ):
             yield
