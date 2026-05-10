@@ -1,4 +1,8 @@
-from dbt.tests.adapter.empty.test_empty import BaseTestEmpty, BaseTestEmptyInlineSourceRef
+from dbt.tests.adapter.empty.test_empty import (
+    BaseTestEmpty,
+    BaseTestEmptyInlineSourceRef,
+    BaseTestEmptySeedFlag,
+)
 
 
 class TestAthenaEmpty(BaseTestEmpty):
@@ -6,4 +10,8 @@ class TestAthenaEmpty(BaseTestEmpty):
 
 
 class TestAthenaEmptyInlineSourceRef(BaseTestEmptyInlineSourceRef):
+    pass
+
+
+class TestAthenaEmptySeedFlag(BaseTestEmptySeedFlag):
     pass

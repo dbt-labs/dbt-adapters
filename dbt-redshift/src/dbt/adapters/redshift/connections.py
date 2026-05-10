@@ -194,6 +194,10 @@ class RedshiftCredentials(Credentials):
     # downstream views (no CASCADE side-effects).
     allow_concurrent_drops: bool = False
 
+    # Drop behavior: omit CASCADE from DROP TABLE/VIEW/MATERIALIZED VIEW
+    # statements. Safe only for projects with no downstream dependents.
+    drop_without_cascade: bool = False
+
     _ALIASES = {"dbname": "database", "pass": "password"}
 
     @property
@@ -233,6 +237,7 @@ class RedshiftCredentials(Credentials):
             "tcp_keepalive_count",
             "query_group",
             "allow_concurrent_drops",
+            "drop_without_cascade",
         )
 
     @property
@@ -620,6 +625,11 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
             yield
+            # The execute() retry mechanism may have closed and reopened
+            # the connection during yield, resetting transaction_open to
+            # False. Restore the flag so commit() can proceed as expected.
+            if not connection.transaction_open:
+                connection.transaction_open = True
             self.commit()
 
             self.begin()
@@ -639,6 +649,9 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         self.begin()
         yield
+        # See comment in fresh_transaction().
+        if not connection.transaction_open:
+            connection.transaction_open = True
         self.commit()
 
         self.begin()
@@ -683,10 +696,13 @@ class RedshiftConnectionManager(SQLConnectionManager):
             e: Exception, retries: int, backoff: int, retry_all: bool
         ) -> Tuple[int, int]:
             oid_not_found_msg = "could not open relation with OID"
+            concurrent_txn_msg = "conflict with concurrent transaction"
             err_str = str(e)
             if retries == 0:
                 raise e
             if oid_not_found_msg in err_str:
+                pass
+            elif concurrent_txn_msg in err_str:
                 pass
             elif "schema" in err_str and "does not exist" in err_str:
                 pass

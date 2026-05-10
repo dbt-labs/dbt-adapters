@@ -6,6 +6,7 @@ from tests.functional.adapter.utils.parse_dbt_run_output import (
     extract_running_create_statements,
 )
 
+from dbt.adapters.athena.impl import AthenaAdapter
 from dbt.contracts.results import RunStatus
 from dbt.tests.util import run_dbt
 
@@ -19,7 +20,17 @@ models__unique_tmp_table_suffix_sql = """
 }}
 select
     random() as rnd,
-    cast(from_iso8601_date('{{ var('logical_date') }}') as date) as date_column
+    cast(date_column as date) as date_column
+from (
+    values (
+        sequence(
+            from_iso8601_date('{{ var('start_date') }}'),
+            from_iso8601_date('{{ var('end_date') }}'),
+            interval '1' day
+        )
+    )
+) as t1(date_array)
+cross join unnest(date_array) as t2(date_column)
 """
 
 
@@ -28,7 +39,7 @@ class TestUniqueTmpTableSuffix:
     def models(self):
         return {"unique_tmp_table_suffix.sql": models__unique_tmp_table_suffix_sql}
 
-    def test__unique_tmp_table_suffix(self, project, capsys):
+    def test__unique_tmp_table_suffix(self, project, monkeypatch, capsys):
         relation_name = "unique_tmp_table_suffix"
         model_run_result_row_count_query = (
             f"select count(*) as records from {project.test_schema}.{relation_name}"
@@ -44,7 +55,7 @@ class TestUniqueTmpTableSuffix:
                 "--select",
                 relation_name,
                 "--vars",
-                '{"logical_date": "2024-01-01"}',
+                '{"start_date": "2024-01-01", "end_date": "2024-01-01"}',
                 "--log-level",
                 "debug",
                 "--log-format",
@@ -70,11 +81,7 @@ class TestUniqueTmpTableSuffix:
             re.search(expected_unique_table_name_re, first_model_run_result_table_name)
         )
 
-        records_count_first_run = project.run_sql(model_run_result_row_count_query, fetch="all")[
-            0
-        ][0]
-
-        assert records_count_first_run == 1
+        assert project.run_sql(model_run_result_row_count_query, fetch="all")[0][0] == 1
 
         incremental_model_run = run_dbt(
             [
@@ -82,7 +89,7 @@ class TestUniqueTmpTableSuffix:
                 "--select",
                 relation_name,
                 "--vars",
-                '{"logical_date": "2024-01-02"}',
+                '{"start_date": "2024-01-02", "end_date": "2024-01-02"}',
                 "--log-level",
                 "debug",
                 "--log-format",
@@ -110,13 +117,18 @@ class TestUniqueTmpTableSuffix:
 
         assert first_model_run_result_table_name != incremental_model_run_result_table_name
 
+        # Write 4 partitions with a monkeypatched expression limit to force chunking.
+        # Each "(date_column='2024-01-0X')" is ~27 chars, so 2 fit per chunk (58 < 60),
+        # requiring 2 Glue GetPartitions API calls for 4 partitions.
+        monkeypatch.setattr(AthenaAdapter, "GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH", 60)
+
         incremental_model_run_2 = run_dbt(
             [
                 "run",
                 "--select",
                 relation_name,
                 "--vars",
-                '{"logical_date": "2024-01-03"}',
+                '{"start_date": "2024-01-01", "end_date": "2024-01-04"}',
                 "--log-level",
                 "debug",
                 "--log-format",
@@ -136,5 +148,5 @@ class TestUniqueTmpTableSuffix:
         )[0]
 
         assert incremental_model_run_result_table_name != incremental_model_run_result_table_name_2
-
         assert first_model_run_result_table_name != incremental_model_run_result_table_name_2
+        assert project.run_sql(model_run_result_row_count_query, fetch="all")[0][0] == 4
