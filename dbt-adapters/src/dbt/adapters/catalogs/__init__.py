@@ -12,4 +12,3 @@ from dbt.adapters.catalogs._integration import (
 )
 
 from dbt.adapters.catalogs._constants import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-from dbt.adapters.catalogs._v2 import CatalogV2, V2TableFormat
