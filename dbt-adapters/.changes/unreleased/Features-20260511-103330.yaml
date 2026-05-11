@@ -1,0 +1,6 @@
+kind: Features
+body: Add Capability.CatalogsV2 and bridge_v2_catalog template methods on BaseAdapter for adapter-owned v2 catalog bridge architecture
+time: 2026-05-11T10:33:30.877349+05:30
+custom:
+    Author: aahel
+    Issue: "1920"
