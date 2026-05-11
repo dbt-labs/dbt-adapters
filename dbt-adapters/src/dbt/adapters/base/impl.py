@@ -346,6 +346,47 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
         return self._catalog_client.get(name)
 
+    def bridge_v2_catalog(self, catalog: Any) -> CatalogIntegrationConfig:
+        """Translate a v2 CatalogV2 into a CatalogWriteIntegrationConfig for registration.
+
+        CatalogV2 is defined in dbt-core; typed as Any here to avoid a circular dependency.
+        Adapters override the hook methods below rather than this method directly.
+        """
+        from dbt.artifacts.resources import CatalogWriteIntegrationConfig
+
+        ct = catalog.catalog_type
+        platform_block = catalog.config.get(self._v2_platform_key(), {}) or {}
+        external_volume = platform_block.get("external_volume")
+        file_format = platform_block.get("file_format")
+        props = {
+            k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
+        }
+        return CatalogWriteIntegrationConfig(
+            name=catalog.name,
+            catalog_type=self._v2_to_v1_type(ct),
+            catalog_name=catalog.name,
+            table_format=self._v2_table_format(catalog),
+            external_volume=str(external_volume) if external_volume is not None else None,
+            file_format=str(file_format) if file_format is not None else None,
+            adapter_properties=self._translate_v2_properties(ct, props),
+        )
+
+    def _v2_platform_key(self) -> str:
+        """Platform key used to look up this adapter's config block in CatalogV2.config."""
+        return self.type()
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        """Map a v2 catalog type string to the v1 catalog_type expected by CatalogIntegration."""
+        return catalog_type
+
+    def _v2_table_format(self, catalog: Any) -> str:
+        """Return the table_format string to pass to CatalogWriteIntegrationConfig."""
+        return catalog.table_format.value
+
+    def _translate_v2_properties(self, catalog_type: str, props: dict) -> dict:
+        """Rename or inject adapter_properties keys for this adapter's CatalogIntegration."""
+        return props
+
     @available
     def build_catalog_relation(self, config: RelationConfig) -> Optional[CatalogRelation]:
         if not config.config:
