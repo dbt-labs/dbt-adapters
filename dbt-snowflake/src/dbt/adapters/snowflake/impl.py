@@ -5,7 +5,12 @@ from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSe
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+    CatalogRelation,
+    CatalogV2,
+)
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
@@ -110,8 +115,23 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
             Capability.GetCatalogForSingleRelation: CapabilitySupport(support=Support.Full),
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
+            Capability.CatalogsV2: CapabilitySupport(support=Support.Full),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "horizon": "BUILT_IN",
+        "glue": "ICEBERG_REST",
+        "iceberg_rest": "ICEBERG_REST",
+        "unity": "ICEBERG_REST",
+    }
+    _LINKED_FIELD_MAP: ClassVar[Dict[str, str]] = {
+        "catalog_database": "catalog_linked_database",
+    }
+    _LINKED_DB_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": "glue",
+        "unity": "unity",
+    }
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
@@ -121,6 +141,20 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: CatalogV2) -> str:
+        return catalog.table_format.value.upper()
+
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
+        is_linked = catalog_type in ("glue", "iceberg_rest", "unity")
+        if is_linked:
+            props = {self._LINKED_FIELD_MAP.get(k, k): v for k, v in props.items()}
+            if catalog_type in self._LINKED_DB_TYPE:
+                props["catalog_linked_database_type"] = self._LINKED_DB_TYPE[catalog_type]
+        return props
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
