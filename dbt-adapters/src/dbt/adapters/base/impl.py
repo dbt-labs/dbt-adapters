@@ -347,8 +347,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._catalog_client.get(name)
 
     def bridge_v2_catalog(self, catalog: Any) -> CatalogIntegrationConfig:
-        """Translate a v2 CatalogV2 into a CatalogWriteIntegrationConfig for registration.
+        """Translate a CatalogV2 (defined in dbt-core) into a CatalogWriteIntegrationConfig.
 
+        catalog is typed Any to avoid a circular dependency — CatalogV2 lives in dbt-core.
         Adapters override the hook methods below rather than this method directly.
         """
         from dbt.artifacts.resources import CatalogWriteIntegrationConfig
