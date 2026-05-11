@@ -223,6 +223,15 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     @available
+    def drop_without_cascade(self) -> bool:
+        """Whether to omit CASCADE from DROP statements.
+
+        Returns True when the ``drop_without_cascade`` profile credential
+        is set. Safe only for projects with no downstream dependents.
+        """
+        return bool(self.config.credentials.drop_without_cascade)
+
+    @available
     def use_grants_extended(self) -> bool:
         """Whether to use extended grants support for groups and roles."""
         return self.behavior.redshift_grants_extended.no_warn
