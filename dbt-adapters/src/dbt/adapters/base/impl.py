@@ -355,7 +355,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         from dbt.artifacts.resources import CatalogWriteIntegrationConfig
 
         ct = catalog.catalog_type
-        platform_block = catalog.config.get(self._v2_platform_key(), {}) or {}
+        platform_block = catalog.config.get(self.type(), {}) or {}
         external_volume = platform_block.get("external_volume")
         file_format = platform_block.get("file_format")
         props = {
@@ -370,10 +370,6 @@ class BaseAdapter(metaclass=AdapterMeta):
             file_format=str(file_format) if file_format is not None else None,
             adapter_properties=self._translate_v2_properties(ct, props),
         )
-
-    def _v2_platform_key(self) -> str:
-        """Platform key used to look up this adapter's config block in CatalogV2.config."""
-        return self.type()
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         """Map a v2 catalog type string to the v1 catalog_type expected by CatalogIntegration."""
