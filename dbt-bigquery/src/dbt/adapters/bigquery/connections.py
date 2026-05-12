@@ -630,7 +630,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 timeout=self._retry.create_job_creation_timeout(),
             )
         except Conflict as conflict_exc:
-            logger.debug("Caught 409 Conflict for job_id=%s, recovering via get_job()", job_id)
+            logger.debug("Caught 409 Conflict for job_id={}, recovering via get_job()", job_id)
             try:
                 query_job = client.get_job(
                     job_id,
@@ -641,7 +641,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                     f"BigQuery job conflict for job_id={job_id}, and failed to "
                     f"recover existing job via get_job: {get_job_exc}"
                 ) from conflict_exc
-            logger.debug("Job recovered, state: %s", query_job.state)
+            logger.debug("Job recovered, state: {}", query_job.state)
         if (
             query_job.location is not None
             and query_job.job_id is not None
