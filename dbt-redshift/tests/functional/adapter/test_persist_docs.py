@@ -30,29 +30,33 @@ models:
 class TestPersistDocs(BasePersistDocs):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestPersistDocsLateBinding(BasePersistDocsBase):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -90,8 +94,9 @@ class TestPersistDocsLateBinding(BasePersistDocsBase):
 class TestPersistDocsWithMaterializedView(BasePersistDocs):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):

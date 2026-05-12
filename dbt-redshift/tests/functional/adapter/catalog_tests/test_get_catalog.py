@@ -7,8 +7,9 @@ import pytest
 class TestGetCatalog:
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
     @pytest.fixture(scope="class")
     def my_schema(self, project, adapter):

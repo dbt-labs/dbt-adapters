@@ -40,8 +40,9 @@ seeds:
 class TestSimpleMaterializationsRedshift(BaseSimpleMaterializations):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestSingularTestsRedshift(BaseSingularTests):
@@ -59,15 +60,17 @@ class TestEmptyRedshift(BaseEmpty):
 class TestEphemeralRedshift(BaseEphemeral):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestIncrementalRedshift(BaseIncremental):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
-        dbt_profile_target["retry_all"] = True
-        return {}
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestGenericTestsRedshift(BaseGenericTests):
