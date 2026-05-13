@@ -97,7 +97,10 @@ class PostgresAdapter(SQLAdapter):
     CATALOG_BY_RELATION_SUPPORT = True
 
     _capabilities: CapabilityDict = CapabilityDict(
-        {Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full)}
+        {
+            Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
+            Capability.SqlFunctionParameterColumnShadowing: CapabilitySupport(support=Support.Full),
+        }
     )
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
