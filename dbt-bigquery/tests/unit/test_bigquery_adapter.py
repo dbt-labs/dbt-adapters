@@ -1007,7 +1007,9 @@ class TestGetColumnsAndPseudocolumnsForRelation(BaseTestBigQueryAdapter):
         mock_table = MagicMock(spec=Table)
         mock_table.table_type = "EXTERNAL"
         mock_table.schema = [self._make_schema_field("id", "INTEGER")]
-        with patch.object(adapter.connections, "get_bq_table", return_value=mock_table) as mock_get:
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
             result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
         mock_get.assert_called_once()
         self.assertEqual(len(result), 2)
@@ -1020,7 +1022,9 @@ class TestGetColumnsAndPseudocolumnsForRelation(BaseTestBigQueryAdapter):
         mock_table = MagicMock(spec=Table)
         mock_table.table_type = "TABLE"
         mock_table.schema = [self._make_schema_field("id", "INTEGER")]
-        with patch.object(adapter.connections, "get_bq_table", return_value=mock_table) as mock_get:
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
             result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
         mock_get.assert_called_once()
         self.assertEqual(len(result), 1)
