@@ -38,7 +38,11 @@ seeds:
 
 # TODO: update these with test cases or remove them if not needed
 class TestSimpleMaterializationsRedshift(BaseSimpleMaterializations):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestSingularTestsRedshift(BaseSingularTests):
@@ -54,11 +58,19 @@ class TestEmptyRedshift(BaseEmpty):
 
 
 class TestEphemeralRedshift(BaseEphemeral):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestIncrementalRedshift(BaseIncremental):
-    pass
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
 
 
 class TestGenericTestsRedshift(BaseGenericTests):
