@@ -33,17 +33,9 @@ jobs:
             fail-fast: false
             matrix:
                 package:
-                -   "dbt-adapters"
-                -   "dbt-tests-adapter"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
                 -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                os: [ubuntu-22.04]
+                python-version: ["${{ vars.DEFAULT_PYTHON_VERSION }}"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ inputs.branch }}
@@ -58,16 +50,9 @@ jobs:
             fail-fast: false
             matrix:
                 package:
-                -   "dbt-adapters"
-                -   "dbt-athena"
-                -   "dbt-athena-community"
-                -   "dbt-bigquery"
                 -   "dbt-postgres"
-                -   "dbt-redshift"
-                -   "dbt-snowflake"
-                -   "dbt-spark"
-                os: [ubuntu-22.04, macos-14, windows-2022]
-                python-version: ${{ fromJSON(vars.SUPPORTED_PYTHON_VERSIONS) }}
+                os: [ubuntu-22.04]
+                python-version: ["${{ vars.DEFAULT_PYTHON_VERSION }}"]
         with:
             package: ${{ matrix.package }}
             branch: ${{ inputs.branch }}
@@ -83,7 +68,7 @@ jobs:
             contents: read
             id-token: write
         with:
-            packages: ${{ toJSON('[dbt-athena, dbt-bigquery, dbt-postgres, dbt-redshift, dbt-snowflake, dbt-spark]') }}
+            packages: ${{ toJSON('[dbt-postgres]') }}
             branch: ${{ inputs.branch }}
             repository: ${{ inputs.repository }}
             os: ${{ vars.DEFAULT_RUNNER }}

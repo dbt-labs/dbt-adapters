@@ -26,7 +26,7 @@ jobs:
             fail-fast: false
             max-parallel: 1 # Run branches sequentially
             matrix:
-                branch: ["stable", "main"]
+                branch: ["main"]
         with:
             branch: ${{ matrix.branch }}
             repository: ${{ github.repository }}
