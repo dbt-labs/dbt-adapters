@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Emit a debug-level Note event when the recorder row limit is exceeded during agate table serialization
+time: 2026-05-11T00:00:00.000000+00:00
+custom:
+    Author: MichelleArk
+    Issue: "1923"
