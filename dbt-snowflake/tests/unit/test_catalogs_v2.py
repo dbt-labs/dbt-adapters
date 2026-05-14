@@ -5,6 +5,53 @@ from types import SimpleNamespace
 from dbt.adapters.snowflake.impl import SnowflakeAdapter
 
 
+class TestSnowflakeBridgeV2Catalog:
+    """Tests for the full bridge_v2_catalog method — dbt-core is available in this env."""
+
+    def setup_method(self):
+        self.adapter = object.__new__(SnowflakeAdapter)
+
+    def test_horizon_produces_correct_config(self):
+        catalog = SimpleNamespace(
+            name="my_cat",
+            catalog_type="horizon",
+            table_format=SimpleNamespace(value="iceberg"),
+            config={"snowflake": {"external_volume": "s3_vol", "change_tracking": True}},
+        )
+        result = self.adapter.bridge_v2_catalog(catalog)
+        assert result.name == "my_cat"
+        assert result.catalog_type == "BUILT_IN"
+        assert result.catalog_name == "my_cat"
+        assert result.table_format == "ICEBERG"
+        assert result.external_volume == "s3_vol"
+        assert result.adapter_properties == {"change_tracking": True}
+
+    def test_glue_translates_catalog_database(self):
+        catalog = SimpleNamespace(
+            name="glue_cat",
+            catalog_type="glue",
+            table_format=SimpleNamespace(value="iceberg"),
+            config={"snowflake": {"catalog_database": "MY_DB", "auto_refresh": True}},
+        )
+        result = self.adapter.bridge_v2_catalog(catalog)
+        assert result.catalog_type == "ICEBERG_REST"
+        assert result.adapter_properties["catalog_linked_database"] == "MY_DB"
+        assert result.adapter_properties["catalog_linked_database_type"] == "glue"
+        assert result.adapter_properties["auto_refresh"] is True
+
+    def test_empty_platform_block(self):
+        catalog = SimpleNamespace(
+            name="cat",
+            catalog_type="horizon",
+            table_format=SimpleNamespace(value="iceberg"),
+            config={},
+        )
+        result = self.adapter.bridge_v2_catalog(catalog)
+        assert result.name == "cat"
+        assert result.external_volume is None
+        assert result.adapter_properties == {}
+
+
 def _v2_catalog(name, catalog_type, table_format_value, config=None):
     return SimpleNamespace(
         name=name,

@@ -1,6 +1,17 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Mapping,
+    Any,
+    Optional,
+    List,
+    Union,
+    Dict,
+    FrozenSet,
+    Tuple,
+)
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
@@ -9,8 +20,8 @@ from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogRelation,
-    CatalogV2,
 )
+
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
@@ -34,6 +45,9 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
+
+if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
     InfoSchemaCatalogIntegration,
@@ -153,7 +167,7 @@ class SnowflakeAdapter(SQLAdapter):
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
-    def _v2_table_format(self, catalog: CatalogV2) -> str:
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
         return catalog.table_format.value.upper()
 
     def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
