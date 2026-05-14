@@ -82,6 +82,7 @@ from dbt.adapters.catalogs import (
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
     CatalogRelation,
+    CatalogV2Like,
     CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
@@ -346,10 +347,10 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
         return self._catalog_client.get(name)
 
-    def bridge_v2_catalog(self, catalog: Any) -> CatalogIntegrationConfig:
+    def bridge_v2_catalog(self, catalog: CatalogV2Like) -> CatalogIntegrationConfig:
         """Translate a CatalogV2 (defined in dbt-core) into a CatalogWriteIntegrationConfig.
 
-        catalog is typed Any to avoid a circular dependency — CatalogV2 lives in dbt-core.
+        catalog is typed via CatalogV2Like Protocol to avoid a circular dependency.
         Adapters override the hook methods below rather than this method directly.
         """
         from dbt.artifacts.resources import CatalogWriteIntegrationConfig
@@ -375,7 +376,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Map a v2 catalog type string to the v1 catalog_type expected by CatalogIntegration."""
         return catalog_type
 
-    def _v2_table_format(self, catalog: Any) -> str:
+    def _v2_table_format(self, catalog: CatalogV2Like) -> str:
         """Return the table_format string to pass to CatalogWriteIntegrationConfig."""
         return catalog.table_format.value
 
