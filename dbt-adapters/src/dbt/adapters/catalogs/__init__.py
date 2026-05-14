@@ -12,4 +12,4 @@ from dbt.adapters.catalogs._integration import (
 )
 
 from dbt.adapters.catalogs._constants import CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-from dbt.adapters.catalogs._protocols import CatalogV2Like
+from dbt.adapters.catalogs._protocols import CatalogV2

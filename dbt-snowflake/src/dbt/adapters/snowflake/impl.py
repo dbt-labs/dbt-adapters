@@ -9,7 +9,7 @@ from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogRelation,
-    CatalogV2Like,
+    CatalogV2,
 )
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
@@ -153,7 +153,7 @@ class SnowflakeAdapter(SQLAdapter):
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
-    def _v2_table_format(self, catalog: CatalogV2Like) -> str:
+    def _v2_table_format(self, catalog: CatalogV2) -> str:
         return catalog.table_format.value.upper()
 
     def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:

@@ -5,7 +5,7 @@ class _TableFormatLike(Protocol):
     value: str
 
 
-class CatalogV2Like(Protocol):
+class CatalogV2(Protocol):
     """Structural interface for CatalogV2 (defined in dbt-core).
 
     Defined here as a Protocol to avoid a circular dependency. dbt-adapters
