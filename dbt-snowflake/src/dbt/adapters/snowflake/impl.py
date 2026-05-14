@@ -57,6 +57,10 @@ SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     ),
 )
 
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
+
 
 @dataclass
 class SnowflakeConfig(AdapterConfig):
@@ -114,7 +118,11 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
             Capability.GetCatalogForSingleRelation: CapabilitySupport(support=Support.Full),
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
-            Capability.CatalogsV2: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
 

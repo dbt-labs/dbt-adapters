@@ -147,6 +147,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 
 _dataset_lock = threading.Lock()
 
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
+
 
 @dataclass
 class GrantTarget(dbtClassMixin):
@@ -208,7 +212,11 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
-            Capability.CatalogsV2: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
 
