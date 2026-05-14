@@ -1,7 +1,7 @@
 from typing import Any, Dict, Protocol
 
 
-class _TableFormatLike(Protocol):
+class _TableFormat(Protocol):
     value: str
 
 
@@ -14,5 +14,5 @@ class CatalogV2(Protocol):
 
     name: str
     catalog_type: str
-    table_format: _TableFormatLike
+    table_format: _TableFormat
     config: Dict[str, Dict[str, Any]]
