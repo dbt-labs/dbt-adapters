@@ -1,9 +1,4 @@
 """Unit tests for bridge_v2_catalog hook methods on BaseAdapter.
-
-bridge_v2_catalog lazily imports CatalogWriteIntegrationConfig from dbt.artifacts
-(dbt-core), which is not installed in this test environment. The full bridge is
-tested end-to-end in dbt-snowflake functional tests. These tests cover the hook
-methods that adapters override.
 """
 
 from types import SimpleNamespace
