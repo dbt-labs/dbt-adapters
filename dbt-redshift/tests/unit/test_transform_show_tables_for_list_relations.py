@@ -126,6 +126,50 @@ class TestTransformShowTablesForListRelations:
         assert result.rows[1]["type"] == "view"
 
 
+class TestCombineShowTablesAndFunctionRelations:
+    def _make_relation_table(self, rows, column_types=None):
+        cols = ["database", "name", "schema", "type"]
+        types = column_types or [agate.Text()] * 4
+        return agate.Table(rows, column_names=cols, column_types=types)
+
+    def test_empty_function_relations_does_not_raise(self, adapter):
+        """When there are no UDFs, function_relations is an empty agate table loaded from SQL.
+
+        agate infers Integer (its highest-priority type) for all columns when no rows exist,
+        so merging with agate.Table.merge() raises DataTypeError. This method must not fail.
+        """
+        table_and_view = self._make_relation_table([("dev", "my_table", "public", "table")])
+        # Simulate what dbt/agate produces for an empty SQL result: Integer-typed columns.
+        integer_type = agate.data_types.Number()
+        empty_function_relations = self._make_relation_table([], column_types=[integer_type] * 4)
+
+        result = adapter.combine_show_tables_and_function_relations(
+            table_and_view, empty_function_relations
+        )
+        assert len(result.rows) == 1
+        assert result.rows[0]["name"] == "my_table"
+        assert all(isinstance(t, agate.Text) for t in result.column_types)
+
+    def test_function_relations_rows_are_included(self, adapter):
+        table_and_view = self._make_relation_table([("dev", "my_table", "public", "table")])
+        function_relations = self._make_relation_table([("dev", "my_func", "public", "function")])
+        result = adapter.combine_show_tables_and_function_relations(
+            table_and_view, function_relations
+        )
+        assert len(result.rows) == 2
+        names = {row["name"] for row in result.rows}
+        assert names == {"my_table", "my_func"}
+
+    def test_both_empty(self, adapter):
+        table_and_view = self._make_relation_table([])
+        function_relations = self._make_relation_table([])
+        result = adapter.combine_show_tables_and_function_relations(
+            table_and_view, function_relations
+        )
+        assert len(result.rows) == 0
+        assert list(result.column_names) == ["database", "name", "schema", "type"]
+
+
 class TestUseShowApisGating:
     """Verify that use_show_apis correctly gates behavior."""
 
