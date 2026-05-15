@@ -1,41 +1,10 @@
 """Unit tests for bridge_v2_catalog hook methods and the full bridge on BaseAdapter."""
 
-import sys
-from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any, Dict, Optional
 from unittest import mock
 
-import pytest
-
 from dbt.adapters.base.impl import BaseAdapter
-
-
-# ===== Minimal CatalogWriteIntegrationConfig stub =====
-# bridge_v2_catalog lazily imports this from dbt.artifacts.resources (dbt-core).
-# We inject a stub into sys.modules so the base adapter tests don't need dbt-core.
-
-
-@dataclass
-class _CatalogWriteConfig:
-    name: str
-    catalog_type: str
-    catalog_name: Optional[str] = None
-    table_format: Optional[str] = None
-    external_volume: Optional[str] = None
-    file_format: Optional[str] = None
-    adapter_properties: Dict[str, Any] = field(default_factory=dict)
-
-
-@pytest.fixture(autouse=True)
-def patch_dbt_artifacts():
-    mock_resources = mock.MagicMock()
-    mock_resources.CatalogWriteIntegrationConfig = _CatalogWriteConfig
-    with mock.patch.dict(sys.modules, {"dbt.artifacts.resources": mock_resources}):
-        yield
-
-
-# ===== Helpers =====
+from dbt.adapters.catalogs import CatalogWriteConfig
 
 
 def _v2_catalog(name, catalog_type, table_format_value, config=None):
@@ -55,9 +24,6 @@ class _StubAdapter:
     _v2_table_format = BaseAdapter._v2_table_format
     _translate_v2_properties = BaseAdapter._translate_v2_properties
     bridge_v2_catalog = BaseAdapter.bridge_v2_catalog
-
-
-# ===== Hook method defaults =====
 
 
 class TestBaseAdapterV2Hooks:
@@ -81,12 +47,14 @@ class TestBaseAdapterV2Hooks:
         assert self.adapter._translate_v2_properties("horizon", {}) == {}
 
 
-# ===== Full bridge_v2_catalog =====
-
-
 class TestBaseAdapterBridgeV2Catalog:
     def setup_method(self):
         self.adapter = _StubAdapter()
+
+    def test_returns_catalog_write_config(self):
+        catalog = _v2_catalog("cat", "horizon", "iceberg")
+        result = self.adapter.bridge_v2_catalog(catalog)
+        assert isinstance(result, CatalogWriteConfig)
 
     def test_basic_fields_extracted(self):
         catalog = _v2_catalog(
@@ -98,7 +66,7 @@ class TestBaseAdapterBridgeV2Catalog:
         result = self.adapter.bridge_v2_catalog(catalog)
         assert result.name == "my_cat"
         assert result.catalog_name == "my_cat"
-        assert result.catalog_type == "horizon"  # default passthrough
+        assert result.catalog_type == "horizon"
         assert result.table_format == "iceberg"
         assert result.external_volume == "vol"
         assert result.adapter_properties == {"change_tracking": True}
