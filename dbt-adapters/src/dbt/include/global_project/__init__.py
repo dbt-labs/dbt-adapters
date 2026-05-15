@@ -16,12 +16,12 @@ try:
     from dbt.node_types import ModelLanguage as _ModelLanguage
 
     if "javascript" not in _ModelLanguage._member_map_:
-        _js = type(next(iter(_ModelLanguage))).__new__(_ModelLanguage, "javascript")
+        _js = object.__new__(_ModelLanguage)
         _js._name_ = "javascript"  # type: ignore[attr-defined]
         _js._value_ = "javascript"  # type: ignore[attr-defined]
+        setattr(_ModelLanguage, "javascript", _js)
         _ModelLanguage._member_names_.append("javascript")
         _ModelLanguage._member_map_["javascript"] = _js
         _ModelLanguage._value2member_map_["javascript"] = _js
-        setattr(_ModelLanguage, "javascript", _js)
 except Exception:
     pass
