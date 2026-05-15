@@ -6,7 +6,7 @@ _HERE = os.path.dirname(__file__)
 
 try:
     _core_version = Version(pkg_version("dbt-core"))
-    _js_supported = _core_version >= Version("1.12.0")
+    _js_supported = _core_version >= Version("1.12.0a1")
 except Exception:
     _js_supported = False
 
