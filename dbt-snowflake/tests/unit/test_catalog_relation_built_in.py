@@ -122,3 +122,48 @@ def test_model_config_overrides_adapter_properties():
     model.config.update({"change_tracking": False})
     relation = integration.build_relation(model)
     assert relation.change_tracking == "FALSE"
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({}, None),
+        ({"iceberg_version": None}, None),
+        ({"iceberg_version": 3}, 3),
+        ({"iceberg_version": 1}, 1),
+    ],
+)
+def test_iceberg_version_model_config(fake_integration, config, expected):
+    model = deepcopy(model_base)
+    model.config.update(config)
+    relation = fake_integration.build_relation(model)
+    assert relation.iceberg_version == expected
+
+
+def test_iceberg_version_catalog_default():
+    catalog_config = SimpleNamespace(
+        name="SNOWFLAKE",
+        catalog_type="BUILT_IN",
+        external_volume=None,
+        file_format=None,
+        adapter_properties={"iceberg_version": 3},
+    )
+    integration = BuiltInCatalogIntegration(catalog_config)
+    model = deepcopy(model_base)
+    relation = integration.build_relation(model)
+    assert relation.iceberg_version == 3
+
+
+def test_iceberg_version_model_overrides_catalog():
+    catalog_config = SimpleNamespace(
+        name="SNOWFLAKE",
+        catalog_type="BUILT_IN",
+        external_volume=None,
+        file_format=None,
+        adapter_properties={"iceberg_version": 1},
+    )
+    integration = BuiltInCatalogIntegration(catalog_config)
+    model = deepcopy(model_base)
+    model.config.update({"iceberg_version": 3})
+    relation = integration.build_relation(model)
+    assert relation.iceberg_version == 3
