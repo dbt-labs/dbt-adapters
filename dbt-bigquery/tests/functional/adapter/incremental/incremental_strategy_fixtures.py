@@ -190,6 +190,28 @@ where date_day >= _dbt_max_partition
 {% endif %}
 """.lstrip()
 
+overwrite_comment_only_max_partition_token_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        on_schema_change='append_new_columns',
+        partition_by={
+            "field": "date_day",
+            "data_type": "date"
+        }
+    )
+}}
+
+with data as (
+    select 1 as id, cast('2020-01-01' as date) as date_day
+)
+
+-- _dbt_max_partition appears in a comment and must not trigger declaration.
+/* _dbt_max_partition in block comments should also be ignored. */
+select * from data
+""".lstrip()
+
 overwrite_day_sql = """
 {{
     config(

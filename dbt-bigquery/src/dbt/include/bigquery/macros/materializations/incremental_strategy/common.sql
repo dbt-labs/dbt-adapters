@@ -1,7 +1,20 @@
 {% macro declare_dbt_max_partition(relation, partition_by, compiled_code, language='sql') %}
 
   {#-- TODO: revisit partitioning with python models --#}
-  {%- if '_dbt_max_partition' in compiled_code and language == 'sql' -%}
+  {%- if language != 'sql' -%}
+    {{ return('') }}
+  {%- endif -%}
+
+  {#-
+    Ignore mentions in comments/quoted literals when deciding whether to declare
+    _dbt_max_partition.
+  -#}
+  {%- set compiled_code_without_comments = modules.re.sub("(?s)/\\*.*?\\*/|--[^\\n\\r]*", " ", compiled_code) -%}
+  {%- set compiled_code_without_comments_or_strings = modules.re.sub("'(?:''|[^'])*'", " ", compiled_code_without_comments) -%}
+  {%- set uses_dbt_max_partition = modules.re.search("(^|[^A-Za-z0-9_])_dbt_max_partition([^A-Za-z0-9_]|$)", compiled_code_without_comments_or_strings) is not none -%}
+  {%- set relation_exists = load_relation(relation) is not none -%}
+
+  {%- if uses_dbt_max_partition and relation_exists -%}
 
     declare _dbt_max_partition {{ partition_by.data_type_for_partition() }} default (
       select max({{ partition_by.field }}) from {{ this }}

@@ -30,6 +30,7 @@ from tests.functional.adapter.incremental.incremental_strategy_fixtures import (
     overwrite_day_with_time_ingestion_sql,
     overwrite_day_with_time_partition_datetime_sql,
     overwrite_static_day_sql,
+    overwrite_comment_only_max_partition_token_sql,
 )
 
 
@@ -122,3 +123,20 @@ class TestBigQueryScripting(SeedConfigBase):
             project.adapter, "incremental_overwrite_day_with_time_partition_expected"
         )
         assert created == expected
+
+
+class TestBigQueryMaxPartitionCommentToken:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental_overwrite_comment_token.sql": (
+                overwrite_comment_only_max_partition_token_sql
+            ),
+        }
+
+    def test_first_run_and_incremental_run_succeed(self):
+        first_run = run_dbt()
+        assert len(first_run) == 1
+
+        second_run = run_dbt()
+        assert len(second_run) == 1
