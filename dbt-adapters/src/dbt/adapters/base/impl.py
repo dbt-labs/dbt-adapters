@@ -379,7 +379,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Return the table_format string to pass to CatalogWriteIntegrationConfig."""
         return catalog.table_format.value
 
-    def _translate_v2_properties(self, catalog_type: str, props: dict) -> dict:
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
         """Rename or inject adapter_properties keys for this adapter's CatalogIntegration."""
         return props
 
