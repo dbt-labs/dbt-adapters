@@ -7,6 +7,19 @@ import re
 import pytest
 from dbt.tests.util import run_dbt, write_config_file
 
+# Skip if installed dbt-core doesn't support use_catalogs_v2 yet (requires PR #12930).
+try:
+    from dbt.contracts.project import ProjectFlags as _PF
+
+    _has_catalogs_v2 = hasattr(_PF, "use_catalogs_v2")
+except ImportError:
+    _has_catalogs_v2 = False
+
+pytestmark = pytest.mark.skipif(
+    not _has_catalogs_v2,
+    reason="dbt-core does not support use_catalogs_v2 yet (requires PR #12930)",
+)
+
 
 def get_cleaned_model_ddl_from_file(file_name: str) -> str:
     with open(f"target/run/test/models/{file_name}", "r") as ddl_file:
