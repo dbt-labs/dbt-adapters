@@ -16,7 +16,13 @@ try:
     from dbt.node_types import ModelLanguage as _ModelLanguage
 
     if "javascript" not in _ModelLanguage._member_map_:
-        _js = object.__new__(_ModelLanguage)
+        # StrEnum (dbt-core 1.9–1.11) inherits from str, an immutable type.
+        # object.__new__ raises TypeError for str subclasses; str.__new__ must
+        # be used instead so the underlying str value is set correctly.
+        if issubclass(_ModelLanguage, str):
+            _js = str.__new__(_ModelLanguage, "javascript")
+        else:
+            _js = object.__new__(_ModelLanguage)
         _js._name_ = "javascript"  # type: ignore[attr-defined]
         _js._value_ = "javascript"  # type: ignore[attr-defined]
         setattr(_ModelLanguage, "javascript", _js)
