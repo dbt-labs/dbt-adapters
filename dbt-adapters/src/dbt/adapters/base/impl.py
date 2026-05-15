@@ -83,7 +83,7 @@ from dbt.adapters.catalogs import (
     CatalogIntegrationConfig,
     CatalogRelation,
     CatalogV2,
-    CatalogWriteConfig,
+    CatalogWriteIntegrationConfig,
     CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
@@ -349,7 +349,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return self._catalog_client.get(name)
 
     def bridge_v2_catalog(self, catalog: CatalogV2) -> CatalogIntegrationConfig:
-        """Translate a CatalogV2 (defined in dbt-core) into a CatalogWriteConfig.
+        """Translate a CatalogV2 (defined in dbt-core) into a CatalogWriteIntegrationConfig.
 
         catalog is typed via CatalogV2 Protocol to avoid a circular dependency.
         Adapters override the hook methods below rather than this method directly.
@@ -361,7 +361,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         props = {
             k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
         }
-        return CatalogWriteConfig(
+        return CatalogWriteIntegrationConfig(
             name=catalog.name,
             catalog_type=self._v2_to_v1_type(ct),
             catalog_name=catalog.name,

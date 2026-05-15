@@ -63,8 +63,8 @@ class CatalogIntegrationConfig(Protocol):
 
 
 @dataclass
-class CatalogWriteConfig:
-    """Concrete implementation of CatalogWriteIntegrationConfig for use in bridge_v2_catalog.
+class CatalogWriteIntegrationConfig:
+    """Concrete implementation of CatalogIntegrationConfig for use in bridge_v2_catalog.
 
     Defined in dbt-adapters so bridge_v2_catalog has no runtime dependency on dbt-core.
     """

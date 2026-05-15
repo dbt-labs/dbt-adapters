@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from dbt.adapters.base.impl import BaseAdapter
-from dbt.adapters.catalogs import CatalogWriteConfig
+from dbt.adapters.catalogs import CatalogWriteIntegrationConfig
 
 
 def _v2_catalog(name, catalog_type, table_format_value, config=None):
@@ -54,7 +54,7 @@ class TestBaseAdapterBridgeV2Catalog:
     def test_returns_catalog_write_config(self):
         catalog = _v2_catalog("cat", "horizon", "iceberg")
         result = self.adapter.bridge_v2_catalog(catalog)
-        assert isinstance(result, CatalogWriteConfig)
+        assert isinstance(result, CatalogWriteIntegrationConfig)
 
     def test_basic_fields_extracted(self):
         catalog = _v2_catalog(
