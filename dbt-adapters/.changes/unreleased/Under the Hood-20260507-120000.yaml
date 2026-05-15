@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Extract the unique-key match used inside `default__get_merge_sql` into a dispatchable `get_merge_unique_key_match` macro so adapters can override the comparison without forking the full merge SQL
+time: 2026-05-07T12:00:00.000000+00:00
+custom:
+    Author: sriramr98
+    Issue: "1902"
