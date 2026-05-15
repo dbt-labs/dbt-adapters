@@ -3,29 +3,25 @@ import os
 PACKAGE_PATH = os.path.dirname(__file__)
 PROJECT_NAME = "dbt"
 
-# dbt-core < 1.12 does not include 'javascript' in ModelLanguage, so parsing
-# any macro that declares supported_languages=['sql', 'python', 'javascript']
-# raises KeyError at manifest load time. Patch get_supported_languages to drop
-# 'javascript' specifically when it is absent from the enum; all other unknown
-# language names still raise so genuine typos are not silently swallowed.
-# The patch is a no-op on dbt-core >= 1.12 where 'javascript' is a valid member.
+# dbt-core < 1.12 does not include 'javascript' in ModelLanguage, causing a
+# KeyError when the manifest parser encounters function.sql's declaration of
+# supported_languages=['sql', 'python', 'javascript']. Extend the enum with
+# the missing member so the lookup succeeds at runtime. Patching the class
+# itself — rather than wrapping get_supported_languages — means the fix is
+# effective regardless of whether that function was already imported under a
+# local binding by dbt's parser modules before this module was imported.
+# On dbt-core >= 1.12, 'javascript' already exists in the enum and this block
+# is skipped entirely.
 try:
-    import dbt.clients.jinja as _dbt_jinja
     from dbt.node_types import ModelLanguage as _ModelLanguage
 
-    def _tolerant_get_supported_languages(node):
-        if "supported_languages" not in node.args:
-            return [_ModelLanguage.sql]
-        lang_idx = node.args.index("supported_languages")
-        result = []
-        for item in node.defaults[-(len(node.args) - lang_idx)].items:
-            try:
-                result.append(_ModelLanguage[item.value])
-            except KeyError:
-                if item.value != "javascript":
-                    raise
-        return result or [_ModelLanguage.sql]
-
-    _dbt_jinja.get_supported_languages = _tolerant_get_supported_languages
+    if "javascript" not in _ModelLanguage._member_map_:
+        _js = type(next(iter(_ModelLanguage))).__new__(_ModelLanguage, "javascript")
+        _js._name_ = "javascript"  # type: ignore[attr-defined]
+        _js._value_ = "javascript"  # type: ignore[attr-defined]
+        _ModelLanguage._member_names_.append("javascript")
+        _ModelLanguage._member_map_["javascript"] = _js
+        _ModelLanguage._value2member_map_["javascript"] = _js
+        setattr(_ModelLanguage, "javascript", _js)
 except Exception:
     pass
