@@ -10,10 +10,15 @@ try:
 except Exception:
     _js_supported = False
 
-# On dbt-core >= 1.12, ModelLanguage includes 'javascript', so we can safely
-# load the js-capable macro directory. On older versions we fall back to the
-# base directory which omits javascript from supported_languages.
+# global_project/ declares supported_languages=['sql', 'python', 'javascript'],
+# which requires dbt-core >= 1.12 to parse without error. On older versions,
+# fall back to the generated global_project_non_js/ directory, which omits
+# javascript from supported_languages. global_project_non_js/ is a build
+# artifact; run `hatch build` or the generate-compat script to produce it
+# locally when testing against dbt-core < 1.12.
 PACKAGE_PATH = (
-    os.path.normpath(os.path.join(_HERE, "..", "global_project_js")) if _js_supported else _HERE
+    _HERE
+    if _js_supported
+    else os.path.normpath(os.path.join(_HERE, "..", "global_project_non_js"))
 )
 PROJECT_NAME = "dbt"

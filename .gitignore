@@ -178,3 +178,6 @@ cython_debug/
 dbt-integration-tests
 /.tool-versions
 /.hypothesis/*
+
+# generated build artifact — produced by hatch_build.py for dbt-core < 1.12 compatibility
+dbt-adapters/src/dbt/include/global_project_non_js/

@@ -3,8 +3,8 @@ import shutil
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
-_JS_FUNCTION_SQL = """\
-{% materialization function, default, supported_languages=['sql', 'python', 'javascript'] %}
+_NON_JS_FUNCTION_SQL = """\
+{% materialization function, default, supported_languages=['sql', 'python'] %}
     {% set existing_relation = load_cached_relation(this) %}
     {% set target_relation = this.incorporate(type=this.Function) %}
 
@@ -32,11 +32,11 @@ _FUNCTION_SQL_REL = os.path.join("macros", "materializations", "functions", "fun
 class CustomBuildHook(BuildHookInterface):
     def initialize(self, version, build_data):
         src = os.path.join(self.root, "src", "dbt", "include", "global_project")
-        dst = os.path.join(self.root, "src", "dbt", "include", "global_project_js")
+        dst = os.path.join(self.root, "src", "dbt", "include", "global_project_non_js")
 
         if os.path.exists(dst):
             shutil.rmtree(dst)
         shutil.copytree(src, dst)
 
         with open(os.path.join(dst, _FUNCTION_SQL_REL), "w") as f:
-            f.write(_JS_FUNCTION_SQL)
+            f.write(_NON_JS_FUNCTION_SQL)
