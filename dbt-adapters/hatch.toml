@@ -5,6 +5,8 @@ path = "src/dbt/adapters/__about__.py"
 packages = ["src/dbt/adapters", "src/dbt/include"]
 sources = ["src"]
 
+[build.hooks.custom]
+
 [envs.default]
 dependencies = [
     "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
