@@ -1,0 +1,6 @@
+kind: Fixes
+body: Add snowflake__persist_docs override and warn from snowflake__alter_column_comment so persist_docs emits the missing-column warning on Snowflake without an extra get_columns_in_relation call
+time: 2026-05-18T12:00:00.000000+00:00
+custom:
+    Author: sriramr98
+    Issue: "1690"

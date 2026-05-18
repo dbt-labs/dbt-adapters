@@ -107,8 +107,23 @@
 {% endmacro %}
 
 
+{% macro snowflake__persist_docs(relation, model, for_relation, for_columns) -%}
+  {% if for_relation and config.persist_relation_docs() and model.description %}
+    {% do run_query(alter_relation_comment(relation, model.description)) %}
+  {% endif %}
+
+  {% if for_columns and config.persist_column_docs() and model.columns %}
+    {% set alter_comment_sql = alter_column_comment(relation, model.columns) %}
+    {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
+      {% do run_query(alter_comment_sql) %}
+    {% endif %}
+  {% endif %}
+{% endmacro %}
+
+
 {% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% do validate_doc_columns(relation, column_dict, existing_columns) %}
     {% if relation.is_dynamic_table -%}
         {% set relation_type = "table" %}
     {% else -%}
