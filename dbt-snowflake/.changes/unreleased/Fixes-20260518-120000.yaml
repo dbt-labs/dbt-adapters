@@ -3,4 +3,4 @@ body: Add snowflake__persist_docs override and warn from snowflake__alter_column
 time: 2026-05-18T12:00:00.000000+00:00
 custom:
     Author: sriramr98
-    Issue: "1690"
+    Issue: "1937"
