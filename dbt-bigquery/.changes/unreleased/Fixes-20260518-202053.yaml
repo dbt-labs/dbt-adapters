@@ -1,5 +1,5 @@
 kind: Fixes
-body: Skip non existent schemas like information_schema when building catalog relations
+body: Skip nonexistent schemas like information_schema when building catalog relations
 time: 2026-05-18T20:20:53.321278+05:30
 custom:
     Author: ash2shukla
