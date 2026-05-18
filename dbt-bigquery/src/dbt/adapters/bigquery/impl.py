@@ -1058,14 +1058,17 @@ class BigQueryAdapter(BaseAdapter):
 
     def _get_catalog_relations_by_info_schema(self, relations):
         candidates = super()._get_catalog_relations_by_info_schema(relations)
-        db_schemas: Dict[str, Set[str]] = {}
+        schema_exists: Dict[str, Dict[str, bool]] = {}
         result = {}
 
         for info_schema, rels in candidates.items():
             database = info_schema.database
-            if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
-            if info_schema.schema in db_schemas[database]:  # type:ignore
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
                 result[info_schema] = rels
             else:
                 logger.debug(
