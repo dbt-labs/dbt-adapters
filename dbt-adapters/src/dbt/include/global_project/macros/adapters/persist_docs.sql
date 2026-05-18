@@ -22,22 +22,27 @@
   {{ return(adapter.dispatch('persist_docs', 'dbt')(relation, model, for_relation, for_columns)) }}
 {% endmacro %}
 
-{#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names. Returns a filtered column_dict containing only columns that exist. --#}
+{#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names. Returns a filtered column_dict containing only columns that exist.
 {% macro validate_doc_columns(relation, column_dict, existing_column_names) %}
   {% set existing_lower = existing_column_names | map("lower") | list %}
   {% set missing = [] %}
-  {% for col_name in column_dict %}
-    {% if col_name | lower not in existing_lower %}
+  {% set filtered = {} %}
+  {% for col_name, col_info in column_dict.items() %}
+    {% set is_quoted = col_info.get('quote', false) if col_info is mapping else false %}
+    {% if is_quoted %}
+      {% set present = col_name in existing_column_names %}
+    {% else %}
+      {% set present = col_name | lower in existing_lower %}
+    {% endif %}
+    {% if present %}
+      {% do filtered.update({col_name: col_info}) %}
+    {% else %}
       {% do missing.append(col_name) %}
     {% endif %}
   {% endfor %}
   {% if missing | length > 0 %}
     {{ exceptions.warn("In relation " ~ relation.render() ~ ": The following columns are specified in the schema but are not present in the database: " ~ missing | join(", ")) }}
   {% endif %}
-  {% set filtered = {} %}
-  {% for col_name in column_dict if col_name | lower in existing_lower %}
-    {% do filtered.update({col_name: column_dict[col_name]}) %}
-  {% endfor %}
   {{ return(filtered) }}
 {% endmacro %}
 

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Make validate_doc_columns honor the per-column quote config so quoted identifiers compare case-sensitively instead of being matched after a blanket lowercase
+time: 2026-05-18T12:00:00.000000+00:00
+custom:
+    Author: sriramr98
+    Issue: "1690"
