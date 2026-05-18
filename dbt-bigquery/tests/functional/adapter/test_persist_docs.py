@@ -4,8 +4,10 @@ import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsBase,
     BasePersistDocs,
+    BasePersistDocsQuotedColumnCaseSensitive,
 )
 from dbt.tests.adapter.persist_docs import fixtures as persist_docs_fixtures
 
@@ -397,3 +399,11 @@ models:
 
             assert id_field.description == "Updated id description"
             assert name_field.description == "Updated name description"
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass

@@ -2,7 +2,9 @@ import pytest
 
 from dbt.tests.adapter.persist_docs import fixtures
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsBase,
+    BasePersistDocsQuotedColumnCaseSensitive,
 )
 from dbt.tests.util import run_dbt_and_capture
 
@@ -34,3 +36,11 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
             "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
             in logs
         )
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass

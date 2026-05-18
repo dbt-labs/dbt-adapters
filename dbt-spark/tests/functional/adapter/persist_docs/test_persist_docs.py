@@ -1,5 +1,9 @@
 import pytest
 
+from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
+    BasePersistDocsQuotedColumnCaseSensitive,
+)
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 from fixtures import (
@@ -161,3 +165,13 @@ class TestPersistDocsMissingColumn:
             "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
             in logs
         )
+
+
+@pytest.mark.skip_profile("apache_spark", "spark_session")
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+@pytest.mark.skip_profile("apache_spark", "spark_session")
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass

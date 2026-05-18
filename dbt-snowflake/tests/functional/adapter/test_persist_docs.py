@@ -5,8 +5,10 @@ from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocs,
+    BasePersistDocsAllColumnsMissing,
     BasePersistDocsColumnMissing,
     BasePersistDocsCommentOnQuotedColumn,
+    BasePersistDocsQuotedColumnCaseSensitive,
 )
 
 
@@ -79,4 +81,12 @@ class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
+    pass
+
+
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
     pass

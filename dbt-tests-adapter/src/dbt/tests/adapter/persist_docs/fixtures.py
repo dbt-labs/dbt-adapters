@@ -58,6 +58,37 @@ models:
         description: "comment that cannot be created"
 """
 
+_MODELS__ALL_COLUMNS_MISSING = """
+{{ config(materialized='table') }}
+select 1 as id
+"""
+
+_PROPERITES__SCHEMA_ALL_COLUMNS_MISSING = """
+version: 2
+models:
+  - name: all_columns_missing
+    columns:
+      - name: bogus_col_one
+        description: "first bogus column"
+      - name: bogus_col_two
+        description: "second bogus column"
+"""
+
+_MODELS__QUOTED_CASE_SENSITIVE = """
+{{ config(materialized='table') }}
+select 1 as mycol
+"""
+
+_PROPERITES__SCHEMA_QUOTED_CASE_SENSITIVE = """
+version: 2
+models:
+  - name: quoted_case_sensitive
+    columns:
+      - name: MyCol
+        description: "case-sensitive name; must not silently match mycol"
+        quote: true
+"""
+
 _PROPERTIES__SCHEMA_YML = """
 version: 2
 
