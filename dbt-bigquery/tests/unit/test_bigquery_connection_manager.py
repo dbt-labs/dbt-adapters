@@ -5,10 +5,10 @@ from unittest.mock import patch, MagicMock, Mock, ANY
 
 import dbt.adapters
 import google.cloud.bigquery
-
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
+from dbt.adapters.bigquery.retry import _TerminalJobAwarePredicate, RetryFactory
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -309,6 +309,30 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # profile timeout is 1, so polling timeout = 1 + 30 = 31
         self.assertEqual(call_kwargs["timeout"], 31)
 
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_uses_polling_retry(self, MockQueryJobConfig):
+        """query_job.result() should receive a retry built from create_query_job_polling_retry,
+        not a raw DEFAULT_JOB_RETRY.with_timeout(execution_timeout)."""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        with patch.object(
+            self.connections._retry,
+            "create_query_job_polling_retry",
+            wraps=self.connections._retry.create_query_job_polling_retry,
+        ) as spy:
+            self.connections._query_and_results(
+                self.mock_connection,
+                "SELECT 1",
+                {"dry_run": False},
+                job_id="test_job",
+            )
+            spy.assert_called_once_with(mock_job)
+
+        call_kwargs = mock_job.result.call_args[1]
+        self.assertIn("retry", call_kwargs)
+
     def test_copy_bq_table_respects_model_timeout(self):
         """Test that copy_bq_table uses the model-level timeout when set"""
         mock_copy_job = Mock()
@@ -330,3 +354,148 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         # Clean up
         self.mock_connection._bq_model_timeout = None
+
+
+class TestTerminalJobAwarePredicate(unittest.TestCase):
+    """Unit tests for the _TerminalJobAwarePredicate used in query_job.result() polling."""
+
+    def _make_internal_error(self):
+        """Reproduce the Tyson error: 400 with reason=internalError."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.BadRequest(
+            "internal error during execution",
+            errors=[{"reason": "internalError"}],
+        )
+
+    def _make_non_retryable_error(self):
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.BadRequest("syntax error", errors=[{"reason": "invalidQuery"}])
+
+    def test_short_circuits_on_terminal_failed_job(self):
+        """Core regression test: internalError on a DONE+failed job must not retry."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "DONE"
+        mock_job.error_result = {"reason": "internalError", "message": "internal error"}
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+        mock_job.reload.assert_called_once()
+
+    def test_retries_when_job_still_running(self):
+        """A retryable error on a still-running job should be retried (up to the cap)."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_job.reload.assert_called_once()
+
+    def test_respects_attempt_cap_on_running_job(self):
+        """Even for a still-running job, stop after job_retries attempts."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=2)
+
+        self.assertTrue(predicate(self._make_internal_error()))  # attempt 1
+        self.assertTrue(predicate(self._make_internal_error()))  # attempt 2
+        self.assertFalse(predicate(self._make_internal_error()))  # attempt 3 → cap hit
+
+    def test_no_retry_when_retries_zero(self):
+        """job_retries=0 means never retry, regardless of error type or job state."""
+        mock_job = Mock()
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=0)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+
+    def test_non_retryable_error_skips_reload(self):
+        """Non-retryable errors should bail out immediately without calling job.reload()."""
+        mock_job = Mock()
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_non_retryable_error())
+
+        self.assertFalse(result)
+        mock_job.reload.assert_not_called()
+
+    def test_reload_failure_falls_through_to_deferred(self):
+        """If reload() raises, we fall through to _DeferredException rather than crashing."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = Exception("network error")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+
+    def test_terminal_job_wins_over_remaining_retries(self):
+        """Even if retries budget remains, terminal job state stops polling."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "DONE"
+        mock_job.error_result = {"reason": "internalError"}
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=10)
+        result = predicate(self._make_internal_error())
+
+        self.assertFalse(result)
+
+
+class TestRetryFactoryPollingRetry(unittest.TestCase):
+    """Tests for RetryFactory.create_query_job_polling_retry."""
+
+    def _make_credentials(
+        self, job_retries=1, job_retry_deadline_seconds=None, job_execution_timeout_seconds=28800
+    ):
+        creds = Mock(spec=BigQueryCredentials)
+        creds.job_retries = job_retries
+        creds.job_retry_deadline_seconds = job_retry_deadline_seconds
+        creds.job_execution_timeout_seconds = job_execution_timeout_seconds
+        creds.job_creation_timeout_seconds = 60
+        return creds
+
+    def test_deadline_uses_job_retry_deadline_seconds(self):
+        """Retry deadline should come from job_retry_deadline_seconds, not job_execution_timeout_seconds."""
+        creds = self._make_credentials(
+            job_retry_deadline_seconds=300,
+            job_execution_timeout_seconds=28800,
+        )
+        factory = RetryFactory(creds)
+        retry = factory.create_query_job_polling_retry(Mock())
+
+        self.assertEqual(retry._deadline, 300)
+
+    def test_deadline_falls_back_to_10_minutes(self):
+        """When job_retry_deadline_seconds is unset, default to 600s (not execution timeout)."""
+        creds = self._make_credentials(
+            job_retry_deadline_seconds=None,
+            job_execution_timeout_seconds=28800,
+        )
+        factory = RetryFactory(creds)
+        retry = factory.create_query_job_polling_retry(Mock())
+
+        self.assertEqual(retry._deadline, 600)
+
+    def test_predicate_is_terminal_job_aware(self):
+        """The retry object's predicate should be a _TerminalJobAwarePredicate."""
+        creds = self._make_credentials()
+        factory = RetryFactory(creds)
+        mock_job = Mock()
+        retry = factory.create_query_job_polling_retry(mock_job)
+
+        self.assertIsInstance(retry._predicate, _TerminalJobAwarePredicate)
+        self.assertIs(retry._predicate._query_job, mock_job)

@@ -1,4 +1,4 @@
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from google.api_core.future.polling import DEFAULT_POLLING
 from google.api_core.retry import Retry
@@ -17,6 +17,7 @@ _logger = AdapterLogger("BigQuery")
 
 _MINUTE = 60.0
 _DAY = 24 * 60 * 60.0
+_DEFAULT_POLLING_RETRY_DEADLINE = 10 * _MINUTE
 
 
 class RetryFactory:
@@ -62,6 +63,21 @@ class RetryFactory:
 
         return retry
 
+    def create_query_job_polling_retry(self, query_job: Any) -> Retry:
+        """
+        Build a retry for query_job.result() polling that:
+        - Uses job_retry_deadline_seconds (default 10 min) as the retry budget,
+          decoupled from job_execution_timeout_seconds so that a long-running job
+          does not silently burn the full execution timeout on getQueryResults errors.
+        - Enforces job_retries as an attempt cap.
+        - Short-circuits immediately when the underlying BQ job has reached a
+          terminal failed state (state == DONE + error_result), avoiding the
+          scenario where a permanently-dead job is polled for hours.
+        """
+        deadline = self._job_deadline or _DEFAULT_POLLING_RETRY_DEADLINE
+        predicate = _TerminalJobAwarePredicate(query_job, self._retries)
+        return DEFAULT_JOB_RETRY.with_predicate(predicate).with_deadline(deadline)
+
 
 class _DeferredException:
     """
@@ -90,6 +106,41 @@ class _DeferredException:
 
         # otherwise raise
         return False
+
+
+class _TerminalJobAwarePredicate:
+    """
+    Retry predicate for query_job.result() polling.
+
+    Short-circuits when the underlying BQ job has reached a terminal failed state
+    (state == "DONE" with error_result set), even if _job_should_retry would
+    otherwise consider the error retryable. This prevents dbt from polling
+    getQueryResults for hours against a job that BQ has already killed.
+
+    Also enforces a per-run attempt cap via _DeferredException.
+    """
+
+    def __init__(self, query_job: Any, retries: int) -> None:
+        self._query_job = query_job
+        self._deferred = _DeferredException(retries)
+
+    def __call__(self, error: Exception) -> bool:
+        if not _job_should_retry(error):
+            return False
+
+        # Reload from jobs.get to get authoritative job state.
+        try:
+            self._query_job.reload()
+            if self._query_job.state == "DONE" and self._query_job.error_result:
+                _logger.debug(
+                    f"Job {self._query_job.job_id} is in a terminal failed state; "
+                    "stopping getQueryResults polling."
+                )
+                return False
+        except Exception as reload_error:
+            _logger.debug(f"Failed to reload job state during retry predicate: {reload_error}")
+
+        return self._deferred(error)
 
 
 def _create_reopen_on_error(connection: Connection) -> Callable[[Exception], None]:
