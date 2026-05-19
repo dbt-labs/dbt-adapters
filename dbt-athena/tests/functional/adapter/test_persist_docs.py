@@ -28,7 +28,7 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_MISSING_COL}
 
     def test_missing_column(self, project):
         _, logs = run_dbt_and_capture(["run"])

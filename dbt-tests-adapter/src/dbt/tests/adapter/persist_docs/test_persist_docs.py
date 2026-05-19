@@ -125,7 +125,7 @@ class BasePersistDocsColumnMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_MISSING_COL}
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_MISSING_COL}
 
     def test_missing_column(self, project):
         run_dbt(["docs", "generate"])
@@ -167,7 +167,7 @@ class BasePersistDocsAllColumnsMissing(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_ALL_COLUMNS_MISSING}
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_ALL_COLUMNS_MISSING}
 
     def test_all_columns_missing_does_not_crash(self, project):
         results, logs = run_dbt_and_capture(["run"])
@@ -198,7 +198,7 @@ class BasePersistDocsQuotedColumnCaseSensitive(BasePersistDocsBase):
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": fixtures._PROPERITES__SCHEMA_QUOTED_CASE_SENSITIVE}
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_QUOTED_CASE_SENSITIVE}
 
     def test_quoted_column_case_sensitive_warning(self, project):
         _, logs = run_dbt_and_capture(["run"])
