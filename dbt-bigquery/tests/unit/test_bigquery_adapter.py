@@ -1010,7 +1010,9 @@ class TestBigQueryFilterCatalog(unittest.TestCase):
 class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
     def test_filters_out_nonexistent_schemas(self):
         adapter = self.get_adapter("oauth")
-        adapter.list_schemas = MagicMock(return_value=["real_dataset"])
+        adapter.check_schema_exists = MagicMock(
+            side_effect=lambda database, schema: schema == "real_dataset"
+        )
 
         normal_relation = BigQueryRelation.create(
             database="test-project",
