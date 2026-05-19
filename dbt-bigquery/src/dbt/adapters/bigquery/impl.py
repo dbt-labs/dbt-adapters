@@ -5,6 +5,7 @@ from multiprocessing.context import SpawnContext
 import threading
 from typing import (
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Iterable,
@@ -146,6 +147,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 
 _dataset_lock = threading.Lock()
 
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
+
 
 @dataclass
 class GrantTarget(dbtClassMixin):
@@ -208,14 +213,26 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "biglake_metastore": "biglake_metastore",
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     ###
     # Implementations of abstract methods
