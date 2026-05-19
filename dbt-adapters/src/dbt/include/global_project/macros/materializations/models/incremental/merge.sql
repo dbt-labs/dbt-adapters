@@ -4,6 +4,14 @@
   {{ adapter.dispatch('get_merge_sql', 'dbt')(target, source, unique_key, dest_columns, incremental_predicates) }}
 {%- endmacro %}
 
+{% macro get_merge_unique_key_match(source_unique_key, target_unique_key) %}
+  {{ return(adapter.dispatch('get_merge_unique_key_match', 'dbt')(source_unique_key, target_unique_key)) }}
+{% endmacro %}
+
+{% macro default__get_merge_unique_key_match(source_unique_key, target_unique_key) -%}
+    {{ return(equals(source_unique_key, target_unique_key) | trim) }}
+{%- endmacro %}
+
 {% macro default__get_merge_sql(target, source, unique_key, dest_columns, incremental_predicates=none) -%}
     {%- set predicates = [] if incremental_predicates is none else [] + incremental_predicates -%}
     {%- set dest_cols_csv = get_quoted_csv(dest_columns | map(attribute="name")) -%}
@@ -22,8 +30,8 @@
             {% endfor %}
         {% else %}
             {% set source_unique_key = ("DBT_INTERNAL_SOURCE." ~ unique_key) | trim %}
-	    {% set target_unique_key = ("DBT_INTERNAL_DEST." ~ unique_key) | trim %}
-	    {% set unique_key_match = equals(source_unique_key, target_unique_key) | trim %}
+            {% set target_unique_key = ("DBT_INTERNAL_DEST." ~ unique_key) | trim %}
+            {% set unique_key_match = get_merge_unique_key_match(source_unique_key, target_unique_key) %}
             {% do predicates.append(unique_key_match) %}
         {% endif %}
     {% else %}

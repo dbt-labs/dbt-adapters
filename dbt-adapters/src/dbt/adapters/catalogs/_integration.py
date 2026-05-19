@@ -1,8 +1,26 @@
 import abc
+from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 from typing_extensions import Protocol
 
 from dbt.adapters.contracts.relation import RelationConfig
+
+
+class _TableFormat(Protocol):
+    value: str
+
+
+class CatalogV2(Protocol):
+    """Structural interface for CatalogV2 (defined in dbt-core).
+
+    Defined here as a Protocol to avoid a circular dependency. dbt-adapters
+    uses this for typing bridge_v2_catalog and its hook methods.
+    """
+
+    name: str
+    catalog_type: str
+    table_format: _TableFormat
+    config: Dict[str, Dict[str, Any]]
 
 
 class CatalogIntegrationConfig(Protocol):
@@ -42,6 +60,22 @@ class CatalogIntegrationConfig(Protocol):
     external_volume: Optional[str]
     file_format: Optional[str]
     adapter_properties: Dict[str, Any]
+
+
+@dataclass
+class CatalogWriteIntegrationConfig:
+    """Concrete implementation of CatalogIntegrationConfig for use in bridge_v2_catalog.
+
+    Defined in dbt-adapters so bridge_v2_catalog has no runtime dependency on dbt-core.
+    """
+
+    name: str
+    catalog_type: str
+    external_volume: Optional[str] = None
+    table_format: Optional[str] = None
+    catalog_name: Optional[str] = None
+    file_format: Optional[str] = None
+    adapter_properties: Dict[str, Any] = field(default_factory=dict)
 
 
 class CatalogRelation(Protocol):
