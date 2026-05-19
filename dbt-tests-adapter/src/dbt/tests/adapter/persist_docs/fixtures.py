@@ -47,7 +47,7 @@ models:
         quote: true
 """
 
-_PROPERITES__SCHEMA_MISSING_COL = """
+_PROPERTIES__SCHEMA_MISSING_COL = """
 version: 2
 models:
   - name: missing_column
@@ -63,7 +63,7 @@ _MODELS__ALL_COLUMNS_MISSING = """
 select 1 as id
 """
 
-_PROPERITES__SCHEMA_ALL_COLUMNS_MISSING = """
+_PROPERTIES__SCHEMA_ALL_COLUMNS_MISSING = """
 version: 2
 models:
   - name: all_columns_missing
@@ -79,7 +79,7 @@ _MODELS__QUOTED_CASE_SENSITIVE = """
 select 1 as mycol
 """
 
-_PROPERITES__SCHEMA_QUOTED_CASE_SENSITIVE = """
+_PROPERTIES__SCHEMA_QUOTED_CASE_SENSITIVE = """
 version: 2
 models:
   - name: quoted_case_sensitive
