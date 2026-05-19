@@ -1,12 +1,13 @@
 import json
 import pytest
 
-from dbt.tests.util import run_dbt, write_file
+from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsBase,
     BasePersistDocs,
 )
+from dbt.tests.adapter.persist_docs import fixtures as persist_docs_fixtures
 
 _MODELS__TABLE_MODEL_NESTED = """
 {{ config(materialized='table') }}
@@ -135,8 +136,86 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
             }
         }
 
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"missing_column.sql": persist_docs_fixtures._MODELS__MISSING_COLUMN}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": persist_docs_fixtures._PROPERITES__SCHEMA_MISSING_COL}
+
     def test_missing_column(self, project):
-        run_dbt()
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
+            in logs
+        )
+
+
+_MODELS__TABLE_NESTED_MISSING = """
+{{ config(materialized='table') }}
+SELECT
+    STRUCT(
+        STRUCT(
+            1 AS level_3_a,
+            2 AS level_3_b
+        ) AS level_2
+    ) AS level_1
+"""
+
+_PROPERTIES__NESTED_MISSING = """
+version: 2
+
+models:
+  - name: table_nested_missing
+    columns:
+      - name: level_1
+        description: level_1 column description
+      - name: level_1.level_2
+        description: level_2 column description
+      - name: level_1.level_2.level_3_a
+        description: level_3 column description
+      - name: level_1.level_2.does_not_exist
+        description: this nested column does not exist
+      - name: totally_fake
+        description: this top-level column does not exist
+"""
+
+
+class TestPersistDocsNestedColumnMissing(BasePersistDocsBase):
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"table_nested_missing.sql": _MODELS__TABLE_NESTED_MISSING}
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": _PROPERTIES__NESTED_MISSING}
+
+    def test_nested_missing_column_warning(self, project):
+        _, logs = run_dbt_and_capture(["run"])
+
+        # Invalid columns should trigger a warning
+        assert (
+            "The following columns are specified in the schema but are not present in the database: level_1.level_2.does_not_exist, totally_fake"
+            in logs
+        )
+
+        # Valid nested columns should NOT appear in the warning
+        assert "not present in the database: level_1," not in logs
+        assert "not present in the database: level_1.level_2," not in logs
+        assert "level_1.level_2.level_3_a" not in logs
 
 
 class TestPersistDocsNested(BasePersistDocsBase):

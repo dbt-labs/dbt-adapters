@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix get_partition_batches exceeding partition limit when combining non-bucket and bucket partitions
+time: 2026-03-20T01:56:50.322765+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1783"

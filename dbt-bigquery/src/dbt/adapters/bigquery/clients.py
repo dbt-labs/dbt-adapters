@@ -1,9 +1,15 @@
-from typing import Optional
+from __future__ import annotations
+
+from typing import Optional, TYPE_CHECKING
+
+# Lazy-loaded inside create_notebook_client() to avoid slowing down every
+# `dbt parse` invocation. See: https://github.com/dbt-labs/dbt-adapters/issues/1604
+if TYPE_CHECKING:
+    from google.cloud import aiplatform_v1
 
 from google.api_core.client_info import ClientInfo
 from google.api_core.client_options import ClientOptions
 from google.auth.exceptions import DefaultCredentialsError
-from google.cloud import aiplatform_v1
 from google.cloud.bigquery import Client as BigQueryClient, DEFAULT_RETRY as BQ_DEFAULT_RETRY
 from google.cloud.dataproc_v1 import BatchControllerClient, JobControllerClient
 from google.cloud.storage import Client as StorageClient
@@ -78,6 +84,8 @@ def _dataproc_endpoint(credentials: BigQueryCredentials) -> str:
 def create_notebook_client(
     credentials: GoogleCredentials, region: Optional[str]
 ) -> aiplatform_v1.NotebookServiceClient:
+    from google.cloud import aiplatform_v1
+
     api_endpoint = f"{region}-aiplatform.googleapis.com"
     notebook_client = aiplatform_v1.NotebookServiceClient(
         credentials=credentials,

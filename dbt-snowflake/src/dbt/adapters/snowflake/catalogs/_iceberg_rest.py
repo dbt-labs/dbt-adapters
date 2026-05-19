@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -8,6 +8,7 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
 
 from dbt.adapters.exceptions.compilation import InvalidRelationConfigError
 
@@ -17,12 +18,15 @@ class IcebergRestCatalogRelation:
     catalog_type: str = constants.DEFAULT_ICEBERG_REST_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_ICEBERG_REST_CATALOG.name
     table_format: Optional[str] = constants.ICEBERG_TABLE_FORMAT
+    partition_by: Optional[Union[list[str], str]] = None
     catalog_linked_database: Optional[str] = None
+    catalog_linked_database_type: Optional[str] = None  # e.g., 'glue' for AWS Glue
     external_volume: Optional[str] = None
     file_format: Optional[str] = None
     target_file_size: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     auto_refresh: Optional[bool] = None
+    iceberg_version: Optional[int] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -33,8 +37,10 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     allows_writes = True
     auto_refresh = None
     catalog_linked_database: Optional[str] = None
+    catalog_linked_database_type: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -43,10 +49,16 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         self.external_volume: Optional[str] = config.external_volume
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
+            self.catalog_linked_database_type = adapter_properties.get(
+                "catalog_linked_database_type"
+            )
             self.auto_refresh = adapter_properties.get("auto_refresh")
             self.target_file_size = adapter_properties.get("target_file_size")
             self.max_data_extension_time_in_days = adapter_properties.get(
                 "max_data_extension_time_in_days"
+            )
+            self.iceberg_version = adapter_properties.get(
+                SnowflakeIcebergTableRelationParameters.iceberg_version
             )
 
         if not self.catalog_linked_database:
@@ -78,9 +90,12 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         return IcebergRestCatalogRelation(
             catalog_name=self.name,
             external_volume=None,
+            partition_by=parse_model.partition_by(model),
             catalog_linked_database=self.catalog_linked_database,
+            catalog_linked_database_type=self.catalog_linked_database_type,
             auto_refresh=parse_model.auto_refresh(model) or self.auto_refresh,
             target_file_size=parse_model.target_file_size(model) or self.target_file_size,
             max_data_extension_time_in_days=parse_model.max_data_extension_time_in_days(model)
             or self.max_data_extension_time_in_days,
+            iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
         )

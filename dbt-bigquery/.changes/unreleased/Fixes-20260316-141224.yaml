@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix nested STRUCT fields misassigning values when YAML order differs
+time: 2026-03-16T14:12:24.465109-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1530"

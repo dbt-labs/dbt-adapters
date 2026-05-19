@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
@@ -35,6 +35,7 @@ class PostgresCredentials(Credentials):
     sslkey: Optional[str] = None
     sslrootcert: Optional[str] = None
     application_name: Optional[str] = "dbt"
+    autocommit: Optional[bool] = False
     retries: int = 1
 
     _ALIASES = {"dbname": "database", "pass": "password"}
@@ -63,12 +64,64 @@ class PostgresCredentials(Credentials):
             "sslkey",
             "sslrootcert",
             "application_name",
+            "autocommit",
             "retries",
         )
 
 
 class PostgresConnectionManager(SQLConnectionManager):
     TYPE = "postgres"
+
+    def __init__(self, profile, mp_context):
+        super().__init__(profile, mp_context)
+        self._skip_transactions_checker: Optional[Callable[[], bool]] = None
+
+    def set_skip_transactions_checker(self, checker: Callable[[], bool]) -> None:
+        self._skip_transactions_checker = checker
+
+    def _is_autocommit_enabled(self) -> bool:
+        """Check if autocommit is enabled for the current connection."""
+        connection = self.get_thread_connection()
+        return connection.credentials.autocommit is True
+
+    def _should_skip_transaction_statements(self) -> bool:
+        """Check if we should skip BEGIN/COMMIT/ROLLBACK statements.
+
+        Returns True if:
+        1. autocommit is enabled (each statement auto-commits)
+        2. The behavior flag is set (checked via _skip_transactions_checker)
+
+        Both conditions must be true to skip transaction statements.
+        """
+        if not self._is_autocommit_enabled():
+            return False
+
+        if self._skip_transactions_checker is None:
+            return False
+
+        return self._skip_transactions_checker()
+
+    def begin(self):
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            super().begin()
+
+        connection.transaction_open = True
+
+    def commit(self):
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            super().commit()
+        connection.transaction_open = False
+
+    def rollback_if_open(self):
+        connection = self.get_thread_connection()
+
+        if not self._should_skip_transaction_statements():
+            super().rollback_if_open()
+        connection.transaction_open = False
 
     @contextmanager
     def exception_handler(self, sql):
@@ -151,6 +204,9 @@ class PostgresConnectionManager(SQLConnectionManager):
                     **kwargs,
                 )
 
+            if handle is not None and credentials.autocommit:
+                handle.autocommit = True
+
             if rec_mode is not None:
                 # If using the record/replay mechanism, regardless of mode, we
                 # use a wrapper.
@@ -202,6 +258,9 @@ class PostgresConnectionManager(SQLConnectionManager):
         res = cursor.fetchone()
 
         logger.debug("Cancel query '{}': {}".format(connection_name, res))
+
+    def add_begin_query(self):
+        pass
 
     @classmethod
     def get_credentials(cls, credentials):

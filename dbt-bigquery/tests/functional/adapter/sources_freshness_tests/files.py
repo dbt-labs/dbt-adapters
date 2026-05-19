@@ -9,6 +9,20 @@ sources:
       - name: test_source
 """
 
+BATCH_SCHEMA_YML = """
+sources:
+  - name: test_source
+    freshness:
+      warn_after: {count: 10, period: hour}
+      error_after: {count: 1, period: day}
+    schema: "{{ target.schema }}"
+    tables:
+      - name: test_table
+      - name: test_table2
+      - name: test_table_with_loaded_at_field
+        loaded_at_field: my_loaded_at_field
+"""
+
 SEED_TEST_SOURCE_CSV = """
 id,name
 1,Martin

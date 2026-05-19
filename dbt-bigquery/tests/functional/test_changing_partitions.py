@@ -257,3 +257,29 @@ class TestBigQueryChangingPartition(BaseBigQueryChangingPartition):
             "require_partition_filter": None,
         }
         self.run_changes(before, after)
+
+
+class TestBigQueryChangingPartitionStandardSQL(BaseBigQueryChangingPartition):
+    """Run partition tests with the standard SQL behavior flag enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "flags": {"bigquery_use_standard_sql_for_partitions": True},
+        }
+
+    def test_bigquery_add_partition(self, project):
+        before = {
+            "partition_by": None,
+            "cluster_by": None,
+            "partition_expiration_days": None,
+            "require_partition_filter": None,
+        }
+        after = {
+            "partition_by": {"field": "cur_time", "data_type": "timestamp"},
+            "cluster_by": None,
+            "partition_expiration_days": 7,
+            "require_partition_filter": True,
+        }
+        self.run_changes(before, after)
+        self.partitions_test({"expected": 1})

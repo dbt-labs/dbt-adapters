@@ -18,17 +18,3 @@
     {{ adapter.commit() }}
 
 {% endmacro %}
-
-
-{% macro get_function_macro(function_type, function_language) %}
-    {{ return(adapter.dispatch('get_function_macro', 'dbt')(function_type, function_language)) }}
-{% endmacro %}
-
-{% macro default__get_function_macro(function_type, function_language) %}
-    {% set macro_name = function_type ~ "_function_" ~ function_language %}
-    {% if not macro_name in context %}
-        {{ exceptions.raise_not_implemented(function_language ~ ' ' ~ function_type ~ ' function not implemented for adapter ' ~adapter.type()) }}
-    {% endif %}
-    {% set macro = context[macro_name] %}
-    {{ return(macro) }}
-{% endmacro %}

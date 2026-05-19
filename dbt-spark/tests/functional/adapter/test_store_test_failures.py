@@ -36,7 +36,9 @@ class TestSparkStoreTestFailures(StoreTestFailuresBase):
         self.run_tests_store_failures_and_assert(project)
 
 
-@pytest.mark.skip_profile("apache_spark", "spark_session")
+@pytest.mark.skip_profile(
+    "apache_spark", "spark_session", "databricks_sql_endpoint", "spark_http_odbc"
+)
 class TestSparkStoreTestFailuresWithDelta(StoreTestFailuresBase):
     @pytest.fixture(scope="class")
     def project_config_update(self):

@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 ADAPTER_TYPE = "snowflake"
 
-DEFAULT_PYTHON_VERSION_FOR_PYTHON_MODELS = "3.9"
+DEFAULT_PYTHON_VERSION_FOR_PYTHON_MODELS = "3.10"
 
 INFO_SCHEMA_TABLE_FORMAT = "DEFAULT"
 ICEBERG_TABLE_FORMAT = "ICEBERG"
@@ -41,4 +41,5 @@ SnowflakeIcebergTableRelationParameters = SimpleNamespace(
     max_data_extension_time_in_days="max_data_extension_time_in_days",
     change_tracking="change_tracking",
     automatic_clustering="automatic_clustering",
+    iceberg_version="iceberg_version",
 )

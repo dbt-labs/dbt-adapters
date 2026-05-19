@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from typing import Iterable, List, Optional, Union
 
 from dbt_common.exceptions import DbtConfigError
 
@@ -74,6 +74,21 @@ def cluster_by(model: RelationConfig) -> Optional[str]:
     return None
 
 
+# Keys may have to be lowercased due to Glue
+def partition_by(model: RelationConfig) -> Optional[Union[str, List[str]]]:
+    if not model.config:
+        return None
+
+    fields = model.config.get("partition_by")
+    if isinstance(fields, str):
+        return fields
+    if isinstance(fields, Iterable):
+        return list(fields)
+    if fields is not None:
+        raise DbtConfigError(f"Unexpected partition_by configuration: {fields}")
+    return None
+
+
 def external_volume(model: RelationConfig) -> Optional[str]:
     return model.config.get("external_volume") if model.config else None
 
@@ -111,6 +126,14 @@ def table_format(model: RelationConfig) -> Optional[str]:
         # make table_format case-insensitive
         return _table_format.upper()
     return None
+
+
+def iceberg_version(model: RelationConfig) -> Optional[int]:
+    return (
+        model.config.get(SnowflakeIcebergTableRelationParameters.iceberg_version)
+        if model.config
+        else None
+    )
 
 
 def target_file_size(model: RelationConfig) -> Optional[str]:

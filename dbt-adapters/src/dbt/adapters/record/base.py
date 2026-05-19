@@ -52,6 +52,38 @@ class AdapterExecuteRecord(Record):
 
 
 @dataclasses.dataclass
+class SubmitPythonJobParams:
+    thread_id: str
+    parsed_model: dict
+    compiled_code: str
+
+    def _to_dict(self):
+        return {
+            "thread_id": self.thread_id,
+            "unique_id": self.parsed_model.get("unique_id"),
+            "config": self.parsed_model.get("config"),
+            "compiled_code": self.compiled_code,
+        }
+
+
+@dataclasses.dataclass
+class SubmitPythonJobResult:
+    return_val: AdapterResponse
+
+    def _to_dict(self):
+        return {"return_val": self.return_val.to_dict()}
+
+
+@Recorder.register_record_type
+class SubmitPythonJobRecord(Record):
+    """Implements record/replay support for BaseAdapter.submit_python_job()."""
+
+    params_cls = SubmitPythonJobParams
+    result_cls = SubmitPythonJobResult
+    group = "Available"
+
+
+@dataclasses.dataclass
 class AdapterTestSqlResult:
     return_val: str
 

@@ -1,0 +1,7 @@
+kind: Features
+body: Add PythonUDFWithPackagesSupported test class and fixtures (MY_UDF_PYTHON_WITH_NUMPY,
+  MY_UDF_PYTHON_WITH_PACKAGES_YML) for testing Python UDF package templating and execution
+time: 2026-03-11T17:56:08.011769-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1737"

@@ -6,10 +6,12 @@ packages = ["src/dbt"]
 sources = ["src"]
 
 [envs.default]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "ipdb~=0.13.13",
@@ -19,6 +21,7 @@ dependencies = [
     "pytest-csv~=3.0",
     "pytest-dotenv",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -60,16 +63,19 @@ check-sdist = [
 docker-prod = "docker build -f docker/Dockerfile -t dbt-spark ."
 
 [envs.ci]
+pre-install-commands = [
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
 dependencies = [
-    "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-tests-adapter @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-tests-adapter",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -90,6 +96,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-logbook~=1.2",
+    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
