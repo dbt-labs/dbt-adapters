@@ -137,7 +137,7 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
 
 BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     name="bigquery_use_standard_sql_for_partitions",
-    default=False,
+    default=True,
     description=(
         "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
         "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
