@@ -65,12 +65,34 @@
 {% endmacro %}
 
 
+{#
+  -- QUOTE GRANTEES
+  -- Hook for adapters to wrap/quote/transform grantee identifiers before they
+  -- are emitted in GRANT/REVOKE statements. The default is a no-op (returns
+  -- the list unchanged), preserving the existing behavior.
+  --
+  -- Adapters that need quoted identifiers (T-SQL [brackets], Snowflake
+  -- "double-quotes" for case-sensitive names, Spark/Hive backticks),
+  -- prefixed identifiers (BigQuery `user:foo@example.com`, Redshift
+  -- `group:`/`role:`/`user:`), or any other per-grantee transformation can
+  -- override just this macro instead of duplicating the whole grant/revoke
+  -- SQL.
+#}
+{% macro quote_grantees(grantees) %}
+    {{ return(adapter.dispatch('quote_grantees', 'dbt')(grantees)) }}
+{% endmacro %}
+
+{%- macro default__quote_grantees(grantees) -%}
+    {{ return(grantees) }}
+{%- endmacro -%}
+
+
 {% macro get_grant_sql(relation, privilege, grantees) %}
     {{ return(adapter.dispatch('get_grant_sql', 'dbt')(relation, privilege, grantees)) }}
 {% endmacro %}
 
 {%- macro default__get_grant_sql(relation, privilege, grantees) -%}
-    grant {{ privilege }} on {{ relation.render() }} to {{ grantees | join(', ') }}
+    grant {{ privilege }} on {{ relation.render() }} to {{ quote_grantees(grantees) | join(', ') }}
 {%- endmacro -%}
 
 
@@ -79,7 +101,7 @@
 {% endmacro %}
 
 {%- macro default__get_revoke_sql(relation, privilege, grantees) -%}
-    revoke {{ privilege }} on {{ relation.render() }} from {{ grantees | join(', ') }}
+    revoke {{ privilege }} on {{ relation.render() }} from {{ quote_grantees(grantees) | join(', ') }}
 {%- endmacro -%}
 
 
