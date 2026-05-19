@@ -56,9 +56,9 @@ check-sdist = [
 
 [envs.ci]
 pre-install-commands = [
+    "pip install dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
