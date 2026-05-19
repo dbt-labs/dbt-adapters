@@ -407,9 +407,6 @@ jobs:
                 working-directory: "./dbt-snowflake"
         environment:
             name: "dbt-snowflake"
-        permissions:
-            id-token: write
-            contents: read
         env:
             SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
             SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
@@ -428,10 +425,6 @@ jobs:
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
             SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
             SNOWFLAKE_TEST_TOKEN: ${{ secrets.SNOWFLAKE_TEST_TOKEN }}
-            # Snowflake WIF binds to a single OIDC subject (exact match); we use two users to cover both:
-            # - main:         repo:dbt-labs/dbt-adapters:ref:refs/heads/main
-            # - pull_request: repo:dbt-labs/dbt-adapters:pull_request
-            SNOWFLAKE_TEST_WIF_USER: ${{ github.event_name == 'pull_request' && vars.SNOWFLAKE_TEST_WIF_USER_PR || vars.SNOWFLAKE_TEST_WIF_USER_MAIN }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
@@ -452,19 +445,8 @@ jobs:
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
-            - name: "Mint Snowflake OIDC token"
-              id: oidc
-              uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
-              with:
-                  script: |
-                      const token = await core.getIDToken('snowflakecomputing.com');
-                      core.setSecret(token);
-                      core.setOutput('id_token', token);
-
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
-              env:
-                  OIDC_TOKEN: ${{ steps.oidc.outputs.id_token }}
 
     integration-tests-spark:
         if: contains(fromJSON(inputs.packages), 'dbt-spark')
