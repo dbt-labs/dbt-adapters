@@ -453,14 +453,18 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Mint Snowflake OIDC token"
+              id: oidc
               uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b
               with:
                   script: |
                       const token = await core.getIDToken('snowflakecomputing.com');
-                      core.exportVariable('OIDC_TOKEN', token);
+                      core.setSecret(token);
+                      core.setOutput('id_token', token);
 
             - name: "Run integration tests"
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
+              env:
+                  OIDC_TOKEN: ${{ steps.oidc.outputs.id_token }}
 
     integration-tests-spark:
         if: contains(fromJSON(inputs.packages), 'dbt-spark')
