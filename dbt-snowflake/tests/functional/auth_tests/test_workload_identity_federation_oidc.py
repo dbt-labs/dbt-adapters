@@ -70,6 +70,9 @@ jobs:
 """
 
 import os
+from time import sleep
+
+import requests
 from dbt.tests.util import run_dbt
 import pytest
 
@@ -77,6 +80,32 @@ import pytest
 _MODELS__MODEL_1_SQL = """
 select 1 as id, 'wif_test' as source
 """
+
+
+def _mint_github_oidc_token():
+    """Mint a fresh GitHub OIDC token for Snowflake WIF authentication.
+
+    GitHub OIDC tokens have a ~5 min TTL; the integration test suite runs
+    longer, so a token minted at workflow start would expire before this
+    test executes. Mint right before the connection instead.
+
+    """
+    url = os.getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+    bearer = os.getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+    if not (url and bearer):
+        return os.getenv("OIDC_TOKEN")
+
+    headers = {"Authorization": f"bearer {bearer}"}
+    target = f"{url}&audience=snowflakecomputing.com"
+    for _ in range(5):
+        result = requests.get(target, headers=headers)
+        try:
+            return result.json()["value"]
+        except (ValueError, KeyError):
+            sleep(0.1)
+    raise RuntimeError(
+        f"Failed to mint GitHub OIDC token after retries (status={result.status_code})"
+    )
 
 
 class TestSnowflakeWorkloadIdentityFederation:
@@ -92,7 +121,7 @@ class TestSnowflakeWorkloadIdentityFederation:
             "role": os.getenv("SNOWFLAKE_TEST_ROLE"),
             "authenticator": "workload_identity",
             "workload_identity_provider": "oidc",
-            "token": os.getenv("OIDC_TOKEN"),
+            "token": _mint_github_oidc_token(),
         }
 
     @pytest.fixture(scope="class")
