@@ -58,10 +58,10 @@ check-sdist = [
 pre-install-commands = [
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
+    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
 ]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
-    "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git#subdirectory=core",
     "ddtrace==2.3.0",
     "moto~=5.0.13",
     "pyparsing~=3.1.4",
