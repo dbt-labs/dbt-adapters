@@ -70,7 +70,11 @@ dependencies = [
 ]
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = "python -m pytest tests/functional --ddtrace"
+integration-tests = [
+    "python -c \"import os; from dbt.include import global_project; p = os.path.join(global_project.PACKAGE_PATH, 'macros/adapters/persist_docs.sql'); print('===== LOADED persist_docs.sql ====='); print('PATH:', p); print('REAL:', os.path.realpath(p)); print(open(p).read()); print('===== END =====')\"",
+    "pip show dbt-adapters",
+    "python -m pytest tests/functional --ddtrace",
+]
 
 [envs.cd]
 pre-install-commands = []
