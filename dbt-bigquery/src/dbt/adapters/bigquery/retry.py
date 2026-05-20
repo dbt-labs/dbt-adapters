@@ -122,9 +122,16 @@ class _TerminalJobAwarePredicate:
 
     def __init__(self, query_job: Any, retries: int) -> None:
         self._query_job = query_job
+        self._retries = retries
         self._deferred = _DeferredException(retries)
 
     def __call__(self, error: Exception) -> bool:
+        # If the user opted out of retries, bail immediately. Avoids an
+        # unnecessary jobs.get round-trip via query_job.reload() that can never
+        # change the outcome.
+        if self._retries == 0:
+            return False
+
         if not _job_should_retry(error):
             return False
 
