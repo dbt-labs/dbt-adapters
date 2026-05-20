@@ -1007,6 +1007,33 @@ class TestBigQueryFilterCatalog(unittest.TestCase):
             assert isinstance(row["something"], decimal.Decimal)
 
 
+class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
+    def test_filters_out_nonexistent_schemas(self):
+        adapter = self.get_adapter("oauth")
+        adapter.check_schema_exists = MagicMock(
+            side_effect=lambda database, schema: schema == "real_dataset"
+        )
+
+        normal_relation = BigQueryRelation.create(
+            database="test-project",
+            schema="real_dataset",
+            identifier="my_table",
+        )
+        info_schema_source = BigQueryRelation.create(
+            database="test-project",
+            schema="region-us.INFORMATION_SCHEMA",
+            identifier="COLUMN_FIELD_PATHS",
+        )
+
+        result = adapter._get_catalog_relations_by_info_schema(
+            [normal_relation, info_schema_source]
+        )
+
+        schemas_in_result = {info.schema for info in result.keys()}
+        assert "real_dataset" in schemas_in_result
+        assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
+
+
 class TestBigQueryAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):
         rows = [
