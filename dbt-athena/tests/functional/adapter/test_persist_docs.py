@@ -4,8 +4,6 @@ from dbt.tests.adapter.persist_docs import fixtures
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsAllColumnsMissing,
     BasePersistDocsBase,
-    BasePersistDocsQuotedColumnCaseSensitive,
-    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 from dbt.tests.util import run_dbt_and_capture
 
@@ -41,22 +39,3 @@ class TestPersistDocsColumnMissing(BasePersistDocsBase):
 
 class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
     pass
-
-
-class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
-    pass
-
-
-class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
-    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
-):
-    @pytest.mark.skip(
-        reason=(
-            "Athena/Glue folds column names to lowercase at the catalog layer, "
-            "so a case-mismatched physical column is physically unreachable. "
-            "Case-sensitivity logic is covered by TestPersistDocsQuotedColumnCaseSensitive. "
-            "Docs: https://docs.aws.amazon.com/athena/latest/ug/tables-databases-columns-names.html"
-        )
-    )
-    def test_quoted_description_not_applied_on_case_mismatch(self, project):
-        pass
