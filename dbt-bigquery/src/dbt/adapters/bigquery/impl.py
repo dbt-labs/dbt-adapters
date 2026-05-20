@@ -1056,6 +1056,28 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
+                    )
+                )
+        return result
+
     def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
         """Raise an error if the source identifier contains a wildcard character.
 
