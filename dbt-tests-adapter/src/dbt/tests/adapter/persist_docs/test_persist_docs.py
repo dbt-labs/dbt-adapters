@@ -208,6 +208,52 @@ class BasePersistDocsQuotedColumnCaseSensitive(BasePersistDocsBase):
         )
 
 
+class BasePersistDocsQuotedDescriptionNotAppliedOnMismatch(BasePersistDocsBase):
+    """With quote: true and case-mismatched physical column, the documented description
+    must not be applied to a differently-cased physical column even though
+    case-insensitive lookup in adapter-specific comment SQL would otherwise match it."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "models": {
+                "test": {
+                    "+persist_docs": {
+                        "columns": True,
+                    },
+                }
+            }
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "quoted_physical_case_mismatch.sql": fixtures._MODELS__QUOTED_PHYSICAL_CASE_MISMATCH
+        }
+
+    @pytest.fixture(scope="class")
+    def properties(self):
+        return {"schema.yml": fixtures._PROPERTIES__SCHEMA_QUOTED_PHYSICAL_CASE_MISMATCH}
+
+    def test_quoted_description_not_applied_on_case_mismatch(self, project):
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: mycol"
+            in logs
+        )
+        run_dbt(["docs", "generate"])
+        catalog_path = os.path.join(project.project_root, "target", "catalog.json")
+        with open(catalog_path) as fp:
+            catalog_data = json.load(fp)
+        node = catalog_data["nodes"]["model.test.quoted_physical_case_mismatch"]
+        for col_name, col_meta in node["columns"].items():
+            comment = col_meta.get("comment") or ""
+            assert "DOCUMENTED_DESCRIPTION_SENTINEL" not in comment, (
+                f"Documented description was applied to physical column {col_name!r} "
+                f"despite case mismatch + quote: true on documented identifier."
+            )
+
+
 class BasePersistDocsCommentOnQuotedColumn:
     """Covers edge case where column with comment must be quoted.
     We set this using the `quote:` tag in the property file."""
@@ -266,6 +312,12 @@ class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
 
 
 class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
     pass
 
 

@@ -8,6 +8,7 @@ from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsBase,
     BasePersistDocs,
     BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 from dbt.tests.adapter.persist_docs import fixtures as persist_docs_fixtures
 
@@ -406,4 +407,10 @@ class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
 
 
 class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
     pass

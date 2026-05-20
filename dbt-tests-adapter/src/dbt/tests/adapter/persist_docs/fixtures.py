@@ -89,6 +89,21 @@ models:
         quote: true
 """
 
+_MODELS__QUOTED_PHYSICAL_CASE_MISMATCH = """
+{{ config(materialized='table') }}
+select 1 as {{ adapter.quote("MyCol") }}
+"""
+
+_PROPERTIES__SCHEMA_QUOTED_PHYSICAL_CASE_MISMATCH = """
+version: 2
+models:
+  - name: quoted_physical_case_mismatch
+    columns:
+      - name: mycol
+        description: "DOCUMENTED_DESCRIPTION_SENTINEL must not be applied to a different-case physical column"
+        quote: true
+"""
+
 _PROPERTIES__SCHEMA_YML = """
 version: 2
 

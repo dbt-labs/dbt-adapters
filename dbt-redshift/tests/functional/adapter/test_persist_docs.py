@@ -11,6 +11,7 @@ from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsColumnMissing,
     BasePersistDocsCommentOnQuotedColumn,
     BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
 )
 
 _MATERIALIZED_VIEW_PROPERTIES__SCHEMA_YML = """
@@ -62,6 +63,16 @@ class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
 
 
 class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):
         outputs = {"default": dbt_profile_target}

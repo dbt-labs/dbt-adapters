@@ -123,7 +123,7 @@
 
 {% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
-    {% do validate_doc_columns(relation, column_dict, existing_columns) %}
+    {% set filtered_column_dict = validate_doc_columns(relation, column_dict, existing_columns) %}
     {% if relation.is_dynamic_table -%}
         {% set relation_type = "table" %}
     {% else -%}
@@ -131,7 +131,7 @@
     {% endif %}
     alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} alter
     {% for column_name in existing_columns if (column_name in existing_columns) or (column_name|lower in existing_columns) %}
-        {{ get_column_comment_sql(column_name, column_dict) }} {{- ',' if not loop.last else ';' }}
+        {{ get_column_comment_sql(column_name, filtered_column_dict) }} {{- ',' if not loop.last else ';' }}
     {% endfor %}
 {% endmacro %}
 
