@@ -117,7 +117,7 @@
       {% for flat_col in col.flatten() %}
         {% set parts = flat_col.name.split(".") %}
         {% for i in range(1, parts | length + 1) %}
-          {% set prefix = parts[:i] | join(".") | lower %}
+          {% set prefix = parts[:i] | join(".") %}
           {% if prefix not in valid_names %}
             {% do valid_names.append(prefix) %}
           {% endif %}
