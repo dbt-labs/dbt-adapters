@@ -26,18 +26,23 @@
 {% macro validate_doc_columns(relation, column_dict, existing_column_names) %}
   {% set existing_lower = existing_column_names | map("lower") | list %}
   {% set missing = [] %}
+  {% set filtered = {} %}
   {% for col_name in column_dict %}
-    {% if col_name | lower not in existing_lower %}
+    {% set is_quoted = column_dict[col_name]['quote'] %}
+    {% if is_quoted %}
+      {% set present = col_name in existing_column_names %}
+    {% else %}
+      {% set present = col_name | lower in existing_lower %}
+    {% endif %}
+    {% if present %}
+      {% do filtered.update({col_name: column_dict[col_name]}) %}
+    {% else %}
       {% do missing.append(col_name) %}
     {% endif %}
   {% endfor %}
   {% if missing | length > 0 %}
     {{ exceptions.warn("In relation " ~ relation.render() ~ ": The following columns are specified in the schema but are not present in the database: " ~ missing | join(", ")) }}
   {% endif %}
-  {% set filtered = {} %}
-  {% for col_name in column_dict if col_name | lower in existing_lower %}
-    {% do filtered.update({col_name: column_dict[col_name]}) %}
-  {% endfor %}
   {{ return(filtered) }}
 {% endmacro %}
 
