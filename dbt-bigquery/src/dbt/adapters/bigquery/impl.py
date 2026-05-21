@@ -137,7 +137,7 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
 
 BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     name="bigquery_use_standard_sql_for_partitions",
-    default=False,
+    default=True,
     description=(
         "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
         "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
@@ -1052,6 +1052,28 @@ class BigQueryAdapter(BaseAdapter):
                 logger.debug(
                     "Skipping catalog for {}.{} - schema does not exist".format(
                         database, candidate.schema
+                    )
+                )
+        return result
+
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
                     )
                 )
         return result
