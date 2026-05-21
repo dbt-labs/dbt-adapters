@@ -407,6 +407,9 @@ jobs:
                 working-directory: "./dbt-snowflake"
         environment:
             name: "dbt-snowflake"
+        permissions:
+            id-token: write
+            contents: read
         env:
             SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
             SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
@@ -425,6 +428,7 @@ jobs:
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
             SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
             SNOWFLAKE_TEST_TOKEN: ${{ secrets.SNOWFLAKE_TEST_TOKEN }}
+            SNOWFLAKE_TEST_WIF_USER: ${{ vars.SNOWFLAKE_TEST_WIF_USER }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
