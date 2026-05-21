@@ -1,0 +1,6 @@
+kind: Fixes
+body: Added base testing classes for quoted columns warning from persist_docs flow
+time: 2026-05-18T11:38:54.566605+05:30
+custom:
+    Author: sriramr98
+    Issue: "1937"
