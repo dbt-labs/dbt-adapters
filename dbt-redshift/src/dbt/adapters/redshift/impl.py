@@ -142,23 +142,23 @@ class RedshiftAdapter(SQLAdapter):
         self._log_feature_adoption()
 
     def _log_feature_adoption(self) -> None:
+        from dbt.adapters.redshift.connections import is_serverless
+
         creds = self.config.credentials
-        serverless = creds.is_serverless is True or "serverless" in (creds.host or "")
+        serverless = is_serverless(creds)
         if creds.datasharing:
             logger.info(
-                "Redshift datasharing mode active (method={}, serverless={}, ra3_node={})".format(
-                    creds.method,
-                    serverless,
-                    bool(creds.ra3_node),
-                )
+                "Redshift datasharing mode active (method={}, serverless={}, ra3_node={})",
+                creds.method,
+                serverless,
+                bool(creds.ra3_node),
             )
         else:
             logger.debug(
-                "Redshift datasharing disabled (method={}, serverless={}, ra3_node={})".format(
-                    creds.method,
-                    serverless,
-                    bool(creds.ra3_node),
-                )
+                "Redshift datasharing disabled (method={}, serverless={}, ra3_node={})",
+                creds.method,
+                serverless,
+                bool(creds.ra3_node),
             )
 
     @property

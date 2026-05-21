@@ -1,7 +1,7 @@
 from multiprocessing import get_context
 from unittest import mock
 
-from dbt.adapters.redshift import Plugin as RedshiftPlugin, RedshiftAdapter
+from dbt.adapters.redshift import RedshiftAdapter
 from tests.unit.utils import config_from_parts_or_dicts
 
 
