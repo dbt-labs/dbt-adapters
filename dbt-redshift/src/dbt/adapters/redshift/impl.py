@@ -139,6 +139,27 @@ class RedshiftAdapter(SQLAdapter):
         self.connections.set_skip_transactions_checker(
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
+        self._log_feature_adoption()
+
+    def _log_feature_adoption(self) -> None:
+        creds = self.config.credentials
+        serverless = creds.is_serverless is True or "serverless" in (creds.host or "")
+        if creds.datasharing:
+            logger.info(
+                "Redshift datasharing mode active (method={}, serverless={}, ra3_node={})".format(
+                    creds.method,
+                    serverless,
+                    bool(creds.ra3_node),
+                )
+            )
+        else:
+            logger.debug(
+                "Redshift datasharing disabled (method={}, serverless={}, ra3_node={})".format(
+                    creds.method,
+                    serverless,
+                    bool(creds.ra3_node),
+                )
+            )
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
