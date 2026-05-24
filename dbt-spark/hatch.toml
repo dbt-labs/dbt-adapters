@@ -20,8 +20,6 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-dotenv",
-    "pytest-logbook~=1.2",
-    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -74,8 +72,6 @@ dependencies = [
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
-    "pytest-logbook~=1.2",
-    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]
@@ -95,8 +91,6 @@ dependencies = [
     "freezegun",
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
-    "pytest-logbook~=1.2",
-    "logbook<1.9",
     "pytest-mock",
     "pytest-xdist",
 ]

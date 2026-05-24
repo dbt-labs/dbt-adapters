@@ -20,8 +20,6 @@ dependencies = [
     "pytest-csv~=3.0",
     "chardet~=6.0",
     "pytest-dotenv~=0.5.2",
-    "pytest-logbook~=1.2",
-    "logbook<1.9",
     "pytest-xdist~=3.6",
     "tox~=4.16",  # does this pin deps transitively?
 ]
@@ -77,8 +75,6 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "chardet~=6.0",
-    "pytest-logbook~=1.2",
-    "logbook<1.9",
     "pytest-xdist~=3.6",
     "tox~=4.16",  # does this pin deps transitively?
 ]
@@ -95,8 +91,6 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "chardet~=6.0",
-    "pytest-logbook>=1.2",
-    "logbook<1.9",
     "pytest-xdist~=3.6",
     "tox~=4.16",  # does this pin deps transitively?
 ]

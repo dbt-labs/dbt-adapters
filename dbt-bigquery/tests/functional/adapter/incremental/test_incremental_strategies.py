@@ -122,3 +122,67 @@ class TestBigQueryScripting(SeedConfigBase):
             project.adapter, "incremental_overwrite_day_with_time_partition_expected"
         )
         assert created == expected
+
+
+class TestBigQueryScriptingTruthyNullsEquals(TestBigQueryScripting):
+    """Same scenario as TestBigQueryScripting but with the truthy-nulls equals
+    behavior flag enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
+
+
+_merge_null_unique_key_sql = """
+{{
+    config(
+        materialized="incremental",
+        unique_key="id",
+        incremental_strategy="merge",
+    )
+}}
+
+with data as (
+    {% if not is_incremental() %}
+        select cast(null as int64) as id, 'a' as value union all
+        select 1 as id, 'b' as value
+    {% else %}
+        select cast(null as int64) as id, 'a_updated' as value union all
+        select 1 as id, 'b_updated' as value
+    {% endif %}
+)
+
+select * from data
+""".lstrip()
+
+
+class TestBigQueryMergeNullUniqueKeyTruthyNullsEquals:
+    """Regression: with the truthy-nulls flag enabled, a MERGE on a string
+    `unique_key` whose values are NULL must match NULL=NULL rather than
+    inserting a duplicate row."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"merge_null_unique_key.sql": _merge_null_unique_key_sql}
+
+    def test__null_unique_key_matches_under_truthy_nulls(self, project):
+        run_dbt(["run"])
+        run_dbt(["run"])
+
+        relation = project.adapter.Relation.create(
+            database=project.database,
+            schema=project.test_schema,
+            identifier="merge_null_unique_key",
+        )
+        with project.adapter.connection_named("_test"):
+            _, table = project.adapter.execute(
+                f"select id, value from {relation} order by id nulls last",
+                fetch=True,
+            )
+
+        rows = [(row[0], row[1]) for row in table.rows]
+        assert rows == [(1, "b_updated"), (None, "a_updated")]
