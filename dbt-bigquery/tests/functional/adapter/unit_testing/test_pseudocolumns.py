@@ -75,10 +75,13 @@ class TestBigQueryPseudocolumns(BasePseudocolumnUnitTest):
         from dbt.adapters.bigquery.column import BigQueryColumn
         from dbt.adapters.bigquery.impl import BigQueryAdapter
 
+        original_method = BigQueryAdapter.get_columns_and_pseudocolumns_for_relation
+
         def mock_columns_and_pseudocolumns(_self, relation):
             if relation.identifier == "external_table":
                 return [BigQueryColumn("id", "INTEGER"), BigQueryColumn("_FILE_NAME", "STRING")]
-            return []
+            # Fall through to the real method for temp relations (model output schema lookup)
+            return original_method(_self, relation)
 
         mock_columns_and_pseudocolumns._is_available_ = True
         mock_columns_and_pseudocolumns._parse_replacement_ = lambda *a, **k: []
