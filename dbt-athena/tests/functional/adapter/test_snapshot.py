@@ -299,3 +299,93 @@ class TestIcebergSnapshotCheckCols(TestSnapshotCheckColsHive):
             "cc_date_snapshot.sql": iceberg_cc_date_snapshot_sql,
             "cc_name_snapshot.sql": iceberg_cc_name_snapshot_sql,
         }
+
+
+iceberg_valid_to_current_snapshot_sql = """
+{% snapshot valid_to_current_snapshot %}
+    {{ config(
+        check_cols=['name'],
+        unique_key='id',
+        strategy='check',
+        target_database=database,
+        target_schema=schema,
+        table_type='iceberg',
+        dbt_valid_to_current="cast('9999-12-31 00:00:00' as timestamp(6))",
+    ) }}
+    select
+        id,
+        name,
+        cast(some_date as timestamp(6)) as some_date
+    from {{ ref(var('seed_name', 'base')) }}
+{% endsnapshot %}
+""".strip()
+
+
+class TestIcebergSnapshotValidToCurrent:
+    """Verify that dbt_valid_to_current sentinel is properly honored in MERGE.
+
+    When a row changes, the previous version should be closed (dbt_valid_to set
+    to the new row's dbt_valid_from) and only one current row should exist per
+    unique key at any time.
+    """
+
+    SENTINEL = "cast('9999-12-31 00:00:00' as timestamp(6))"
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "base.csv": seeds_base_csv,
+            "updated_2.csv": seeds_altered_base_csv + seeds_altered_added_csv,
+        }
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"name": "iceberg_snapshot_valid_to_current"}
+
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {
+            "valid_to_current_snapshot.sql": iceberg_valid_to_current_snapshot_sql,
+        }
+
+    def test_snapshot_valid_to_current_closes_rows(self, project):
+        # Initial seed + snapshot: 10 rows, all current
+        results = run_dbt(["seed"])
+        assert len(results) == 2
+
+        results = run_dbt(["snapshot"])
+        assert results[0].status == "success"
+        check_relation_rows(project, "valid_to_current_snapshot", 10)
+
+        # Verify all rows have sentinel value (not NULL)
+        relation = relation_from_name(project.adapter, "valid_to_current_snapshot")
+        result = project.run_sql(
+            f"select count(*) from {relation} "
+            f"where dbt_valid_to = {self.SENTINEL}",
+            fetch="one",
+        )
+        assert result[0] == 10
+
+        # Re-snapshot with updated names: should close 10 old rows + insert 10 new
+        results = run_dbt(["snapshot", "--vars", "seed_name: updated_2"])
+        assert results[0].status == "success"
+        check_relation_rows(project, "valid_to_current_snapshot", 20)
+
+        # Only 10 rows should be current (one per unique key)
+        result = project.run_sql(
+            f"select count(*) from {relation} "
+            f"where dbt_valid_to = {self.SENTINEL}",
+            fetch="one",
+        )
+        assert result[0] == 10
+
+        # No duplicate current rows for same id
+        result = project.run_sql(
+            f"select count(*) from ("
+            f"  select id, count(*) as n from {relation} "
+            f"  where dbt_valid_to = {self.SENTINEL} "
+            f"  group by id having count(*) > 1"
+            f")",
+            fetch="one",
+        )
+        assert result[0] == 0
