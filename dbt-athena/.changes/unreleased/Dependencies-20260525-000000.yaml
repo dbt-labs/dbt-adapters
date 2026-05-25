@@ -4,4 +4,4 @@ body: Allow pre-release versions of dbt-core to be selected so release integrati
 time: 2026-05-25T00:00:00.000000-08:00
 custom:
   Author: sriramr98
-  PR: "TBD"
+  PR: "1976"
