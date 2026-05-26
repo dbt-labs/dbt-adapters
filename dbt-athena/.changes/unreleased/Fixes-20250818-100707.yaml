@@ -1,0 +1,6 @@
+kind: Fixes
+body: Retry when S3 deletion fails instead of immediately failing
+time: 2025-08-18T10:07:07.057583-04:00
+custom:
+    Author: Avinash-1394
+    Issue: "1270"
