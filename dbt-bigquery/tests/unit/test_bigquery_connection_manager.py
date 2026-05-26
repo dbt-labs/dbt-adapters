@@ -5,6 +5,7 @@ from unittest.mock import patch, MagicMock, Mock, ANY
 
 import dbt.adapters
 import google.cloud.bigquery
+from google.api_core import exceptions as google_api_exceptions
 
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
@@ -200,6 +201,39 @@ class TestBigQueryConnectionManager(unittest.TestCase):
                 mock_job.result.side_effect = exceptions.ServiceUnavailable("Service unavailable")
             else:
                 mock_job.result.return_value = iter([])
+            return mock_job
+
+        self.mock_client.query.side_effect = make_query_job
+        self.connections.raw_execute("SELECT 1")
+        self.assertEqual(self.mock_client.query.call_count, 2)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_job_execution_timeout_cancelled_error_triggers_retry(self, MockQueryJobConfig):
+        exceptions = google_api_exceptions
+        call_count = {"query": 0}
+
+        def make_query_job(*args, **kwargs):
+            call_count["query"] += 1
+            mock_job = Mock(
+                job_id=f"job_{call_count['query']}",
+                location="US",
+                project="project",
+            )
+
+            if call_count["query"] == 1:
+                mock_job.result.side_effect = exceptions.Cancelled(
+                    "Job execution was cancelled: Job timed out after 1 sec",
+                    errors=[
+                        {
+                            "message": "Job execution was cancelled: Job timed out after 1 sec",
+                            "domain": "global",
+                            "reason": "stopped",
+                        }
+                    ],
+                )
+            else:
+                mock_job.result.return_value = iter([])
+
             return mock_job
 
         self.mock_client.query.side_effect = make_query_job

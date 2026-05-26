@@ -3,6 +3,7 @@ from typing import Callable, Optional
 from google.api_core.future.polling import DEFAULT_POLLING
 from google.api_core.retry import Retry
 from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY, _job_should_retry
+from google.api_core import exceptions as google_api_exceptions
 from requests.exceptions import ConnectionError
 
 from dbt.adapters.contracts.connection import Connection, ConnectionState
@@ -82,7 +83,7 @@ class _DeferredException:
         self._error_count += 1
 
         # if the error is retryable, and we haven't breached the threshold, log and continue
-        if _job_should_retry(error) and self._error_count <= self._retries:
+        if _is_retryable_job_error(error) and self._error_count <= self._retries:
             _logger.debug(
                 f"Retry attempt {self._error_count} of {self._retries} after error: {repr(error)}"
             )
@@ -90,6 +91,37 @@ class _DeferredException:
 
         # otherwise raise
         return False
+
+
+_JOB_TIMEOUT_MESSAGE = "job execution was cancelled"
+_JOB_TIMED_OUT_MESSAGE = "job timed out"
+
+
+def _is_bigquery_job_execution_timeout(error: Exception) -> bool:
+    if not isinstance(error, google_api_exceptions.Cancelled):
+        return False
+
+    if getattr(error, "code", None) != 499:
+        return False
+
+    errors = getattr(error, "errors", None) or []
+    for error in errors:
+        if not isinstance(error, dict):
+            continue
+
+        message = error.get("message", "").lower()
+        if (
+            error.get("reason", "") == "stopped"
+            and _JOB_TIMEOUT_MESSAGE in message
+            and _JOB_TIMED_OUT_MESSAGE in message
+        ):
+            return True
+
+    return False
+
+
+def _is_retryable_job_error(error: Exception) -> bool:
+    return _job_should_retry(error) or _is_bigquery_job_execution_timeout(error)
 
 
 def _create_reopen_on_error(connection: Connection) -> Callable[[Exception], None]:

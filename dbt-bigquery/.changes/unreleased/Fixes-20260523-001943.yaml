@@ -1,0 +1,6 @@
+kind: Fixes
+body: Retry BigQuery jobs that time out due to `job_execution_timeout_seconds` when `job_retries` is configured.
+time: 2026-05-23T00:19:43.9064987-04:00
+custom:
+    Author: s2shams
+    Issue: "1955"
