@@ -70,18 +70,24 @@ def test_datasharing_log_serverless_true():
     config = _make_config({"datasharing": True, "is_serverless": True})
     with mock.patch("dbt.adapters.redshift.impl.logger") as mock_logger:
         RedshiftAdapter(config, get_context("spawn"))
-    datasharing_calls = [c for c in _info_calls(mock_logger) if "datasharing" in c.lower()]
+    # logger.info is called as info(fmt_string, method, serverless, ra3_node)
+    # c[0] is the positional-args tuple; c[0][0] is the format string, c[0][2] is serverless
+    datasharing_calls = [
+        c for c in mock_logger.info.call_args_list if "datasharing" in c[0][0].lower()
+    ]
     assert datasharing_calls
-    assert "serverless=True" in datasharing_calls[0]
+    assert datasharing_calls[0][0][2] is True  # serverless arg
 
 
 def test_datasharing_log_serverless_false_for_provisioned():
     config = _make_config({"datasharing": True})
     with mock.patch("dbt.adapters.redshift.impl.logger") as mock_logger:
         RedshiftAdapter(config, get_context("spawn"))
-    datasharing_calls = [c for c in _info_calls(mock_logger) if "datasharing" in c.lower()]
+    datasharing_calls = [
+        c for c in mock_logger.info.call_args_list if "datasharing" in c[0][0].lower()
+    ]
     assert datasharing_calls
-    assert "serverless=False" in datasharing_calls[0]
+    assert datasharing_calls[0][0][2] is False  # serverless arg
 
 
 def test_datasharing_disabled_emits_debug_log():

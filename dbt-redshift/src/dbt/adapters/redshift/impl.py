@@ -149,14 +149,14 @@ class RedshiftAdapter(SQLAdapter):
         if creds.datasharing:
             logger.info(
                 "Redshift datasharing mode active (method={}, serverless={}, ra3_node={})",
-                creds.method,
+                str(creds.method),
                 serverless,
                 bool(creds.ra3_node),
             )
         else:
             logger.debug(
                 "Redshift datasharing disabled (method={}, serverless={}, ra3_node={})",
-                creds.method,
+                str(creds.method),
                 serverless,
                 bool(creds.ra3_node),
             )
