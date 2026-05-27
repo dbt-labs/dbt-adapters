@@ -432,8 +432,8 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
         self.assertFalse(result)
         mock_job.reload.assert_not_called()
 
-    def test_reload_expected_api_error_logs_debug(self):
-        """Expected API errors during reload() log at debug (no warning) and fall through."""
+    def test_reload_expected_api_error_logs_warning(self):
+        """Expected API errors during reload() log at warning and fall through."""
         from google.api_core.exceptions import InternalServerError
 
         mock_job = Mock()
@@ -446,10 +446,10 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
             result = predicate(self._make_internal_error())
 
         self.assertTrue(result)
-        mock_logger.warning.assert_not_called()
+        mock_logger.warning.assert_called_once()
 
-    def test_reload_transport_error_logs_debug(self):
-        """Expected transport errors during reload() log at debug (no warning) and fall through."""
+    def test_reload_transport_error_logs_warning(self):
+        """Expected transport errors during reload() log at warning and fall through."""
         from requests.exceptions import ConnectionError as RequestsConnectionError
 
         mock_job = Mock()
@@ -462,7 +462,7 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
             result = predicate(self._make_internal_error())
 
         self.assertTrue(result)
-        mock_logger.warning.assert_not_called()
+        mock_logger.warning.assert_called_once()
 
     def test_reload_unexpected_error_logs_warning(self):
         """Unexpected exceptions during reload() (auth bugs, programming errors)

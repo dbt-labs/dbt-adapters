@@ -141,8 +141,8 @@ class _TerminalJobAwarePredicate:
         # Retry predicate would crash the entire query_job.result() call,
         # which is worse than continuing to retry. We split the catch so that
         # truly unexpected errors (auth bugs, programming errors, new SDK
-        # exception types) are loud (warning), while routine API/transport
-        # flakes during reload stay quiet (debug).
+        # exception types) are loud (warning), and routine API/transport
+        # flakes during reload are also warning for observability.
         try:
             self._query_job.reload()
             if self._query_job.state == "DONE" and self._query_job.error_result:
@@ -152,7 +152,7 @@ class _TerminalJobAwarePredicate:
                 )
                 return False
         except (GoogleAPICallError, RequestException) as reload_error:
-            _logger.debug(
+            _logger.warning(
                 f"Expected transient error reloading job state during retry "
                 f"predicate (falling back to standard retry logic): {reload_error}"
             )
