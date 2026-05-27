@@ -27,6 +27,15 @@ MODEL__ICEBERG_TABLE_W_CONFIGS = """
                             select 1 as id
                             """
 
+MODEL__ICEBERG_TABLE_COPY_TAGS_AND_GRANTS = """
+                            {{ config(materialized='table',
+                                catalog_name='basic_iceberg_catalog',
+                                copy_grants=True,
+                                copy_tags=True)
+                                }}
+                            select 1 as id
+                            """
+
 
 class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
 
@@ -60,6 +69,7 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         return {
             "basic_iceberg_table.sql": MODEL__BASIC_ICEBERG_TABLE,
             "iceberg_table_with_configs.sql": MODEL__ICEBERG_TABLE_W_CONFIGS,
+            "iceberg_table_copy_tags_and_grants.sql": MODEL__ICEBERG_TABLE_COPY_TAGS_AND_GRANTS,
         }
 
     def test_basic_iceberg_catalog_integration(self, project):
@@ -76,3 +86,9 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         assert "max_data_extension_time_in_days = 30" in iceberg_table_with_configs_sql
         assert "change_tracking = FALSE" in iceberg_table_with_configs_sql
         assert "data_retention_time_in_days = 1" in iceberg_table_with_configs_sql
+
+        iceberg_table_copy_tags_and_grants_sql = get_cleaned_model_ddl_from_file(
+            "iceberg_table_copy_tags_and_grants.sql"
+        )
+        assert "copy grants" in iceberg_table_copy_tags_and_grants_sql
+        assert "copy tags" not in iceberg_table_copy_tags_and_grants_sql
