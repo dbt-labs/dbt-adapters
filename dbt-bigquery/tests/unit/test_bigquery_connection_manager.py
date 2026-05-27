@@ -1,7 +1,7 @@
 import json
 import unittest
 from requests.exceptions import ConnectionError
-from unittest.mock import patch, MagicMock, Mock, ANY
+from unittest.mock import patch, MagicMock, Mock, ANY, create_autospec
 
 import dbt.adapters
 import google.cloud.bigquery
@@ -252,6 +252,33 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         call_kwargs = mock_job.result.call_args[1]
         # timeout should be 120 + 30 = 150
         self.assertEqual(call_kwargs["timeout"], 150)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_job_retry_is_none_in_result_call(self, MockQueryJobConfig):
+        """Test that job.result() is called with job_retry=None.
+
+        job_retry=None prevents the BigQuery Python client from silently re-submitting
+        failed jobs inside job.result(). Without this, a job failing with backendError
+        could be re-submitted multiple times, each with a fresh polling_timeout window,
+        causing total runtime to far exceed job_execution_timeout.
+        """
+        mock_job = create_autospec(google.cloud.bigquery.QueryJob, instance=True)
+        mock_job.job_id = "test_job"
+        mock_job.location = "US"
+        mock_job.project = "project"
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections._query_and_results(
+            self.mock_connection,
+            "SELECT 1",
+            {"dry_run": False},
+            job_id="test_job",
+        )
+
+        call_kwargs = mock_job.result.call_args[1]
+        self.assertIn("job_retry", call_kwargs)
+        self.assertIsNone(call_kwargs["job_retry"])
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_retryable_google_api_error_is_reraised(self, MockQueryJobConfig):
