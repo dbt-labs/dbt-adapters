@@ -1,9 +1,10 @@
 from typing import Any, Callable, Optional
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.api_core.future.polling import DEFAULT_POLLING
 from google.api_core.retry import Retry
 from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY, _job_should_retry
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, RequestException
 
 from dbt.adapters.contracts.connection import Connection, ConnectionState
 from dbt.adapters.events.logging import AdapterLogger
@@ -135,7 +136,13 @@ class _TerminalJobAwarePredicate:
         if not _job_should_retry(error):
             return False
 
-        # Reload from jobs.get to get authoritative job state.
+        # Reload from jobs.get to get authoritative job state. Both branches
+        # below fall through to the standard retry path; raising out of a
+        # Retry predicate would crash the entire query_job.result() call,
+        # which is worse than continuing to retry. We split the catch so that
+        # truly unexpected errors (auth bugs, programming errors, new SDK
+        # exception types) are loud (warning), while routine API/transport
+        # flakes during reload stay quiet (debug).
         try:
             self._query_job.reload()
             if self._query_job.state == "DONE" and self._query_job.error_result:
@@ -144,8 +151,16 @@ class _TerminalJobAwarePredicate:
                     "stopping getQueryResults polling."
                 )
                 return False
+        except (GoogleAPICallError, RequestException) as reload_error:
+            _logger.debug(
+                f"Expected transient error reloading job state during retry "
+                f"predicate (falling back to standard retry logic): {reload_error}"
+            )
         except Exception as reload_error:
-            _logger.debug(f"Failed to reload job state during retry predicate: {reload_error}")
+            _logger.warning(
+                f"Unexpected error reloading job state during retry predicate "
+                f"(falling back to standard retry logic): {reload_error}"
+            )
 
         return self._deferred(error)
 

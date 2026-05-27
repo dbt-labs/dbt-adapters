@@ -432,16 +432,52 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
         self.assertFalse(result)
         mock_job.reload.assert_not_called()
 
-    def test_reload_failure_falls_through_to_deferred(self):
-        """If reload() raises, we fall through to _DeferredException rather than crashing."""
+    def test_reload_expected_api_error_logs_debug(self):
+        """Expected API errors during reload() log at debug (no warning) and fall through."""
+        from google.api_core.exceptions import InternalServerError
+
         mock_job = Mock()
         mock_job.job_id = "job_abc"
-        mock_job.reload.side_effect = Exception("network error")
+        mock_job.reload.side_effect = InternalServerError("jobs.get is flaky")
 
         predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
-        result = predicate(self._make_internal_error())
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
 
         self.assertTrue(result)
+        mock_logger.warning.assert_not_called()
+
+    def test_reload_transport_error_logs_debug(self):
+        """Expected transport errors during reload() log at debug (no warning) and fall through."""
+        from requests.exceptions import ConnectionError as RequestsConnectionError
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = RequestsConnectionError("connection reset")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_not_called()
+
+    def test_reload_unexpected_error_logs_warning(self):
+        """Unexpected exceptions during reload() (auth bugs, programming errors)
+        log at warning level but still fall through to retry rather than crashing."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.reload.side_effect = ValueError("programming error")
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_internal_error())
+
+        self.assertTrue(result)
+        mock_logger.warning.assert_called_once()
 
     def test_terminal_job_wins_over_remaining_retries(self):
         """Even if retries budget remains, terminal job state stops polling."""
