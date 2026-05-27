@@ -1007,6 +1007,33 @@ class TestBigQueryFilterCatalog(unittest.TestCase):
             assert isinstance(row["something"], decimal.Decimal)
 
 
+class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
+    def test_filters_out_nonexistent_schemas(self):
+        adapter = self.get_adapter("oauth")
+        adapter.check_schema_exists = MagicMock(
+            side_effect=lambda database, schema: schema == "real_dataset"
+        )
+
+        normal_relation = BigQueryRelation.create(
+            database="test-project",
+            schema="real_dataset",
+            identifier="my_table",
+        )
+        info_schema_source = BigQueryRelation.create(
+            database="test-project",
+            schema="region-us.INFORMATION_SCHEMA",
+            identifier="COLUMN_FIELD_PATHS",
+        )
+
+        result = adapter._get_catalog_relations_by_info_schema(
+            [normal_relation, info_schema_source]
+        )
+
+        schemas_in_result = {info.schema for info in result.keys()}
+        assert "real_dataset" in schemas_in_result
+        assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
+
+
 class TestBigQueryAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):
         rows = [
@@ -1171,3 +1198,51 @@ def test_sanitize_label_length(label_length):
         random.choice(string.ascii_uppercase + string.digits) for i in range(label_length)
     )
     assert len(_sanitize_label(random_string)) <= _VALIDATE_LABEL_LENGTH_LIMIT
+
+
+class TestPartitionConfigRenderWrappedInt64Range:
+    """Tests for render_wrapped() with int64 range partitions.
+
+    For int64 range partitions, render_wrapped normalizes field values
+    to their partition start value, preventing excessively large arrays when
+    computing partitions for replacement in insert_overwrite.
+    """
+
+    def test_int64_range_normalizes_to_partition_start(self):
+        """Values should be normalized using: value - MOD(value - start, interval)."""
+        config = PartitionConfig.parse(
+            {
+                "field": "partkey",
+                "data_type": "int64",
+                "range": {"start": 0, "end": 100000, "interval": 1000},
+            }
+        )
+        result = config.render_wrapped()
+        assert result == "(partkey - MOD(partkey - 0, 1000))"
+
+    def test_int64_range_with_nonzero_start(self):
+        config = PartitionConfig.parse(
+            {
+                "field": "id",
+                "data_type": "int64",
+                "range": {"start": 100, "end": 10000, "interval": 500},
+            }
+        )
+        result = config.render_wrapped()
+        assert result == "(id - MOD(id - 100, 500))"
+
+    def test_int64_range_with_alias(self):
+        config = PartitionConfig.parse(
+            {
+                "field": "partkey",
+                "data_type": "int64",
+                "range": {"start": 0, "end": 100000, "interval": 1000},
+            }
+        )
+        result = config.render_wrapped(alias="DBT_INTERNAL_DEST")
+        assert result == "(DBT_INTERNAL_DEST.partkey - MOD(DBT_INTERNAL_DEST.partkey - 0, 1000))"
+
+    def test_int64_without_range_returns_raw_field(self):
+        """int64 without range config should return the raw field name."""
+        config = PartitionConfig(field="id", data_type="int64")
+        assert config.render_wrapped() == "id"

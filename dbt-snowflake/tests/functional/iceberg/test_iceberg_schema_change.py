@@ -1,7 +1,6 @@
 import pytest
 from dbt.tests.util import run_dbt, write_file
 
-
 _MODEL_ICEBERG_BASE = """
 {{
   config(
@@ -121,6 +120,53 @@ class TestIcebergSchemaChange:
 
         # This should work fine
         results = run_dbt(["run", "--select", "test_iceberg_base"])
+        assert len(results) == 1
+        assert results[0].status == "success"
+
+
+_MODEL_ICEBERG_STRUCTURED_TYPE = """
+{{
+  config(
+    materialized="incremental",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    on_schema_change="sync_all_columns"
+  )
+}}
+
+select
+  1 as id,
+  object_construct('first', 'John', 'last', 'Doe')::object(first varchar, last varchar) as name
+"""
+
+
+class TestIcebergStructuredTypeVarcharNormalization:
+    """
+    Reproduces the bug where Iceberg v3 structured types use VARCHAR(134217728) but
+    Snowflake uses VARCHAR(16777216), causing false schema mismatch errors on
+    incremental runs.
+
+    DESC TABLE returns OBJECT(first VARCHAR(134217728), last VARCHAR(134217728)) for
+    Iceberg tables, while the model definition expects VARCHAR(16777216). Without
+    normalization this causes on_schema_change to detect a spurious column type change.
+    """
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "test_iceberg_structured.sql": _MODEL_ICEBERG_STRUCTURED_TYPE,
+        }
+
+    def test_incremental_with_structured_type_varchar(self, project):
+        """Incremental run with OBJECT(varchar) columns should not fail on schema comparison."""
+        # First run creates the iceberg table with an OBJECT column
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        assert results[0].status == "success"
+
+        # Second incremental run triggers schema comparison via DESC TABLE.
+        # Without the fix, VARCHAR(134217728) vs VARCHAR(16777216) causes a mismatch.
+        results = run_dbt(["run"])
         assert len(results) == 1
         assert results[0].status == "success"
 

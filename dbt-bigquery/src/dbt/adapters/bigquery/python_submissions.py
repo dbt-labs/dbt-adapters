@@ -1,9 +1,18 @@
+from __future__ import annotations
+
 import inspect
 import json
 import re
 import time
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, TYPE_CHECKING, Union
 import uuid
+
+# These imports are heavy and only needed for BigFrames Python models.
+# They are lazy-loaded inside BigFramesHelper methods to avoid slowing
+# down every `dbt parse` invocation. See: https://github.com/dbt-labs/dbt-adapters/issues/1604
+if TYPE_CHECKING:
+    from google.cloud import aiplatform_v1
+    from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F401
 
 from dbt.adapters.base import PythonJobHelper, PythonSubmissionResult
 from dbt.adapters.bigquery import BigQueryCredentials
@@ -18,18 +27,16 @@ from dbt.adapters.bigquery.credentials import (
     create_google_credentials,
     DataprocBatchConfig,
 )
+from google.auth.impersonated_credentials import Credentials as ImpersonatedCredentials
 from dbt.adapters.bigquery.retry import RetryFactory
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.exceptions import DbtRuntimeError
 
 from google.api_core.operation import Operation
 from google.auth.transport.requests import Request
-from google.cloud import aiplatform_v1
-from google.cloud.aiplatform import gapic as aiplatform_gapic
 from google.cloud.dataproc_v1 import CreateBatchRequest, Job, RuntimeConfig
 from google.cloud.dataproc_v1.types.batches import Batch
 from google.protobuf.json_format import ParseDict
-import nbformat
 
 _logger = AdapterLogger("BigQuery")
 
@@ -47,8 +54,6 @@ _DEFAULT_BIGFRAMES_TIMEOUT = 60 * 60
 # Time interval in seconds between successive polling attempts to check the
 # notebook job's status in BigFrames mode.
 _COLAB_POLL_INTERVAL = 30
-# Suffix used by service accounts.
-_SERVICE_ACCOUNT_SUFFIX = "iam.gserviceaccount.com"
 
 
 class _BigQueryPythonHelper(PythonJobHelper):
@@ -231,6 +236,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             return creds.token
 
     def _py_to_ipynb(self, compiled_code: str) -> str:
+        import nbformat
+
         notebook = nbformat.v4.new_notebook()
         # Put all codes in one cell.
         notebook.cells.append(nbformat.v4.new_code_cell(compiled_code))
@@ -238,6 +245,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
         return nbformat.writes(notebook, nbformat.NO_CONVERT)
 
     def _get_notebook_template_id(self) -> str:
+        from google.cloud import aiplatform_v1
+
         # If user specifies a runtime template id, use it.
         if self._notebook_template_id:
             return self._notebook_template_id
@@ -266,6 +275,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
             return self._create_notebook_template()
 
     def _create_notebook_template(self) -> str:
+        from google.cloud import aiplatform_v1
+
         # Construct the full network and subnetwork resource names.
         network_full_name = f"projects/{self._project}/global/networks/{_NETWORK_NAME}"
         subnetwork_full_name = (
@@ -305,9 +316,37 @@ class BigFramesHelper(_BigQueryPythonHelper):
         match = re.search(r"notebookRuntimeTemplates/(\d+)", template_name)
         return match.group(1) if match else ""
 
+    def _get_service_account_from_credentials(self) -> Optional[str]:
+        """Detect if the OAuth identity is a service account.
+
+        Handles impersonated credentials (via profiles.yml or ADC) and direct
+        service accounts (Cloud Composer, Cloud Run).
+
+        Returns the service account email if detected, or None for regular users.
+        """
+        creds = self._GoogleCredentials
+
+        # Impersonated credentials: from profiles.yml impersonate_service_account
+        # or from ADC with service account impersonation (e.g.,
+        # gcloud auth application-default login --impersonate-service-account).
+        target_principal = getattr(creds, "_target_principal", None)
+        if isinstance(creds, ImpersonatedCredentials) and target_principal:
+            return target_principal
+
+        # Direct service account credentials (e.g., Compute Engine SAs in
+        # Cloud Composer, Cloud Run), or impersonated credentials where
+        # _target_principal is not set but service_account_email is available.
+        service_account_email = getattr(creds, "service_account_email", None)
+        if service_account_email:
+            return service_account_email
+
+        return None
+
     def _config_notebook_job(
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
+        from google.cloud import aiplatform_v1
+
         notebook_execution_job = aiplatform_v1.NotebookExecutionJob()
         notebook_execution_job.notebook_runtime_template_resource_name = (
             f"projects/{self._project}/locations/{self._region}/"
@@ -318,6 +357,15 @@ class BigFramesHelper(_BigQueryPythonHelper):
             aiplatform_v1.NotebookExecutionJob.GcsNotebookSource(uri=self._gcs_path)
         )
 
+        # Explicit acknowledge the 'out-of-org' warning required by Vertex AI.
+        # This label is needed for cross-project runtime templates to bypass GCP
+        # security policy blocks that would otherwise prevent job creation.
+        # TODO: add a function test for it.
+        security_ack_label = {
+            "aiplatform.googleapis.com/notebook_runtime_out_of_org_warning": "ack"
+        }
+        notebook_execution_job.labels = security_ack_label
+
         if self._connection_method in (
             BigQueryConnectionMethod.SERVICE_ACCOUNT,
             BigQueryConnectionMethod.SERVICE_ACCOUNT_JSON,
@@ -327,21 +375,11 @@ class BigFramesHelper(_BigQueryPythonHelper):
             BigQueryConnectionMethod.OAUTH,
             BigQueryConnectionMethod.OAUTH_SECRETS,
         ):
-            # If `impersonate_service_account` is configured correctly in
-            # profiles.yml, the job will run as the specified service account.
-            if hasattr(self._GoogleCredentials, "_target_principal"):
-                target_principal = self._GoogleCredentials._target_principal
-                if target_principal:
-                    notebook_execution_job.service_account = target_principal
-                else:
-                    raise ValueError(
-                        "The impersonated service account is incorrect. Please "
-                        "verify the `impersonate_service_account` setting in "
-                        "your profiles.yml configuration."
-                    )
-
-            # The job will run under the identity of the authenticated user.
+            service_account = self._get_service_account_from_credentials()
+            if service_account:
+                notebook_execution_job.service_account = service_account
             else:
+                # Regular user OAuth: fetch user email from the userinfo endpoint.
                 request = Request()
                 response = request(
                     method="GET",
@@ -354,13 +392,7 @@ class BigFramesHelper(_BigQueryPythonHelper):
                         f"Failed to retrieve user info. Status: {response.status}, Body: {response.data}"
                     )
                 if user_email := json.loads(response.data).get("email"):
-                    # In services such as Cloud Composer and Cloud Run, the authenticated user
-                    # is a service account with associated Application Default Credentials.
-                    # This does not require service account impersonation.
-                    if user_email and user_email.endswith(_SERVICE_ACCOUNT_SUFFIX):
-                        notebook_execution_job.service_account = user_email
-                    else:
-                        notebook_execution_job.execution_user = user_email
+                    notebook_execution_job.execution_user = user_email
                 else:
                     raise DbtRuntimeError(
                         "Authorization request to get user failed to return an email."
@@ -471,6 +503,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
 
     def _track_notebook_job_status(self, job_name: str) -> aiplatform_v1.NotebookExecutionJob:
         """Tracks the notebook job until it completes or times out."""
+        from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F811
+
         max_wait_time = self._polling_retry.timeout
         elapsed = 0
 
@@ -505,6 +539,8 @@ class BigFramesHelper(_BigQueryPythonHelper):
     def _submit_bigframes_job(
         self, notebook_template_id: str
     ) -> aiplatform_v1.NotebookExecutionJob:
+        from google.cloud import aiplatform_v1  # noqa: F811
+        from google.cloud.aiplatform import gapic as aiplatform_gapic  # noqa: F811
 
         notebook_execution_job = self._config_notebook_job(notebook_template_id)
 

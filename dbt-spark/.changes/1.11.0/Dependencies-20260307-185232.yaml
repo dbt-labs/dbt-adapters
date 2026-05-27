@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Update thrift to use at least 0.20.0
+time: 2026-03-07T18:52:32.187639+01:00
+custom:
+    Author: annebelleo
+    PR: "#1727"

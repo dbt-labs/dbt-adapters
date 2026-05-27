@@ -64,6 +64,8 @@ class BigQueryCredentials(Credentials):
     job_retries: Optional[int] = 1
     job_creation_timeout_seconds: Optional[int] = None
     job_execution_timeout_seconds: Optional[int] = None
+    # When True, logs the BigQuery job link at INFO level instead of DEBUG
+    job_link_info_level_log: Optional[bool] = False
 
     # Keyfile json creds (unicode or base 64 encoded)
     keyfile: Optional[str] = None
@@ -157,6 +159,7 @@ class BigQueryCredentials(Credentials):
             "job_retries",
             "job_creation_timeout_seconds",
             "job_execution_timeout_seconds",
+            "job_link_info_level_log",
             "timeout_seconds",
             "client_id",
             "token_uri",

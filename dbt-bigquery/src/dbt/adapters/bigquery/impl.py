@@ -5,10 +5,12 @@ from multiprocessing.context import SpawnContext
 import threading
 from typing import (
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Iterable,
     List,
+    Mapping,
     Optional,
     Set,
     Tuple,
@@ -22,6 +24,7 @@ import google.auth
 import google.oauth2
 import google.cloud.bigquery
 from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
+from google.cloud.bigquery.routine import RoutineType
 import google.cloud.exceptions
 import pytz
 
@@ -122,7 +125,31 @@ BIGQUERY_NOOP_ALTER_RELATION_COMMENT = BehaviorFlag(
     ),
 )
 
+BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
+    name="bigquery_reject_wildcard_metadata_source_freshness",
+    default=False,
+    description=(
+        "Raise an error when metadata-based source freshness is used with a wildcard table "
+        "identifier (e.g. 'events_*'). BigQuery returns the current time as the modified "
+        "timestamp for wildcard tables, causing freshness checks to always report ~0 seconds."
+    ),
+)
+
+BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
+    name="bigquery_use_standard_sql_for_partitions",
+    default=True,
+    description=(
+        "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
+        "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
+        "deprecated by BigQuery on June 1, 2026."
+    ),
+)
+
 _dataset_lock = threading.Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -154,6 +181,7 @@ class BigqueryConfig(AdapterConfig):
     submission_method: Optional[str] = None
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
+    job_execution_timeout_seconds: Optional[int] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -184,14 +212,26 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "biglake_metastore": "biglake_metastore",
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     ###
     # Implementations of abstract methods
@@ -202,7 +242,15 @@ class BigQueryAdapter(BaseAdapter):
         return [
             BIGQUERY_USE_BATCH_SOURCE_FRESHNESS,
             BIGQUERY_NOOP_ALTER_RELATION_COMMENT,
+            BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS,
+            BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS,
         ]
+
+    def get_partitions_metadata(self, table):
+        self.connections.use_standard_sql_for_partitions = (
+            self.behavior.bigquery_use_standard_sql_for_partitions.no_warn
+        )
+        return super().get_partitions_metadata(table)
 
     @classmethod
     def date_function(cls) -> str:
@@ -251,6 +299,19 @@ class BigQueryAdapter(BaseAdapter):
         self.cache_renamed(from_relation, to_relation)
         client.copy_table(from_table_ref, to_table_ref)
         client.delete_table(from_table_ref)
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
+        """Override the connection's query execution timeout based on the model config"""
+        timeout = config.get("job_execution_timeout_seconds")
+        if timeout is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = float(timeout)
+        return timeout
+
+    def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        if context is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_timeout = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -341,11 +402,18 @@ class BigQueryAdapter(BaseAdapter):
             #       won't need to do this
             max_results=100000,
         )
+        all_routines = client.list_routines(dataset_ref)
 
         # This will 404 if the dataset does not exist. This behavior mirrors
         # the implementation of list_relations for other adapters
         try:
-            return [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            function_relations = [
+                relation
+                for routine in all_routines
+                if (relation := self._bq_routine_to_relation(routine)) is not None
+            ]  # type: ignore[misc]
+            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
@@ -364,7 +432,21 @@ class BigQueryAdapter(BaseAdapter):
             table = self.connections.get_bq_table(database, schema, identifier)
         except google.api_core.exceptions.NotFound:
             table = None
-        return self._bq_table_to_relation(table)
+
+        if table is not None:
+            return self._bq_table_to_relation(table)
+
+        # Fall back to checking if it's a routine (function/procedure)
+        connection = self.connections.get_thread_connection()
+        client = connection.handle
+        routine_ref = google.cloud.bigquery.RoutineReference.from_string(
+            f"{database}.{schema}.{identifier}"
+        )
+        try:
+            routine = client.get_routine(routine_ref)
+        except google.api_core.exceptions.NotFound:
+            routine = None
+        return self._bq_routine_to_relation(routine)
 
     # BigQuery added SQL support for 'create schema' + 'drop schema' in March 2021
     # Unfortunately, 'drop schema' runs into permissions issues during tests
@@ -519,6 +601,21 @@ class BigQueryAdapter(BaseAdapter):
             type=self.RELATION_TYPES.get(
                 bq_table.table_type, RelationType.External
             ),  # type:ignore
+        )
+
+    def _bq_routine_to_relation(self, bq_routine) -> Union[BigQueryRelation, None]:
+        if bq_routine is None:
+            return None
+
+        if bq_routine.type_ == RoutineType.PROCEDURE:
+            return None
+
+        return self.Relation.create(
+            database=bq_routine.project,
+            schema=bq_routine.dataset_id,
+            identifier=bq_routine.routine_id,
+            quote_policy={"schema": True, "identifier": True},
+            type=RelationType.Function,  # type: ignore[arg-type]
         )
 
     @classmethod
@@ -959,11 +1056,56 @@ class BigQueryAdapter(BaseAdapter):
                 )
         return result
 
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
+                    )
+                )
+        return result
+
+    def _check_for_wildcard_identifier(self, source: BaseRelation) -> None:
+        """Raise an error if the source identifier contains a wildcard character.
+
+        When ``client.get_table()`` is called with a wildcard identifier
+        (e.g. ``events_*``), BigQuery creates a temporary table that unions all
+        matching tables.  The ``modified`` timestamp on this temp table reflects
+        the current time, not the actual modification time of the underlying
+        tables — causing metadata-based freshness checks to report an age of
+        ~0 seconds.
+
+        See: https://github.com/googleapis/python-bigquery/issues/2035
+        """
+        identifier = source.identifier
+        if identifier and "*" in identifier:
+            if self.behavior.bigquery_reject_wildcard_metadata_source_freshness:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Metadata-based source freshness is not supported for wildcard table "
+                    f"'{source}'. Please set 'loaded_at_field' on this source to use a "
+                    f"query-based freshness check instead."
+                )
+
     def calculate_freshness_from_metadata(
         self,
         source: BaseRelation,
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[Optional[AdapterResponse], FreshnessResponse]:
+        self._check_for_wildcard_identifier(source)
+
         conn = self.connections.get_thread_connection()
         client: Client = conn.handle
 
@@ -999,6 +1141,9 @@ class BigQueryAdapter(BaseAdapter):
         """
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for source in sources:
+            self._check_for_wildcard_identifier(source)
 
         # Legacy behavior: use metadata-based freshness for each source
         if not self.behavior.bigquery_use_batch_source_freshness:

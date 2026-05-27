@@ -5,6 +5,7 @@ from importlib import reload
 from unittest.mock import Mock, patch, call
 import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
+from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
 import dbt.adapters.events.logging
 
@@ -204,6 +205,52 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsPATAuth:
+    """Test suite for Programmatic Access Token (PAT) authentication"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "database": "test_db",
+            "schema": "test_schema",
+        }
+
+    def test_pat_auth_args_passes_token(self, base_credentials):
+        """PAT authenticator should pass token directly to connector"""
+        creds = connections.SnowflakeCredentials(
+            **base_credentials,
+            authenticator="programmatic_access_token",
+            token="my-pat-token",
+        )
+        args = creds.auth_args()
+        assert args["token"] == "my-pat-token"
+        assert args["authenticator"] == "programmatic_access_token"
+
+    def test_pat_auth_no_spurious_warning(self, base_credentials):
+        """PAT authenticator should not trigger the 'token set but authenticator wrong' warning"""
+        # Patch warn_or_error so we can assert it is NOT called during __post_init__.
+        # If 'programmatic_access_token' is ever accidentally removed from the allowlist,
+        # __post_init__ would call warn_or_error and this assertion would fail.
+        with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+            connections.SnowflakeCredentials(
+                **base_credentials,
+                authenticator="programmatic_access_token",
+                token="my-pat-token",
+            )
+            mock_warn.assert_not_called()
+
+    def test_pat_auth_without_token(self, base_credentials):
+        """PAT authenticator without a token should still produce auth args (connector will error)"""
+        creds = connections.SnowflakeCredentials(
+            **base_credentials,
+            authenticator="programmatic_access_token",
+        )
+        args = creds.auth_args()
+        assert args["authenticator"] == "programmatic_access_token"
+        assert args.get("token") is None
+
+
 def test_snowflake_oauth_expired_token_raises_error():
     credentials = {
         "account": "test_account",
@@ -230,3 +277,73 @@ def test_snowflake_oauth_expired_token_raises_error():
 
         with pytest.raises(FailedToConnectError):
             adapter.open()
+
+
+def test_connnections_credentials_passes_through_wif_params():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "azure",
+        "workload_identity_entra_resource": "app://123",
+        "token": "test_token",
+    }
+    auth_args = connections.SnowflakeCredentials(**credentials).auth_args()
+    assert auth_args["authenticator"] == "WORKLOAD_IDENTITY"
+    assert auth_args["workload_identity_provider"] == "azure"
+    assert auth_args["workload_identity_entra_resource"] == "app://123"
+    assert auth_args["token"] == "test_token"
+
+
+def test_connnections_credentials_wif_authenticator_fails_without_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        # Missing workload_identity_provider
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_invalid_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "some_non_existent_cloud_provider",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!"
+        in str(excinfo)
+    )
+
+
+def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_and_non_azure_provider():
+    credentials = {
+        "account": "account_id_with_underscores",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "aws",
+        "workload_identity_entra_resource": "app://123",
+    }
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials(**credentials).auth_args()
+    assert (
+        "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+        in str(excinfo)
+    )

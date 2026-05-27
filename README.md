@@ -31,6 +31,25 @@ This repository is a monorepo containing the following packages:
 
 Please refer to each of these packages for more specific information.
 
+## Releases
+
+All of our packages are merged off of main except for `dbt-adapters` and `dbt-tests-adapter`. Therefore merging a pull request to main does not automatically put it in the queue for the next release. To do so please add the 'promote to stable' label to the PR once it's been merged.
+
+The reason we do this is to allow us to patch the previous minor version with updates (i.e. what's in stable) as needed while preparing what's on main (the next minor release) to be ready for release.
+
+### Upcoming Minor Releases
+
+The following milestones track features that we're planning for the next minor version release of each adapter:
+
+- [dbt-athena v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/3) (2 PRs)
+- [dbt-bigquery v1.12.0](https://github.com/dbt-labs/dbt-adapters/milestone/4) (31 PRs)
+- [dbt-postgres v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/5) (6 PRs)
+- [dbt-redshift v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/2) (24 PRs)
+- [dbt-snowflake v1.12.0](https://github.com/dbt-labs/dbt-adapters/milestone/6) (23 PRs)
+- [dbt-spark v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/7) (2 PRs)
+
+**Note:** PRs in these milestones may have been merged to `main` but not yet been promoted to the `stable` branch for patch releases in the current minor version.
+
 # Getting started
 
 ## Install dbt
@@ -55,7 +74,3 @@ Please refer to each of these packages for more specific information.
 # Contributors ✨
 
 Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
-
-<a href="https://github.com/dbt-labs/dbt-adapters/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=dbt-labs/dbt-adapters" />
-</a>

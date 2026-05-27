@@ -1,0 +1,6 @@
+kind: Fixes
+body: Maintains declared order of cluster_by in generated query
+time: 2026-03-03T19:31:12.007263+05:30
+custom:
+    Author: sriramr98
+    Issue: "586"

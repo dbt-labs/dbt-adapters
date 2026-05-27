@@ -1,0 +1,6 @@
+kind: Features
+body: "Add support for granting privileges to Redshift groups and roles via grants config using 'group:' and 'role:' prefixes"
+time: 2026-02-04T15:45:31.000000-08:00
+custom:
+  Author: jni-bot
+  Issue: "647"

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix PARTITION BY clause placement in CREATE ICEBERG TABLE DDL for Snowflake built-in catalog
+time: 2026-03-06T16:30:35.728134-05:00
+custom:
+  Author: jecolvin
+  Issue: "1720"

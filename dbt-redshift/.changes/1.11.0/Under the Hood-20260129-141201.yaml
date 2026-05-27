@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Fix bug where `retryable_exceptions` is not iterable with `retry_all` config
+  param set
+time: 2026-01-29T14:12:01.381556-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1587"

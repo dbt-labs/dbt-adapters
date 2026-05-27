@@ -157,6 +157,34 @@ _MODEL_BASIC_DYNAMIC_TABLE_MODEL_WITH_SUBPATH = """
 select * from {{ ref('first_table') }}
 """
 
+_MODEL_BASIC_ICEBERG_MODEL_V3 = """
+{{
+  config(
+    transient = "true",
+    materialized = "table",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    iceberg_version=3,
+  )
+}}
+
+select * from {{ ref('first_table') }}
+"""
+
+_MODEL_BASIC_DYNAMIC_TABLE_ICEBERG_V3 = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 minute',
+    refresh_mode='INCREMENTAL',
+    catalog='snowflake',
+    external_volume='s3_iceberg_snow',
+    iceberg_version=3,
+) }}
+
+select * from {{ ref('first_table') }}
+"""
+
 _MODEL_BUILT_ON_ICEBERG_TABLE = """
 {{
   config(
