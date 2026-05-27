@@ -1,6 +1,9 @@
 kind: Fixes
-body: Remove unsupported COPY TAGS clause from Snowflake built-in Iceberg CREATE TABLE DDL.
+body: >-
+  Stop emitting unsupported COPY TAGS on CREATE ICEBERG TABLE for the Snowflake
+  built-in catalog; copy_tags is ignored on that path while copy_grants remains
+  supported.
 time: 2026-05-27T11:39:00.000000+05:30
 custom:
-  Author: codex
+  Author: aahelguha
   Issue: "1958"
