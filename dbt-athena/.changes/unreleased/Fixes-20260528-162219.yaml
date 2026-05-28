@@ -1,0 +1,6 @@
+kind: Fixes
+body: Cancel in-flight Athena queries when a dbt invocation is cancelled
+time: 2026-05-28T16:22:19.786142+05:30
+custom:
+    Author: aahel
+    Issue: "406"
