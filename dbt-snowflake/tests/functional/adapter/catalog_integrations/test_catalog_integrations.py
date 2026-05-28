@@ -27,6 +27,11 @@ MODEL__ICEBERG_TABLE_W_CONFIGS = """
                             select 1 as id
                             """
 
+MODEL__NON_TRANSIENT_ICEBERG_TABLE = """
+                            {{ config(materialized='table', catalog_name='basic_iceberg_catalog', transient=False) }}
+                            select 1 as id
+                            """
+
 
 class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
 
@@ -60,6 +65,7 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         return {
             "basic_iceberg_table.sql": MODEL__BASIC_ICEBERG_TABLE,
             "iceberg_table_with_configs.sql": MODEL__ICEBERG_TABLE_W_CONFIGS,
+            "non_transient_iceberg_table.sql": MODEL__NON_TRANSIENT_ICEBERG_TABLE,
         }
 
     def test_basic_iceberg_catalog_integration(self, project):
@@ -76,3 +82,13 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         assert "max_data_extension_time_in_days = 30" in iceberg_table_with_configs_sql
         assert "change_tracking = FALSE" in iceberg_table_with_configs_sql
         assert "data_retention_time_in_days = 1" in iceberg_table_with_configs_sql
+
+    def test_transient_iceberg_table_ddl(self, project):
+        run_dbt(["run"])
+        # Default (no transient config) → should emit TRANSIENT ICEBERG TABLE
+        default_sql = get_cleaned_model_ddl_from_file("basic_iceberg_table.sql")
+        assert "transient iceberg table" in default_sql.lower()
+
+        # Explicit transient=False → should NOT emit TRANSIENT
+        non_transient_sql = get_cleaned_model_ddl_from_file("non_transient_iceberg_table.sql")
+        assert "transient" not in non_transient_sql.lower()
