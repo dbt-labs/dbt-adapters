@@ -6,6 +6,11 @@ packages = ["src/dbt"]
 sources = ["src"]
 
 [envs.default]
+pre-install-commands = [
+    "pip install dbt-core@git+https://github.com/dbt-labs/dbt-core.git@1.latest#subdirectory=core",
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
@@ -61,6 +66,11 @@ check-sdist = [
 docker-prod = "docker build -f docker/Dockerfile -t dbt-spark ."
 
 [envs.ci]
+pre-install-commands = [
+    "pip install dbt-core@git+https://github.com/dbt-labs/dbt-core.git@1.latest#subdirectory=core",
+    "pip install -e ../dbt-adapters",
+    "pip install -e ../dbt-tests-adapter",
+]
 dependencies = [
     "dbt-adapters @ git+https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-adapters",
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
