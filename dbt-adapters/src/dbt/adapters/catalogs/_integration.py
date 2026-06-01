@@ -59,6 +59,7 @@ class CatalogIntegrationConfig(Protocol):
     table_format: Optional[str]
     external_volume: Optional[str]
     file_format: Optional[str]
+    catalog_database: Optional[str]
     adapter_properties: Dict[str, Any]
 
 
@@ -75,6 +76,7 @@ class CatalogWriteIntegrationConfig:
     table_format: Optional[str] = None
     catalog_name: Optional[str] = None
     file_format: Optional[str] = None
+    catalog_database: Optional[str] = None
     adapter_properties: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -125,6 +127,7 @@ class CatalogIntegration(abc.ABC):
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
         self.file_format: Optional[str] = config.file_format
+        self.catalog_database: Optional[str] = config.catalog_database
 
     def build_relation(self, config: RelationConfig) -> CatalogRelation:
         """
