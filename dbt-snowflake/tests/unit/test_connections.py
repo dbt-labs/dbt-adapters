@@ -205,6 +205,39 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+def test_connnections_credentials_maps_insecure_mode_to_disable_ocsp_checks():
+    credentials = {
+        "account": "test_account",
+        "user": "user",
+        "password": "password",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "insecure_mode": True,
+    }
+
+    creds = connections.SnowflakeCredentials(**credentials)
+
+    assert creds.disable_ocsp_checks is True
+
+
+def test_connnections_credentials_disable_ocsp_checks_takes_precedence():
+    credentials = {
+        "account": "test_account",
+        "user": "user",
+        "password": "password",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "insecure_mode": True,
+        "disable_ocsp_checks": False,
+    }
+
+    creds = connections.SnowflakeCredentials(**credentials)
+
+    assert creds.disable_ocsp_checks is False
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 
