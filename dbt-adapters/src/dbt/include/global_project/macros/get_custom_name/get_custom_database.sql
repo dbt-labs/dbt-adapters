@@ -19,14 +19,18 @@
 
 {% macro default__generate_database_name(custom_database_name=none, node=none) -%}
     {%- set default_database = target.database -%}
-    {%- if custom_database_name is none -%}
-
+    {%- if node is not none -%}
+        {%- set catalog_db = adapter.get_catalog_database_override(node) -%}
+        {%- if catalog_db -%}
+            {{ catalog_db }}
+        {%- elif custom_database_name is none -%}
+            {{ default_database }}
+        {%- else -%}
+            {{ custom_database_name }}
+        {%- endif -%}
+    {%- elif custom_database_name is none -%}
         {{ default_database }}
-
     {%- else -%}
-
         {{ custom_database_name }}
-
     {%- endif -%}
-
 {%- endmacro %}

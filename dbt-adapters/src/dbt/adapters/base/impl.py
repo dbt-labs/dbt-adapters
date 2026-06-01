@@ -84,6 +84,7 @@ from dbt.adapters.catalogs import (
     CatalogRelation,
     CatalogV2,
     CatalogWriteIntegrationConfig,
+    DbtCatalogIntegrationNotFoundError,
     CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
@@ -358,6 +359,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         platform_block = catalog.config.get(self.type(), {}) or {}
         external_volume = platform_block.get("external_volume")
         file_format = platform_block.get("file_format")
+        catalog_database = platform_block.get("catalog_database")
+        # Keep catalog_database in props so adapter overrides (e.g. Snowflake's
+        # _translate_v2_properties) can remap it to their platform-specific field name.
         props = {
             k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
         }
@@ -368,6 +372,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             table_format=self._v2_table_format(catalog),
             external_volume=str(external_volume) if external_volume is not None else None,
             file_format=str(file_format) if file_format is not None else None,
+            catalog_database=str(catalog_database) if catalog_database is not None else None,
             adapter_properties=self._translate_v2_properties(ct, props),
         )
 
@@ -396,6 +401,26 @@ class BaseAdapter(metaclass=AdapterMeta):
             return catalog.build_relation(config)
 
         return None
+
+    @available
+    def get_catalog_database_override(self, config: RelationConfig) -> Optional[str]:
+        """Return the catalog_database override for a node, or None.
+
+        When a catalog specifies catalog_database, that value takes precedence over
+        the model's database config and target.database in generate_database_name.
+        """
+        if not config.config:
+            return None
+        catalog_name = config.config.get(
+            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or config.config.get("catalog")
+        if not catalog_name:
+            return None
+        try:
+            integration = self.get_catalog_integration(str(catalog_name))
+            return integration.catalog_database
+        except DbtCatalogIntegrationNotFoundError:
+            return None
 
     ###
     # Methods to set / access a macro resolver
