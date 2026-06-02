@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from unittest.mock import ANY, Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
 
 import botocore.session
@@ -110,7 +110,8 @@ class TestAssumeRoleSession:
 
         session = _assume_role_session(base_session, credentials)
 
-        base_session.client.assert_called_once_with("sts", config=ANY)
+        base_session.client.assert_called_once()
+        assert base_session.client.call_args.args[0] == "sts"
         mock_sts.assume_role.assert_called_once_with(
             RoleArn="arn:aws:iam::123456789012:role/TestRole",
             RoleSessionName="dbt-athena",
@@ -288,8 +289,30 @@ class TestAssumeRoleSession:
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
         )
+        # First response expires within botocore's advisory window (~15 min),
+        # so the next get_frozen_credentials() naturally triggers a refresh
+        # without mutating private state on the credentials object.
+        near_expiration = datetime.now(timezone.utc) + timedelta(minutes=12)
+        future_expiration = datetime.now(timezone.utc) + timedelta(hours=1)
         mock_sts = MagicMock()
-        mock_sts.assume_role.return_value = self.STS_RESPONSE
+        mock_sts.assume_role.side_effect = [
+            {
+                "Credentials": {
+                    "AccessKeyId": "ASSUMED_ACCESS_KEY",
+                    "SecretAccessKey": "ASSUMED_SECRET_KEY",
+                    "SessionToken": "ASSUMED_SESSION_TOKEN",
+                    "Expiration": near_expiration,
+                }
+            },
+            {
+                "Credentials": {
+                    "AccessKeyId": "REFRESHED_ACCESS_KEY",
+                    "SecretAccessKey": "REFRESHED_SECRET_KEY",
+                    "SessionToken": "REFRESHED_SESSION_TOKEN",
+                    "Expiration": future_expiration,
+                }
+            },
+        ]
         base_session = MagicMock()
         base_session.client.return_value = mock_sts
 
@@ -298,10 +321,10 @@ class TestAssumeRoleSession:
         assert isinstance(refreshable, RefreshableCredentials)
         assert mock_sts.assume_role.call_count == 1
 
-        refreshable._expiry_time = datetime.now(timezone.utc) - timedelta(hours=1)
-        refreshable.get_frozen_credentials()
+        frozen = refreshable.get_frozen_credentials()
 
         assert mock_sts.assume_role.call_count == 2
+        assert frozen.access_key == "REFRESHED_ACCESS_KEY"
 
     def test_different_role_arns_use_separate_cache_entries(self):
         creds_a = self._make_credentials(

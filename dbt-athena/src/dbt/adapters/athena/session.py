@@ -3,16 +3,15 @@ import threading
 import time
 from functools import cached_property, lru_cache
 from hashlib import md5
-from typing import Any, Callable, Dict, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional
 from uuid import UUID
 
 import boto3
 import boto3.session
 import botocore.session
 from botocore.credentials import (
-    CredentialProvider,
-    CredentialResolver,
-    RefreshableCredentials,
+    AssumeRoleCredentialFetcher,
+    DeferredRefreshableCredentials,
 )
 from botocore.exceptions import ClientError
 from dbt_common.exceptions import DbtRuntimeError
@@ -62,63 +61,50 @@ def _assume_role_session(
     return _get_assume_role_session(base_session, key)
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=8)
 def _get_assume_role_session(
     base_session: boto3.session.Session,
     key: _AssumeRoleParams,
 ) -> boto3.session.Session:
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
-    sts_client = base_session.client(
-        "sts",
-        config=get_boto3_config(key.num_retries),
-    )
-    kwargs: Dict[str, Any] = {
-        "RoleArn": key.assume_role_arn,
+
+    extra_args: Dict[str, Any] = {
         "RoleSessionName": key.assume_role_session_name,
     }
     if key.assume_role_external_id:
-        kwargs["ExternalId"] = key.assume_role_external_id
+        extra_args["ExternalId"] = key.assume_role_external_id
     if key.assume_role_duration_seconds:
-        kwargs["DurationSeconds"] = key.assume_role_duration_seconds
+        extra_args["DurationSeconds"] = key.assume_role_duration_seconds
 
-    def _refresh() -> Dict[str, str]:
-        try:
-            response = sts_client.assume_role(**kwargs)
-        except ClientError as e:
-            raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
-        creds = response["Credentials"]
-        return {
-            "access_key": creds["AccessKeyId"],
-            "secret_key": creds["SecretAccessKey"],
-            "token": creds["SessionToken"],
-            "expiry_time": creds["Expiration"].isoformat(),
-        }
+    def client_creator(service_name: str, **kwargs: Any) -> Any:
+        return base_session.client(
+            service_name,
+            config=get_boto3_config(key.num_retries),
+            **kwargs,
+        )
+
+    fetcher = AssumeRoleCredentialFetcher(
+        client_creator=client_creator,
+        source_credentials=base_session.get_credentials(),
+        role_arn=key.assume_role_arn,
+        extra_args=extra_args,
+    )
+    credentials = DeferredRefreshableCredentials(
+        method="sts-assume-role",
+        refresh_using=fetcher.fetch_credentials,
+    )
 
     botocore_session = botocore.session.Session()
-    botocore_session.register_component(
-        "credential_provider",
-        CredentialResolver(providers=[_AssumeRoleCredentialProvider(_refresh)]),
-    )
+    # Bypass the credential resolver chain so our refreshable credentials are used
+    # directly; this is the standard botocore seam for injecting pre-built credentials.
+    botocore_session._credentials = credentials
     botocore_session.set_config_variable("region", key.region_name)
     # Surface AssumeRole failures here instead of deep inside the first AWS call.
-    botocore_session.get_credentials()
+    try:
+        credentials.get_frozen_credentials()
+    except ClientError as e:
+        raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
     return boto3.session.Session(botocore_session=botocore_session)
-
-
-class _AssumeRoleCredentialProvider(CredentialProvider):
-    METHOD = "sts-assume-role"
-    CANONICAL_NAME = "AssumeRole"
-
-    def __init__(self, refresh: Callable[[], Dict[str, str]]) -> None:
-        super().__init__()
-        self._refresh = refresh
-
-    def load(self) -> RefreshableCredentials:
-        return RefreshableCredentials.create_from_metadata(
-            metadata=self._refresh(),
-            refresh_using=self._refresh,
-            method=self.METHOD,
-        )
 
 
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
