@@ -3,11 +3,17 @@ import threading
 import time
 from functools import cached_property, lru_cache
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Callable, Dict, NamedTuple, Optional
 from uuid import UUID
 
 import boto3
 import boto3.session
+import botocore.session
+from botocore.credentials import (
+    CredentialProvider,
+    CredentialResolver,
+    RefreshableCredentials,
+)
 from botocore.exceptions import ClientError
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.invocation import get_invocation_id
@@ -23,9 +29,6 @@ from dbt.adapters.contracts.connection import Connection
 invocation_id = get_invocation_id()
 spark_session_list: Dict[UUID, str] = {}
 spark_session_load: Dict[UUID, int] = {}
-
-# Refresh credentials this many seconds before actual expiration
-_EXPIRY_BUFFER_SECONDS = 300
 
 
 class _AssumeRoleParams(NamedTuple):
@@ -48,7 +51,6 @@ def _assume_role_session(
         raise DbtRuntimeError(
             f"assume_role_duration_seconds must be between 900 and 43200, got {duration}"
         )
-    ttl = duration - _EXPIRY_BUFFER_SECONDS
     key = _AssumeRoleParams(
         assume_role_arn=credentials.assume_role_arn,
         assume_role_external_id=credentials.assume_role_external_id,
@@ -57,16 +59,13 @@ def _assume_role_session(
         region_name=credentials.region_name,
         num_retries=credentials.effective_num_retries,
     )
-    # Increments every ttl seconds, causing lru_cache to treat each period as a distinct call
-    ttl_bucket = int(time.time() / ttl)
-    return _get_assume_role_session(base_session, key, ttl_bucket)
+    return _get_assume_role_session(base_session, key)
 
 
 @lru_cache(maxsize=1)
 def _get_assume_role_session(
     base_session: boto3.session.Session,
     key: _AssumeRoleParams,
-    _ttl_hash: int,  # artificial value that changes every ttl seconds to force cache invalidation
 ) -> boto3.session.Session:
     LOGGER.debug(f"Assuming role: {key.assume_role_arn}")
     sts_client = base_session.client(
@@ -81,16 +80,45 @@ def _get_assume_role_session(
         kwargs["ExternalId"] = key.assume_role_external_id
     if key.assume_role_duration_seconds:
         kwargs["DurationSeconds"] = key.assume_role_duration_seconds
-    try:
-        response = sts_client.assume_role(**kwargs)
-    except ClientError as e:
-        raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
-    return boto3.session.Session(
-        aws_access_key_id=response["Credentials"]["AccessKeyId"],
-        aws_secret_access_key=response["Credentials"]["SecretAccessKey"],
-        aws_session_token=response["Credentials"]["SessionToken"],
-        region_name=key.region_name,
+
+    def _refresh() -> Dict[str, str]:
+        try:
+            response = sts_client.assume_role(**kwargs)
+        except ClientError as e:
+            raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
+        creds = response["Credentials"]
+        return {
+            "access_key": creds["AccessKeyId"],
+            "secret_key": creds["SecretAccessKey"],
+            "token": creds["SessionToken"],
+            "expiry_time": creds["Expiration"].isoformat(),
+        }
+
+    botocore_session = botocore.session.Session()
+    botocore_session.register_component(
+        "credential_provider",
+        CredentialResolver(providers=[_AssumeRoleCredentialProvider(_refresh)]),
     )
+    botocore_session.set_config_variable("region", key.region_name)
+    # Surface AssumeRole failures here instead of deep inside the first AWS call.
+    botocore_session.get_credentials()
+    return boto3.session.Session(botocore_session=botocore_session)
+
+
+class _AssumeRoleCredentialProvider(CredentialProvider):
+    METHOD = "sts-assume-role"
+    CANONICAL_NAME = "AssumeRole"
+
+    def __init__(self, refresh: Callable[[], Dict[str, str]]) -> None:
+        super().__init__()
+        self._refresh = refresh
+
+    def load(self) -> RefreshableCredentials:
+        return RefreshableCredentials.create_from_metadata(
+            metadata=self._refresh(),
+            refresh_using=self._refresh,
+            method=self.METHOD,
+        )
 
 
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
