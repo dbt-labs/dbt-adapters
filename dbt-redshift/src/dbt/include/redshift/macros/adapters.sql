@@ -33,6 +33,11 @@
 
 {% macro redshift__create_table_as(temporary, relation, sql) -%}
 
+  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+  {%- if not temporary and catalog_relation is not none and catalog_relation.table_format == 'iceberg' -%}
+    {{ return(redshift__create_table_iceberg_sql(relation, sql, catalog_relation)) }}
+  {%- endif -%}
+
   {%- set _dist = config.get('dist') -%}
   {%- set _sort_type = config.get(
           'sort_type',

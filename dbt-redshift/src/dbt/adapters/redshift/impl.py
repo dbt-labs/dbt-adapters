@@ -7,7 +7,7 @@ import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
+from typing import ClassVar, List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
@@ -27,7 +27,9 @@ from dbt.adapters.events.logging import AdapterLogger
 
 import dbt_common.exceptions
 
-from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
+from dbt.adapters.catalogs import CatalogV2
+from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation, constants
+from dbt.adapters.redshift.catalogs import GlueCatalogIntegration
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -41,6 +43,10 @@ for package in packages:
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once the dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
@@ -117,6 +123,8 @@ class RedshiftAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = RedshiftConfig
 
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration]
+
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -130,8 +138,18 @@ class RedshiftAdapter(SQLAdapter):
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    # maps the v2 catalogs.yml `type` to this adapter's catalog integration type
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": constants.GLUE_CATALOG_TYPE,
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
@@ -139,6 +157,13 @@ class RedshiftAdapter(SQLAdapter):
         self.connections.set_skip_transactions_checker(
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
+        self.add_catalog_integration(constants.DEFAULT_GLUE_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: CatalogV2) -> str:
+        return catalog.table_format.value.lower()
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
