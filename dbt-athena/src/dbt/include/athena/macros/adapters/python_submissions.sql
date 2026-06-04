@@ -57,7 +57,42 @@ def materialize(spark_session, df, target_relation):
 
 dbt = SparkdbtObj()
 df = model(dbt, spark)
-materialize(spark, df, dbt.this)
+if df is None:
+    import boto3
+    from botocore.exceptions import ClientError
+
+    {%- set assume_role_arn = target.assume_role_arn or "" %}
+    {%- if assume_role_arn %}
+    _sts_creds = boto3.client("sts", region_name="{{ target.region_name }}").assume_role(
+        RoleArn="{{ assume_role_arn }}",
+        RoleSessionName="{{ target.assume_role_session_name or 'dbt-athena-skip-materialize-check' }}",
+        {%- if target.assume_role_external_id %}
+        ExternalId="{{ target.assume_role_external_id }}",
+        {%- endif %}
+    )["Credentials"]
+    glue = boto3.client(
+        "glue",
+        region_name="{{ target.region_name }}",
+        aws_access_key_id=_sts_creds["AccessKeyId"],
+        aws_secret_access_key=_sts_creds["SecretAccessKey"],
+        aws_session_token=_sts_creds["SessionToken"],
+    )
+    {%- else %}
+    glue = boto3.client("glue", region_name="{{ target.region_name }}")
+    {%- endif %}
+
+    try:
+        glue.get_table(DatabaseName="{{ target_relation.schema }}", Name="{{ target_relation.identifier }}")
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "EntityNotFoundException":
+            raise Exception(
+                "model() returned None but target table "
+                "{{ target_relation.schema }}.{{ target_relation.identifier }} does not exist. "
+                "Models returning None must materialize the target themselves."
+            ) from e
+        raise
+else:
+    materialize(spark, df, dbt.this)
 {%- endmacro -%}
 
 {%- macro athena__py_execute_query(query) -%}

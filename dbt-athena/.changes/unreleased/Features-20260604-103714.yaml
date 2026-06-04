@@ -1,0 +1,6 @@
+kind: Features
+body: 'feat(athena): allow Python models to return None to skip adapter materialize()'
+time: 2026-06-04T10:37:14.055371+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "2002"
