@@ -33,6 +33,7 @@ def oauth_target():
         "job_retries": 2,
         "compute_region": os.getenv("COMPUTE_REGION") or os.getenv("DATAPROC_REGION"),
         "dataproc_cluster_name": os.getenv("DATAPROC_CLUSTER_NAME"),
+        "submission_method": "cluster",
         "gcs_bucket": os.getenv("GCS_BUCKET"),
     }
 
@@ -57,5 +58,6 @@ def service_account_target():
         "dataproc_cluster_name": os.getenv(
             "DATAPROC_CLUSTER_NAME"
         ),  # only needed for cluster submission method
+        "submission_method": "cluster",
         "gcs_bucket": os.getenv("GCS_BUCKET"),
     }
