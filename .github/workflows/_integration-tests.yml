@@ -130,8 +130,6 @@ jobs:
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
-        # Shard the suite across parallel runners with pytest-split. All shards hit the
-        # same BigQuery project quota, so peak concurrency is groups x (-n workers) x dbt threads.
         strategy:
             fail-fast: false
             matrix:
@@ -187,8 +185,6 @@ jobs:
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-bigquery
-        # Shard across runners but keep -n1 per runner (see hatch.toml): flaky python-model
-        # tests stay serial within a runner to preserve isolation, we just split them across machines.
         strategy:
             fail-fast: false
             matrix:
