@@ -371,6 +371,14 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
         return exceptions.BadRequest("syntax error", errors=[{"reason": "invalidQuery"}])
 
+    def _make_rate_limit_error(self):
+        """Reproduce the reported getQueryResults rate-limit error."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.Forbidden(
+            "Exceeded rate limits: too many api requests per user per method",
+            errors=[{"reason": "rateLimitExceeded"}],
+        )
+
     def test_short_circuits_on_terminal_failed_job(self):
         """Core regression test: internalError on a DONE+failed job must not retry."""
         mock_job = Mock()
@@ -385,7 +393,7 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
         mock_job.reload.assert_called_once()
 
     def test_retries_when_job_still_running(self):
-        """A retryable error on a still-running job should be retried (up to the cap)."""
+        """A retryable error on a still-running job should be retried."""
         mock_job = Mock()
         mock_job.job_id = "job_abc"
         mock_job.state = "RUNNING"
@@ -397,18 +405,18 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
         self.assertTrue(result)
         mock_job.reload.assert_called_once()
 
-    def test_respects_attempt_cap_on_running_job(self):
-        """Even for a still-running job, stop after job_retries attempts."""
+    def test_continues_retrying_on_running_job(self):
+        """Predicate should continue allowing retries while the job is still running."""
         mock_job = Mock()
         mock_job.job_id = "job_abc"
         mock_job.state = "RUNNING"
         mock_job.error_result = None
 
-        predicate = _TerminalJobAwarePredicate(mock_job, retries=2)
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=1)
 
-        self.assertTrue(predicate(self._make_internal_error()))  # attempt 1
-        self.assertTrue(predicate(self._make_internal_error()))  # attempt 2
-        self.assertFalse(predicate(self._make_internal_error()))  # attempt 3 → cap hit
+        self.assertTrue(predicate(self._make_internal_error()))
+        self.assertTrue(predicate(self._make_internal_error()))
+        self.assertTrue(predicate(self._make_internal_error()))
 
     def test_no_retry_when_retries_zero(self):
         """job_retries=0 means never retry, and skips the jobs.get reload call."""
@@ -431,6 +439,35 @@ class TestTerminalJobAwarePredicate(unittest.TestCase):
 
         self.assertFalse(result)
         mock_job.reload.assert_not_called()
+
+    def test_rate_limit_error_retries_without_reload(self):
+        """A rate-limit error says nothing about job health: retry without the
+        extra jobs.get reload, so we don't add pressure to the rate limit."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+        result = predicate(self._make_rate_limit_error())
+
+        self.assertTrue(result)
+        mock_job.reload.assert_not_called()
+
+    def test_retry_path_logs_debug(self):
+        """The continue-polling path should emit a debug line for observability."""
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        predicate = _TerminalJobAwarePredicate(mock_job, retries=3)
+
+        with patch("dbt.adapters.bigquery.retry._logger") as mock_logger:
+            result = predicate(self._make_rate_limit_error())
+
+        self.assertTrue(result)
+        mock_logger.debug.assert_called_once()
 
     def test_reload_expected_api_error_logs_warning(self):
         """Expected API errors during reload() log at warning and fall through."""
@@ -517,6 +554,79 @@ class TestRetryFactoryPollingRetry(unittest.TestCase):
             errors=[{"reason": "internalError"}],
         )
 
+    def _make_rate_limit_error(self):
+        """Reproduce the reported getQueryResults rate-limit error."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        return exceptions.Forbidden(
+            "Exceeded rate limits: too many api requests per user per method "
+            "for this user_method (JobService.getQueryResults)",
+            errors=[{"reason": "rateLimitExceeded"}],
+        )
+
+    def test_rate_limit_on_running_job_retries_beyond_job_retries_then_succeeds(self):
+        """Regression test for #1957: transient rateLimitExceeded errors on a
+        still-running job must be retried past the job_retries count and allowed
+        to succeed, rather than surfacing as a hard failure after job_retries.
+        """
+        creds = self._make_credentials(job_retries=1)
+        factory = RetryFactory(creds)
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        retry = factory.create_query_job_polling_retry(mock_job)
+        err = self._make_rate_limit_error()
+
+        call_count = {"n": 0}
+
+        def fail_then_succeed():
+            call_count["n"] += 1
+            # Fail more times than job_retries (1) before succeeding.
+            if call_count["n"] <= 5:
+                raise err
+            return "results"
+
+        # Patch sleep so exponential backoff doesn't slow the test down.
+        with patch("time.sleep"):
+            result = retry(fail_then_succeed)()
+
+        self.assertEqual(result, "results")
+        self.assertEqual(
+            call_count["n"],
+            6,
+            "Transient rate-limit errors must retry past job_retries until success",
+        )
+
+    def test_internal_error_on_running_job_retries_beyond_job_retries(self):
+        """A still-running job hitting transient internalError is retried well
+        beyond the job_retries count (no attempt cap on the polling retry)."""
+        creds = self._make_credentials(job_retries=2)
+        factory = RetryFactory(creds)
+
+        mock_job = Mock()
+        mock_job.job_id = "job_abc"
+        mock_job.state = "RUNNING"
+        mock_job.error_result = None
+
+        retry = factory.create_query_job_polling_retry(mock_job)
+        err = self._make_internal_error()
+
+        call_count = {"n": 0}
+
+        def fail_then_succeed():
+            call_count["n"] += 1
+            if call_count["n"] <= 4:  # > 1 initial + 2 retries
+                raise err
+            return "results"
+
+        with patch("time.sleep"):
+            result = retry(fail_then_succeed)()
+
+        self.assertEqual(result, "results")
+        self.assertGreater(call_count["n"], 3)
+
     def test_retry_short_circuits_on_terminal_failed_job(self):
         """Tyson regression: a terminal failed job should fail on the first attempt."""
         creds = self._make_credentials(job_retries=5)
@@ -542,32 +652,6 @@ class TestRetryFactoryPollingRetry(unittest.TestCase):
 
         self.assertEqual(call_count["n"], 1, "Terminal-failed job should not be retried at all")
 
-    def test_retry_attempts_match_job_retries_for_running_job(self):
-        """Retries on a still-running job are bounded by job_retries (1 initial + N retries)."""
-        creds = self._make_credentials(job_retries=2)
-        factory = RetryFactory(creds)
-
-        mock_job = Mock()
-        mock_job.job_id = "job_abc"
-        mock_job.state = "RUNNING"
-        mock_job.error_result = None
-
-        retry = factory.create_query_job_polling_retry(mock_job)
-        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
-        err = self._make_internal_error()
-
-        call_count = {"n": 0}
-
-        def always_fail():
-            call_count["n"] += 1
-            raise err
-
-        with self.assertRaises(exceptions.BadRequest):
-            retry(always_fail)()
-
-        # 1 initial attempt + 2 retries = 3 total
-        self.assertEqual(call_count["n"], 3)
-
     @patch("dbt.adapters.bigquery.retry.DEFAULT_JOB_RETRY")
     def test_factory_passes_job_retry_deadline_seconds_to_retry(self, mock_retry):
         """Deadline plumbing: job_retry_deadline_seconds (not job_execution_timeout_seconds)
@@ -585,6 +669,11 @@ class TestRetryFactoryPollingRetry(unittest.TestCase):
 
         chained = mock_retry.with_predicate.return_value
         chained.with_deadline.assert_called_once_with(300)
+        chained.with_deadline.return_value.with_delay.assert_called_once_with(
+            initial=5.0,
+            maximum=60.0,
+            multiplier=2.0,
+        )
 
     @patch("dbt.adapters.bigquery.retry.DEFAULT_JOB_RETRY")
     def test_factory_falls_back_to_default_deadline(self, mock_retry):
@@ -600,3 +689,8 @@ class TestRetryFactoryPollingRetry(unittest.TestCase):
 
         chained = mock_retry.with_predicate.return_value
         chained.with_deadline.assert_called_once_with(600)
+        chained.with_deadline.return_value.with_delay.assert_called_once_with(
+            initial=5.0,
+            maximum=60.0,
+            multiplier=2.0,
+        )
