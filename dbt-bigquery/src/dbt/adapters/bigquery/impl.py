@@ -212,6 +212,7 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
             **(
                 {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
                 if _CATALOGS_V2_CAPABILITY is not None
@@ -223,12 +224,6 @@ class BigQueryAdapter(BaseAdapter):
     _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
         "biglake_metastore": "biglake_metastore",
     }
-
-    def supports(self, capability: Capability) -> bool:
-        # Gate MicrobatchConcurrency on the use_concurrent_microbatch behavior flag.
-        if capability == Capability.MicrobatchConcurrency:
-            return bool(self.behavior.use_concurrent_microbatch)
-        return super().supports(capability)
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
