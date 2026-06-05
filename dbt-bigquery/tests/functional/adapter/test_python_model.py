@@ -1,6 +1,7 @@
 import os
 import pytest
 import time
+import uuid
 from dbt.tests.util import run_dbt, run_dbt_and_capture, write_file
 import dbt.tests.adapter.python_model.test_python_model as dbt_tests
 
@@ -109,15 +110,17 @@ def model(dbt, spark):
     return final_df
 """
 
-models__partitioned_model_yaml = """
+
+def _partitioned_model_yaml(batch_id: str) -> str:
+    return f"""
 models:
   - name: python_partitioned_model
     description: A random table with a calculated column defined in python.
     config:
-      batch_id: '{{ run_started_at.strftime("%Y-%m-%d-%H-%M-%S") }}-python-partitioned'
+      batch_id: {batch_id}-python-partitioned
     tests:
       - number_partitions:
-          expected: "{{ var('expected', 1) }}"
+          expected: "{{{{ var('expected', 1) }}}}"
     columns:
       - name: A
         description: Column A
@@ -138,10 +141,19 @@ class TestPythonPartitionedModels:
     def models(self):
         return {
             "python_partitioned_model.py": models__partitioned_model_python,
-            "python_partitioned_model.yml": models__partitioned_model_yaml,
+            "python_partitioned_model.yml": _partitioned_model_yaml("placeholder"),
         }
 
     def test_multiple_named_python_models(self, project):
+        # Generate a unique batch id per invocation and write it into the model
+        # before running, so flaky reruns and parallel shards never reuse a batch
+        # id left over from a prior attempt (a second-granularity timestamp could).
+        batch_id = f"custom-{uuid.uuid4().hex}"
+        write_file(
+            _partitioned_model_yaml(batch_id),
+            project.project_root + "/models",
+            "python_partitioned_model.yml",
+        )
         result = run_dbt(["run"])
         assert len(result) == 1
 
@@ -199,14 +211,14 @@ models:
         description: Column C
 """
 
-custom_ts_id = str("custom-" + str(time.time()).replace(".", "-"))
 
-models__bad_python_array_batch_id_yaml = f"""
+def _python_array_batch_id_yaml(batch_id: str) -> str:
+    return f"""
 models:
   - name: python_array_batch_id
     description: A random table with a calculated column defined in python.
     config:
-      batch_id: {custom_ts_id}-python-array
+      batch_id: {batch_id}-python-array
     columns:
       - name: A
         description: Column A
@@ -240,10 +252,21 @@ class TestPythonDuplicateBatchIdModels:
     def models(self):
         return {
             "python_array_batch_id.py": models__python_array_batch_id_python,
-            "python_array_batch_id.yml": models__bad_python_array_batch_id_yaml,
+            "python_array_batch_id.yml": models__python_array_batch_id_yaml,
         }
 
     def test_multiple_python_models_fixed_id(self, project):
+        # Generate a unique batch id per invocation and write it into the model
+        # right before running. Run #1 and run #2 still share the id (so the
+        # second run gets the expected 409), but flaky reruns and parallel shards
+        # never reuse a batch id left over from a prior attempt, which would
+        # otherwise make the "expect pass" first run fail with a 409.
+        batch_id = f"custom-{uuid.uuid4().hex}"
+        write_file(
+            _python_array_batch_id_yaml(batch_id),
+            project.project_root + "/models",
+            "python_array_batch_id.yml",
+        )
         result, output = run_dbt_and_capture(["run"], expect_pass=True)
         result_two, output_two = run_dbt_and_capture(["run"], expect_pass=False)
         assert result_two[0].message.startswith("409 Already exists: Failed to create batch:")
