@@ -190,8 +190,6 @@ models__python_array_batch_id_yaml = """
 models:
   - name: python_array_batch_id
     description: A random table with a calculated column defined in python.
-    config:
-      submission_method: serverless
     columns:
       - name: A
         description: Column A
@@ -208,7 +206,6 @@ models:
   - name: python_array_batch_id
     description: A random table with a calculated column defined in python.
     config:
-      submission_method: serverless
       batch_id: {custom_ts_id}-python-array
     columns:
       - name: A
