@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Shard BigQuery integration tests across parallel CI runners with pytest-split
+  and raise xdist workers to speed up the suite
+time: 2026-06-05T00:00:00.000000-06:00
+custom:
+  Author: tauhidanjum
+  Issue: "2005"

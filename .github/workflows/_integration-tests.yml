@@ -130,6 +130,12 @@ jobs:
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
+        # Shard the suite across parallel runners with pytest-split. All shards hit the
+        # same BigQuery project quota, so peak concurrency is groups x (-n workers) x dbt threads.
+        strategy:
+            fail-fast: false
+            matrix:
+                group: [1, 2, 3, 4]
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -169,7 +175,7 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Run integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests
+              run: hatch run ${{ inputs.hatch-env }}:integration-tests --splits 4 --group ${{ matrix.group }}
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
@@ -181,6 +187,12 @@ jobs:
         runs-on: ${{ inputs.os }}
         # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
         needs: integration-tests-bigquery
+        # Shard across runners but keep -n1 per runner (see hatch.toml): flaky python-model
+        # tests stay serial within a runner to preserve isolation, we just split them across machines.
+        strategy:
+            fail-fast: false
+            matrix:
+                group: [1, 2]
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -220,7 +232,7 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Run flaky integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
+              run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky --splits 2 --group ${{ matrix.group }}
 
     integration-tests-postgres:
         if: contains(fromJSON(inputs.packages), 'dbt-postgres')
