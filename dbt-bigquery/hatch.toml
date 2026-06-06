@@ -86,7 +86,7 @@ dependencies = [
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
 integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional --ddtrace -n 8 {args:}'
-integration-tests-flaky = "python -m pytest -n 1 -m flaky --profile service_account tests/functional --ddtrace {args:}"
+integration-tests-flaky = "python -m pytest -n 4 -m flaky --profile service_account tests/functional --ddtrace {args:}"
 
 [envs.cd]
 pre-install-commands = []
@@ -106,4 +106,4 @@ dependencies = [
 [envs.cd.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
 integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional --ddtrace -n 8 {args:}'
-integration-tests-flaky = "python -m pytest -n 1 -m flaky --profile service_account tests/functional --ddtrace {args:}"
+integration-tests-flaky = "python -m pytest -n 4 -m flaky --profile service_account tests/functional --ddtrace {args:}"
