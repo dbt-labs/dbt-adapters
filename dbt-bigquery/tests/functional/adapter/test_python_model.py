@@ -42,6 +42,7 @@ class TestPythonModelDataproc(dbt_tests.BasePythonModelTests):
 
 
 @pytest.mark.skip(reason=TEST_SKIP_MESSAGE)
+@pytest.mark.flaky
 class TestPythonIncrementalMatsDataproc(dbt_tests.BasePythonIncrementalTests):
     pass
 
@@ -275,6 +276,7 @@ class TestPythonDuplicateBatchIdModels:
 
 
 @pytest.mark.skip(reason=TEST_SKIP_MESSAGE)
+@pytest.mark.flaky
 class TestChangingSchemaDataproc:
     @pytest.fixture(scope="class")
     def models(self):
@@ -297,14 +299,17 @@ class TestChangingSchemaDataproc:
             assert "Execution status: OK in" in log
 
 
+@pytest.mark.flaky
 class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
     pass
 
 
+@pytest.mark.flaky
 class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
     pass
 
 
+@pytest.mark.flaky
 class TestPythonMetaGetBigquery(dbt_tests.BasePythonMetaGetTests):
     pass
 
