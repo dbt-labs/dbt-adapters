@@ -128,6 +128,7 @@ jobs:
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery:
+        if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
         strategy:
             fail-fast: false

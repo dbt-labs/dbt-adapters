@@ -106,4 +106,4 @@ dependencies = [
 [envs.cd.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
 integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional --ddtrace -n 8 {args:}'
-integration-tests-flaky = "python -m pytest -m flaky --profile service_account tests/functional --ddtrace -n 4"
+integration-tests-flaky = "python -m pytest -m flaky --profile service_account tests/functional --ddtrace -n 5"
