@@ -128,13 +128,11 @@ jobs:
               run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery:
-        # TEMPORARILY DISABLED: only running the flaky BigQuery tests for now.
-        if: false
         runs-on: ${{ inputs.os }}
         strategy:
             fail-fast: false
             matrix:
-                group: [1, 2, 3, 4, 5]
+                group: [1, 2, 3]
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -174,18 +172,14 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Run integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests --splits 5 --group ${{ matrix.group }}
+              run: hatch run ${{ inputs.hatch-env }}:integration-tests --splits 3 --group ${{ matrix.group }}
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
-        # we need to run with "!cancelled()" so that we run after non-flaky BQ tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
-            !cancelled()
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
         runs-on: ${{ inputs.os }}
-        # NOTE: the non-flaky `integration-tests-bigquery` job is temporarily disabled (if: false),
-        # so the `needs` dependency on it is removed to keep the flaky job runnable.
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
