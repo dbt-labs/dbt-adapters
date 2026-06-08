@@ -1,11 +1,5 @@
-"""
-Unit tests for the Python-model submit retry wrappers in ``tests/_python_model_retry``.
-
-These lock in the retry *decisions* without touching Dataproc or Vertex AI: a fake
-``submit`` raises the relevant exception (and, for BigFrames, simulates whether the
-notebook log was read) and we assert how many times it is re-invoked. ``sleep`` is
-stubbed so the tests run instantly.
-"""
+"""Unit tests for the retry wrappers in ``tests/_python_model_retry``: a fake ``submit``
+raises, and we assert how often it is re-invoked. ``sleep`` is stubbed for speed."""
 
 from types import SimpleNamespace
 
@@ -68,10 +62,8 @@ class TestPredicates:
         assert is_notebook_job_failure(Exception(_NOTEBOOK_FAIL)) is True
         assert is_notebook_job_failure(Exception(_CONFIG_ERR)) is False  # no failure verb
         assert is_notebook_job_failure(Exception(_MODEL_ERR)) is False  # not about a notebook
-        # A dbt-side polling timeout is a legitimate terminal outcome, not transient infra:
-        # it mentions "notebook" (in "cancel the related notebook job") but must NOT match,
-        # else the retry helper would re-run the deliberate timeout-error test until a real
-        # transient slips through and masks the expected timeout message.
+        # A dbt timeout says "notebook" (in "cancel the related notebook job") but is a
+        # legitimate terminal outcome, not transient infra, so it must NOT match.
         assert is_notebook_job_failure(Exception(_NOTEBOOK_TIMEOUT)) is False
 
     def test_backoff_grows_and_is_capped(self):
@@ -121,10 +113,7 @@ class TestDataprocQuotaRetry:
         assert len(calls) == 4
 
     def test_deletes_orphaned_batch_before_each_quota_retry(self):
-        """
-        The quota error surfaces after create_batch claimed the id, so the prior batch
-        must be cleared before re-submitting or the retry hits 409 Already exists.
-        """
+        """The prior batch must be cleared before re-submitting, else the retry 409s."""
         calls = []
 
         def fake_submit(self, code):
@@ -140,10 +129,8 @@ class TestDataprocQuotaRetry:
         assert helper._batch_controller_client.deleted == [expected, expected]
 
     def test_no_delete_on_409_already_exists(self):
-        """
-        A 409 is not a quota error, so it is re-raised immediately and the duplicate-id
-        batch is never deleted — preserving TestPythonDuplicateBatchIdModels' run #2.
-        """
+        """A 409 isn't a quota error: re-raised immediately, batch never deleted —
+        preserving TestPythonDuplicateBatchIdModels' expected run #2 failure."""
         calls = []
 
         def fake_submit(self, code):
@@ -247,10 +234,7 @@ class TestBigframesRetrySubmit:
         assert len(calls) == 3
 
     def test_composes_with_read_tracking_so_logged_error_is_not_retried(self):
-        """
-        Faithful composition: the submit body reads the log via the *tracked* reader, so
-        a real error (log present) flips the flag through the same path production uses.
-        """
+        """submit reads the log via the tracked reader, flipping the flag as production does."""
         calls = []
         tracked_read = make_bigframes_read_tracking(lambda self, uri: {"cells": []})
 

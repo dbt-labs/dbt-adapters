@@ -146,9 +146,7 @@ class TestPythonPartitionedModels:
         }
 
     def test_multiple_named_python_models(self, project):
-        # Generate a unique batch id per invocation and write it into the model
-        # before running, so flaky reruns and parallel shards never reuse a batch
-        # id left over from a prior attempt (a second-granularity timestamp could).
+        # Unique batch id per invocation so flaky reruns / parallel shards never reuse one.
         batch_id = f"custom-{uuid.uuid4().hex}"
         write_file(
             _partitioned_model_yaml(batch_id),
@@ -257,11 +255,8 @@ class TestPythonDuplicateBatchIdModels:
         }
 
     def test_multiple_python_models_fixed_id(self, project):
-        # Generate a unique batch id per invocation and write it into the model
-        # right before running. Run #1 and run #2 still share the id (so the
-        # second run gets the expected 409), but flaky reruns and parallel shards
-        # never reuse a batch id left over from a prior attempt, which would
-        # otherwise make the "expect pass" first run fail with a 409.
+        # Unique id per invocation, but shared across run #1 and #2 so the second run
+        # still gets the expected 409 — without colliding with a prior attempt's batch.
         batch_id = f"custom-{uuid.uuid4().hex}"
         write_file(
             _python_array_batch_id_yaml(batch_id),
