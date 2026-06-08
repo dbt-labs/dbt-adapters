@@ -22,11 +22,35 @@ from tests._python_model_retry import (
 
 # Messages mirroring what each path actually raises.
 _QUOTA_ERR = "Insufficient 'CPUS' quota: requested 12 but available 0"
+_ALREADY_EXISTS = "409 Already exists: Failed to create batch: Batch ...custom-abc-python"
 _NOTEBOOK_FAIL = "The colab notebook execution job 'projects/p/.../123' failed."
 _CONFIG_ERR = "Unsupported credential method in BigFrames: 'foo'"
 _MODEL_ERR = "name 'undefined_var' is not defined"
 
 _NO_SLEEP = lambda _delay: None  # noqa: E731
+
+
+class _FakeBatchClient:
+    """Records delete_batch calls and builds resource names like the real client."""
+
+    def __init__(self):
+        self.deleted = []
+
+    def batch_path(self, project, region, batch_id):
+        return f"projects/{project}/locations/{region}/batches/{batch_id}"
+
+    def delete_batch(self, name):
+        self.deleted.append(name)
+
+
+def _fake_helper(batch_id="custom-abc-python"):
+    """A stand-in ServerlessDataProcHelper with the attrs _delete_batch_quietly reads."""
+    return SimpleNamespace(
+        _batch_controller_client=_FakeBatchClient(),
+        _project="proj",
+        _region="us-central1",
+        _get_batch_id=lambda: batch_id,
+    )
 
 
 class TestPredicates:
@@ -86,6 +110,59 @@ class TestDataprocQuotaRetry:
         with pytest.raises(Exception, match="quota"):
             self._wrap(fake_submit, attempts=4)(SimpleNamespace(), "code")
         assert len(calls) == 4
+
+    def test_deletes_orphaned_batch_before_each_quota_retry(self):
+        """
+        The quota error surfaces after create_batch claimed the id, so the prior batch
+        must be cleared before re-submitting or the retry hits 409 Already exists.
+        """
+        calls = []
+
+        def fake_submit(self, code):
+            calls.append(code)
+            if len(calls) < 3:
+                raise Exception(_QUOTA_ERR)
+            return "OK"
+
+        helper = _fake_helper()
+        assert self._wrap(fake_submit)(helper, "code") == "OK"
+        # One delete before each of the two retries; none after the successful submit.
+        expected = "projects/proj/locations/us-central1/batches/custom-abc-python"
+        assert helper._batch_controller_client.deleted == [expected, expected]
+
+    def test_no_delete_on_409_already_exists(self):
+        """
+        A 409 is not a quota error, so it is re-raised immediately and the duplicate-id
+        batch is never deleted — preserving TestPythonDuplicateBatchIdModels' run #2.
+        """
+        calls = []
+
+        def fake_submit(self, code):
+            calls.append(code)
+            raise Exception(_ALREADY_EXISTS)
+
+        helper = _fake_helper()
+        with pytest.raises(Exception, match="Already exists"):
+            self._wrap(fake_submit)(helper, "code")
+        assert len(calls) == 1
+        assert helper._batch_controller_client.deleted == []
+
+    def test_delete_failure_does_not_break_retry(self):
+        """Cleanup is best-effort: a delete that raises must not abort the retry loop."""
+        calls = []
+
+        def fake_submit(self, code):
+            calls.append(code)
+            if len(calls) < 2:
+                raise Exception(_QUOTA_ERR)
+            return "OK"
+
+        helper = _fake_helper()
+        helper._batch_controller_client.delete_batch = lambda name: (_ for _ in ()).throw(
+            RuntimeError("FailedPrecondition: batch not in terminal state")
+        )
+        assert self._wrap(fake_submit)(helper, "code") == "OK"
+        assert len(calls) == 2
 
 
 class TestBigframesReadTracking:

@@ -44,6 +44,32 @@ def backoff_seconds(attempt: int, base: float, max_delay: float) -> float:
     return delay + random.uniform(0, delay * _JITTER_RATIO)
 
 
+def _delete_batch_quietly(helper: Any) -> None:
+    """
+    Best-effort removal of the batch a prior attempt may have registered before its quota
+    rejection surfaced.
+
+    The ``CPUS`` quota error is raised while *polling* the batch (``operation.result``),
+    which is *after* ``create_batch`` has already claimed the id on the server. Dataproc
+    batch ids are unique per workload, so a re-submit with the same id would then collide
+    with that orphaned (terminal/``FAILED``) batch and raise ``409 Already exists`` —
+    surfacing as a hard failure rather than retrying cleanly. Deleting it first lets the
+    re-submit recreate the id.
+
+    Every failure here is swallowed by design: if the quota error instead surfaced *at*
+    ``create_batch`` nothing was created (``NotFound``); a batch still winding down raises
+    ``FailedPrecondition``; and unit-test doubles may not wire a client at all. In all
+    cases the subsequent ``create_batch`` is the real source of truth.
+    """
+    try:
+        client = helper._batch_controller_client
+        name = client.batch_path(helper._project, helper._region, helper._get_batch_id())
+        client.delete_batch(name=name)
+        _logger.debug("Deleted orphaned Dataproc batch before retry: %s", name)
+    except Exception as exc:  # noqa: BLE001 - best-effort cleanup; create_batch decides truth
+        _logger.debug("No orphaned Dataproc batch to delete before retry: %s", exc)
+
+
 def make_dataproc_quota_retry(
     original_submit: Callable,
     attempts: int,
@@ -56,6 +82,12 @@ def make_dataproc_quota_retry(
     shared, project-wide Dataproc CPU quota is momentarily exhausted by other concurrent
     CI runs. A rejected submission allocates nothing, so this only adds waiting, never
     extra CPU pressure. Non-quota failures are re-raised immediately.
+
+    Before each quota retry the prior attempt's batch is deleted (see
+    :func:`_delete_batch_quietly`): the quota error surfaces only after ``create_batch``
+    claimed the id, so re-submitting without clearing it would hit ``409 Already exists``.
+    This stays strictly on the quota-retry path, so tests that deliberately reuse a fixed
+    batch id across separate runs to assert the expected 409 are unaffected.
     """
 
     def submit_with_quota_retry(self, compiled_code):
@@ -65,6 +97,7 @@ def make_dataproc_quota_retry(
             except Exception as exc:
                 if attempt == attempts or not is_cpu_quota_error(exc):
                     raise
+                _delete_batch_quietly(self)
                 delay = backoff_seconds(attempt, base, max_delay)
                 _logger.warning(
                     "Dataproc CPU quota exhausted (attempt %d/%d); retrying in %.0fs: %s",
