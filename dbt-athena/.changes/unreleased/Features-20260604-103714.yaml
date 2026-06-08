@@ -1,5 +1,5 @@
 kind: Features
-body: 'feat(athena): allow Python models to return None to skip adapter materialize()'
+body: 'feat(athena): allow Python models to skip adapter materialize() by returning None, with incremental flows auto-detecting and skipping the tmp/merge post-step'
 time: 2026-06-04T10:37:14.055371+09:00
 custom:
     Author: dtaniwaki

@@ -98,23 +98,35 @@
       {% endcall %}
     {%- endif -%}
 
-    -- create a backup relation
-    {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
+    {# Python models can return None and self-materialize the final relation
+       directly; tmp_relation then never gets created and the rename dance must
+       be skipped. Detect by re-loading the tmp from the catalog. #}
+    {%- set tmp_check = adapter.get_relation(
+      database=tmp_relation.database,
+      schema=tmp_relation.schema,
+      identifier=tmp_relation.identifier
+    ) -%}
+    {%- if model_language == 'python' and tmp_check is none -%}
+      {% set build_sql = "select 'python self-materialized; skipping HA rename'" -%}
+    {%- else -%}
+      -- create a backup relation
+      {%- set relation_bkp = make_temp_relation(target_relation, '__bkp') -%}
 
-    -- if something failed in a prior run and previously created
-    -- backup migration still exists, drop it
-    {%- if relation_bkp is not none -%}
-      {{ drop_relation(relation_bkp) }}
+      -- if something failed in a prior run and previously created
+      -- backup migration still exists, drop it
+      {%- if relation_bkp is not none -%}
+        {{ drop_relation(relation_bkp) }}
+      {%- endif -%}
+
+      -- rename the current target_relation to a backup_relation
+      {%- do rename_relation(target_relation, relation_bkp) -%}
+      -- rename the new full refreshed tmp_relation to the target_relation
+      {%- do rename_relation(tmp_relation, target_relation) -%}
+      -- drop the backup_relation
+      {%- do drop_relation(relation_bkp) -%}
+
+      {% set build_sql = "select '" ~ query_result ~ "'" -%}
     {%- endif -%}
-
-    -- rename the current target_relation to a backup_relation
-    {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the new full refreshed tmp_relation to the target_relation
-    {%- do rename_relation(tmp_relation, target_relation) -%}
-    -- drop the backup_relation
-    {%- do drop_relation(relation_bkp) -%}
-
-    {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
   -- Running in full refresh, drop existing relation, and do full build --
   {% elif existing_relation.is_view or should_full_refresh() %}
@@ -138,12 +150,21 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
-    {% set build_sql = incremental_insert(
-        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
-      )
-    %}
-    {% do to_drop.append(tmp_relation) %}
+    {%- set tmp_check = adapter.get_relation(
+      database=tmp_relation.database,
+      schema=tmp_relation.schema,
+      identifier=tmp_relation.identifier
+    ) -%}
+    {%- if model_language == 'python' and tmp_check is none -%}
+      {% set build_sql = "select 'python self-materialized; skipping insert_overwrite'" -%}
+    {%- else -%}
+      {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
+      {% set build_sql = incremental_insert(
+          on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
+        )
+      %}
+      {% do to_drop.append(tmp_relation) %}
+    {%- endif -%}
 
   -- Append Strategy --
   {% elif strategy == 'append' %}
@@ -156,11 +177,22 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    {% set build_sql = incremental_insert(
-        on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
-      )
-    %}
-    {% do to_drop.append(tmp_relation) %}
+    {# Python return-None auto-detection: if tmp does not exist, the model
+       wrote the final relation directly and we skip incremental_insert. #}
+    {%- set tmp_check = adapter.get_relation(
+      database=tmp_relation.database,
+      schema=tmp_relation.schema,
+      identifier=tmp_relation.identifier
+    ) -%}
+    {%- if model_language == 'python' and tmp_check is none -%}
+      {% set build_sql = "select 'python self-materialized; skipping incremental_insert'" -%}
+    {%- else -%}
+      {% set build_sql = incremental_insert(
+          on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
+        )
+      %}
+      {% do to_drop.append(tmp_relation) %}
+    {%- endif -%}
 
   -- Iceberge Merge Stategy --
   {% elif strategy == 'merge' and table_type == 'iceberg' %}
@@ -196,20 +228,29 @@
         {{ query_result }}
       {% endcall %}
     {%- endif -%}
-    {% set build_sql = iceberg_merge(
-        on_schema_change=on_schema_change,
-        tmp_relation=tmp_relation,
-        target_relation=target_relation,
-        unique_key=unique_key,
-        incremental_predicates=incremental_predicates,
-        existing_relation=existing_relation,
-        delete_condition=delete_condition,
-        update_condition=update_condition,
-        insert_condition=insert_condition,
-        force_batch=force_batch,
-      )
-    %}
-    {% do to_drop.append(tmp_relation) %}
+    {%- set tmp_check = adapter.get_relation(
+      database=tmp_relation.database,
+      schema=tmp_relation.schema,
+      identifier=tmp_relation.identifier
+    ) -%}
+    {%- if model_language == 'python' and tmp_check is none -%}
+      {% set build_sql = "select 'python self-materialized; skipping iceberg_merge'" -%}
+    {%- else -%}
+      {% set build_sql = iceberg_merge(
+          on_schema_change=on_schema_change,
+          tmp_relation=tmp_relation,
+          target_relation=target_relation,
+          unique_key=unique_key,
+          incremental_predicates=incremental_predicates,
+          existing_relation=existing_relation,
+          delete_condition=delete_condition,
+          update_condition=update_condition,
+          insert_condition=insert_condition,
+          force_batch=force_batch,
+        )
+      %}
+      {% do to_drop.append(tmp_relation) %}
+    {%- endif -%}
   {% endif %}
 
   {% call statement("main", language=model_language) %}
