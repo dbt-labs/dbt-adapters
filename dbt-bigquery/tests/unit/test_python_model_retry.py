@@ -24,6 +24,11 @@ from tests._python_model_retry import (
 _QUOTA_ERR = "Insufficient 'CPUS' quota: requested 12 but available 0"
 _ALREADY_EXISTS = "409 Already exists: Failed to create batch: Batch ...custom-abc-python"
 _NOTEBOOK_FAIL = "The colab notebook execution job 'projects/p/.../123' failed."
+_NOTEBOOK_TIMEOUT = (
+    "The dbt operation encountered a timeout: Operation did not complete within the "
+    "designated timeout of 2 seconds. Please cancel the related notebook job manually "
+    "via the GCP console since it might still be actively running."
+)
 _CONFIG_ERR = "Unsupported credential method in BigFrames: 'foo'"
 _MODEL_ERR = "name 'undefined_var' is not defined"
 
@@ -61,9 +66,13 @@ class TestPredicates:
 
     def test_notebook_job_failure_matches_failure_not_config_or_model_error(self):
         assert is_notebook_job_failure(Exception(_NOTEBOOK_FAIL)) is True
-        assert is_notebook_job_failure(Exception("notebook job timeout")) is True
         assert is_notebook_job_failure(Exception(_CONFIG_ERR)) is False  # no failure verb
         assert is_notebook_job_failure(Exception(_MODEL_ERR)) is False  # not about a notebook
+        # A dbt-side polling timeout is a legitimate terminal outcome, not transient infra:
+        # it mentions "notebook" (in "cancel the related notebook job") but must NOT match,
+        # else the retry helper would re-run the deliberate timeout-error test until a real
+        # transient slips through and masks the expected timeout message.
+        assert is_notebook_job_failure(Exception(_NOTEBOOK_TIMEOUT)) is False
 
     def test_backoff_grows_and_is_capped(self):
         # base=10, cap=60: 10, 20, 40, 60, 60 ... plus up to 25% jitter, never below base.

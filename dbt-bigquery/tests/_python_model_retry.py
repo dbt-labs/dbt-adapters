@@ -31,11 +31,18 @@ def is_cpu_quota_error(exc: BaseException) -> bool:
 
 
 def is_notebook_job_failure(exc: BaseException) -> bool:
-    """True for a failed/timed-out Colab notebook execution job (not config errors)."""
+    """True for a *transiently* failed Colab notebook execution job (not config errors).
+
+    Matches the JOB_STATE_FAILED path ("...notebook execution job... failed") and the
+    unexpected-error-during-execution path. A dbt-side polling timeout is deliberately
+    excluded: it is a legitimate terminal outcome (the timeout-error test asserts it) and
+    re-running a model that outlasts its own timeout just times out again — it is not the
+    "failed before writing a log" signature this retry is meant to absorb.
+    """
     message = str(exc).lower()
-    return "notebook" in message and (
-        "failed" in message or "timeout" in message or "unexpected error" in message
-    )
+    if "did not complete within the designated timeout" in message:
+        return False
+    return "notebook" in message and ("failed" in message or "unexpected error" in message)
 
 
 def backoff_seconds(attempt: int, base: float, max_delay: float) -> float:
