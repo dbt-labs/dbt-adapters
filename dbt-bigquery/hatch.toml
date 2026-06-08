@@ -78,6 +78,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-mock",
+    "pytest-split",
     "pytest-xdist",
     "requests",
 ]
@@ -97,6 +98,7 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-mock",
+    "pytest-split",
     "pytest-xdist",
     "requests",
 ]
