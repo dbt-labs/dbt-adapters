@@ -20,8 +20,8 @@ def _config(**kwargs) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
-def _model(config: dict) -> SimpleNamespace:
-    return SimpleNamespace(config=config)
+def _model(config: dict, schema: str = "analytics", identifier: str = "orders") -> SimpleNamespace:
+    return SimpleNamespace(config=config, schema=schema, identifier=identifier)
 
 
 def test_integration_class_attributes():
@@ -47,6 +47,7 @@ def test_build_relation_reads_model_config():
     assert relation.catalog_name == "my_glue_catalog"
     assert relation.partition_by == ["day(event_ts)", "identity(region)"]
     assert relation.table_properties == {"compression_type": "zstd"}
+    # external_volume stays the raw base; location is derived per-table
     assert relation.external_volume == "s3://my-bucket/prefix/"
 
 
@@ -70,3 +71,46 @@ def test_partition_by_accepts_string_or_list(partition_by):
     integration = GlueCatalogIntegration(_config())
     relation = integration.build_relation(_model({"partition_by": partition_by}))
     assert relation.partition_by == partition_by
+
+
+# ---- LOCATION derivation (unique per-table prefix) ----
+
+
+def test_location_is_derived_per_table():
+    integration = GlueCatalogIntegration(_config())
+    model = _model(
+        {"external_volume": "s3://my-bucket/prefix/"}, schema="sales", identifier="orders"
+    )
+    relation = integration.build_relation(model)
+    # default base_location_root is "_dbt"; trailing slash on the volume is normalized
+    assert relation.location == "s3://my-bucket/prefix/_dbt/sales/orders"
+
+
+def test_location_is_unique_across_models_sharing_a_volume():
+    integration = GlueCatalogIntegration(_config(external_volume="s3://shared/"))
+    a = integration.build_relation(_model({}, schema="s", identifier="model_a"))
+    b = integration.build_relation(_model({}, schema="s", identifier="model_b"))
+    assert a.location != b.location
+    assert a.location == "s3://shared/_dbt/s/model_a"
+    assert b.location == "s3://shared/_dbt/s/model_b"
+
+
+def test_location_respects_base_location_root_and_subpath():
+    integration = GlueCatalogIntegration(_config())
+    model = _model(
+        {
+            "external_volume": "s3://my-bucket/",
+            "base_location_root": "warehouse",
+            "base_location_subpath": "v2",
+        },
+        schema="sales",
+        identifier="orders",
+    )
+    relation = integration.build_relation(model)
+    assert relation.location == "s3://my-bucket/warehouse/sales/orders/v2"
+
+
+def test_location_is_none_without_external_volume():
+    integration = GlueCatalogIntegration(_config())
+    relation = integration.build_relation(_model({}))
+    assert relation.location is None

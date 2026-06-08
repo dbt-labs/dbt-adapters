@@ -47,3 +47,17 @@ def table_properties(model: RelationConfig) -> Optional[Dict[str, Any]]:
     if not model.config:
         return None
     return model.config.get("table_properties")
+
+
+def base_location_root(model: RelationConfig) -> Optional[str]:
+    """Root path under ``external_volume`` used when deriving a per-table LOCATION."""
+    if not model.config:
+        return None
+    return model.config.get("base_location_root")
+
+
+def base_location_subpath(model: RelationConfig) -> Optional[str]:
+    """Optional extra path segment appended to the derived per-table LOCATION."""
+    if not model.config:
+        return None
+    return model.config.get("base_location_subpath")

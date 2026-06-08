@@ -19,6 +19,19 @@
     ) %}
   {%- endif -%}
 
+  {# Warn about native Redshift table configs that have no effect on Iceberg tables #}
+  {%- set ignored_configs = [] -%}
+  {%- if config.get('dist') -%}{%- do ignored_configs.append('dist') -%}{%- endif -%}
+  {%- if config.get('sort') -%}{%- do ignored_configs.append('sort') -%}{%- endif -%}
+  {%- if config.get('backup') == false -%}{%- do ignored_configs.append('backup') -%}{%- endif -%}
+  {%- if ignored_configs -%}
+    {% do exceptions.warn(
+      "The following configs have no effect on Redshift Iceberg tables and are ignored: "
+      ~ ignored_configs | join(", ")
+      ~ ". Iceberg uses `partition_by` instead of `dist`/`sort`, and external storage instead of `backup`."
+    ) %}
+  {%- endif -%}
+
   {%- set sql_header = config.get('sql_header', none) -%}
   {{ sql_header if sql_header is not none }}
 
@@ -51,7 +64,7 @@
 
   create table {{ relation }}
     using iceberg
-    {{ optional('location', catalog_relation.external_volume, "'") }}
+    {{ optional('location', catalog_relation.location, "'") }}
     {% if partition_by_string -%} partitioned by ({{ partition_by_string }}) {%- endif %}
     {% if table_properties_string -%} table properties ({{ table_properties_string }}) {%- endif %}
   as (
