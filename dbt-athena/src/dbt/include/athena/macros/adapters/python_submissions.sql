@@ -82,12 +82,12 @@ if df is None:
     {%- endif %}
 
     try:
-        glue.get_table(DatabaseName="{{ target_relation.schema }}", Name="{{ target_relation.identifier }}")
+        glue.get_table(DatabaseName="{{ this.schema }}", Name="{{ this.identifier }}")
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") == "EntityNotFoundException":
             raise Exception(
                 "model() returned None but target table "
-                "{{ target_relation.schema }}.{{ target_relation.identifier }} does not exist. "
+                "{{ this.schema }}.{{ this.identifier }} does not exist. "
                 "Models returning None must materialize the target themselves."
             ) from e
         raise
