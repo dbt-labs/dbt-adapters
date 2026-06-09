@@ -5,7 +5,10 @@
     https://docs.aws.amazon.com/redshift/latest/dg/iceberg-writes-sql-syntax.html
 
     Limitations (per AWS docs):
-    - Iceberg does not support CREATE OR REPLACE, so we DROP first for idempotency.
+    - Iceberg DDL cannot run inside a multi-statement transaction, so this macro
+      emits a SINGLE statement (just the CREATE). Dropping any existing relation is
+      handled separately by the materialization, and the connection must run with
+      autocommit so dbt does not wrap it in BEGIN/COMMIT.
     - Iceberg tables cannot be renamed, so the materialization builds directly into
       the target relation rather than using an intermediate + rename swap.
     - Iceberg tables do not support column constraints / attributes, so model
@@ -55,19 +58,15 @@
     {%- set table_properties_string = none -%}
   {%- endif -%}
 
-  {# Iceberg has no CREATE OR REPLACE and tables can't be renamed; drop first for idempotency #}
-  {%- set existing_relation = adapter.get_relation(
-        database=relation.database, schema=relation.schema, identifier=relation.identifier) -%}
-  {% if existing_relation is not none %}
-    drop table if exists {{ existing_relation }};
-  {% endif %}
-
+  {#- Single statement only: Iceberg DDL can't run in a multi-statement transaction.
+      Any existing relation is dropped separately by the materialization. -#}
   create table {{ relation }}
     using iceberg
-    {{ optional('location', catalog_relation.location, "'") }}
+    {# Redshift uses `location '...'` (no `=`), so pass an empty equals_char #}
+    {{ optional('location', catalog_relation.location, "'", '') }}
     {% if partition_by_string -%} partitioned by ({{ partition_by_string }}) {%- endif %}
     {% if table_properties_string -%} table properties ({{ table_properties_string }}) {%- endif %}
   as (
     {{ sql }}
-  );
+  )
 {%- endmacro %}

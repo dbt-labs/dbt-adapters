@@ -308,6 +308,16 @@
       from information_schema.views
       where table_schema ilike '{{ schema_relation.schema }}'
       union all
+      -- external (e.g. Apache Iceberg / Glue) tables are not in information_schema;
+      -- include them so they land in the relation cache (get_relation, is_incremental)
+      select
+        '{{ schema_relation.database }}' as database,
+        tablename as name,
+        schemaname as schema,
+        'table' as type
+      from svv_external_tables
+      where schemaname ilike '{{ schema_relation.schema }}'
+      union all
       select distinct
         '{{ schema_relation.database }}' as database,
         proname as name,

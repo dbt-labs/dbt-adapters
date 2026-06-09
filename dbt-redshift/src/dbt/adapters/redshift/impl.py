@@ -2,12 +2,15 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
+from urllib.parse import urlparse
+
+import boto3
 
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
 from datetime import datetime, timezone
-from typing import ClassVar, List, Optional, Set, Any, Dict, Tuple, Type, Mapping
+from typing import ClassVar, List, Optional, Set, Any, Dict, Tuple, Type, Mapping, Union
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
@@ -115,6 +118,14 @@ class RedshiftConfig(AdapterConfig):
     auto_refresh: Optional[bool] = False
     query_group: Optional[str] = None
 
+    # Apache Iceberg (AWS Glue Data Catalog) configs
+    table_format: Optional[str] = None
+    external_volume: Optional[str] = None
+    base_location_root: Optional[str] = None
+    base_location_subpath: Optional[str] = None
+    partition_by: Optional[Union[str, List[str]]] = None
+    table_properties: Optional[Dict[str, Any]] = None
+
 
 class RedshiftAdapter(SQLAdapter):
     Relation = RedshiftRelation
@@ -164,6 +175,46 @@ class RedshiftAdapter(SQLAdapter):
 
     def _v2_table_format(self, catalog: CatalogV2) -> str:
         return catalog.table_format.value.lower()
+
+    def _boto3_session(self) -> "boto3.session.Session":
+        """Build a boto3 session from the adapter credentials, falling back to the
+        default credential chain (env vars, shared config, instance profile)."""
+        creds = self.config.credentials
+        kwargs: Dict[str, Any] = {}
+        if getattr(creds, "region", None):
+            kwargs["region_name"] = creds.region
+        if getattr(creds, "access_key_id", None) and getattr(creds, "secret_access_key", None):
+            kwargs["aws_access_key_id"] = creds.access_key_id
+            kwargs["aws_secret_access_key"] = creds.secret_access_key
+        elif getattr(creds, "iam_profile", None):
+            kwargs["profile_name"] = creds.iam_profile
+        return boto3.session.Session(**kwargs)
+
+    @available
+    def delete_from_s3(self, s3_path: Optional[str]) -> None:
+        """Delete every object under an ``s3://bucket/prefix`` location.
+
+        Redshift's ``DROP TABLE`` on an Iceberg table only removes the AWS Glue
+        Data Catalog entry; it leaves the data/metadata files in S3. Since
+        ``CREATE TABLE ... USING ICEBERG`` requires an empty ``LOCATION``, we purge
+        the prefix here before re-creating the table (mirrors dbt-athena's
+        ``delete_from_s3``). The dbt client must have AWS credentials with delete
+        access to the bucket.
+        """
+        if not s3_path:
+            return
+        parsed = urlparse(s3_path)
+        bucket = parsed.netloc
+        prefix = parsed.path.lstrip("/")
+        if not bucket:
+            return
+        # scope deletion to this table's own folder so a prefix like ".../orders"
+        # does not also match a sibling ".../orders_partitioned"
+        if prefix and not prefix.endswith("/"):
+            prefix += "/"
+        logger.debug(f"Purging Iceberg S3 location: s3://{bucket}/{prefix}")
+        s3 = self._boto3_session().resource("s3")
+        s3.Bucket(bucket).objects.filter(Prefix=prefix).delete()
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:

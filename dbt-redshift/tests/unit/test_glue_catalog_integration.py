@@ -60,12 +60,6 @@ def test_build_relation_falls_back_to_integration_external_volume():
     assert relation.table_properties is None
 
 
-def test_build_relation_location_alias():
-    integration = GlueCatalogIntegration(_config())
-    relation = integration.build_relation(_model({"location": "s3://aliased/"}))
-    assert relation.external_volume == "s3://aliased/"
-
-
 @pytest.mark.parametrize("partition_by", ["day(event_ts)", ["day(event_ts)"]])
 def test_partition_by_accepts_string_or_list(partition_by):
     integration = GlueCatalogIntegration(_config())

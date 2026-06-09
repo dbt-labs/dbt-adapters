@@ -38,21 +38,38 @@
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
   {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
 
-  {% if existing_relation is none %}
+  {% if is_iceberg %}
+    {#-- Iceberg: No CREATE OR REPLACE / rename, and DROP does not clear S3, so we
+        CTAS when absent and otherwise mutate in place. Existence comes from the
+        relation cache (external tables are now listed in list_relations). --#}
+    {% if existing_relation is none or should_full_refresh() %}
+        {#-- (re)create: drop the Glue entry if present, purge S3, then CTAS --#}
+        {% if existing_relation is not none %}
+          {% call statement('drop_iceberg_target') -%}
+            drop table if exists {{ target_relation }}
+          {%- endcall %}
+        {% endif %}
+        {% do adapter.delete_from_s3(catalog_relation.location) %}
+        {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
+        {% set relation_for_indexes = target_relation %}
+    {% else %}
+        {#-- incremental: stage to a normal temp table, then run the strategy DML against
+            the Iceberg target. `append` is a single INSERT; merge/delete+insert emit
+            multiple statements and are not yet validated for Iceberg. --#}
+        {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
+        {% set relation_for_indexes = temp_relation %}
+        {% set dest_columns = adapter.get_columns_in_relation(temp_relation) %}
+        {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
+        {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': temp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
+        {% set build_sql = strategy_sql_macro_func(strategy_arg_dict) %}
+    {% endif %}
+  {% elif existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
       {% set relation_for_indexes = target_relation %}
   {% elif full_refresh_mode %}
-      {% if is_iceberg %}
-          -- Iceberg tables can't be renamed and don't support CREATE OR REPLACE,
-          -- so drop the existing relation and rebuild directly into the target.
-          {{ drop_relation_if_exists(existing_relation) }}
-          {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
-          {% set relation_for_indexes = target_relation %}
-      {% else %}
-          {% set build_sql = get_create_table_as_sql(False, intermediate_relation, sql) %}
-          {% set relation_for_indexes = intermediate_relation %}
-          {% set need_swap = true %}
-      {% endif %}
+      {% set build_sql = get_create_table_as_sql(False, intermediate_relation, sql) %}
+      {% set relation_for_indexes = intermediate_relation %}
+      {% set need_swap = true %}
   {% else %}
     {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
     {% set relation_for_indexes = temp_relation %}

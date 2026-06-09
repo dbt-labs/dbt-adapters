@@ -36,10 +36,10 @@ def partition_by(model: RelationConfig) -> Optional[Union[str, List[str]]]:
 
 
 def external_volume(model: RelationConfig) -> Optional[str]:
-    """The S3 ``LOCATION`` prefix the Iceberg table data is written to."""
+    """The S3 base prefix the Iceberg table data is written to (the ``LOCATION`` root)."""
     if not model.config:
         return None
-    return model.config.get("external_volume") or model.config.get("location")
+    return model.config.get("external_volume")
 
 
 def table_properties(model: RelationConfig) -> Optional[Dict[str, Any]]:

@@ -31,12 +31,16 @@
   {{ run_hooks(pre_hooks, inside_transaction=True) }}
 
   {% if is_iceberg %}
-    -- Iceberg tables can't be renamed and don't support CREATE OR REPLACE, so we
-    -- drop any existing relation and build directly into the target relation.
+    -- Redshift Iceberg has no CREATE OR REPLACE and can't rename. DROP TABLE only
+    -- removes the Glue catalog entry (S3 data is left behind), and CTAS requires an
+    -- empty LOCATION, so we: drop the catalog entry (if any), purge the S3 prefix,
+    -- then CTAS.
     {% if existing_relation is not none %}
-      {{ drop_relation_if_exists(existing_relation) }}
+      {% call statement('drop_iceberg_target') -%}
+        drop table if exists {{ target_relation }}
+      {%- endcall %}
     {% endif %}
-
+    {% do adapter.delete_from_s3(catalog_relation.location) %}
     {% call statement('main') -%}
       {{ get_create_table_as_sql(False, target_relation, sql) }}
     {%- endcall %}
