@@ -1,6 +1,8 @@
-from contextlib import contextmanager  # noqa: F401
 from multiprocessing import get_context
 from unittest import TestCase, mock
+
+from botocore.exceptions import NoCredentialsError
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.redshift import (
     Plugin as RedshiftPlugin,
@@ -69,3 +71,15 @@ class TestDeleteFromS3(TestCase):
             adapter.delete_from_s3(None)
             adapter.delete_from_s3("")
             session.assert_not_called()
+
+    def test_raises_clear_error_when_no_aws_credentials(self):
+        adapter = make_adapter()
+        mock_bucket = mock.MagicMock()
+        mock_bucket.objects.filter.return_value.delete.side_effect = NoCredentialsError()
+        mock_s3 = mock.MagicMock()
+        mock_s3.Bucket.return_value = mock_bucket
+        mock_session = mock.MagicMock()
+        mock_session.resource.return_value = mock_s3
+        with mock.patch.object(adapter, "_boto3_session", return_value=mock_session):
+            with self.assertRaises(DbtRuntimeError):
+                adapter.delete_from_s3("s3://bucket/prefix/")

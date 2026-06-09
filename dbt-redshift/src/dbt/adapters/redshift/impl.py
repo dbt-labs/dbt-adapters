@@ -5,6 +5,7 @@ from multiprocessing.context import SpawnContext
 from urllib.parse import urlparse
 
 import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
@@ -177,8 +178,15 @@ class RedshiftAdapter(SQLAdapter):
         return catalog.table_format.value.lower()
 
     def _boto3_session(self) -> "boto3.session.Session":
-        """Build a boto3 session from the adapter credentials, falling back to the
-        default credential chain (env vars, shared config, instance profile)."""
+        """Build a boto3 session for S3 operations.
+
+        AWS credentials are sourced independently of the Redshift connection auth
+        (which may be username/password and carry no AWS identity), in order:
+          1. explicit ``access_key_id`` + ``secret_access_key`` from the profile,
+          2. a named ``iam_profile`` from the profile,
+          3. the standard AWS credential chain (``AWS_PROFILE`` / ``~/.aws`` /
+             environment variables / instance role).
+        """
         creds = self.config.credentials
         kwargs: Dict[str, Any] = {}
         if getattr(creds, "region", None):
@@ -198,8 +206,11 @@ class RedshiftAdapter(SQLAdapter):
         Data Catalog entry; it leaves the data/metadata files in S3. Since
         ``CREATE TABLE ... USING ICEBERG`` requires an empty ``LOCATION``, we purge
         the prefix here before re-creating the table (mirrors dbt-athena's
-        ``delete_from_s3``). The dbt client must have AWS credentials with delete
-        access to the bucket.
+        ``delete_from_s3``).
+
+        This needs AWS credentials with ``s3:DeleteObject``/``s3:ListBucket`` on the
+        bucket, resolved via ``_boto3_session`` (profile keys / ``iam_profile`` / the
+        default AWS chain) -- separate from the Redshift connection auth.
         """
         if not s3_path:
             return
@@ -213,8 +224,18 @@ class RedshiftAdapter(SQLAdapter):
         if prefix and not prefix.endswith("/"):
             prefix += "/"
         logger.debug(f"Purging Iceberg S3 location: s3://{bucket}/{prefix}")
-        s3 = self._boto3_session().resource("s3")
-        s3.Bucket(bucket).objects.filter(Prefix=prefix).delete()
+        try:
+            s3 = self._boto3_session().resource("s3")
+            s3.Bucket(bucket).objects.filter(Prefix=prefix).delete()
+        except (NoCredentialsError, PartialCredentialsError) as exc:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "Could not find AWS credentials to clean up the Iceberg table's S3 "
+                f"location (s3://{bucket}/{prefix}). Redshift Iceberg models need AWS "
+                "credentials for S3 cleanup, separate from the database connection. "
+                "Provide `access_key_id`/`secret_access_key` or `iam_profile` in your "
+                "profile, or configure the standard AWS credential chain (AWS_PROFILE / "
+                "~/.aws / environment variables)."
+            ) from exc
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
