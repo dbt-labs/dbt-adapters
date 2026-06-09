@@ -780,7 +780,7 @@ class BigQueryAdapter(BaseAdapter):
         new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
         conn.handle.update_table(new_table, ["schema"])
 
-    @available.parse_none
+    @available.deprecated("alter_relation_comment", lambda *a, **k: None)
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
     ):
