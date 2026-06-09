@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Add upper bound `<2.0` on `dbt-core` to prevent pip from resolving to dbt-core 2.0 (Fusion engine), which is incompatible with the python adapter
+time: 2026-06-09T05:30:34+00:00
+custom:
+  Author: sriramr98
+  PR: "2013"
