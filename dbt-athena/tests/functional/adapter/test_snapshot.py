@@ -360,8 +360,7 @@ class TestIcebergSnapshotValidToCurrent:
         # Verify all rows have sentinel value (not NULL)
         relation = relation_from_name(project.adapter, "valid_to_current_snapshot")
         result = project.run_sql(
-            f"select count(*) from {relation} "
-            f"where dbt_valid_to = {self.SENTINEL}",
+            f"select count(*) from {relation} " f"where dbt_valid_to = {self.SENTINEL}",
             fetch="one",
         )
         assert result[0] == 10
@@ -373,8 +372,7 @@ class TestIcebergSnapshotValidToCurrent:
 
         # Only 10 rows should be current (one per unique key)
         result = project.run_sql(
-            f"select count(*) from {relation} "
-            f"where dbt_valid_to = {self.SENTINEL}",
+            f"select count(*) from {relation} " f"where dbt_valid_to = {self.SENTINEL}",
             fetch="one",
         )
         assert result[0] == 10
