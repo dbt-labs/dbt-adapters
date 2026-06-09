@@ -40,7 +40,7 @@ try:
     import thrift
     import ssl
     import thrift_sasl
-    from puresasl.client import SASLClient
+    from pyhive.sasl_compat import PureSASLClient as SASLClient
 except ImportError:
     TTransportException = None
     pass  # done deliberately: setting modules to None explicitly violates MyPy contracts by degrading type semantics
