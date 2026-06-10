@@ -182,6 +182,7 @@ class BigqueryConfig(AdapterConfig):
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
+    reservation: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -312,8 +313,8 @@ class BigQueryAdapter(BaseAdapter):
         return timeout
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        conn = self.connections.get_thread_connection()
         if context is not None:
-            conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = None
             conn._bq_model_location = None
 
