@@ -7,11 +7,13 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
+from multiprocessing.context import SpawnContext
 from textwrap import dedent
 from threading import Lock
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Generator,
@@ -43,10 +45,18 @@ from mypy_boto3_glue.type_defs import (
 from pyathena.error import OperationalError
 
 from dbt.adapters.athena import AthenaConnectionManager
+from dbt.adapters.athena.catalogs import (
+    AthenaInfoSchemaCatalogIntegration,
+    GlueCatalogIntegration,
+)
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.connections import AthenaCursor
-from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.constants import (
+    DEFAULT_GLUE_CATALOG,
+    DEFAULT_INFO_SCHEMA_CATALOG,
+    LOGGER,
+)
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
     SnapshotMigrationRequired,
@@ -79,6 +89,12 @@ from dbt.adapters.athena.utils import (
 from dbt.adapters.base import ConstraintSupport, PythonJobHelper, available
 from dbt.adapters.base.impl import AdapterConfig
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
@@ -88,6 +104,10 @@ if TYPE_CHECKING:
     from mypy_boto3_glue.client import GlueClient
 
 boto3_client_lock = Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once the dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -166,6 +186,31 @@ class AthenaAdapter(SQLAdapter):
         ConstraintType.primary_key: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.foreign_key: ConstraintSupport.NOT_SUPPORTED,
     }
+
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration, AthenaInfoSchemaCatalogIntegration]
+
+    _capabilities: CapabilityDict = CapabilityDict(
+        {
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
+        }
+    )
+
+    # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {"glue": "glue"}
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        # Register the default catalogs so models can reference them by name and so
+        # models without a catalog fall back to standard Hive behavior.
+        self.add_catalog_integration(DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(DEFAULT_GLUE_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     @classmethod
     def date_function(cls) -> str:

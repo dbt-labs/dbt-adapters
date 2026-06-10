@@ -11,7 +11,7 @@
   {%- set bucketed_by = config.get('bucketed_by', default=none) -%}
   {%- set bucket_count = config.get('bucket_count', default=none) -%}
   {%- set field_delimiter = config.get('field_delimiter', default=none) -%}
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
+  {%- set table_type = resolve_table_type() -%}
   {%- set format = config.get('format', default='parquet') -%}
   {%- set write_compression = config.get('write_compression', default=none) -%}
   {%- set s3_data_dir = config.get('s3_data_dir', default=target.s3_data_dir) -%}

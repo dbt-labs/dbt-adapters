@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add catalogs.yml v2 support: register a writable Glue/Iceberg catalog (type ''glue'') and a default info_schema (hive) catalog so models can select a table format via catalog_name'
+time: 2026-06-10T12:00:25.663965+05:30
+custom:
+    Author: aahel
+    Issue: "0000"
