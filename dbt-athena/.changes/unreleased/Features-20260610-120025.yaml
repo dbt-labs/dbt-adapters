@@ -3,4 +3,4 @@ body: 'Add catalogs.yml v2 support: register a writable Glue/Iceberg catalog (ty
 time: 2026-06-10T12:00:25.663965+05:30
 custom:
     Author: aahel
-    Issue: "0000"
+    Issue: "2016"
