@@ -58,6 +58,7 @@ class BigQueryCredentials(Credentials):
     api_endpoint: Optional[str] = None
     priority: Optional[Priority] = None
     maximum_bytes_billed: Optional[int] = None
+    reservation: Optional[str] = None
     impersonate_service_account: Optional[str] = None
 
     job_retry_deadline_seconds: Optional[int] = None
@@ -154,6 +155,7 @@ class BigQueryCredentials(Credentials):
             "location",
             "priority",
             "maximum_bytes_billed",
+            "reservation",
             "impersonate_service_account",
             "job_retry_deadline_seconds",
             "job_retries",
