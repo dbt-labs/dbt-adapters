@@ -26,6 +26,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.mock_connection.name = "test_connection"  # Must be a string for fire_event
         self.mock_connection.handle = self.mock_client
         self.mock_connection.credentials = self.credentials
+        self.mock_connection._bq_model_location = None
 
         self.connections = BigQueryConnectionManager(
             profile=Mock(credentials=self.credentials, query_comment=None),
@@ -102,6 +103,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             job_id=1,
             job_retry=None,
             timeout=self.credentials.job_creation_timeout_seconds,
+            location=None,
         )
 
     def test_copy_bq_table_appends(self):
@@ -354,6 +356,34 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         # Clean up
         self.mock_connection._bq_model_timeout = None
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_passes_model_location_to_client_query(self, MockQueryJobConfig):
+        """When _bq_model_location is set, raw_execute passes location to client.query()."""
+        mock_job = Mock(job_id="test_job", location="US", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.mock_connection._bq_model_location = "US"
+        try:
+            self.connections.raw_execute("SELECT 1")
+        finally:
+            self.mock_connection._bq_model_location = None
+
+        _, kwargs = self.mock_client.query.call_args
+        self.assertEqual(kwargs.get("location"), "US")
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_passes_none_location_when_not_set(self, MockQueryJobConfig):
+        """When _bq_model_location is absent, client.query() receives location=None (client default applies)."""
+        mock_job = Mock(job_id="test_job", location="EU", project="project")
+        mock_job.result.return_value = iter([])
+        self.mock_client.query.return_value = mock_job
+
+        self.connections.raw_execute("SELECT 1")
+
+        _, kwargs = self.mock_client.query.call_args
+        self.assertIsNone(kwargs.get("location"))
 
 
 class TestTerminalJobAwarePredicate(unittest.TestCase):

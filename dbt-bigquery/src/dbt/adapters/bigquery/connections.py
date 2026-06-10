@@ -618,6 +618,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         polling_timeout = (
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
+        model_location = getattr(conn, "_bq_model_location", None)
         # Cannot reuse job_config if destination is set and ddl is used
         query_job = client.query(
             query=sql,
@@ -625,6 +626,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_id=job_id,
             job_retry=None,
             timeout=self._retry.create_job_creation_timeout(),
+            location=model_location,
         )
         if (
             query_job.location is not None

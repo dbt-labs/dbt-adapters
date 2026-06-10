@@ -1246,3 +1246,27 @@ class TestPartitionConfigRenderWrappedInt64Range:
         """int64 without range config should return the raw field name."""
         config = PartitionConfig(field="id", data_type="int64")
         assert config.render_wrapped() == "id"
+
+
+class TestModelLocationHooks(BaseTestBigQueryAdapter):
+    def setUp(self):
+        super().setUp()
+        self.adapter = self.get_adapter("oauth")
+        self.mock_conn = MagicMock()
+        self.mock_conn._bq_model_location = None
+        self.adapter.connections = MagicMock()
+        self.adapter.connections.get_thread_connection.return_value = self.mock_conn
+
+    def test_pre_model_hook_sets_location_on_connection(self):
+        self.adapter.pre_model_hook({"location": "US"})
+        self.assertEqual(self.mock_conn._bq_model_location, "US")
+
+    def test_pre_model_hook_no_location_leaves_attribute_unset(self):
+        self.adapter.pre_model_hook({})
+        # attribute should not have been written
+        self.assertIsNone(self.mock_conn._bq_model_location)
+
+    def test_post_model_hook_clears_location(self):
+        self.mock_conn._bq_model_location = "US"
+        self.adapter.post_model_hook({}, context="non-None")
+        self.assertIsNone(self.mock_conn._bq_model_location)
