@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import random
 import time
+import uuid
 from typing import Any, Callable
 
 _logger = logging.getLogger(__name__)
@@ -29,6 +30,19 @@ def backoff_seconds(attempt: int, base: float, max_delay: float) -> float:
     """Jittered exponential backoff for a 1-based attempt, capped at ``max_delay``."""
     delay = min(base * 2 ** (attempt - 1), max_delay)
     return delay + random.uniform(0, delay * _JITTER_RATIO)
+
+
+def _pin_batch_id(helper: Any) -> None:
+    """Pin a stable batch id on first run so create and the pre-retry delete agree.
+
+    The adapter's ``_get_batch_id`` mints a fresh uuid on every call when ``batch_id`` is
+    unset (see ``python_submissions._get_batch_id``), so without this the delete would
+    target a different id than the batch ``submit`` actually created — leaking it. An
+    explicit ``batch_id`` is never overridden.
+    """
+    config = getattr(helper, "_parsed_model", {}).get("config")
+    if config is not None and not config.get("batch_id"):
+        config["batch_id"] = str(uuid.uuid4())
 
 
 def _delete_batch_quietly(helper: Any) -> None:
@@ -62,6 +76,7 @@ def make_dataproc_quota_retry(
     """
 
     def wrapped(self, compiled_code):
+        _pin_batch_id(self)
         for attempt in range(1, attempts + 1):
             try:
                 return original_submit(self, compiled_code)

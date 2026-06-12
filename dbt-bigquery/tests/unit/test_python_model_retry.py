@@ -1,6 +1,7 @@
 """Unit tests for the retry wrapper in ``tests/_python_model_retry``: a fake ``submit``
 raises, and we assert how often it is re-invoked. ``sleep`` is stubbed for speed."""
 
+import uuid
 from types import SimpleNamespace
 
 import pytest
@@ -40,6 +41,20 @@ def _fake_helper(batch_id="custom-abc-python"):
         _region="us-central1",
         _get_batch_id=lambda: batch_id,
     )
+
+
+def _realistic_helper(config=None):
+    """Helper whose _get_batch_id reads config like the real adapter: a fresh uuid per
+    call when batch_id is unset, otherwise the pinned/explicit value."""
+    model = {"config": config or {}}
+    helper = SimpleNamespace(
+        _batch_controller_client=_FakeBatchClient(),
+        _project="proj",
+        _region="us-central1",
+        _parsed_model=model,
+    )
+    helper._get_batch_id = lambda: model["config"].get("batch_id", str(uuid.uuid4()))
+    return helper
 
 
 class TestPredicates:
@@ -141,3 +156,39 @@ class TestDataprocQuotaRetry:
         )
         assert self._wrap(fake_submit)(helper, "code") == "OK"
         assert len(calls) == 2
+
+
+class TestBatchIdPinning:
+    """The adapter mints a fresh uuid per _get_batch_id() call when batch_id is unset, so
+    the wrapper pins a stable id up front to keep create and the pre-retry delete aligned."""
+
+    def _wrap(self, fake_submit, attempts=3):
+        return make_dataproc_quota_retry(
+            fake_submit, attempts, base=1, max_delay=1, sleep=_NO_SLEEP
+        )
+
+    def test_unset_batch_id_is_pinned_so_delete_matches_create(self):
+        """Without pinning, each _get_batch_id() call yields a new uuid and the delete
+        targets a batch that was never created, leaking it."""
+        created, calls = [], []
+
+        def fake_submit(self, code):
+            created.append(self._get_batch_id())  # what create_batch would claim
+            calls.append(code)
+            if len(calls) < 2:
+                raise Exception(_QUOTA_ERR)
+            return "OK"
+
+        helper = _realistic_helper()
+        assert self._wrap(fake_submit)(helper, "code") == "OK"
+
+        # The id stayed stable across the create -> delete -> recreate cycle...
+        assert created[0] == created[1]
+        # ...and the deleted batch is exactly the one the first (failed) submit created.
+        deleted = helper._batch_controller_client.deleted
+        assert deleted == [f"projects/proj/locations/us-central1/batches/{created[0]}"]
+
+    def test_explicit_batch_id_is_never_overridden(self):
+        helper = _realistic_helper(config={"batch_id": "custom-abc"})
+        self._wrap(lambda self, code: "OK", attempts=1)(helper, "code")
+        assert helper._parsed_model["config"]["batch_id"] == "custom-abc"
