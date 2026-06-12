@@ -1,10 +1,16 @@
 
 {% macro bigquery__create_csv_table(model, agate_table) %}
-  {# When load_csv_rows runs, BigQuery's load job creates the table implicitly.
-     When the table has no rows (e.g. --empty), load_csv_rows is skipped,
-     so we must create the table explicitly via DDL. #}
+  {# When load_csv_rows runs, BigQuery's load job creates the table implicitly
+     and load_csv_rows applies the table options (labels, expiration, tags,
+     kms_key_name). When the table has no rows (e.g. --empty), load_csv_rows is
+     skipped, so we must create the table explicitly via DDL and apply those
+     same options here. #}
   {% if (agate_table.rows | length) == 0 %}
-    {{ return(default__create_csv_table(model, agate_table)) }}
+    {% set create_sql = default__create_csv_table(model, agate_table) %}
+    {% call statement() %}
+      alter table {{ this.render() }} set {{ bigquery_table_options(config, model) }}
+    {% endcall %}
+    {{ return(create_sql) }}
   {% endif %}
 {% endmacro %}
 
@@ -13,7 +19,7 @@
     {# When --empty is used, load_csv_rows is skipped so the table won't be
        recreated implicitly by load_dataframe. Create it explicitly via DDL. #}
     {% if (agate_table.rows | length) == 0 %}
-        {{ return(default__create_csv_table(model, agate_table)) }}
+        {{ return(bigquery__create_csv_table(model, agate_table)) }}
     {% endif %}
 {% endmacro %}
 
