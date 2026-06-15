@@ -39,7 +39,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
-from dbt_common.record import record_function
+from dbt_common.record import auto_record_function, record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -787,6 +787,7 @@ class BigQueryAdapter(BaseAdapter):
         new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
         conn.handle.update_table(new_table, ["schema"])
 
+    @auto_record_function("AdapterUpdateTableDescription", group="Available")
     @available.parse_none
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
