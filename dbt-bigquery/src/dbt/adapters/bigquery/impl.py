@@ -80,6 +80,7 @@ from dbt.adapters.bigquery.python_submissions import (
 from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterDescribeRelationRecord,
     BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterCopyTableRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -553,6 +554,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_schema
 
     @available.parse(lambda *a, **k: "")
+    @record_function(
+        BigQueryAdapterCopyTableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def copy_table(self, source, destination, materialization):
         if materialization == "incremental":
             write_disposition = WRITE_APPEND
