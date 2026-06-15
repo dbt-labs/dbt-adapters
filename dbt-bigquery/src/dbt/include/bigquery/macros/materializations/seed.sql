@@ -8,7 +8,7 @@
   {% if (agate_table.rows | length) == 0 %}
     {% set create_sql = default__create_csv_table(model, agate_table) %}
     {% call statement() %}
-      alter table {{ this.render() }} set {{ bigquery_table_options(config, model) }}
+      alter table {{ this.render() }} set {{ bigquery_table_options(config, model, temporary=False) }}
     {% endcall %}
     {{ return(create_sql) }}
   {% endif %}

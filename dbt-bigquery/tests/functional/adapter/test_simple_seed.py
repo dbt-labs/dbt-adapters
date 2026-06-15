@@ -161,12 +161,14 @@ class TestBigQueryEmptySeed(BaseTestEmptySeed):
                 "quote_columns": False,
                 "+hours_to_expiration": 2,
                 "+labels": {"contains_pii": "yes", "contains_pie": "no"},
+                "+labels_from_meta": True,
+                "+meta": {"team": "data"},
             },
         }
 
     @staticmethod
     def table_labels():
-        return {"contains_pii": "yes", "contains_pie": "no"}
+        return {"contains_pii": "yes", "contains_pie": "no", "team": "data"}
 
     def test__bigquery_empty_seed_applies_table_options(self, project):
         seed_results = run_dbt(["seed"])
