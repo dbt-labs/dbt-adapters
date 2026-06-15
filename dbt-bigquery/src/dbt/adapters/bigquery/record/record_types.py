@@ -81,3 +81,35 @@ class BigQueryAdapterDescribeRelationRecord(Record):
     params_cls = BigQueryAdapterDescribeRelationParams
     result_cls = BigQueryAdapterDescribeRelationResult
     group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterCopyTableParams:
+    thread_id: str
+    source: Union[BigQueryRelation, List[BigQueryRelation]]
+    destination: BigQueryRelation
+    materialization: str
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        source_array = [self.source] if type(self.source) is not list else self.source
+
+        return {
+            "thread_id": self.thread_id,
+            "source": [serialize_base_relation(source) for source in source_array],
+            "destination": serialize_base_relation(self.destination),
+            "materialization": self.materialization
+        }
+
+@dataclasses.dataclass
+class BigQueryAdapterCopyTableResult:
+    return_val: str
+
+@Recorder.register_record_type
+class BigQueryAdapterCopyTableRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.copy_table() method."""
+
+    params_cls = BigQueryAdapterCopyTableParams
+    result_cls = BigQueryAdapterCopyTableResult
+    group = "Available"
