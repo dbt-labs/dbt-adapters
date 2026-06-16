@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Optional, List, Union
+from typing import Dict, Optional, List, Union
 
 from dbt_common.record import Record, Recorder
 from dbt.adapters.bigquery.relation import BigQueryRelation
@@ -140,4 +140,33 @@ class BigQueryAdapterGetDatasetLocationRecord(Record):
 
     params_cls = BigQueryAdapterGetDatasetLocationParams
     result_cls = BigQueryAdapterGetDatasetLocationResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGrantAccessToParams:
+    thread_id: str
+    entity: BigQueryRelation
+    entity_type: str
+    role: Optional[str]
+    grant_target_dict: Dict[str, str]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "entity": serialize_base_relation(self.entity),
+            "entity_type": self.entity_type,
+            "role": self.role,
+            "grant_target_dict": self.grant_target_dict,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGrantAccessToRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.grant_access_to() method."""
+
+    params_cls = BigQueryAdapterGrantAccessToParams
+    result_cls = None
     group = "Available"
