@@ -113,3 +113,31 @@ class BigQueryAdapterCopyTableRecord(Record):
     params_cls = BigQueryAdapterCopyTableParams
     result_cls = BigQueryAdapterCopyTableResult
     group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetDatasetLocationParams:
+    thread_id: str
+    relation: BigQueryRelation
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+        }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetDatasetLocationResult:
+    return_val: str
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGetDatasetLocationRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.get_dataset_location() method."""
+
+    params_cls = BigQueryAdapterGetDatasetLocationParams
+    result_cls = BigQueryAdapterGetDatasetLocationResult
+    group = "Available"
