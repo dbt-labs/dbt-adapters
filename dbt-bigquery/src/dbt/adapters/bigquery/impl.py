@@ -81,6 +81,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterDescribeRelationRecord,
     BigQueryAdapterIsReplaceableRecord,
     BigQueryAdapterCopyTableRecord,
+    BigQueryAdapterGetDatasetLocationRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -1329,6 +1330,12 @@ class BigQueryAdapter(BaseAdapter):
                 client.update_dataset(dataset, ["access_entries"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGetDatasetLocationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_dataset_location(self, relation):
         conn = self.connections.get_thread_connection()
         client = conn.handle
