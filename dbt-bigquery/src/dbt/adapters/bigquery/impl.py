@@ -82,6 +82,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterIsReplaceableRecord,
     BigQueryAdapterCopyTableRecord,
     BigQueryAdapterGetDatasetLocationRecord,
+    BigQueryAdapterGrantAccessToRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -1308,6 +1309,12 @@ class BigQueryAdapter(BaseAdapter):
         return None
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGrantAccessToRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def grant_access_to(self, entity, entity_type, role, grant_target_dict) -> None:
         """
         Given an entity, grants it access to a dataset.
