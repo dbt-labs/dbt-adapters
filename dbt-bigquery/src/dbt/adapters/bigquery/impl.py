@@ -84,6 +84,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterGetDatasetLocationRecord,
     BigQueryAdapterGrantAccessToRecord,
     BigQueryAdapterGetColumnsInSelectSqlRecord,
+    BigQueryAdapterAlterTableAddColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -816,6 +817,12 @@ class BigQueryAdapter(BaseAdapter):
         client.update_table(table, ["description"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_columns(self, relation, columns):
         logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
         self.alter_table_add_remove_columns(relation, columns, None)
