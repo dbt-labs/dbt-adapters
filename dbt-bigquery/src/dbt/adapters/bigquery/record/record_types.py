@@ -2,6 +2,7 @@ import dataclasses
 from typing import Dict, Optional, List, Union
 
 from dbt_common.record import Record, Recorder
+from dbt.adapters.bigquery.column import BigQueryColumn
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import PartitionConfig
 
@@ -169,4 +170,34 @@ class BigQueryAdapterGrantAccessToRecord(Record):
 
     params_cls = BigQueryAdapterGrantAccessToParams
     result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetColumnsInSelectSqlParams:
+    thread_id: str
+    select_sql: str
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetColumnsInSelectSqlResult:
+    return_val: List[BigQueryColumn]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_column_list
+
+        return {"return_val": serialize_base_column_list(self.return_val)}
+
+    def _from_dict(self, data):
+        from dbt.adapters.record.serialization import deserialize_base_column_list
+
+        self.return_val = deserialize_base_column_list(data["return_val"])
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGetColumnsInSelectSqlRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.get_columns_in_select_sql() method."""
+
+    params_cls = BigQueryAdapterGetColumnsInSelectSqlParams
+    result_cls = BigQueryAdapterGetColumnsInSelectSqlResult
     group = "Available"
