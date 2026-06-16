@@ -201,3 +201,31 @@ class BigQueryAdapterGetColumnsInSelectSqlRecord(Record):
     params_cls = BigQueryAdapterGetColumnsInSelectSqlParams
     result_cls = BigQueryAdapterGetColumnsInSelectSqlResult
     group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterAlterTableAddColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    columns: List[BigQueryColumn]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import (
+            serialize_base_relation,
+            serialize_base_column_list,
+        )
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "columns": serialize_base_column_list(self.columns),
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterAlterTableAddColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.alter_table_add_columns() method."""
+
+    params_cls = BigQueryAdapterAlterTableAddColumnsParams
+    result_cls = None
+    group = "Available"
