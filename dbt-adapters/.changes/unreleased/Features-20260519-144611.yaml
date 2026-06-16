@@ -1,0 +1,6 @@
+kind: Features
+body: Add dispatched quote_grantees macro called by default__get_grant_sql and default__get_revoke_sql so adapters can wrap or quote grantee identifiers without overriding the entire grant/revoke SQL
+time: 2026-05-19T14:46:11.000000+00:00
+custom:
+  Author: sdebruyn
+  Issue: "1952"
