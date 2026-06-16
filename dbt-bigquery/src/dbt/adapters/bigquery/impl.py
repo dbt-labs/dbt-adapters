@@ -85,6 +85,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterGrantAccessToRecord,
     BigQueryAdapterGetColumnsInSelectSqlRecord,
     BigQueryAdapterAlterTableAddColumnsRecord,
+    BigQueryAdapterUpdateColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -787,6 +788,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_column_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterUpdateColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def update_columns(self, relation, columns):
         if len(columns) == 0:
             return

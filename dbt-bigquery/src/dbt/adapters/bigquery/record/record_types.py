@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Dict, Optional, List, Union
+from typing import Any, Dict, Optional, List, Union
 
 from dbt_common.record import Record, Recorder
 from dbt.adapters.bigquery.column import BigQueryColumn
@@ -227,5 +227,30 @@ class BigQueryAdapterAlterTableAddColumnsRecord(Record):
     """Implements record/replay support for the BigQueryAdapter.alter_table_add_columns() method."""
 
     params_cls = BigQueryAdapterAlterTableAddColumnsParams
+    result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterUpdateColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    columns: Dict[str, Any]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "columns": self.columns,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterUpdateColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.update_columns() method."""
+
+    params_cls = BigQueryAdapterUpdateColumnsParams
     result_cls = None
     group = "Available"
