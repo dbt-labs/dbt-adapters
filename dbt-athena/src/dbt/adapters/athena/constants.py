@@ -1,6 +1,14 @@
 from dbt.adapters.events.logging import AdapterLogger
 
 DEFAULT_THREAD_COUNT = 4
+DEFAULT_SPARK_CONNECT_MAX_SESSIONS = 4
+DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY = 1
+# Spark 3.5 quota "On-demand DPUs per account" (L-E20AD6B8). Adjustable via
+# service-quotas; override per-profile with spark_connect_dpu_budget.
+DEFAULT_SPARK_CONNECT_DPU_BUDGET = 60
+# Safety net only; firing this means DPU exhaustion or a stuck pool.
+DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT = 21600  # 6h
+DEFAULT_SPARK_CONNECT_MAX_RETRIES = 3
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_POLLING_INTERVAL = 5
 DEFAULT_SPARK_COORDINATOR_DPU_SIZE = 1
