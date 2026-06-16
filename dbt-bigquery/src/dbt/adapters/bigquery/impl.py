@@ -83,6 +83,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterCopyTableRecord,
     BigQueryAdapterGetDatasetLocationRecord,
     BigQueryAdapterGrantAccessToRecord,
+    BigQueryAdapterGetColumnsInSelectSqlRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -592,6 +593,12 @@ class BigQueryAdapter(BaseAdapter):
         return flattened_columns
 
     @available.parse(lambda *a, **k: False)
+    @record_function(
+        BigQueryAdapterGetColumnsInSelectSqlRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_columns_in_select_sql(self, select_sql: str) -> List[BigQueryColumn]:
         try:
             conn = self.connections.get_thread_connection()
