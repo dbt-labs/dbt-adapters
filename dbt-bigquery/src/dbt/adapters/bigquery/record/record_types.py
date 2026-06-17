@@ -321,3 +321,75 @@ class BigQueryAdapterAlterTableAddRemoveColumnsRecord(Record):
     params_cls = BigQueryAdapterAlterTableAddRemoveColumnsParams
     result_cls = None
     group = "Available"
+
+
+def _serialize_schema_changes_dict(changes):
+    """Serialize the fixed-shape schema_changes_dict produced by
+    bigquery__check_for_schema_changes. Keys (all set by that macro):
+      - schema_changed: bool
+      - source_not_in_target / target_not_in_source / source_columns / target_columns:
+        List[BigQueryColumn]
+      - new_target_types: List[{"column_name": str, "new_type": str}]
+      - source_relation: BigQueryRelation
+    """
+    from dbt.adapters.record.serialization import (
+        serialize_base_relation,
+        serialize_base_column_list,
+    )
+
+    if changes is None:
+        return None
+
+    source_relation = changes.get("source_relation")
+    return {
+        "schema_changed": changes.get("schema_changed"),
+        "source_not_in_target": serialize_base_column_list(
+            changes.get("source_not_in_target") or []
+        ),
+        "target_not_in_source": serialize_base_column_list(
+            changes.get("target_not_in_source") or []
+        ),
+        "source_columns": serialize_base_column_list(changes.get("source_columns") or []),
+        "target_columns": serialize_base_column_list(changes.get("target_columns") or []),
+        "new_target_types": changes.get("new_target_types"),
+        "source_relation": (
+            serialize_base_relation(source_relation) if source_relation is not None else None
+        ),
+    }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterSyncStructColumnsParams:
+    thread_id: str
+    on_schema_change: str
+    source_relation: BigQueryRelation
+    target_relation: BigQueryRelation
+    schema_changes_dict: Dict[str, Any]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "on_schema_change": self.on_schema_change,
+            "source_relation": serialize_base_relation(self.source_relation),
+            "target_relation": serialize_base_relation(self.target_relation),
+            "schema_changes_dict": _serialize_schema_changes_dict(self.schema_changes_dict),
+        }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterSyncStructColumnsResult:
+    return_val: Dict[str, Any]
+
+    def _to_dict(self):
+        return {"return_val": _serialize_schema_changes_dict(self.return_val)}
+
+
+@Recorder.register_record_type
+class BigQueryAdapterSyncStructColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.sync_struct_columns() method."""
+
+    params_cls = BigQueryAdapterSyncStructColumnsParams
+    result_cls = BigQueryAdapterSyncStructColumnsResult
+    group = "Available"
