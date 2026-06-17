@@ -287,3 +287,37 @@ class BigQueryAdapterLoadDataframeRecord(Record):
     params_cls = BigQueryAdapterLoadDataframeParams
     result_cls = None
     group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterAlterTableAddRemoveColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    add_columns: Optional[List[BigQueryColumn]]
+    remove_columns: Optional[List[BigQueryColumn]]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import (
+            serialize_base_relation,
+            serialize_base_column_list,
+        )
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "add_columns": (
+                serialize_base_column_list(self.add_columns) if self.add_columns else None
+            ),
+            "remove_columns": (
+                serialize_base_column_list(self.remove_columns) if self.remove_columns else None
+            ),
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterAlterTableAddRemoveColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.alter_table_add_remove_columns() method."""
+
+    params_cls = BigQueryAdapterAlterTableAddRemoveColumnsParams
+    result_cls = None
+    group = "Available"
