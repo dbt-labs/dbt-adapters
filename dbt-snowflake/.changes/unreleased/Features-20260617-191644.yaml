@@ -1,0 +1,8 @@
+kind: Features
+body: Add dynamic workload identity token providers for Snowflake WIF/OIDC; the first
+  provider, `github_actions`, mints a fresh OIDC token immediately before each Snowflake
+  connection is opened
+time: 2026-06-17T19:16:44+02:00
+custom:
+    Author: Daniel-Wiszowaty
+    Issue: "2030"
