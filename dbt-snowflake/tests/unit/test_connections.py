@@ -439,6 +439,42 @@ def test_wif_token_unknown_provider_rejected():
     assert "github_actions" in str(excinfo.value)
 
 
+def test_wif_token_non_string_provider_rejected():
+    # A malformed profile (provider as a nested mapping) must fail with a clear config
+    # error, not an AttributeError/TypeError leaking out of dispatch.
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {**_WIF_TOKEN_BASE, "workload_identity_token": {"provider": {"nested": "dict"}}}
+        )
+    assert "must be a string" in str(excinfo.value)
+
+
+def test_wif_token_non_string_audience_rejected():
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {
+                **_WIF_TOKEN_BASE,
+                "workload_identity_token": {"provider": "github_actions", "audience": ["a", "b"]},
+            }
+        )
+    assert "must be a string" in str(excinfo.value)
+
+
+def test_wif_token_requires_oidc_for_any_provider():
+    # The OIDC-provider requirement is general (not github_actions-specific): a dynamic
+    # token paired with a non-OIDC workload_identity_provider would be silently ignored by
+    # the connector in favor of ambient cloud credentials, so it must be rejected.
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {
+                **_WIF_TOKEN_BASE,
+                "workload_identity_provider": "GCP",
+                "workload_identity_token": {"provider": "github_actions"},
+            }
+        )
+    assert "requires `workload_identity_provider: OIDC`" in str(excinfo.value)
+
+
 def test_wif_token_minted_fresh_per_auth_args(monkeypatch):
     """Regression: each auth_args() (i.e. each connection open/retry) mints a new token."""
     monkeypatch.setenv(

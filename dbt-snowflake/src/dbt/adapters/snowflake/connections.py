@@ -189,6 +189,12 @@ class SnowflakeCredentials(Credentials):
         if self.workload_identity_token is None:
             return
 
+        if not isinstance(self.workload_identity_token, WorkloadIdentityTokenConfig):
+            raise DbtConfigError(
+                "Invalid Snowflake profile: `workload_identity_token` must be a mapping with a "
+                "`provider` (and optional `audience`)."
+            )
+
         if self.token:
             raise DbtConfigError(
                 "Invalid Snowflake profile: `token` and `workload_identity_token` cannot both "
@@ -203,6 +209,15 @@ class SnowflakeCredentials(Credentials):
             )
 
         provider = self.workload_identity_token.provider
+        audience = self.workload_identity_token.audience
+        if not isinstance(provider, str) or (
+            audience is not None and not isinstance(audience, str)
+        ):
+            raise DbtConfigError(
+                "Invalid Snowflake profile: `workload_identity_token.provider` must be a string "
+                "and `workload_identity_token.audience` (if set) must be a string."
+            )
+
         if provider not in WORKLOAD_IDENTITY_TOKEN_PROVIDERS:
             raise DbtConfigError(
                 f"Invalid Snowflake profile: unknown workload identity token provider "
@@ -210,13 +225,17 @@ class SnowflakeCredentials(Credentials):
                 f"{', '.join(sorted(WORKLOAD_IDENTITY_TOKEN_PROVIDERS))}."
             )
 
-        if provider == "github_actions" and (
+        # dbt mints OIDC ID tokens, so every dynamic provider requires
+        # `workload_identity_provider: OIDC`. For other values (e.g. AWS/GCP/AZURE) the
+        # connector sources credentials from the runtime and ignores a supplied token, which
+        # would silently bypass the minted token -- reject that pairing for all providers.
+        if (
             not self.workload_identity_provider
             or self.workload_identity_provider.upper() != "OIDC"
         ):
             raise DbtConfigError(
-                "Invalid Snowflake profile: `workload_identity_token.provider: github_actions` "
-                "requires `workload_identity_provider: OIDC`."
+                "Invalid Snowflake profile: `workload_identity_token` requires "
+                "`workload_identity_provider: OIDC`."
             )
 
     @property
