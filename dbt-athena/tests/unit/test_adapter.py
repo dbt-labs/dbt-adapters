@@ -1639,6 +1639,30 @@ class TestAthenaAdapter:
     def test_format_value_for_partition(self, value, column_type, expected_result):
         assert self.adapter.format_value_for_partition(value, column_type) == expected_result
 
+    @pytest.mark.parametrize(
+        "value, expected_result",
+        [
+            (True, ("true", "=")),
+            (False, ("false", "=")),
+        ],
+    )
+    def test_format_boolean_partition_iceberg(self, value, expected_result):
+        # Boolean partition columns are valid on Iceberg only.
+        assert (
+            self.adapter.format_value_for_partition(value, "boolean", "iceberg") == expected_result
+        )
+
+    @pytest.mark.parametrize("table_type", ["hive", "unknown"])
+    def test_format_boolean_partition_non_iceberg_raises(self, table_type):
+        # Hive (the default) does not support boolean partition columns (HIVE-6590).
+        with pytest.raises(ValueError, match="Unsupported column type: boolean"):
+            self.adapter.format_value_for_partition(True, "boolean", table_type)
+
+    def test_format_boolean_partition_defaults_to_hive(self):
+        # Two-argument callers keep the pre-existing behavior (raise on boolean).
+        with pytest.raises(ValueError, match="Unsupported column type: boolean"):
+            self.adapter.format_value_for_partition(True, "boolean")
+
     def test_format_unsupported_type(self):
         with pytest.raises(ValueError):
             self.adapter.format_value_for_partition("test", "unsupported_type")
