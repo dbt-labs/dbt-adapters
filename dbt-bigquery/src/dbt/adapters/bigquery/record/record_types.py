@@ -254,3 +254,36 @@ class BigQueryAdapterUpdateColumnsRecord(Record):
     params_cls = BigQueryAdapterUpdateColumnsParams
     result_cls = None
     group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterLoadDataframeParams:
+    thread_id: str
+    database: str
+    schema: str
+    table_name: str
+    agate_table: Any  # agate.Table; serialized via serialize_agate_table
+    column_override: Dict[str, str]
+    field_delimiter: str
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_agate_table
+
+        return {
+            "thread_id": self.thread_id,
+            "database": self.database,
+            "schema": self.schema,
+            "table_name": self.table_name,
+            "agate_table": serialize_agate_table(self.agate_table),
+            "column_override": self.column_override,
+            "field_delimiter": self.field_delimiter,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterLoadDataframeRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.load_dataframe() method."""
+
+    params_cls = BigQueryAdapterLoadDataframeParams
+    result_cls = None
+    group = "Available"

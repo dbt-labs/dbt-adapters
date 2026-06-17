@@ -86,6 +86,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterGetColumnsInSelectSqlRecord,
     BigQueryAdapterAlterTableAddColumnsRecord,
     BigQueryAdapterUpdateColumnsRecord,
+    BigQueryAdapterLoadDataframeRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -1018,6 +1019,12 @@ class BigQueryAdapter(BaseAdapter):
         return schema_changes_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterLoadDataframeRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def load_dataframe(
         self,
         database: str,
