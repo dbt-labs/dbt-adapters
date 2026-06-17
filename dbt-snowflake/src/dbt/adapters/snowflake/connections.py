@@ -59,6 +59,11 @@ from dbt.adapters.snowflake.record import SnowflakeRecordReplayHandle
 
 from dbt.adapters.snowflake.auth import private_key_from_file, private_key_from_string
 from dbt.adapters.snowflake.query_headers import SnowflakeMacroQueryStringSetter
+from dbt.adapters.snowflake.workload_identity import (
+    mint_workload_identity_token,
+    SUPPORTED_PROVIDERS as WORKLOAD_IDENTITY_TOKEN_PROVIDERS,
+    WorkloadIdentityTokenConfig,
+)
 
 if TYPE_CHECKING:
     import agate
@@ -132,6 +137,9 @@ class SnowflakeCredentials(Credentials):
     s3_stage_vpce_dns_name: Optional[str] = None
     workload_identity_provider: Optional[str] = None
     workload_identity_entra_resource: Optional[str] = None
+    # When set, dbt mints a fresh workload identity token before each connection
+    # open instead of using a static `token`. Mutually exclusive with `token`.
+    workload_identity_token: Optional[WorkloadIdentityTokenConfig] = None
     # Setting this to 0.0 will disable platform detection which adds query latency
     # this should only be set to a non-zero value if you are using WIF authentication
     platform_detection_timeout_seconds: Optional[float] = (
@@ -175,6 +183,42 @@ class SnowflakeCredentials(Credentials):
         if self.client_session_keep_alive is False and self.reuse_connections is None:
             self.reuse_connections = True
 
+        self._validate_workload_identity_token()
+
+    def _validate_workload_identity_token(self) -> None:
+        if self.workload_identity_token is None:
+            return
+
+        if self.token:
+            raise DbtConfigError(
+                "Invalid Snowflake profile: `token` and `workload_identity_token` cannot both "
+                "be configured. Use `token` for static token mode, or `workload_identity_token` "
+                "for dynamic token mode."
+            )
+
+        if not self.authenticator or self.authenticator.lower() != "workload_identity":
+            raise DbtConfigError(
+                "Invalid Snowflake profile: `workload_identity_token` requires "
+                "`authenticator: workload_identity`."
+            )
+
+        provider = self.workload_identity_token.provider
+        if provider not in WORKLOAD_IDENTITY_TOKEN_PROVIDERS:
+            raise DbtConfigError(
+                f"Invalid Snowflake profile: unknown workload identity token provider "
+                f"`{provider}`. Supported providers: "
+                f"{', '.join(sorted(WORKLOAD_IDENTITY_TOKEN_PROVIDERS))}."
+            )
+
+        if provider == "github_actions" and (
+            not self.workload_identity_provider
+            or self.workload_identity_provider.upper() != "OIDC"
+        ):
+            raise DbtConfigError(
+                "Invalid Snowflake profile: `workload_identity_token.provider: github_actions` "
+                "requires `workload_identity_provider: OIDC`."
+            )
+
     @property
     def type(self):
         return "snowflake"
@@ -211,6 +255,7 @@ class SnowflakeCredentials(Credentials):
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
             "workload_identity_entra_resource",
+            "workload_identity_token",
             "platform_detection_timeout_seconds",
         )
 
@@ -285,7 +330,12 @@ class SnowflakeCredentials(Credentials):
 
                 result["workload_identity_provider"] = self.workload_identity_provider
 
-                if self.token:
+                if self.workload_identity_token:
+                    # Mint a fresh token right before connecting. auth_args() runs
+                    # inside SnowflakeConnectionManager.open()'s connect() closure,
+                    # so every (re)connect and retry gets a newly minted token.
+                    result["token"] = mint_workload_identity_token(self.workload_identity_token)
+                elif self.token:
                     result["token"] = self.token
 
                 if self.workload_identity_entra_resource:

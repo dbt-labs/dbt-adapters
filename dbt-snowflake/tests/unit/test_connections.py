@@ -7,6 +7,7 @@ import multiprocessing
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt_common.exceptions import DbtConfigError
 import dbt.adapters.snowflake.connections as connections
+import dbt.adapters.snowflake.workload_identity as workload_identity
 import dbt.adapters.events.logging
 
 
@@ -347,3 +348,118 @@ def test_connnections_credentials_wif_authenticator_fails_with_entra_resource_an
         "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
         in str(excinfo)
     )
+
+
+# ---------------------------------------------------------------------------
+# Dynamic workload identity token (WIF/OIDC) provider config
+# ---------------------------------------------------------------------------
+
+_WIF_TOKEN_BASE = {
+    "account": "account",
+    "database": "database",
+    "warehouse": "warehouse",
+    "schema": "schema",
+    "user": "user",
+    "authenticator": "workload_identity",
+    "workload_identity_provider": "OIDC",
+}
+
+
+def _gha_response(value="minted_token", status_code=200, json_value=None):
+    response = Mock()
+    response.status_code = status_code
+    response.json.return_value = {"value": value} if json_value is None else json_value
+    return response
+
+
+def test_wif_token_github_actions_parses():
+    creds = connections.SnowflakeCredentials.from_dict(
+        {
+            **_WIF_TOKEN_BASE,
+            "workload_identity_token": {
+                "provider": "github_actions",
+                "audience": "snowflakecomputing.com",
+            },
+        }
+    )
+    assert isinstance(creds.workload_identity_token, connections.WorkloadIdentityTokenConfig)
+    assert creds.workload_identity_token.provider == "github_actions"
+    assert creds.workload_identity_token.audience == "snowflakecomputing.com"
+
+
+def test_wif_token_default_audience_is_none_until_minted():
+    creds = connections.SnowflakeCredentials.from_dict(
+        {**_WIF_TOKEN_BASE, "workload_identity_token": {"provider": "github_actions"}}
+    )
+    assert creds.workload_identity_token.audience is None
+
+
+def test_wif_token_and_static_token_are_mutually_exclusive():
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {
+                **_WIF_TOKEN_BASE,
+                "token": "static-token",
+                "workload_identity_token": {"provider": "github_actions"},
+            }
+        )
+    assert "cannot both" in str(excinfo.value)
+
+
+def test_wif_token_requires_workload_identity_authenticator():
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {
+                **_WIF_TOKEN_BASE,
+                "authenticator": "snowflake",
+                "workload_identity_token": {"provider": "github_actions"},
+            }
+        )
+    assert "requires `authenticator: workload_identity`" in str(excinfo.value)
+
+
+def test_wif_token_github_actions_requires_oidc_provider():
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {
+                **_WIF_TOKEN_BASE,
+                "workload_identity_provider": "AWS",
+                "workload_identity_token": {"provider": "github_actions"},
+            }
+        )
+    assert "requires `workload_identity_provider: OIDC`" in str(excinfo.value)
+
+
+def test_wif_token_unknown_provider_rejected():
+    with pytest.raises(DbtConfigError) as excinfo:
+        connections.SnowflakeCredentials.from_dict(
+            {**_WIF_TOKEN_BASE, "workload_identity_token": {"provider": "random_ci"}}
+        )
+    assert "unknown workload identity token provider" in str(excinfo.value)
+    assert "github_actions" in str(excinfo.value)
+
+
+def test_wif_token_minted_fresh_per_auth_args(monkeypatch):
+    """Regression: each auth_args() (i.e. each connection open/retry) mints a new token."""
+    monkeypatch.setenv(
+        "ACTIONS_ID_TOKEN_REQUEST_URL",
+        "https://token.actions.githubusercontent.com/req?api-version=2.0",
+    )
+    monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "bearer-secret")
+
+    creds = connections.SnowflakeCredentials.from_dict(
+        {**_WIF_TOKEN_BASE, "workload_identity_token": {"provider": "github_actions"}}
+    )
+
+    with patch.object(
+        workload_identity.requests,
+        "get",
+        side_effect=[_gha_response("token_1"), _gha_response("token_2")],
+    ):
+        first = creds.auth_args()
+        second = creds.auth_args()
+
+    assert first["authenticator"] == connections.WORKLOAD_IDENTITY_AUTHENTICATOR
+    assert first["workload_identity_provider"] == "OIDC"
+    assert first["token"] == "token_1"
+    assert second["token"] == "token_2"

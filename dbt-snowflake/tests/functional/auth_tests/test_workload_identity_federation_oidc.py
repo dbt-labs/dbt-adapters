@@ -133,3 +133,49 @@ class TestSnowflakeWorkloadIdentityFederation:
     def test_snowflake_wif_basic_functionality(self, project):
         """Test basic dbt functionality with WIF authentication"""
         run_dbt()
+
+
+_HAS_GITHUB_ACTIONS_OIDC = bool(
+    os.getenv("ACTIONS_ID_TOKEN_REQUEST_URL") and os.getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+)
+
+
+@pytest.mark.skipif(
+    not _HAS_GITHUB_ACTIONS_OIDC,
+    reason="requires the GitHub Actions OIDC runtime "
+    "(ACTIONS_ID_TOKEN_REQUEST_URL / ACTIONS_ID_TOKEN_REQUEST_TOKEN)",
+)
+class TestSnowflakeWorkloadIdentityFederationDynamicToken:
+    """Dynamic-token WIF: dbt mints a fresh OIDC token before each connection open.
+
+    Unlike the static-token class above, no `token` is configured -- the
+    `github_actions` provider mints one at connection-open time.
+    """
+
+    @pytest.fixture(scope="class", autouse=True)
+    def dbt_profile_target(self):
+        return {
+            "type": "snowflake",
+            "threads": 4,
+            "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
+            "user": os.getenv("SNOWFLAKE_TEST_WIF_USER"),
+            "database": os.getenv("SNOWFLAKE_TEST_DATABASE"),
+            "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
+            "role": os.getenv("SNOWFLAKE_TEST_ROLE"),
+            "authenticator": "workload_identity",
+            "workload_identity_provider": "oidc",
+            "workload_identity_token": {
+                "provider": "github_actions",
+                "audience": "snowflakecomputing.com",
+            },
+        }
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "model_1.sql": _MODELS__MODEL_1_SQL,
+        }
+
+    def test_snowflake_wif_dynamic_token(self, project):
+        """dbt mints a fresh GitHub Actions OIDC token per connection open."""
+        run_dbt()
