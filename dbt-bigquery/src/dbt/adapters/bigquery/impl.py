@@ -88,6 +88,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterUpdateColumnsRecord,
     BigQueryAdapterLoadDataframeRecord,
     BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+    BigQueryAdapterSyncStructColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -895,6 +896,12 @@ class BigQueryAdapter(BaseAdapter):
             client.update_table(new_table, ["schema"])
 
     @available.parse(lambda *a, **k: {})
+    @record_function(
+        BigQueryAdapterSyncStructColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def sync_struct_columns(
         self,
         on_schema_change: str,
