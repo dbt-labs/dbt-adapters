@@ -87,6 +87,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterAlterTableAddColumnsRecord,
     BigQueryAdapterUpdateColumnsRecord,
     BigQueryAdapterLoadDataframeRecord,
+    BigQueryAdapterAlterTableAddRemoveColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -837,6 +838,12 @@ class BigQueryAdapter(BaseAdapter):
         self.alter_table_add_remove_columns(relation, columns, None)
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
         conn = self.connections.get_thread_connection()
         client = conn.handle
