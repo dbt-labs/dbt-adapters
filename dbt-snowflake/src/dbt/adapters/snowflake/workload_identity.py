@@ -109,14 +109,25 @@ def _mint_github_actions_oidc_token(audience: str) -> str:
 
 
 def _github_oidc_url_with_audience(request_url: str, audience: str) -> str:
+    # urllib.parse and the HTTP client (urllib3) disagree on where the host ends when the
+    # URL contains a backslash, whitespace, or control character: urlparse can read
+    # "evil.com\\.actions.githubusercontent.com" as one trusted-looking host while urllib3
+    # dials "evil.com". Reject such URLs outright so a tampered request URL can never smuggle
+    # the bearer request token (which can itself mint identity tokens) to another host.
+    if any(ch == "\\" or ch.isspace() or ord(ch) < 0x20 for ch in request_url):
+        raise DbtRuntimeError("The GitHub Actions OIDC request URL contains invalid characters.")
     parsed = urllib.parse.urlparse(request_url)
     if parsed.scheme != "https":
         raise DbtRuntimeError("The GitHub Actions OIDC request URL must use HTTPS.")
     hostname = (parsed.hostname or "").lower()
-    if hostname != _GITHUB_OIDC_ALLOWED_HOST and not hostname.endswith(
+    is_allowed_host = hostname == _GITHUB_OIDC_ALLOWED_HOST or hostname.endswith(
         "." + _GITHUB_OIDC_ALLOWED_HOST
-    ):
-        # Fail closed rather than send the bearer request token to an unknown host.
+    )
+    has_empty_label = "" in hostname.split(".")
+    if not is_allowed_host or has_empty_label:
+        # Fail closed rather than send the bearer request token to an unknown host. The
+        # empty-label check rejects ".actions.githubusercontent.com" / trailing-dot hosts
+        # that slip past the suffix match but are not real GitHub hosts.
         raise DbtRuntimeError(
             "The GitHub Actions OIDC request URL host is not a recognized GitHub Actions host."
         )

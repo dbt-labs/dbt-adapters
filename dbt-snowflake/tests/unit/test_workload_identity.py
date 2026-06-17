@@ -112,6 +112,11 @@ def test_github_oidc_non_200_does_not_leak_response_body(monkeypatch):
         "http://token.actions.githubusercontent.com/req",  # not https
         "https://evil.example.com/req",  # wrong host
         "https://token.actions.githubusercontent.com@evil.example.com/req",  # userinfo trick
+        # parser-differential: urlparse sees a trusted suffix, urllib3 dials evil.com
+        "https://evil.com\\.actions.githubusercontent.com/req",
+        "https://evil.com\\x.actions.githubusercontent.com/req",
+        "https://.actions.githubusercontent.com/req",  # empty-label host
+        "https://token.actions.githubusercontent.com\t/req",  # control/whitespace char
     ],
 )
 def test_github_oidc_url_rejects_untrusted_targets(bad_url):
