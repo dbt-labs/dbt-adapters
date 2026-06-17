@@ -41,6 +41,10 @@ class WorkloadIdentityTokenConfig(dbtClassMixin):
 
     This is intentionally *not* a token value -- it names the provider dbt should
     request a token from and (optionally) the audience to request it for.
+
+    Prefer an account-scoped ``audience`` (e.g. your Snowflake account URL) matching the
+    Snowflake user's ``OIDC_AUDIENCE_LIST``; the bare ``snowflakecomputing.com`` default is
+    shared across all Snowflake accounts and is therefore cross-account replayable.
     """
 
     provider: str
