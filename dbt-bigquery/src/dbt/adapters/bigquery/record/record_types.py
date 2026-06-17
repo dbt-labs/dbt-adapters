@@ -100,12 +100,14 @@ class BigQueryAdapterCopyTableParams:
             "thread_id": self.thread_id,
             "source": [serialize_base_relation(source) for source in source_array],
             "destination": serialize_base_relation(self.destination),
-            "materialization": self.materialization
+            "materialization": self.materialization,
         }
+
 
 @dataclasses.dataclass
 class BigQueryAdapterCopyTableResult:
     return_val: str
+
 
 @Recorder.register_record_type
 class BigQueryAdapterCopyTableRecord(Record):
