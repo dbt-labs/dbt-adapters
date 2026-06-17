@@ -40,7 +40,7 @@ try:
     import thrift
     import ssl
     import thrift_sasl
-    from puresasl.client import SASLClient
+    from pyhive.sasl_compat import PureSASLClient as SASLClient
 except ImportError:
     TTransportException = None
     pass  # done deliberately: setting modules to None explicitly violates MyPy contracts by degrading type semantics
@@ -185,6 +185,10 @@ class SparkCredentials(Credentials):
         self.server_side_parameters = {
             str(key): str(value) for key, value in self.server_side_parameters.items()
         }
+
+        # Disable ANSI mode to ensure compatibility with Spark v3 and v4
+        # and prevent it from being overwritten.
+        self.server_side_parameters["spark.sql.ansi.enabled"] = "false"
 
     @property
     def type(self) -> str:
@@ -696,7 +700,14 @@ def build_ssl_transport(
         port = 10000
     if auth is None:
         auth = "NONE"
-    socket = TSSLSocket(host, port, cert_reqs=ssl.CERT_NONE)
+
+    # newer versions of thrift changed TSSLSocket to no longer
+    # directly accept CERT_NONE, so pass ssl context instead
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+    socket = TSSLSocket(host, port, ssl_context=ssl_context)
+
     if auth == "NOSASL":
         # NOSASL corresponds to hive.server2.authentication=NOSASL
         # in hive-site.xml

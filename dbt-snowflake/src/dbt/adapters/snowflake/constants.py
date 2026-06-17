@@ -41,4 +41,5 @@ SnowflakeIcebergTableRelationParameters = SimpleNamespace(
     max_data_extension_time_in_days="max_data_extension_time_in_days",
     change_tracking="change_tracking",
     automatic_clustering="automatic_clustering",
+    iceberg_version="iceberg_version",
 )

@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add datasharing profile variant tests for incremental on_schema_change, incremental unique_key, materialized view basic, and UDFs to catch metadata regressions when SHOW APIs are enabled
+time: 2026-03-27T19:05:57.000000+00:00
+custom:
+    Author: colinrogers99
+    Issue: "1808"

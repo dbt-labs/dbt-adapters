@@ -1,11 +1,27 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple, TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Mapping,
+    Any,
+    Optional,
+    List,
+    Union,
+    Dict,
+    FrozenSet,
+    Tuple,
+)
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+    CatalogRelation,
+)
+
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
@@ -13,6 +29,7 @@ from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
 )
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
@@ -22,11 +39,15 @@ from dbt_common.contracts.metadata import (
     CatalogTable,
     ColumnMetadata,
 )
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
+
+if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
     InfoSchemaCatalogIntegration,
@@ -38,10 +59,22 @@ from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
 from dbt.adapters.snowflake import SnowflakeRelation
 
-if TYPE_CHECKING:
-    import agate
+import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
+    name="snowflake_default_transient_dynamic_tables",
+    default=False,
+    description=(
+        "When enabled, dynamic tables default to transient (matching regular table behavior). "
+        "This is a breaking change from previous behavior where dynamic tables were non-transient."
+    ),
+)
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -52,19 +85,25 @@ class SnowflakeConfig(AdapterConfig):
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
+    copy_tags: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
+    snowflake_initialization_warehouse: Optional[str] = None
+    refresh_warehouse: Optional[str] = None
     query_tag: Optional[str] = None
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
+    immutable_where: Optional[str] = None
 
     # extended formats
     table_format: Optional[str] = None
     external_volume: Optional[str] = None
     base_location_root: Optional[str] = None
     base_location_subpath: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
 
 class SnowflakeAdapter(SQLAdapter):
@@ -94,13 +133,50 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
             Capability.GetCatalogForSingleRelation: CapabilitySupport(support=Support.Full),
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "horizon": "BUILT_IN",
+        "glue": "ICEBERG_REST",
+        "iceberg_rest": "ICEBERG_REST",
+        "unity": "ICEBERG_REST",
+    }
+    _LINKED_FIELD_MAP: ClassVar[Dict[str, str]] = {
+        "catalog_database": "catalog_linked_database",
+    }
+    _LINKED_DB_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": "glue",
+        "unity": "unity",
+    }
+
+    @property
+    def _behavior_flags(self) -> list[BehaviorFlag]:
+        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        return catalog.table_format.value.upper()
+
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
+        is_linked = catalog_type in ("glue", "iceberg_rest", "unity")
+        if is_linked:
+            props = {self._LINKED_FIELD_MAP.get(k, k): v for k, v in props.items()}
+            if catalog_type in self._LINKED_DB_TYPE:
+                props["catalog_linked_database_type"] = self._LINKED_DB_TYPE[catalog_type]
+        return props
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -159,12 +235,14 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
-    def _get_warehouse(self) -> str:
+    def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
-            # can this happen?
-            raise DbtRuntimeError("Could not get current warehouse: no results")
-        return str(table[0][0])
+            return None
+        value = table[0][0]
+        if value is None or str(value).upper() == "NULL":
+            return None
+        return str(value)
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
@@ -281,6 +359,33 @@ class SnowflakeAdapter(SQLAdapter):
             stats=stats_dict,
         )
 
+    # Fixed type map for SHOW OBJECTS columns.  Without this, agate infers types
+    # per-page from the data (e.g. `rows`/`bytes` → Number for table pages but Text
+    # when all-NULL on view-only pages, and everything → Number when the page is
+    # empty), causing agate.Table.merge() to raise
+    # "columns with the same names, but different types".
+    _SHOW_OBJECTS_COLUMN_TYPES: ClassVar[Dict[str, "agate.DataType"]] = {
+        "created_on": agate.DateTime(),
+        "rows": agate.Number(),
+        "bytes": agate.Number(),
+    }
+
+    @available
+    def normalize_show_objects_result(self, table: "agate.Table") -> "agate.Table":
+        """
+        Rebuild a SHOW OBJECTS result page with a fixed column-type schema so that
+        all paginated pages are type-homogeneous before merging.  Known columns are
+        given their natural types; all other columns default to Text.
+        """
+        column_types = [
+            self._SHOW_OBJECTS_COLUMN_TYPES.get(name, agate.Text()) for name in table.column_names
+        ]
+        return agate.Table(
+            [list(row) for row in table.rows],
+            column_names=table.column_names,
+            column_types=column_types,
+        )
+
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:
@@ -288,6 +393,9 @@ class SnowflakeAdapter(SQLAdapter):
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
+            schema_functions = self.execute_macro(
+                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
             # Alternatively, we could query the list of schemas before we start
@@ -298,11 +406,31 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        tabular_columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
-        return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
+        tabular_relations = [
+            self._parse_list_relations_result(obj)
+            for obj in schema_objects.select(tabular_columns)
+        ]
+        function_relations = [
+            self._parse_list_function_relations_result(obj)
+            for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
+        ]
+        return tabular_relations + function_relations
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
@@ -329,6 +457,17 @@ class SnowflakeAdapter(SQLAdapter):
             identifier=identifier,
             type=relation_type,
             table_format=table_format,
+            quote_policy=quote_policy,
+        )
+
+    def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
+        return self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier=identifier,
+            type=self.Relation.Function,
             quote_policy=quote_policy,
         )
 
@@ -510,7 +649,9 @@ CALL {proc_name}();
         return None
 
     @available
-    def describe_dynamic_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+    def describe_dynamic_table(
+        self, relation: SnowflakeRelation, include_transient: bool = False
+    ) -> Dict[str, Any]:
         """
         Get all relevant metadata about a dynamic table to return as a dict to Agate Table row
 
@@ -528,19 +669,55 @@ CALL {proc_name}();
             raise DbtRuntimeError(f"Could not get dynamic query metadata: {show_sql} failed")
         # normalize column names to lower case, this still preserves column order
         dt_table = dt_table.rename(column_names=[name.lower() for name in dt_table.column_names])
-        return {
-            "dynamic_table": dt_table.select(
-                [
-                    "name",
-                    "schema_name",
-                    "database_name",
-                    "text",
-                    "target_lag",
-                    "warehouse",
-                    "refresh_mode",
-                ]
+
+        # Select columns that exist in the result set
+        # initialization_warehouse may not be available in all Snowflake accounts
+        base_columns = [
+            "name",
+            "schema_name",
+            "database_name",
+            "text",
+            "target_lag",
+            "warehouse",
+            "refresh_mode",
+            "immutable_where",
+            "cluster_by",
+        ]
+        available_columns = [c.lower() for c in dt_table.column_names]
+        if "initialization_warehouse" in available_columns:
+            base_columns.insert(base_columns.index("warehouse") + 1, "initialization_warehouse")
+        if "scheduler" in available_columns:
+            base_columns.append("scheduler")
+
+        selected = dt_table.select(base_columns)
+
+        if include_transient:
+            is_transient = self._query_dynamic_table_transient_status(relation)
+            # choosing a future proof column name
+            selected = selected.compute(
+                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
             )
-        }
+
+        return {"dynamic_table": selected}
+
+    def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
+        """
+        Query SHOW TABLES to determine if a dynamic table is transient.
+
+        SHOW DYNAMIC TABLES does not expose transient status, so we fall back to
+        SHOW TABLES where the "kind" column contains "TRANSIENT" for transient tables.
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        _, tables_table = self.execute(show_tables_sql, fetch=True)
+        if len(tables_table.rows) > 0:
+            tables_table = tables_table.rename(
+                column_names=[name.lower() for name in tables_table.column_names]
+            )
+            return tables_table.rows[0].get("kind") == "TRANSIENT"
+        return False
 
     def expand_column_types(self, goal, current):
         reference_columns = {c.name: c for c in self.get_columns_in_relation(goal)}
