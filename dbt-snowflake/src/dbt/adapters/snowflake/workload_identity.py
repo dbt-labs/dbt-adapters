@@ -1,8 +1,12 @@
 """Dynamic workload identity token providers for Snowflake WIF/OIDC auth.
 
 dbt-snowflake can mint a fresh workload identity token immediately before each
-connection is opened, instead of relying on a static ``token`` that may expire
-mid-run (e.g. short-lived CI OIDC tokens).
+connection is opened, instead of relying on a static ``token`` that can expire
+before dbt opens a *later* connection (e.g. short-lived CI OIDC tokens on long
+or highly-parallel runs, where late-starting threads, connection-pool misses, or
+reconnects open connections after the source token's TTL). The token is consumed
+only at connection open; an already-open connection is kept alive by Snowflake's
+own session/master tokens and does not need the source token re-minted.
 
 Adding a provider:
     1. write a ``_mint_<provider>(config) -> str`` function below
