@@ -665,7 +665,9 @@ class SparkConnectionManager(SQLConnectionManager):
                     logger.warning(msg)
                     time.sleep(creds.connect_timeout)
                 else:
-                    raise FailedToConnectError("failed to connect") from e
+                    raise FailedToConnectError(
+                        f"failed to connect: {type(e).__name__}: {e}"
+                    ) from e
         else:
             raise exc  # type: ignore
 
