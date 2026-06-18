@@ -109,7 +109,7 @@ class TestSparkAdapter(unittest.TestCase):
             self.assertEqual(connection.credentials.schema, "analytics")
             self.assertIsNone(connection.credentials.database)
 
-    def test_build_ssl_transport_defaults_username_when_none(self):
+    def test_build_ssl_transport_defaults_sasl_credentials(self):
         """build_ssl_transport should default username to 'dbt' when not set so
         puresasl PLAIN mechanism does not raise SASLError for missing username."""
         captured = {}
