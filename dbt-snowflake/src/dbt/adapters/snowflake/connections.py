@@ -147,19 +147,25 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]:
+        if self.authenticator not in [
+            "oauth",
+            "jwt",
+            "programmatic_access_token",
+            "workload_identity",
+        ]:
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
                         base_msg=(
-                            "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth', 'jwt', or 'programmatic_access_token'."
+                            "The token parameter was set, but the authenticator was not set "
+                            "to 'oauth', 'jwt', 'programmatic_access_token', or 'workload_identity'."
                         )
                     )
                 )
 
             if not self.user:
-                # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
+                # The user attribute is only optional if 'authenticator' is
+                # 'jwt', 'oauth', 'programmatic_access_token', or 'workload_identity'
                 warn_or_error(
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
