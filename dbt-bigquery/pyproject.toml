@@ -36,7 +36,7 @@ dependencies = [
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.11.6,<2.0",
     "nbformat>=5.10.4",
-    "google-cloud-aiplatform>=1.72.0",
+    "google-cloud-aiplatform>=1.148.0",
 ]
 
 [project.urls]
