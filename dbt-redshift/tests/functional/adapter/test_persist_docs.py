@@ -32,7 +32,11 @@ class TestPersistDocs(BasePersistDocs):
 
 
 class TestPersistDocsColumnMissing(BasePersistDocsColumnMissing):
-    pass
+    @pytest.mark.skip(
+        reason="validate_doc_columns macro not ported to stable dbt-adapters yet; see #1684 / #1936"
+    )
+    def test_missing_column_warning(self, project):
+        pass
 
 
 class TestPersistDocsCommentOnQuotedColumn(BasePersistDocsCommentOnQuotedColumn):
