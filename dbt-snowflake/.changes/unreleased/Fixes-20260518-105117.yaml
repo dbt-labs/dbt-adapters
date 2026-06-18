@@ -1,8 +1,0 @@
-kind: Fixes
-body: Fix Python incremental `__dbt_tmp` being created as a permanent table, restore the
-  `transient` config for Python `materialized='table'`, and accept `tmp_relation_type='table'`
-  for Python models.
-time: 2026-05-18T10:51:17.000000+00:00
-custom:
-    Author: tauhid621
-    Issue: "1928"
