@@ -147,7 +147,8 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in [
+        authenticator = (self.authenticator or "").lower()
+        if authenticator not in [
             "oauth",
             "jwt",
             "programmatic_access_token",
