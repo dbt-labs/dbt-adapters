@@ -1,0 +1,6 @@
+kind: Dependencies
+body: bump google-cloud-aiplatform lower bound to 1.148.0
+time: 2026-06-18T11:44:03.852927+05:30
+custom:
+    Author: aahel
+    PR: "2031"
