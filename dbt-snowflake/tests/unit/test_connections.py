@@ -319,9 +319,9 @@ def test_connnections_credentials_wif_oidc_token_and_no_user_no_warning():
         mock_warn.assert_not_called()
 
 
-def test_connnections_credentials_authenticator_is_case_insensitive():
-    """The authenticator value should be matched case-insensitively in both
-    __post_init__ validation and auth_args (e.g. 'WORKLOAD_IDENTITY')."""
+def test_connnections_credentials_workload_identity_authenticator_is_case_insensitive():
+    """workload_identity is matched case-insensitively in both __post_init__ validation
+    and auth_args (e.g. 'WORKLOAD_IDENTITY'). Other authenticators stay case-sensitive."""
     credentials = {
         "account": "test_account",
         "database": "database",

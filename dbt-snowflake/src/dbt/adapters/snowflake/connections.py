@@ -139,11 +139,7 @@ class SnowflakeCredentials(Credentials):
     )
 
     def __post_init__(self):
-        # normalize once so authenticator comparisons are case-insensitive and
-        # consistent with auth_args() (e.g. accept 'WORKLOAD_IDENTITY')
-        authenticator = (self.authenticator or "").lower()
-
-        if authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
+        if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
             # the user probably forgot to set 'authenticator' like I keep doing
             warn_or_error(
                 AdapterEventWarning(
@@ -151,12 +147,13 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if authenticator not in [
-            "oauth",
-            "jwt",
-            "programmatic_access_token",
-            "workload_identity",
-        ]:
+        # workload_identity is matched case-insensitively to mirror auth_args(); the
+        # other authenticators stay case-sensitive to preserve existing behavior
+        is_workload_identity = (self.authenticator or "").lower() == "workload_identity"
+        if (
+            self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]
+            and not is_workload_identity
+        ):
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
@@ -243,10 +240,8 @@ class SnowflakeCredentials(Credentials):
         if self.protocol:
             result["protocol"] = self.protocol
         if self.authenticator:
-            # match case-insensitively so e.g. 'OAuth' or 'WORKLOAD_IDENTITY' work
-            authenticator = self.authenticator.lower()
             result["authenticator"] = self.authenticator
-            if authenticator == "oauth":
+            if self.authenticator == "oauth":
                 token = self.token
                 # if we have a client ID/client secret, the token is a refresh
                 # token, not an access token
@@ -267,20 +262,20 @@ class SnowflakeCredentials(Credentials):
 
                 result["token"] = token
 
-            elif authenticator == "jwt":
+            elif self.authenticator == "jwt":
                 # If authenticator is 'jwt', then the 'token' value should be used
                 # unmodified. We expose this as 'jwt' in the profile, but the value
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
 
-            elif authenticator == "programmatic_access_token":
+            elif self.authenticator == "programmatic_access_token":
                 # Snowflake Programmatic Access Tokens (PATs) are passed directly
                 # to the connector via the `token` field. The connector handles
                 # PAT auth natively since snowflake-connector-python v3.12.0.
                 result["token"] = self.token
 
-            elif authenticator == "workload_identity":
+            elif self.authenticator.lower() == "workload_identity":
                 result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
 
                 if (
