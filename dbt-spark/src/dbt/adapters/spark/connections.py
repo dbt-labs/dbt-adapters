@@ -725,7 +725,7 @@ def build_ssl_transport(
             if username is None:
                 # Username doesn't matter in NONE mode, just needs
                 # to be nonempty.
-                username = "x"
+                username = "dbt"
             if password is None:
                 # Password doesn't matter in NONE mode, just needs
                 # to be nonempty.
