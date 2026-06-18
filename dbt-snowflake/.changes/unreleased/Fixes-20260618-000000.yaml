@@ -1,0 +1,7 @@
+kind: Fixes
+body: Quote column names when dropping columns in `alter_relation_add_remove_columns`
+  so they match the quoted names used when adding them.
+time: 2026-06-18T00:00:00.000000+00:00
+custom:
+    Author: tauhid621
+    Issue: "695"
