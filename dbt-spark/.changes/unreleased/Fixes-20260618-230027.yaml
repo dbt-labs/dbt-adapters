@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'Default username to ''x'' when not set for SASL PLAIN auth (auth: NONE/LDAP/CUSTOM with use_ssl: true), preventing TTransportException when user is omitted from profile'
+time: 2026-06-18T23:00:27.103138+05:30
+custom:
+    Author: aahel
+    Issue: "2035"
