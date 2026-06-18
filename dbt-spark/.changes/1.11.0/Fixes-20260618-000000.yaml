@@ -1,5 +1,0 @@
-kind: Fixes
-body: Log underlying exception type and message at debug level when connection fails, so --log-level debug surfaces the real error instead of "failed to connect"
-time: 2026-06-18T00:00:00.000000+00:00
-custom:
-  Author: aahelguha
