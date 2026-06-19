@@ -8,12 +8,10 @@
 {%-   set columns_in_relation = adapter.get_columns_in_relation(this_or_defer_relation) -%}
 
 {%-   set column_name_to_data_types = {} -%}
-{%-   set column_name_to_quoted = {} -%}
 {%-   for column in columns_in_relation -%}
 
 {#-- This needs to be a case-insensitive comparison --#}
 {%-     do column_name_to_data_types.update({column.name|lower: column.data_type}) -%}
-{%-     do column_name_to_quoted.update({column.name|lower: column.quoted}) -%}
 {%-   endfor -%}
 {%- endif -%}
 
@@ -32,7 +30,7 @@
 {%-   set default_row_copy = default_row.copy() -%}
 {%-   do default_row_copy.update(formatted_row) -%}
 select
-{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} as {{ column_name_to_quoted[column_name] }}{% if not loop.last -%}, {%- endif %}
+{%-   for column_name, column_value in default_row_copy.items() %} {{ column_value }} as {{ adapter.quote(column_name) }}{% if not loop.last -%}, {%- endif %}
 {%-   endfor %}
 {%-   if not loop.last %}
 union all
@@ -41,7 +39,7 @@ union all
 
 {%- if (rows | length) == 0 -%}
     select
-    {%- for column_name, column_value in default_row.items() %} {{ column_value }} as {{ column_name_to_quoted[column_name] }}{% if not loop.last -%},{%- endif %}
+    {%- for column_name, column_value in default_row.items() %} {{ column_value }} as {{ adapter.quote(column_name) }}{% if not loop.last -%},{%- endif %}
     {%- endfor %}
     limit 0
 {%- endif -%}
