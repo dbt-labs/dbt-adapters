@@ -1,0 +1,48 @@
+name: "Publish Docker"
+
+on:
+    workflow_call:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: string
+                required: true
+            version:
+                description: "Choose the version to publish"
+                type: string
+                required: true
+            dry-run:
+                description: "Dry Run"
+                type: boolean
+                default: false
+    workflow_dispatch:
+        inputs:
+            package:
+                description: "Choose the package to publish"
+                type: choice
+                options:
+                    -   "dbt-bigquery"
+                    -   "dbt-postgres"
+                    -   "dbt-redshift"
+                    -   "dbt-snowflake"
+                    -   "dbt-spark"
+            version:
+                description: "Choose the version to publish"
+                type: string
+                required: true
+            dry-run:
+                description: "Dry Run"
+                type: boolean
+                default: false
+
+permissions:
+    packages: write
+
+jobs:
+    publish-docker:
+        uses: dbt-labs/dbt-release/.github/workflows/release-docker.yml@main
+        with:
+            package: ${{ inputs.package }}
+            version_number: ${{ inputs.version }}
+            dockerfile: ${{ inputs.package }}/docker/Dockerfile
+            test_run: ${{ inputs.dry-run }}
