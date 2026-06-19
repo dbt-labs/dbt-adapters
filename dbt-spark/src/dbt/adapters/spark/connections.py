@@ -722,6 +722,10 @@ def build_ssl_transport(
             sasl_auth = "GSSAPI"
         else:
             sasl_auth = "PLAIN"
+            if username is None:
+                # Username doesn't matter in NONE mode, just needs
+                # to be nonempty.
+                username = "dbt"
             if password is None:
                 # Password doesn't matter in NONE mode, just needs
                 # to be nonempty.
