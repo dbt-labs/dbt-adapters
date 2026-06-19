@@ -226,7 +226,7 @@ class TestInteractiveTableChangeDetectionLogic:
             "text": "SELECT 1",
             "cluster_by": cluster_by,
             "target_lag": target_lag,
-            "warehouse": warehouse,
+            "refresh_warehouse": warehouse,
         }
         column_types = [agate.Text()] * len(row_data)
 
@@ -368,7 +368,7 @@ class TestInteractiveTableParseRelationResults:
             "text": text,
             "cluster_by": cluster_by,
             "target_lag": target_lag,
-            "warehouse": warehouse,
+            "refresh_warehouse": warehouse,
         }
         column_types = [agate.Text()] * len(row_data)
 
@@ -406,5 +406,21 @@ class TestInteractiveTableParseRelationResults:
     def test_parse_multi_column_cluster_by(self):
         """Multi-column cluster_by values are preserved."""
         results = self._make_agate_results(cluster_by="region, product_id")
+        config = SnowflakeInteractiveTableConfig.from_relation_results(results)
+        assert config.cluster_by == "region, product_id"
+
+    def test_parse_cluster_by_strips_surrounding_parens(self):
+        """SHOW INTERACTIVE TABLES returns cluster_by wrapped in parens, e.g. '(id)'.
+
+        Without normalization, a no-op rerun compares 'id' (config) against '(id)'
+        (metadata) and falsely triggers a CREATE OR REPLACE.
+        """
+        results = self._make_agate_results(cluster_by="(id)")
+        config = SnowflakeInteractiveTableConfig.from_relation_results(results)
+        assert config.cluster_by == "id"
+
+    def test_parse_multi_column_cluster_by_strips_parens(self):
+        """Parenthesized multi-column cluster_by is unwrapped without splitting inner commas."""
+        results = self._make_agate_results(cluster_by="(region, product_id)")
         config = SnowflakeInteractiveTableConfig.from_relation_results(results)
         assert config.cluster_by == "region, product_id"

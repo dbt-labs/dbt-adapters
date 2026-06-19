@@ -657,8 +657,9 @@ CALL {proc_name}();
         """
         Get all relevant metadata about an interactive table to return as a dict to Agate Table row.
 
-        Uses SHOW TABLES to retrieve interactive table metadata. SHOW TABLES LIKE uses
-        pattern matching, so we filter to an exact name match after fetching results.
+        Uses SHOW INTERACTIVE TABLES to retrieve interactive table metadata. SHOW INTERACTIVE
+        TABLES LIKE uses pattern matching, so we filter to an exact name match after fetching
+        results.
 
         Args:
             relation (SnowflakeRelation): the relation to describe
@@ -666,7 +667,9 @@ CALL {proc_name}();
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
-        show_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        show_sql = (
+            f"show interactive tables like '{relation.identifier}' in schema {database}.{schema}"
+        )
         res, tables_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
             raise DbtRuntimeError(f"Could not get interactive table metadata: {show_sql} failed")
@@ -699,8 +702,8 @@ CALL {proc_name}();
 
         if "target_lag" in available_columns:
             base_columns.append("target_lag")
-        if "warehouse" in available_columns:
-            base_columns.append("warehouse")
+        if "refresh_warehouse" in available_columns:
+            base_columns.append("refresh_warehouse")
 
         selected = exact_match.select(base_columns)
 

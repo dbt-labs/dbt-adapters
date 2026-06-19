@@ -95,6 +95,8 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         cluster_by_raw = interactive_table.get("cluster_by")
         if cluster_by_raw is not None and str(cluster_by_raw).strip() not in ("", "NONE", "None"):
             cluster_by_val = str(cluster_by_raw).strip()
+            if cluster_by_val.startswith("(") and cluster_by_val.endswith(")"):
+                cluster_by_val = cluster_by_val[1:-1].strip()
         else:
             raise CompilationError(
                 "Interactive table metadata is missing a valid `cluster_by` value. "
@@ -108,7 +110,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             "query": interactive_table.get("text"),
             "cluster_by": cluster_by_val,
             "target_lag": interactive_table.get("target_lag"),
-            "snowflake_warehouse": interactive_table.get("warehouse"),
+            "snowflake_warehouse": interactive_table.get("refresh_warehouse"),
         }
 
         return config_dict

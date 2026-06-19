@@ -1,0 +1,7 @@
+kind: Features
+body: Add support for Snowflake interactive table materialization (`materialized='interactive_table'`),
+    including static and dynamic (target_lag) variants and config-change detection
+time: 2026-06-19T00:00:00.000000-00:00
+custom:
+    Author: jimmyxie-figma
+    Issue: "1780"
