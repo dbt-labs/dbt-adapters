@@ -1,0 +1,8 @@
+kind: Fixes
+body: Return the field unchanged from default__concat when called with a single-element
+  list, so adapters that override with a SQL CONCAT() function call do not receive
+  invalid single-argument input
+time: 2026-05-19T12:42:15.000000+00:00
+custom:
+  Author: sdebruyn
+  Issue: "1948"

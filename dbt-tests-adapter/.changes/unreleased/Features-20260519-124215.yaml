@@ -1,0 +1,8 @@
+kind: Features
+body: Add BaseConcatSingleField test class covering concat() with a single-element
+  field list, so every adapter inherits regression coverage for the CONCAT() single-argument
+  case
+time: 2026-05-19T12:42:15.000000+00:00
+custom:
+  Author: sdebruyn
+  Issue: "1948"
