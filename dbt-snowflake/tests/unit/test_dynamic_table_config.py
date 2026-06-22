@@ -566,13 +566,35 @@ class TestSchedulerValidation:
         )
         return relation_config
 
-    def test_scheduler_enable_invalid_when_target_lag_none(self):
-        relation_config = self._make_relation_config(scheduler="ENABLE", target_lag=None)
+    def test_no_target_lag_no_scheduler_defaults_to_disable(self):
+        """Case 1: no target_lag, no scheduler -> scheduler inferred as DISABLE."""
+        relation_config = self._make_relation_config(scheduler=None, target_lag=None)
 
-        with pytest.raises(CompilationError, match="requires `target_lag`"):
-            SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+        config = SnowflakeDynamicTableConfig.from_relation_config(relation_config)
 
-    def test_scheduler_disable_invalid_when_target_lag_set(self):
+        assert config.target_lag is None
+        assert config.scheduler == "DISABLE"
+
+    def test_target_lag_set_no_scheduler_defaults_to_enable(self):
+        """Case 2: target_lag set, no scheduler -> scheduler inferred as ENABLE."""
+        relation_config = self._make_relation_config(scheduler=None, target_lag="2 minutes")
+
+        config = SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+        assert config.target_lag == "2 minutes"
+        assert config.scheduler == "ENABLE"
+
+    def test_no_target_lag_scheduler_disable_is_valid(self):
+        """Case 3: no target_lag, scheduler='DISABLE' -> valid."""
+        relation_config = self._make_relation_config(scheduler="DISABLE", target_lag=None)
+
+        config = SnowflakeDynamicTableConfig.from_relation_config(relation_config)
+
+        assert config.target_lag is None
+        assert config.scheduler == "DISABLE"
+
+    def test_target_lag_set_scheduler_disable_is_invalid(self):
+        """Case 4: target_lag set, scheduler='DISABLE' -> CompilationError."""
         relation_config = self._make_relation_config(scheduler="DISABLE", target_lag="1 hour")
 
         with pytest.raises(CompilationError, match="requires `target_lag` to be omitted"):
@@ -585,6 +607,12 @@ class TestSchedulerValidation:
 
         assert config.scheduler == "ENABLE"
         assert config.target_lag == "1 hour"
+
+    def test_scheduler_enable_invalid_when_target_lag_none(self):
+        relation_config = self._make_relation_config(scheduler="ENABLE", target_lag=None)
+
+        with pytest.raises(CompilationError, match="requires `target_lag`"):
+            SnowflakeDynamicTableConfig.from_relation_config(relation_config)
 
     def test_invalid_scheduler_literal_still_rejected(self):
         relation_config = self._make_relation_config(scheduler="ENABLED", target_lag="1 hour")
