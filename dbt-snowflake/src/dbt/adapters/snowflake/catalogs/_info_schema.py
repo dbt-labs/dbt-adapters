@@ -36,6 +36,7 @@ class InfoSchemaCatalogIntegration(CatalogIntegration):
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
+        self.catalog_database: Optional[str] = config.catalog_database
         if adapter_properties := config.adapter_properties:
             self.change_tracking = adapter_properties.get(
                 SnowflakeIcebergTableRelationParameters.change_tracking

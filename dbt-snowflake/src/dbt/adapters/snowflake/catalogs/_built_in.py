@@ -63,6 +63,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
+        self.catalog_database: Optional[str] = config.catalog_database
         if adapter_properties := config.adapter_properties:
             if storage_serialization_policy := adapter_properties.get(
                 SnowflakeIcebergTableRelationParameters.storage_serialization_policy
