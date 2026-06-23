@@ -47,7 +47,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
-        self.catalog_database: Optional[str] = config.catalog_database
+        self.catalog_database: Optional[str] = getattr(config, "catalog_database", None)
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
             self.catalog_linked_database_type = adapter_properties.get(
