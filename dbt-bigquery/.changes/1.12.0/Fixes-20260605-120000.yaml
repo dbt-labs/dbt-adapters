@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixed a regression where transient getQueryResults rate-limit errors (rateLimitExceeded) surfaced as hard job failures during bursts of concurrent jobs. The polling retry no longer caps attempts at job_retries; retryable errors now back off (initial 5s) until job_retry_deadline_seconds, while still short-circuiting immediately when the underlying job is in a terminal failed state. Rate-limit errors back off without an extra jobs.get reload to avoid adding pressure to the rate limit being waited out.
+time: 2026-06-05T12:00:00.000000-05:00
+custom:
+    Author: tauhid621
+    Issue: "1957"
