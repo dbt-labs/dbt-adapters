@@ -1,4 +1,10 @@
 {% macro snowflake__generate_database_name(custom_database_name=none, node=none) -%}
+    {%- if node is not none -%}
+        {%- set catalog_db = adapter.get_catalog_database_override(node) -%}
+        {%- if catalog_db -%}
+            {{ return(catalog_db) }}
+        {%- endif -%}
+    {%- endif -%}
     {%- if custom_database_name is none -%}
          {%- if node is not none and node|attr('database') -%}
             {%- set catalog_relation = adapter.build_catalog_relation(node) -%}
