@@ -1,0 +1,6 @@
+kind: Features
+body: snowflake__generate_database_name now checks catalog_database override at highest priority, so v2 catalogs with catalog_database set take effect before model database config and target.database
+time: 2026-06-23T12:52:45.957622+05:30
+custom:
+    Author: aahel
+    Issue: "2004"
