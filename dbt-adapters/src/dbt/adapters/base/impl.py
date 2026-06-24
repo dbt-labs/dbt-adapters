@@ -132,6 +132,15 @@ DEFAULT_BASE_BEHAVIOR_FLAGS = [
         "default": False,
         "docs_url": "",
     },
+    {
+        # When True (default), enforces the model contract on materialized
+        # view create / full-refresh by running the same column-equivalence
+        # check used for tables. Users can opt out by setting this flag to
+        # False in their project's `flags:` block.
+        "name": "enforce_contract_on_materialized_view",
+        "default": True,
+        "docs_url": "",
+    },
 ]
 
 
