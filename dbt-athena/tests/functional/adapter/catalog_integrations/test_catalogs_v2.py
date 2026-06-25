@@ -7,7 +7,12 @@ import re
 
 import pytest
 
-from dbt.tests.util import run_dbt, run_dbt_and_capture, write_config_file
+from dbt.tests.util import (
+    relation_from_name,
+    run_dbt,
+    run_dbt_and_capture,
+    write_config_file,
+)
 
 # Skip if installed dbt-core doesn't support use_catalogs_v2 yet.
 try:
@@ -51,6 +56,27 @@ select 1 as id, 'hive' as name
 MODEL__FILE_FORMAT_VOLUME = """
 {{ config(materialized='table', catalog_name='athena_glue_v2') }}
 select 1 as id
+"""
+
+# Source for the catalog-driven snapshot; its `value` flips via a var to trigger a change.
+MODEL__SNAP_SOURCE = """
+{{ config(materialized='table') }}
+select 1 as id, '{{ var('snap_val', 'a') }}' as value
+"""
+
+# Catalog-driven Iceberg snapshot (no table_type) — the second snapshot run exercises
+# the table_type read in snapshot.sql (merge strategy + column handling).
+SNAPSHOT__CATALOG = """
+{% snapshot cat_snapshot %}
+{{ config(
+    target_schema=schema,
+    unique_key='id',
+    strategy='check',
+    check_cols=['value'],
+    catalog_name='athena_glue_v2',
+) }}
+select id, value from {{ ref('snap_source') }}
+{% endsnapshot %}
 """
 
 # Catalog-driven Iceberg incremental (no table_type). The second run adds a column,
@@ -245,3 +271,62 @@ class TestAthenaV2CatalogFileFormatAndVolume:
         _, stdout = run_dbt_and_capture(["--debug", "run"])
         assert "format='orc'" in stdout  # catalog file_format -> DDL format=
         assert self.EXTERNAL_VOLUME in stdout  # catalog external_volume -> table location base
+
+
+class TestAthenaV2CatalogSnapshot:
+    """A catalog-driven Iceberg snapshot, including the second-run merge path."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"use_catalogs_v2": True}}
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {"get_detailed_table_type.sql": get_detailed_table_type_sql}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"snap_source.sql": MODEL__SNAP_SOURCE}
+
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {"cat_snapshot.sql": SNAPSHOT__CATALOG}
+
+    @pytest.fixture
+    def catalogs(self):
+        return {
+            "catalogs": [
+                {
+                    "name": "athena_glue_v2",
+                    "type": "glue",
+                    "table_format": "iceberg",
+                    "config": {"athena": {"file_format": "parquet"}},
+                }
+            ]
+        }
+
+    def _row_count(self, project, name):
+        relation = relation_from_name(project.adapter, name)
+        return project.run_sql(f"select count(*) as n from {relation}", fetch="one")[0]
+
+    def test_catalog_snapshot_iceberg(self, project, catalogs):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+
+        # Build source (value 'a') and take the first snapshot -> creates the Iceberg table.
+        assert len(run_dbt(["run"])) == 1
+        assert len(run_dbt(["snapshot"])) == 1
+
+        # Flip the source value and snapshot again -> the merge path runs, and must use
+        # the iceberg strategy (resolved from the catalog) against the iceberg table.
+        run_dbt(["run", "--vars", '{"snap_val": "b"}'])
+        assert len(run_dbt(["snapshot", "--vars", '{"snap_val": "b"}'])) == 1
+
+        # The snapshot table is Iceberg (only the snapshot is; snap_source is hive).
+        args_str = f'{{"schema": "{project.test_schema}"}}'
+        _, stdout = run_dbt_and_capture(
+            ["run-operation", "get_detailed_table_type", "--args", args_str]
+        )
+        assert "ICEBERG" in stdout
+
+        # check strategy recorded both versions of id=1 (original + updated).
+        assert self._row_count(project, "cat_snapshot") == 2
