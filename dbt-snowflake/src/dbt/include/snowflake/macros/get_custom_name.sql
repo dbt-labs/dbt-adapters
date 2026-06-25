@@ -8,6 +8,9 @@
             {%- set catalog_relation = none -%}
         {%- endif -%}
         {%- if catalog_relation is not none
+            and catalog_relation|attr('catalog_database')-%}
+            {{ return(catalog_relation.catalog_database) }}
+        {%- elif catalog_relation is not none
             and catalog_relation|attr('catalog_linked_database')-%}
             {{ return(catalog_relation.catalog_linked_database) }}
         {%- else -%}
