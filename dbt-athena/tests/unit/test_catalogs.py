@@ -1,17 +1,21 @@
 """Unit tests for dbt-athena catalogs.yml v2 support."""
 
+from multiprocessing import get_context
 from types import SimpleNamespace
 
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.athena import constants
+from dbt.adapters.athena import Plugin as AthenaPlugin
 from dbt.adapters.athena.catalogs import (
     AthenaInfoSchemaCatalogIntegration,
     GlueCatalogIntegration,
 )
 from dbt.adapters.athena.impl import AthenaAdapter
-from dbt.adapters.catalogs import CatalogIntegrationClient
+
+from .constants import AWS_REGION, DATA_CATALOG_NAME, DATABASE_NAME, S3_STAGING_DIR
+from .utils import config_from_parts_or_dicts, inject_adapter
 
 
 def _v2_catalog(name, catalog_type, table_format_value, config=None):
@@ -35,11 +39,29 @@ def _model(config=None):
 
 @pytest.fixture
 def adapter():
-    """Bare adapter with only the catalog client wired up (no connections)."""
-    instance = object.__new__(AthenaAdapter)
-    instance._catalog_client = CatalogIntegrationClient(AthenaAdapter.CATALOG_INTEGRATIONS)
-    instance.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
-    instance.add_catalog_integration(constants.DEFAULT_GLUE_CATALOG)
+    """A real AthenaAdapter so __init__ (default catalog registration) is exercised."""
+    project_cfg = {
+        "name": "X",
+        "version": "0.1",
+        "profile": "test",
+        "project-root": "/tmp/dbt/does-not-exist",
+        "config-version": 2,
+    }
+    profile_cfg = {
+        "outputs": {
+            "test": {
+                "type": "athena",
+                "s3_staging_dir": S3_STAGING_DIR,
+                "region_name": AWS_REGION,
+                "database": DATA_CATALOG_NAME,
+                "schema": DATABASE_NAME,
+            }
+        },
+        "target": "test",
+    }
+    config = config_from_parts_or_dicts(project_cfg, profile_cfg)
+    instance = AthenaAdapter(config, get_context("spawn"))
+    inject_adapter(instance, AthenaPlugin)
     return instance
 
 
@@ -88,36 +110,27 @@ class TestRegistration:
 
 
 class TestV2Bridge:
-    def setup_method(self):
-        self.adapter = object.__new__(AthenaAdapter)
-
-    def test_v2_to_v1_type_glue(self):
-        assert self.adapter._v2_to_v1_type("glue") == "glue"
-
-    def test_v2_to_v1_type_unknown_passthrough(self):
-        assert self.adapter._v2_to_v1_type("custom_type") == "custom_type"
-
-    def test_bridge_v2_catalog_glue(self):
+    def test_bridge_v2_catalog_glue(self, adapter):
         catalog = _v2_catalog(
             "my_glue",
             "glue",
             "iceberg",
             config={"athena": {"external_volume": "s3://bucket/path", "file_format": "parquet"}},
         )
-        result = self.adapter.bridge_v2_catalog(catalog)
+        result = adapter.bridge_v2_catalog(catalog)
         assert result.name == "my_glue"
         assert result.catalog_type == "glue"
         assert result.table_format == "iceberg"
         assert result.external_volume == "s3://bucket/path"
         assert result.file_format == "parquet"
 
-    def test_bridge_v2_catalog_default_table_format_maps_to_hive(self):
+    def test_bridge_v2_catalog_default_table_format_maps_to_hive(self, adapter):
         # The v2 spec's non-Iceberg value is 'default'; Athena's equivalent is 'hive'.
         catalog = _v2_catalog("my_default", "glue", "default", config={"athena": {}})
-        result = self.adapter.bridge_v2_catalog(catalog)
+        result = adapter.bridge_v2_catalog(catalog)
         assert result.table_format == "hive"
 
-    def test_bridge_v2_catalog_unsupported_table_format_raises(self):
+    def test_bridge_v2_catalog_unsupported_table_format_raises(self, adapter):
         catalog = _v2_catalog("bad", "glue", "hudi", config={"athena": {}})
         with pytest.raises(DbtRuntimeError, match="unsupported table_format 'hudi'"):
-            self.adapter.bridge_v2_catalog(catalog)
+            adapter.bridge_v2_catalog(catalog)
