@@ -46,6 +46,21 @@ MODEL__PRECEDENCE = """
 select 1 as id, 'hive' as name
 """
 
+# Catalog-driven Iceberg incremental (no table_type). The second run adds a column,
+# exercising resolve_table_type() inside the on_schema_change path.
+MODEL__INCREMENTAL = """
+{{ config(
+    materialized='incremental',
+    catalog_name='athena_glue_v2',
+    incremental_strategy='append',
+    on_schema_change='sync_all_columns',
+) }}
+select 1 as id, 'test 1' as name
+{%- if is_incremental() %}
+, current_date as updated_at
+{%- endif %}
+"""
+
 
 class TestAthenaV2GlueCatalog:
     """End-to-end: v2 glue catalog -> bridge -> GlueCatalogIntegration -> Iceberg DDL."""
@@ -131,3 +146,55 @@ class TestAthenaV2CatalogPrecedence:
         match = re.search(r"Detailed Table Type: (\w*)", stdout)
         assert match is not None
         assert match.group(1) != "ICEBERG"
+
+
+class TestAthenaV2CatalogIncremental:
+    """A catalog-driven Iceberg incremental, including the on_schema_change path."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"use_catalogs_v2": True}}
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {"get_detailed_table_type.sql": get_detailed_table_type_sql}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"incremental_catalog.sql": MODEL__INCREMENTAL}
+
+    @pytest.fixture
+    def catalogs(self):
+        return {
+            "catalogs": [
+                {
+                    "name": "athena_glue_v2",
+                    "type": "glue",
+                    "table_format": "iceberg",
+                    "config": {"athena": {"file_format": "parquet"}},
+                }
+            ]
+        }
+
+    def _column_names(self, project, relation_name):
+        result = project.run_sql(f"show columns from {relation_name}", fetch="all")
+        return [row[0].strip() for row in result]
+
+    def test_incremental_catalog_iceberg_on_schema_change(self, project, catalogs):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+
+        # First run: create the table (Iceberg, driven by the catalog).
+        assert len(run_dbt(["run"])) == 1
+        # Second run: is_incremental adds `updated_at`, triggering on_schema_change,
+        # which calls resolve_table_type() and must resolve to iceberg from the catalog.
+        assert len(run_dbt(["run"])) == 1
+
+        # The table is Iceberg even though no table_type was configured.
+        args_str = f'{{"schema": "{project.test_schema}"}}'
+        _, stdout = run_dbt_and_capture(
+            ["run-operation", "get_detailed_table_type", "--args", args_str]
+        )
+        assert re.search(r"Detailed Table Type: (\w+)", stdout).group(1) == "ICEBERG"
+
+        # on_schema_change took the iceberg ADD COLUMN path and added the new column.
+        assert "updated_at" in self._column_names(project, "incremental_catalog")
