@@ -40,6 +40,12 @@ MODEL__GLUE_ICEBERG = """
 select 1 as id, 'iceberg' as name
 """
 
+# Catalog says iceberg, but an explicit table_type='hive' must win (backward compat).
+MODEL__PRECEDENCE = """
+{{ config(materialized='table', catalog_name='athena_glue_v2', table_type='hive') }}
+select 1 as id, 'hive' as name
+"""
+
 
 class TestAthenaV2GlueCatalog:
     """End-to-end: v2 glue catalog -> bridge -> GlueCatalogIntegration -> Iceberg DDL."""
@@ -80,3 +86,48 @@ class TestAthenaV2GlueCatalog:
         )
         table_type = re.search(r"Detailed Table Type: (\w+)", stdout).group(1)
         assert table_type == "ICEBERG"
+
+
+class TestAthenaV2CatalogPrecedence:
+    """An explicit table_type config overrides the catalog's table_format."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"use_catalogs_v2": True}}
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {"get_detailed_table_type.sql": get_detailed_table_type_sql}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"precedence.sql": MODEL__PRECEDENCE}
+
+    @pytest.fixture
+    def catalogs(self):
+        return {
+            "catalogs": [
+                {
+                    "name": "athena_glue_v2",
+                    "type": "glue",
+                    "table_format": "iceberg",
+                    "config": {"athena": {"file_format": "parquet"}},
+                }
+            ]
+        }
+
+    def test_explicit_table_type_overrides_catalog(self, project, catalogs):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+        run_results = run_dbt(["run"])
+        assert len(run_results) == 1
+
+        args_str = f'{{"schema": "{project.test_schema}"}}'
+        _, stdout = run_dbt_and_capture(
+            ["run-operation", "get_detailed_table_type", "--args", args_str]
+        )
+        # Catalog is iceberg, but table_type='hive' wins -> not an Iceberg table.
+        # Hive tables have no `table_type` Glue parameter, so detailed_table_type is
+        # empty (\\w* matches that), whereas an Iceberg table would report 'ICEBERG'.
+        match = re.search(r"Detailed Table Type: (\w*)", stdout)
+        assert match is not None
+        assert match.group(1) != "ICEBERG"

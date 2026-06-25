@@ -55,6 +55,7 @@ from dbt.adapters.athena.connections import AthenaCursor
 from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
     DEFAULT_INFO_SCHEMA_CATALOG,
+    GLUE_CATALOG_TYPE,
     HIVE_TABLE_FORMAT,
     ICEBERG_TABLE_FORMAT,
     LOGGER,
@@ -202,8 +203,10 @@ class AthenaAdapter(SQLAdapter):
         }
     )
 
-    # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS
-    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {"glue": "glue"}
+    # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS.
+    # Identity for Athena today (like BigQuery); the hook is the consistent place
+    # to add aliases later (e.g. a future "sagemaker" -> "glue").
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {GLUE_CATALOG_TYPE: GLUE_CATALOG_TYPE}
 
     # catalogs.yml v2 table_format -> Athena's table_type. 'default' is the v2 spec's
     # non-Iceberg value; Athena calls the equivalent 'hive'.
@@ -216,6 +219,8 @@ class AthenaAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         # Register the default catalogs so models can reference them by name and so
         # models without a catalog fall back to standard Hive behavior.
+        # NOTE: "info_schema" and "glue" are therefore reserved names — a catalogs.yml
+        # entry using either will raise DbtCatalogIntegrationAlreadyExistsError.
         self.add_catalog_integration(DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(DEFAULT_GLUE_CATALOG)
 
