@@ -1,5 +1,5 @@
 kind: Features
-body: Promote catalog_database to a first-class field on all catalog types; add get_catalog_database_override adapter method and update default__generate_database_name and snowflake__generate_database_name so catalog_database takes highest priority over model database config and target.database
+body: 'Add catalog_database support to v2 catalogs.yml: catalog integrations can now specify a physical database override that takes highest priority in generate_database_name over model database config and target.database. default__generate_database_name reads catalog_database from the catalog relation via build_catalog_relation.'
 time: 2026-06-23T12:41:20.406005+05:30
 custom:
     Author: aahel
