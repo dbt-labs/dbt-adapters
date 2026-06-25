@@ -46,6 +46,13 @@ MODEL__PRECEDENCE = """
 select 1 as id, 'hive' as name
 """
 
+# Catalog supplies file_format + external_volume; the model sets neither, so the
+# catalog values flow into the DDL.
+MODEL__FILE_FORMAT_VOLUME = """
+{{ config(materialized='table', catalog_name='athena_glue_v2') }}
+select 1 as id
+"""
+
 # Catalog-driven Iceberg incremental (no table_type). The second run adds a column,
 # exercising resolve_table_type() inside the on_schema_change path.
 MODEL__INCREMENTAL = """
@@ -198,3 +205,43 @@ class TestAthenaV2CatalogIncremental:
 
         # on_schema_change took the iceberg ADD COLUMN path and added the new column.
         assert "updated_at" in self._column_names(project, "incremental_catalog")
+
+
+class TestAthenaV2CatalogFileFormatAndVolume:
+    """Catalog file_format and external_volume flow into the DDL (model config would win)."""
+
+    EXTERNAL_VOLUME = "s3://dbt-athena-integration-testing/catalog_volume"
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"use_catalogs_v2": True}}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"vol_model.sql": MODEL__FILE_FORMAT_VOLUME}
+
+    @pytest.fixture
+    def catalogs(self):
+        return {
+            "catalogs": [
+                {
+                    "name": "athena_glue_v2",
+                    "type": "glue",
+                    "table_format": "iceberg",
+                    "config": {
+                        "athena": {
+                            "file_format": "orc",
+                            "external_volume": self.EXTERNAL_VOLUME,
+                        }
+                    },
+                }
+            ]
+        }
+
+    def test_catalog_file_format_and_external_volume(self, project, catalogs):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+        # The model sets neither `format` nor `s3_data_dir`, so the catalog values
+        # must appear in the executed CREATE TABLE DDL (logged at --debug).
+        _, stdout = run_dbt_and_capture(["--debug", "run"])
+        assert "format='orc'" in stdout  # catalog file_format -> DDL format=
+        assert self.EXTERNAL_VOLUME in stdout  # catalog external_volume -> table location base

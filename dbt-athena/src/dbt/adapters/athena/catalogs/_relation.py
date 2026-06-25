@@ -8,11 +8,10 @@ from dbt.adapters.athena import constants
 
 @dataclass
 class AthenaCatalogRelation(CatalogRelation):
-    # NOTE: only `table_format` is currently consumed (by resolve_table_type() to choose
-    # hive vs iceberg). `file_format` and `external_volume` are carried for protocol parity
-    # but are NOT yet honored in the generated DDL — format still comes from the model
-    # `format` config and location from `external_location` / `s3_data_dir`. Wiring them
-    # through is tracked as a follow-up.
+    # Consumed in create_table_as.sql, with model config taking precedence:
+    #   table_format    -> table_type (hive vs iceberg), via resolve_table_type()
+    #   file_format     -> DDL `format`   (model `format` config > catalog > parquet)
+    #   external_volume -> S3 location base (model `s3_data_dir`/`external_location` > catalog)
     catalog_type: str = constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type
     catalog_name: Optional[str] = constants.DEFAULT_INFO_SCHEMA_CATALOG.name
     table_format: Optional[str] = constants.HIVE_TABLE_FORMAT
