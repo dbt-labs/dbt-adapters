@@ -84,7 +84,6 @@ from dbt.adapters.catalogs import (
     CatalogRelation,
     CatalogV2,
     CatalogWriteIntegrationConfig,
-    DbtCatalogIntegrationNotFoundError,
     CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
@@ -401,26 +400,6 @@ class BaseAdapter(metaclass=AdapterMeta):
             return catalog.build_relation(config)
 
         return None
-
-    @available
-    def get_catalog_database_override(self, config: RelationConfig) -> Optional[str]:
-        """Return the catalog_database override for a node, or None.
-
-        When a catalog specifies catalog_database, that value takes precedence over
-        the model's database config and target.database in generate_database_name.
-        """
-        if not config.config:
-            return None
-        catalog_name = config.config.get(
-            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-        ) or config.config.get("catalog")
-        if not catalog_name:
-            return None
-        try:
-            integration = self.get_catalog_integration(str(catalog_name))
-            return integration.catalog_database
-        except DbtCatalogIntegrationNotFoundError:
-            return None
 
     ###
     # Methods to set / access a macro resolver
