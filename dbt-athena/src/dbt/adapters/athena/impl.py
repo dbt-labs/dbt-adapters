@@ -55,6 +55,8 @@ from dbt.adapters.athena.connections import AthenaCursor
 from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
     DEFAULT_INFO_SCHEMA_CATALOG,
+    HIVE_TABLE_FORMAT,
+    ICEBERG_TABLE_FORMAT,
     LOGGER,
 )
 from dbt.adapters.athena.exceptions import (
@@ -101,6 +103,7 @@ from dbt.adapters.sql import SQLAdapter
 
 
 if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
     from mypy_boto3_glue.client import GlueClient
 
 boto3_client_lock = Lock()
@@ -202,6 +205,13 @@ class AthenaAdapter(SQLAdapter):
     # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS
     _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {"glue": "glue"}
 
+    # catalogs.yml v2 table_format -> Athena's table_type. 'default' is the v2 spec's
+    # non-Iceberg value; Athena calls the equivalent 'hive'.
+    _V2_TABLE_FORMAT: ClassVar[Dict[str, str]] = {
+        "default": HIVE_TABLE_FORMAT,
+        "iceberg": ICEBERG_TABLE_FORMAT,
+    }
+
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         # Register the default catalogs so models can reference them by name and so
@@ -211,6 +221,16 @@ class AthenaAdapter(SQLAdapter):
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        table_format = catalog.table_format.value
+        try:
+            return self._V2_TABLE_FORMAT[table_format]
+        except KeyError:
+            raise DbtRuntimeError(
+                f"Catalog '{catalog.name}' has unsupported table_format '{table_format}'. "
+                f"Athena supports: {', '.join(sorted(self._V2_TABLE_FORMAT))}."
+            )
 
     @classmethod
     def date_function(cls) -> str:

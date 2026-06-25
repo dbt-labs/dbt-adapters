@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.athena import constants
 from dbt.adapters.athena.catalogs import (
@@ -109,3 +110,14 @@ class TestV2Bridge:
         assert result.table_format == "iceberg"
         assert result.external_volume == "s3://bucket/path"
         assert result.file_format == "parquet"
+
+    def test_bridge_v2_catalog_default_table_format_maps_to_hive(self):
+        # The v2 spec's non-Iceberg value is 'default'; Athena's equivalent is 'hive'.
+        catalog = _v2_catalog("my_default", "glue", "default", config={"athena": {}})
+        result = self.adapter.bridge_v2_catalog(catalog)
+        assert result.table_format == "hive"
+
+    def test_bridge_v2_catalog_unsupported_table_format_raises(self):
+        catalog = _v2_catalog("bad", "glue", "hudi", config={"athena": {}})
+        with pytest.raises(DbtRuntimeError, match="unsupported table_format 'hudi'"):
+            self.adapter.bridge_v2_catalog(catalog)
