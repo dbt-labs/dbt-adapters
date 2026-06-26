@@ -1,0 +1,6 @@
+kind: Features
+body: Add `tmp_relation_type=transient` support for incremental models, enabling Snowflake lineage tracking; add `snowflake__resolve_incremental_tmp_relation` dispatch macro for controlling tmp relation destination
+time: 2026-04-24T00:00:00.000000-00:00
+custom:
+    Author: b-per
+    Issue: "1893"

@@ -22,7 +22,6 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
-from google.cloud.bigquery.retry import DEFAULT_JOB_RETRY
 from google.cloud.exceptions import BadRequest, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
@@ -264,6 +263,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
         maximum_bytes_billed = conn.credentials.maximum_bytes_billed
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
+
+        model_reservation = getattr(conn, "_bq_model_reservation", None)
+        reservation = (
+            model_reservation if model_reservation is not None else conn.credentials.reservation
+        )
+
+        if reservation is not None:
+            job_params["reservation"] = reservation
 
         model_timeout = getattr(conn, "_bq_model_timeout", None)
         if model_timeout is not None:
@@ -643,7 +650,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             iterator = query_job.result(
                 max_results=limit,
                 timeout=polling_timeout,
-                retry=DEFAULT_JOB_RETRY.with_timeout(timeout),
+                retry=self._retry.create_query_job_polling_retry(query_job),
             )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."

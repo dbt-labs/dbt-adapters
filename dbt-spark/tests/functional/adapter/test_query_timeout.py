@@ -4,6 +4,7 @@ NOTE: These tests only work with PyHive-based connections (http/thrift methods).
 ODBC connections use PyodbcConnectionWrapper which doesn't have timeout/retry support yet.
 """
 
+import copy
 import pytest
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 from dbt_common.exceptions import DbtRuntimeError
@@ -56,11 +57,17 @@ class TestQueryTimeout:
 
     @pytest.fixture(scope="class")
     def dbt_profile_target(self, dbt_profile_target):
-        """Override profile to add timeout configuration."""
-        dbt_profile_target["query_timeout"] = 1  # 1 second timeout
-        dbt_profile_target["poll_interval"] = 1  # Poll every second for faster test
-        dbt_profile_target["query_retries"] = 0  # Disable retries for clearer errors
-        return dbt_profile_target
+        """Override profile to add timeout configuration.
+
+        Copy before mutating — the parent fixture is session-scoped, so
+        in-place mutation leaks query_timeout=1 into every later test on
+        the same worker and makes their seeds/queries time out.
+        """
+        overrides = copy.deepcopy(dbt_profile_target)
+        overrides["query_timeout"] = 1  # 1 second timeout
+        overrides["poll_interval"] = 1  # Poll every second for faster test
+        overrides["query_retries"] = 0  # Disable retries for clearer errors
+        return overrides
 
     def test_query_timeout_exceeded(self, project):
         """Test that queries exceeding timeout raise appropriate error."""

@@ -145,9 +145,86 @@ class TestIcebergRestCatalogIntegration:
         assert hasattr(relation, "catalog_type")
         assert hasattr(relation, "table_format")
         assert hasattr(relation, "file_format")
+        assert hasattr(relation, "iceberg_version")
 
         # Verify values
         assert relation.catalog_name == "POLARIS"
         assert relation.catalog_linked_database == "custom_db"
         assert relation.external_volume == "test_volume"
         assert relation.auto_refresh is True
+
+    def test_iceberg_version_from_model_config(self):
+        """Test that iceberg_version is passed through from model config."""
+        config = SimpleNamespace(
+            name="test_iceberg_rest",
+            catalog_name="POLARIS",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "custom_database",
+            },
+        )
+
+        integration = IcebergRestCatalogIntegration(config)
+
+        model = Mock()
+        model.config = {"iceberg_version": 3}
+        model.schema = "test_schema"
+        model.identifier = "test_table"
+
+        relation = integration.build_relation(model)
+        assert relation.iceberg_version == 3
+
+    def test_iceberg_version_from_catalog_config(self):
+        """Test that iceberg_version defaults from catalog adapter_properties."""
+        config = SimpleNamespace(
+            name="test_iceberg_rest",
+            catalog_name="POLARIS",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "custom_database",
+                "iceberg_version": 3,
+            },
+        )
+
+        integration = IcebergRestCatalogIntegration(config)
+
+        model = Mock()
+        model.config = {}
+        model.schema = "test_schema"
+        model.identifier = "test_table"
+
+        relation = integration.build_relation(model)
+        assert relation.iceberg_version == 3
+
+    def test_iceberg_version_model_overrides_catalog(self):
+        """Test that model-level iceberg_version overrides catalog default."""
+        config = SimpleNamespace(
+            name="test_iceberg_rest",
+            catalog_name="POLARIS",
+            catalog_type="iceberg_rest",
+            external_volume="s3_volume",
+            adapter_properties={
+                "catalog_linked_database": "custom_database",
+                "iceberg_version": 1,
+            },
+        )
+
+        integration = IcebergRestCatalogIntegration(config)
+
+        model = Mock()
+        model.config = {"iceberg_version": 3}
+        model.schema = "test_schema"
+        model.identifier = "test_table"
+
+        relation = integration.build_relation(model)
+        assert relation.iceberg_version == 3
+
+    def test_iceberg_version_defaults_to_none(self):
+        """Test that iceberg_version defaults to None when not set."""
+        relation = IcebergRestCatalogRelation(
+            catalog_name="POLARIS",
+            catalog_linked_database="custom_db",
+        )
+        assert relation.iceberg_version is None

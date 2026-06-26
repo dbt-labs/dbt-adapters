@@ -53,15 +53,6 @@ REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     ),
 )
 
-REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
-    name="redshift_use_show_apis",
-    default=False,
-    description=(
-        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
-        "for metadata queries. Required for cross-database operations with Datasharing. "
-    ),
-)
-
 REDSHIFT_GRANTS_EXTENDED = BehaviorFlag(
     name="redshift_grants_extended",
     default=False,
@@ -149,20 +140,10 @@ class RedshiftAdapter(SQLAdapter):
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
 
-        if (
-            self.behavior.redshift_use_show_apis.no_warn
-            and not self.config.credentials.datasharing
-        ):
-            logger.debug(
-                "The `redshift_use_show_apis` behavior flag has been replaced by the `datasharing` profile configuration. "
-                "Please migrate to `datasharing` as this flag will be removed in a future release."
-            )
-
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
             REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
-            REDSHIFT_USE_SHOW_APIS,
             REDSHIFT_GRANTS_EXTENDED,
         ]
 
@@ -214,13 +195,18 @@ class RedshiftAdapter(SQLAdapter):
     def use_show_apis(self) -> bool:
         """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
 
-        Returns True when the ``datasharing`` profile config is enabled
-        or the ``redshift_use_show_apis`` behavior flag is set.
+        Returns True when the ``datasharing`` profile config is enabled.
         """
-        return (
-            bool(self.config.credentials.datasharing)
-            or self.behavior.redshift_use_show_apis.no_warn
-        )
+        return bool(self.config.credentials.datasharing)
+
+    @available
+    def drop_without_cascade(self) -> bool:
+        """Whether to omit CASCADE from DROP statements.
+
+        Returns True when the ``drop_without_cascade`` profile credential
+        is set. Safe only for projects with no downstream dependents.
+        """
+        return bool(self.config.credentials.drop_without_cascade)
 
     @available
     def use_grants_extended(self) -> bool:
@@ -236,7 +222,7 @@ class RedshiftAdapter(SQLAdapter):
 
         if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
-                "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
+                "Cross-db references allowed only in RA3.* node or with datasharing enabled. ({} vs {})".format(
                     database, expected
                 )
             )
@@ -278,6 +264,31 @@ class RedshiftAdapter(SQLAdapter):
 
         return agate.Table(
             new_rows,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
+        )
+
+    @available
+    def combine_show_tables_and_function_relations(
+        self,
+        table_and_view_relations: "agate.Table",
+        function_relations: "agate.Table",
+    ) -> "agate.Table":
+        """Combine table/view relations with function relations into a single agate.Table.
+
+        Uses explicit agate.Text() column types to avoid type inference issues when
+        function_relations is empty (no user-defined functions in the schema). An empty
+        agate table loaded from SQL has no rows to infer types from, so agate defaults
+        to Integer—which mismatches the explicit Text() types in table_and_view_relations
+        and causes agate.Table.merge() to raise DataTypeError.
+        """
+        all_rows = []
+        for row in table_and_view_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        for row in function_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        return agate.Table(
+            all_rows,
             column_names=["database", "name", "schema", "type"],
             column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
