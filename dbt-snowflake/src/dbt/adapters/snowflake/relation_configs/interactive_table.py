@@ -33,8 +33,8 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
     name: str
     schema_name: str
     database_name: str
-    query: str
     cluster_by: str
+    query: Optional[str] = None
     target_lag: Optional[str] = None
     snowflake_warehouse: Optional[str] = None
 

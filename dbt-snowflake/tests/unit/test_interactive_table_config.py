@@ -403,6 +403,18 @@ class TestInteractiveTableParseRelationResults:
         assert config.target_lag == "5 minutes"
         assert config.snowflake_warehouse == "REFRESH_WH"
 
+    def test_parse_null_query_does_not_raise(self):
+        """SHOW INTERACTIVE TABLES returns a NULL `text` for static interactive tables.
+
+        `filter_null_values` drops the None `query` before constructing the config, so
+        `query` must be optional. Otherwise re-running a static interactive table crashes
+        with `__init__() missing 1 required positional argument: 'query'`.
+        """
+        results = self._make_agate_results(cluster_by="id", text=None)
+        config = SnowflakeInteractiveTableConfig.from_relation_results(results)
+        assert config.query is None
+        assert config.cluster_by == "id"
+
     def test_parse_multi_column_cluster_by(self):
         """Multi-column cluster_by values are preserved."""
         results = self._make_agate_results(cluster_by="region, product_id")
