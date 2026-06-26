@@ -52,8 +52,8 @@ class AthenaAdapterResponse(AdapterResponse):
 
 @dataclass
 class AthenaCredentials(Credentials):
-    s3_staging_dir: str
     region_name: str
+    s3_staging_dir: Optional[str] = None
     endpoint_url: Optional[str] = None
     work_group: Optional[str] = None
     skip_workgroup_check: bool = False
@@ -61,6 +61,12 @@ class AthenaCredentials(Credentials):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_session_token: Optional[str] = None
+    assume_role_arn: Optional[str] = None
+    # external_id is not a secret; it is a shared condition value to prevent confused deputy attacks.
+    # See: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html
+    assume_role_external_id: Optional[str] = None
+    assume_role_session_name: str = "dbt-athena"
+    assume_role_duration_seconds: int = 3600
     poll_interval: float = 1.0
     debug_query_state: bool = False
     _ALIASES = {"catalog": "database"}
@@ -90,6 +96,10 @@ class AthenaCredentials(Credentials):
 
     def _connection_keys(self) -> Tuple[str, ...]:
         return (
+            "assume_role_arn",
+            "assume_role_duration_seconds",
+            "assume_role_external_id",
+            "assume_role_session_name",
             "s3_staging_dir",
             "work_group",
             "skip_workgroup_check",

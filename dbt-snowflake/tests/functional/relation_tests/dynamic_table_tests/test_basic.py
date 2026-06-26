@@ -448,3 +448,36 @@ class TestIcebergSchedulerConfigChange:
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
         assert_message_not_in_logs("Applying REFRESH to:", logs)
+
+
+class TestDynamicTableCopyGrants:
+    """Test copy_grants functionality specifically for dynamic tables"""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        copy_grants_model = """
+{{ config(
+    materialized='dynamic_table',
+    target_lag='1 minute',
+    snowflake_warehouse='DBT_TESTING_ALT',
+    copy_grants=true
+) }}
+
+select * from {{ ref('my_seed') }}
+"""
+        yield {
+            "my_dynamic_table_copy_grants.sql": copy_grants_model,
+        }
+
+    def test_dynamic_table_copy_grants_in_sql(self, project):
+        """Test that copy_grants appears in the generated SQL on replace (full-refresh)"""
+        run_dbt(["seed"])
+        run_dbt(["run"])
+        _, logs = run_dbt_and_capture(["--debug", "run", "--full-refresh"])
+
+        assert_message_in_logs("copy grants", logs)
+        assert query_relation_type(project, "my_dynamic_table_copy_grants") == "dynamic_table"
