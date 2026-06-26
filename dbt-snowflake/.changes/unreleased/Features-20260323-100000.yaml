@@ -1,6 +1,6 @@
 kind: Features
-body: Add Snowflake Interactive Table materialization support, enabling dbt models to be materialized as interactive tables optimized for low-latency, high-concurrency queries with interactive warehouses.
+body: Add Snowflake interactive table materialization (`materialized='interactive_table'`), supporting static and dynamic (`target_lag`) variants with config-change detection.
 time: 2026-03-23T10:00:00-07:00
 custom:
-    Author: rxie
+    Author: jimmyxie-figma
     Issue: "1780"
