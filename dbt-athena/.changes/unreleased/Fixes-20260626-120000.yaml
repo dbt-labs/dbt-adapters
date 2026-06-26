@@ -1,8 +1,0 @@
-kind: Fixes
-body: Preserve Athena query failure messages from `StateChangeReason` when `AthenaError.ErrorMessage`
-  is empty, restoring detection of `TOO_MANY_OPEN_PARTITIONS` and `ICEBERG_COMMIT_ERROR` (fixes the
-  partition-batching path for Hive tables with many partitions) and avoiding empty error messages.
-time: 2026-06-26T12:00:00.000000+00:00
-custom:
-    Author: iconara colin-rogers-dbt
-    Issue: "1334"
