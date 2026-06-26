@@ -47,10 +47,16 @@ from tenacity import (
 
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.constants import LOGGER
-from dbt.adapters.athena.exceptions import AthenaError, AthenaQueryCancelledError, AthenaQueryFailedError
+from dbt.adapters.athena.exceptions import (
+    AthenaError,
+    AthenaQueryCancelledError,
+    AthenaQueryFailedError,
+)
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
-from dbt.adapters.athena.connections_legacy import AthenaConnectionManager as PyAthenaConnectionManager
+from dbt.adapters.athena.connections_legacy import (
+    AthenaConnectionManager as PyAthenaConnectionManager,
+)
 from dbt.adapters.contracts.connection import (
     AdapterResponse,
     Connection,
@@ -112,14 +118,14 @@ class AthenaCredentials(Credentials):
     @property
     def unique_field(self) -> str:
         if self.s3_staging_dir is not None:
-            str = self.s3_staging_dir
+            key = self.s3_staging_dir
         elif self.s3_data_dir is not None:
-            str = self.s3_data_dir
+            key = self.s3_data_dir
         elif self.work_group is not None:
-            str = self.work_group
+            key = self.work_group
         else:
-            str = "primary"
-        return f"athena-{md5(str)}"
+            key = "primary"
+        return f"athena-{md5(key)}"
 
     @property
     def effective_num_retries(self) -> int:
@@ -213,6 +219,18 @@ API_REQUEST_ERROR_NAMES = [
 ]
 
 
+def _is_api_request_error(exception: BaseException) -> bool:
+    """Whether an exception represents a transient, retriable Athena API request error.
+
+    Prefers the structured botocore error code and falls back to a substring match so the
+    same detection is used both when starting a query and when polling its status.
+    """
+    error_code = getattr(exception, "response", {}).get("Error", {}).get("Code", None)
+    if error_code in API_REQUEST_ERROR_NAMES:
+        return True
+    return any(error_name in str(exception) for error_name in API_REQUEST_ERROR_NAMES)
+
+
 class AthenaCursor:
     query: Optional[str]
     state: Optional[str]
@@ -235,9 +253,7 @@ class AthenaCursor:
         self._poll_delay = poll_delay
         self._formatter = formatter
         self._with_throttling_retries = Retrying(
-            retry=retry_if_exception(
-                lambda e: any(error_name in str(e) for error_name in API_REQUEST_ERROR_NAMES)
-            ),
+            retry=retry_if_exception(_is_api_request_error),
             stop=stop_after_attempt(self._credentials.num_retries + 1),
             wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
             reraise=True,
@@ -302,17 +318,16 @@ class AthenaCursor:
         if self._query_execution_id is None:
             return
         while True:
-            self._poll_delay(self._credentials.poll_interval)
             try:
                 status_response = self._client.get_query_execution(
                     QueryExecutionId=self._query_execution_id
                 )
             except Exception as e:
-                error_code = getattr(e, "response", {}).get("Error", {}).get("Code", None)
-                if error_code in API_REQUEST_ERROR_NAMES:
+                if _is_api_request_error(e):
                     LOGGER.warning(
                         f"Athena query {self._query_execution_id} got error while polling status, will retry: {e}"
                     )
+                    self._poll_delay(self._credentials.poll_interval)
                     continue
                 else:
                     raise e
@@ -332,16 +347,17 @@ class AthenaCursor:
                 else:
                     raise AthenaError("Could not create result set, query execution ID lost")
             elif self.state == AthenaCursor.STATE_FAILED:
-                raise AthenaQueryFailedError(status.get("AthenaError", {}))
-            elif self.state == self.state == AthenaCursor.STATE_CANCELLED:
+                raise AthenaQueryFailedError(
+                    status.get("AthenaError", {}), status.get("StateChangeReason")
+                )
+            elif self.state == AthenaCursor.STATE_CANCELLED:
                 raise AthenaQueryCancelledError(status.get("StateChangeReason", None))
+            # Query is still queued or running; wait before polling again.
+            self._poll_delay(self._credentials.poll_interval)
 
     def cancel(self) -> None:
-        print(f"CANCEL '{self._query_execution_id}'")
         if self._query_execution_id:
-            self._client.stop_query_execution(
-                QueryExecutionId=self._query_execution_id
-            )
+            self._client.stop_query_execution(QueryExecutionId=self._query_execution_id)
 
     def _is_plain_text_result(self, query_execution: QueryExecutionTypeDef) -> bool:
         statement_type = query_execution.get("StatementType", None)
@@ -534,14 +550,16 @@ class AthenaResultSet(Iterator[Row]):
     def _parse_time_zone(self, value: str) -> tzinfo:
         if value == "UTC":
             return timezone.utc
-        else:
-            try:
-                return datetime.strptime(value, "%z").tzinfo
-            except ValueError:
-                try:
-                    return ZoneInfo(value)
-                except ZoneInfoNotFoundError:
-                    raise ValueError(f'Could not parse time zone "{value}"')
+        try:
+            parsed = datetime.strptime(value, "%z").tzinfo
+            if parsed is not None:
+                return parsed
+        except ValueError:
+            pass
+        try:
+            return ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            raise ValueError(f'Could not parse time zone "{value}"')
 
     TIME_FORMATS = [
         "%H:%M:%S.%f",
@@ -564,12 +582,12 @@ class AthenaResultSet(Iterator[Row]):
             return time.replace(tzinfo=tz)
         except ValueError:
             raise ValueError(f'Could not parse time with time zone "{value}"')
-     
-    def _parse_array(self, value) -> List[Any]:
-        if value == '[]':
+
+    def _parse_array(self, value: str) -> List[Any]:
+        if value == "[]":
             return []
 
-        result = []
+        result: List[Any] = []
         current_element = ""
         nesting = 0
 
@@ -578,27 +596,25 @@ class AthenaResultSet(Iterator[Row]):
                 nesting += 1
             elif char in ("]", "}"):
                 nesting -= 1
-            
+
             if char == "," and nesting == 0:
-                element = self._process_nested_value(current_element.strip())
-                result.append(element)
+                result.append(self._process_nested_value(current_element.strip()))
                 current_element = ""
             else:
                 current_element += char
-        
+
         if len(current_element.strip()) > 0:
-            element = self._process_nested_value(current_element.strip())
-            result.append(element)
-        
+            result.append(self._process_nested_value(current_element.strip()))
+
         return result
-        
-    def _parse_map_or_row(self, value) -> List[Any]:
+
+    def _parse_map_or_row(self, value: str) -> Dict[str, Any]:
         if value == "{}":
             return {}
 
-        result = {}
+        result: Dict[str, Any] = {}
         current_key = ""
-        current_value = None
+        current_value: Optional[str] = None
         nesting = 0
 
         for char in value[1:-1]:
@@ -610,21 +626,21 @@ class AthenaResultSet(Iterator[Row]):
             if char == "=" and nesting == 0:
                 current_value = ""
             elif char == "," and nesting == 0:
-                value = self._process_nested_value(current_value.strip())
-                result[current_key.strip()] = value
+                result[current_key.strip()] = self._process_nested_value(
+                    (current_value or "").strip()
+                )
                 current_key = ""
                 current_value = None
             elif current_value is not None:
                 current_value += char
             else:
                 current_key += char
-        
+
         if len(current_key.strip()) > 0 and current_value is not None:
-            value = self._process_nested_value(current_value.strip())
-            result[current_key.strip()] = value
-        
+            result[current_key.strip()] = self._process_nested_value(current_value.strip())
+
         return result
-        
+
     def _process_nested_value(self, value: str) -> Any:
         if value.startswith("["):
             return self._parse_array(value)
@@ -707,11 +723,14 @@ class AthenaConnectionManager(SQLConnectionManager):
 
         try:
             credentials = cast(AthenaCredentials, connection.credentials)
-            if credentials.connection_manager is not None and credentials.connection_manager.lower() == "pyathena":
+            if (
+                credentials.connection_manager is not None
+                and credentials.connection_manager.lower() == "pyathena"
+            ):
                 return PyAthenaConnectionManager.open(connection)
             else:
                 connection.handle = AthenaConnection(credentials).connect()
-                connection.state = ConnectionState.OPEN
+                connection.state = ConnectionState.OPEN  # type: ignore[assignment]
         except ConnectionError as exc:
             raise exc
         except Exception as exc:
@@ -719,7 +738,7 @@ class AthenaConnectionManager(SQLConnectionManager):
                 f"Got an error when attempting to open a Athena connection due to {exc}"
             )
             connection.handle = None
-            connection.state = ConnectionState.FAIL
+            connection.state = ConnectionState.FAIL  # type: ignore[assignment]
             raise ConnectionError(str(exc))
 
         return connection
