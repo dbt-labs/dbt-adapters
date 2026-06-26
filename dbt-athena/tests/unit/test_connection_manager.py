@@ -32,3 +32,10 @@ class TestAthenaConnectionManager:
         assert cm.data_type_code_to_name("array<string>") == "ARRAY"
         assert cm.data_type_code_to_name("map<int, boolean>") == "MAP"
         assert cm.data_type_code_to_name("DECIMAL(3, 7)") == "DECIMAL"
+
+    def test_cancel_tells_the_connection_to_cancel(self):
+        connection = mock.MagicMock()
+        connection.handle = mock.MagicMock()
+        cm = AthenaConnectionManager(mock.MagicMock(), get_context("spawn"))
+        cm.cancel(connection)
+        connection.handle.cancel.assert_called_once()

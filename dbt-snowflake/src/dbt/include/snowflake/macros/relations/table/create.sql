@@ -24,7 +24,7 @@
         {%- if catalog_relation.catalog_type == 'BUILT_IN' %}
             {% do exceptions.raise_compiler_error('Iceberg is incompatible with Python models. Please use a SQL model for the iceberg format.') %}
         {%- else -%}
-            {{ py_write_table(compiled_code, relation) }}
+            {{ py_write_table(compiled_code, relation, temporary) }}
         {%- endif %}
 
     {%- else -%}
@@ -33,6 +33,36 @@
     {%- endif -%}
 
 {% endmacro %}
+
+
+{% macro snowflake__create_table_transient_sql(relation, compiled_code) -%}
+{#-
+    Implements CREATE TRANSIENT TABLE ... AS SELECT for use as an incremental
+    tmp relation. Unlike session-scoped temporary tables, transient tables
+    persist in the catalog (enabling Snowflake lineage tracking) but have no
+    fail-safe period, avoiding the storage costs of permanent tables.
+    https://docs.snowflake.com/en/sql-reference/sql/create-table
+-#}
+
+{%- set contract_config = config.get('contract') -%}
+{%- if contract_config.enforced -%}
+    {{- get_assert_columns_equivalent(compiled_code) -}}
+    {%- set compiled_code = get_select_subquery(compiled_code) -%}
+{%- endif -%}
+
+{%- set sql_header = config.get('sql_header', none) -%}
+{{ sql_header if sql_header is not none }}
+
+create or replace transient table {{ relation }}
+    {%- if contract_config.enforced %}
+    {{ get_table_columns_and_constraints() }}
+    {%- endif %}
+as (
+    {{ compiled_code }}
+    )
+;
+
+{%- endmacro %}
 
 
 {% macro snowflake__create_table_temporary_sql(relation, compiled_code) -%}
@@ -79,6 +109,7 @@ as (
 {%- endif -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
+{%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -98,6 +129,7 @@ create or replace {{ transient }}table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
+    {% if copy_tags -%} copy tags {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
@@ -145,6 +177,7 @@ alter table {{ relation }} resume recluster;
 {%- endif -%}
 
 {%- set copy_grants = config.get('copy_grants', default=false) -%}
+{%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -174,6 +207,7 @@ create or replace iceberg table {{ relation }}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if copy_grants -%} copy grants {%- endif %}
+    {% if copy_tags -%} copy tags {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}
     select * from (
@@ -339,11 +373,13 @@ insert into {{ relation }}
 {%- endmacro %}
 
 
-{% macro py_write_table(compiled_code, target_relation) %}
+{% macro py_write_table(compiled_code, target_relation, temporary=False) %}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
-{% if catalog_relation.is_transient %}
+{% if temporary %}
+    {%- set table_type='temporary' -%}
+{% elif catalog_relation.is_transient %}
     {%- set table_type='transient' -%}
 {% endif %}
 

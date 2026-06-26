@@ -1,11 +1,27 @@
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import ClassVar, Mapping, Any, Optional, List, Union, Dict, FrozenSet, Tuple
+from typing import (
+    TYPE_CHECKING,
+    ClassVar,
+    Mapping,
+    Any,
+    Optional,
+    List,
+    Union,
+    Dict,
+    FrozenSet,
+    Tuple,
+)
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
-from dbt.adapters.catalogs import CatalogRelation, CatalogIntegration, CatalogIntegrationConfig
+from dbt.adapters.catalogs import (
+    CatalogIntegration,
+    CatalogIntegrationConfig,
+    CatalogRelation,
+)
+
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
@@ -13,6 +29,7 @@ from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
 )
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.contracts.metadata import (
@@ -28,6 +45,9 @@ from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntime
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
+
+if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
     InfoSchemaCatalogIntegration,
@@ -52,6 +72,10 @@ SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     ),
 )
 
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
+
 
 @dataclass
 class SnowflakeConfig(AdapterConfig):
@@ -61,6 +85,7 @@ class SnowflakeConfig(AdapterConfig):
     automatic_clustering: Optional[bool] = None
     secure: Optional[bool] = None
     copy_grants: Optional[bool] = None
+    copy_tags: Optional[bool] = None
     snowflake_warehouse: Optional[str] = None
     snowflake_initialization_warehouse: Optional[str] = None
     refresh_warehouse: Optional[str] = None
@@ -108,8 +133,27 @@ class SnowflakeAdapter(SQLAdapter):
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
             Capability.GetCatalogForSingleRelation: CapabilitySupport(support=Support.Full),
             Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "horizon": "BUILT_IN",
+        "glue": "ICEBERG_REST",
+        "iceberg_rest": "ICEBERG_REST",
+        "unity": "ICEBERG_REST",
+    }
+    _LINKED_FIELD_MAP: ClassVar[Dict[str, str]] = {
+        "catalog_database": "catalog_linked_database",
+    }
+    _LINKED_DB_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": "glue",
+        "unity": "unity",
+    }
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
@@ -119,6 +163,20 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        return catalog.table_format.value.upper()
+
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
+        is_linked = catalog_type in ("glue", "iceberg_rest", "unity")
+        if is_linked:
+            props = {self._LINKED_FIELD_MAP.get(k, k): v for k, v in props.items()}
+            if catalog_type in self._LINKED_DB_TYPE:
+                props["catalog_linked_database_type"] = self._LINKED_DB_TYPE[catalog_type]
+        return props
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -335,6 +393,9 @@ class SnowflakeAdapter(SQLAdapter):
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
+            schema_functions = self.execute_macro(
+                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
             # Alternatively, we could query the list of schemas before we start
@@ -345,11 +406,31 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             raise
 
-        columns = ["database_name", "schema_name", "name", "kind", "is_dynamic", "is_iceberg"]
+        tabular_columns = [
+            "database_name",
+            "schema_name",
+            "name",
+            "kind",
+            "is_dynamic",
+            "is_iceberg",
+        ]
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
         )
-        return [self._parse_list_relations_result(obj) for obj in schema_objects.select(columns)]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
+        tabular_relations = [
+            self._parse_list_relations_result(obj)
+            for obj in schema_objects.select(tabular_columns)
+        ]
+        function_relations = [
+            self._parse_list_function_relations_result(obj)
+            for obj in schema_functions.select(function_columns)
+            if obj["is_builtin"] == "N"
+        ]
+        return tabular_relations + function_relations
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
@@ -376,6 +457,17 @@ class SnowflakeAdapter(SQLAdapter):
             identifier=identifier,
             type=relation_type,
             table_format=table_format,
+            quote_policy=quote_policy,
+        )
+
+    def _parse_list_function_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database, schema, identifier, _is_builtin = result
+        quote_policy = {"database": True, "schema": True, "identifier": True}
+        return self.Relation.create(
+            database=database,
+            schema=schema,
+            identifier=identifier,
+            type=self.Relation.Function,
             quote_policy=quote_policy,
         )
 

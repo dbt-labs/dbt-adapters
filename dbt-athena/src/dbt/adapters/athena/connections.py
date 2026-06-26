@@ -1,5 +1,6 @@
 import json
 import re
+from weakref import WeakSet
 from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -28,7 +29,6 @@ from boto3.session import Session as BotoSession
 from botocore.config import Config as BotoConfig
 from mypy_boto3_athena.client import AthenaClient
 from mypy_boto3_athena.type_defs import (
-    AthenaErrorTypeDef,
     ColumnInfoTypeDef,
     GetQueryResultsInputTypeDef,
     DatumTypeDef,
@@ -47,6 +47,7 @@ from tenacity import (
 
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.exceptions import AthenaError, AthenaQueryCancelledError, AthenaQueryFailedError
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
 from dbt.adapters.athena.connections_legacy import AthenaConnectionManager as PyAthenaConnectionManager
@@ -154,32 +155,6 @@ class AthenaCredentials(Credentials):
             "spark_work_group",
             "work_group",
         )
-
-
-class AthenaError(Exception):
-    pass
-
-
-class AthenaQueryCancelledError(AthenaError):
-    pass
-
-
-class AthenaQueryFailedError(AthenaError):
-    CATEGORY_SYSTEM = 1
-    CATEGORY_USER = 2
-    CATEGORY_OTHER = 3
-
-    TYPE_ICEBERG_ERROR = 233
-
-    error_category: Optional[int]
-    error_type: Optional[int]
-    retryable: Optional[bool]
-
-    def __init__(self, athena_error: AthenaErrorTypeDef) -> None:
-        super().__init__(athena_error.get("ErrorMessage", None))
-        self.error_category = athena_error.get("ErrorCategory", None)
-        self.error_type = athena_error.get("ErrorType", None)
-        self.retryable = athena_error.get("Retryable", None)
 
 
 class AthenaParameterFormatter:
@@ -360,6 +335,13 @@ class AthenaCursor:
                 raise AthenaQueryFailedError(status.get("AthenaError", {}))
             elif self.state == self.state == AthenaCursor.STATE_CANCELLED:
                 raise AthenaQueryCancelledError(status.get("StateChangeReason", None))
+
+    def cancel(self) -> None:
+        print(f"CANCEL '{self._query_execution_id}'")
+        if self._query_execution_id:
+            self._client.stop_query_execution(
+                QueryExecutionId=self._query_execution_id
+            )
 
     def _is_plain_text_result(self, query_execution: QueryExecutionTypeDef) -> bool:
         statement_type = query_execution.get("StatementType", None)
@@ -665,6 +647,7 @@ class AthenaConnection(Connection):
         self.session = boto_session_factory(self)
         self.region_name = self.credentials.region_name
         self._client = None
+        self._cursors: WeakSet = WeakSet()
 
     def connect(self, boto_config_factory: Callable[..., BotoConfig] = get_boto3_config) -> Self:
         boto_config = boto_config_factory(
@@ -681,9 +664,15 @@ class AthenaConnection(Connection):
 
     def cursor(self) -> AthenaCursor:
         if self._client is not None:
-            return AthenaCursor(self._client, self._athena_credentials)
+            cursor = AthenaCursor(self._client, self._athena_credentials)
+            self._cursors.add(cursor)
+            return cursor
         else:
             raise ConnectionError("Not connected")
+
+    def cancel(self) -> None:
+        for cursor in self._cursors:
+            cursor.cancel()
 
 
 class AthenaConnectionManager(SQLConnectionManager):
@@ -770,7 +759,8 @@ class AthenaConnectionManager(SQLConnectionManager):
         return cursor.rowcount, cursor.data_scanned_in_bytes
 
     def cancel(self, connection: Connection) -> None:
-        pass
+        if connection.handle:
+            connection.handle.cancel()
 
     def add_begin_query(self) -> None:
         pass

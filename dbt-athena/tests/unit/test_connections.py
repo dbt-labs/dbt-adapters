@@ -144,6 +144,12 @@ class TestAthenaConnection:
         with pytest.raises(ConnectionError):
             connection.cursor()
 
+    def test_cancel_tells_the_cursor_to_cancel(self, connection):
+        cursor = connection.cursor()
+        cursor.cancel = mock.MagicMock()
+        connection.cancel()
+        cursor.cancel.assert_called_once()
+
 
 STATE_EVENT_QUEUED = {"QueryExecution": {"Status": {"State": "QUEUED"}}}
 STATE_EVENT_RUNNING = {"QueryExecution": {"Status": {"State": "RUNNING"}}}
@@ -193,6 +199,7 @@ class TestAthenaCursor:
     def athena_client(self):
         client = mock.Mock()
         client.start_query_execution = mock.Mock(return_value={"QueryExecutionId": "1234-abcd"})
+        client.stop_query_execution = mock.Mock()
         client.get_query_execution = mock.Mock(return_value=STATE_EVENT_SUCCEEDED)
         client.get_query_results = mock.Mock(
             return_value={
@@ -424,7 +431,7 @@ class TestAthenaCursor:
         athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
         with pytest.raises(AthenaQueryFailedError) as e:
             cursor.execute("SELECT NOW()")
-        assert str(e.value) == "Query failed!"
+        assert str(e.value) == "Runtime Error\n  Query failed!"
         assert e.value.error_category == AthenaQueryFailedError.CATEGORY_USER
         assert e.value.error_type == 9999
         assert e.value.retryable is True
@@ -438,7 +445,7 @@ class TestAthenaCursor:
         athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
         with pytest.raises(AthenaQueryCancelledError) as e:
             cursor.execute("SELECT NOW()")
-        assert str(e.value) == "Query was cancelled!"
+        assert str(e.value) == "Runtime Error\n  Query was cancelled!"
 
     def test_execute_retries_iceberg_commit_errors(self, cursor, athena_client, credentials):
         state_sequence = [STATE_EVENT_QUEUED]
@@ -463,7 +470,7 @@ class TestAthenaCursor:
         athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
         with pytest.raises(AthenaQueryFailedError) as e:
             cursor.execute("INSERT INTO time SELECT NOW()")
-        assert str(e.value) == "ICEBERG_COMMIT_ERROR: could not commit"
+        assert str(e.value) == "Runtime Error\n  ICEBERG_COMMIT_ERROR: could not commit"
 
     API_REQUEST_ERROR_NAMES = [
         "TooManyRequestsException",
@@ -515,6 +522,17 @@ class TestAthenaCursor:
         with pytest.raises(Exception) as e:
             cursor.execute("SELECT NOW()")
         assert "InvalidRequestException" in str(e.value)
+
+    def test_cancel(self, cursor, athena_client):
+        cursor.execute("SELECT NOW()")
+        cursor.cancel()
+        athena_client.stop_query_execution.assert_called_once_with(
+            QueryExecutionId="1234-abcd"
+        )
+
+    def test_cancel_before_execute(self, cursor, athena_client):
+        cursor.cancel()
+        athena_client.stop_query_execution.assert_not_called()
 
     def test_description_loads_column_metadata(self, cursor, athena_client):
         cursor.execute("SELECT * FROM table")

@@ -5,6 +5,7 @@ from multiprocessing.context import SpawnContext
 import threading
 from typing import (
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Iterable,
@@ -23,6 +24,7 @@ import google.auth
 import google.oauth2
 import google.cloud.bigquery
 from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
+from google.cloud.bigquery.routine import RoutineType
 import google.cloud.exceptions
 import pytz
 
@@ -135,7 +137,7 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
 
 BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     name="bigquery_use_standard_sql_for_partitions",
-    default=False,
+    default=True,
     description=(
         "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
         "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
@@ -144,6 +146,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 )
 
 _dataset_lock = threading.Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -206,14 +212,26 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "biglake_metastore": "biglake_metastore",
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     ###
     # Implementations of abstract methods
@@ -384,11 +402,18 @@ class BigQueryAdapter(BaseAdapter):
             #       won't need to do this
             max_results=100000,
         )
+        all_routines = client.list_routines(dataset_ref)
 
         # This will 404 if the dataset does not exist. This behavior mirrors
         # the implementation of list_relations for other adapters
         try:
-            return [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+            function_relations = [
+                relation
+                for routine in all_routines
+                if (relation := self._bq_routine_to_relation(routine)) is not None
+            ]  # type: ignore[misc]
+            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
@@ -407,7 +432,21 @@ class BigQueryAdapter(BaseAdapter):
             table = self.connections.get_bq_table(database, schema, identifier)
         except google.api_core.exceptions.NotFound:
             table = None
-        return self._bq_table_to_relation(table)
+
+        if table is not None:
+            return self._bq_table_to_relation(table)
+
+        # Fall back to checking if it's a routine (function/procedure)
+        connection = self.connections.get_thread_connection()
+        client = connection.handle
+        routine_ref = google.cloud.bigquery.RoutineReference.from_string(
+            f"{database}.{schema}.{identifier}"
+        )
+        try:
+            routine = client.get_routine(routine_ref)
+        except google.api_core.exceptions.NotFound:
+            routine = None
+        return self._bq_routine_to_relation(routine)
 
     # BigQuery added SQL support for 'create schema' + 'drop schema' in March 2021
     # Unfortunately, 'drop schema' runs into permissions issues during tests
@@ -562,6 +601,21 @@ class BigQueryAdapter(BaseAdapter):
             type=self.RELATION_TYPES.get(
                 bq_table.table_type, RelationType.External
             ),  # type:ignore
+        )
+
+    def _bq_routine_to_relation(self, bq_routine) -> Union[BigQueryRelation, None]:
+        if bq_routine is None:
+            return None
+
+        if bq_routine.type_ == RoutineType.PROCEDURE:
+            return None
+
+        return self.Relation.create(
+            database=bq_routine.project,
+            schema=bq_routine.dataset_id,
+            identifier=bq_routine.routine_id,
+            quote_policy={"schema": True, "identifier": True},
+            type=RelationType.Function,  # type: ignore[arg-type]
         )
 
     @classmethod
@@ -998,6 +1052,28 @@ class BigQueryAdapter(BaseAdapter):
                 logger.debug(
                     "Skipping catalog for {}.{} - schema does not exist".format(
                         database, candidate.schema
+                    )
+                )
+        return result
+
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
                     )
                 )
         return result

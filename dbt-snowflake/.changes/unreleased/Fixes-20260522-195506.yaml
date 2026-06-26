@@ -1,0 +1,6 @@
+kind: Fixes
+body: Use SHOW USER FUNCTIONS in list_function_relations_without_caching to filter built-in functions server-side; eliminates per-schema large-result chunked S3 fetches that saturated customer-owned VPCe stage endpoints
+time: 2026-05-22T19:55:06.574022+05:30
+custom:
+    Author: sriramr98
+    Issue: "1973"

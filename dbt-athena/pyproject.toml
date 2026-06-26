@@ -27,10 +27,10 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies=[
-    "dbt-adapters>=1.0.0,<2.0",
+    "dbt-adapters>=1.24.1,<2.0",
     "dbt-common>=1.0.0,<2.0",
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
-    "dbt-core>=1.8.0",
+    "dbt-core>=1.8.0rc1",
     "boto3>=1.28",
     "boto3-stubs[athena,glue,lakeformation,sts]>=1.28",
     "mmh3>=4.0.1,<4.2.0",
