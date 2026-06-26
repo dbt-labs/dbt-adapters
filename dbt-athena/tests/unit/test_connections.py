@@ -36,41 +36,46 @@ class TestAthenaCredentials:
     def test_effective_num_retries_returns_num_boto3_retries(self, credentials):
         credentials.num_boto3_retries = 5
         assert credentials.effective_num_retries == 5
-        
-    def test_effective_num_retries_returns_num_retries_when_num_boto3_retries_is_not_set(self, credentials):
+
+    def test_effective_num_retries_returns_num_retries_when_num_boto3_retries_is_not_set(
+        self, credentials
+    ):
         credentials.num_retries = 9
         assert credentials.effective_num_retries == 9
-        
+
     def test_unique_field_varies_with_staging_dir(self, credentials):
         credentials.s3_staging_dir = "s3://test-bucket/staging-location-1"
         unique1 = credentials.unique_field
         credentials.s3_staging_dir = "s3://test-bucket/staging-location-2"
         unique2 = credentials.unique_field
         assert unique1 != unique2
-        
+
     def test_unique_field_uses_data_dir_when_staging_dir_is_not_set(self, credentials):
         credentials.s3_data_dir = "s3://test-bucket/data-location-1"
         unique1 = credentials.unique_field
         credentials.s3_data_dir = "s3://test-bucket/data-location-2"
         unique2 = credentials.unique_field
         assert unique1 != unique2
-        
+
     def test_unique_field_uses_work_group_when_staging_and_data_dir_are_not_set(self, credentials):
         credentials.work_group = "wg1"
         unique1 = credentials.unique_field
         credentials.work_group = "wg2"
         unique2 = credentials.unique_field
         assert unique1 != unique2
-        
-    def test_unique_field_is_same_when_none_of_staging_dir_data_dir_or_work_group_is_set(self, credentials):
+
+    def test_unique_field_is_same_when_none_of_staging_dir_data_dir_or_work_group_is_set(
+        self, credentials
+    ):
         unique1 = credentials.unique_field
         unique2 = credentials.unique_field
         assert unique1 == unique2
-        
+
     def test_connection_info_returns_all_properties(self, credentials):
         connection_info_keys = set([key for (key, _) in credentials.connection_info()])
         class_field_names = set([field.name for field in dataclasses.fields(AthenaCredentials)])
         assert connection_info_keys == class_field_names
+
 
 class TestAthenaConnection:
     @pytest.fixture
@@ -113,14 +118,19 @@ class TestAthenaConnection:
             "athena", region_name=AWS_REGION, config=config_factory()
         )
 
-    def test_connect_creates_athena_client_with_endpoint(self, credentials, session_factory, config_factory):
-        credentials.endpoint_url = 'athena.ab-fake-9.amazonaws.none'
+    def test_connect_creates_athena_client_with_endpoint(
+        self, credentials, session_factory, config_factory
+    ):
+        credentials.endpoint_url = "athena.ab-fake-9.amazonaws.none"
         connection = AthenaConnection(credentials, boto_session_factory=session_factory)
         connection.connect(boto_config_factory=config_factory)
         session_factory.assert_called_once_with(connection)
         session = session_factory()
         session.client.assert_called_once_with(
-            "athena", region_name=AWS_REGION, config=config_factory(), endpoint_url='athena.ab-fake-9.amazonaws.none'
+            "athena",
+            region_name=AWS_REGION,
+            config=config_factory(),
+            endpoint_url="athena.ab-fake-9.amazonaws.none",
         )
 
     def test_connect_returns_self(self, credentials, session_factory, config_factory):
@@ -188,6 +198,20 @@ STATE_EVENT_ICEBERG_COMMIT_ERROR = {
                 "ErrorCategory": AthenaQueryFailedError.CATEGORY_USER,
                 "ErrorType": AthenaQueryFailedError.TYPE_ICEBERG_ERROR,
                 "Retryable": False,
+            },
+        }
+    }
+}
+# Some failures (e.g. TOO_MANY_OPEN_PARTITIONS) leave AthenaError.ErrorMessage empty and only
+# populate StateChangeReason.
+STATE_EVENT_ERROR_WITHOUT_MESSAGE = {
+    "QueryExecution": {
+        "Status": {
+            "State": "FAILED",
+            "StateChangeReason": "TOO_MANY_OPEN_PARTITIONS: limit exceeded",
+            "AthenaError": {
+                "ErrorCategory": AthenaQueryFailedError.CATEGORY_USER,
+                "ErrorType": 9999,
             },
         }
     }
@@ -264,7 +288,7 @@ class TestAthenaCursor:
                 "Database": "my_schema",
             },
         )
-        
+
     def test_execute_skips_workgroup_when_not_set(self, cursor, athena_client, credentials):
         credentials.work_group = None
         cursor.execute("SELECT NOW()")
@@ -339,7 +363,14 @@ class TestAthenaCursor:
         ]
         athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
         cursor.execute("SELECT NOW()")
-        poll_delay.assert_has_calls([mock.call(credentials.poll_interval)] * len(state_sequence))
+        # The status is checked before sleeping, so there is no delay after the terminal state.
+        non_terminal_polls = len(state_sequence) - 1
+        poll_delay.assert_has_calls([mock.call(credentials.poll_interval)] * non_terminal_polls)
+        assert poll_delay.call_count == non_terminal_polls
+
+    def test_execute_does_not_delay_when_query_completes_immediately(self, cursor, poll_delay):
+        cursor.execute("SELECT NOW()")
+        poll_delay.assert_not_called()
 
     def test_data_scanned_in_bytes(self, cursor):
         assert cursor.data_scanned_in_bytes == 0
@@ -436,6 +467,21 @@ class TestAthenaCursor:
         assert e.value.error_type == 9999
         assert e.value.retryable is True
 
+    def test_execute_falls_back_to_state_change_reason_when_error_message_is_empty(
+        self, cursor, athena_client
+    ):
+        # Regression test: TOO_MANY_OPEN_PARTITIONS detection (and other string-based error
+        # handling) relies on the message, which Athena only exposes via StateChangeReason here.
+        state_sequence = [
+            STATE_EVENT_QUEUED,
+            STATE_EVENT_RUNNING,
+            STATE_EVENT_ERROR_WITHOUT_MESSAGE,
+        ]
+        athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
+        with pytest.raises(AthenaQueryFailedError) as e:
+            cursor.execute("SELECT NOW()")
+        assert "TOO_MANY_OPEN_PARTITIONS: limit exceeded" in str(e.value)
+
     def test_execute_awaits_cancellation_and_raises(self, cursor, athena_client):
         state_sequence = [
             STATE_EVENT_QUEUED,
@@ -526,9 +572,7 @@ class TestAthenaCursor:
     def test_cancel(self, cursor, athena_client):
         cursor.execute("SELECT NOW()")
         cursor.cancel()
-        athena_client.stop_query_execution.assert_called_once_with(
-            QueryExecutionId="1234-abcd"
-        )
+        athena_client.stop_query_execution.assert_called_once_with(QueryExecutionId="1234-abcd")
 
     def test_cancel_before_execute(self, cursor, athena_client):
         cursor.cancel()
@@ -1021,8 +1065,21 @@ class TestAthenaCursor:
         rows = list(cursor.fetchall())
         assert rows[0] == (datetime.datetime(2024, 1, 1, 10, 11, 12, 13000, tzinfo=timezone.utc),)
         assert rows[1] == (datetime.datetime(2024, 2, 29, 23, 59, 59, tzinfo=timezone.utc),)
-        assert rows[2] == (datetime.datetime(2024, 1, 1, 10, 11, 12, 13000, tzinfo=ZoneInfo("America/New_York")),)
-        assert rows[3] == (datetime.datetime(2024, 1, 1, 10, 11, 12, 13000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))),)
+        assert rows[2] == (
+            datetime.datetime(2024, 1, 1, 10, 11, 12, 13000, tzinfo=ZoneInfo("America/New_York")),
+        )
+        assert rows[3] == (
+            datetime.datetime(
+                2024,
+                1,
+                1,
+                10,
+                11,
+                12,
+                13000,
+                tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)),
+            ),
+        )
 
     def test_fetch_converts_times(self, cursor, athena_client):
         data = [
@@ -1056,9 +1113,19 @@ class TestAthenaCursor:
         assert rows[0] == (datetime.time(10, 11, 12, 13000, tzinfo=timezone.utc),)
         assert rows[1] == (datetime.time(23, 59, 59, tzinfo=timezone.utc),)
         assert rows[2] == (datetime.time(0, 0, 0, tzinfo=ZoneInfo("America/New_York")),)
-        assert rows[3] == (datetime.time(0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))),)
-        assert rows[4] == (datetime.time(0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=30))),)
-        assert rows[5] == (datetime.time(0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))),)
+        assert rows[3] == (
+            datetime.time(
+                0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))
+            ),
+        )
+        assert rows[4] == (
+            datetime.time(0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=30))),
+        )
+        assert rows[5] == (
+            datetime.time(
+                0, 0, 0, 1000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))
+            ),
+        )
 
     def test_fetch_converts_varbinary(self, cursor, athena_client):
         data = [
@@ -1089,7 +1156,7 @@ class TestAthenaCursor:
             ("hello world",),
             ({"a": 1, "b": {"c": [3]}},),
         ]
-        
+
     def test_fetch_converts_arrays(self, cursor, athena_client):
         data = [
             ["[]"],

@@ -30,8 +30,15 @@ class AthenaQueryFailedError(AthenaError):
     error_type: Optional[int]
     retryable: Optional[bool]
 
-    def __init__(self, athena_error: AthenaErrorTypeDef) -> None:
-        super().__init__(athena_error.get("ErrorMessage", None))
+    def __init__(
+        self,
+        athena_error: AthenaErrorTypeDef,
+        state_change_reason: Optional[str] = None,
+    ) -> None:
+        # Athena does not always populate AthenaError.ErrorMessage; for some failures (e.g.
+        # TOO_MANY_OPEN_PARTITIONS, ICEBERG_COMMIT_ERROR) the detail is only in StateChangeReason.
+        # Fall back to it so the message is never empty and string-based error detection keeps working.
+        super().__init__(athena_error.get("ErrorMessage") or state_change_reason)
         self.error_category = athena_error.get("ErrorCategory", None)
         self.error_type = athena_error.get("ErrorType", None)
         self.retryable = athena_error.get("Retryable", None)

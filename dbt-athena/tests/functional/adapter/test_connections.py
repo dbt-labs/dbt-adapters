@@ -73,12 +73,25 @@ class TestConnection:
         assert result[2] == datetime.datetime(2024, 7, 5, 12, 34, 56, 0)
         assert result[3] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000)
         assert result[4] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=timezone.utc)
-        assert result[5] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=ZoneInfo("America/New_York"))
-        assert result[6] == datetime.datetime(2024, 7, 5, 12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
+        assert result[5] == datetime.datetime(
+            2024, 7, 5, 12, 34, 56, 789000, tzinfo=ZoneInfo("America/New_York")
+        )
+        assert result[6] == datetime.datetime(
+            2024,
+            7,
+            5,
+            12,
+            34,
+            56,
+            789000,
+            tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)),
+        )
         assert result[7] == datetime.time(12, 34, 56)
         assert result[8] == datetime.time(12, 34, 56, 0)
         assert result[9] == datetime.time(12, 34, 56, 789000)
-        assert result[10] == datetime.time(12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30)))
+        assert result[10] == datetime.time(
+            12, 34, 56, 789000, tzinfo=datetime.timezone(datetime.timedelta(minutes=-30))
+        )
 
     def test__convert_other_scalars(self, project):
         query = """
