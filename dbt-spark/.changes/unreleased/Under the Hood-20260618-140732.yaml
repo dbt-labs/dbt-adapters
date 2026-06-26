@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: improve error message for connection failure
+time: 2026-06-18T14:07:32.513854+05:30
+custom:
+    Author: aahel
+    Issue: "2033"
