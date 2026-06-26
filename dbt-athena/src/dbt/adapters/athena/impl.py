@@ -805,19 +805,24 @@ class AthenaAdapter(SQLAdapter):
                 )
 
             catalog = []
-            paginator = athena_client.get_paginator("list_table_metadata")
             for schema in schemas:
-                for page in paginator.paginate(
-                    CatalogName=information_schema.database,
-                    DatabaseName=schema,
-                    MaxResults=50,  # Limit supported by this operation
-                ):
-                    for table in page["TableMetadataList"]:
+                kwargs = {
+                    "CatalogName": information_schema.database,
+                    "DatabaseName": schema,
+                    "MaxResults": 50,
+                }
+                while True:
+                    response = athena_client.list_table_metadata(**kwargs)
+                    for table in response["TableMetadataList"]:
                         catalog.extend(
                             self._get_one_table_for_non_glue_catalog(
                                 table, schema, information_schema.database  # type:ignore
                             )
                         )
+                    next_token = response.get("NextToken")
+                    if not next_token:
+                        break
+                    kwargs["NextToken"] = next_token
             table = agate.Table.from_object(catalog)
 
         return self._catalog_filter_table(table, used_schemas)
