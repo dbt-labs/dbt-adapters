@@ -480,6 +480,8 @@ class AthenaResultSet(Iterator[Row]):
                 self._convert_type(self._column_info[index], datum)
                 for index, datum in enumerate(row.get("Data", []))
             )
+        elif self._is_plain_text:
+            return tuple(datum.get("VarCharValue") for datum in row.get("Data", []))
         else:
             raise AthenaError("No column info found")
 

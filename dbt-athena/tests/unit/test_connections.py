@@ -676,6 +676,32 @@ class TestAthenaCursor:
         row = cursor.fetchone()
         assert row == ("row0",)
 
+    @pytest.mark.parametrize("query", DDL_AND_UTILITY_QUERIES)
+    def test_fetch_returns_rows_of_plain_text_results_without_column_info(
+        self, cursor, athena_client, query
+    ):
+        statement_type, statement_subtype, query_string = query
+        rows = [["Partitions not in metastore:\tt:dt=2024-01-01"], ["Repair: Added partition"]]
+        page = self._create_page(athena_client, [], rows, include_header=False)
+        athena_client.get_query_execution = self._utility_query_execution(
+            statement_type, statement_subtype
+        )
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute(query_string)
+        assert cursor.fetchall() == [
+            ("Partitions not in metastore:\tt:dt=2024-01-01",),
+            ("Repair: Added partition",),
+        ]
+
+    def test_fetch_raises_without_column_info_for_a_non_plain_text_result(
+        self, cursor, athena_client
+    ):
+        page = self._create_page(athena_client, [], [["a"]], include_header=True)
+        athena_client.get_query_results = mock.Mock(return_value=page)
+        cursor.execute("SELECT * FROM table")
+        with pytest.raises(AthenaError, match="No column info found"):
+            cursor.fetchall()
+
     def test_fetchmany_loads_one_page_and_skips_the_header_row(self, cursor, athena_client):
         data = [[f"2024-01-{(n + 1):02d}", f"{n}"] for n in range(10)]
         page = self._create_page(athena_client, [("dt", "date"), ("n", "int")], data)
