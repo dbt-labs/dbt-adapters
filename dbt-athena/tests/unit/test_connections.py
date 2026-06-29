@@ -361,7 +361,6 @@ class TestAthenaCursor:
         ]
         athena_client.get_query_execution = mock.Mock(side_effect=state_sequence)
         cursor.execute("SELECT NOW()")
-        # The status is checked before sleeping, so there is no delay after the terminal state.
         non_terminal_polls = len(state_sequence) - 1
         poll_delay.assert_has_calls([mock.call(credentials.poll_interval)] * non_terminal_polls)
         assert poll_delay.call_count == non_terminal_polls
