@@ -202,8 +202,6 @@ STATE_EVENT_ICEBERG_COMMIT_ERROR = {
         }
     }
 }
-# Some failures (e.g. TOO_MANY_OPEN_PARTITIONS) leave AthenaError.ErrorMessage empty and only
-# populate StateChangeReason.
 STATE_EVENT_ERROR_WITHOUT_MESSAGE = {
     "QueryExecution": {
         "Status": {
@@ -470,8 +468,6 @@ class TestAthenaCursor:
     def test_execute_falls_back_to_state_change_reason_when_error_message_is_empty(
         self, cursor, athena_client
     ):
-        # Regression test: TOO_MANY_OPEN_PARTITIONS detection (and other string-based error
-        # handling) relies on the message, which Athena only exposes via StateChangeReason here.
         state_sequence = [
             STATE_EVENT_QUEUED,
             STATE_EVENT_RUNNING,
