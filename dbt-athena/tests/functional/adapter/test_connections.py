@@ -5,6 +5,8 @@ import math
 from ipaddress import ip_address
 from uuid import UUID
 
+import pytest
+
 
 class TestConnection:
     def test__run_basic_query(self, project):
@@ -138,3 +140,33 @@ class TestConnection:
         assert result[5] == {"a": "a", "b": "b", "c": "c"}
         assert result[6] == [1, 2, ["c"]]
         assert result[7] == {"a": 1, "b": 2, "c": 3}
+
+    def test__syntax_error(self, project):
+        with pytest.raises(Exception, match="mismatched input 'THIS'"):
+            project.run_sql("THIS IS NOT SQL")
+
+    def test__semantic_error(self, project):
+        with pytest.raises(Exception, match="Column 'not_a_column' cannot be resolved"):
+            project.run_sql("SELECT not_a_column FROM TABLE(sequence(start => 0, stop => 1000))")
+
+    def test__catalog_error(self, project):
+        with pytest.raises(Exception, match="TABLE_NOT_FOUND"):
+            project.run_sql("SELECT * FROM no_such_table")
+
+    def test__too_many_open_partitions(self, project):
+        table_name = f"{project.test_schema}.test_too_many_partitions"
+        project.run_sql(f"DROP TABLE IF EXISTS {table_name}")
+        project.run_sql(
+            f"""
+            CREATE TABLE {table_name}
+            WITH (format='PARQUET', partitioned_by=ARRAY['pk1'])
+            AS SELECT 1 AS value, 'seed' AS pk1
+        """
+        )
+        select_clauses = """
+            SELECT sequential_number AS value, CAST(sequential_number AS VARCHAR) AS pk1
+            FROM TABLE(sequence(start => 0, stop => 1000))
+        """
+        with pytest.raises(Exception, match="TOO_MANY_OPEN_PARTITIONS"):
+            project.run_sql(f"INSERT INTO {table_name} {select_clauses}")
+        project.run_sql(f"DROP TABLE IF EXISTS {table_name}")
