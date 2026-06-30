@@ -140,7 +140,7 @@ class TestInteractiveTableFullRefreshReplaces:
 
 
 class TestInteractiveTableConfigChangeApply:
-    """on_configuration_change='apply' replaces when cluster_by / target_lag / warehouse change."""
+    """on_configuration_change='apply' replaces when cluster_by or target_lag change."""
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -284,3 +284,53 @@ class TestInteractiveTableStaticNoChangeIsNoOp:
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_not_in_logs("create or replace interactive table", logs)
         assert_message_in_logs("No configuration changes were identified on:", logs)
+
+
+class TestInteractiveTableMultiColumnClusterByNoOp:
+    """Re-running a static interactive table with a multi-column cluster_by must not
+    CREATE OR REPLACE. Snowflake returns the key wrapped, e.g. '(id, value)'; without
+    correct normalization the no-op rerun would falsely detect a cluster_by change."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_multicol_noop.sql": models.INTERACTIVE_TABLE_STATIC_MULTICOL}
+
+    def test_multicol_noop_run_does_not_replace(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_not_in_logs("create or replace interactive table", logs)
+        assert_message_in_logs("No configuration changes were identified on:", logs)
+
+
+class TestInteractiveTableStaticClusterByChangeReplaces:
+    """An isolated cluster_by change on a static interactive table (no target_lag
+    confound) triggers a CREATE OR REPLACE under on_configuration_change='apply'."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_cluster_change.sql": models.INTERACTIVE_TABLE_STATIC}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"on_configuration_change": "apply"}}
+
+    def test_cluster_by_change_triggers_replace(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        update_model(
+            project, "my_interactive_cluster_change", models.INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_in_logs("create or replace interactive table", logs)
+        assert_message_in_logs("cluster by (value)", logs)

@@ -35,6 +35,17 @@ select id, value from {{ ref('my_seed') }}
 """
 
 
+# Static interactive table with a multi-column cluster_by. Guards the no-op round-trip:
+# SHOW INTERACTIVE TABLES returns the clustering key parenthesized, e.g. '(id, value)'.
+INTERACTIVE_TABLE_STATIC_MULTICOL = """
+{{ config(
+    materialized='interactive_table',
+    cluster_by=['id', 'value'],
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
 # Altered cluster_by for config-change detection.
 INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER = """
 {{ config(
