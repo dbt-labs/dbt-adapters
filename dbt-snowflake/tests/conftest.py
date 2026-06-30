@@ -28,14 +28,6 @@ def dbt_profile_target():
         profile["user"] = os.getenv("SNOWFLAKE_TEST_USER")
     if os.getenv("SNOWFLAKE_TEST_PASSWORD"):
         profile["password"] = os.getenv("SNOWFLAKE_TEST_PASSWORD")
-    if os.getenv("SNOWFLAKE_TEST_ROLE"):
-        profile["role"] = os.getenv("SNOWFLAKE_TEST_ROLE")
-    if os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY"):
-        profile["private_key"] = os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY")
-    if os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PATH"):
-        profile["private_key_path"] = os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PATH")
-    if os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE"):
-        profile["private_key_passphrase"] = os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE")
 
     # Optional parameters allow testing against local DEV Snowflake instances.
     if os.getenv("SNOWFLAKE_TEST_HOST"):
