@@ -76,6 +76,9 @@ class TestInteractiveTableReplacesExistingTable:
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
         assert_message_in_logs("create interactive table", logs)
+        # the swap renames the interactive intermediate into place, which exercises
+        # the interactive rename dispatch (alter table ... rename to ...)
+        assert_message_in_logs("rename to", logs)
         assert query_row_count(project, "my_relation") == 3
 
 
