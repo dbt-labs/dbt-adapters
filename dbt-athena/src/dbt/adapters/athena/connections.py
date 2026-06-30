@@ -139,8 +139,8 @@ class AthenaCredentials(Credentials):
             "assume_role_session_name",
             "aws_access_key_id",
             "aws_profile_name",
-            "aws_secret_access_key",
-            "aws_session_token",
+            # aws_secret_access_key and aws_session_token are intentionally omitted: they are
+            # secrets and _connection_keys controls what is surfaced (e.g. by `dbt debug`).
             "connection_manager",
             "database",
             "debug_query_state",
