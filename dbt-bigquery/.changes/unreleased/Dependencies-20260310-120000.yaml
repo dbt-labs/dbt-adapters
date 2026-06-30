@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Bump upper bound of google-cloud-storage to <4
+time: 2026-03-10T12:00:00.000000+00:00
+custom:
+  Author: andreyvdl
+  PR: ""
