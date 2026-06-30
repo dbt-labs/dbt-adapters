@@ -57,6 +57,28 @@ class TestInteractiveTableDynamicBasic:
         assert query_row_count(project, "my_interactive_dynamic") == 3
 
 
+class TestInteractiveTableReplacesExistingTable:
+    """A model that already exists as a normal table, then switches to
+    materialized='interactive_table', must rebuild cleanly via the replace path."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_relation.sql": models.TABLE_RELATION}
+
+    def test_table_converts_to_interactive(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+        update_model(project, "my_relation", models.INTERACTIVE_TABLE_STATIC)
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+
+        assert_message_in_logs("create interactive table", logs)
+        assert query_row_count(project, "my_relation") == 3
+
+
 class TestInteractiveTableMissingClusterByRaises:
     """`cluster_by` is required — compilation must fail without it."""
 

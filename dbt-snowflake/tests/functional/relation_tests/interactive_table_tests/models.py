@@ -16,6 +16,13 @@ select id, value from {{ ref('my_seed') }}
 """
 
 
+# A plain table, used to test converting an existing relation into an interactive table.
+TABLE_RELATION = """
+{{ config(materialized='table') }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
 # Dynamic interactive table: cluster_by + target_lag + snowflake_warehouse.
 INTERACTIVE_TABLE_DYNAMIC = """
 {{ config(
