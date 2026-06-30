@@ -71,10 +71,19 @@ class TestAthenaCredentials:
         unique2 = credentials.unique_field
         assert unique1 == unique2
 
-    def test_connection_info_returns_all_properties(self, credentials):
+    # Secrets must never be surfaced through connection_info (e.g. by `dbt debug`).
+    SENSITIVE_FIELDS = {"aws_secret_access_key", "aws_session_token"}
+
+    def test_connection_info_returns_all_non_sensitive_properties(self, credentials):
         connection_info_keys = set([key for (key, _) in credentials.connection_info()])
         class_field_names = set([field.name for field in dataclasses.fields(AthenaCredentials)])
-        assert connection_info_keys == class_field_names
+        assert connection_info_keys == class_field_names - self.SENSITIVE_FIELDS
+
+    def test_connection_info_excludes_sensitive_properties(self, credentials):
+        credentials.aws_secret_access_key = "super-secret"
+        credentials.aws_session_token = "super-secret-token"
+        connection_info_keys = set([key for (key, _) in credentials.connection_info()])
+        assert not (connection_info_keys & self.SENSITIVE_FIELDS)
 
 
 class TestAthenaConnection:
