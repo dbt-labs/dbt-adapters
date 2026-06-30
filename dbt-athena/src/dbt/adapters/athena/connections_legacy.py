@@ -256,7 +256,7 @@ class AthenaCursor(Cursor):
 
                 if query_execution.state == AthenaQueryExecution.STATE_CANCELLED:
                     raise CancelledQueryException("Query cancelled")
-                
+
                 if query_execution.state == AthenaQueryExecution.STATE_SUCCEEDED:
                     self.result_set = self._result_set_class(
                         self._connection,
