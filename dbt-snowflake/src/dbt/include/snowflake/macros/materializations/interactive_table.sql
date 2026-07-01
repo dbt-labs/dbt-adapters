@@ -32,6 +32,9 @@
         {% set build_sql = get_create_sql(target_relation, sql) %}
     {% elif full_refresh_mode or not existing_relation.is_interactive_table %}
         {% set build_sql = get_replace_sql(existing_relation, target_relation, sql) %}
+    {% elif config.get('target_lag') is none %}
+        {# static interactive tables don't auto-refresh and can't be diffed via SHOW; always rebuild #}
+        {% set build_sql = get_replace_sql(existing_relation, target_relation, sql) %}
     {% else %}
 
         {% set on_configuration_change = config.get('on_configuration_change') %}

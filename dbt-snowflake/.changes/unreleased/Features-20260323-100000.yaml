@@ -1,5 +1,5 @@
 kind: Features
-body: Add Snowflake interactive table materialization (`materialized='interactive_table'`), supporting static and dynamic (`target_lag`) variants with config-change detection.
+body: Add Snowflake interactive table materialization (`materialized='interactive_table'`), supporting static and dynamic (`target_lag`) variants.
 time: 2026-03-23T10:00:00-07:00
 custom:
     Author: jimmyxie-figma

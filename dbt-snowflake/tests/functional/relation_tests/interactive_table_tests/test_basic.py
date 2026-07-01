@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from dbt.tests.util import (
@@ -8,6 +10,10 @@ from dbt.tests.util import (
 
 from tests.functional.relation_tests.interactive_table_tests import models
 from tests.functional.utils import query_row_count, update_model
+
+# Dynamic interactive tables need a standard refresh warehouse. CI provisions DBT_TESTING;
+# local runs override via SNOWFLAKE_TEST_ALT_WAREHOUSE. Models read the same env var.
+ALT_WAREHOUSE = os.getenv("SNOWFLAKE_TEST_ALT_WAREHOUSE", "DBT_TESTING")
 
 
 def assert_message_not_in_logs(message: str, logs: str) -> None:
@@ -53,7 +59,7 @@ class TestInteractiveTableDynamicBasic:
         assert_message_in_logs("create interactive table", logs)
         assert_message_in_logs("cluster by (id)", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
-        assert_message_in_logs("warehouse = DBT_TESTING", logs)
+        assert_message_in_logs(f"warehouse = {ALT_WAREHOUSE}", logs)
         assert query_row_count(project, "my_interactive_dynamic") == 3
 
 
@@ -170,7 +176,7 @@ class TestInteractiveTableConfigChangeApply:
         update_model(
             project,
             "interactive_cfg_change",
-            models.INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER,
+            models.INTERACTIVE_TABLE_DYNAMIC_CLUSTER_ALTER,
         )
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_in_logs("create or replace interactive table", logs)
@@ -209,7 +215,7 @@ class TestInteractiveTableConfigChangeContinueNoOp:
         update_model(
             project,
             "interactive_cfg_continue",
-            models.INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER,
+            models.INTERACTIVE_TABLE_DYNAMIC_CLUSTER_ALTER,
         )
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_not_in_logs("create or replace interactive table", logs)
@@ -262,12 +268,9 @@ class TestInteractiveTableNoChangeIsNoOp:
         assert_message_in_logs("No configuration changes were identified on:", logs)
 
 
-class TestInteractiveTableStaticNoChangeIsNoOp:
-    """Re-running a STATIC interactive table (cluster_by only) must not CREATE OR REPLACE.
-
-    Regression guard: Snowflake returns cluster_by wrapped in parens e.g. '(id)';
-    without normalization, the no-op rerun would falsely detect a cluster_by change.
-    """
+class TestInteractiveTableStaticRebuildsEveryRun:
+    """A STATIC interactive table (cluster_by only) does not auto-refresh and cannot be
+    diffed via SHOW, so every run must CREATE OR REPLACE — like a normal table."""
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -275,19 +278,46 @@ class TestInteractiveTableStaticNoChangeIsNoOp:
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
-        yield {"my_interactive_static_noop.sql": models.INTERACTIVE_TABLE_STATIC}
+        yield {"my_interactive_static_rebuild.sql": models.INTERACTIVE_TABLE_STATIC}
 
-    def test_static_noop_run_does_not_replace(self, project):
+    def test_static_rerun_replaces(self, project):
         run_dbt(["seed"])
         run_dbt(["run"])
 
         _, logs = run_dbt_and_capture(["--debug", "run"])
-        assert_message_not_in_logs("create or replace interactive table", logs)
-        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("create or replace interactive table", logs)
+        assert_message_not_in_logs("No configuration changes were identified on:", logs)
+
+
+class TestInteractiveTableStaticRebuildsOnSqlChange:
+    """A SQL-only change to a static interactive table is reflected on the next run,
+    because static tables always CREATE OR REPLACE."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_static_sql.sql": models.INTERACTIVE_TABLE_STATIC}
+
+    def test_sql_change_rebuilds(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+        assert query_row_count(project, "my_interactive_static_sql") == 3
+
+        update_model(
+            project,
+            "my_interactive_static_sql",
+            models.INTERACTIVE_TABLE_STATIC_SQL_ALTER,
+        )
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_in_logs("create or replace interactive table", logs)
+        assert query_row_count(project, "my_interactive_static_sql") == 2
 
 
 class TestInteractiveTableMultiColumnClusterByNoOp:
-    """Re-running a static interactive table with a multi-column cluster_by must not
+    """Re-running a dynamic interactive table with a multi-column cluster_by must not
     CREATE OR REPLACE. Snowflake returns the key wrapped, e.g. '(id, value)'; without
     correct normalization the no-op rerun would falsely detect a cluster_by change."""
 
@@ -297,7 +327,7 @@ class TestInteractiveTableMultiColumnClusterByNoOp:
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
-        yield {"my_interactive_multicol_noop.sql": models.INTERACTIVE_TABLE_STATIC_MULTICOL}
+        yield {"my_interactive_multicol_noop.sql": models.INTERACTIVE_TABLE_DYNAMIC_MULTICOL}
 
     def test_multicol_noop_run_does_not_replace(self, project):
         run_dbt(["seed"])
@@ -306,31 +336,3 @@ class TestInteractiveTableMultiColumnClusterByNoOp:
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_not_in_logs("create or replace interactive table", logs)
         assert_message_in_logs("No configuration changes were identified on:", logs)
-
-
-class TestInteractiveTableStaticClusterByChangeReplaces:
-    """An isolated cluster_by change on a static interactive table (no target_lag
-    confound) triggers a CREATE OR REPLACE under on_configuration_change='apply'."""
-
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        return {"my_seed.csv": models.SEED}
-
-    @pytest.fixture(scope="class", autouse=True)
-    def models(self):
-        yield {"my_interactive_cluster_change.sql": models.INTERACTIVE_TABLE_STATIC}
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    def test_cluster_by_change_triggers_replace(self, project):
-        run_dbt(["seed"])
-        run_dbt(["run"])
-
-        update_model(
-            project, "my_interactive_cluster_change", models.INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER
-        )
-        _, logs = run_dbt_and_capture(["--debug", "run"])
-        assert_message_in_logs("create or replace interactive table", logs)
-        assert_message_in_logs("cluster by (value)", logs)

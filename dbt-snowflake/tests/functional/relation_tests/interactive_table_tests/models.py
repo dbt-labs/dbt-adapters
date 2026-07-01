@@ -16,6 +16,17 @@ select id, value from {{ ref('my_seed') }}
 """
 
 
+# Static interactive table with altered SQL (fewer rows) to prove a rebuild every run
+# reflects source/SQL changes even though no config field changed.
+INTERACTIVE_TABLE_STATIC_SQL_ALTER = """
+{{ config(
+    materialized='interactive_table',
+    cluster_by='id',
+) }}
+select id, value from {{ ref('my_seed') }} where id <= 2
+"""
+
+
 # A plain table, used to test converting an existing relation into an interactive table.
 TABLE_RELATION = """
 {{ config(materialized='table') }}
@@ -29,28 +40,32 @@ INTERACTIVE_TABLE_DYNAMIC = """
     materialized='interactive_table',
     cluster_by='id',
     target_lag='2 minutes',
-    snowflake_warehouse='DBT_TESTING',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
 ) }}
 select id, value from {{ ref('my_seed') }}
 """
 
 
-# Static interactive table with a multi-column cluster_by. Guards the no-op round-trip:
+# Dynamic interactive table with a multi-column cluster_by. Guards the no-op round-trip:
 # SHOW INTERACTIVE TABLES returns the clustering key parenthesized, e.g. '(id, value)'.
-INTERACTIVE_TABLE_STATIC_MULTICOL = """
+INTERACTIVE_TABLE_DYNAMIC_MULTICOL = """
 {{ config(
     materialized='interactive_table',
     cluster_by=['id', 'value'],
+    target_lag='2 minutes',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
 ) }}
 select id, value from {{ ref('my_seed') }}
 """
 
 
-# Altered cluster_by for config-change detection.
-INTERACTIVE_TABLE_STATIC_CLUSTER_ALTER = """
+# Dynamic interactive table with an altered cluster_by, for config-change detection.
+INTERACTIVE_TABLE_DYNAMIC_CLUSTER_ALTER = """
 {{ config(
     materialized='interactive_table',
     cluster_by='value',
+    target_lag='2 minutes',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
 ) }}
 select id, value from {{ ref('my_seed') }}
 """
@@ -62,7 +77,7 @@ INTERACTIVE_TABLE_DYNAMIC_LAG_ALTER = """
     materialized='interactive_table',
     cluster_by='id',
     target_lag='5 minutes',
-    snowflake_warehouse='DBT_TESTING',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
 ) }}
 select id, value from {{ ref('my_seed') }}
 """
