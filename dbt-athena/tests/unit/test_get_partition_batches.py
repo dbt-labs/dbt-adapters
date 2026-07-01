@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 import jinja2
+import pytest
 
 # Directory containing the macro files
 _HELPERS_DIR = os.path.normpath(
@@ -72,10 +73,12 @@ def _format_one_partition_key(key):
     return f'"{key}"'
 
 
-def _format_value_for_partition(value, column_type):
+def _format_value_for_partition(value, column_type, table_type="hive"):
     """Stub for adapter.format_value_for_partition.
 
-    Returns (formatted_value, comparison_operator).
+    Returns (formatted_value, comparison_operator). Mirrors the real method:
+    booleans are only valid on iceberg (Hive rejects them, HIVE-6590), and
+    unsupported column types raise.
     """
     if value is None:
         return ("''", " IS NULL -- ")
@@ -83,7 +86,11 @@ def _format_value_for_partition(value, column_type):
         return (f"DATE'{value}'", "=")
     if column_type == "integer" or column_type == "bigint":
         return (str(value), "=")
-    return (f"'{value}'", "=")
+    if column_type in ("string", "varchar"):
+        return (f"'{value}'", "=")
+    if column_type == "boolean" and table_type == "iceberg":
+        return (str(value).lower(), "=")
+    raise ValueError(f"Unsupported column type: {column_type}")
 
 
 def _render_macro(config, rows, column_types):
@@ -198,6 +205,65 @@ class TestNonBucketedBatching:
             "\"date_col\"=DATE'2024-01-01' and \"region\"='us-east-1' or "
             "\"date_col\"=DATE'2024-01-01' and \"region\"='eu-west-1'",
         ]
+
+
+class TestBooleanPartition:
+    """Boolean partition columns are valid on Iceberg but not on Hive (HIVE-6590).
+
+    The batch path (get_partition_batches) is shared by both table types, so it
+    formats booleans only when table_type='iceberg'; for hive it falls through to
+    format_value_for_partition, which raises the clear early error.
+    """
+
+    def test_iceberg_boolean_partition(self):
+        result = _render_macro(
+            config={
+                "partitioned_by": ["is_current"],
+                "partitions_limit": 100,
+                "table_type": "iceberg",
+            },
+            rows=[[True], [False]],
+            column_types=["boolean"],
+        )
+        assert result == [
+            '"is_current"=true or "is_current"=false',
+        ]
+
+    def test_iceberg_boolean_with_other_partition(self):
+        result = _render_macro(
+            config={
+                "partitioned_by": ["is_current", "region"],
+                "partitions_limit": 100,
+                "table_type": "iceberg",
+            },
+            rows=[[True, "us-east-1"], [False, "eu-west-1"]],
+            column_types=["boolean", "varchar"],
+        )
+        assert result == [
+            '"is_current"=true and "region"=\'us-east-1\' or '
+            '"is_current"=false and "region"=\'eu-west-1\'',
+        ]
+
+    def test_hive_boolean_partition_raises(self):
+        with pytest.raises(ValueError, match="Unsupported column type: boolean"):
+            _render_macro(
+                config={
+                    "partitioned_by": ["is_current"],
+                    "partitions_limit": 100,
+                    "table_type": "hive",
+                },
+                rows=[[True], [False]],
+                column_types=["boolean"],
+            )
+
+    def test_default_table_type_boolean_raises(self):
+        """table_type defaults to hive, so a boolean partition still raises."""
+        with pytest.raises(ValueError, match="Unsupported column type: boolean"):
+            _render_macro(
+                config={"partitioned_by": ["is_current"], "partitions_limit": 100},
+                rows=[[True], [False]],
+                column_types=["boolean"],
+            )
 
 
 class TestPartitionsLimitClamping:
