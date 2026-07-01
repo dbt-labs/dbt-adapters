@@ -362,6 +362,23 @@ class BigQueryAdapter(BaseAdapter):
             logger.debug("get_columns_in_relation error: {}".format(e))
             return []
 
+    @available.parse_list
+    def get_columns_and_pseudocolumns_for_relation(
+        self, relation: BigQueryRelation
+    ) -> List[BigQueryColumn]:
+        """Return all columns (regular + pseudocolumns) for a relation in a single API call."""
+        try:
+            table = self.connections.get_bq_table(
+                database=relation.database, schema=relation.schema, identifier=relation.identifier
+            )
+            columns = self._get_dbt_columns_from_bq_table(table)
+            if table.table_type == "EXTERNAL":
+                columns.append(BigQueryColumn("_FILE_NAME", "STRING"))
+            return columns
+        except (ValueError, google.cloud.exceptions.NotFound) as e:
+            logger.debug("get_columns_and_pseudocolumns_for_relation error: {}".format(e))
+            return []
+
     @available.parse(lambda *a, **k: [])
     def add_time_ingestion_partition_column(self, partition_by, columns) -> List[BigQueryColumn]:
         """Add time ingestion partition column to columns list"""
