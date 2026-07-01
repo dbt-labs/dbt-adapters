@@ -136,7 +136,15 @@
       in DDL (e.g. OPTIONS(description=...)).
     -#}
   {%- else -%}
-    {% do adapter.update_table_description(relation.database, relation.schema, relation.identifier, relation_comment) %}
+    {%- if relation.type == 'materialized_view' -%}
+      {%- set relation_type = 'materialized view' -%}
+    {%- else -%}
+      {%- set relation_type = relation.type -%}
+    {%- endif -%}
+    {%- set alter_comment_sql -%}
+      alter {{ relation_type }} {{ relation.render() }} set options(description={{ relation_comment | tojson }});
+    {%- endset -%}
+    {% do run_query(alter_comment_sql) %}
   {%- endif -%}
 {% endmacro %}
 
