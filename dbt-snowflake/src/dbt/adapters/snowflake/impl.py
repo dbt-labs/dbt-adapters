@@ -768,7 +768,7 @@ CALL {proc_name}();
             column_names=[name.lower() for name in tables_table.column_names]
         )
 
-        # SHOW TABLES LIKE uses pattern matching and may return multiple rows.
+        # SHOW INTERACTIVE TABLES LIKE uses pattern matching and may return multiple rows.
         # Filter to the exact matching row, respecting quoting policy:
         # unquoted identifiers are stored uppercase in Snowflake metadata.
         if quoting.identifier:
