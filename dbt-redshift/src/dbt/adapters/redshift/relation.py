@@ -80,6 +80,13 @@ class RedshiftRelation(BaseRelation):
     ) -> Optional[RedshiftMaterializedViewConfigChangeset]:
         config_change_collection = RedshiftMaterializedViewConfigChangeset()
 
+        # svv_table_info returns no rows for materialized views with no data.
+        # In this case we cannot compare configurations, so return None to trigger
+        # a simple refresh instead of crashing.
+        mv_table = relation_results.get("materialized_view")
+        if not mv_table or len(mv_table.rows) == 0:
+            return None
+
         existing_materialized_view = RedshiftMaterializedViewConfig.from_relation_results(
             relation_results
         )
