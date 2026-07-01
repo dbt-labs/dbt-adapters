@@ -19,6 +19,12 @@
 
 {% macro default__generate_database_name(custom_database_name=none, node=none) -%}
     {%- set default_database = target.database -%}
+    {%- if node is not none -%}
+        {%- set catalog_relation = adapter.build_catalog_relation(node) -%}
+        {%- if catalog_relation and catalog_relation|attr('catalog_database') -%}
+            {{ return(catalog_relation.catalog_database) }}
+        {%- endif -%}
+    {%- endif -%}
     {%- if custom_database_name is none -%}
 
         {{ default_database }}
