@@ -67,3 +67,24 @@ jobs:
                   mention_groups_when: "success"
               env:
                   SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_PULL_REQUESTS }}
+
+    notify-failure:
+        needs:
+            - publish
+            - open-lockfile-pr
+        if: ${{ failure() }}
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+            - name: "Notify Slack of failure"
+              uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2 # ravsamhq/notify-slack-action@v2
+              with:
+                  token: ${{ secrets.GITHUB_TOKEN }}
+                  status: "failure"
+                  notification_title: "{workflow} {status_message}"
+                  message_format: "{emoji} *{workflow}* {status_message} for <{repo_url}|{repo}>"
+                  footer: "View run: {run_url}"
+                  notify_when: "failure"
+                  mention_groups: ${{ vars.SLACK_ON_CALL }}
+                  mention_groups_when: "failure"
+              env:
+                  SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEV_ADAPTER_ALERTS }}
