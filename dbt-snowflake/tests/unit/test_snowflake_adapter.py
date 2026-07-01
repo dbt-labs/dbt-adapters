@@ -836,6 +836,58 @@ class TestSnowflakeAdapter(unittest.TestCase):
         assert isinstance(normalized.columns["name"].data_type, agate.Text)
         assert isinstance(normalized.columns["kind"].data_type, agate.Text)
 
+    def test_get_column_schema_from_query_fixed_type(self):
+        """FIXED type codes are converted to NUMBER(precision, scale)."""
+        mock_cursor = mock.Mock()
+        # https://peps.python.org/pep-0249/#description
+        mock_cursor.description = [
+            ("ID", 0, None, None, 38, 0, True),
+            ("AMOUNT", 0, None, None, 10, 2, True),
+        ]
+        self.adapter.connections.add_select_query = mock.Mock(
+            return_value=(None, mock_cursor)
+        )
+
+        with mock.patch.object(
+            self.adapter.connections,
+            "data_type_code_to_name",
+            return_value="FIXED",
+        ) as data_type_code_to_name:
+            columns = self.adapter.get_column_schema_from_query("select 42")
+
+        assert [(column.column, column.dtype) for column in columns] == [
+            ("ID", "NUMBER(38, 0)"),
+            ("AMOUNT", "NUMBER(10, 2)"),
+        ]
+        assert data_type_code_to_name.call_count == 2
+
+    def test_get_column_schema_from_query_non_fixed_types(self):
+        """Non-FIXED type_code is looked up via data_type_code_to_name."""
+        mock_cursor = mock.Mock()
+        mock_cursor.description = [
+            ("SCORE", 1, None, None, None, None, True),
+            ("NAME", 2, None, None, None, None, True),
+            ("FLAG", 13, None, None, None, None, True),
+        ]
+        self.adapter.connections.add_select_query = mock.Mock(
+            return_value=(None, mock_cursor)
+        )
+
+        type_names = {1: "REAL", 2: "TEXT", 13: "BOOLEAN"}
+        with mock.patch.object(
+            self.adapter.connections,
+            "data_type_code_to_name",
+            side_effect=lambda code: type_names[code],
+        ) as data_type_code_to_name:
+            columns = self.adapter.get_column_schema_from_query("select 1")
+
+        assert [(column.column, column.dtype) for column in columns] == [
+            ("SCORE", "REAL"),
+            ("NAME", "TEXT"),
+            ("FLAG", "BOOLEAN"),
+        ]
+        assert data_type_code_to_name.call_count == 3
+
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):
     def test_convert_text_type(self):

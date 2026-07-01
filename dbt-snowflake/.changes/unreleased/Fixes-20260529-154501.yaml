@@ -1,0 +1,6 @@
+kind: Fixes
+body: Replace invalid FIXED dtype with NUMBER(p, s) in column type mapping
+time: 2026-05-29T15:45:01.991974+10:00
+custom:
+    Author: rio-not-real
+    Issue: "1986"

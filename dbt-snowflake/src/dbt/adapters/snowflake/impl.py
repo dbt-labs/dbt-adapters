@@ -281,6 +281,26 @@ class SnowflakeAdapter(SQLAdapter):
             else:
                 raise
 
+    def get_column_schema_from_query(self, sql: str) -> List[SnowflakeColumn]:
+        """Get a list of the Columns with names and data types from the given sql."""
+        _, cursor = self.connections.add_select_query(sql)
+        columns = []
+
+        # https://peps.python.org/pep-0249/#description
+        for column_name, column_type_code, _, _, precision, scale, _ in cursor.description:
+            dtype = self.connections.data_type_code_to_name(column_type_code)
+            if dtype == "FIXED":
+                # fixed-point numbers
+                # but FIXED is not a valid SQL type, so we need to convert it
+                dtype = (
+                    f"NUMBER({precision}, {scale})"
+                    if precision is not None and scale is not None
+                    else "NUMBER"
+                )
+            columns.append(self.Column.create(column_name, dtype))
+
+        return columns
+
     def _show_object_metadata(self, relation: SnowflakeRelation) -> Optional[dict]:
         try:
             kwargs = {"relation": relation}
