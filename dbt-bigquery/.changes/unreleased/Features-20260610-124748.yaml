@@ -1,0 +1,6 @@
+kind: Features
+body: Add model-level location config to override the BigQuery query execution location per model.
+time: 2026-06-10T12:47:48.324905+02:00
+custom:
+    Author: emilgq
+    Issue: "2017"
