@@ -416,6 +416,7 @@ class SnowflakeAdapter(SQLAdapter):
             "kind",
             "is_dynamic",
             "is_iceberg",
+            "is_interactive",
         ]
         function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
@@ -424,12 +425,14 @@ class SnowflakeAdapter(SQLAdapter):
         schema_functions = schema_functions.rename(
             column_names=[col.lower() for col in schema_functions.column_names]
         )
-        available_columns = [c.lower() for c in schema_objects.column_names]
-        has_is_interactive = "is_interactive" in available_columns
-        if has_is_interactive:
-            tabular_columns.append("is_interactive")
+        # older Snowflake versions omit is_interactive; default it to None so
+        # downstream parsing can always rely on the column being present
+        if "is_interactive" not in schema_objects.column_names:
+            schema_objects = schema_objects.compute(
+                [("is_interactive", agate.Formula(agate.Text(), lambda row: None))]
+            )
         tabular_relations = [
-            self._parse_list_relations_result(obj, has_is_interactive=has_is_interactive)
+            self._parse_list_relations_result(obj)
             for obj in schema_objects.select(tabular_columns)
         ]
         function_relations = [
@@ -439,22 +442,16 @@ class SnowflakeAdapter(SQLAdapter):
         ]
         return tabular_relations + function_relations
 
-    def _parse_list_relations_result(
-        self, result: "agate.Row", has_is_interactive: bool = False
-    ) -> SnowflakeRelation:
-        if has_is_interactive:
-            (
-                database,
-                schema,
-                identifier,
-                relation_type,
-                is_dynamic,
-                is_iceberg,
-                is_interactive,
-            ) = result
-        else:
-            database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
-            is_interactive = None
+    def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        (
+            database,
+            schema,
+            identifier,
+            relation_type,
+            is_dynamic,
+            is_iceberg,
+            is_interactive,
+        ) = result
 
         try:
             relation_type = self.Relation.get_relation_type(relation_type.lower())
