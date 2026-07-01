@@ -1,0 +1,6 @@
+kind: Features
+body: Support Apache Iceberg tables on Redshift via the AWS Glue Data Catalog (table, incremental, and view materializations)
+time: 2026-06-09T20:40:19.518272+05:30
+custom:
+    Author: aahel
+    Issue: "2014"

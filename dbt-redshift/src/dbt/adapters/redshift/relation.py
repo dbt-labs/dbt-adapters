@@ -11,6 +11,7 @@ from dbt.adapters.relation_configs import (
 from dbt.adapters.base import RelationType
 from dbt_common.exceptions import DbtRuntimeError
 
+from dbt.adapters.redshift import constants
 from dbt.adapters.redshift.relation_configs import (
     RedshiftMaterializedViewConfig,
     RedshiftMaterializedViewConfigChangeset,
@@ -28,6 +29,7 @@ class RedshiftRelation(BaseRelation):
     include_policy = RedshiftIncludePolicy  # type: ignore
     quote_policy = RedshiftQuotePolicy  # type: ignore
     require_alias: bool = False
+    table_format: str = constants.DEFAULT_TABLE_FORMAT
     relation_configs = {
         RelationType.MaterializedView.value: RedshiftMaterializedViewConfig,  # type:ignore
     }
@@ -62,6 +64,17 @@ class RedshiftRelation(BaseRelation):
 
     def relation_max_name_length(self):
         return MAX_CHARACTERS_IN_IDENTIFIER
+
+    @property
+    def is_iceberg_format(self) -> bool:
+        return self.table_format == constants.ICEBERG_TABLE_FORMAT
+
+    @property
+    def can_be_renamed(self) -> bool:
+        # Iceberg tables don't support rename; replacing one requires DROP + CREATE.
+        # Returning False here routes the standard materialization cleanup branches
+        # to drop the existing relation instead of renaming it.
+        return self.type in self.renameable_relations and not self.is_iceberg_format
 
     @classmethod
     def from_config(cls, config: RelationConfig) -> RelationConfigBase:
