@@ -130,6 +130,10 @@ jobs:
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
+        strategy:
+            fail-fast: false
+            matrix:
+                group: [1, 2]
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -169,18 +173,14 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Run integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests
+              run: hatch run ${{ inputs.hatch-env }}:integration-tests --splits 2 --group ${{ matrix.group }}
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
-        # we need to run with "!cancelled()" so that we run after non-flaky BQ tests even when they fail
         if: |
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION &&
-            !cancelled()
+            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
         runs-on: ${{ inputs.os }}
-        # make sure these don't kick off in parallel with the non-flaky tests, which defeats the purpose of running them separately
-        needs: integration-tests-bigquery
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -407,6 +407,9 @@ jobs:
                 working-directory: "./dbt-snowflake"
         environment:
             name: "dbt-snowflake"
+        permissions:
+            id-token: write
+            contents: read
         env:
             SNOWFLAKE_TEST_ACCOUNT: ${{ secrets.SNOWFLAKE_TEST_ACCOUNT }}
             SNOWFLAKE_TEST_USER: ${{ vars.SNOWFLAKE_TEST_USER }}
@@ -425,6 +428,7 @@ jobs:
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
             SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE }}
             SNOWFLAKE_TEST_TOKEN: ${{ secrets.SNOWFLAKE_TEST_TOKEN }}
+            SNOWFLAKE_TEST_WIF_USER: ${{ vars.SNOWFLAKE_TEST_WIF_USER }}
         steps:
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4

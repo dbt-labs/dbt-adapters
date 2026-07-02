@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Queries are now run by calling the Athena API directly, instead of through PyAthena. PyAthena can be renabled by setting the `connection_manager` parameter.
+time: 2026-02-26T11:58:49.341921+01:00
+custom:
+    Author: iconara
+    Issue: "1637"

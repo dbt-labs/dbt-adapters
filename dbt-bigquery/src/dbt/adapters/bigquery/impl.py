@@ -5,6 +5,7 @@ from multiprocessing.context import SpawnContext
 import threading
 from typing import (
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Iterable,
@@ -136,7 +137,7 @@ BIGQUERY_REJECT_WILDCARD_METADATA_SOURCE_FRESHNESS = BehaviorFlag(
 
 BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
     name="bigquery_use_standard_sql_for_partitions",
-    default=False,
+    default=True,
     description=(
         "Use Standard SQL (INFORMATION_SCHEMA.PARTITIONS) instead of Legacy SQL "
         "($__PARTITIONS_SUMMARY__) for partition metadata queries. Legacy SQL is being "
@@ -145,6 +146,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 )
 
 _dataset_lock = threading.Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -177,6 +182,7 @@ class BigqueryConfig(AdapterConfig):
     notebook_template_id: Optional[str] = None
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
+    reservation: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -207,14 +213,26 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "biglake_metastore": "biglake_metastore",
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
         self.connections: BigQueryConnectionManager = self.connections
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_ICEBERG_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
     ###
     # Implementations of abstract methods
@@ -284,17 +302,22 @@ class BigQueryAdapter(BaseAdapter):
         client.delete_table(from_table_ref)
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[float]:
-        """Override the connection's query execution timeout based on the model config"""
+        """Override the connection's query execution timeout and reservation based on the model config"""
         timeout = config.get("job_execution_timeout_seconds")
         if timeout is not None:
             conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = float(timeout)
+        reservation = config.get("reservation")
+        if reservation is not None:
+            conn = self.connections.get_thread_connection()
+            conn._bq_model_reservation = reservation
         return timeout
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
+        conn = self.connections.get_thread_connection()
         if context is not None:
-            conn = self.connections.get_thread_connection()
             conn._bq_model_timeout = None
+        conn._bq_model_reservation = None
 
     @available
     def list_schemas(self, database: str) -> List[str]:
@@ -1035,6 +1058,28 @@ class BigQueryAdapter(BaseAdapter):
                 logger.debug(
                     "Skipping catalog for {}.{} - schema does not exist".format(
                         database, candidate.schema
+                    )
+                )
+        return result
+
+    def _get_catalog_relations_by_info_schema(self, relations):
+        candidates = super()._get_catalog_relations_by_info_schema(relations)
+        schema_exists: Dict[str, Dict[str, bool]] = {}
+        result = {}
+
+        for info_schema, rels in candidates.items():
+            database = info_schema.database
+            schema = info_schema.schema
+            if database not in schema_exists:
+                schema_exists[database] = {}
+            if schema not in schema_exists[database]:
+                schema_exists[database][schema] = self.check_schema_exists(database, schema)
+            if schema_exists[database][schema]:
+                result[info_schema] = rels
+            else:
+                logger.debug(
+                    "Skipping catalog for {}.{} - schema does not exist".format(
+                        database, info_schema.schema
                     )
                 )
         return result
