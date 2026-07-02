@@ -15,6 +15,9 @@
         {{ interactive_table_execute_build_sql(build_sql, existing_relation, target_relation) }}
     {% endif %}
 
+    {# runs every run (build or no-op) so the warehouse list stays authoritative, like grants #}
+    {{ snowflake__attach_interactive_warehouses(target_relation) }}
+
     {{ run_hooks(post_hooks) }}
 
     {% do unset_query_tag(query_tag) %}

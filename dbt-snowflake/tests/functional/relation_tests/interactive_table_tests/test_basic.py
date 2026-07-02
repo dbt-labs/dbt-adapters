@@ -336,3 +336,93 @@ class TestInteractiveTableMultiColumnClusterByNoOp:
         _, logs = run_dbt_and_capture(["--debug", "run"])
         assert_message_not_in_logs("create or replace interactive table", logs)
         assert_message_in_logs("No configuration changes were identified on:", logs)
+
+
+def _provision_interactive_warehouses(project, count):
+    """Create `count` interactive warehouses named off the (unique) test schema, and
+    publish them to the env var the attach models read. Returns the warehouse names."""
+    names = [f"dbt_test_iw_{project.test_schema}_{i}".lower() for i in range(count)]
+    for name in names:
+        project.run_sql(
+            f"create or replace interactive warehouse {name} "
+            "warehouse_size=xsmall auto_suspend=86400 initially_suspended=true"
+        )
+    os.environ["SNOWFLAKE_TEST_INTERACTIVE_WHS"] = ",".join(names)
+    return names
+
+
+class TestInteractiveTableAttachesToWarehouse:
+    """A model with `snowflake_interactive_warehouses` attaches after the build. A passing
+    run proves the ALTER succeeded against the real warehouse."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_attach.sql": models.INTERACTIVE_TABLE_STATIC_ATTACH}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def interactive_warehouses(self, project):
+        names = _provision_interactive_warehouses(project, 1)
+        yield names
+        for name in names:
+            project.run_sql(f"drop warehouse if exists {name}")
+
+    def test_attaches_after_build(self, project, interactive_warehouses):
+        run_dbt(["seed"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_in_logs(f"alter warehouse {interactive_warehouses[0]} add tables", logs)
+
+
+class TestInteractiveTableAttachesToMultipleWarehouses:
+    """A list of warehouses attaches to each one."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_attach_multi.sql": models.INTERACTIVE_TABLE_STATIC_ATTACH}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def interactive_warehouses(self, project):
+        names = _provision_interactive_warehouses(project, 2)
+        yield names
+        for name in names:
+            project.run_sql(f"drop warehouse if exists {name}")
+
+    def test_attaches_to_each(self, project, interactive_warehouses):
+        run_dbt(["seed"])
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        for name in interactive_warehouses:
+            assert_message_in_logs(f"alter warehouse {name} add tables", logs)
+
+
+class TestInteractiveTableDynamicReattachesEveryRun:
+    """Attach runs on every run, including a dynamic no-op rerun that doesn't rebuild."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        return {"my_seed.csv": models.SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"my_interactive_attach_dyn.sql": models.INTERACTIVE_TABLE_DYNAMIC_ATTACH}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def interactive_warehouses(self, project):
+        names = _provision_interactive_warehouses(project, 1)
+        yield names
+        for name in names:
+            project.run_sql(f"drop warehouse if exists {name}")
+
+    def test_reattaches_on_noop_run(self, project, interactive_warehouses):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        _, logs = run_dbt_and_capture(["--debug", "run"])
+        assert_message_not_in_logs("create or replace interactive table", logs)
+        assert_message_in_logs(f"alter warehouse {interactive_warehouses[0]} add tables", logs)

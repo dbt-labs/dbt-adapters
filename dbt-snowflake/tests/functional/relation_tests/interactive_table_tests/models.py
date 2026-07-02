@@ -101,3 +101,28 @@ INTERACTIVE_TABLE_LAG_NO_WAREHOUSE = """
 ) }}
 select id, value from {{ ref('my_seed') }}
 """
+
+
+# Static interactive table attached to one or more interactive warehouses. The list is
+# provided via env var (comma-separated) so tests can point at warehouses they provision.
+INTERACTIVE_TABLE_STATIC_ATTACH = """
+{{ config(
+    materialized='interactive_table',
+    cluster_by='id',
+    snowflake_interactive_warehouses=env_var('SNOWFLAKE_TEST_INTERACTIVE_WHS').split(','),
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+# Dynamic interactive table with an attachment list, to prove attach runs on a no-op rerun.
+INTERACTIVE_TABLE_DYNAMIC_ATTACH = """
+{{ config(
+    materialized='interactive_table',
+    cluster_by='id',
+    target_lag='2 minutes',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    snowflake_interactive_warehouses=env_var('SNOWFLAKE_TEST_INTERACTIVE_WHS').split(','),
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
