@@ -43,6 +43,12 @@ class _StubReattachIterator:
     def _call_iter(self, iter_fun):
         return iter_fun()
 
+    def _release_until(self, until_response_id):
+        pass
+
+    def _release_all(self):
+        pass
+
 
 class _StubSparkConnectClient:
     @classmethod
