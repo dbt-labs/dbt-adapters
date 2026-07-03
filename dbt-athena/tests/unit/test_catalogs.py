@@ -11,6 +11,7 @@ from dbt.adapters.athena import Plugin as AthenaPlugin
 from dbt.adapters.athena.catalogs import (
     AthenaInfoSchemaCatalogIntegration,
     GlueCatalogIntegration,
+    S3TablesCatalogIntegration,
 )
 from dbt.adapters.athena.impl import AthenaAdapter
 
@@ -134,3 +135,52 @@ class TestV2Bridge:
         catalog = _v2_catalog("bad", "glue", "hudi", config={"athena": {}})
         with pytest.raises(DbtRuntimeError, match="unsupported table_format 'hudi'"):
             adapter.bridge_v2_catalog(catalog)
+
+
+class TestS3TablesCatalogIntegration:
+    def _config(self, **overrides):
+        base = dict(
+            name="my_s3_tables",
+            catalog_name="my_s3_tables",
+            catalog_type=constants.S3_TABLES_CATALOG_TYPE,
+            table_format=constants.ICEBERG_TABLE_FORMAT,
+            external_volume=None,
+            file_format=constants.PARQUET_FILE_FORMAT,
+            adapter_properties={},
+        )
+        return SimpleNamespace(**{**base, **overrides})
+
+    def test_build_relation_is_iceberg(self):
+        integration = S3TablesCatalogIntegration(self._config())
+        relation = integration.build_relation(_model())
+        assert relation.table_format == constants.ICEBERG_TABLE_FORMAT
+        assert relation.catalog_type == constants.S3_TABLES_CATALOG_TYPE
+
+    def test_external_volume_is_always_none(self):
+        # S3 Tables manages storage; external_volume must never be set on the relation.
+        integration = S3TablesCatalogIntegration(self._config(external_volume="s3://ignored"))
+        relation = integration.build_relation(_model())
+        assert relation.external_volume is None
+
+    def test_allows_writes(self):
+        assert S3TablesCatalogIntegration.allows_writes is True
+
+    def test_bridge_v2_catalog_s3_tables(self, adapter):
+        catalog = _v2_catalog(
+            "my_s3_tables",
+            constants.S3_TABLES_CATALOG_TYPE,
+            "iceberg",
+            config={"athena": {"file_format": "parquet"}},
+        )
+        result = adapter.bridge_v2_catalog(catalog)
+        assert result.catalog_type == constants.S3_TABLES_CATALOG_TYPE
+        assert result.table_format == constants.ICEBERG_TABLE_FORMAT
+        assert result.external_volume is None
+
+    def test_registration_and_relation_lookup(self, adapter):
+        adapter.add_catalog_integration(self._config())
+        relation = adapter.build_catalog_relation(_model({"catalog_name": "my_s3_tables"}))
+        assert relation is not None
+        assert relation.catalog_type == constants.S3_TABLES_CATALOG_TYPE
+        assert relation.table_format == constants.ICEBERG_TABLE_FORMAT
+        assert relation.external_volume is None

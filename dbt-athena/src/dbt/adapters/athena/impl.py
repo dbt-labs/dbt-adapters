@@ -48,6 +48,7 @@ from dbt.adapters.athena import AthenaConnectionManager
 from dbt.adapters.athena.catalogs import (
     AthenaInfoSchemaCatalogIntegration,
     GlueCatalogIntegration,
+    S3TablesCatalogIntegration,
 )
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
@@ -59,6 +60,7 @@ from dbt.adapters.athena.constants import (
     HIVE_TABLE_FORMAT,
     ICEBERG_TABLE_FORMAT,
     LOGGER,
+    S3_TABLES_CATALOG_TYPE,
 )
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
@@ -191,7 +193,11 @@ class AthenaAdapter(SQLAdapter):
         ConstraintType.foreign_key: ConstraintSupport.NOT_SUPPORTED,
     }
 
-    CATALOG_INTEGRATIONS = [GlueCatalogIntegration, AthenaInfoSchemaCatalogIntegration]
+    CATALOG_INTEGRATIONS = [
+        GlueCatalogIntegration,
+        S3TablesCatalogIntegration,
+        AthenaInfoSchemaCatalogIntegration,
+    ]
 
     _capabilities: CapabilityDict = CapabilityDict(
         {
@@ -206,7 +212,10 @@ class AthenaAdapter(SQLAdapter):
     # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS.
     # Identity for Athena today (like BigQuery); the hook is the consistent place
     # to add aliases later (e.g. a future "sagemaker" -> "glue").
-    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {GLUE_CATALOG_TYPE: GLUE_CATALOG_TYPE}
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        GLUE_CATALOG_TYPE: GLUE_CATALOG_TYPE,
+        S3_TABLES_CATALOG_TYPE: S3_TABLES_CATALOG_TYPE,
+    }
 
     # catalogs.yml v2 table_format -> Athena's table_type. 'default' is the v2 spec's
     # non-Iceberg value; Athena calls the equivalent 'hive'.

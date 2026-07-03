@@ -48,6 +48,7 @@ HIVE_TABLE_FORMAT = "hive"
 PARQUET_FILE_FORMAT = "parquet"
 GLUE_CATALOG_TYPE = "glue"
 INFO_SCHEMA_CATALOG_TYPE = "info_schema"
+S3_TABLES_CATALOG_TYPE = "s3_tables"
 
 # Default catalog registered for every model that does not reference a catalog.
 # Maps to Athena's standard Hive table_type.
