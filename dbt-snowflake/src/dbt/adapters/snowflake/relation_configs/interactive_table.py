@@ -92,6 +92,12 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
         interactive_table: "agate.Row" = relation_results["interactive_table"].rows[0]
 
+        # cluster_by / snowflake_warehouse change-detection compares this parsed value
+        # against what dbt sends via raw string equality (matching dynamic_table); we only
+        # strip a bare surrounding `(...)` and do not normalize case or a LINEAR(...) wrapper.
+        # If SHOW INTERACTIVE TABLES ever returns a different format, a dynamic table would
+        # spuriously rebuild. The dynamic no-op / multicol functional tests guard this against
+        # a live account; the unit tests mock SHOW output so they won't catch a format change.
         cluster_by_val = str(interactive_table.get("cluster_by") or "").strip()
         if cluster_by_val in ("", "NONE", "None"):
             raise CompilationError(
