@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix relation swap discarding the intermediate table when a rename hits a concurrent transaction conflict
+time: 2026-07-03T22:13:16.406388+05:30
+custom:
+    Author: namangoyal
+    Issue: "626"

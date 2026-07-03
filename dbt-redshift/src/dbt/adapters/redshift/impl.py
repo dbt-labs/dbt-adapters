@@ -178,6 +178,26 @@ class RedshiftAdapter(SQLAdapter):
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 
+    def rename_relation(self, from_relation, to_relation):
+        """
+        The table materialization's target<->backup<->intermediate swap issues
+        two RENAMEs inside one build transaction. If Redshift aborts that
+        transaction on a "conflict with concurrent transaction" error during
+        the first rename, the intermediate relation created earlier in the
+        same transaction is rolled back with it. execute()'s retry then
+        resends only the failed RENAME statement, so the second RENAME
+        (intermediate -> target) fails with "relation ... does not exist",
+        masking the original conflict.
+
+        Wrapping the rename in fresh_transaction() commits the in-progress
+        transaction (and the intermediate relation with it) before attempting
+        the rename, so a conflict here can no longer take the intermediate
+        relation down with it. Mirrors the CASCADE handling in drop_relation
+        above.
+        """
+        with self.connections.fresh_transaction():
+            return super().rename_relation(from_relation, to_relation)
+
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx):
         column = agate_table.columns[col_idx]
