@@ -120,6 +120,9 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         return config_dict
 
 
+# There is no ALTER INTERACTIVE TABLE, so every change replaces and the materialization
+# only branches on `configuration_changes is none`. requires_full_refresh is never read; it
+# exists here solely to satisfy the abstract RelationConfigChange contract.
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeInteractiveTableClusterByConfigChange(RelationConfigChange):
     context: Optional[str] = None
@@ -152,20 +155,6 @@ class SnowflakeInteractiveTableConfigChangeset:
     cluster_by: Optional[SnowflakeInteractiveTableClusterByConfigChange] = None
     target_lag: Optional[SnowflakeInteractiveTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeInteractiveTableWarehouseConfigChange] = None
-
-    @property
-    def requires_full_refresh(self) -> bool:
-        return any(
-            [
-                self.cluster_by.requires_full_refresh if self.cluster_by else False,
-                self.target_lag.requires_full_refresh if self.target_lag else False,
-                (
-                    self.snowflake_warehouse.requires_full_refresh
-                    if self.snowflake_warehouse
-                    else False
-                ),
-            ]
-        )
 
     @property
     def has_changes(self) -> bool:

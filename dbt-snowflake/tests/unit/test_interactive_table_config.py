@@ -153,7 +153,6 @@ class TestSnowflakeInteractiveTableConfigChangeset:
         changeset = SnowflakeInteractiveTableConfigChangeset()
 
         assert not changeset.has_changes
-        assert not changeset.requires_full_refresh
 
     def test_cluster_by_change_requires_full_refresh(self):
         """Cluster by changes require full refresh (no ALTER support)."""
@@ -165,7 +164,7 @@ class TestSnowflakeInteractiveTableConfigChangeset:
         )
 
         assert changeset.has_changes
-        assert changeset.requires_full_refresh
+        assert changeset.cluster_by.requires_full_refresh
 
     def test_target_lag_change_requires_full_refresh(self):
         """Target lag changes require full refresh (no ALTER support)."""
@@ -177,7 +176,7 @@ class TestSnowflakeInteractiveTableConfigChangeset:
         )
 
         assert changeset.has_changes
-        assert changeset.requires_full_refresh
+        assert changeset.target_lag.requires_full_refresh
 
     def test_warehouse_change_requires_full_refresh(self):
         """Warehouse changes require full refresh (no ALTER support)."""
@@ -189,7 +188,7 @@ class TestSnowflakeInteractiveTableConfigChangeset:
         )
 
         assert changeset.has_changes
-        assert changeset.requires_full_refresh
+        assert changeset.snowflake_warehouse.requires_full_refresh
 
     def test_all_changes_require_full_refresh(self):
         """All config change types require full refresh for interactive tables."""
@@ -285,7 +284,7 @@ class TestInteractiveTableChangeDetectionLogic:
         assert changeset is not None
         assert changeset.cluster_by is not None
         assert changeset.cluster_by.context == "region"
-        assert changeset.requires_full_refresh
+        assert changeset.cluster_by.requires_full_refresh
 
     def test_target_lag_change_detected(self):
         """When target_lag changes, a changeset is returned."""
@@ -324,7 +323,7 @@ class TestInteractiveTableChangeDetectionLogic:
         assert changeset is not None
         assert changeset.target_lag is not None
         assert changeset.target_lag.context is None
-        assert changeset.requires_full_refresh
+        assert changeset.target_lag.requires_full_refresh
 
     def test_warehouse_change_detected(self):
         """When warehouse changes, a changeset is returned."""
