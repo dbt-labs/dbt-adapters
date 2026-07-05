@@ -110,7 +110,8 @@ models__merge_view_unsupported_type_sql = """
         table_type='iceberg',
         materialized='incremental',
         incremental_strategy='merge',
-        unique_key=['id']
+        unique_key=['id'],
+        tmp_relation_type='view'
     )
 }}
 
@@ -221,7 +222,7 @@ class BaseMergeTmpRelationType:
         return tmp_queries
 
 
-class TestIcebergMergeDefaultTmpRelationIsView(BaseMergeTmpRelationType):
+class TestIcebergMergeDefaultTmpRelationIsTable(BaseMergeTmpRelationType):
     @pytest.fixture(scope="class")
     def models(self):
         return {"merge_default_tmp.sql": models__merge_default_tmp_sql}
@@ -230,17 +231,17 @@ class TestIcebergMergeDefaultTmpRelationIsView(BaseMergeTmpRelationType):
     def seeds(self):
         return {"expected_merge_view_tmp.csv": seeds__expected_merge_view_tmp_csv}
 
-    def test__merge_defaults_to_view_tmp_relation(self, project, capsys):
-        """With no tmp_relation_type set, merge stages the source as a view
-        (same default as dbt-trino and dbt-snowflake)."""
+    def test__merge_defaults_to_table_tmp_relation(self, project, capsys):
+        """With no tmp_relation_type set, merge stages the source as a table,
+        preserving backward-compatible behavior."""
 
         tmp_queries = self.run_and_get_tmp_queries(project, capsys, "merge_default_tmp")
 
         view_creates = [q for q in tmp_queries if "create or replace view" in q.lower()]
         table_creates = [q for q in tmp_queries if "create table" in q.lower()]
 
-        assert view_creates, "expected merge to stage the source as a view by default"
-        assert not table_creates, "expected no tmp table creation for the default merge path"
+        assert table_creates, "expected merge to stage the source as a table by default"
+        assert not view_creates, "expected no view creation for the default merge path"
 
 
 class TestIcebergMergeViewTmpRelation(BaseMergeTmpRelationType):
@@ -286,43 +287,23 @@ class TestIcebergMergeTableTmpRelationOptOut(BaseMergeTmpRelationType):
         assert not view_creates, "expected no view creation when tmp_relation_type=table"
 
 
-class TestIcebergMergeViewFallbackOnUnsupportedType:
+class TestIcebergMergeViewUnsupportedTypeFailsLoudly:
     @pytest.fixture(scope="class")
     def models(self):
         return {"merge_view_unsupported_type.sql": models__merge_view_unsupported_type_sql}
 
-    def test__falls_back_to_table_staging(self, project, capsys):
-        """timestamp(6) columns cannot live in an Athena view, so the default
-        view staging must fall back to a table and the run still succeed."""
+    def test__view_with_unsupported_types_errors(self, project):
+        """timestamp(6) columns cannot live in an Athena view, so an explicitly
+        requested view staging must fail loudly on the incremental run instead
+        of silently changing behavior. Cast the columns or use 'table'."""
 
         relation_name = "merge_view_unsupported_type"
         model_run = run_dbt(["run", "--select", relation_name])
         assert model_run.results[0].status == RunStatus.Success
-        capsys.readouterr()  # discard first-run logs
 
-        incremental_run = run_dbt(
-            [
-                "run",
-                "--select",
-                relation_name,
-                "--log-level",
-                "debug",
-                "--log-format",
-                "json",
-            ]
-        )
-        assert incremental_run.results[0].status == RunStatus.Success
-
-        out, _ = capsys.readouterr()
-        queries = extract_athena_queries(out, relation_name)
-        tmp_queries = [q for q in queries if "__dbt_tmp" in q]
-        table_creates = [q for q in tmp_queries if "create table" in q.lower()]
-        assert table_creates, "expected fallback to table staging for unsupported view types"
-
-        rows = project.run_sql(
-            f"select count(*) from {project.test_schema}.{relation_name}", fetch="one"
-        )
-        assert rows[0] == 3
+        result = run_dbt(["run", "--select", relation_name], expect_pass=False)
+        assert result.results[0].status == RunStatus.Error
+        assert "type" in result.results[0].message.lower()
 
 
 class TestViewTmpRelationInvalidWithInsertOverwrite:

@@ -1579,20 +1579,6 @@ class AthenaAdapter(SQLAdapter):
         return f'{{"rowcount":{cursor.rowcount},"data_scanned_in_bytes":{cursor.data_scanned_in_bytes}}}'
 
     @available
-    def run_query_with_view_type_catching(self, sql: str) -> str:
-        """Athena views only hold Hive-compatible types; columns such as
-        timestamp(6) or timestamp with time zone are rejected at creation.
-        Returns a marker instead of raising so the caller can fall back to
-        staging the data as a table."""
-        try:
-            self._run_query(sql)
-        except AthenaError as e:
-            if "Invalid column type" in str(e) or "Unsupported Hive type" in str(e):
-                return "UNSUPPORTED_VIEW_COLUMN_TYPE"
-            raise e
-        return "SUCCESS"
-
-    @available
     def format_partition_keys(self, partition_keys: List[str]) -> str:
         return ", ".join([self.format_one_partition_key(k) for k in partition_keys])
 

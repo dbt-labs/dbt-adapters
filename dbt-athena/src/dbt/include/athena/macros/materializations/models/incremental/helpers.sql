@@ -42,10 +42,12 @@
        (insert_overwrite, force_batch) require a physical table so every read
        sees identical data.
 
-       Like dbt-trino and dbt-snowflake, the merge strategy defaults to a
-       view. Set tmp_relation_type to 'table' to opt out, e.g. for models
-       projecting types that Athena views cannot hold, such as
-       'timestamp with time zone'.
+       The default is 'table' to preserve backward-compatible behavior; set
+       tmp_relation_type to 'view' to opt in for merge and append models.
+       The config name mirrors dbt-trino and dbt-snowflake. Note that Athena
+       views cannot hold some types, such as 'timestamp(6)' or
+       'timestamp with time zone' — cast those columns (e.g. to
+       'timestamp(3)') or keep 'table'.
   #} */
 
   {% if tmp_relation_type is not none and tmp_relation_type not in ['table', 'view'] %}
@@ -74,9 +76,7 @@
     {% endif %}
   {% endif %}
 
-  {% if tmp_relation_type in ['table', 'view'] %}
-    {% do return(tmp_relation_type) %}
-  {% elif language == 'sql' and strategy == 'merge' and not force_batch %}
+  {% if tmp_relation_type == 'view' %}
     {% do return('view') %}
   {% else %}
     {% do return('table') %}
@@ -87,26 +87,12 @@
 {% macro stage_incremental_tmp_relation(tmp_relation, tmp_relation_type, compiled_code, model_language, force_batch) %}
   /* {#
        Creates the staging relation for an incremental run and returns it.
-       When the resolved type is 'view' but the user did not request it
-       explicitly, an Athena rejection of the view's column types (e.g.
-       timestamp(6) or timestamp with time zone, which Glue views cannot
-       hold) falls back to staging a table. An explicitly configured view
-       fails loudly instead.
   #} */
   {% if tmp_relation_type == 'view' %}
-    {% if config.get('tmp_relation_type') is not none %}
-      {%- call statement('create_tmp_relation') -%}
-        {{ create_view_as(tmp_relation, compiled_code) }}
-      {%- endcall -%}
-      {% do return(tmp_relation) %}
-    {% else %}
-      {% set view_result = adapter.run_query_with_view_type_catching(create_view_as(tmp_relation, compiled_code)) %}
-      {% if view_result != 'UNSUPPORTED_VIEW_COLUMN_TYPE' %}
-        {% do return(tmp_relation) %}
-      {% endif %}
-      {% do log('Model columns are not supported in an Athena view, staging as a table instead') %}
-      {% set tmp_relation = tmp_relation.incorporate(type='table') %}
-    {% endif %}
+    {%- call statement('create_tmp_relation') -%}
+      {{ create_view_as(tmp_relation, compiled_code) }}
+    {%- endcall -%}
+    {% do return(tmp_relation) %}
   {% endif %}
 
   {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) %}
