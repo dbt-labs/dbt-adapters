@@ -241,6 +241,18 @@ athena:
     - For incremental models, it allows to define a schema to hold temporary create statements
       used in incremental model runs
     - Schema will be created in the model target database if does not exist
+- `tmp_relation_type` (`default=none`)
+    - For incremental models, controls whether the model query is staged as a `table` or a `view`
+      before being inserted/merged into the target table
+    - When unset, the `merge` strategy stages as a view (like dbt-trino and dbt-snowflake), so the
+      data is only written once by the merge itself instead of twice (temporary table, then merge);
+      all other strategies stage as a table
+    - If Athena rejects the view because the model projects column types views cannot hold
+      (e.g. `timestamp(6)` or `timestamp with time zone`), the default automatically falls back to
+      staging a table. Set `tmp_relation_type='table'` to skip the view attempt entirely, or cast
+      the offending columns (e.g. to `timestamp(3)`) to keep the view staging
+    - `view` cannot be combined with Python models, the `insert_overwrite` strategy or
+      `force_batch`, since those read the staged data more than once and require a stable snapshot
 - `lf_tags_config` (`default=none`)
     - [AWS Lake Formation](#aws-lake-formation-integration) tags to associate with the table and columns
     - `enabled` (`default=False`) whether LF tags management is enabled for a model
@@ -426,6 +438,13 @@ It is possible to use Iceberg in an incremental fashion, specifically two strate
         - `incremental_predicates`, `delete_condition`, `update_condition` and `insert_condition` can include any column of
           the incremental table (`src`) or the final table (`target`).
           Column names must be prefixed by either `src` or `target` to prevent a `Column is ambiguous` error.
+
+The `merge` strategy stages the model query as a view by default, so the data is only written once — by the
+merge into the target table — instead of twice (once into a temporary table, then again by the merge). This
+reduces both run time and Athena scan costs. If Athena rejects the view because the model projects column
+types views cannot hold (e.g. `timestamp(6)` or `timestamp with time zone`), dbt automatically falls back to
+staging a temporary table. Set `tmp_relation_type` to `table` or `view` to control this behavior explicitly
+(see [Table configuration](#table-configuration)).
 
 `delete_condition` example:
 
