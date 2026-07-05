@@ -1,0 +1,10 @@
+kind: Features
+body: Stage incremental merge models as a view instead of a temporary table, avoiding
+    writing the data twice. Merge defaults to a view like dbt-trino and dbt-snowflake,
+    with automatic fallback to a table when the model projects types Athena views
+    cannot hold. The staging type can be set explicitly with the `tmp_relation_type`
+    model config (`view` or `table`).
+time: 2026-07-05T14:40:46.000000+05:30
+custom:
+    Author: Amar1404
+    Issue: "1962"

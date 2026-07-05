@@ -29,6 +29,96 @@
 {% endmacro %}
 
 
+{% macro validate_get_tmp_relation_type(strategy, table_type, force_batch, language) %}
+  {%- set tmp_relation_type = config.get('tmp_relation_type') -%}
+  {%- if tmp_relation_type is not none -%}
+    {%- set tmp_relation_type = tmp_relation_type | lower -%}
+  {%- endif -%}
+  /* {#
+       Staging the model query as a view avoids writing the data twice
+       (once into a temporary table, then again by the merge/insert into the
+       target). A view is only safe when the staged data is read by a single
+       statement; strategies or options that read it multiple times
+       (insert_overwrite, force_batch) require a physical table so every read
+       sees identical data.
+
+       Like dbt-trino and dbt-snowflake, the merge strategy defaults to a
+       view. Set tmp_relation_type to 'table' to opt out, e.g. for models
+       projecting types that Athena views cannot hold, such as
+       'timestamp with time zone'.
+  #} */
+
+  {% if tmp_relation_type is not none and tmp_relation_type not in ['table', 'view'] %}
+    {% do exceptions.raise_compiler_error(
+      "Invalid tmp_relation_type provided: " ~ tmp_relation_type ~ ". Expected one of: 'table', 'view'"
+    ) %}
+  {% endif %}
+
+  {% if tmp_relation_type == 'view' %}
+    {% if language != 'sql' %}
+      {% do exceptions.raise_compiler_error(
+        "Python models only support 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+    {% if strategy == 'insert_overwrite' %}
+      {% do exceptions.raise_compiler_error(
+        "The 'insert_overwrite' strategy runs multiple statements against the staged data
+        and only supports 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+    {% if force_batch %}
+      {% do exceptions.raise_compiler_error(
+        "force_batch processes the staged data in multiple statements
+        and only supports 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+  {% endif %}
+
+  {% if tmp_relation_type in ['table', 'view'] %}
+    {% do return(tmp_relation_type) %}
+  {% elif language == 'sql' and strategy == 'merge' and not force_batch %}
+    {% do return('view') %}
+  {% else %}
+    {% do return('table') %}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro stage_incremental_tmp_relation(tmp_relation, tmp_relation_type, compiled_code, model_language, force_batch) %}
+  /* {#
+       Creates the staging relation for an incremental run and returns it.
+       When the resolved type is 'view' but the user did not request it
+       explicitly, an Athena rejection of the view's column types (e.g.
+       timestamp(6) or timestamp with time zone, which Glue views cannot
+       hold) falls back to staging a table. An explicitly configured view
+       fails loudly instead.
+  #} */
+  {% if tmp_relation_type == 'view' %}
+    {% if config.get('tmp_relation_type') is not none %}
+      {%- call statement('create_tmp_relation') -%}
+        {{ create_view_as(tmp_relation, compiled_code) }}
+      {%- endcall -%}
+      {% do return(tmp_relation) %}
+    {% else %}
+      {% set view_result = adapter.run_query_with_view_type_catching(create_view_as(tmp_relation, compiled_code)) %}
+      {% if view_result != 'UNSUPPORTED_VIEW_COLUMN_TYPE' %}
+        {% do return(tmp_relation) %}
+      {% endif %}
+      {% do log('Model columns are not supported in an Athena view, staging as a table instead') %}
+      {% set tmp_relation = tmp_relation.incorporate(type='table') %}
+    {% endif %}
+  {% endif %}
+
+  {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) %}
+  {%- if model_language == 'python' -%}
+    {% call statement('create_table', language=model_language) %}
+      {{ query_result }}
+    {% endcall %}
+  {%- endif -%}
+  {% do return(tmp_relation) %}
+{% endmacro %}
+
+
 {% macro batch_incremental_insert(tmp_relation, target_relation, dest_cols_csv) %}
     {% set partitions_batches = get_partition_batches(tmp_relation) %}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}
