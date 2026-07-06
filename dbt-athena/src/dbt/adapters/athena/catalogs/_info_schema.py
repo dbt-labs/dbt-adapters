@@ -23,5 +23,5 @@ class AthenaInfoSchemaCatalogIntegration(CatalogIntegration):
             catalog_name=self.catalog_name,
             table_format=self.table_format,
             file_format=self.file_format,
-            external_volume=None,
+            external_volume=self.external_volume,
         )
