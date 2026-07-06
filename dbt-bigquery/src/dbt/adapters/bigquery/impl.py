@@ -213,6 +213,7 @@ class BigQueryAdapter(BaseAdapter):
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full),
             **(
                 {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
                 if _CATALOGS_V2_CAPABILITY is not None
