@@ -4,7 +4,10 @@
   {%- set rel_type = none if rel_type_object == none else rel_type_object.value -%}
   {%- set natively_droppable = rel_type == 'iceberg_table' or relation.type == 'view' -%}
 
-  {%- if native_drop and natively_droppable -%}
+  {%- if adapter.is_s3_tables_database(relation.database) -%}
+    {# S3 Tables manages its own storage — must drop via SQL, never via Glue + direct S3 delete #}
+    {%- do drop_relation_sql(relation) -%}
+  {%- elif native_drop and natively_droppable -%}
     {%- do drop_relation_sql(relation) -%}
   {%- else -%}
     {%- do drop_relation_glue(relation) -%}

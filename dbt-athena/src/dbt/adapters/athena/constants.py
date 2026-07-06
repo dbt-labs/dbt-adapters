@@ -50,6 +50,11 @@ GLUE_CATALOG_TYPE = "glue"
 INFO_SCHEMA_CATALOG_TYPE = "info_schema"
 S3_TABLES_CATALOG_TYPE = "s3_tables"
 
+# The Glue federated catalog name prefix AWS assigns to S3 Tables buckets. In Athena/Glue
+# an S3 Tables bucket is addressed as "s3tablescatalog/<bucket-name>" (dbt `database`).
+# Distinct from S3_TABLES_CATALOG_TYPE, which is the dbt catalogs.yml `type` value.
+S3_TABLES_GLUE_CATALOG_PREFIX = "s3tablescatalog"
+
 # Default catalog registered for every model that does not reference a catalog.
 # Maps to Athena's standard Hive table_type.
 DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(

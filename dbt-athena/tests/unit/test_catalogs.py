@@ -184,3 +184,11 @@ class TestS3TablesCatalogIntegration:
         assert relation.catalog_type == constants.S3_TABLES_CATALOG_TYPE
         assert relation.table_format == constants.ICEBERG_TABLE_FORMAT
         assert relation.external_volume is None
+
+    def test_is_s3_tables_database(self, adapter):
+        # S3 Tables buckets surface as Glue federated catalogs "s3tablescatalog/<bucket>".
+        assert adapter.is_s3_tables_database("s3tablescatalog/my-bucket") is True
+        assert adapter.is_s3_tables_database("awsdatacatalog") is False
+        assert adapter.is_s3_tables_database("glue") is False
+        assert adapter.is_s3_tables_database(None) is False
+        assert adapter.is_s3_tables_database("") is False
