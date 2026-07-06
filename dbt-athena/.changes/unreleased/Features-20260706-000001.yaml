@@ -1,0 +1,6 @@
+kind: Features
+body: 'Support catalog_database in catalogs.yml v2: when set on a catalog, it overrides the model database via athena__generate_database_name (precedence: catalog_database > model database config > target.database).'
+time: 2026-07-06T00:00:01.000000+00:00
+custom:
+    Author: aahel
+    Issue: "2048"
