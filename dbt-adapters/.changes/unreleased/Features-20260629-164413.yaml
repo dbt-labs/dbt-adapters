@@ -1,6 +1,0 @@
-kind: Features
-body: Support microbatch concurrency for dbt-bigquery
-time: 2026-06-29T16:44:13.859882-05:00
-custom:
-    Author: amishas157
-    Issue: "766"
