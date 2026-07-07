@@ -169,9 +169,25 @@ class TestCatalogDatabase:
         relation = integration.build_relation(_model())
         assert relation.catalog_database is None
 
+    def test_info_schema_catalog_database_flows_to_relation(self):
+        config = SimpleNamespace(
+            name="my_info_schema",
+            catalog_name="my_info_schema",
+            catalog_type=constants.INFO_SCHEMA_CATALOG_TYPE,
+            table_format=constants.HIVE_TABLE_FORMAT,
+            external_volume=None,
+            file_format=constants.PARQUET_FILE_FORMAT,
+            catalog_database="analytics_db",
+            adapter_properties={},
+        )
+        integration = AthenaInfoSchemaCatalogIntegration(config)
+        assert integration.catalog_database == "analytics_db"
+        relation = integration.build_relation(_model())
+        assert relation.catalog_database == "analytics_db"
+
     def test_catalog_database_flows_from_registration_to_relation(self, adapter):
         # Register a catalog with catalog_database set; build_catalog_relation must
-        # propagate it so the athena__generate_database_name macro can read it.
+        # propagate it onto the relation so default__generate_database_name can read it.
         config = SimpleNamespace(
             name="db_override_catalog",
             catalog_name="db_override_catalog",
