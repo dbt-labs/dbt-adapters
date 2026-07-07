@@ -17,3 +17,4 @@ class AthenaCatalogRelation(CatalogRelation):
     table_format: Optional[str] = constants.HIVE_TABLE_FORMAT
     file_format: Optional[str] = constants.PARQUET_FILE_FORMAT
     external_volume: Optional[str] = None
+    catalog_database: Optional[str] = None
