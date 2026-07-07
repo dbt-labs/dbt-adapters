@@ -127,6 +127,8 @@ class CatalogIntegration(abc.ABC):
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
         self.file_format: Optional[str] = config.file_format
+        # catalog_database is an additive field; use getattr so config objects from
+        # older/third-party adapters that predate it don't break construction.
         self.catalog_database: Optional[str] = getattr(config, "catalog_database", None)
 
     def build_relation(self, config: RelationConfig) -> CatalogRelation:

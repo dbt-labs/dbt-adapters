@@ -359,8 +359,11 @@ class BaseAdapter(metaclass=AdapterMeta):
         external_volume = platform_block.get("external_volume")
         file_format = platform_block.get("file_format")
         catalog_database = platform_block.get("catalog_database")
-        _first_class = {"external_volume", "file_format", "catalog_database"}
-        props = {k: v for k, v in platform_block.items() if k not in _first_class}
+        # Keep catalog_database in props so adapter overrides (e.g. Snowflake's
+        # _translate_v2_properties) can remap it to their platform-specific field name.
+        props = {
+            k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
+        }
         return CatalogWriteIntegrationConfig(
             name=catalog.name,
             catalog_type=self._v2_to_v1_type(ct),

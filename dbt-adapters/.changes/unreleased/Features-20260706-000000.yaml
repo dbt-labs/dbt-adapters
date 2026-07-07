@@ -1,6 +1,0 @@
-kind: Features
-body: 'Add catalog_database as a first-class catalog integration field: any adapter''s catalog can now specify a database name override that takes precedence in generate_database_name. Extracted from the platform block in bridge_v2_catalog alongside external_volume and file_format.'
-time: 2026-07-06T00:00:00.000000+00:00
-custom:
-    Author: aahel
-    Issue: "2048"

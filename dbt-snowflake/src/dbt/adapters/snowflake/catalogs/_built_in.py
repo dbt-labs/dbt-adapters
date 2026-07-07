@@ -45,6 +45,7 @@ class BuiltInCatalogRelation:
     storage_serialization_policy: Optional[str] = None
     change_tracking: Optional[str] = None
     iceberg_version: Optional[int] = None
+    catalog_database: Optional[str] = None
 
 
 class BuiltInCatalogIntegration(CatalogIntegration):
@@ -127,4 +128,5 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             change_tracking=resolve_change_tracking(model, self.change_tracking),
             data_retention_time_in_days=data_retention_time_in_days,
             iceberg_version=iceberg_version,
+            catalog_database=self.catalog_database,
         )
