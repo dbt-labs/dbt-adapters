@@ -63,7 +63,7 @@ def _get_info_schema_jobs_query(project_id, dataset_id, table_id):
     """
 
 
-def _run_dbt_in_subprocess(project, dbt_command, timeout=120):
+def _run_dbt_in_subprocess(project, dbt_command, timeout=300):
     # stderr is merged into stdout so a single reader thread can drain both;
     # reading them separately with only one drained risks a classic pipe
     # deadlock if the child fills the undrained pipe's OS buffer.
