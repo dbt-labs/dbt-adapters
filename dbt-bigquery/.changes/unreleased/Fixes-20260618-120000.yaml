@@ -1,5 +1,5 @@
 kind: Fixes
-body: Hardened query execution against duplicate writes. The reopen/retry path now reuses a single predetermined job_id across attempts instead of minting a fresh one per attempt, so a retryable error escaping the polling retry can no longer resubmit non-idempotent DML (MERGE/INSERT) as a second BigQuery job. If the job_id already exists, dbt attaches to the in-flight job via get_job rather than resubmitting.
+body: Hardened job submission against duplicate writes and spurious 409 Already Exists failures. Query and copy jobs now submit with a single predetermined job_id and attach to the in-flight job via get_job when BigQuery reports the job already exists, instead of resubmitting. This prevents a retryable error escaping the polling retry (or the client library's transport retry resubmitting after a lost response) from either re-running non-idempotent DML as a second job or failing the run with a 409.
 time: 2026-06-18T12:00:00.000000-05:00
 custom:
     Author: tauhid621

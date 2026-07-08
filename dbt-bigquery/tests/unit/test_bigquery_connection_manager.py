@@ -110,6 +110,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             [self._table_ref("project", "dataset", "table1")],
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
+            job_id=ANY,
             retry=ANY,
         )
         args, kwargs = self.mock_client.copy_table.call_args
@@ -124,12 +125,31 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             [self._table_ref("project", "dataset", "table1")],
             self._table_ref("project", "dataset", "table2"),
             job_config=ANY,
+            job_id=ANY,
             retry=ANY,
         )
         args, kwargs = self.mock_client.copy_table.call_args
         self.assertEqual(
             kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
         )
+
+    def test_copy_bq_table_attaches_to_existing_job_on_conflict(self):
+        """A resubmitted copy job (e.g. a transport retry after a lost response)
+        must attach to the existing job via get_job rather than fail with a 409,
+        since copy_table has no built-in Conflict recovery."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self.mock_client.copy_table.side_effect = exceptions.Conflict(
+            "Already Exists: Job project:job_x"
+        )
+        existing_job = Mock(job_id="job_x")
+        self.mock_client.get_job.return_value = existing_job
+
+        self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 1)
+        self.mock_client.get_job.assert_called_once()
+        # We wait on the attached job, not a resubmitted one.
+        existing_job.result.assert_called_once()
 
     def test_job_labels_valid_json(self):
         expected = {"key": "value"}
