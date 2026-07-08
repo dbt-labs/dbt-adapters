@@ -209,6 +209,17 @@ def _relation_name(rel: Optional[BaseRelation]) -> str:
         return str(rel)
 
 
+def _config_get(config: Any, key: str) -> Any:
+    """Read ``key`` from a node config that may not be dict-like.
+
+    Some node configs are typed, non-mapping objects (e.g. a saved-query export's
+    ``ExportConfig``, which has no ``.get``). Return None for those rather than
+    raising AttributeError.
+    """
+    get = getattr(config, "get", None)
+    return get(key) if callable(get) else None
+
+
 def log_code_execution(code_execution_function):
     # decorator to log code and execution time
     if code_execution_function.__name__ != "submit_python_job":
@@ -393,9 +404,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             return None
 
         # "catalog" is legacy, but we support it for backward compatibility
-        if catalog_name := config.config.get(
-            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-        ) or config.config.get("catalog"):
+        if catalog_name := _config_get(
+            config.config, CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or _config_get(config.config, "catalog"):
             catalog = self.get_catalog_integration(catalog_name)
             return catalog.build_relation(config)
 
