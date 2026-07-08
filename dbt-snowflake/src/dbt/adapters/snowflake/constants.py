@@ -14,7 +14,6 @@ DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
     catalog_type="INFO_SCHEMA",  # these don't show up in Snowflake; this is a dbt convention
     external_volume=None,
     file_format=None,
-    catalog_database=None,
     adapter_properties={},
 )
 # catalog names must be uppercase since Snowflake will uppercase them in their metadata tables
@@ -24,7 +23,6 @@ DEFAULT_BUILT_IN_CATALOG = SimpleNamespace(
     # assume you are using the default volume or specify in the model
     external_volume=None,
     file_format=None,
-    catalog_database=None,
     adapter_properties={},
 )
 
@@ -34,7 +32,6 @@ DEFAULT_ICEBERG_REST_CATALOG = SimpleNamespace(
     external_volume=None,
     table_format=ICEBERG_TABLE_FORMAT,
     file_format=None,
-    catalog_database=None,
     adapter_properties={},
 )
 

@@ -45,7 +45,6 @@ class BuiltInCatalogRelation:
     storage_serialization_policy: Optional[str] = None
     change_tracking: Optional[str] = None
     iceberg_version: Optional[int] = None
-    catalog_database: Optional[str] = None
 
 
 class BuiltInCatalogIntegration(CatalogIntegration):
@@ -64,7 +63,6 @@ class BuiltInCatalogIntegration(CatalogIntegration):
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.external_volume: Optional[str] = config.external_volume
-        self.catalog_database: Optional[str] = getattr(config, "catalog_database", None)
         if adapter_properties := config.adapter_properties:
             if storage_serialization_policy := adapter_properties.get(
                 SnowflakeIcebergTableRelationParameters.storage_serialization_policy
@@ -128,5 +126,4 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             change_tracking=resolve_change_tracking(model, self.change_tracking),
             data_retention_time_in_days=data_retention_time_in_days,
             iceberg_version=iceberg_version,
-            catalog_database=self.catalog_database,
         )

@@ -369,9 +369,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         platform_block = catalog.config.get(self.type(), {}) or {}
         external_volume = platform_block.get("external_volume")
         file_format = platform_block.get("file_format")
-        catalog_database = platform_block.get("catalog_database")
-        # Keep catalog_database in props so adapter overrides (e.g. Snowflake's
-        # _translate_v2_properties) can remap it to their platform-specific field name.
         props = {
             k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
         }
@@ -382,7 +379,6 @@ class BaseAdapter(metaclass=AdapterMeta):
             table_format=self._v2_table_format(catalog),
             external_volume=str(external_volume) if external_volume is not None else None,
             file_format=str(file_format) if file_format is not None else None,
-            catalog_database=str(catalog_database) if catalog_database is not None else None,
             adapter_properties=self._translate_v2_properties(ct, props),
         )
 

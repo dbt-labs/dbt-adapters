@@ -1,6 +1,0 @@
-kind: Features
-body: 'snowflake__generate_database_name reads catalog_database from the catalog relation via build_catalog_relation; when set it takes highest priority over model database config and target.database. catalog_database is now surfaced on BuiltInCatalogRelation and IcebergRestCatalogRelation.'
-time: 2026-06-23T12:52:45.957622+05:30
-custom:
-    Author: aahel
-    Issue: "2004"
