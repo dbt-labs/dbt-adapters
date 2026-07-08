@@ -130,6 +130,7 @@ jobs:
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
+        timeout-minutes: 45
         strategy:
             fail-fast: false
             matrix:
@@ -181,6 +182,7 @@ jobs:
             contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
             inputs.python-version == vars.DEFAULT_PYTHON_VERSION
         runs-on: ${{ inputs.os }}
+        timeout-minutes: 45
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
