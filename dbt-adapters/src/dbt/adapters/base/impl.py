@@ -392,10 +392,16 @@ class BaseAdapter(metaclass=AdapterMeta):
         if not config.config:
             return None
 
+        # Catalogs are referenced via a mapping-style `catalog_name`/`catalog` key.
+        # Some node types expose a typed, non-mapping config object (e.g. a saved-query
+        # export's `ExportConfig`, which has no `.get`). Those can't reference a catalog,
+        # so bail out instead of raising AttributeError on `.get`.
+        get = getattr(config.config, "get", None)
+        if not callable(get):
+            return None
+
         # "catalog" is legacy, but we support it for backward compatibility
-        if catalog_name := config.config.get(
-            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-        ) or config.config.get("catalog"):
+        if catalog_name := get(CATALOG_INTEGRATION_MODEL_CONFIG_NAME) or get("catalog"):
             catalog = self.get_catalog_integration(catalog_name)
             return catalog.build_relation(config)
 
