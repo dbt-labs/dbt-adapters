@@ -14,4 +14,3 @@ class BigQueryCatalogRelation(CatalogRelation):
     file_format: Optional[str] = constants.INFO_SCHEMA_FILE_FORMAT
     external_volume: Optional[str] = None
     storage_uri: Optional[str] = None
-    catalog_database: Optional[str] = None

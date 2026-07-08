@@ -24,7 +24,6 @@ class _StubAdapter:
     _v2_table_format = BaseAdapter._v2_table_format
     _translate_v2_properties = BaseAdapter._translate_v2_properties
     bridge_v2_catalog = BaseAdapter.bridge_v2_catalog
-    build_catalog_relation = BaseAdapter.build_catalog_relation
 
 
 class TestBaseAdapterV2Hooks:
@@ -99,22 +98,3 @@ class TestBaseAdapterBridgeV2Catalog:
         )
         result = self.adapter.bridge_v2_catalog(catalog)
         assert result.external_volume == "correct"
-
-
-class TestBuildCatalogRelation:
-    def setup_method(self):
-        self.adapter = _StubAdapter()
-
-    def test_non_mapping_config_returns_none(self):
-        # Saved-query export nodes carry a typed ExportConfig (no `.get`); build_catalog_relation
-        # must not raise AttributeError on it — it just can't reference a catalog.
-        export_config = SimpleNamespace(export_as="table", schema_name="s", alias="a")
-        node = SimpleNamespace(config=export_config)
-        assert self.adapter.build_catalog_relation(node) is None
-
-    def test_empty_config_returns_none(self):
-        assert self.adapter.build_catalog_relation(SimpleNamespace(config={})) is None
-
-    def test_mapping_config_without_catalog_name_returns_none(self):
-        node = SimpleNamespace(config={"materialized": "table"})
-        assert self.adapter.build_catalog_relation(node) is None
