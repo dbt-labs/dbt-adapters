@@ -22,7 +22,7 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
-from google.cloud.exceptions import BadRequest, Forbidden, NotFound
+from google.cloud.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -277,9 +277,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_params["job_timeout_ms"] = int(model_timeout * 1000)
 
         with self.exception_handler(sql):
+            # Predetermine the job_id ONCE, outside the retry closure below.
+            # create_reopen_with_deadline may re-enter _query_and_results on a
+            # connection reset or a retryable error that escapes the inner
+            # polling retry. Minting the id inside the closure made every
+            # re-entry submit a brand-new job, which double-executes
+            # non-idempotent DML (MERGE/INSERT) and silently duplicates rows.
+            # A stable id makes resubmission idempotent: BigQuery returns 409
+            # Conflict for the already-created job, which _query_and_results
+            # recovers from instead of spawning a second job.
+            job_id = self.generate_job_id()
 
             def _execute_with_retry():
-                job_id = self.generate_job_id()
                 return self._query_and_results(
                     conn,
                     sql,
@@ -626,14 +635,27 @@ class BigQueryConnectionManager(BaseConnectionManager):
         polling_timeout = (
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
-        # Cannot reuse job_config if destination is set and ddl is used
-        query_job = client.query(
-            query=sql,
-            job_config=query_job_config,
-            job_id=job_id,
-            job_retry=None,
-            timeout=self._retry.create_job_creation_timeout(),
-        )
+        # Cannot reuse job_config if destination is set and ddl is used.
+        # job_id is predetermined and stable across retries (see raw_execute).
+        # If a previous attempt already created this job (e.g. the connection
+        # dropped after submission and the reopen-retry re-entered), BigQuery
+        # raises 409 Conflict. Attach to the existing job rather than
+        # resubmitting, so a single statement can never spawn two BQ jobs and
+        # duplicate non-idempotent DML.
+        try:
+            query_job = client.query(
+                query=sql,
+                job_config=query_job_config,
+                job_id=job_id,
+                job_retry=None,
+                timeout=self._retry.create_job_creation_timeout(),
+            )
+        except Conflict:
+            logger.debug(
+                f"Job {job_id} already exists; attaching to the in-flight job "
+                "instead of resubmitting to avoid duplicate execution."
+            )
+            query_job = client.get_job(job_id)
         if (
             query_job.location is not None
             and query_job.job_id is not None

@@ -161,7 +161,11 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.connections.copy_bq_table(source, destination, write_disposition)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_raw_execute_retries_with_fresh_job_id(self, MockQueryJobConfig):
+    def test_raw_execute_reuses_job_id_on_retry(self, MockQueryJobConfig):
+        """The reopen-retry must reuse the SAME predetermined job_id across
+        attempts. Minting a fresh id per attempt double-executes non-idempotent
+        DML and duplicates rows (inc-6741). A stable id makes resubmission
+        idempotent via BigQuery's 409 Conflict path."""
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
         job_ids_used = []
 
@@ -176,7 +180,32 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.mock_client.query.side_effect = capture_job_id
         self.connections.raw_execute("SELECT 1")
         self.assertEqual(self.mock_client.query.call_count, 2)
-        self.assertNotEqual(job_ids_used[0], job_ids_used[1])
+        self.assertEqual(job_ids_used[0], job_ids_used[1])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_to_existing_job_on_conflict(self, MockQueryJobConfig):
+        """If the job_id already exists (a prior attempt submitted it), recover
+        by attaching to the existing job via get_job instead of resubmitting,
+        so a single statement never spawns a duplicate BigQuery job."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self.mock_client.query.side_effect = exceptions.Conflict(
+            "Already Exists: Job project:job_x"
+        )
+        existing_job = Mock(job_id="job_x", location="US", project="project")
+        existing_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = existing_job
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id="job_x",
+        )
+
+        self.mock_client.get_job.assert_called_once_with("job_x")
+        self.assertIs(query_job, existing_job)
+        # The DML must not be resubmitted.
+        self.assertEqual(self.mock_client.query.call_count, 1)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_raw_execute_no_retry_on_non_retryable_error(self, MockQueryJobConfig):
