@@ -5,6 +5,7 @@ import time
 import os
 import signal
 import subprocess
+import threading
 
 import pytest
 
@@ -62,8 +63,10 @@ def _get_info_schema_jobs_query(project_id, dataset_id, table_id):
     """
 
 
-def _run_dbt_in_subprocess(project, dbt_command):
-
+def _run_dbt_in_subprocess(project, dbt_command, timeout=120):
+    # stderr is merged into stdout so a single reader thread can drain both;
+    # reading them separately with only one drained risks a classic pipe
+    # deadlock if the child fills the undrained pipe's OS buffer.
     run_dbt_process = subprocess.Popen(
         [
             "dbt",
@@ -74,24 +77,41 @@ def _run_dbt_in_subprocess(project, dbt_command):
             project.project_root,
         ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         shell=False,
         env=os.environ.copy(),
+        text=True,
     )
-    std_out_log = ""
-    while True:
-        std_out_line = run_dbt_process.stdout.readline().decode("utf-8")
-        std_out_log += std_out_line
-        if std_out_line != "":
-            print(std_out_line)
-            if "1 of 1 START" in std_out_line:
+
+    output_lines = []
+
+    def _drain_output():
+        for line in run_dbt_process.stdout:
+            output_lines.append(line)
+            print(line, end="")
+            if "1 of 1 START" in line:
                 time.sleep(1)
                 run_dbt_process.send_signal(signal.SIGINT)
 
-        if run_dbt_process.poll():
-            break
+    # Reading happens on its own thread so the main thread can enforce a
+    # wall-clock timeout on the subprocess instead of blocking forever on
+    # a readline() call that has no timeout of its own.
+    reader_thread = threading.Thread(target=_drain_output, daemon=True)
+    reader_thread.start()
 
-    return std_out_log
+    try:
+        run_dbt_process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        run_dbt_process.kill()
+        run_dbt_process.wait()
+        reader_thread.join(timeout=5)
+        raise TimeoutError(
+            f"'dbt {dbt_command}' did not exit within {timeout}s of being sent SIGINT"
+        )
+
+    reader_thread.join(timeout=5)
+
+    return "".join(output_lines)
 
 
 def _get_job_id(project, table_name):
