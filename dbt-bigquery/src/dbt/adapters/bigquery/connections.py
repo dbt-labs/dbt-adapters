@@ -129,9 +129,14 @@ class BigQueryConnectionManager(BaseConnectionManager):
             raise DbtDatabaseError(exc_message)
 
     def cancel_open(self) -> List[str]:
+        logger.warning("DIAGNOSTIC: cancel_open() called")
         names = []
         this_connection = self.get_if_exists()
         with self.lock:
+            logger.warning(
+                f"DIAGNOSTIC: cancel_open() acquired lock, "
+                f"thread_connections={list(self.thread_connections.keys())}"
+            )
             for thread_id, connection in self.thread_connections.items():
                 if connection is this_connection:
                     continue
@@ -139,11 +144,17 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 if connection.handle is not None and connection.state == ConnectionState.OPEN:
                     client: Client = connection.handle
                     for job_id in self.jobs_by_thread.get(thread_id, []):
+                        logger.warning(f"DIAGNOSTIC: about to call client.cancel_job({job_id})")
+                        start = time.time()
                         with self.exception_handler(f"Cancel job: {job_id}"):
                             client.cancel_job(
                                 job_id,
                                 retry=self._retry.create_reopen_with_deadline(connection),
                             )
+                        logger.warning(
+                            f"DIAGNOSTIC: client.cancel_job({job_id}) returned after "
+                            f"{time.time() - start:.1f}s"
+                        )
                     self.close(connection)
 
                 if connection.name is not None:
