@@ -63,6 +63,37 @@ def _get_info_schema_jobs_query(project_id, dataset_id, table_id):
     """
 
 
+def _get_all_jobs_query(project_id, dataset_id, table_id):
+    """
+    Diagnostic query: list every job (not just cancelled ones) that targeted
+    this destination table, to check whether a retry silently resubmitted
+    the query as a new job after cancellation instead of stopping it.
+    """
+    return f"""
+        SELECT job_id, creation_time, state, error_result.reason AS error_reason
+        FROM `region-us`.`INFORMATION_SCHEMA.JOBS_BY_PROJECT`
+        WHERE creation_time > TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 HOUR)
+        AND statement_type = 'CREATE_TABLE_AS_SELECT'
+        AND project_id = '{project_id}'
+        AND destination_table.table_id = '{table_id}'
+        AND destination_table.dataset_id = '{dataset_id}'
+        ORDER BY creation_time
+    """
+
+
+def _dump_all_jobs_for_debugging(project, table_name):
+    try:
+        with get_connection(project.adapter):
+            jobs = project.run_sql(
+                _get_all_jobs_query(project.database, project.test_schema, table_name)
+            )
+        print(f"\nAll BigQuery jobs targeting table {table_name!r} in the last 5 hours:")
+        for row in jobs:
+            print(f"  {row}")
+    except Exception as e:
+        print(f"\nCould not fetch diagnostic job list: {e!r}")
+
+
 def _run_dbt_in_subprocess(project, dbt_command, timeout=650):
     # BigQuery's cancel_job() retries internally on transient errors using
     # job_retry_deadline_seconds (default 600s), so the timeout here needs
@@ -144,7 +175,11 @@ class TestBigqueryCancelsQueriesOnKeyboardInterrupt:
         }
 
     def test_bigquery_cancels_queries_for_model_on_keyboard_interrupt(self, project):
-        std_out_log = _run_dbt_in_subprocess(project, "run")
+        try:
+            std_out_log = _run_dbt_in_subprocess(project, "run")
+        except TimeoutError:
+            _dump_all_jobs_for_debugging(project, "model")
+            raise
 
         assert "CANCEL query model.test.model" in std_out_log
         assert len(_get_job_id(project, "model")) == 1
