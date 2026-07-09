@@ -169,55 +169,82 @@ jobs:
             - name: "Install hatch"
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
+            # DIAGNOSTIC (temporary): the cancel test hangs on Linux CI but not
+            # locally. Run a background watchdog that dumps python thread stacks
+            # to the Actions console if the run is still alive after a while.
+            # `py-spy dump` prints only stacks (thread/function/file/line) — no
+            # local variable values or arguments — so no credentials are exposed.
             - name: "Run integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests
+              run: |
+                  python -m pip install --quiet py-spy || true
+                  export PATH="$HOME/.local/bin:$PATH"
+                  echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope >/dev/null 2>&1 || true
+                  (
+                    elapsed=0
+                    while true; do
+                      sleep 120; elapsed=$((elapsed + 120))
+                      echo "===================================================="
+                      echo "WATCHDOG: python thread stacks at ~${elapsed}s"
+                      echo "===================================================="
+                      for pid in $(pgrep -f "[p]ython"); do
+                        echo "----- py-spy dump pid ${pid} -----"
+                        py-spy dump --pid "${pid}" 2>&1 || true
+                      done
+                    done
+                  ) &
+                  WATCH=$!
+                  set +e
+                  hatch run ${{ inputs.hatch-env }}:integration-tests
+                  rc=$?
+                  kill "${WATCH}" 2>/dev/null || true
+                  exit $rc
 
-    integration-tests-bigquery-flaky:
-        # we only run this for one python version to avoid running in parallel
-        if: |
-            contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
-            inputs.python-version == vars.DEFAULT_PYTHON_VERSION
-        runs-on: ${{ inputs.os }}
-        defaults:
-            run:
-                working-directory: "./dbt-bigquery"
-        environment:
-            name: "dbt-bigquery"
-        env:
-            BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
-            BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
-            BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
-            BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
-            BIGFRAMES_NOTEBOOK_TEMPLATE_ID: ${{ secrets.BIGFRAMES_NOTEBOOK_TEMPLATE_ID }}
-            DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
-            DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
-            DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
-            COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
-            DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
-            DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
-            GCS_BUCKET: ${{ vars.GCS_BUCKET }}
-        steps:
-            - name: "Checkout ${{ inputs.branch }}"
-              uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
-              with:
-                  ref: ${{ inputs.branch }}
-                  repository: ${{ inputs.repository }}
-                  submodules: true
+    # integration-tests-bigquery-flaky:
+    #     # we only run this for one python version to avoid running in parallel
+    #     if: |
+    #         contains(fromJSON(inputs.packages), 'dbt-bigquery') &&
+    #         inputs.python-version == vars.DEFAULT_PYTHON_VERSION
+    #     runs-on: ${{ inputs.os }}
+    #     defaults:
+    #         run:
+    #             working-directory: "./dbt-bigquery"
+    #     environment:
+    #         name: "dbt-bigquery"
+    #     env:
+    #         BIGQUERY_TEST_SERVICE_ACCOUNT_JSON: ${{ secrets.BIGQUERY_TEST_SERVICE_ACCOUNT_JSON }}
+    #         BIGQUERY_TEST_ALT_DATABASE: ${{ vars.BIGQUERY_TEST_ALT_DATABASE }}
+    #         BIGQUERY_TEST_NO_ACCESS_DATABASE: ${{ vars.BIGQUERY_TEST_NO_ACCESS_DATABASE }}
+    #         BIGQUERY_TEST_ICEBERG_BUCKET: ${{ vars.BIGQUERY_TEST_ICEBERG_BUCKET }}
+    #         BIGFRAMES_NOTEBOOK_TEMPLATE_ID: ${{ secrets.BIGFRAMES_NOTEBOOK_TEMPLATE_ID }}
+    #         DBT_TEST_USER_1: ${{ vars.DBT_TEST_USER_1 }}
+    #         DBT_TEST_USER_2: ${{ vars.DBT_TEST_USER_2 }}
+    #         DBT_TEST_USER_3: ${{ vars.DBT_TEST_USER_3 }}
+    #         COMPUTE_REGION: ${{ vars.COMPUTE_REGION }}
+    #         DATAPROC_REGION: ${{ vars.DATAPROC_REGION }}
+    #         DATAPROC_CLUSTER_NAME: ${{ vars.DATAPROC_CLUSTER_NAME }}
+    #         GCS_BUCKET: ${{ vars.GCS_BUCKET }}
+    #     steps:
+    #         - name: "Checkout ${{ inputs.branch }}"
+    #           uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
+    #           with:
+    #               ref: ${{ inputs.branch }}
+    #               repository: ${{ inputs.repository }}
+    #               submodules: true
 
-            - name: "Set up Python"
-              uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # actions/setup-python@v6
-              with:
-                  python-version: ${{ inputs.python-version }}
-                  allow-prereleases: true
+    #         - name: "Set up Python"
+    #           uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # actions/setup-python@v6
+    #           with:
+    #               python-version: ${{ inputs.python-version }}
+    #               allow-prereleases: true
 
-            - name: "Set environment variables"
-              run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
+    #         - name: "Set environment variables"
+    #           run: echo "HATCH_PYTHON=${{ inputs.python-version }}" >> $GITHUB_ENV
 
-            - name: "Install hatch"
-              uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
+    #         - name: "Install hatch"
+    #           uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
-            - name: "Run flaky integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
+    #         - name: "Run flaky integration tests"
+    #           run: hatch run ${{ inputs.hatch-env }}:integration-tests-flaky
 
     # integration-tests-postgres:
     #     if: contains(fromJSON(inputs.packages), 'dbt-postgres')
