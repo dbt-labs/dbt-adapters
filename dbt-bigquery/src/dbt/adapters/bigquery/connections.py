@@ -52,10 +52,11 @@ logger = AdapterLogger("BigQuery")
 
 BQ_QUERY_JOB_SPLIT = "-----Query Job SQL Follows-----"
 
-# Per-request socket-read timeout for each completion poll. Bounds a stalled read
-# (e.g. a connection closed during cancellation) that would otherwise block for the
-# full execution budget; the overall wait is still capped by polling_timeout below.
-_QUERY_RESULT_POLL_TIMEOUT = 300.0
+# Per-attempt timeout for each completion poll. Bounds a stalled read (e.g. a
+# connection closed during cancellation) that would otherwise block for the full
+# execution budget; a query running longer than this re-arms, and the overall wait
+# is still capped by polling_timeout below.
+_QUERY_RESULT_POLL_TIMEOUT = 120.0
 
 
 @dataclass
@@ -665,6 +666,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
                     )
                     break
                 except TimeoutError:
+                    # cancel_open() closes this connection during cancellation. Stop
+                    # polling instead of re-arming, so a cancelled run terminates
+                    # rather than re-polling a dead connection until polling_timeout.
+                    if conn.state == ConnectionState.CLOSED:
+                        raise
                     if poll_deadline is not None and time.monotonic() >= poll_deadline:
                         raise
         except TimeoutError:
