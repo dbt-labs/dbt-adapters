@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix invalid 'FIXED' dtype in snapshot deletion_records cast to NUMBER
+time: 2026-07-10T12:00:00.000000-04:00
+custom:
+    Author: itsnamangoyal
+    Issue: "1986"
