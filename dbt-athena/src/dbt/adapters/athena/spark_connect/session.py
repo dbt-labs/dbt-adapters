@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import threading
 import time
 from typing import Dict, List, Optional, Tuple, TypedDict
@@ -34,6 +35,16 @@ class _AccountCapacityUnavailable(Exception):
     """
 
 
+class _StartSessionThrottled(Exception):
+    """Raised when Athena throttles StartSession (``ThrottlingException`` /
+    ``Rate exceeded``).
+
+    The StartSession call-rate quota is account-wide and independent of the DPU
+    budget: many small sessions fit the budget yet still burst past the rate
+    limit, so the pool backs off and retries rather than failing the model.
+    """
+
+
 class SparkConnectSessionPool:
     """Singleton pool of Athena Spark Connect sessions.
 
@@ -47,7 +58,12 @@ class SparkConnectSessionPool:
 
     _DEAD_SESSION_STATES = frozenset({"FAILED", "TERMINATED", "TERMINATING", "DEGRADED"})
     _EVICTION_INTERVAL = 30.0
-    _GLOBAL_LIMIT_BACKOFF_SECONDS = 5.0
+
+    # Full-jitter exponential backoff bounds for AWS StartSession pushbacks
+    # (session limit, region capacity, throttling), so concurrent workers hit
+    # by the same event disperse their retries instead of colliding in lockstep.
+    _PUSHBACK_BASE_BACKOFF_SECONDS = 1.0
+    _PUSHBACK_MAX_BACKOFF_SECONDS = 30.0
 
     def __new__(cls) -> "SparkConnectSessionPool":
         # Avoid double-checked locking: another thread could see
@@ -102,11 +118,11 @@ class SparkConnectSessionPool:
         invocation_id = key[0]
         deadline = time.monotonic() + timeout
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
+        pushback_attempts = 0
 
         while True:
             new_session_id: Optional[str] = None
-            global_limit_hit = False
-            capacity_unavailable = False
+            pushback: Optional[str] = None
             start_error: Optional[BaseException] = None
             budget_used = 0
             budget_ok = False
@@ -127,9 +143,11 @@ class SparkConnectSessionPool:
                                 dpu_request,
                             )
                         except _GlobalSessionLimitReached:
-                            global_limit_hit = True
+                            pushback = "session_limit"
                         except _AccountCapacityUnavailable:
-                            capacity_unavailable = True
+                            pushback = "capacity"
+                        except _StartSessionThrottled:
+                            pushback = "throttling"
                         except Exception as e:  # noqa: BLE001 - re-raised after cleanup
                             start_error = e
 
@@ -140,16 +158,21 @@ class SparkConnectSessionPool:
             if start_error is not None:
                 raise start_error
 
-            if global_limit_hit:
+            if pushback == "session_limit":
                 LOGGER.warning(
                     f"Athena rejected StartSession (account session limit) for key {key}; "
                     f"client-side accounting saw used={budget_used} + request={dpu_request} "
                     f"<= budget={dpu_budget}. Another process may share the account quota."
                 )
-            if capacity_unavailable:
+            elif pushback == "capacity":
                 LOGGER.warning(
                     f"Athena rejected StartSession for key {key}: AWS region capacity "
                     f"unavailable. Backing off; this is transient and budget cannot predict it."
+                )
+            elif pushback == "throttling":
+                LOGGER.warning(
+                    f"Athena throttled StartSession (Rate exceeded) for key {key}; "
+                    f"backing off. Lower dbt threads or spark_connect_max_sessions if persistent."
                 )
 
             if reuse_candidate is not None:
@@ -180,15 +203,22 @@ class SparkConnectSessionPool:
                     f"dpu_budget={dpu_budget}, last used_dpu={budget_used})"
                 )
 
-            # Longer wait when AWS pushed back (limit or capacity) so we don't
-            # hammer StartSession during a region-wide event.
-            sleep_for = (
-                self._GLOBAL_LIMIT_BACKOFF_SECONDS
-                if (global_limit_hit or capacity_unavailable)
-                else polling_interval
-            )
+            if pushback is not None:
+                pushback_attempts += 1
+                sleep_for = self._pushback_backoff(pushback_attempts)
+            else:
+                pushback_attempts = 0
+                sleep_for = polling_interval
             time.sleep(sleep_for)
             time_since_eviction += sleep_for
+
+    def _pushback_backoff(self, attempts: int) -> float:
+        """Full-jitter exponential backoff for consecutive StartSession pushbacks."""
+        ceiling = min(
+            self._PUSHBACK_MAX_BACKOFF_SECONDS,
+            self._PUSHBACK_BASE_BACKOFF_SECONDS * (2 ** (attempts - 1)),
+        )
+        return random.uniform(0, ceiling)
 
     def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
         """Pop sessions from prior invocations. Caller must hold ``self._lock``.
@@ -254,6 +284,8 @@ class SparkConnectSessionPool:
                 raise _GlobalSessionLimitReached() from e
             if "required capacity not being available" in message:
                 raise _AccountCapacityUnavailable() from e
+            if "ThrottlingException" in message or "Rate exceeded" in message:
+                raise _StartSessionThrottled() from e
             raise
 
         session_id = str(response["SessionId"])

@@ -548,6 +548,66 @@ class TestAccountCapacityUnavailable:
         assert any("region capacity unavailable" in w for w in warnings)
 
 
+class TestStartSessionThrottling:
+    def test_retries_on_throttling_exception(self, monkeypatch):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.start_session.side_effect = [
+            Exception("ThrottlingException: Rate exceeded"),
+            {"SessionId": "sid-ok", "State": "IDLE"},
+        ]
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        sid = _acquire(pool, client, max_sessions=1)
+
+        assert sid == "sid-ok"
+        assert client.start_session.call_count == 2
+
+    def test_retries_on_bare_rate_exceeded_message(self, monkeypatch):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.start_session.side_effect = [
+            Exception("An error occurred (ThrottlingException): Rate exceeded"),
+            {"SessionId": "sid-ok", "State": "IDLE"},
+        ]
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        sid = _acquire(pool, client, max_sessions=1)
+
+        assert sid == "sid-ok"
+        assert client.start_session.call_count == 2
+
+    def test_throttling_emits_backoff_warning(self, monkeypatch):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.start_session.side_effect = [
+            Exception("ThrottlingException: Rate exceeded"),
+            {"SessionId": "sid-ok", "State": "IDLE"},
+        ]
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+        warnings = _spy_logger_warnings(monkeypatch)
+
+        _acquire(pool, client, max_sessions=1)
+
+        assert any("throttled StartSession" in w for w in warnings)
+
+    def test_backoff_grows_and_caps(self, monkeypatch):
+        """Ceiling doubles per consecutive pushback until _PUSHBACK_MAX."""
+        pool = SparkConnectSessionPool()
+        monkeypatch.setattr(session_module.random, "uniform", lambda _lo, hi: hi)
+
+        assert pool._pushback_backoff(1) == pytest.approx(1.0)
+        assert pool._pushback_backoff(2) == pytest.approx(2.0)
+        assert pool._pushback_backoff(3) == pytest.approx(4.0)
+        assert pool._pushback_backoff(99) == pytest.approx(pool._PUSHBACK_MAX_BACKOFF_SECONDS)
+
+    def test_backoff_stays_within_ceiling(self):
+        pool = SparkConnectSessionPool()
+        for attempts in range(1, 8):
+            value = pool._pushback_backoff(attempts)
+            assert 0.0 <= value <= pool._PUSHBACK_MAX_BACKOFF_SECONDS
+
+
 class TestReuseLivenessCheck:
     def test_dead_session_is_discarded_during_reuse(self):
         """When a stale session is reserved for reuse but the liveness check
