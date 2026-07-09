@@ -69,6 +69,13 @@ pre-install-commands = [
     "pip install -e ../dbt-adapters",
     "pip install -e ../dbt-tests-adapter",
 ]
+# Force the branch build of dbt-core to win: pip can skip a "pkg @ git+...@branch"
+# URL when a satisfying dbt-core is already present in the env, silently leaving
+# stock dbt-core installed. post-install runs after deps are resolved and
+# guarantees the SIGINT bounded-wait fix is the code actually loaded.
+post-install-commands = [
+    "pip install --force-reinstall --no-deps 'dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@fix/sigint-bounded-wait-cancel#subdirectory=core'",
+]
 dependencies = [
     "dbt-common @ git+https://github.com/dbt-labs/dbt-common.git",
     "dbt-core @ git+https://github.com/dbt-labs/dbt-core.git@fix/sigint-bounded-wait-cancel#subdirectory=core",
@@ -85,7 +92,11 @@ dependencies = [
 
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = 'python -m pytest -m "not flaky" --profile service_account tests/functional/test_cancel.py --ddtrace -n 4'
+integration-tests = [
+    "pip show dbt-core | grep -iE '^Version|Location' || true",
+    "python -c \"import inspect, dbt.graph.queue as q; s = inspect.getsource(q.GraphQueue.join); print('BOUNDED-WAIT FIX LOADED' if 'timeout' in s else 'WARNING: stock dbt-core, bounded-wait fix NOT loaded')\"",
+    "python -m pytest -m 'not flaky' --profile service_account tests/functional/test_cancel.py --ddtrace -n 4",
+]
 integration-tests-flaky = "python -m pytest -m flaky --profile service_account tests/functional --ddtrace -n 8"
 
 [envs.cd]
