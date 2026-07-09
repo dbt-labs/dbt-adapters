@@ -5,10 +5,21 @@ import time
 import os
 import signal
 import subprocess
+import threading
 
 import pytest
 
 from dbt.tests.util import get_connection
+
+# How long to wait for the model to start before sending SIGINT. If the "START"
+# line is never observed (some CI runners do not deliver the child's piped
+# output promptly), we fall back to signalling after this delay so a missed
+# line can never turn into a full hang.
+_START_TIMEOUT = 120.0
+# Hard cap on how long we wait for dbt to exit after SIGINT. Cancellation must
+# terminate the run promptly; if it does not, fail fast with diagnostics rather
+# than hanging until the CI job timeout.
+_EXIT_TIMEOUT = 120.0
 
 _SEED_CSV = """
 id, name, astrological_sign, moral_alignment
@@ -74,24 +85,48 @@ def _run_dbt_in_subprocess(project, dbt_command):
             project.project_root,
         ],
         stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         shell=False,
         env=os.environ.copy(),
     )
-    std_out_log = ""
-    while True:
-        std_out_line = run_dbt_process.stdout.readline().decode("utf-8")
-        std_out_log += std_out_line
-        if std_out_line != "":
-            print(std_out_line)
-            if "1 of 1 START" in std_out_line:
-                time.sleep(1)
-                run_dbt_process.send_signal(signal.SIGINT)
 
-        if run_dbt_process.poll():
-            break
+    # Drain the child's output on a background thread. Reading in the main
+    # thread with a blocking readline() means that if the "START" line is never
+    # delivered the test hangs until the CI job timeout; draining here keeps the
+    # pipe from filling and lets the main thread enforce its own timeouts.
+    captured = []
+    started = threading.Event()
 
-    return std_out_log
+    def _drain():
+        for raw in run_dbt_process.stdout:
+            line = raw.decode("utf-8")
+            captured.append(line)
+            if "1 of 1 START" in line:
+                started.set()
+
+    drainer = threading.Thread(target=_drain, daemon=True)
+    drainer.start()
+
+    # Interrupt once the model has started (preferred) or after a bounded
+    # fallback, so cancellation is always exercised and never hangs.
+    started.wait(timeout=_START_TIMEOUT)
+    time.sleep(1)
+    run_dbt_process.send_signal(signal.SIGINT)
+
+    # dbt must terminate promptly after cancellation; never wait indefinitely.
+    try:
+        run_dbt_process.wait(timeout=_EXIT_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        run_dbt_process.kill()
+        run_dbt_process.wait()
+        drainer.join(timeout=5)
+        raise AssertionError(
+            f"dbt did not exit within {_EXIT_TIMEOUT}s after SIGINT; "
+            "cancellation appears to have hung.\n" + "".join(captured)
+        )
+
+    drainer.join(timeout=5)
+    return "".join(captured)
 
 
 def _get_job_id(project, table_name):
