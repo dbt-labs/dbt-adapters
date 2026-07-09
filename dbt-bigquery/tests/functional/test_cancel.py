@@ -23,6 +23,11 @@ _EXIT_TIMEOUT = 120.0
 # How often to resend SIGINT (and re-check for exit) while waiting for dbt to
 # cancel and terminate.
 _SIGINT_INTERVAL = 5.0
+# INFORMATION_SCHEMA.JOBS_BY_PROJECT is eventually consistent, so the cancelled
+# job may not be queryable immediately. Poll for it up to this long before giving
+# up, re-checking at this interval.
+_JOB_LOOKUP_TIMEOUT = 180.0
+_JOB_LOOKUP_INTERVAL = 10.0
 
 _SEED_CSV = """
 id, name, astrological_sign, moral_alignment
@@ -171,13 +176,19 @@ def _run_dbt_in_subprocess(project, dbt_command):
 
 
 def _get_job_id(project, table_name):
-    # Because we run this in a subprocess we have to actually call Bigquery and look up the job id
-    with get_connection(project.adapter):
-        job_id = project.run_sql(
-            _get_info_schema_jobs_query(project.database, project.test_schema, table_name)
-        )
-
-    return job_id
+    # Because we run this in a subprocess we have to actually call Bigquery and look up the job id.
+    # INFORMATION_SCHEMA.JOBS_BY_PROJECT is eventually consistent: a just-cancelled job can take
+    # tens of seconds to surface, so poll until it appears (or give up after a bounded wait) rather
+    # than querying once and flaking when the metadata hasn't caught up yet.
+    deadline = time.monotonic() + _JOB_LOOKUP_TIMEOUT
+    while True:
+        with get_connection(project.adapter):
+            job_id = project.run_sql(
+                _get_info_schema_jobs_query(project.database, project.test_schema, table_name)
+            )
+        if job_id or time.monotonic() >= deadline:
+            return job_id
+        time.sleep(_JOB_LOOKUP_INTERVAL)
 
 
 @pytest.mark.skipif(
