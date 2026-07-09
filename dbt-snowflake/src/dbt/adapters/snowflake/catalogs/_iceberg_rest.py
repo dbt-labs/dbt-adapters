@@ -27,6 +27,7 @@ class IcebergRestCatalogRelation:
     max_data_extension_time_in_days: Optional[int] = None
     auto_refresh: Optional[bool] = None
     iceberg_version: Optional[int] = None
+    catalog_database: Optional[str] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -47,6 +48,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
         self.name: str = config.name
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
+        self.catalog_database: Optional[str] = getattr(config, "catalog_database", None)
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
             self.catalog_linked_database_type = adapter_properties.get(
@@ -98,4 +100,5 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             max_data_extension_time_in_days=parse_model.max_data_extension_time_in_days(model)
             or self.max_data_extension_time_in_days,
             iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
+            catalog_database=self.catalog_database,
         )
