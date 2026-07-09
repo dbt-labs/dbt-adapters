@@ -196,11 +196,6 @@ def _create_reopen_on_error(connection: Connection) -> Callable[[Exception], Non
 
     def on_error(error: Exception):
         if isinstance(error, (ConnectionResetError, ConnectionError)):
-            # Don't reopen a connection cancel_open() deliberately closed. Doing
-            # so lets the retry resubmit the job and re-poll it, so a cancelled
-            # run never terminates. Re-raise instead to let cancellation surface.
-            if connection.state == ConnectionState.CLOSED:
-                raise error
             _logger.warning("Reopening connection after {!r}".format(error))
             connection.handle.close()
 

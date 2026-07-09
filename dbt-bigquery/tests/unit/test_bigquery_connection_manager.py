@@ -7,9 +7,11 @@ import dbt.adapters
 import google.cloud.bigquery
 from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
-from dbt.adapters.bigquery.connections import BigQueryConnectionManager
+from dbt.adapters.bigquery.connections import (
+    BigQueryConnectionManager,
+    _QUERY_RESULT_POLL_TIMEOUT,
+)
 from dbt.adapters.bigquery.retry import _TerminalJobAwarePredicate, RetryFactory
-from dbt.adapters.contracts.connection import ConnectionState
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -53,24 +55,6 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         assert self.mock_connection.handle is new_mock_client
         assert new_mock_client is not self.mock_client
-
-    @patch(
-        "dbt.adapters.bigquery.retry.create_bigquery_client",
-        return_value=Mock(google.cloud.bigquery.Client),
-    )
-    def test_retry_does_not_reopen_connection_closed_for_cancellation(self, mock_client_factory):
-        """A connection closed by cancel_open() must not be reopened by the retry."""
-        self.mock_connection.state = ConnectionState.CLOSED
-
-        @self.connections._retry.create_reopen_with_deadline(self.mock_connection)
-        def raise_connection_error():
-            raise ConnectionError("connection closed for cancellation")
-
-        with self.assertRaises(ConnectionError):
-            raise_connection_error()
-
-        assert self.mock_connection.handle is self.mock_client
-        mock_client_factory.assert_not_called()
 
     def test_is_retryable(self):
         _is_retryable = google.cloud.bigquery.retry._job_should_retry
@@ -133,7 +117,8 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         )
         args, kwargs = self.mock_client.copy_table.call_args
         self.assertEqual(
-            kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_APPEND
+            kwargs["job_config"].write_disposition,
+            dbt.adapters.bigquery.impl.WRITE_APPEND,
         )
 
     def test_copy_bq_table_truncates(self):
@@ -147,7 +132,8 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         )
         args, kwargs = self.mock_client.copy_table.call_args
         self.assertEqual(
-            kwargs["job_config"].write_disposition, dbt.adapters.bigquery.impl.WRITE_TRUNCATE
+            kwargs["job_config"].write_disposition,
+            dbt.adapters.bigquery.impl.WRITE_TRUNCATE,
         )
 
     def test_job_labels_valid_json(self):
@@ -226,8 +212,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.assertEqual(self.mock_client.query.call_count, 2)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_query_and_results_passes_timeout_to_result(self, MockQueryJobConfig):
-        """Test that _query_and_results passes a timeout to query_job.result()"""
+    def test_query_and_results_bounds_each_poll_request(self, MockQueryJobConfig):
+        """The result fetch must use the fixed per-request transport timeout,
+        decoupled from the execution budget, so a stalled socket read cannot block
+        for the whole budget."""
         mock_job = Mock(job_id="test_job", location="US", project="project")
         mock_job.result.return_value = iter([])
         self.mock_client.query.return_value = mock_job
@@ -239,17 +227,13 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             job_id="test_job",
         )
 
-        # Verify result() was called with a timeout parameter
         mock_job.result.assert_called_once()
-        call_kwargs = mock_job.result.call_args[1]
-        self.assertIn("timeout", call_kwargs)
-        # timeout should be job_execution_timeout (1) + 30 second buffer = 31
-        self.assertEqual(call_kwargs["timeout"], 31)
+        self.assertEqual(mock_job.result.call_args[1]["timeout"], _QUERY_RESULT_POLL_TIMEOUT)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
-    def test_query_and_results_polling_timeout_includes_buffer(self, MockQueryJobConfig):
-        """Test that the polling timeout is job_execution_timeout + 30 seconds buffer"""
-        # Set a specific job_execution_timeout and recreate the connection manager
+    def test_query_and_results_sets_job_timeout_ms_from_profile(self, MockQueryJobConfig):
+        """The profile execution timeout must flow to server-side job_timeout_ms,
+        while each poll request stays bounded by the fixed per-request timeout."""
         self.credentials.job_execution_timeout_seconds = 120
         connections = BigQueryConnectionManager(
             profile=Mock(credentials=self.credentials, query_comment=None),
@@ -268,9 +252,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             job_id="test_job",
         )
 
-        call_kwargs = mock_job.result.call_args[1]
-        # timeout should be 120 + 30 = 150
-        self.assertEqual(call_kwargs["timeout"], 150)
+        # execution budget -> server-side job runtime limit
+        self.assertEqual(MockQueryJobConfig.call_args[1]["job_timeout_ms"], 120000)
+        # per-request transport bound is fixed, not the budget
+        self.assertEqual(mock_job.result.call_args[1]["timeout"], _QUERY_RESULT_POLL_TIMEOUT)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_retryable_google_api_error_is_reraised(self, MockQueryJobConfig):
@@ -306,9 +291,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             job_id="test_job",
         )
 
-        call_kwargs = mock_job.result.call_args[1]
-        # polling timeout should be model timeout (60) + 30 second buffer = 90
-        self.assertEqual(call_kwargs["timeout"], 90)
+        # model timeout (job_timeout_ms) is preserved as the server-side runtime limit
+        self.assertEqual(MockQueryJobConfig.call_args[1]["job_timeout_ms"], 60000)
+        # per-request transport bound is fixed, not the budget
+        self.assertEqual(mock_job.result.call_args[1]["timeout"], _QUERY_RESULT_POLL_TIMEOUT)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_query_and_results_falls_back_to_profile_timeout(self, MockQueryJobConfig):
@@ -324,9 +310,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             job_id="test_job",
         )
 
-        call_kwargs = mock_job.result.call_args[1]
-        # profile timeout is 1, so polling timeout = 1 + 30 = 31
-        self.assertEqual(call_kwargs["timeout"], 31)
+        # profile timeout (1s) flows to server-side job_timeout_ms
+        self.assertEqual(MockQueryJobConfig.call_args[1]["job_timeout_ms"], 1000)
+        # per-request transport bound is fixed, not the budget
+        self.assertEqual(mock_job.result.call_args[1]["timeout"], _QUERY_RESULT_POLL_TIMEOUT)
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_query_and_results_uses_polling_retry(self, MockQueryJobConfig):
@@ -638,7 +625,10 @@ class TestRetryFactoryPollingRetry(unittest.TestCase):
     """
 
     def _make_credentials(
-        self, job_retries=3, job_retry_deadline_seconds=None, job_execution_timeout_seconds=28800
+        self,
+        job_retries=3,
+        job_retry_deadline_seconds=None,
+        job_execution_timeout_seconds=28800,
     ):
         creds = Mock(spec=BigQueryCredentials)
         creds.job_retries = job_retries

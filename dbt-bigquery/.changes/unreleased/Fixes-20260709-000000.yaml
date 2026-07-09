@@ -1,0 +1,9 @@
+kind: Fixes
+body: Bound the per-request timeout when polling for query completion so a stalled
+    or half-open connection (e.g. one closed during cancellation, which on Linux
+    cannot interrupt an in-flight socket read) fails fast instead of blocking for
+    the full execution budget and deadlocking the run
+time: 2026-07-09T00:00:00.000000+05:30
+custom:
+    Author: tauhidanjum
+    PR: "2056"

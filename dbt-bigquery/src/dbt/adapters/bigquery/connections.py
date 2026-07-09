@@ -52,6 +52,11 @@ logger = AdapterLogger("BigQuery")
 
 BQ_QUERY_JOB_SPLIT = "-----Query Job SQL Follows-----"
 
+# Per-request socket-read timeout for each completion poll. Bounds a stalled read
+# (e.g. a connection closed during cancellation) that would otherwise block for the
+# full execution budget; the overall wait is still capped by polling_timeout below.
+_QUERY_RESULT_POLL_TIMEOUT = 300.0
+
 
 @dataclass
 class BigQueryAdapterResponse(AdapterResponse):
@@ -646,12 +651,22 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 logger.debug(job_link)
 
         pre = time.perf_counter()
+        polling_retry = self._retry.create_query_job_polling_retry(query_job)
+        poll_deadline = time.monotonic() + polling_timeout if polling_timeout else None
         try:
-            iterator = query_job.result(
-                max_results=limit,
-                timeout=polling_timeout,
-                retry=self._retry.create_query_job_polling_retry(query_job),
-            )
+            # Poll with a bounded per-request timeout, re-arming until polling_timeout
+            # is spent so a query running longer than the bound isn't cut off.
+            while True:
+                try:
+                    iterator = query_job.result(
+                        max_results=limit,
+                        timeout=_QUERY_RESULT_POLL_TIMEOUT,
+                        retry=polling_retry,
+                    )
+                    break
+                except TimeoutError:
+                    if poll_deadline is not None and time.monotonic() >= poll_deadline:
+                        raise
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             try:
