@@ -76,26 +76,32 @@ def _get_info_schema_jobs_query(project_id, dataset_id, table_id):
     """
 
 
-def _unblock_sigint_in_child():
-    """Ensure the dbt child starts with SIGINT unblocked.
+def _reset_sigint_in_child():
+    """Restore default SIGINT handling in the dbt child before exec.
 
-    This test runs under pytest-xdist (`-n`), whose worker processes run with
-    SIGINT blocked in their signal mask. `subprocess` inherits the parent
-    thread's signal *mask* (it only resets SIG_IGN dispositions, not the mask),
-    so without this the dbt child inherits a blocked SIGINT: the SIGINT we send
-    stays pending at the OS level, is never delivered to any thread, and dbt's
-    KeyboardInterrupt handling never runs. Unblocking here (in the forked child,
-    before exec) restores normal Ctrl-C behavior.
+    This test runs under pytest-xdist (`-n`), whose worker processes set SIGINT
+    to SIG_IGN. SIG_IGN is preserved across exec, and `subprocess`'s
+    `restore_signals` only resets SIGPIPE/SIGXFSZ/SIGXFZ — NOT SIGINT. So the
+    dbt child would inherit SIGINT=SIG_IGN, and CPython does not install its
+    default SIGINT handler when it inherits an ignored SIGINT — meaning dbt
+    silently ignores the Ctrl-C we send and never cancels. Resetting the
+    disposition to SIG_DFL here (in the forked child, before exec) lets dbt's
+    Python install its normal KeyboardInterrupt handler. Also unblock the signal
+    for good measure.
     """
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGINT})
 
 
 def _run_dbt_in_subprocess(project, dbt_command):
 
-    # Diagnostic: report whether the (xdist worker) parent has SIGINT blocked,
-    # which the child would otherwise inherit. Shown in pytest's captured stdout.
+    # Diagnostic: report the parent (xdist worker) SIGINT disposition + mask that
+    # the child would otherwise inherit. Shown in pytest's captured stdout.
     parent_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
-    print(f"parent SIGINT blocked in mask: {signal.SIGINT in parent_mask}")
+    print(
+        f"parent SIGINT disposition: {signal.getsignal(signal.SIGINT)!r}; "
+        f"blocked in mask: {signal.SIGINT in parent_mask}"
+    )
 
     run_dbt_process = subprocess.Popen(
         [
@@ -110,7 +116,7 @@ def _run_dbt_in_subprocess(project, dbt_command):
         stderr=subprocess.STDOUT,
         shell=False,
         env=os.environ.copy(),
-        preexec_fn=_unblock_sigint_in_child,
+        preexec_fn=_reset_sigint_in_child,
     )
 
     # Drain the child's output on a background thread. Reading in the main

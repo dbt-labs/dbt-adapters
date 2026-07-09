@@ -55,8 +55,12 @@ BQ_QUERY_JOB_SPLIT = "-----Query Job SQL Follows-----"
 # Per-attempt timeout for each completion poll. Bounds a stalled read (e.g. a
 # connection closed during cancellation) that would otherwise block for the full
 # execution budget; a query running longer than this re-arms, and the overall wait
-# is still capped by polling_timeout below.
-_QUERY_RESULT_POLL_TIMEOUT = 120.0
+# is still capped by polling_timeout below. Kept well under a minute so that when
+# a run is cancelled (the connection is closed mid-poll) the worker escapes its
+# blocked read promptly instead of hanging until the read times out — on Linux
+# closing the client does not interrupt an in-flight recv, so this per-poll bound
+# is what actually lets cancellation complete and dbt exit.
+_QUERY_RESULT_POLL_TIMEOUT = 30.0
 
 
 @dataclass
