@@ -20,6 +20,9 @@ _START_TIMEOUT = 120.0
 # terminate the run promptly; if it does not, fail fast with diagnostics rather
 # than hanging until the CI job timeout.
 _EXIT_TIMEOUT = 120.0
+# How often to resend SIGINT (and re-check for exit) while waiting for dbt to
+# cancel and terminate.
+_SIGINT_INTERVAL = 5.0
 
 _SEED_CSV = """
 id, name, astrological_sign, moral_alignment
@@ -111,17 +114,29 @@ def _run_dbt_in_subprocess(project, dbt_command):
     # fallback, so cancellation is always exercised and never hangs.
     started.wait(timeout=_START_TIMEOUT)
     time.sleep(1)
-    run_dbt_process.send_signal(signal.SIGINT)
 
-    # dbt must terminate promptly after cancellation; never wait indefinitely.
-    try:
-        run_dbt_process.wait(timeout=_EXIT_TIMEOUT)
-    except subprocess.TimeoutExpired:
+    # Resend SIGINT until dbt exits. A single process-directed SIGINT can fail
+    # to trigger cancellation (it may land before the main thread is parked in
+    # queue.join(), or be handled on a thread that does not raise
+    # KeyboardInterrupt); resending makes cancellation reliable, while the hard
+    # deadline guarantees we fail fast instead of hanging until the CI timeout.
+    deadline = time.monotonic() + _EXIT_TIMEOUT
+    exited = False
+    while time.monotonic() < deadline:
+        run_dbt_process.send_signal(signal.SIGINT)
+        try:
+            run_dbt_process.wait(timeout=_SIGINT_INTERVAL)
+            exited = True
+            break
+        except subprocess.TimeoutExpired:
+            continue
+
+    if not exited:
         run_dbt_process.kill()
         run_dbt_process.wait()
         drainer.join(timeout=5)
         raise AssertionError(
-            f"dbt did not exit within {_EXIT_TIMEOUT}s after SIGINT; "
+            f"dbt did not exit within {_EXIT_TIMEOUT}s of repeated SIGINT; "
             "cancellation appears to have hung.\n" + "".join(captured)
         )
 
