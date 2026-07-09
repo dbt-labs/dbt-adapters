@@ -136,6 +136,16 @@ class TestV2Bridge:
         with pytest.raises(DbtRuntimeError, match="unsupported table_format 'hudi'"):
             adapter.bridge_v2_catalog(catalog)
 
+    def test_bridge_v2_catalog_catalog_database_flows_to_write_config(self, adapter):
+        catalog = _v2_catalog(
+            "my_glue",
+            "glue",
+            "iceberg",
+            config={"athena": {"catalog_database": "my_glue_db"}},
+        )
+        result = adapter.bridge_v2_catalog(catalog)
+        assert result.catalog_database == "my_glue_db"
+
 
 class TestS3TablesCatalogIntegration:
     def _config(self, **overrides):
@@ -194,3 +204,66 @@ class TestS3TablesCatalogIntegration:
         assert adapter.is_s3_tables_database("glue") is False
         assert adapter.is_s3_tables_database(None) is False
         assert adapter.is_s3_tables_database("") is False
+
+
+class TestCatalogDatabase:
+    def test_catalog_database_flows_to_relation(self):
+        config = SimpleNamespace(
+            name="my_glue",
+            catalog_name="my_glue",
+            catalog_type=constants.GLUE_CATALOG_TYPE,
+            table_format=constants.ICEBERG_TABLE_FORMAT,
+            external_volume=None,
+            file_format=constants.PARQUET_FILE_FORMAT,
+            catalog_database="analytics_db",
+            adapter_properties={},
+        )
+        integration = GlueCatalogIntegration(config)
+        assert integration.catalog_database == "analytics_db"
+        relation = integration.build_relation(_model())
+        assert relation.catalog_database == "analytics_db"
+
+    def test_catalog_database_defaults_to_none(self):
+        integration = GlueCatalogIntegration(constants.DEFAULT_GLUE_CATALOG)
+        assert integration.catalog_database is None
+        relation = integration.build_relation(_model())
+        assert relation.catalog_database is None
+
+    def test_info_schema_catalog_database_flows_to_relation(self):
+        config = SimpleNamespace(
+            name="my_info_schema",
+            catalog_name="my_info_schema",
+            catalog_type=constants.INFO_SCHEMA_CATALOG_TYPE,
+            table_format=constants.HIVE_TABLE_FORMAT,
+            external_volume=None,
+            file_format=constants.PARQUET_FILE_FORMAT,
+            catalog_database="analytics_db",
+            adapter_properties={},
+        )
+        integration = AthenaInfoSchemaCatalogIntegration(config)
+        assert integration.catalog_database == "analytics_db"
+        relation = integration.build_relation(_model())
+        assert relation.catalog_database == "analytics_db"
+
+    def test_catalog_database_flows_from_registration_to_relation(self, adapter):
+        # Register a catalog with catalog_database set; build_catalog_relation must
+        # propagate it onto the relation so default__generate_database_name can read it.
+        config = SimpleNamespace(
+            name="db_override_catalog",
+            catalog_name="db_override_catalog",
+            catalog_type=constants.GLUE_CATALOG_TYPE,
+            table_format=constants.ICEBERG_TABLE_FORMAT,
+            external_volume=None,
+            file_format=constants.PARQUET_FILE_FORMAT,
+            catalog_database="my_override_db",
+            adapter_properties={},
+        )
+        adapter.add_catalog_integration(config)
+        relation = adapter.build_catalog_relation(_model({"catalog_name": "db_override_catalog"}))
+        assert relation is not None
+        assert relation.catalog_database == "my_override_db"
+
+    def test_catalog_database_is_none_when_unset(self, adapter):
+        relation = adapter.build_catalog_relation(_model({"catalog_name": "glue"}))
+        assert relation is not None
+        assert relation.catalog_database is None

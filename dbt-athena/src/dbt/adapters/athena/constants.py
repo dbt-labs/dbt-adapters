@@ -64,6 +64,7 @@ DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
     table_format=HIVE_TABLE_FORMAT,
     external_volume=None,
     file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
     adapter_properties={},
 )
 
@@ -75,5 +76,6 @@ DEFAULT_GLUE_CATALOG = SimpleNamespace(
     table_format=ICEBERG_TABLE_FORMAT,
     external_volume=None,
     file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
     adapter_properties={},
 )

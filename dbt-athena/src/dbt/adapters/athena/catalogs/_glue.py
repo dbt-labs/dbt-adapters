@@ -24,4 +24,5 @@ class GlueCatalogIntegration(CatalogIntegration):
             table_format=self.table_format,
             file_format=self.file_format,
             external_volume=self.external_volume,
+            catalog_database=self.catalog_database,
         )

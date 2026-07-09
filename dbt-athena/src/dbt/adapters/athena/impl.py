@@ -42,7 +42,6 @@ from mypy_boto3_glue.type_defs import (
     TableTypeDef,
     TableVersionTypeDef,
 )
-from pyathena.error import OperationalError
 
 from dbt.adapters.athena import AthenaConnectionManager
 from dbt.adapters.athena.catalogs import (
@@ -52,7 +51,7 @@ from dbt.adapters.athena.catalogs import (
 )
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.connections import AthenaCursor
+from dbt.adapters.athena.connections import AthenaCursor, AthenaError
 from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
     DEFAULT_INFO_SCHEMA_CATALOG,
@@ -898,19 +897,24 @@ class AthenaAdapter(SQLAdapter):
                 )
 
             catalog = []
-            paginator = athena_client.get_paginator("list_table_metadata")
             for schema in schemas:
-                for page in paginator.paginate(
-                    CatalogName=information_schema.database,
-                    DatabaseName=schema,
-                    MaxResults=50,  # Limit supported by this operation
-                ):
-                    for table in page["TableMetadataList"]:
+                kwargs = {
+                    "CatalogName": information_schema.database,
+                    "DatabaseName": schema,
+                    "MaxResults": 50,
+                }
+                while True:
+                    response = athena_client.list_table_metadata(**kwargs)
+                    for table in response["TableMetadataList"]:
                         catalog.extend(
                             self._get_one_table_for_non_glue_catalog(
                                 table, schema, information_schema.database  # type:ignore
                             )
                         )
+                    next_token = response.get("NextToken")
+                    if not next_token:
+                        break
+                    kwargs["NextToken"] = next_token
             table = agate.Table.from_object(catalog)
 
         return self._catalog_filter_table(table, used_schemas)
@@ -1669,8 +1673,8 @@ class AthenaAdapter(SQLAdapter):
     @available
     def run_query_with_partitions_limit_catching(self, sql: str) -> str:
         try:
-            cursor = self._run_query(sql, catch_partitions_limit=True)
-        except OperationalError as e:
+            cursor = self._run_query(sql)
+        except AthenaError as e:
             if "TOO_MANY_OPEN_PARTITIONS" in str(e):
                 return "TOO_MANY_OPEN_PARTITIONS"
             raise e
@@ -1739,20 +1743,20 @@ class AthenaAdapter(SQLAdapter):
     def run_operation_with_potential_multiple_runs(self, query: str, op: str) -> None:
         while True:
             try:
-                self._run_query(query, catch_partitions_limit=False)
+                self._run_query(query)
                 break
-            except OperationalError as e:
+            except AthenaError as e:
                 if f"ICEBERG_{op.upper()}_MORE_RUNS_NEEDED" not in str(e):
                     raise e
 
-    def _run_query(self, sql: str, catch_partitions_limit: bool) -> AthenaCursor:
+    def _run_query(self, sql: str) -> AthenaCursor:
         query = self.connections._add_query_comment(sql)
         conn = self.connections.get_thread_connection()
         cursor: AthenaCursor = conn.handle.cursor()
         LOGGER.debug(f"Running Athena query:\n{query}")
         try:
-            cursor.execute(query, catch_partitions_limit=catch_partitions_limit)
-        except OperationalError as e:
+            cursor.execute(query)
+        except AthenaError as e:
             LOGGER.debug(f"CAUGHT EXCEPTION: {e}")
             raise e
         return cursor
