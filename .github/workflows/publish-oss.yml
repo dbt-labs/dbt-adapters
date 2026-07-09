@@ -57,7 +57,48 @@ permissions:
     id-token: write
 
 jobs:
+    validate-inputs:
+        name: "Validate branch and deploy-to combination"
+        runs-on: ${{ vars.DEFAULT_RUNNER }}
+        steps:
+            - name: "Validate branch for prod deployment"
+              if: inputs.deploy-to == 'prod'
+              run: |
+                  package="${{ inputs.package }}"
+                  branch="${{ inputs.branch }}"
+                  version="${{ inputs.version }}"
+
+                  # dbt-adapters and dbt-tests-adapter must always publish prod from main
+                  if [[ "$package" == "dbt-adapters" || "$package" == "dbt-tests-adapter" ]]; then
+                      if [[ "$branch" != "main" ]]; then
+                          echo "::error::$package prod releases must use branch 'main', got '$branch'"
+                          exit 1
+                      fi
+                  else
+                      # For adapter packages, determine if this is a pre-release
+                      is_prerelease=false
+                      if [[ "$version" =~ (rc|a|b|alpha|beta|dev) ]]; then
+                          is_prerelease=true
+                      fi
+
+                      if [[ "$is_prerelease" == "true" ]]; then
+                          # Pre-releases should be from main
+                          if [[ "$branch" != "main" ]]; then
+                              echo "::error::$package prod pre-releases must use branch 'main', got '$branch'"
+                              exit 1
+                          fi
+                      else
+                          # Final releases should be from stable
+                          if [[ "$branch" != "stable" ]]; then
+                              echo "::error::$package prod final releases must use branch 'stable', got '$branch'"
+                              exit 1
+                          fi
+                      fi
+                  fi
+                  echo "Branch validation passed: package=$package branch=$branch version=$version"
+
     work-branch:
+        needs: validate-inputs
         runs-on: ${{ vars.DEFAULT_RUNNER }}
         outputs:
             name: ${{ steps.branch.outputs.name }}
