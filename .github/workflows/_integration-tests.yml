@@ -190,6 +190,13 @@ jobs:
                         echo "----- py-spy dump pid ${pid} -----"
                         py-spy dump --pid "${pid}" 2>&1 || true
                       done
+                      # Also show dbt's own debug log timeline (what dbt actually
+                      # did: START line, job submission, any interrupt). Safe:
+                      # dbt scrubs secrets from its logs.
+                      for lg in $(find /tmp/pytest-of-runner -name dbt.log 2>/dev/null); do
+                        echo "----- tail dbt.log: ${lg} -----"
+                        tail -n 40 "${lg}" 2>&1 || true
+                      done
                     done
                   ) &
                   WATCH=$!
