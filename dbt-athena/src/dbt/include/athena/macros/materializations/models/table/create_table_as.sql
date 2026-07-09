@@ -55,6 +55,14 @@
   {%- endif -%}
 
   {%- if language == 'python' -%}
+    {%- if is_s3_tables -%}
+      {%- set error_python_s3_tables -%}
+        Python models are not supported for S3 Tables catalogs. S3 Tables manages its own
+        storage and rejects the explicit location required by the Spark writer. Use a SQL
+        model instead.
+      {%- endset -%}
+      {% do exceptions.raise_compiler_error(error_python_s3_tables) %}
+    {%- endif -%}
     {%- set spark_ctas = '' -%}
     {%- if table_type == 'iceberg' -%}
       {%- set spark_ctas -%}

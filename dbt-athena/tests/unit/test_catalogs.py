@@ -188,6 +188,8 @@ class TestS3TablesCatalogIntegration:
     def test_is_s3_tables_database(self, adapter):
         # S3 Tables buckets surface as Glue federated catalogs "s3tablescatalog/<bucket>".
         assert adapter.is_s3_tables_database("s3tablescatalog/my-bucket") is True
+        # Prefix detection is case-insensitive.
+        assert adapter.is_s3_tables_database("S3TablesCatalog/my-bucket") is True
         assert adapter.is_s3_tables_database("awsdatacatalog") is False
         assert adapter.is_s3_tables_database("glue") is False
         assert adapter.is_s3_tables_database(None) is False

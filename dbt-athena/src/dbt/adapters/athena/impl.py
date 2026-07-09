@@ -244,7 +244,7 @@ class AthenaAdapter(SQLAdapter):
         """
         if not database:
             return False
-        return database.startswith(f"{S3_TABLES_GLUE_CATALOG_PREFIX}/")
+        return database.lower().startswith(f"{S3_TABLES_GLUE_CATALOG_PREFIX.lower()}/")
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
@@ -939,9 +939,7 @@ class AthenaAdapter(SQLAdapter):
             # nested Glue federated catalogs named "s3tablescatalog/<bucket>". Both are
             # Glue-backed but are not registered as Athena DataCatalogs, so we build the
             # descriptor directly instead of calling athena.get_data_catalog (which 404s).
-            if database.lower() == "awsdatacatalog" or database.startswith(
-                f"{S3_TABLES_GLUE_CATALOG_PREFIX}/"
-            ):
+            if database.lower() == "awsdatacatalog" or self.is_s3_tables_database(database):
                 with boto3_client_lock:
                     sts = client.session.client(
                         "sts",
