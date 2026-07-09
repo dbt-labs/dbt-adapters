@@ -9,6 +9,7 @@ from dbt.adapters.bigquery import BigQueryCredentials
 from dbt.adapters.bigquery import BigQueryRelation
 from dbt.adapters.bigquery.connections import BigQueryConnectionManager
 from dbt.adapters.bigquery.retry import _TerminalJobAwarePredicate, RetryFactory
+from dbt.adapters.contracts.connection import ConnectionState
 
 
 class TestBigQueryConnectionManager(unittest.TestCase):
@@ -52,6 +53,24 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         assert self.mock_connection.handle is new_mock_client
         assert new_mock_client is not self.mock_client
+
+    @patch(
+        "dbt.adapters.bigquery.retry.create_bigquery_client",
+        return_value=Mock(google.cloud.bigquery.Client),
+    )
+    def test_retry_does_not_reopen_connection_closed_for_cancellation(self, mock_client_factory):
+        """A connection closed by cancel_open() must not be reopened by the retry."""
+        self.mock_connection.state = ConnectionState.CLOSED
+
+        @self.connections._retry.create_reopen_with_deadline(self.mock_connection)
+        def raise_connection_error():
+            raise ConnectionError("connection closed for cancellation")
+
+        with self.assertRaises(ConnectionError):
+            raise_connection_error()
+
+        assert self.mock_connection.handle is self.mock_client
+        mock_client_factory.assert_not_called()
 
     def test_is_retryable(self):
         _is_retryable = google.cloud.bigquery.retry._job_should_retry
