@@ -125,7 +125,8 @@
   {%- set target_table = model.get('alias', model.get('name')) -%}
   {%- set strategy_name = config.get('strategy') -%}
   {%- set file_format = config.get('file_format', 'parquet') -%}
-  {%- set table_type = config.get('table_type', 'hive') -%}
+  {# catalog-aware: explicit table_type wins, else the catalog's format (catalogs.yml v2) #}
+  {%- set table_type = resolve_table_type() -%}
 
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
