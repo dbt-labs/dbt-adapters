@@ -76,7 +76,26 @@ def _get_info_schema_jobs_query(project_id, dataset_id, table_id):
     """
 
 
+def _unblock_sigint_in_child():
+    """Ensure the dbt child starts with SIGINT unblocked.
+
+    This test runs under pytest-xdist (`-n`), whose worker processes run with
+    SIGINT blocked in their signal mask. `subprocess` inherits the parent
+    thread's signal *mask* (it only resets SIG_IGN dispositions, not the mask),
+    so without this the dbt child inherits a blocked SIGINT: the SIGINT we send
+    stays pending at the OS level, is never delivered to any thread, and dbt's
+    KeyboardInterrupt handling never runs. Unblocking here (in the forked child,
+    before exec) restores normal Ctrl-C behavior.
+    """
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGINT})
+
+
 def _run_dbt_in_subprocess(project, dbt_command):
+
+    # Diagnostic: report whether the (xdist worker) parent has SIGINT blocked,
+    # which the child would otherwise inherit. Shown in pytest's captured stdout.
+    parent_mask = signal.pthread_sigmask(signal.SIG_BLOCK, [])
+    print(f"parent SIGINT blocked in mask: {signal.SIGINT in parent_mask}")
 
     run_dbt_process = subprocess.Popen(
         [
@@ -91,6 +110,7 @@ def _run_dbt_in_subprocess(project, dbt_command):
         stderr=subprocess.STDOUT,
         shell=False,
         env=os.environ.copy(),
+        preexec_fn=_unblock_sigint_in_child,
     )
 
     # Drain the child's output on a background thread. Reading in the main
