@@ -1,7 +1,7 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
   {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
   {% set is_microbatch = raw_strategy == 'microbatch' %}
-  {% set table_type = config.get('table_type', default='hive') | lower %}
+  {% set table_type = resolve_table_type() %}
   {% set model_language = model['language'] %}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}

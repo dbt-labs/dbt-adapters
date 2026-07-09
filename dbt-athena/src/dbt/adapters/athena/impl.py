@@ -7,11 +7,13 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
+from multiprocessing.context import SpawnContext
 from textwrap import dedent
 from threading import Lock
 from typing import (
     TYPE_CHECKING,
     Any,
+    ClassVar,
     Dict,
     FrozenSet,
     Generator,
@@ -42,10 +44,21 @@ from mypy_boto3_glue.type_defs import (
 )
 
 from dbt.adapters.athena import AthenaConnectionManager
+from dbt.adapters.athena.catalogs import (
+    AthenaInfoSchemaCatalogIntegration,
+    GlueCatalogIntegration,
+)
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.connections import AthenaCursor, AthenaError
-from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.constants import (
+    DEFAULT_GLUE_CATALOG,
+    DEFAULT_INFO_SCHEMA_CATALOG,
+    GLUE_CATALOG_TYPE,
+    HIVE_TABLE_FORMAT,
+    ICEBERG_TABLE_FORMAT,
+    LOGGER,
+)
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
     SnapshotMigrationRequired,
@@ -78,15 +91,26 @@ from dbt.adapters.athena.utils import (
 from dbt.adapters.base import ConstraintSupport, PythonJobHelper, available
 from dbt.adapters.base.impl import AdapterConfig
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 
 
 if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
     from mypy_boto3_glue.client import GlueClient
 
 boto3_client_lock = Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once the dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -165,6 +189,52 @@ class AthenaAdapter(SQLAdapter):
         ConstraintType.primary_key: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.foreign_key: ConstraintSupport.NOT_SUPPORTED,
     }
+
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration, AthenaInfoSchemaCatalogIntegration]
+
+    _capabilities: CapabilityDict = CapabilityDict(
+        {
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
+        }
+    )
+
+    # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS.
+    # Identity for Athena today (like BigQuery); the hook is the consistent place
+    # to add aliases later (e.g. a future "sagemaker" -> "glue").
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {GLUE_CATALOG_TYPE: GLUE_CATALOG_TYPE}
+
+    # catalogs.yml v2 table_format -> Athena's table_type. 'default' is the v2 spec's
+    # non-Iceberg value; Athena calls the equivalent 'hive'.
+    _V2_TABLE_FORMAT: ClassVar[Dict[str, str]] = {
+        "default": HIVE_TABLE_FORMAT,
+        "iceberg": ICEBERG_TABLE_FORMAT,
+    }
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        # Register the default catalogs so models can reference them by name and so
+        # models without a catalog fall back to standard Hive behavior.
+        # NOTE: "info_schema" and "glue" are therefore reserved names — a catalogs.yml
+        # entry using either will raise DbtCatalogIntegrationAlreadyExistsError.
+        self.add_catalog_integration(DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(DEFAULT_GLUE_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        table_format = catalog.table_format.value
+        try:
+            return self._V2_TABLE_FORMAT[table_format]
+        except KeyError:
+            raise DbtRuntimeError(
+                f"Catalog '{catalog.name}' has unsupported table_format '{table_format}'. "
+                f"Athena supports: {', '.join(sorted(self._V2_TABLE_FORMAT))}."
+            )
 
     @classmethod
     def date_function(cls) -> str:
