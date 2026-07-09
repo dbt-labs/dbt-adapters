@@ -1,0 +1,8 @@
+kind: Fixes
+body: Append an actionable hint to the Iceberg timestamp-precision error (091385), pointing
+  users to cast to TIMESTAMP_NTZ(6)/TIMESTAMP_LTZ(6) or use an Iceberg v3 table with nanosecond
+  support enabled
+time: 2026-07-09T12:00:00.000000-07:00
+custom:
+  Author: sfc-gh-nijain
+  Issue: "2090"

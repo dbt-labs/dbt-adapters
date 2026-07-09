@@ -401,6 +401,20 @@ class SnowflakeConnectionManager(SQLConnectionManager):
             for regex_pattern, replacement_message in ERROR_REDACTION_PATTERNS.items():
                 msg = re.sub(regex_pattern, replacement_message, msg)
 
+            # Iceberg tables reject timestamp precision greater than microseconds (6) unless the
+            # table is Iceberg format-version 3 with nanosecond timestamp support enabled. The
+            # raw error (091385) does not explain how to resolve it, so append an actionable hint.
+            # This is reactive: it fires only when Snowflake actually rejects the statement, so it
+            # never triggers where nanosecond timestamps are supported (v3 with the feature on).
+            if "091385" in msg:
+                msg = (
+                    f"{msg}\n\n"
+                    "Iceberg supports nanosecond timestamps only on format-version 3 with "
+                    "nanosecond timestamp support enabled. Either cast the column to "
+                    "TIMESTAMP_NTZ(6) / TIMESTAMP_LTZ(6), or use an Iceberg v3 table with "
+                    "nanosecond timestamp support enabled."
+                )
+
             logger.debug("Snowflake query id: {}".format(e.sfqid))
             logger.debug("Snowflake error: {}".format(msg))
 
