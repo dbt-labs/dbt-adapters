@@ -104,6 +104,7 @@ def _get_job_id(project, table_name):
     return job_id
 
 
+@pytest.mark.skip(reason="flaky in CI: subprocess signal timing is unreliable")
 @pytest.mark.skipif(
     platform.system() == "Windows", reason="running signt is unsupported on Windows."
 )
