@@ -4,6 +4,12 @@
 
     {{ run_hooks(pre_hooks) }}
 
+    {# Drop the existing function when --full-refresh is requested to handle signature changes
+       (e.g. renamed parameters or changed return types) that CREATE OR REPLACE cannot apply. #}
+    {% if should_full_refresh() %}
+        {{ drop_relation_if_exists(existing_relation) }}
+    {% endif %}
+
     {% set function_config = this.get_function_config(model) %}
     {% set macro_name = this.get_function_macro_name(function_config) %}
 
