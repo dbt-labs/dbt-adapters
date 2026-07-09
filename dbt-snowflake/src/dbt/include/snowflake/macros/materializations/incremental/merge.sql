@@ -86,6 +86,7 @@
     {% endif %}
     {% do arg_dict.update({'incremental_predicates': incremental_predicates}) %}
 
+    {%- set dml -%}
     delete from {{ target }} DBT_INTERNAL_TARGET
     where (
     {% for predicate in incremental_predicates %}
@@ -99,4 +100,12 @@
         select {{ dest_cols_csv }}
         from {{ source }}
     )
+    {%- endset -%}
+
+    {#-- Skip transaction wrapping for catalog-linked databases --#}
+    {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+        {% do return(dml) %}
+    {% else %}
+        {% do return(snowflake_dml_explicit_transaction(dml)) %}
+    {% endif %}
 {% endmacro %}
