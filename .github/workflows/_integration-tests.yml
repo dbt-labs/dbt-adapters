@@ -130,10 +130,7 @@ jobs:
     integration-tests-bigquery:
         if: contains(fromJSON(inputs.packages), 'dbt-bigquery')
         runs-on: ${{ inputs.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                group: [1, 2]
+        timeout-minutes: 25
         defaults:
             run:
                 working-directory: "./dbt-bigquery"
@@ -173,7 +170,7 @@ jobs:
               uses: pypa/hatch@257e27e51a6a5616ed08a39a408a21c35c9931bc # pypa/hatch@install
 
             - name: "Run integration tests"
-              run: hatch run ${{ inputs.hatch-env }}:integration-tests --splits 2 --group ${{ matrix.group }}
+              run: hatch run ${{ inputs.hatch-env }}:integration-tests
 
     integration-tests-bigquery-flaky:
         # we only run this for one python version to avoid running in parallel
