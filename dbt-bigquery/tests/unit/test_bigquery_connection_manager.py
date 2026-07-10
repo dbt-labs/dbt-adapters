@@ -138,16 +138,20 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         must attach to the existing job via get_job rather than fail with a 409,
         since copy_table has no built-in Conflict recovery."""
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_x"
+        self.connections.generate_job_id = Mock(return_value=job_id)
         self.mock_client.copy_table.side_effect = exceptions.Conflict(
-            "Already Exists: Job project:job_x"
+            f"Already Exists: Job project:{job_id}"
         )
-        existing_job = Mock(job_id="job_x")
+        existing_job = Mock(job_id=job_id)
         self.mock_client.get_job.return_value = existing_job
 
         self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
 
         self.assertEqual(self.mock_client.copy_table.call_count, 1)
-        self.mock_client.get_job.assert_called_once()
+        # We must attach to the SAME job we tried to submit, not a different id.
+        self.assertEqual(self.mock_client.copy_table.call_args.kwargs["job_id"], job_id)
+        self.mock_client.get_job.assert_called_once_with(job_id)
         # We wait on the attached job, not a resubmitted one.
         existing_job.result.assert_called_once()
 
@@ -208,10 +212,11 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         by attaching to the existing job via get_job instead of resubmitting,
         so a single statement never spawns a duplicate BigQuery job."""
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_x"
         self.mock_client.query.side_effect = exceptions.Conflict(
-            "Already Exists: Job project:job_x"
+            f"Already Exists: Job project:{job_id}"
         )
-        existing_job = Mock(job_id="job_x", location="US", project="project")
+        existing_job = Mock(job_id=job_id, location="US", project="project")
         existing_job.result.return_value = iter([])
         self.mock_client.get_job.return_value = existing_job
 
@@ -219,10 +224,10 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             self.mock_connection,
             "MERGE INTO t USING s ON ...",
             {"dry_run": False},
-            job_id="job_x",
+            job_id=job_id,
         )
 
-        self.mock_client.get_job.assert_called_once_with("job_x")
+        self.mock_client.get_job.assert_called_once_with(job_id)
         self.assertIs(query_job, existing_job)
         # The DML must not be resubmitted.
         self.assertEqual(self.mock_client.query.call_count, 1)
