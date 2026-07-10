@@ -39,7 +39,7 @@ from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
 from dbt_common.exceptions import DbtInternalError
-from dbt_common.record import record_function
+from dbt_common.record import auto_record_function, record_function
 from dbt_common.utils import filter_null_values
 from dbt.adapters.base import (
     AdapterConfig,
@@ -80,6 +80,15 @@ from dbt.adapters.bigquery.python_submissions import (
 from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterDescribeRelationRecord,
     BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterCopyTableRecord,
+    BigQueryAdapterGetDatasetLocationRecord,
+    BigQueryAdapterGrantAccessToRecord,
+    BigQueryAdapterGetColumnsInSelectSqlRecord,
+    BigQueryAdapterAlterTableAddColumnsRecord,
+    BigQueryAdapterUpdateColumnsRecord,
+    BigQueryAdapterLoadDataframeRecord,
+    BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+    BigQueryAdapterSyncStructColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -553,6 +562,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_schema
 
     @available.parse(lambda *a, **k: "")
+    @record_function(
+        BigQueryAdapterCopyTableRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def copy_table(self, source, destination, materialization):
         if materialization == "incremental":
             write_disposition = WRITE_APPEND
@@ -584,6 +599,12 @@ class BigQueryAdapter(BaseAdapter):
         return flattened_columns
 
     @available.parse(lambda *a, **k: False)
+    @record_function(
+        BigQueryAdapterGetColumnsInSelectSqlRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_columns_in_select_sql(self, select_sql: str) -> List[BigQueryColumn]:
         try:
             conn = self.connections.get_thread_connection()
@@ -770,6 +791,12 @@ class BigQueryAdapter(BaseAdapter):
         return bq_column_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterUpdateColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def update_columns(self, relation, columns):
         if len(columns) == 0:
             return
@@ -787,6 +814,7 @@ class BigQueryAdapter(BaseAdapter):
         new_table = google.cloud.bigquery.Table(table_ref, schema=new_schema)
         conn.handle.update_table(new_table, ["schema"])
 
+    @auto_record_function("AdapterUpdateTableDescription", group="Available")
     @available.parse_none
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
@@ -800,11 +828,23 @@ class BigQueryAdapter(BaseAdapter):
         client.update_table(table, ["description"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_columns(self, relation, columns):
         logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
         self.alter_table_add_remove_columns(relation, columns, None)
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterAlterTableAddRemoveColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
         conn = self.connections.get_thread_connection()
         client = conn.handle
@@ -856,6 +896,12 @@ class BigQueryAdapter(BaseAdapter):
             client.update_table(new_table, ["schema"])
 
     @available.parse(lambda *a, **k: {})
+    @record_function(
+        BigQueryAdapterSyncStructColumnsRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def sync_struct_columns(
         self,
         on_schema_change: str,
@@ -988,6 +1034,12 @@ class BigQueryAdapter(BaseAdapter):
         return schema_changes_dict
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterLoadDataframeRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def load_dataframe(
         self,
         database: str,
@@ -1299,6 +1351,12 @@ class BigQueryAdapter(BaseAdapter):
         return None
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGrantAccessToRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def grant_access_to(self, entity, entity_type, role, grant_target_dict) -> None:
         """
         Given an entity, grants it access to a dataset.
@@ -1321,6 +1379,12 @@ class BigQueryAdapter(BaseAdapter):
                 client.update_dataset(dataset, ["access_entries"])
 
     @available.parse_none
+    @record_function(
+        BigQueryAdapterGetDatasetLocationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     def get_dataset_location(self, relation):
         conn = self.connections.get_thread_connection()
         client = conn.handle
