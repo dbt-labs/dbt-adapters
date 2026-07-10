@@ -23,12 +23,10 @@
   {{ adapter.load_dataframe(model['database'], model['schema'], model['alias'],
   							agate_table, column_override, model['config']['delimiter']) }}
 
+  {# bigquery_table_options already renders OPTIONS(description=...) when
+     persist_relation_docs is enabled, so the description is set as part of this
+     single ALTER statement. No separate update_table_description call needed. #}
   {% call statement() %}
     alter table {{ this.render() }} set {{ bigquery_table_options(config, model) }}
   {% endcall %}
-
-  {% if config.persist_relation_docs() and 'description' in model %}
-
-  	{{ adapter.update_table_description(model['database'], model['schema'], model['alias'], model['description']) }}
-  {% endif %}
 {% endmacro %}

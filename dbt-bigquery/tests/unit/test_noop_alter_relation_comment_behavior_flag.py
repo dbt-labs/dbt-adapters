@@ -1,5 +1,4 @@
 from types import SimpleNamespace
-from unittest import mock
 
 from dbt_common.behavior_flags import BehaviorFlagRendered
 from dbt.adapters.bigquery.impl import BIGQUERY_NOOP_ALTER_RELATION_COMMENT
@@ -11,8 +10,14 @@ def _load_bigquery_adapters_macros(adapter):
         loader=jinja2.FileSystemLoader("src/dbt/include/bigquery/macros"),
         extensions=["jinja2.ext.do"],
     )
+    # alter_relation_comment now emits DDL via run_query; capture what it is handed
+    # and expose it on the module as `captured_sql` for assertions.
+    captured_sql = []
+    env.globals["run_query"] = captured_sql.append
     template = env.get_template("adapters.sql")
-    return template.make_module({"adapter": adapter})
+    module = template.make_module({"adapter": adapter})
+    module.captured_sql = captured_sql
+    return module
 
 
 def test_alter_relation_comment_noop_when_behavior_flag_true():
@@ -23,30 +28,38 @@ def test_alter_relation_comment_noop_when_behavior_flag_true():
                 {BIGQUERY_NOOP_ALTER_RELATION_COMMENT["name"]: True},
             )
         ),
-        update_table_description=mock.Mock(),
     )
     assert adapter.behavior.bigquery_noop_alter_relation_comment.no_warn is True
-    relation = SimpleNamespace(database="db", schema="sch", identifier="ident")
+    relation = SimpleNamespace(type="table", render=lambda: "`db`.`sch`.`ident`")
 
     macros = _load_bigquery_adapters_macros(adapter)
     macros.bigquery__alter_relation_comment(relation, "desc")
 
-    adapter.update_table_description.assert_not_called()
+    assert macros.captured_sql == []
 
 
-def test_alter_relation_comment_calls_update_when_behavior_flag_false():
+def test_alter_relation_comment_emits_ddl_when_behavior_flag_false():
     adapter = SimpleNamespace(
         behavior=SimpleNamespace(
             bigquery_noop_alter_relation_comment=BehaviorFlagRendered(
                 BIGQUERY_NOOP_ALTER_RELATION_COMMENT, {}
             )
         ),
-        update_table_description=mock.Mock(),
     )
     assert adapter.behavior.bigquery_noop_alter_relation_comment.no_warn is False
-    relation = SimpleNamespace(database="db", schema="sch", identifier="ident")
 
-    macros = _load_bigquery_adapters_macros(adapter)
-    macros.bigquery__alter_relation_comment(relation, "desc")
+    # relation.type "materialized_view" maps to the "materialized view" SQL keyword.
+    for relation_type, keyword in [
+        ("table", "table"),
+        ("view", "view"),
+        ("materialized_view", "materialized view"),
+    ]:
+        relation = SimpleNamespace(type=relation_type, render=lambda: "`db`.`sch`.`ident`")
+        macros = _load_bigquery_adapters_macros(adapter)
+        macros.bigquery__alter_relation_comment(relation, "desc")
 
-    adapter.update_table_description.assert_called_once_with("db", "sch", "ident", "desc")
+        assert len(macros.captured_sql) == 1
+        assert (
+            macros.captured_sql[0].strip()
+            == f'alter {keyword} `db`.`sch`.`ident` set options(description="desc");'
+        )

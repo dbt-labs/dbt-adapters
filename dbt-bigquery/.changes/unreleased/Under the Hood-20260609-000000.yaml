@@ -1,0 +1,10 @@
+kind: Under the Hood
+body: Set relation descriptions via `ALTER ... SET OPTIONS(description=...)` DDL instead
+  of the BigQuery API. This replaces the prior get-then-update API round trip with a
+  single atomic statement, which is more performant and avoids a race when a concurrent
+  update lands between the get and update calls. The `adapter.update_table_description`
+  method is deprecated in favor of the `alter_relation_comment` macro.
+time: 2026-06-09T00:00:00.000000+00:00
+custom:
+  Author: yaroslav-borodaienko
+  Issue: "1568"

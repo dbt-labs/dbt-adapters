@@ -1,7 +1,5 @@
 import pytest
-from unittest import mock
 
-from dbt.adapters.bigquery.impl import BigQueryAdapter
 from dbt.tests.util import run_dbt
 
 
@@ -40,10 +38,8 @@ class TestNoopAlterRelationCommentBehaviorFlag:
             },
         }
 
-    def test_relation_description_set_without_update_call(self, project):
-        with mock.patch.object(BigQueryAdapter, "update_table_description") as mock_update:
-            run_dbt(["run"])
-            assert mock_update.call_count == 0
+    def test_relation_description_set_via_create_options(self, project):
+        run_dbt(["run"])
 
         with project.adapter.connection_named("_test"):
             client = project.adapter.connections.get_thread_connection().handle
