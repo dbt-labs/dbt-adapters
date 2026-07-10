@@ -95,6 +95,8 @@
 {% macro snowflake__alter_relation_comment(relation, relation_comment) -%}
     {%- if relation.is_dynamic_table -%}
         {%- set relation_type = 'dynamic table' -%}
+    {%- elif relation.is_interactive_table -%}
+        {%- set relation_type = 'table' -%}
     {%- else -%}
         {%- set relation_type = relation.type -%}
     {%- endif -%}
@@ -124,7 +126,7 @@
 {% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
     {% set filtered_column_dict = validate_doc_columns(relation, column_dict, existing_columns) %}
-    {% if relation.is_dynamic_table -%}
+    {% if relation.is_dynamic_table or relation.is_interactive_table -%}
         {% set relation_type = "table" %}
     {% else -%}
         {% set relation_type = relation.type %}
@@ -210,6 +212,8 @@
 
     {% if relation.is_dynamic_table -%}
         {% set relation_type = "dynamic table" %}
+    {% elif relation.is_interactive_table -%}
+        {% set relation_type = "table" %}
     {% else -%}
         {% set relation_type = relation.type %}
     {% endif %}
