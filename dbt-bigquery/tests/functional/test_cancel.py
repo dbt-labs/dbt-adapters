@@ -10,6 +10,19 @@ import pytest
 
 from dbt.tests.util import get_connection
 
+
+def _reset_sigint_in_child():
+    """Un-ignore SIGINT in the dbt child so it can be cancelled via Ctrl-C.
+
+    pytest-xdist workers set SIGINT to SIG_IGN, and that "ignore" state is
+    inherited by the child across exec. CPython skips installing its
+    KeyboardInterrupt handler when SIGINT arrives already ignored, so dbt would
+    silently drop the SIGINT this test sends. Resetting to SIG_DFL here (in the
+    child, before exec) lets dbt install its normal handler and cancel.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+
 _SEED_CSV = """
 id, name, astrological_sign, moral_alignment
 1, Alice, Aries, Lawful Good
@@ -77,6 +90,7 @@ def _run_dbt_in_subprocess(project, dbt_command):
         stderr=subprocess.PIPE,
         shell=False,
         env=os.environ.copy(),
+        preexec_fn=_reset_sigint_in_child,
     )
     std_out_log = ""
     while True:
@@ -104,7 +118,6 @@ def _get_job_id(project, table_name):
     return job_id
 
 
-@pytest.mark.skip(reason="flaky in CI: subprocess signal timing is unreliable")
 @pytest.mark.skipif(
     platform.system() == "Windows", reason="running signt is unsupported on Windows."
 )
