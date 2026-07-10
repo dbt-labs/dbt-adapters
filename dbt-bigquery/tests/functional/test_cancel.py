@@ -25,7 +25,6 @@ def _reset_sigint_in_child():
     for good measure.
     """
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGINT})
 
 
 _SEED_CSV = """
