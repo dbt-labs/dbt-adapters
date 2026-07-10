@@ -22,7 +22,6 @@ from pyathena.formatter import (
     _escape_presto,
 )
 from pyathena.model import AthenaQueryExecution
-from pyathena.options import ExecuteOptions
 from pyathena.result_set import AthenaResultSet
 from pyathena.util import RetryConfig
 from tenacity import (
@@ -203,12 +202,10 @@ class AthenaCursor(Cursor):
                 query_id = self._execute(
                     operation,
                     parameters=parameters,
-                    options=ExecuteOptions(
-                        work_group=work_group,
-                        s3_staging_dir=s3_staging_dir,
-                        cache_size=cache_size,
-                        cache_expiration_time=cache_expiration_time,
-                    ),
+                    work_group=work_group,
+                    s3_staging_dir=s3_staging_dir,
+                    cache_size=cache_size,
+                    cache_expiration_time=cache_expiration_time,
                 )
 
                 LOGGER.debug(f"Athena query ID {query_id}")
