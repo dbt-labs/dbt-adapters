@@ -10,6 +10,24 @@ import pytest
 
 from dbt.tests.util import get_connection
 
+
+def _reset_sigint_in_child():
+    """Restore default SIGINT handling in the dbt child before exec.
+
+    This test runs under pytest-xdist (`-n`), whose worker processes set SIGINT
+    to SIG_IGN. SIG_IGN is preserved across exec, and `subprocess`'s
+    `restore_signals` only resets SIGPIPE/SIGXFSZ/SIGXFZ — NOT SIGINT. So the
+    dbt child would inherit SIGINT=SIG_IGN, and CPython does not install its
+    default SIGINT handler when it inherits an ignored SIGINT — meaning dbt
+    silently ignores the Ctrl-C we send and never cancels. Resetting the
+    disposition to SIG_DFL here (in the forked child, before exec) lets dbt's
+    Python install its normal KeyboardInterrupt handler. Also unblock the signal
+    for good measure.
+    """
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.pthread_sigmask(signal.SIG_UNBLOCK, {signal.SIGINT})
+
+
 _SEED_CSV = """
 id, name, astrological_sign, moral_alignment
 1, Alice, Aries, Lawful Good
@@ -77,6 +95,7 @@ def _run_dbt_in_subprocess(project, dbt_command):
         stderr=subprocess.PIPE,
         shell=False,
         env=os.environ.copy(),
+        preexec_fn=_reset_sigint_in_child,
     )
     std_out_log = ""
     while True:
