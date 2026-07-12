@@ -39,13 +39,14 @@ def _make_client(session_ids, state="IDLE"):
     return client
 
 
-def _register(pool, session_id, key, athena_client, dpu=1):
+def _register(pool, session_id, key, athena_client, dpu=1, load=1):
     """Inject a session into the pool for tests, bypassing acquire()."""
     pool._sessions[session_id] = {
         "key": key,
         "client": athena_client,
-        "load": 1,
+        "load": load,
         "dpu": dpu,
+        "draining": False,
     }
 
 
@@ -249,6 +250,39 @@ class TestTerminate:
         pool.terminate("sid-1")  # Must not raise.
 
         assert "sid-1" not in pool._snapshot()
+
+    def test_terminate_drains_shared_session_instead_of_killing_it(self):
+        """A transient failure on one caller must not tear a shared session
+        out from under its co-tenants (session_concurrency > 1)."""
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client, load=2)
+
+        pool.terminate("sid-1")
+
+        client.terminate_session.assert_not_called()
+        info = pool._snapshot()["sid-1"]
+        assert info["load"] == 1
+        assert info["draining"] is True
+
+    def test_release_terminates_drained_session_when_last_caller_leaves(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client, load=2)
+
+        pool.terminate("sid-1")  # co-tenant still attached -> drains
+        pool.release("sid-1")  # last caller leaves
+
+        client.terminate_session.assert_called_once_with(SessionId="sid-1")
+        assert "sid-1" not in pool._snapshot()
+
+    def test_draining_session_is_not_reused_by_attach(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client, load=2)
+        pool.terminate("sid-1")  # -> load 1, draining
+
+        assert pool._attach(("inv", "fp"), session_concurrency=5) is None
 
     def test_terminate_by_invocation_preserves_other_invocations(self):
         """The singleton is shared across invocations on multi-invocation hosts

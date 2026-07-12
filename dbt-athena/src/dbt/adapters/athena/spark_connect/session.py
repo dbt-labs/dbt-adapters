@@ -21,6 +21,7 @@ class _SessionInfo(TypedDict):
     client: AthenaClient
     load: int
     dpu: int
+    draining: bool
 
 
 class _GlobalSessionLimitReached(Exception):
@@ -242,7 +243,7 @@ class SparkConnectSessionPool:
         out-of-lock liveness check to prevent oversubscription.
         """
         for sid, info in self._sessions.items():
-            if info["key"] == key and info["load"] < session_concurrency:
+            if info["key"] == key and info["load"] < session_concurrency and not info["draining"]:
                 info["load"] += 1
                 return sid
         return None
@@ -294,6 +295,7 @@ class SparkConnectSessionPool:
             "client": athena_client,
             "load": 1,
             "dpu": dpu,
+            "draining": False,
         }
         return session_id
 
@@ -313,11 +315,21 @@ class SparkConnectSessionPool:
         return bool(state) and state not in self._DEAD_SESSION_STATES
 
     def release(self, session_id: str) -> None:
-        """Mark the session as idle so it can be reused."""
+        """Mark the session as idle so it can be reused.
+
+        When the last caller leaves a draining session (one abandoned by a
+        transient failure while co-tenants were still attached), terminate
+        it on Athena instead of leaving it to leak until idle timeout.
+        """
         with self._lock:
             info = self._sessions.get(session_id)
-            if info is not None:
-                info["load"] = max(info["load"] - 1, 0)
+            if info is None:
+                return
+            info["load"] = max(info["load"] - 1, 0)
+            if info["load"] > 0 or not info["draining"]:
+                return
+            self._sessions.pop(session_id, None)
+        self._terminate_entries([(session_id, info)])
 
     def unregister(self, session_id: str) -> None:
         """Drop a session from the pool without terminating it on Athena."""
@@ -325,11 +337,26 @@ class SparkConnectSessionPool:
             self._sessions.pop(session_id, None)
 
     def terminate(self, session_id: str) -> None:
-        """Terminate the Athena session and drop it from the pool."""
+        """Detach the calling model after a transient failure.
+
+        Terminates the Athena session only when this was its last caller.
+        When other models are still attached (``session_concurrency`` > 1),
+        the session is marked draining instead: co-tenants keep running,
+        no new caller attaches, and it is terminated once the last caller
+        releases it (see ``release``). This prevents one model's transient
+        failure from tearing the shared session out from under its
+        co-tenants.
+        """
         with self._lock:
-            info = self._sessions.pop(session_id, None)
-        if info is not None:
-            self._terminate_entries([(session_id, info)])
+            info = self._sessions.get(session_id)
+            if info is None:
+                return
+            info["load"] = max(info["load"] - 1, 0)
+            if info["load"] > 0:
+                info["draining"] = True
+                return
+            self._sessions.pop(session_id, None)
+        self._terminate_entries([(session_id, info)])
 
     def terminate_by_invocation(self, invocation_id: str) -> None:
         """Terminate only sessions for the given dbt invocation.
