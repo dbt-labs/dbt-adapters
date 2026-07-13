@@ -205,6 +205,34 @@ class TestS3TablesCatalogIntegration:
         assert adapter.is_s3_tables_database(None) is False
         assert adapter.is_s3_tables_database("") is False
 
+    def test_table_bucket_derives_catalog_database(self):
+        # Declaring just the bucket derives the federated catalog_database, so the
+        # model's database is routed without repeating the "s3tablescatalog/" prefix.
+        integration = S3TablesCatalogIntegration(
+            self._config(adapter_properties={"table_bucket": "my-bucket"})
+        )
+        assert integration.catalog_database == "s3tablescatalog/my-bucket"
+        relation = integration.build_relation(_model())
+        assert relation.catalog_database == "s3tablescatalog/my-bucket"
+
+    def test_explicit_catalog_database_is_honored(self):
+        # An explicit catalog_database (e.g. cross-account) is used as-is when no
+        # table_bucket is given.
+        integration = S3TablesCatalogIntegration(
+            self._config(catalog_database="s3tablescatalog/other-bucket")
+        )
+        assert integration.catalog_database == "s3tablescatalog/other-bucket"
+        assert (
+            integration.build_relation(_model()).catalog_database == "s3tablescatalog/other-bucket"
+        )
+
+    def test_no_bucket_leaves_catalog_database_unset(self):
+        # Backward-compatible: without table_bucket/catalog_database, the model's own
+        # database config drives routing.
+        integration = S3TablesCatalogIntegration(self._config())
+        assert integration.catalog_database is None
+        assert integration.build_relation(_model()).catalog_database is None
+
 
 class TestCatalogDatabase:
     def test_catalog_database_flows_to_relation(self):
