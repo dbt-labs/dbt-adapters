@@ -5,8 +5,7 @@
   {%- set natively_droppable = rel_type == 'iceberg_table' or relation.type == 'view' -%}
 
   {%- if adapter.is_s3_tables_database(relation.database) -%}
-    {# S3 Tables manages its own storage — must drop via SQL, never via Glue + direct S3 delete #}
-    {%- do drop_relation_sql(relation) -%}
+    {%- do drop_relation_s3_tables(relation) -%}
   {%- elif native_drop and natively_droppable -%}
     {%- do drop_relation_sql(relation) -%}
   {%- else -%}
@@ -17,6 +16,16 @@
 {% macro drop_relation_glue(relation) -%}
   {%- do log('Dropping relation via Glue and S3 APIs') -%}
   {%- do adapter.clean_up_table(relation) -%}
+  {%- do adapter.delete_from_glue_catalog(relation) -%}
+{% endmacro %}
+
+{% macro drop_relation_s3_tables(relation) -%}
+  {# S3 Tables manages its own storage, so we must NOT clean up S3 directly.
+     A SQL `DROP TABLE` can't target a federated sub-catalog either (Athena's
+     Hive DDL is limited to <schema>.<table> in the query's default catalog),
+     so we drop the metadata via Glue, which delegates to S3 Tables and removes
+     the underlying data. #}
+  {%- do log('Dropping S3 Tables relation via Glue Data Catalog') -%}
   {%- do adapter.delete_from_glue_catalog(relation) -%}
 {% endmacro %}
 

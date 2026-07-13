@@ -1,5 +1,5 @@
 kind: Features
-body: 'Add S3 Tables catalog support (catalog_type: s3_tables): register an AWS S3 Tables-backed Iceberg catalog in catalogs.yml v2. S3 Tables manages storage automatically, so no explicit LOCATION is emitted in DDL, S3 cleanup is skipped, and table replacement uses a SQL drop-and-recreate (S3 Tables does not support ALTER TABLE RENAME).'
+body: 'Add S3 Tables catalog support (catalog_type: s3_tables): register an AWS S3 Tables-backed Iceberg catalog in catalogs.yml v2. S3 Tables manages storage automatically, so no explicit LOCATION is emitted in DDL and direct S3 cleanup is skipped. Table replacement drops the existing table via the Glue Data Catalog (which delegates to S3 Tables), because S3 Tables does not support ALTER TABLE RENAME and Athena SQL DROP TABLE cannot target a federated sub-catalog.'
 time: 2026-07-03T00:00:00.000000+00:00
 custom:
     Author: aahel
