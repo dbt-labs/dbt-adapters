@@ -10,6 +10,22 @@ MODEL__ORDERS = """
 select 1 as id, 10 as amount, cast('2020-01-01' as datetime) as ordered_at
 """
 
+# The semantic layer requires a time spine model with DAY (or finer) granularity.
+MODEL__TIME_SPINE = """
+{{ config(materialized='table') }}
+select cast('2020-01-01' as date) as date_day
+"""
+
+TIME_SPINE__YML = """
+models:
+  - name: metricflow_time_spine
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        granularity: day
+"""
+
 SEMANTIC_MODELS__YML = """
 semantic_models:
   - name: orders
@@ -59,6 +75,8 @@ class TestSavedQueryExportParse:
     def models(self):
         return {
             "orders.sql": MODEL__ORDERS,
+            "metricflow_time_spine.sql": MODEL__TIME_SPINE,
+            "time_spine.yml": TIME_SPINE__YML,
             "semantic_models.yml": SEMANTIC_MODELS__YML,
             "metrics.yml": METRICS__YML,
             "saved_queries.yml": SAVED_QUERIES__YML,
