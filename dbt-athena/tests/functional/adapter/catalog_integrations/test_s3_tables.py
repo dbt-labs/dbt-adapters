@@ -37,11 +37,8 @@ pytestmark = pytest.mark.skipif(
 
 # Pre-provisioned table bucket (see module docstring), reused across runs; concurrent
 # test classes stay isolated via unique namespaces (each uses project.test_schema).
-# Overridable so other accounts can point at their own bucket; defaults to the CI bucket.
-S3_TABLES_BUCKET = os.getenv(
-    "DBT_TEST_ATHENA_S3_TABLES_BUCKET", "dbt-athena-s3tables-integration-testing"
-)
-# AWS's fixed federated-catalog name for S3 Tables — not configurable.
+S3_TABLES_BUCKET = "dbt-athena-s3tables-integration-testing"
+# AWS's fixed federated-catalog name for S3 Tables.
 GLUE_S3TABLES_CATALOG = "s3tablescatalog"
 
 
