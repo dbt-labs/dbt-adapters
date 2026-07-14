@@ -1,6 +1,6 @@
 import textwrap
 from dataclasses import dataclass, field
-from typing import ClassVar, Dict, FrozenSet, Optional, Type, Iterator, Tuple
+from typing import FrozenSet, Optional, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
@@ -16,7 +16,6 @@ from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.events.functions import fire_event, warn_or_error
 
 from dbt.adapters.snowflake import constants
-from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
     SnowflakeDynamicTableConfig,
@@ -29,11 +28,6 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
-    SnowflakeInteractiveTableConfig,
-    SnowflakeInteractiveTableConfigChangeset,
-    SnowflakeInteractiveTableClusterByConfigChange,
-    SnowflakeInteractiveTableTargetLagConfigChange,
-    SnowflakeInteractiveTableWarehouseConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -45,9 +39,8 @@ class SnowflakeRelation(BaseRelation):
     table_format: str = constants.INFO_SCHEMA_TABLE_FORMAT
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
-    relation_configs: ClassVar[Dict[str, Type[SnowflakeRelationConfigBase]]] = {
+    relation_configs = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
-        SnowflakeRelationType.InteractiveTable: SnowflakeInteractiveTableConfig,
     }
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -55,7 +48,6 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
                 SnowflakeRelationType.DynamicTable,  # type: ignore
-                SnowflakeRelationType.InteractiveTable,  # type: ignore
             }
         )
     )
@@ -64,7 +56,6 @@ class SnowflakeRelation(BaseRelation):
         default_factory=lambda: frozenset(
             {
                 SnowflakeRelationType.DynamicTable,  # type: ignore
-                SnowflakeRelationType.InteractiveTable,  # type: ignore
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
             }
@@ -74,10 +65,6 @@ class SnowflakeRelation(BaseRelation):
     @property
     def is_dynamic_table(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
-
-    @property
-    def is_interactive_table(self) -> bool:
-        return self.type == SnowflakeRelationType.InteractiveTable
 
     @property
     def is_materialized_view(self) -> bool:
@@ -90,10 +77,6 @@ class SnowflakeRelation(BaseRelation):
     @classproperty
     def DynamicTable(cls) -> str:
         return str(SnowflakeRelationType.DynamicTable)
-
-    @classproperty
-    def InteractiveTable(cls) -> str:
-        return str(SnowflakeRelationType.InteractiveTable)
 
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
@@ -191,48 +174,6 @@ class SnowflakeRelation(BaseRelation):
             config_change_collection.transient = SnowflakeDynamicTableTransientConfigChange(
                 action=RelationConfigChangeAction.create,  # type: ignore
                 context=new_dynamic_table.transient,
-            )
-
-        if config_change_collection.has_changes:
-            return config_change_collection
-        return None
-
-    @classmethod
-    def interactive_table_config_changeset(
-        cls,
-        relation_results: RelationResults,
-        relation_config: RelationConfig,
-    ) -> Optional[SnowflakeInteractiveTableConfigChangeset]:
-        existing_interactive_table = SnowflakeInteractiveTableConfig.from_relation_results(
-            relation_results
-        )
-        new_interactive_table = SnowflakeInteractiveTableConfig.from_relation_config(
-            relation_config
-        )
-
-        config_change_collection = SnowflakeInteractiveTableConfigChangeset()
-
-        if new_interactive_table.cluster_by != existing_interactive_table.cluster_by:
-            config_change_collection.cluster_by = SnowflakeInteractiveTableClusterByConfigChange(
-                action=RelationConfigChangeAction.create,  # type:ignore
-                context=new_interactive_table.cluster_by,
-            )
-
-        if new_interactive_table.target_lag != existing_interactive_table.target_lag:
-            config_change_collection.target_lag = SnowflakeInteractiveTableTargetLagConfigChange(
-                action=RelationConfigChangeAction.create,  # type:ignore
-                context=new_interactive_table.target_lag,
-            )
-
-        if (
-            new_interactive_table.snowflake_warehouse
-            != existing_interactive_table.snowflake_warehouse
-        ):
-            config_change_collection.snowflake_warehouse = (
-                SnowflakeInteractiveTableWarehouseConfigChange(
-                    action=RelationConfigChangeAction.create,  # type:ignore
-                    context=new_interactive_table.snowflake_warehouse,
-                )
             )
 
         if config_change_collection.has_changes:
