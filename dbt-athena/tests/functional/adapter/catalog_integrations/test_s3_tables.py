@@ -1,12 +1,17 @@
 """Functional tests for the S3 Tables catalog (``catalog_type: s3_tables``) on Athena.
 
-These provision a real AWS S3 Tables bucket + Glue federation and validate the
-end-to-end flow across materializations: create (location-free Iceberg DDL), the
-table landing in S3 Tables, querying it, and idempotent re-runs (which drop via
-the Glue Data Catalog rather than a SQL ``DROP TABLE``).
+These run against a real AWS S3 Tables catalog and validate the end-to-end flow
+across materializations: create (location-free Iceberg DDL), the table landing in
+S3 Tables, querying it, and idempotent re-runs (which drop via the Glue Data
+Catalog rather than a SQL ``DROP TABLE``).
 
-Requires ``use_catalogs_v2`` support and AWS permissions for the S3 Tables API
-and ``glue:CreateCatalog`` (to register the ``s3tablescatalog`` federation).
+Prerequisites (provisioned once per account/region, NOT by these tests):
+  * an S3 Tables table bucket named ``dbt-athena-s3tables-integration-testing``
+  * the ``s3tablescatalog`` Glue federation (``aws glue create-catalog`` with the
+    ``aws:s3tables`` connection over ``bucket/*``)
+and the test role needs S3 Tables read/write (e.g. ``AmazonS3TablesFullAccess``).
+The tests create/drop only their own namespace + tables on the fly. If the bucket
+is absent or the role lacks S3 Tables access (e.g. a contributor fork), they skip.
 """
 
 import os
@@ -55,7 +60,13 @@ class BaseS3TablesCatalog:
 
     @pytest.fixture(scope="class", autouse=True)
     def s3_tables_infra(self):
-        """Ensure a table bucket + the s3tablescatalog Glue federation exist."""
+        """Resolve the pre-provisioned table bucket; skip if it's absent/inaccessible.
+
+        The bucket and the s3tablescatalog Glue federation are provisioned once per
+        account/region (see module docstring), not here. We only confirm the bucket
+        is reachable so a missing prerequisite or a permission-less role (forks) skips
+        cleanly instead of failing deep in a dbt run.
+        """
         session = _session()
         try:
             s3t = session.client("s3tables")
@@ -67,33 +78,17 @@ class BaseS3TablesCatalog:
         bucket_arn = f"arn:aws:s3tables:{region}:{account}:bucket/{S3_TABLES_BUCKET}"
 
         try:
-            s3t.create_table_bucket(name=S3_TABLES_BUCKET)
+            s3t.get_table_bucket(tableBucketARN=bucket_arn)
         except ClientError as e:
-            if e.response["Error"]["Code"] != "ConflictException":
-                raise
-
-        glue = session.client("glue")
-        try:
-            glue.get_catalog(CatalogId=GLUE_S3TABLES_CATALOG)
-        except ClientError:
-            allow_all = [
-                {
-                    "Principal": {"DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"},
-                    "Permissions": ["ALL"],
-                }
-            ]
-            glue.create_catalog(
-                Name=GLUE_S3TABLES_CATALOG,
-                CatalogInput={
-                    "FederatedCatalog": {
-                        "Identifier": f"arn:aws:s3tables:{region}:{account}:bucket/*",
-                        "ConnectionName": "aws:s3tables",
-                    },
-                    "CreateDatabaseDefaultPermissions": allow_all,
-                    "CreateTableDefaultPermissions": allow_all,
-                    "AllowFullTableExternalDataAccess": "True",
-                },
-            )
+            code = e.response["Error"]["Code"]
+            if code in ("AccessDeniedException", "AccessDenied"):
+                pytest.skip("role lacks S3 Tables access (expected on forks)")
+            if code in ("NotFoundException", "NotFound"):
+                pytest.skip(
+                    f"pre-provisioned S3 Tables bucket '{S3_TABLES_BUCKET}' not found; "
+                    "provision it + the s3tablescatalog Glue federation once per account/region"
+                )
+            raise
 
         yield {
             "bucket_arn": bucket_arn,
