@@ -3,4 +3,4 @@ body: Make sure that for calling build_catalog_relation node has a mapping type 
 time: 2026-07-15T03:19:43.785555+05:30
 custom:
     Author: ash2shukla
-    Issue: "12345"
+    Issue: "2073"
