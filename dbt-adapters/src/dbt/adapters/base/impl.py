@@ -210,6 +210,17 @@ def _relation_name(rel: Optional[BaseRelation]) -> str:
         return str(rel)
 
 
+def _config_get(config: Any, key: str) -> Any:
+    """Read ``key`` from a node config that may not be dict-like.
+
+    Some node configs are typed, non-mapping objects (e.g. a saved-query export's
+    ``ExportConfig``, which has no ``.get``). Return None for those rather than
+    raising AttributeError.
+    """
+    get = getattr(config, "get", None)
+    return get(key) if callable(get) else None
+
+
 def log_code_execution(code_execution_function):
     # decorator to log code and execution time
     if code_execution_function.__name__ != "submit_python_job":
@@ -359,6 +370,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         platform_block = catalog.config.get(self.type(), {}) or {}
         external_volume = platform_block.get("external_volume")
         file_format = platform_block.get("file_format")
+        catalog_database = platform_block.get("catalog_database")
+        # Keep catalog_database in props so adapter overrides (e.g. Snowflake's
+        # _translate_v2_properties) can remap it to their platform-specific field name.
         props = {
             k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
         }
@@ -369,6 +383,7 @@ class BaseAdapter(metaclass=AdapterMeta):
             table_format=self._v2_table_format(catalog),
             external_volume=str(external_volume) if external_volume is not None else None,
             file_format=str(file_format) if file_format is not None else None,
+            catalog_database=str(catalog_database) if catalog_database is not None else None,
             adapter_properties=self._translate_v2_properties(ct, props),
         )
 
@@ -390,9 +405,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             return None
 
         # "catalog" is legacy, but we support it for backward compatibility
-        if catalog_name := config.config.get(
-            CATALOG_INTEGRATION_MODEL_CONFIG_NAME
-        ) or config.config.get("catalog"):
+        if catalog_name := _config_get(
+            config.config, CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or _config_get(config.config, "catalog"):
             catalog = self.get_catalog_integration(catalog_name)
             return catalog.build_relation(config)
 

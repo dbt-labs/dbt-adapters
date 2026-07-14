@@ -11,10 +11,15 @@
   {%- set bucketed_by = config.get('bucketed_by', default=none) -%}
   {%- set bucket_count = config.get('bucket_count', default=none) -%}
   {%- set field_delimiter = config.get('field_delimiter', default=none) -%}
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
-  {%- set format = config.get('format', default='parquet') -%}
+  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+  {%- set table_type = resolve_table_type() -%}
+  {# format: model `format` config > catalog file_format > parquet #}
+  {%- set catalog_file_format = catalog_relation.file_format if catalog_relation is not none else none -%}
+  {%- set format = config.get('format', default=none) or catalog_file_format or 'parquet' -%}
   {%- set write_compression = config.get('write_compression', default=none) -%}
-  {%- set s3_data_dir = config.get('s3_data_dir', default=target.s3_data_dir) -%}
+  {# location base: model `s3_data_dir` config > catalog external_volume > target default #}
+  {%- set catalog_external_volume = catalog_relation.external_volume if catalog_relation is not none else none -%}
+  {%- set s3_data_dir = config.get('s3_data_dir', default=none) or catalog_external_volume or target.s3_data_dir -%}
   {%- set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) -%}
   {%- set s3_tmp_table_dir = config.get('s3_tmp_table_dir', default=target.s3_tmp_table_dir) -%}
   {%- set extra_table_properties = config.get('table_properties', default=none) -%}

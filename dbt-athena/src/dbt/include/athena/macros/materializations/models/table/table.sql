@@ -6,7 +6,7 @@
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
 
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
+  {%- set table_type = resolve_table_type() -%}
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
   {%- set old_tmp_relation = adapter.get_relation(identifier=identifier ~ '__ha',
                                              schema=schema,
