@@ -1,9 +1,9 @@
 """Functional tests for the S3 Tables catalog (``catalog_type: s3_tables``) on Athena.
 
 These provision a real AWS S3 Tables bucket + Glue federation and validate the
-end-to-end flow: create (location-free Iceberg DDL), the table actually landing
-in S3 Tables, querying it, and an idempotent re-run (which drops via the Glue
-Data Catalog rather than a SQL ``DROP TABLE``).
+end-to-end flow across materializations: create (location-free Iceberg DDL), the
+table landing in S3 Tables, querying it, and idempotent re-runs (which drop via
+the Glue Data Catalog rather than a SQL ``DROP TABLE``).
 
 Requires ``use_catalogs_v2`` support and AWS permissions for the S3 Tables API
 and ``glue:CreateCatalog`` (to register the ``s3tablescatalog`` federation).
@@ -35,13 +35,6 @@ pytestmark = pytest.mark.skipif(
 S3_TABLES_BUCKET = "dbt-athena-s3tables-integration-testing"
 GLUE_S3TABLES_CATALOG = "s3tablescatalog"
 
-MODEL__S3_TABLES = """
-{{ config(materialized='table', catalog_name='s3_tables_catalog') }}
-select 1 as id, 'alpha' as name
-union all
-select 2 as id, 'beta' as name
-"""
-
 
 def _session() -> boto3.Session:
     return boto3.Session(
@@ -50,14 +43,15 @@ def _session() -> boto3.Session:
     )
 
 
-class TestAthenaS3TablesCatalog:
+class BaseS3TablesCatalog:
+    """Shared provisioning + config for S3 Tables functional tests.
+
+    Subclasses provide ``models`` (and optionally ``snapshots``) plus a test method.
+    """
+
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {"flags": {"use_catalogs_v2": True}}
-
-    @pytest.fixture(scope="class")
-    def models(self):
-        return {"s3t_model.sql": MODEL__S3_TABLES}
 
     @pytest.fixture(scope="class", autouse=True)
     def s3_tables_infra(self):
@@ -82,7 +76,6 @@ class TestAthenaS3TablesCatalog:
         try:
             glue.get_catalog(CatalogId=GLUE_S3TABLES_CATALOG)
         except ClientError:
-            all_buckets = f"arn:aws:s3tables:{region}:{account}:bucket/*"
             allow_all = [
                 {
                     "Principal": {"DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"},
@@ -93,7 +86,7 @@ class TestAthenaS3TablesCatalog:
                 Name=GLUE_S3TABLES_CATALOG,
                 CatalogInput={
                     "FederatedCatalog": {
-                        "Identifier": all_buckets,
+                        "Identifier": f"arn:aws:s3tables:{region}:{account}:bucket/*",
                         "ConnectionName": "aws:s3tables",
                     },
                     "CreateDatabaseDefaultPermissions": allow_all,
@@ -109,7 +102,7 @@ class TestAthenaS3TablesCatalog:
 
     @pytest.fixture(autouse=True)
     def namespace(self, project, s3_tables_infra):
-        """Create the S3 Tables namespace matching the model's schema; clean it up after."""
+        """Create the S3 Tables namespace matching the model schema; clean it up after."""
         s3t = _session().client("s3tables")
         arn = s3_tables_infra["bucket_arn"]
         ns = project.test_schema
@@ -144,37 +137,118 @@ class TestAthenaS3TablesCatalog:
             ]
         }
 
-    def _table_names(self, s3_tables_infra, namespace):
+    def _table_type(self, s3_tables_infra, namespace, table):
         s3t = _session().client("s3tables")
-        tables = s3t.list_tables(
+        for t in s3t.list_tables(
             tableBucketARN=s3_tables_infra["bucket_arn"], namespace=namespace
-        ).get("tables", [])
-        return {t["name"]: t.get("type") for t in tables}
+        ).get("tables", []):
+            if t["name"] == table:
+                return t.get("type")
+        return None
 
-    def test_s3_tables_create_query_and_rerun(self, project, catalogs, s3_tables_infra, namespace):
+
+MODEL__TABLE = """
+{{ config(materialized='table', catalog_name='s3_tables_catalog') }}
+select 1 as id, 'alpha' as name
+union all
+select 2 as id, 'beta' as name
+"""
+
+MODEL__INCREMENTAL = """
+{{ config(materialized='incremental', catalog_name='s3_tables_catalog',
+          incremental_strategy='merge', unique_key='id') }}
+select 1 as id, 'a' as val
+{% if is_incremental() %}
+union all select 2 as id, 'b' as val
+{% endif %}
+"""
+
+SNAPSHOT__CHECK = """
+{% snapshot s3t_snapshot %}
+{{ config(target_schema=schema, catalog_name='s3_tables_catalog',
+          unique_key='id', strategy='check', check_cols=['val']) }}
+select 1 as id, '{{ var("snap_val", "a") }}' as val
+{% endsnapshot %}
+"""
+
+
+class TestAthenaS3TablesTable(BaseS3TablesCatalog):
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"s3t_model.sql": MODEL__TABLE}
+
+    def test_create_query_and_rerun(self, project, catalogs, s3_tables_infra, namespace):
         write_config_file(catalogs, project.project_root, "catalogs.yml")
         database = s3_tables_infra["database"]
 
-        # First run: the model routes to the S3 Tables catalog via catalog_database,
-        # and the DDL is location-free Iceberg (is_external=false, no LOCATION).
+        # First run: routes to S3 Tables via catalog_database; location-free Iceberg DDL.
         _, stdout = run_dbt_and_capture(["--debug", "run"])
         assert "is_external=false" in stdout.replace(" ", "")
         assert "external_location=" not in stdout
 
-        # The table really landed in S3 Tables (managed Iceberg tables report type "customer").
-        tables = self._table_names(s3_tables_infra, namespace)
-        assert tables.get("s3t_model") == "customer"
+        # Landed in S3 Tables (managed Iceberg tables report type "customer").
+        assert self._table_type(s3_tables_infra, namespace, "s3t_model") == "customer"
 
-        # It's queryable via the federated catalog.
         count = project.run_sql(
             f'select count(*) from "{database}"."{namespace}"."s3t_model"', fetch="one"
         )[0]
         assert count == 2
 
-        # Idempotent re-run: the existing table is dropped via the Glue Data Catalog
-        # (a SQL DROP would no-op against awsdatacatalog and fail with TABLE_ALREADY_EXISTS).
+        # Idempotent re-run: existing table dropped via Glue (a SQL DROP would no-op
+        # against awsdatacatalog and fail with TABLE_ALREADY_EXISTS).
         assert len(run_dbt(["run"])) == 1
         count = project.run_sql(
             f'select count(*) from "{database}"."{namespace}"."s3t_model"', fetch="one"
         )[0]
         assert count == 2
+
+
+class TestAthenaS3TablesIncremental(BaseS3TablesCatalog):
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"s3t_inc.sql": MODEL__INCREMENTAL}
+
+    def test_incremental_merge(self, project, catalogs, s3_tables_infra, namespace):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+        database = s3_tables_infra["database"]
+        rel = f'"{database}"."{namespace}"."s3t_inc"'
+
+        # First run: create (1 row). Exercises create_table_as for s3_tables.
+        assert len(run_dbt(["run"])) == 1
+        assert self._table_type(s3_tables_infra, namespace, "s3t_inc") == "customer"
+        assert project.run_sql(f"select count(*) from {rel}", fetch="one")[0] == 1
+
+        # Second run: is_incremental adds id=2 -> MERGE into the Iceberg table. This also
+        # exercises the end-of-materialization step that must skip Glue version-expiry
+        # for S3 Tables (else GetTableVersions raises EntityNotFoundException).
+        assert len(run_dbt(["run"])) == 1
+        assert project.run_sql(f"select count(*) from {rel}", fetch="one")[0] == 2
+
+
+class TestAthenaS3TablesSnapshot(BaseS3TablesCatalog):
+    @pytest.fixture(scope="class")
+    def snapshots(self):
+        return {"s3t_snapshot.sql": SNAPSHOT__CHECK}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        # No models; snapshot selects a literal so the test is self-contained.
+        return {}
+
+    def _snap_count(self, project, database, namespace):
+        return project.run_sql(
+            f'select count(*) from "{database}"."{namespace}"."s3t_snapshot"', fetch="one"
+        )[0]
+
+    def test_snapshot_check_strategy(self, project, catalogs, s3_tables_infra, namespace):
+        write_config_file(catalogs, project.project_root, "catalogs.yml")
+        database = s3_tables_infra["database"]
+
+        # First snapshot: create the Iceberg snapshot table in S3 Tables.
+        assert len(run_dbt(["snapshot"])) == 1
+        assert self._table_type(s3_tables_infra, namespace, "s3t_snapshot") == "customer"
+        assert self._snap_count(project, database, namespace) == 1
+
+        # Flip the value -> check strategy records a new version via MERGE.
+        assert len(run_dbt(["snapshot", "--vars", '{"snap_val": "b"}'])) == 1
+        assert self._snap_count(project, database, namespace) == 2
