@@ -1,0 +1,6 @@
+kind: Features
+body: Add Postgres adapter support for snapshot column backfill using UPDATE...FROM syntax
+time: 2026-01-20T00:00:00.000000000Z
+custom:
+  Author: ""
+  Issue: "1562"
