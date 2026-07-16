@@ -134,11 +134,16 @@ class TestSnowflakeCloneIcebergTable:
         results = run_dbt(clone_args)
         assert len(results) == 1
 
-        # Verify the cloned relation is also an Iceberg table
+        # Verify the cloned relation is also an Iceberg table. Query metadata directly
+        # via list_relations_without_caching (issues SHOW OBJECTS) rather than
+        # list_relations: the relations cache stores the freshly cloned relation as a
+        # plain table without table_format, so it would report is_iceberg=N even though
+        # Snowflake created a real Iceberg table.
         with project.adapter.connection_named("__test"):
-            schema_relations = project.adapter.list_relations(
-                database=project.database, schema=other_schema
-            )
+            schema_relation = project.adapter.Relation.create(
+                database=project.database, schema=other_schema, identifier=""
+            ).without_identifier()
+            schema_relations = project.adapter.list_relations_without_caching(schema_relation)
             assert len(schema_relations) == 1
             assert schema_relations[0].is_iceberg_format
 
