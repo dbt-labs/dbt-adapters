@@ -22,6 +22,7 @@ select 3 as id, cast('{now.strftime('%Y-%m-%d %H:%M:%S-0')}' as timestamp) as ev
 """
 
 
+@pytest.mark.skip(reason="Sample mode is unsupported on 1.9")
 class TestAthenaSampleMode(BaseSampleModeTest):
     @pytest.fixture(scope="class")
     def input_model_sql(self) -> str:

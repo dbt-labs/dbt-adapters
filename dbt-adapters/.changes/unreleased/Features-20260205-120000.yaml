@@ -1,0 +1,6 @@
+kind: Features
+body: Add runtime implementation for `dbt.config.meta_get()` in Python models
+time: 2026-02-05T12:00:00.000000-08:00
+custom:
+    Author: venkaa28
+    Issue: "1595"

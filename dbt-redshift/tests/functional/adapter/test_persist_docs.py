@@ -80,6 +80,32 @@ class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
         return outputs
 
 
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+
 class TestPersistDocsLateBinding(BasePersistDocsBase):
     @pytest.fixture(scope="class")
     def profiles_config_update(self, dbt_profile_target):

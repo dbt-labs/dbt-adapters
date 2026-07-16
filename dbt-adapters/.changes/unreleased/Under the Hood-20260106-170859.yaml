@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Update diff_column_data_types to allow for dispatch
+time: 2026-01-06T17:08:59.109313-08:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1527"
