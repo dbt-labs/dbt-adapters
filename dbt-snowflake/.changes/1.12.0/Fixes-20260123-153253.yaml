@@ -1,6 +1,0 @@
-kind: Fixes
-body: Fix record/replay support for cursor.stats attribute access.
-time: 2026-01-23T15:32:53.925706-05:00
-custom:
-  Author: emmyoop
-  Issue: "1573"
