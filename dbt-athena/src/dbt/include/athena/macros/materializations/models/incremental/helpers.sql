@@ -53,6 +53,7 @@
     target_relation,
     existing_relation,
     force_batch,
+    source_sql=none,
     statement_name="main"
   )
 %}
@@ -65,18 +66,34 @@
     {% if force_batch %}
         {% do batch_incremental_insert(tmp_relation, target_relation, dest_cols_csv) %}
     {% else %}
-      {%- set insert_full -%}
-          insert into {{ target_relation }} ({{ dest_cols_csv }})
-              (
-                 select {{ dest_cols_csv }}
-                 from {{ tmp_relation }}
-              );
-      {%- endset -%}
+      {%- if source_sql is not none -%}
+        {%- set insert_full -%}
+            insert into {{ target_relation }} ({{ dest_cols_csv }})
+                (
+                   select {{ dest_cols_csv }}
+                   from (
+                     {{ source_sql }}
+                   ) _dbt_sbq
+                );
+        {%- endset -%}
+      {%- else -%}
+        {%- set insert_full -%}
+            insert into {{ target_relation }} ({{ dest_cols_csv }})
+                (
+                   select {{ dest_cols_csv }}
+                   from {{ tmp_relation }}
+                );
+        {%- endset -%}
+      {%- endif -%}
 
       {%- set query_result =  adapter.run_query_with_partitions_limit_catching(insert_full) -%}
       {%- do log('QUERY RESULT: ' ~ query_result) -%}
       {%- if query_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
+        {%- if source_sql is not none -%}
+          {% do exceptions.raise_compiler_error("Runtime error: TOO_MANY_OPEN_PARTITIONS encountered with build_strategy='subquery'. Switch to build_strategy='tmp_table' to enable automatic batching.") %}
+        {%- else -%}
           {% do batch_incremental_insert(tmp_relation, target_relation, dest_cols_csv) %}
+        {%- endif -%}
       {%- endif -%}
     {%- endif -%}
 
@@ -85,10 +102,16 @@
 {%- endmacro %}
 
 
-{% macro delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by) %}
+{% macro delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by, source_sql=none) %}
   {%- set partitioned_keys = partitioned_by | tojson | replace('\"', '') | replace('[', '') | replace(']', '') -%}
   {% call statement('get_partitions', fetch_result=True) %}
+    {%- if source_sql is not none -%}
+    select distinct {{partitioned_keys}} from (
+      {{ source_sql }}
+    ) _dbt_sbq;
+    {%- else -%}
     select distinct {{partitioned_keys}} from {{ tmp_relation }};
+    {%- endif -%}
   {% endcall %}
   {%- set table = load_result('get_partitions').table -%}
   {%- set rows = table.rows -%}
