@@ -1,6 +1,0 @@
-kind: Fixes
-body: Apply table options (labels, expiration, tags, kms_key_name) to empty BigQuery seeds
-time: 2026-06-12T17:30:22.304386+05:30
-custom:
-    Author: itsnamangoyal
-    Issue: "1959"

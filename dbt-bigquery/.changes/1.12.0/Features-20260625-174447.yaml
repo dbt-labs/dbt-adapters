@@ -1,6 +1,0 @@
-kind: Features
-body: BigQueryCatalogRelation now exposes catalog_database; when set in a v2 biglake_metastore catalog config it takes highest priority in generate_database_name over model database config and target.database
-time: 2026-06-25T17:44:47.859799+05:30
-custom:
-    Author: aahel
-    Issue: "2004"

@@ -1,8 +1,0 @@
-kind: Under the Hood
-body: Stabilize flaky BigQuery Python-model integration tests by retrying transient
-  Dataproc CPU-quota failures, and shard the suite across parallel CI runners with
-  pytest-split to keep it fast
-time: 2026-06-05T00:00:00.000000-06:00
-custom:
-  Author: tauhid621
-  Issue: ""
