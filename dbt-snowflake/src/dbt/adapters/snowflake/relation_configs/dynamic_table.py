@@ -318,8 +318,18 @@ class SnowflakeDynamicTableTransientConfigChange(RelationConfigChange):
         return True
 
 
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeDynamicTableQueryConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return True
+
+
 @dataclass
 class SnowflakeDynamicTableConfigChangeset:
+    query: Optional[SnowflakeDynamicTableQueryConfigChange] = None
     target_lag: Optional[SnowflakeDynamicTableTargetLagConfigChange] = None
     snowflake_warehouse: Optional[SnowflakeDynamicTableWarehouseConfigChange] = None
     snowflake_initialization_warehouse: Optional[
@@ -335,6 +345,7 @@ class SnowflakeDynamicTableConfigChangeset:
     def requires_full_refresh(self) -> bool:
         return any(
             [
+                self.query.requires_full_refresh if self.query else False,
                 self.target_lag.requires_full_refresh if self.target_lag else False,
                 (
                     self.snowflake_warehouse.requires_full_refresh
@@ -358,6 +369,7 @@ class SnowflakeDynamicTableConfigChangeset:
     def has_changes(self) -> bool:
         return any(
             [
+                self.query,
                 self.target_lag,
                 self.snowflake_warehouse,
                 self.snowflake_initialization_warehouse,
