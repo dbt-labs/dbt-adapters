@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from dbt.adapters.events.logging import AdapterLogger
 
 DEFAULT_THREAD_COUNT = 4
@@ -39,3 +41,35 @@ DEFAULT_SPARK_PROPERTIES = {
 }
 
 LOGGER = AdapterLogger(__name__)
+
+# Catalog integration (catalogs.yml v2) constants
+ICEBERG_TABLE_FORMAT = "iceberg"
+HIVE_TABLE_FORMAT = "hive"
+PARQUET_FILE_FORMAT = "parquet"
+GLUE_CATALOG_TYPE = "glue"
+INFO_SCHEMA_CATALOG_TYPE = "info_schema"
+
+# Default catalog registered for every model that does not reference a catalog.
+# Maps to Athena's standard Hive table_type.
+DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
+    name="info_schema",
+    catalog_name="info_schema",
+    catalog_type=INFO_SCHEMA_CATALOG_TYPE,
+    table_format=HIVE_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
+    adapter_properties={},
+)
+
+# Default writable Iceberg catalog backed by the AWS Glue Data Catalog.
+DEFAULT_GLUE_CATALOG = SimpleNamespace(
+    name="glue",
+    catalog_name="glue",
+    catalog_type=GLUE_CATALOG_TYPE,
+    table_format=ICEBERG_TABLE_FORMAT,
+    external_volume=None,
+    file_format=PARQUET_FILE_FORMAT,
+    catalog_database=None,
+    adapter_properties={},
+)

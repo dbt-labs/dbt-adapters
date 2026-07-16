@@ -1,0 +1,6 @@
+kind: Dependencies
+body: 'bump dbt-adapters version pin floor to >=1.16.6 '
+time: 2025-09-08T16:41:30.499184-07:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1328"

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Respect QUOTED_IDENTIFIERS_IGNORE_CASE with dynamic tables.
+time: 2025-05-22T03:15:31.20101-07:00
+custom:
+    Author: versusfacit
+    Issue: "993"

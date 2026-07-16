@@ -1,0 +1,6 @@
+kind: Features
+body: Add `enable_change_history` option for models on BigQuery.
+time: 2025-08-11T19:44:47.222876+02:00
+custom:
+    Author: Robin_CHESNE
+    Issue: "1206"

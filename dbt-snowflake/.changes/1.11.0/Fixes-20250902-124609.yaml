@@ -1,0 +1,6 @@
+kind: Fixes
+body: handle non-model node types being passed to generate_database_name
+time: 2025-09-02T12:46:09.419663-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1309"

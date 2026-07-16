@@ -7,9 +7,24 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from functools import lru_cache
+from multiprocessing.context import SpawnContext
 from textwrap import dedent
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, Type
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Dict,
+    FrozenSet,
+    Generator,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -27,13 +42,23 @@ from mypy_boto3_glue.type_defs import (
     TableTypeDef,
     TableVersionTypeDef,
 )
-from pyathena.error import OperationalError
 
 from dbt.adapters.athena import AthenaConnectionManager
+from dbt.adapters.athena.catalogs import (
+    AthenaInfoSchemaCatalogIntegration,
+    GlueCatalogIntegration,
+)
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.connections import AthenaCursor
-from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.connections import AthenaCursor, AthenaError
+from dbt.adapters.athena.constants import (
+    DEFAULT_GLUE_CATALOG,
+    DEFAULT_INFO_SCHEMA_CATALOG,
+    GLUE_CATALOG_TYPE,
+    HIVE_TABLE_FORMAT,
+    ICEBERG_TABLE_FORMAT,
+    LOGGER,
+)
 from dbt.adapters.athena.exceptions import (
     S3LocationException,
     SnapshotMigrationRequired,
@@ -54,6 +79,7 @@ from dbt.adapters.athena.relation import (
 from dbt.adapters.athena.s3 import S3DataNaming
 from dbt.adapters.athena.utils import (
     AthenaCatalogType,
+    chunk_iterable,
     clean_sql_comment,
     ellipsis_comment,
     get_catalog_id,
@@ -65,15 +91,26 @@ from dbt.adapters.athena.utils import (
 from dbt.adapters.base import ConstraintSupport, PythonJobHelper, available
 from dbt.adapters.base.impl import AdapterConfig
 from dbt.adapters.base.relation import BaseRelation, InformationSchema
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 
 
 if TYPE_CHECKING:
+    from dbt.adapters.catalogs import CatalogV2
     from mypy_boto3_glue.client import GlueClient
 
 boto3_client_lock = Lock()
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once the dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 
 @dataclass
@@ -132,6 +169,9 @@ class AthenaConfig(AdapterConfig):
 class AthenaAdapter(SQLAdapter):
     BATCH_CREATE_PARTITION_API_LIMIT = 100
     BATCH_DELETE_PARTITION_API_LIMIT = 25
+    BATCH_DELETE_S3_OBJECTS_API_LIMIT = 1000
+    PARTITION_PROCESSING_CHUNK_SIZE = 1000
+    GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH = 2048
     INTEGER_MAX_VALUE_32_BIT_SIGNED = 0x7FFFFFFF
 
     ConnectionManager = AthenaConnectionManager
@@ -149,6 +189,52 @@ class AthenaAdapter(SQLAdapter):
         ConstraintType.primary_key: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.foreign_key: ConstraintSupport.NOT_SUPPORTED,
     }
+
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration, AthenaInfoSchemaCatalogIntegration]
+
+    _capabilities: CapabilityDict = CapabilityDict(
+        {
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
+        }
+    )
+
+    # catalogs.yml v2 type -> the catalog_type expected by CATALOG_INTEGRATIONS.
+    # Identity for Athena today (like BigQuery); the hook is the consistent place
+    # to add aliases later (e.g. a future "sagemaker" -> "glue").
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {GLUE_CATALOG_TYPE: GLUE_CATALOG_TYPE}
+
+    # catalogs.yml v2 table_format -> Athena's table_type. 'default' is the v2 spec's
+    # non-Iceberg value; Athena calls the equivalent 'hive'.
+    _V2_TABLE_FORMAT: ClassVar[Dict[str, str]] = {
+        "default": HIVE_TABLE_FORMAT,
+        "iceberg": ICEBERG_TABLE_FORMAT,
+    }
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        # Register the default catalogs so models can reference them by name and so
+        # models without a catalog fall back to standard Hive behavior.
+        # NOTE: "info_schema" and "glue" are therefore reserved names — a catalogs.yml
+        # entry using either will raise DbtCatalogIntegrationAlreadyExistsError.
+        self.add_catalog_integration(DEFAULT_INFO_SCHEMA_CATALOG)
+        self.add_catalog_integration(DEFAULT_GLUE_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: "CatalogV2") -> str:
+        table_format = catalog.table_format.value
+        try:
+            return self._V2_TABLE_FORMAT[table_format]
+        except KeyError:
+            raise DbtRuntimeError(
+                f"Catalog '{catalog.name}' has unsupported table_format '{table_format}'. "
+                f"Athena supports: {', '.join(sorted(self._V2_TABLE_FORMAT))}."
+            )
 
     @classmethod
     def date_function(cls) -> str:
@@ -401,7 +487,9 @@ class AthenaAdapter(SQLAdapter):
         return None
 
     @available
-    def clean_up_partitions(self, relation: AthenaRelation, where_condition: str) -> None:
+    def clean_up_partitions(
+        self, relation: AthenaRelation, where_condition: Union[str, List[str]]
+    ) -> None:
         conn = self.connections.get_thread_connection()
         creds = conn.credentials
         client = conn.handle
@@ -415,24 +503,79 @@ class AthenaAdapter(SQLAdapter):
                 region_name=client.region_name,
                 config=get_boto3_config(num_retries=creds.effective_num_retries),
             )
-        paginator = glue_client.get_paginator("get_partitions")
-        partition_params = {
-            "CatalogId": catalog_id,
-            "DatabaseName": relation.schema,
-            "TableName": relation.identifier,
-            "Expression": where_condition,
-            "ExcludeColumnSchema": True,
-        }
-        partition_pg = paginator.paginate(**partition_params)
-        partitions = partition_pg.build_full_result().get("Partitions")
-        for partition in partitions:
-            self.delete_from_s3(partition["StorageDescriptor"]["Location"])
-            glue_client.delete_partition(
-                CatalogId=catalog_id,
-                DatabaseName=relation.schema,
-                TableName=relation.identifier,
-                PartitionValues=partition["Values"],
-            )
+
+        where_conditions = (
+            [where_condition] if isinstance(where_condition, str) else where_condition
+        )
+
+        def join_or_conditions(conditions: List[str]) -> str:
+            return " or ".join(conditions)
+
+        def get_partition_expressions() -> Generator[List[str], None, None]:
+            current_chunk: List[str] = []
+            for condition in where_conditions:
+                condition_with_brackets = f"({condition})"
+                if (
+                    len(condition_with_brackets)
+                    > AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH
+                ):
+                    raise DbtRuntimeError(
+                        f"Partition condition exceeds the Glue API expression limit of "
+                        f"{AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH} characters: "
+                        f"'{condition_with_brackets[:100]}...'"
+                    )
+                if current_chunk and (
+                    len(join_or_conditions(current_chunk + [condition_with_brackets]))
+                    > AthenaAdapter.GET_PARTITIONS_API_EXPRESSION_MAX_LENGTH
+                ):
+                    yield current_chunk
+                    current_chunk = []
+                current_chunk.append(condition_with_brackets)
+            if current_chunk:
+                yield current_chunk
+
+        def iter_partitions() -> Generator[Dict[str, Any], None, None]:
+            paginator = glue_client.get_paginator("get_partitions")
+            for expression_chunk in get_partition_expressions():
+                expression = join_or_conditions(expression_chunk)
+                partition_params = {
+                    "CatalogId": catalog_id,
+                    "DatabaseName": relation.schema,
+                    "TableName": relation.identifier,
+                    "Expression": expression,
+                    "ExcludeColumnSchema": True,
+                }
+                for page in paginator.paginate(**partition_params):
+                    yield from page.get("Partitions", [])
+
+        def delete_partition_chunk(partitions):
+            self.bulk_delete_from_s3([p["StorageDescriptor"]["Location"] for p in partitions])
+
+            for glue_batch in get_chunks(
+                partitions, AthenaAdapter.BATCH_DELETE_PARTITION_API_LIMIT
+            ):
+                response = glue_client.batch_delete_partition(
+                    CatalogId=catalog_id,
+                    DatabaseName=relation.schema,
+                    TableName=relation.identifier,
+                    PartitionsToDelete=[{"Values": p["Values"]} for p in glue_batch],
+                )
+                if errors := response.get("Errors"):
+                    for err in errors:
+                        LOGGER.error(
+                            f"Failed to delete Glue partition: Values='{err['PartitionValues']}', "
+                            f"Code='{err['ErrorDetail']['ErrorCode']}', "
+                            f"Message='{err['ErrorDetail']['ErrorMessage']}'"
+                        )
+                    raise DbtRuntimeError(
+                        f"Failed to delete {len(errors)} partition(s) from Glue table "
+                        f"'{relation.schema}.{relation.identifier}'"
+                    )
+
+        for partition_params_chunk in chunk_iterable(
+            iter_partitions(), AthenaAdapter.PARTITION_PROCESSING_CHUNK_SIZE
+        ):
+            delete_partition_chunk(partition_params_chunk)
 
     @available
     def clean_up_table(self, relation: AthenaRelation) -> None:
@@ -537,6 +680,68 @@ class AthenaAdapter(SQLAdapter):
                 raise DbtRuntimeError("Failed to delete files from S3.")
         else:
             LOGGER.debug("S3 path does not exist")
+
+    def bulk_delete_from_s3(self, s3_paths: List[str]) -> None:
+        if not s3_paths:
+            LOGGER.debug("No S3 paths provided for deletion")
+            return
+
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        s3_resource = client.session.resource(
+            "s3",
+            region_name=client.region_name,
+            config=get_boto3_config(num_retries=creds.effective_num_retries),
+        )
+
+        # Group paths by bucket to support partitions spread across multiple buckets
+        paths_by_bucket: Dict[str, List[str]] = {}
+        for s3_path in s3_paths:
+            bucket, _ = self._parse_s3_path(s3_path)
+            paths_by_bucket.setdefault(bucket, []).append(s3_path)
+
+        def filter_objects_by_prefixes(
+            s3_bucket: Any, bucket_paths: List[str]
+        ) -> Generator[Any, None, None]:
+            for s3_path in bucket_paths:
+                LOGGER.debug(f"Listing files for deletion: {s3_path}")
+                _, prefix = self._parse_s3_path(s3_path)
+                yield from s3_bucket.objects.filter(Prefix=prefix)
+
+        def chunk_object_keys(objects_iter) -> Generator[List[Dict[str, str]], None, None]:
+            chunk = []
+            for obj in objects_iter:
+                chunk.append({"Key": obj.key})
+                if len(chunk) >= AthenaAdapter.BATCH_DELETE_S3_OBJECTS_API_LIMIT:
+                    yield chunk
+                    chunk = []
+            if chunk:
+                yield chunk
+
+        for bucket_name, bucket_paths in paths_by_bucket.items():
+            s3_bucket = s3_resource.Bucket(bucket_name)
+            for object_keys in chunk_object_keys(
+                filter_objects_by_prefixes(s3_bucket, bucket_paths)
+            ):
+                if object_keys:
+                    LOGGER.debug(f"Calling delete_objects for {len(object_keys)} objects")
+                    response = s3_bucket.delete_objects(Delete={"Objects": object_keys})
+                    deleted_count = len(response.get("Deleted", []))
+                    error_count = len(response.get("Errors", []))
+                    LOGGER.debug(
+                        f"delete_objects result: {deleted_count} deleted, {error_count} errors"
+                    )
+                    if errors := response.get("Errors"):
+                        for err in errors:
+                            LOGGER.error(
+                                f"Failed to delete S3 object: Key='{err['Key']}', "
+                                f"Code='{err['Code']}', Message='{err['Message']}', "
+                                f"Bucket='{bucket_name}'"
+                            )
+                        raise DbtRuntimeError(
+                            f"Failed to delete {len(errors)} object(s) from S3 bucket '{bucket_name}'"
+                        )
 
     @staticmethod
     def _parse_s3_path(s3_path: str) -> Tuple[str, str]:
@@ -670,19 +875,24 @@ class AthenaAdapter(SQLAdapter):
                 )
 
             catalog = []
-            paginator = athena_client.get_paginator("list_table_metadata")
             for schema in schemas:
-                for page in paginator.paginate(
-                    CatalogName=information_schema.database,
-                    DatabaseName=schema,
-                    MaxResults=50,  # Limit supported by this operation
-                ):
-                    for table in page["TableMetadataList"]:
+                kwargs = {
+                    "CatalogName": information_schema.database,
+                    "DatabaseName": schema,
+                    "MaxResults": 50,
+                }
+                while True:
+                    response = athena_client.list_table_metadata(**kwargs)
+                    for table in response["TableMetadataList"]:
                         catalog.extend(
                             self._get_one_table_for_non_glue_catalog(
                                 table, schema, information_schema.database  # type:ignore
                             )
                         )
+                    next_token = response.get("NextToken")
+                    if not next_token:
+                        break
+                    kwargs["NextToken"] = next_token
             table = agate.Table.from_object(catalog)
 
         return self._catalog_filter_table(table, used_schemas)
@@ -1169,6 +1379,43 @@ class AthenaAdapter(SQLAdapter):
             result.extend([schema["Name"] for schema in page["DatabaseList"]])
         return result
 
+    @available.parse(lambda *a, **k: False)
+    def check_schema_exists(self, database: str, schema: str) -> bool:
+        """
+        Check if a schema exists using the Glue GetDatabase API.
+
+        This avoids the default SQL-based implementation which would trigger
+        Athena's StartQueryExecution, requiring unnecessary IAM permissions.
+        For non-Glue data catalogs, falls back to the default SQL-based implementation.
+        """
+        data_catalog = self._get_data_catalog(database)
+        if data_catalog and data_catalog["Type"] != "GLUE":
+            return super().check_schema_exists(database, schema)
+
+        conn = self.connections.get_thread_connection()
+        creds = conn.credentials
+        client = conn.handle
+        catalog_id = get_catalog_id(data_catalog)
+
+        with boto3_client_lock:
+            glue_client = client.session.client(
+                "glue",
+                region_name=client.region_name,
+                config=get_boto3_config(num_retries=creds.effective_num_retries),
+            )
+
+        try:
+            kwargs: Dict[str, str] = {"Name": schema}
+            if catalog_id:
+                kwargs["CatalogId"] = catalog_id
+            response = glue_client.get_database(**kwargs)
+            LOGGER.debug(f"Glue GetDatabase response for schema '{schema}': {response}")
+            return True
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "EntityNotFoundException":
+                return False
+            raise e
+
     @staticmethod
     def _is_current_column(col: ColumnTypeDef) -> bool:
         """
@@ -1394,8 +1641,8 @@ class AthenaAdapter(SQLAdapter):
     @available
     def run_query_with_partitions_limit_catching(self, sql: str) -> str:
         try:
-            cursor = self._run_query(sql, catch_partitions_limit=True)
-        except OperationalError as e:
+            cursor = self._run_query(sql)
+        except AthenaError as e:
             if "TOO_MANY_OPEN_PARTITIONS" in str(e):
                 return "TOO_MANY_OPEN_PARTITIONS"
             raise e
@@ -1464,20 +1711,20 @@ class AthenaAdapter(SQLAdapter):
     def run_operation_with_potential_multiple_runs(self, query: str, op: str) -> None:
         while True:
             try:
-                self._run_query(query, catch_partitions_limit=False)
+                self._run_query(query)
                 break
-            except OperationalError as e:
+            except AthenaError as e:
                 if f"ICEBERG_{op.upper()}_MORE_RUNS_NEEDED" not in str(e):
                     raise e
 
-    def _run_query(self, sql: str, catch_partitions_limit: bool) -> AthenaCursor:
+    def _run_query(self, sql: str) -> AthenaCursor:
         query = self.connections._add_query_comment(sql)
         conn = self.connections.get_thread_connection()
         cursor: AthenaCursor = conn.handle.cursor()
         LOGGER.debug(f"Running Athena query:\n{query}")
         try:
-            cursor.execute(query, catch_partitions_limit=catch_partitions_limit)
-        except OperationalError as e:
+            cursor.execute(query)
+        except AthenaError as e:
             LOGGER.debug(f"CAUGHT EXCEPTION: {e}")
             raise e
         return cursor

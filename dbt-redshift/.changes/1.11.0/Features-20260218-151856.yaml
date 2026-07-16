@@ -1,0 +1,6 @@
+kind: Features
+body: Use SVV system views for relation listing when `redshift_use_show_apis` is enabled
+time: 2026-02-18T15:18:56.433599+05:30
+custom:
+    Author: tauhid621
+    Issue: "1622"

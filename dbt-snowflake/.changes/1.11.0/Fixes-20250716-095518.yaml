@@ -1,0 +1,6 @@
+kind: Fixes
+body: Rename DT temp tables to avoid problematic drops
+time: 2025-07-16T09:55:18.719362-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "713"

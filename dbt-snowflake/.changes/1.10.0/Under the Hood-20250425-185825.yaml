@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Remove enable_iceberg_materializations behavior flag now that 2025_01 is required
+time: 2025-04-25T18:58:25.032841-04:00
+custom:
+  Author: mikealfare
+  Issue: "1025"

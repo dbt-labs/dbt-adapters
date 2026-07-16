@@ -1,0 +1,6 @@
+kind: Fixes
+body: fix macro naming get_delete_insert_merge_sql
+time: 2025-06-05T14:54:21.254391-07:00
+custom:
+  Author: VersusFacit
+  Issue: "1032"

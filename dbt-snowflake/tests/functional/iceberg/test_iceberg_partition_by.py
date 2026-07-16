@@ -227,6 +227,8 @@ class TestPartitionByIcebergBuiltinCatalog(TestIcebergPartitionBy):
         run_dbt(["run"])
         iceberg_sql = get_cleaned_model_ddl_from_file("builtin_table.sql")
         assert "partition by (order_date)" in iceberg_sql
+        # partition by must appear before external_volume per Snowflake syntax
+        assert iceberg_sql.index("partition by") < iceberg_sql.index("external_volume")
 
 
 class TestPartitionByIcebergRestCatalog(TestIcebergPartitionBy):

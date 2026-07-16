@@ -1,0 +1,6 @@
+kind: Features
+body: 'Support cross-database `create_schema` and `drop_schema` when `redshift_use_show_apis` is enabled, and deprecate `ra3_node` as an alias for the behavior flag.'
+time: 2026-03-02T14:53:37.985901+05:30
+custom:
+    Author: tauhid621
+    Issue: "1693"

@@ -1,0 +1,6 @@
+kind: Fixes
+body: fix table and column descriptions for snowflake iceberg tables
+time: 2025-06-30T19:32:40.470484+05:30
+custom:
+    Author: sandeepmullangi2
+    Issue: "1015"

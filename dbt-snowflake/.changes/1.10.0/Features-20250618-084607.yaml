@@ -1,0 +1,6 @@
+kind: Features
+body: Add 's3_stage_vpce_dns_name' session parameter
+time: 2025-06-18T08:46:07.352953-05:00
+custom:
+    Author: csquire
+    Issue: "1161"

@@ -10,6 +10,7 @@ from tests.functional.adapter.incremental.seeds import (
     seed_incremental_overwrite_date_expected_csv,
     seed_incremental_overwrite_day_expected_csv,
     seed_incremental_overwrite_range_expected_csv,
+    seed_incremental_overwrite_range_with_interval_expected_csv,
     seed_incremental_overwrite_time_expected_csv,
     seed_merge_expected_csv,
     seed_incremental_overwrite_day_with_time_partition_expected_csv,
@@ -24,6 +25,7 @@ from tests.functional.adapter.incremental.incremental_strategy_fixtures import (
     overwrite_partitions_sql,
     overwrite_copy_partitions_with_partitions_sql,
     overwrite_range_sql,
+    overwrite_range_with_interval_sql,
     overwrite_time_sql,
     overwrite_day_with_time_ingestion_sql,
     overwrite_day_with_time_partition_datetime_sql,
@@ -48,6 +50,7 @@ class TestBigQueryScripting(SeedConfigBase):
             "incremental_overwrite_partitions.sql": overwrite_partitions_sql,
             "incremental_overwrite_copy_partitions_with_partitions.sql": overwrite_copy_partitions_with_partitions_sql,
             "incremental_overwrite_range.sql": overwrite_range_sql,
+            "incremental_overwrite_range_with_interval.sql": overwrite_range_with_interval_sql,
             "incremental_overwrite_time.sql": overwrite_time_sql,
             "incremental_overwrite_day_with_time_partition.sql": overwrite_day_with_time_ingestion_sql,
             "incremental_overwrite_day_with_time_partition_datetime.sql": overwrite_day_with_time_partition_datetime_sql,
@@ -63,16 +66,17 @@ class TestBigQueryScripting(SeedConfigBase):
             "incremental_overwrite_date_expected.csv": seed_incremental_overwrite_date_expected_csv,
             "incremental_overwrite_day_expected.csv": seed_incremental_overwrite_day_expected_csv,
             "incremental_overwrite_range_expected.csv": seed_incremental_overwrite_range_expected_csv,
+            "incremental_overwrite_range_with_interval_expected.csv": seed_incremental_overwrite_range_with_interval_expected_csv,
             "incremental_overwrite_day_with_time_partition_expected.csv": seed_incremental_overwrite_day_with_time_partition_expected_csv,
         }
 
     def test__bigquery_assert_incremental_configurations_apply_the_right_strategy(self, project):
         run_dbt(["seed"])
         results = run_dbt()
-        assert len(results) == 13
+        assert len(results) == 14
 
         results = run_dbt()
-        assert len(results) == 13
+        assert len(results) == 14
 
         incremental_strategies = [
             ("incremental_merge_range", "merge_expected"),
@@ -87,6 +91,10 @@ class TestBigQueryScripting(SeedConfigBase):
             ),
             ("incremental_overwrite_day", "incremental_overwrite_day_expected"),
             ("incremental_overwrite_range", "incremental_overwrite_range_expected"),
+            (
+                "incremental_overwrite_range_with_interval",
+                "incremental_overwrite_range_with_interval_expected",
+            ),
             (
                 "incremental_overwrite_day_with_time_partition_datetime",
                 "incremental_overwrite_day_with_time_partition_expected",
@@ -114,3 +122,67 @@ class TestBigQueryScripting(SeedConfigBase):
             project.adapter, "incremental_overwrite_day_with_time_partition_expected"
         )
         assert created == expected
+
+
+class TestBigQueryScriptingTruthyNullsEquals(TestBigQueryScripting):
+    """Same scenario as TestBigQueryScripting but with the truthy-nulls equals
+    behavior flag enabled."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
+
+
+_merge_null_unique_key_sql = """
+{{
+    config(
+        materialized="incremental",
+        unique_key="id",
+        incremental_strategy="merge",
+    )
+}}
+
+with data as (
+    {% if not is_incremental() %}
+        select cast(null as int64) as id, 'a' as value union all
+        select 1 as id, 'b' as value
+    {% else %}
+        select cast(null as int64) as id, 'a_updated' as value union all
+        select 1 as id, 'b_updated' as value
+    {% endif %}
+)
+
+select * from data
+""".lstrip()
+
+
+class TestBigQueryMergeNullUniqueKeyTruthyNullsEquals:
+    """Regression: with the truthy-nulls flag enabled, a MERGE on a string
+    `unique_key` whose values are NULL must match NULL=NULL rather than
+    inserting a duplicate row."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"enable_truthy_nulls_equals_macro": True}}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"merge_null_unique_key.sql": _merge_null_unique_key_sql}
+
+    def test__null_unique_key_matches_under_truthy_nulls(self, project):
+        run_dbt(["run"])
+        run_dbt(["run"])
+
+        relation = project.adapter.Relation.create(
+            database=project.database,
+            schema=project.test_schema,
+            identifier="merge_null_unique_key",
+        )
+        with project.adapter.connection_named("_test"):
+            _, table = project.adapter.execute(
+                f"select id, value from {relation} order by id nulls last",
+                fetch=True,
+            )
+
+        rows = [(row[0], row[1]) for row in table.rows]
+        assert rows == [(1, "b_updated"), (None, "a_updated")]

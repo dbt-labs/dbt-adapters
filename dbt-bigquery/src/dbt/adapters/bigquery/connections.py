@@ -6,7 +6,7 @@ import json
 from multiprocessing.context import SpawnContext
 import re
 import time
-from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
 from google.auth.exceptions import RefreshError
@@ -22,7 +22,7 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
-from google.cloud.exceptions import BadRequest, Forbidden, NotFound
+from google.cloud.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -233,6 +233,22 @@ class BigQueryConnectionManager(BaseConnectionManager):
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
 
+    def _submit_or_attach(self, client: Client, job_id: str, submit: Callable):
+        """Submit a job, or attach to the existing one via get_job on 409 Conflict.
+
+        A stable job_id makes jobs.insert idempotent: a resubmission (dbt's retry
+        or the client library's transport retry after a lost response) attaches to
+        the in-flight job instead of spawning a second one that re-runs work.
+        """
+        try:
+            return submit()
+        except Conflict:
+            logger.debug(
+                f"Job {job_id} already exists; attaching to the in-flight job "
+                "instead of resubmitting to avoid duplicate execution."
+            )
+            return client.get_job(job_id)
+
     def raw_execute(
         self,
         sql,
@@ -264,10 +280,24 @@ class BigQueryConnectionManager(BaseConnectionManager):
         if maximum_bytes_billed is not None and maximum_bytes_billed != 0:
             job_params["maximum_bytes_billed"] = maximum_bytes_billed
 
+        model_reservation = getattr(conn, "_bq_model_reservation", None)
+        reservation = (
+            model_reservation if model_reservation is not None else conn.credentials.reservation
+        )
+
+        if reservation is not None:
+            job_params["reservation"] = reservation
+
+        model_timeout = getattr(conn, "_bq_model_timeout", None)
+        if model_timeout is not None:
+            job_params["job_timeout_ms"] = int(model_timeout * 1000)
+
         with self.exception_handler(sql):
+            # Mint the job_id once, outside the retry closure, so a re-entry
+            # resubmits the same job instead of spawning a duplicate.
+            job_id = self.generate_job_id()
 
             def _execute_with_retry():
-                job_id = self.generate_job_id()
                 return self._query_and_results(
                     conn,
                     sql,
@@ -418,14 +448,23 @@ class BigQueryConnectionManager(BaseConnectionManager):
         return f"https://console.cloud.google.com/bigquery?project={project_id}&j=bq:{location}:{job_id}&page=queryresults"
 
     def get_partitions_metadata(self, table):
-        def standard_to_legacy(table):
-            return table.project + ":" + table.dataset + "." + table.identifier
+        if getattr(self, "use_standard_sql_for_partitions", False):
+            sql = f"""
+                SELECT partition_id
+                FROM `{table.project}.{table.dataset}.INFORMATION_SCHEMA.PARTITIONS`
+                WHERE table_name = '{table.identifier}'
+            """
+            sql = self._add_query_comment(sql)
+            _, iterator = self.raw_execute(sql, use_legacy_sql=False)
+        else:
 
-        legacy_sql = "SELECT * FROM [" + standard_to_legacy(table) + "$__PARTITIONS_SUMMARY__]"
+            def standard_to_legacy(table):
+                return table.project + ":" + table.dataset + "." + table.identifier
 
-        sql = self._add_query_comment(legacy_sql)
-        # auto_begin is ignored on bigquery, and only included for consistency
-        _, iterator = self.raw_execute(sql, use_legacy_sql=True)
+            legacy_sql = "SELECT * FROM [" + standard_to_legacy(table) + "$__PARTITIONS_SUMMARY__]"
+            sql = self._add_query_comment(legacy_sql)
+            _, iterator = self.raw_execute(sql, use_legacy_sql=True)
+
         return self.get_table_from_response(iterator)
 
     def copy_bq_table(self, source, destination, write_disposition) -> None:
@@ -463,13 +502,22 @@ class BigQueryConnectionManager(BaseConnectionManager):
             destination_ref.path,
         )
         with self.exception_handler(msg):
-            copy_job = client.copy_table(
-                source_ref_array,
-                destination_ref,
-                job_config=CopyJobConfig(write_disposition=write_disposition),
-                retry=self._retry.create_reopen_with_deadline(conn),
+            # Stable job_id: copy_table has no built-in 409 recovery of its own.
+            job_id = self.generate_job_id()
+            copy_job = self._submit_or_attach(
+                client,
+                job_id,
+                lambda: client.copy_table(
+                    source_ref_array,
+                    destination_ref,
+                    job_config=CopyJobConfig(write_disposition=write_disposition),
+                    job_id=job_id,
+                    retry=self._retry.create_reopen_with_deadline(conn),
+                ),
             )
-            copy_job.result(timeout=self._retry.create_job_execution_timeout(fallback=300))
+            model_timeout = getattr(conn, "_bq_model_timeout", None)
+            copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
+            copy_job.result(timeout=copy_timeout)
 
     def write_dataframe_to_table(
         self,
@@ -590,31 +638,50 @@ class BigQueryConnectionManager(BaseConnectionManager):
         job_id,
         limit: Optional[int] = None,
     ):
-        client: Client = conn.handle
-        timeout = self._retry.create_job_execution_timeout()
-        query_job_config = QueryJobConfig(**job_params)
-        query_job_config.job_timeout_ms = timeout * 1000  # convert to milliseconds
         """Query the client and wait for results."""
-        # Cannot reuse job_config if destination is set and ddl is used
-        query_job = client.query(
-            query=sql,
-            job_config=query_job_config,
-            job_id=job_id,
-            job_retry=None,
-            timeout=self._retry.create_job_creation_timeout(),
+        client: Client = conn.handle
+        # Only set job_timeout_ms from profile if not already set (e.g., via model-level config)
+        if "job_timeout_ms" in job_params:
+            timeout = job_params["job_timeout_ms"] / 1000
+        else:
+            timeout = self._retry.create_job_execution_timeout()
+            if timeout:
+                job_params["job_timeout_ms"] = int(timeout * 1000)
+        query_job_config = QueryJobConfig(**job_params)
+        polling_timeout = (
+            timeout + 30 if timeout else None
+        )  # buffer for polling after job execution timeout
+        # Cannot reuse job_config if destination is set and ddl is used.
+        # job_id is stable across retries (see raw_execute).
+        query_job = self._submit_or_attach(
+            client,
+            job_id,
+            lambda: client.query(
+                query=sql,
+                job_config=query_job_config,
+                job_id=job_id,
+                job_retry=None,
+                timeout=self._retry.create_job_creation_timeout(),
+            ),
         )
         if (
             query_job.location is not None
             and query_job.job_id is not None
             and query_job.project is not None
         ):
-            logger.debug(
-                self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
-            )
+            job_link = self._bq_job_link(query_job.location, query_job.project, query_job.job_id)
+            if conn.credentials.job_link_info_level_log:
+                logger.info(job_link)
+            else:
+                logger.debug(job_link)
 
         pre = time.perf_counter()
         try:
-            iterator = query_job.result(max_results=limit, retry=self._retry.create_retry())
+            iterator = query_job.result(
+                max_results=limit,
+                timeout=polling_timeout,
+                retry=self._retry.create_query_job_polling_retry(query_job),
+            )
         except TimeoutError:
             exc = f"Operation did not complete within the designated timeout of {timeout} seconds."
             try:

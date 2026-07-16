@@ -61,3 +61,43 @@ class TestJobTimeout:
         result = run_dbt(["run"], expect_pass=False)  # project setup will fail
         expected_error = f"Job execution was cancelled: Job timed out after {_SHORT_TIMEOUT} sec"
         assert expected_error in result[0].message
+
+
+_MODEL_LEVEL_TIMEOUT_SQL = """
+    {{ config(materialized='table', job_execution_timeout_seconds=1) }}
+    with array_1 as (
+    select generated_ids from UNNEST(GENERATE_ARRAY(1, 200000)) AS generated_ids
+    ),
+    array_2 as (
+    select generated_ids from UNNEST(GENERATE_ARRAY(2, 200000)) AS generated_ids
+    )
+
+    SELECT array_1.generated_ids
+    FROM array_1
+    LEFT JOIN array_1 as jnd on 1=1
+    LEFT JOIN array_2 as jnd2 on 1=1
+    LEFT JOIN array_1 as jnd3 on jnd3.generated_ids >= jnd2.generated_ids
+"""
+
+
+class TestModelLevelJobTimeout:
+    """Test that job_execution_timeout_seconds can be set at the model level."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "model_with_timeout.sql": _MODEL_LEVEL_TIMEOUT_SQL,
+        }
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        # Profile-level timeout is generous
+        outputs["default"]["job_execution_timeout_seconds"] = _REASONABLE_TIMEOUT
+        return {"test": {"outputs": outputs, "target": "default"}}
+
+    def test_model_level_job_timeout(self, project):
+        """Model-level timeout of 1s should override the profile-level 300s timeout."""
+        result = run_dbt(["run"], expect_pass=False)
+        expected_error = "Job execution was cancelled: Job timed out after 1 sec"
+        assert expected_error in result[0].message

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set append=True as default query comment append behaviour
+time: 2025-05-06T11:15:46.12649-04:00
+custom:
+  Author: michelleark
+  Issue: "1066"

@@ -299,7 +299,7 @@ class TestEmptyModeWithPythonModel(dbt_tests.BasePythonEmptyTests):
     pass
 
 
-@pytest.mark.skip(reason="Sample mode is unsupported on 1.9")
+@pytest.mark.flaky
 class TestSampleModeWithPythonModel(dbt_tests.BasePythonSampleTests):
     pass
 

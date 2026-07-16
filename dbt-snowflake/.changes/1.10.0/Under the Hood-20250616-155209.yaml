@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: remove reliance on setting session `quoted_identifiers_ignore_case` parameter
+  to normalize snowflake metadata queries
+time: 2025-06-16T15:52:09.002616-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1159"

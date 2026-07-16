@@ -1,0 +1,7 @@
+kind: Fixes
+body: Apply cluster keys via a separate ALTER statement after creating a table via
+  a CTAS statement.
+time: 2025-05-07T13:58:48.771492-04:00
+custom:
+  Author: mikealfare
+  Issue: "1071"

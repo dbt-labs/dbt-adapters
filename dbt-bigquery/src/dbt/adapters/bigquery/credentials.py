@@ -58,12 +58,15 @@ class BigQueryCredentials(Credentials):
     api_endpoint: Optional[str] = None
     priority: Optional[Priority] = None
     maximum_bytes_billed: Optional[int] = None
+    reservation: Optional[str] = None
     impersonate_service_account: Optional[str] = None
 
     job_retry_deadline_seconds: Optional[int] = None
     job_retries: Optional[int] = 1
     job_creation_timeout_seconds: Optional[int] = None
     job_execution_timeout_seconds: Optional[int] = None
+    # When True, logs the BigQuery job link at INFO level instead of DEBUG
+    job_link_info_level_log: Optional[bool] = False
 
     # Keyfile json creds (unicode or base 64 encoded)
     keyfile: Optional[str] = None
@@ -152,11 +155,13 @@ class BigQueryCredentials(Credentials):
             "location",
             "priority",
             "maximum_bytes_billed",
+            "reservation",
             "impersonate_service_account",
             "job_retry_deadline_seconds",
             "job_retries",
             "job_creation_timeout_seconds",
             "job_execution_timeout_seconds",
+            "job_link_info_level_log",
             "timeout_seconds",
             "client_id",
             "token_uri",
