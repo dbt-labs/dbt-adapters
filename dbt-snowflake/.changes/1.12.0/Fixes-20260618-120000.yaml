@@ -1,8 +1,0 @@
-kind: Fixes
-body: Allow Workload Identity Federation (e.g. OIDC) auth to use a token without a
-  user by exempting the workload_identity authenticator from the token/user profile
-  validation
-time: 2026-06-18T12:00:00.000000-05:00
-custom:
-  Author: tauhid621
-  Issue: ""
