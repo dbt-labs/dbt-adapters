@@ -1,6 +1,0 @@
-kind: Dependencies
-body: Bump dbt-adapters floor to 1.24.1 for catalogs v2 and JS UDF support
-time: 2026-05-21T00:00:00.000000-08:00
-custom:
-  Author: sriramr98
-  PR: "1968"
