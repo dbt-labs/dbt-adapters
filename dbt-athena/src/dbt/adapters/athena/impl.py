@@ -226,6 +226,9 @@ class AthenaAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
+        # Resolved once via STS and reused (the identity is stable for the run) so we don't
+        # call GetCallerIdentity on every _get_data_catalog / relation lookup.
+        self._aws_account_id: Optional[str] = None
         # Register the default catalogs so models can reference them by name and so
         # models without a catalog fall back to standard Hive behavior.
         # NOTE: "info_schema" and "glue" are therefore reserved names — a catalogs.yml
@@ -934,6 +937,30 @@ class AthenaAdapter(SQLAdapter):
             info_schema_name_map.add(relation)
         return info_schema_name_map
 
+    def _get_aws_account_id(self) -> str:
+        """Return the AWS account id, resolved once via STS and cached for the adapter.
+
+        Used to build Glue CatalogIds for the default (`awsdatacatalog`) and S3 Tables
+        federated catalogs. The identity is stable for the run, so this avoids a
+        GetCallerIdentity call on every relation lookup.
+        """
+        account_id = self._aws_account_id
+        if account_id is None:
+            conn = self.connections.get_thread_connection()
+            creds = conn.credentials
+            client = conn.handle
+            with boto3_client_lock:
+                account_id = self._aws_account_id
+                if account_id is None:
+                    sts = client.session.client(
+                        "sts",
+                        region_name=client.region_name,
+                        config=get_boto3_config(num_retries=creds.effective_num_retries),
+                    )
+                    account_id = sts.get_caller_identity()["Account"]
+                    self._aws_account_id = account_id
+        return account_id
+
     def _get_data_catalog(self, database: str) -> Optional[DataCatalogTypeDef]:
         if database:
             conn = self.connections.get_thread_connection()
@@ -944,13 +971,7 @@ class AthenaAdapter(SQLAdapter):
             # Glue-backed but are not registered as Athena DataCatalogs, so we build the
             # descriptor directly instead of calling athena.get_data_catalog (which 404s).
             if database.lower() == "awsdatacatalog" or self.is_s3_tables_database(database):
-                with boto3_client_lock:
-                    sts = client.session.client(
-                        "sts",
-                        region_name=client.region_name,
-                        config=get_boto3_config(num_retries=creds.effective_num_retries),
-                    )
-                account_id = sts.get_caller_identity()["Account"]
+                account_id = self._get_aws_account_id()
                 # Default Glue catalog uses the bare account id; nested federated catalogs
                 # (S3 Tables) require "<account-id>:<catalog-path>" as the Glue CatalogId.
                 if database.lower() == "awsdatacatalog":
