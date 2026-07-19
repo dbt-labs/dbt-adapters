@@ -65,10 +65,9 @@
 
   {% if is_unpartitioned_hive_overwrite_requested and not has_isolated_s3_location %}
     {% set nonisolated_location_msg -%}
-      dbt-athena cannot replace an unpartitioned Hive table using the 'insert_overwrite'
-      incremental strategy without an isolated S3 location. Falling back to 'append', as in
-      previous releases. To enable full-table replacement, configure an s3_data_naming value
-      containing 'unique' and do not set external_location.
+      Full-table replacement for an unpartitioned Hive table requires external_location to be
+      unset and s3_data_naming to contain 'unique'. Falling back to 'append', as in previous
+      releases.
     {%- endset %}
     {% do log(nonisolated_location_msg, info=True) %}
   {% endif %}

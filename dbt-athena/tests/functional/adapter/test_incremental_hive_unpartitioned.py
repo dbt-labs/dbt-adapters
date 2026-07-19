@@ -4,6 +4,13 @@ from dbt.contracts.results import RunStatus
 from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 
+EXPECTED_FALLBACK_MESSAGE = (
+    "Full-table replacement for an unpartitioned Hive table requires external_location to be "
+    "unset and s3_data_naming to contain 'unique'. Falling back to 'append', as in previous "
+    "releases."
+)
+
+
 models__explicit_insert_overwrite_sql = """
 {{ config(
     materialized='incremental',
@@ -24,12 +31,28 @@ models__default_strategy_sql = """
 select 1 as id
 """
 
-models__unsafe_location_sql = """
+models__nonunique_s3_naming_sql = """
 {{ config(
     materialized='incremental',
     incremental_strategy='insert_overwrite',
     table_type='hive',
     s3_data_naming='schema_table'
+) }}
+
+select 1 as id
+"""
+
+models__external_location_sql = """
+{{ config(
+    materialized='incremental',
+    incremental_strategy='insert_overwrite',
+    table_type='hive',
+    external_location=(
+        (target.s3_staging_dir | trim('/'))
+        ~ '/tables/'
+        ~ target.schema
+        ~ '/external_location'
+    )
 ) }}
 
 select 1 as id
@@ -42,7 +65,8 @@ class TestIncrementalHiveUnpartitioned:
         return {
             "explicit_insert_overwrite.sql": models__explicit_insert_overwrite_sql,
             "default_strategy.sql": models__default_strategy_sql,
-            "unsafe_location.sql": models__unsafe_location_sql,
+            "nonunique_s3_naming.sql": models__nonunique_s3_naming_sql,
+            "external_location.sql": models__external_location_sql,
         }
 
     def test_explicit_insert_overwrite_replaces_all_rows(self, project):
@@ -83,8 +107,8 @@ class TestIncrementalHiveUnpartitioned:
             == 2
         )
 
-    def test_nonisolated_location_preserves_append_behavior(self, project):
-        relation_name = "unsafe_location"
+    def test_nonunique_s3_naming_preserves_append_behavior(self, project):
+        relation_name = "nonunique_s3_naming"
         args = ["run", "--select", relation_name]
 
         first_run = run_dbt(args)
@@ -99,5 +123,22 @@ class TestIncrementalHiveUnpartitioned:
             == 2
         )
 
-        assert "dbt-athena cannot replace an unpartitioned Hive table" in stdout
-        assert "previous releases." in stdout
+        assert EXPECTED_FALLBACK_MESSAGE in " ".join(stdout.split())
+
+    def test_external_location_preserves_append_behavior(self, project):
+        relation_name = "external_location"
+        args = ["run", "--select", relation_name]
+
+        first_run = run_dbt(args)
+        assert first_run.results[0].status == RunStatus.Success
+
+        second_run, stdout = run_dbt_and_capture(args)
+        assert second_run.results[0].status == RunStatus.Success
+        assert (
+            project.run_sql(
+                f"select count(*) from {project.test_schema}.{relation_name}", fetch="one"
+            )[0]
+            == 2
+        )
+
+        assert EXPECTED_FALLBACK_MESSAGE in " ".join(stdout.split())
