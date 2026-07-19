@@ -83,7 +83,21 @@ class TestIncrementalHiveUnpartitioned:
             == 2
         )
 
-    def test_explicit_insert_overwrite_requires_unique_location(self, project):
-        _, stdout = run_dbt_and_capture(["run", "--select", "unsafe_location"], expect_pass=False)
+    def test_nonisolated_location_preserves_append_behavior(self, project):
+        relation_name = "unsafe_location"
+        args = ["run", "--select", relation_name]
 
-        assert "dbt-athena requires a unique S3 location for unpartitioned Hive models" in stdout
+        first_run = run_dbt(args)
+        assert first_run.results[0].status == RunStatus.Success
+
+        second_run, stdout = run_dbt_and_capture(args)
+        assert second_run.results[0].status == RunStatus.Success
+        assert (
+            project.run_sql(
+                f"select count(*) from {project.test_schema}.{relation_name}", fetch="one"
+            )[0]
+            == 2
+        )
+
+        assert "dbt-athena cannot replace an unpartitioned Hive table" in stdout
+        assert "previous releases." in stdout

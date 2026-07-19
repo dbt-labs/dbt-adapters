@@ -16,10 +16,16 @@
   {% set target_relation = this.incorporate(type='table') %}
   {% set existing_relation = load_relation(this) %}
   {% set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) %}
-  {% set is_unpartitioned_hive_overwrite = (
+  {% set is_unpartitioned_hive_overwrite_requested = (
     table_type == 'hive'
     and partitioned_by is none
     and configured_strategy == 'insert_overwrite'
+  ) %}
+  {% set has_isolated_s3_location = (
+    external_location is none and 'unique' in s3_data_naming
+  ) %}
+  {% set is_unpartitioned_hive_overwrite = (
+    is_unpartitioned_hive_overwrite_requested and has_isolated_s3_location
   ) %}
   {% set default_versions_to_keep = 4 if is_unpartitioned_hive_overwrite else 1 %}
   {% set versions_to_keep = config.get('versions_to_keep', default_versions_to_keep) | as_number %}
@@ -57,13 +63,14 @@
     ) %}
   {% endif %}
 
-  {% if is_unpartitioned_hive_overwrite and ('unique' not in s3_data_naming or external_location is not none) %}
-    {% set unsafe_location_msg -%}
-      dbt-athena requires a unique S3 location for unpartitioned Hive models using the
-      'insert_overwrite' incremental strategy. Configure an s3_data_naming value containing
-      'unique' and do not set external_location.
+  {% if is_unpartitioned_hive_overwrite_requested and not has_isolated_s3_location %}
+    {% set nonisolated_location_msg -%}
+      dbt-athena cannot replace an unpartitioned Hive table using the 'insert_overwrite'
+      incremental strategy without an isolated S3 location. Falling back to 'append', as in
+      previous releases. To enable full-table replacement, configure an s3_data_naming value
+      containing 'unique' and do not set external_location.
     {%- endset %}
-    {% do exceptions.raise_compiler_error(unsafe_location_msg) %}
+    {% do log(nonisolated_location_msg, info=True) %}
   {% endif %}
 
   {% if partitioned_by is none and strategy == 'insert_overwrite' %}
@@ -75,7 +82,7 @@
       {%- endset %}
       {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
     {% elif not is_unpartitioned_hive_overwrite %}
-      -- Preserve the historical append default when no incremental strategy is configured.
+      -- Preserve the historical append behavior when full-table replacement is not enabled.
       {% set strategy = 'append' %}
     {% endif %}
   {% endif %}
