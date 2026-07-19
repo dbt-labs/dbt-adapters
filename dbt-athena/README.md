@@ -362,11 +362,12 @@ These strategies are supported:
 
 - `insert_overwrite` (default): For partitioned tables, the insert overwrite strategy deletes the overlapping
   partitions from the destination table and then inserts the new records from the source. When explicitly configured
-  on an unpartitioned Hive table with an isolated S3 location, it replaces the full table using a staged table and a
-  Glue catalog swap. This requires an `s3_data_naming` value containing `unique` without `external_location`.
-  Otherwise, dbt logs a message and preserves the existing `append` fallback. An unpartitioned incremental model
-  without an explicitly configured strategy also continues to use `append`. When full-table replacement is enabled,
-  the four most recent Glue table versions and their S3 data are retained by default, as with HA Hive tables.
+  on an unpartitioned Hive table, it replaces the full table using a staged table and a Glue catalog swap when
+  `external_location` is not configured and `s3_data_naming` contains `unique`; the default settings satisfy both
+  conditions. Otherwise, dbt logs a message and preserves the existing `append` fallback. An unpartitioned
+  incremental model without an explicitly configured strategy also continues to use `append`. When full-table
+  replacement is enabled, the four most recent Glue table versions and their S3 data are retained by default, as with
+  HA Hive tables.
 - `append`: Insert new records without updating, deleting or overwriting any existing data. There might be duplicate
   data (e.g. great for log or historical data).
 - `merge`: Conditionally updates, deletes, or inserts rows into an Iceberg table. Used in combination with `unique_key`.

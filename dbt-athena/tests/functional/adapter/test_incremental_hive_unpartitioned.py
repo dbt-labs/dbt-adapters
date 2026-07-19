@@ -15,8 +15,7 @@ models__explicit_insert_overwrite_sql = """
 {{ config(
     materialized='incremental',
     incremental_strategy='insert_overwrite',
-    table_type='hive',
-    s3_data_naming='schema_table_unique'
+    table_type='hive'
 ) }}
 
 select 1 as id
