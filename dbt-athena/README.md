@@ -360,9 +360,12 @@ Support for [incremental models](https://docs.getdbt.com/docs/build/incremental-
 
 These strategies are supported:
 
-- `insert_overwrite` (default): The insert overwrite strategy deletes the overlapping partitions from the destination
-  table, and then inserts the new records from the source. This strategy depends on the `partitioned_by` keyword! If no
-  partitions are defined, dbt will fall back to the `append` strategy.
+- `insert_overwrite` (default): For partitioned tables, the insert overwrite strategy deletes the overlapping
+  partitions from the destination table and then inserts the new records from the source. When explicitly configured
+  on an unpartitioned Hive table, it replaces the full table using a staged table and a Glue catalog swap. This requires
+  an `s3_data_naming` value containing `unique` and does not support `external_location`. For backward compatibility,
+  an unpartitioned incremental model without an explicitly configured strategy continues to use `append`. As with HA
+  Hive tables, the four most recent Glue table versions and their S3 data are retained by default.
 - `append`: Insert new records without updating, deleting or overwriting any existing data. There might be duplicate
   data (e.g. great for log or historical data).
 - `merge`: Conditionally updates, deletes, or inserts rows into an Iceberg table. Used in combination with `unique_key`.

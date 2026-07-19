@@ -1,20 +1,28 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
-  {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
+  {% set configured_strategy = config.get('incremental_strategy') %}
+  {% set raw_strategy = configured_strategy or 'insert_overwrite' %}
   {% set is_microbatch = raw_strategy == 'microbatch' %}
   {% set table_type = resolve_table_type() %}
   {% set model_language = model['language'] %}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
-  {% set versions_to_keep = config.get('versions_to_keep', 1) | as_number %}
   {% set lf_tags_config = config.get('lf_tags_config') %}
   {% set lf_grants = config.get('lf_grants') %}
   {% set partitioned_by = config.get('partitioned_by') %}
+  {% set external_location = config.get('external_location') %}
   {% set force_batch = config.get('force_batch', False) | as_bool -%}
   {% set unique_tmp_table_suffix = config.get('unique_tmp_table_suffix', False) | as_bool -%}
   {% set temp_schema = config.get('temp_schema') %}
   {% set target_relation = this.incorporate(type='table') %}
   {% set existing_relation = load_relation(this) %}
   {% set s3_data_naming = config.get('s3_data_naming', default=target.s3_data_naming) %}
+  {% set is_unpartitioned_hive_overwrite = (
+    table_type == 'hive'
+    and partitioned_by is none
+    and configured_strategy == 'insert_overwrite'
+  ) %}
+  {% set default_versions_to_keep = 4 if is_unpartitioned_hive_overwrite else 1 %}
+  {% set versions_to_keep = config.get('versions_to_keep', default_versions_to_keep) | as_number %}
   -- If using insert_overwrite on Hive table, allow to set a unique tmp table suffix
   {% if unique_tmp_table_suffix == True and strategy == 'insert_overwrite' and table_type == 'hive' %}
     {% set tmp_table_suffix = adapter.generate_unique_temporary_table_suffix() %}
@@ -31,6 +39,32 @@
                                              database=database) %}
   {% set tmp_relation = make_temp_relation(target_relation, suffix=tmp_table_suffix, temp_schema=temp_schema) %}
 
+  {% if is_unpartitioned_hive_overwrite %}
+    {% set tmp_relation = api.Relation.create(
+      identifier=target_relation.identifier ~ tmp_table_suffix,
+      schema=temp_schema or target_relation.schema,
+      database=target_relation.database,
+      s3_path_table_part=target_relation.identifier,
+      type='table'
+    ) %}
+    {% if temp_schema is not none %}
+      {% do create_schema(tmp_relation) %}
+    {% endif %}
+    {% set old_tmp_relation = adapter.get_relation(
+      identifier=tmp_relation.identifier,
+      schema=tmp_relation.schema,
+      database=tmp_relation.database
+    ) %}
+  {% endif %}
+
+  {% if is_unpartitioned_hive_overwrite and ('unique' not in s3_data_naming or external_location is not none) %}
+    {% set unsafe_location_msg -%}
+      dbt-athena requires a unique S3 location for unpartitioned Hive models using the
+      'insert_overwrite' incremental strategy. Configure an s3_data_naming value containing
+      'unique' and do not set external_location.
+    {%- endset %}
+    {% do exceptions.raise_compiler_error(unsafe_location_msg) %}
+  {% endif %}
 
   {% if partitioned_by is none and strategy == 'insert_overwrite' %}
     {% if is_microbatch %}
@@ -40,8 +74,8 @@
         Ensure you are using a `partitioned_by` column that is of grain {{ config.get('batch_size') }}.
       {%- endset %}
       {% do exceptions.raise_compiler_error(missing_partition_key_microbatch_msg) %}
-    {% else %}
-      -- If no partitions are used with insert_overwrite, we fall back to append mode.
+    {% elif not is_unpartitioned_hive_overwrite %}
+      -- Preserve the historical append default when no incremental strategy is configured.
       {% set strategy = 'append' %}
     {% endif %}
   {% endif %}
@@ -126,7 +160,24 @@
     {%- endif -%}
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 
-  -- Insert Overwrite Strategy --
+  -- Unpartitioned Hive Insert Overwrite Strategy --
+  {% elif is_unpartitioned_hive_overwrite %}
+    {% if old_tmp_relation is not none %}
+      {# The target may already point to this relation's S3 location after an interrupted run. #}
+      {% do adapter.delete_from_glue_catalog(old_tmp_relation) %}
+    {% endif %}
+    {% set query_result = safe_create_table_as(False, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- if model_language == 'python' -%}
+      {% call statement('create_table', language=model_language) %}
+        {{ query_result }}
+      {% endcall %}
+    {%- endif -%}
+    {% do adapter.swap_table(tmp_relation, target_relation) %}
+    {# Keep the staged data now referenced by the target and remove only its temporary catalog entry. #}
+    {% do adapter.delete_from_glue_catalog(tmp_relation) %}
+    {% set build_sql = "select '" ~ query_result ~ "'" -%}
+
+  -- Partitioned Hive Insert Overwrite Strategy --
   {% elif strategy in ("insert_overwrite") %}
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
@@ -249,7 +300,9 @@
   {# S3 Tables manages its own Iceberg versioning; the Glue GetTableVersions API is not
      available for the federated catalog (raises EntityNotFoundException), so skip it. #}
   {% if not adapter.is_s3_tables_database(target_relation.database) %}
-    {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) %}
+    {% do adapter.expire_glue_table_versions(
+      target_relation, versions_to_keep, is_unpartitioned_hive_overwrite
+    ) %}
   {% endif %}
 
   {{ return({'relations': [target_relation]}) }}
