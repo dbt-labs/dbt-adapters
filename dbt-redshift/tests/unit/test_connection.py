@@ -743,3 +743,105 @@ class TestExecuteRetryTransientErrors(TestCase):
     def test_does_not_restore_transaction_after_retry_when_none_was_open(self):
         begin_mock = self._run_execute_with_error_and_transaction_state(transaction_open=False)
         begin_mock.assert_not_called()
+
+    def test_restores_transaction_after_two_consecutive_retries(self):
+        """Two retryable failures in a row (within the configured retry budget) should
+        each restore the transaction before the next attempt is made."""
+        mgr = self.adapter.connections
+        call_count = {"n": 0}
+        cursor_mock = MagicMock()
+        cursor_mock.description = [["id"]]
+        connection_mock = MagicMock()
+        connection_mock.transaction_open = True
+
+        def fake_add_query(sql, auto_begin=True):
+            call_count["n"] += 1
+            if call_count["n"] in (1, 2):
+                raise DbtDatabaseError(
+                    "could not complete because of conflict with concurrent transaction"
+                )
+            return None, cursor_mock
+
+        with (
+            mock.patch.object(mgr, "add_query", side_effect=fake_add_query),
+            mock.patch.object(mgr, "get_response", return_value=MagicMock()),
+            mock.patch.object(mgr, "close"),
+            mock.patch.object(mgr, "open"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=connection_mock),
+            mock.patch.object(mgr, "get_if_exists", return_value=connection_mock),
+            mock.patch.object(mgr, "begin") as begin_mock,
+            mock.patch("time.sleep"),
+        ):
+            mgr.execute("drop table if exists foo cascade")
+
+        assert call_count["n"] == 3, "Should have retried twice before succeeding"
+        assert begin_mock.call_count == 2, "Each retry should restore the transaction"
+
+    def test_retry_with_autocommit_skip_transactions_does_not_send_begin(self):
+        """When autocommit + the skip-transactions behavior flag are both enabled, a
+        retry's flag restoration must not send a real BEGIN statement."""
+        mgr = self.adapter.connections
+        mgr.set_skip_transactions_checker(lambda: True)
+        call_count = {"n": 0}
+        cursor_mock = MagicMock()
+        cursor_mock.description = [["id"]]
+        connection_mock = MagicMock()
+        connection_mock.transaction_open = True
+        connection_mock.credentials.autocommit = True
+
+        def fake_add_query(sql, auto_begin=True):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise DbtDatabaseError(
+                    "could not complete because of conflict with concurrent transaction"
+                )
+            return None, cursor_mock
+
+        with (
+            mock.patch.object(mgr, "add_query", side_effect=fake_add_query),
+            mock.patch.object(mgr, "get_response", return_value=MagicMock()),
+            mock.patch.object(mgr, "close"),
+            mock.patch.object(mgr, "open"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=connection_mock),
+            mock.patch.object(mgr, "get_if_exists", return_value=connection_mock),
+            mock.patch.object(mgr, "add_begin_query") as add_begin_mock,
+            mock.patch("time.sleep"),
+        ):
+            mgr.execute("drop table if exists foo cascade")
+
+        add_begin_mock.assert_not_called()
+        assert connection_mock.transaction_open is True
+
+    def test_non_retryable_error_after_successful_retry_propagates_without_new_reconnect(self):
+        """If the retried statement itself fails again with a non-retryable error, it
+        should propagate immediately without an additional close/open/begin cycle."""
+        mgr = self.adapter.connections
+        call_count = {"n": 0}
+        connection_mock = MagicMock()
+        connection_mock.transaction_open = True
+
+        def fake_add_query(sql, auto_begin=True):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise DbtDatabaseError(
+                    "could not complete because of conflict with concurrent transaction"
+                )
+            raise DbtDatabaseError("permission denied for relation foo")
+
+        with (
+            mock.patch.object(mgr, "add_query", side_effect=fake_add_query),
+            mock.patch.object(mgr, "get_response", return_value=MagicMock()),
+            mock.patch.object(mgr, "close") as close_mock,
+            mock.patch.object(mgr, "open") as open_mock,
+            mock.patch.object(mgr, "get_thread_connection", return_value=connection_mock),
+            mock.patch.object(mgr, "get_if_exists", return_value=connection_mock),
+            mock.patch.object(mgr, "begin") as begin_mock,
+            mock.patch("time.sleep"),
+        ):
+            with pytest.raises(DbtDatabaseError, match="permission denied"):
+                mgr.execute("drop table if exists foo cascade")
+
+        assert call_count["n"] == 2, "Should have retried once, then raised on the 2nd failure"
+        close_mock.assert_called_once()
+        open_mock.assert_called_once()
+        begin_mock.assert_called_once()
