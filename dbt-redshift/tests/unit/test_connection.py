@@ -668,6 +668,7 @@ class TestExecuteRetryTransientErrors(TestCase):
             mock.patch.object(mgr, "get_response", return_value=MagicMock()),
             mock.patch.object(mgr, "close"),
             mock.patch.object(mgr, "open"),
+            mock.patch.object(mgr, "begin"),
             mock.patch.object(mgr, "get_thread_connection", return_value=MagicMock()),
             mock.patch.object(mgr, "get_if_exists", return_value=MagicMock()),
             mock.patch("time.sleep"),
@@ -701,3 +702,44 @@ class TestExecuteRetryTransientErrors(TestCase):
             "could not complete because of conflict with concurrent transaction",
             always_fail=True,
         )
+
+    def _run_execute_with_error_and_transaction_state(self, transaction_open):
+        """Run execute() where add_query fails once with a retryable error,
+        and assert whether begin() gets called to restore the transaction
+        after the retry's close()/open() reconnect.
+        """
+        mgr = self.adapter.connections
+        call_count = {"n": 0}
+        cursor_mock = MagicMock()
+        cursor_mock.description = [["id"]]
+        connection_mock = MagicMock()
+        connection_mock.transaction_open = transaction_open
+
+        def fake_add_query(sql, auto_begin=True):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                raise DbtDatabaseError(
+                    "could not complete because of conflict with concurrent transaction"
+                )
+            return None, cursor_mock
+
+        with (
+            mock.patch.object(mgr, "add_query", side_effect=fake_add_query),
+            mock.patch.object(mgr, "get_response", return_value=MagicMock()),
+            mock.patch.object(mgr, "close"),
+            mock.patch.object(mgr, "open"),
+            mock.patch.object(mgr, "get_thread_connection", return_value=connection_mock),
+            mock.patch.object(mgr, "get_if_exists", return_value=connection_mock),
+            mock.patch.object(mgr, "begin") as begin_mock,
+            mock.patch("time.sleep"),
+        ):
+            mgr.execute("drop table if exists foo cascade")
+            return begin_mock
+
+    def test_restores_transaction_after_retry_when_transaction_was_open(self):
+        begin_mock = self._run_execute_with_error_and_transaction_state(transaction_open=True)
+        begin_mock.assert_called_once()
+
+    def test_does_not_restore_transaction_after_retry_when_none_was_open(self):
+        begin_mock = self._run_execute_with_error_and_transaction_state(transaction_open=False)
+        begin_mock.assert_not_called()
