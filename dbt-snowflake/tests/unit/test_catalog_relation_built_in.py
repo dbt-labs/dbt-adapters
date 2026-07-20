@@ -167,3 +167,18 @@ def test_iceberg_version_model_overrides_catalog():
     model.config.update({"iceberg_version": 3})
     relation = integration.build_relation(model)
     assert relation.iceberg_version == 3
+
+
+@pytest.mark.parametrize(
+    "config,expected",
+    [
+        ({}, True),  # not set → defaults to transient (same behavior as regular tables)
+        ({"transient": True}, True),
+        ({"transient": False}, False),
+    ],
+)
+def test_is_transient_model_config(fake_integration, config, expected):
+    model = deepcopy(model_base)
+    model.config.update(config)
+    relation = fake_integration.build_relation(model)
+    assert relation.is_transient == expected

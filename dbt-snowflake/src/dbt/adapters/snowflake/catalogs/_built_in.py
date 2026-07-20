@@ -123,6 +123,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             cluster_by=parse_model.cluster_by(model),
             partition_by=parse_model.partition_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),
+            is_transient=parse_model.is_transient(model),
             storage_serialization_policy=storage_serialization_policy,
             max_data_extension_time_in_days=max_data_extension_time_in_days,
             change_tracking=resolve_change_tracking(model, self.change_tracking),
