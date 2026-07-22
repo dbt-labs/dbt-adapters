@@ -26,7 +26,14 @@ import pytest
 
 def _relkind(project, relname):
     """'p' == partitioned table, 'r' == ordinary table, None == missing."""
-    sql = "select relkind from pg_class where relname = '{}'".format(relname)
+    sql = """
+        select c.relkind
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where c.relname = '{}' and n.nspname = '{}'
+    """.format(
+        relname, project.test_schema
+    )
     result = project.run_sql(sql, fetch="one")
     return result[0] if result else None
 
@@ -38,20 +45,29 @@ def _child_partitions(project, parent):
         from pg_inherits i
         join pg_class c on c.oid = i.inhrelid
         join pg_class p on p.oid = i.inhparent
-        where p.relname = '{}'
+        join pg_namespace n on n.oid = p.relnamespace
+        where p.relname = '{}' and n.nspname = '{}'
         order by c.relname
     """.format(
-        parent
+        parent, project.test_schema
     )
     return [row[0] for row in project.run_sql(sql, fetch="all")]
 
 
 def _rowcount(project, relname):
-    return project.run_sql("select count(*) from {}".format(relname), fetch="one")[0]
+    sql = 'select count(*) from "{}"."{}"'.format(project.test_schema, relname)
+    return project.run_sql(sql, fetch="one")[0]
 
 
 def _relnames_like(project, pattern):
-    sql = "select relname from pg_class where relname like '{}'".format(pattern)
+    sql = """
+        select c.relname
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where c.relname like '{}' and n.nspname = '{}'
+    """.format(
+        pattern, project.test_schema
+    )
     return [row[0] for row in project.run_sql(sql, fetch="all")]
 
 
@@ -209,7 +225,12 @@ class TestDefaultPartition:
     def test_overflow_row_routed_to_default(self, project):
         # 'apac' matches neither p_us nor p_eu; must not raise, must be retained
         assert len(run_dbt(["run"])) == 1
-        got = project.run_sql("select region from list_model where region = 'apac'", fetch="all")
+        got = project.run_sql(
+            'select region from "{}"."list_model" where region = \'apac\''.format(
+                project.test_schema
+            ),
+            fetch="all",
+        )
         assert [r[0] for r in got] == ["apac"]
 
 
