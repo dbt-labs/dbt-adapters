@@ -97,6 +97,54 @@
 {% endmacro %}
 
 
+{#--
+  Incremental lifecycle: create any partitions the incoming batch needs before the
+  strategy DML runs. Auto range/granularity partitions are computed from the staged
+  batch; explicit list/hash partitions are static (set at first build) and rely on the
+  DEFAULT partition for new values. Idempotent via `create table if not exists`.
+--#}
+{% macro postgres__create_incremental_missing_partitions(target_relation, temp_relation, partition_config) %}
+  {%- set ddl = [] -%}
+  {%- if partition_config.method == 'range' and partition_config.granularity -%}
+    {%- set partitions = postgres__resolve_partitions(temp_relation, partition_config) -%}
+    {%- for partition in partitions -%}
+      {%- do ddl.append(postgres__create_partition(target_relation, partition, partition_config.method)) -%}
+    {%- endfor -%}
+  {%- endif -%}
+  {{ return(ddl | join('\n')) }}
+{% endmacro %}
+
+
+{#-- Prepended to every incremental strategy: guard against repartitioning + create missing partitions. --#}
+{% macro postgres__partition_ddl_for_incremental(arg_dict) %}
+  {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) -%}
+  {%- if partition_config is none -%}
+    {{ return('') }}
+  {%- endif -%}
+  {%- set target_relation = arg_dict['target_relation'] -%}
+  {{ postgres__assert_partition_scheme_unchanged(target_relation, partition_config) }}
+  {{ return(postgres__create_incremental_missing_partitions(target_relation, arg_dict['temp_relation'], partition_config)) }}
+{% endmacro %}
+
+
+{#-- A partition scheme can't be changed in place; require a full refresh (issue #679). --#}
+{% macro postgres__assert_partition_scheme_unchanged(target_relation, partition_config) %}
+  {%- set sql -%}
+    select pg_get_partkeydef('{{ target_relation.schema }}.{{ target_relation.identifier }}'::regclass) as partkey
+  {%- endset -%}
+  {%- set existing_key = run_query(sql).columns[0].values()[0] -%}
+  {%- if existing_key is not none -%}
+    {%- set normalized_existing = existing_key | lower | replace(' ', '') -%}
+    {%- set normalized_config = partition_config.render | lower | replace(' ', '') -%}
+    {%- if normalized_existing != normalized_config -%}
+      {%- do exceptions.raise_compiler_error(
+        "partition_by scheme changed from '" ~ existing_key ~ "' to '" ~ partition_config.render
+        ~ "'. Postgres cannot repartition in place; run with --full-refresh to rebuild.") -%}
+    {%- endif -%}
+  {%- endif -%}
+{% endmacro %}
+
+
 {#-- Names of the child partitions attached to `relation`. --#}
 {% macro postgres__get_partition_children(relation) %}
   {% set sql -%}

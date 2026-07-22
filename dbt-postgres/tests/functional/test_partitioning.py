@@ -265,7 +265,7 @@ incremental_range_sql = """
     }
 ) }}
 
-select id, created_at from {{ ref('seed_events') }}
+select id, created_at from "{{ this.schema }}"."seed_events"
 {% if is_incremental() %}
   where created_at > (select max(created_at) from {{ this }})
 {% endif %}
@@ -280,10 +280,15 @@ class TestIncrementalPartitionCreation:
         return {"inc_model.sql": incremental_range_sql}
 
     def _seed(self, project, rows):
-        project.run_sql("create table if not exists seed_events (id int, created_at timestamp)")
-        project.run_sql("truncate seed_events")
+        schema = project.test_schema
+        project.run_sql(
+            'create table if not exists "{}"."seed_events" (id int, created_at timestamp)'.format(
+                schema
+            )
+        )
+        project.run_sql('truncate "{}"."seed_events"'.format(schema))
         values = ",".join("({}, '{}'::timestamp)".format(i, ts) for i, ts in rows)
-        project.run_sql("insert into seed_events values {}".format(values))
+        project.run_sql('insert into "{}"."seed_events" values {}'.format(schema, values))
 
     def test_new_partition_added_on_incremental(self, project):
         self._seed(project, [(1, "2024-01-05"), (2, "2024-01-20")])
@@ -318,8 +323,14 @@ microbatch_sql = """
     }
 ) }}
 
-select id, created_at from {{ ref('seed_events') }}
+select id, created_at from "{{ this.schema }}"."seed_events"
 """
+
+
+def _skip_if_pg_lt_15(project):
+    version = int(project.run_sql("show server_version_num", fetch="one")[0])
+    if version < 150000:
+        pytest.skip("microbatch/merge requires Postgres >= 15")
 
 
 class TestMicrobatchPartitioning:
@@ -330,13 +341,19 @@ class TestMicrobatchPartitioning:
         return {"mb_model.sql": microbatch_sql}
 
     def test_microbatch_creates_day_partitions(self, project):
-        project.run_sql("create table if not exists seed_events (id int, created_at timestamp)")
-        project.run_sql("truncate seed_events")
+        _skip_if_pg_lt_15(project)
+        schema = project.test_schema
         project.run_sql(
-            "insert into seed_events values "
+            'create table if not exists "{}"."seed_events" (id int, created_at timestamp)'.format(
+                schema
+            )
+        )
+        project.run_sql('truncate "{}"."seed_events"'.format(schema))
+        project.run_sql(
+            'insert into "{}"."seed_events" values '
             "(1, '2024-01-01'::timestamp), "
             "(2, '2024-01-02'::timestamp), "
-            "(3, '2024-01-03'::timestamp)"
+            "(3, '2024-01-03'::timestamp)".format(schema)
         )
         run_dbt(["run", "--select", "mb_model"])
         assert _relkind(project, "mb_model") == "p"
@@ -344,16 +361,16 @@ class TestMicrobatchPartitioning:
 
 
 class TestRepartitionGuard:
-    """PR 3: changing partition_by on an existing relation needs --full-refresh."""
+    """PR 3: changing partition_by on an existing incremental relation needs --full-refresh."""
 
     v1 = """
-    {{ config(materialized='table',
+    {{ config(materialized='incremental', incremental_strategy='append',
               partition_by={"fields": ["created_at"], "method": "range",
                             "granularity": "month", "default_partition": true}) }}
     select 1 as id, '2024-01-15'::timestamp as created_at
     """
     v2 = """
-    {{ config(materialized='table',
+    {{ config(materialized='incremental', incremental_strategy='append',
               partition_by={"fields": ["id"], "method": "hash",
                             "partitions": [{"name": "p0", "modulus": 1, "remainder": 0}]}) }}
     select 1 as id, '2024-01-15'::timestamp as created_at

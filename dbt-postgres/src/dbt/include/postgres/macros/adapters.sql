@@ -3,7 +3,7 @@
   {%- set sql_header = config.get('sql_header', none) -%}
   {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) -%}
 
-  {%- if partition_config is not none -%}
+  {%- if partition_config is not none and not temporary -%}
     {{ postgres__create_partitioned_table_as(temporary, relation, sql, partition_config) }}
   {%- else -%}
 
