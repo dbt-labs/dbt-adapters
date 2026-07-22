@@ -182,14 +182,25 @@ All work lands on a single integration branch (`feature/postgres-partitioning`) 
 can be tested and merged at once. Each numbered PR is a logical commit/stack on that
 branch.
 
-- **PR 0 — functional tests (test-first).** Land the full functional test suite for the
-  partitioning behaviors up front. These fail initially and act as the validation
-  harness: each later PR turns more of them green.
-- **PR 1 — config + parsing** + `@available` + errors + unit tests (no behavior change).
-- **PR 2 — `table` partitioned build** (create + default + explicit partitions) +
-  rename/swap handling.
-- **PR 3 — incremental missing-partition creation** (append/delete+insert/microbatch).
-- **PR 4 — contract interaction** + changelog + docs.
+- **PR 0 — functional tests (test-first).** ✅ Full functional suite landed up front as
+  the validation harness (`tests/functional/test_partitioning.py`).
+- **PR 1 — config + parsing.** ✅ `PostgresPartitionConfig`, `PostgresConfig.partition_by`,
+  `@available parse_partition_by`, unit tests, changelog.
+- **PR 2 — `table` partitioned build.** ✅ Staged `LIKE + PARTITION BY` build (CTAS can't
+  combine with `PARTITION BY`), range/list/hash + auto-range from granularity, DEFAULT
+  partition (skipped for hash), `postgres__rename_relation` child-partition swap.
+- **PR 3 — incremental lifecycle.** ✅ Missing-partition creation before
+  append/delete+insert/merge (default + microbatch via merge), `--full-refresh` guard on
+  scheme change, partitioning skipped on the incremental temp relation.
+- **PR 4 — contract interaction.** ✅ Contract-enforced partitioned models build explicit
+  columns + constraints so Postgres enforces that PK/UNIQUE includes the partition columns.
+
+Status: all four PRs implemented on `feature/postgres-partitioning`. Local verification on
+Postgres 14: 28 passed, 1 skipped (microbatch/merge need Postgres >= 15 — verify in CI).
+
+Remaining follow-ups (not blocking): user-facing docs on docs.getdbt.com; a future
+`insert_overwrite`-by-partition strategy using `DETACH`/`ATTACH`; auto-management for
+`list` partitions.
 
 ## Key files
 

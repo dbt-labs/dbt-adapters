@@ -12,10 +12,16 @@
 {% macro postgres__create_partitioned_table_as(temporary, relation, sql, partition_config) -%}
   {%- set unlogged = config.get('unlogged', default=false) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
+  {%- set contract_config = config.get('contract') -%}
 
   {{ sql_header if sql_header is not none }}
 
-  {#-- 1. stage the model results (temp table lives on this connection) --#}
+  {%- if contract_config.enforced -%}
+    {{ get_assert_columns_equivalent(sql) }}
+  {%- endif -%}
+
+  {#-- 1. stage the model results (temp table lives on this connection):
+        gives us the column types (non-contract) and the data-driven partition bounds --#}
   {%- set stage_relation = make_temp_relation(relation, '__dbt_pstage') -%}
   {% call statement('stage_partition_data') -%}
     create temporary table {{ stage_relation }} as (
@@ -26,10 +32,18 @@
   {#-- 2. resolve which partitions to create (explicit, or auto from the staged data) --#}
   {%- set partitions = postgres__resolve_partitions(stage_relation, partition_config) -%}
 
-  {#-- 3. build the DDL that becomes the `main` statement --#}
-  create {% if temporary -%} temporary {%- elif unlogged -%} unlogged {%- endif %} table {{ relation }} (
-    like {{ stage_relation }} including defaults
-  ) partition by {{ partition_config.render }};
+  {#-- 3. build the DDL that becomes the `main` statement.
+        A contract builds explicit columns + constraints (Postgres then enforces that a
+        PRIMARY KEY / UNIQUE includes the partition columns); otherwise we copy the staged
+        column definitions with LIKE. --#}
+  {%- if contract_config.enforced -%}
+    create {% if unlogged %}unlogged {% endif %}table {{ relation }} {{ get_table_columns_and_constraints() }}
+      partition by {{ partition_config.render }};
+  {%- else -%}
+    create {% if temporary -%} temporary {%- elif unlogged -%} unlogged {%- endif %} table {{ relation }} (
+      like {{ stage_relation }} including defaults
+    ) partition by {{ partition_config.render }};
+  {%- endif -%}
 
   {% for partition in partitions %}
     {{ postgres__create_partition(relation, partition, partition_config.method) }}
@@ -40,7 +54,12 @@
     {{ postgres__create_default_partition(relation) }}
   {% endif %}
 
-  insert into {{ relation }} select * from {{ stage_relation }};
+  {%- if contract_config.enforced -%}
+    {%- set column_names = adapter.dispatch('get_column_names', 'dbt')() -%}
+    insert into {{ relation }} ({{ column_names }}) select {{ column_names }} from {{ stage_relation }};
+  {%- else -%}
+    insert into {{ relation }} select * from {{ stage_relation }};
+  {%- endif -%}
 {%- endmacro %}
 
 
