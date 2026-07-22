@@ -1,7 +1,8 @@
 import dataclasses
-from typing import Optional, List, Union
+from typing import Any, Dict, Optional, List, Union
 
 from dbt_common.record import Record, Recorder
+from dbt.adapters.bigquery.column import BigQueryColumn
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import PartitionConfig
 
@@ -80,4 +81,317 @@ class BigQueryAdapterDescribeRelationRecord(Record):
 
     params_cls = BigQueryAdapterDescribeRelationParams
     result_cls = BigQueryAdapterDescribeRelationResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterCopyTableParams:
+    thread_id: str
+    source: Union[BigQueryRelation, List[BigQueryRelation]]
+    destination: BigQueryRelation
+    materialization: str
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        source_array = [self.source] if type(self.source) is not list else self.source
+
+        return {
+            "thread_id": self.thread_id,
+            "source": [serialize_base_relation(source) for source in source_array],
+            "destination": serialize_base_relation(self.destination),
+            "materialization": self.materialization,
+        }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterCopyTableResult:
+    return_val: str
+
+
+@Recorder.register_record_type
+class BigQueryAdapterCopyTableRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.copy_table() method."""
+
+    params_cls = BigQueryAdapterCopyTableParams
+    result_cls = BigQueryAdapterCopyTableResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetDatasetLocationParams:
+    thread_id: str
+    relation: BigQueryRelation
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+        }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetDatasetLocationResult:
+    return_val: str
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGetDatasetLocationRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.get_dataset_location() method."""
+
+    params_cls = BigQueryAdapterGetDatasetLocationParams
+    result_cls = BigQueryAdapterGetDatasetLocationResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGrantAccessToParams:
+    thread_id: str
+    entity: BigQueryRelation
+    entity_type: str
+    role: Optional[str]
+    grant_target_dict: Dict[str, str]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "entity": serialize_base_relation(self.entity),
+            "entity_type": self.entity_type,
+            "role": self.role,
+            "grant_target_dict": self.grant_target_dict,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGrantAccessToRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.grant_access_to() method."""
+
+    params_cls = BigQueryAdapterGrantAccessToParams
+    result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetColumnsInSelectSqlParams:
+    thread_id: str
+    select_sql: str
+
+
+@dataclasses.dataclass
+class BigQueryAdapterGetColumnsInSelectSqlResult:
+    return_val: List[BigQueryColumn]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_column_list
+
+        return {"return_val": serialize_base_column_list(self.return_val)}
+
+    def _from_dict(self, data):
+        from dbt.adapters.record.serialization import deserialize_base_column_list
+
+        self.return_val = deserialize_base_column_list(data["return_val"])
+
+
+@Recorder.register_record_type
+class BigQueryAdapterGetColumnsInSelectSqlRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.get_columns_in_select_sql() method."""
+
+    params_cls = BigQueryAdapterGetColumnsInSelectSqlParams
+    result_cls = BigQueryAdapterGetColumnsInSelectSqlResult
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterAlterTableAddColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    columns: List[BigQueryColumn]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import (
+            serialize_base_relation,
+            serialize_base_column_list,
+        )
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "columns": serialize_base_column_list(self.columns),
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterAlterTableAddColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.alter_table_add_columns() method."""
+
+    params_cls = BigQueryAdapterAlterTableAddColumnsParams
+    result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterUpdateColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    columns: Dict[str, Any]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "columns": self.columns,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterUpdateColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.update_columns() method."""
+
+    params_cls = BigQueryAdapterUpdateColumnsParams
+    result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterLoadDataframeParams:
+    thread_id: str
+    database: str
+    schema: str
+    table_name: str
+    agate_table: Any  # agate.Table; serialized via serialize_agate_table
+    column_override: Dict[str, str]
+    field_delimiter: str
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_agate_table
+
+        return {
+            "thread_id": self.thread_id,
+            "database": self.database,
+            "schema": self.schema,
+            "table_name": self.table_name,
+            "agate_table": serialize_agate_table(self.agate_table),
+            "column_override": self.column_override,
+            "field_delimiter": self.field_delimiter,
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterLoadDataframeRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.load_dataframe() method."""
+
+    params_cls = BigQueryAdapterLoadDataframeParams
+    result_cls = None
+    group = "Available"
+
+
+@dataclasses.dataclass
+class BigQueryAdapterAlterTableAddRemoveColumnsParams:
+    thread_id: str
+    relation: BigQueryRelation
+    add_columns: Optional[List[BigQueryColumn]]
+    remove_columns: Optional[List[BigQueryColumn]]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import (
+            serialize_base_relation,
+            serialize_base_column_list,
+        )
+
+        return {
+            "thread_id": self.thread_id,
+            "relation": serialize_base_relation(self.relation),
+            "add_columns": (
+                serialize_base_column_list(self.add_columns) if self.add_columns else None
+            ),
+            "remove_columns": (
+                serialize_base_column_list(self.remove_columns) if self.remove_columns else None
+            ),
+        }
+
+
+@Recorder.register_record_type
+class BigQueryAdapterAlterTableAddRemoveColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.alter_table_add_remove_columns() method."""
+
+    params_cls = BigQueryAdapterAlterTableAddRemoveColumnsParams
+    result_cls = None
+    group = "Available"
+
+
+def _serialize_schema_changes_dict(changes):
+    """Serialize the fixed-shape schema_changes_dict produced by
+    bigquery__check_for_schema_changes. Keys (all set by that macro):
+      - schema_changed: bool
+      - source_not_in_target / target_not_in_source / source_columns / target_columns:
+        List[BigQueryColumn]
+      - new_target_types: List[{"column_name": str, "new_type": str}]
+      - source_relation: BigQueryRelation
+    """
+    from dbt.adapters.record.serialization import (
+        serialize_base_relation,
+        serialize_base_column_list,
+    )
+
+    if changes is None:
+        return None
+
+    source_relation = changes.get("source_relation")
+    return {
+        "schema_changed": changes.get("schema_changed"),
+        "source_not_in_target": serialize_base_column_list(
+            changes.get("source_not_in_target") or []
+        ),
+        "target_not_in_source": serialize_base_column_list(
+            changes.get("target_not_in_source") or []
+        ),
+        "source_columns": serialize_base_column_list(changes.get("source_columns") or []),
+        "target_columns": serialize_base_column_list(changes.get("target_columns") or []),
+        "new_target_types": changes.get("new_target_types"),
+        "source_relation": (
+            serialize_base_relation(source_relation) if source_relation is not None else None
+        ),
+    }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterSyncStructColumnsParams:
+    thread_id: str
+    on_schema_change: str
+    source_relation: BigQueryRelation
+    target_relation: BigQueryRelation
+    schema_changes_dict: Dict[str, Any]
+
+    def _to_dict(self):
+        from dbt.adapters.record.serialization import serialize_base_relation
+
+        return {
+            "thread_id": self.thread_id,
+            "on_schema_change": self.on_schema_change,
+            "source_relation": serialize_base_relation(self.source_relation),
+            "target_relation": serialize_base_relation(self.target_relation),
+            "schema_changes_dict": _serialize_schema_changes_dict(self.schema_changes_dict),
+        }
+
+
+@dataclasses.dataclass
+class BigQueryAdapterSyncStructColumnsResult:
+    return_val: Dict[str, Any]
+
+    def _to_dict(self):
+        return {"return_val": _serialize_schema_changes_dict(self.return_val)}
+
+
+@Recorder.register_record_type
+class BigQueryAdapterSyncStructColumnsRecord(Record):
+    """Implements record/replay support for the BigQueryAdapter.sync_struct_columns() method."""
+
+    params_cls = BigQueryAdapterSyncStructColumnsParams
+    result_cls = BigQueryAdapterSyncStructColumnsResult
     group = "Available"

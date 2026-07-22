@@ -6,7 +6,7 @@
   {%- set lf_tags_config = config.get('lf_tags_config') -%}
   {%- set lf_grants = config.get('lf_grants') -%}
 
-  {%- set table_type = config.get('table_type', default='hive') | lower -%}
+  {%- set table_type = resolve_table_type() -%}
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
   {%- set old_tmp_relation = adapter.get_relation(identifier=identifier ~ '__ha',
                                              schema=schema,
@@ -94,6 +94,17 @@
     {%- if old_relation is none -%}
       {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
       -- Execute python code that is available in query result object
+      {%- if language == 'python' -%}
+        {% call statement('create_table', language=language) %}
+          {{ query_result }}
+        {% endcall %}
+      {%- endif -%}
+    {%- elif adapter.is_s3_tables_database(database) -%}
+      -- S3 Tables manages its own storage and does not support ALTER TABLE RENAME, so the
+      -- near-zero-downtime swap used for Glue Iceberg is not possible. Drop the existing
+      -- table (via SQL) and recreate it directly.
+      {%- do drop_relation(old_relation) -%}
+      {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
       {%- if language == 'python' -%}
         {% call statement('create_table', language=language) %}
           {{ query_result }}
