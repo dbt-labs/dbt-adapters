@@ -1,7 +1,7 @@
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
-from dbt.adapters.postgres.impl import PostgresPartitionConfig
+from dbt.adapters.postgres.partitioning import PostgresPartitionConfig
 
 
 class TestPostgresPartitionConfigParse:
