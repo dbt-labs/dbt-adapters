@@ -1,6 +1,8 @@
 {% macro postgres__create_table_as(temporary, relation, sql) -%}
   {%- set unlogged = config.get('unlogged', default=false) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
+  {#-- validate partition_by config (parsing raises on invalid input); DDL wiring lands in a later PR --#}
+  {%- set _partition_by = adapter.parse_partition_by(config.get('partition_by')) -%}
 
   {{ sql_header if sql_header is not none }}
 

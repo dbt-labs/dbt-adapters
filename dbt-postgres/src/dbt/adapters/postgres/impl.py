@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from multiprocessing.context import SpawnContext
-from typing import Any, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from dbt.adapters.base import AdapterConfig, ConstraintSupport, available
 from dbt.adapters.capability import (
@@ -71,10 +71,78 @@ class PostgresIndexConfig(dbtClassMixin):
             raise IndexConfigNotDictError(raw_index)
 
 
+PARTITION_METHODS = ("range", "list", "hash")
+RANGE_GRANULARITIES = ("hour", "day", "week", "month", "year")
+
+
+@dataclass
+class PostgresPartitionConfig(dbtClassMixin):
+    """
+    Native PostgreSQL declarative partitioning config (issue #679).
+
+    https://www.postgresql.org/docs/current/ddl-partitioning.html
+
+    - fields: one or more columns/expressions that make up the partition key
+    - method: `range`, `list`, or `hash`
+    - granularity: for `range`, drives auto-management of partitions (bounds + names)
+    - default_partition: create a DEFAULT partition to catch rows outside every partition
+    - partitions: explicit static partition definitions, e.g.
+        range: {"name": "p2024", "from": "'2024-01-01'", "to": "'2025-01-01'"}
+        list:  {"name": "p_us", "values": ["'us'"]}
+        hash:  {"name": "p0", "modulus": 2, "remainder": 0}
+    """
+
+    fields: List[str]
+    method: str = "range"
+    granularity: Optional[str] = None
+    default_partition: bool = True
+    partitions: Optional[List[Dict[str, Any]]] = None
+
+    @property
+    def render(self) -> str:
+        """The `PARTITION BY ...` key clause, e.g. `range (created_at)`."""
+        return f"{self.method} ({', '.join(self.fields)})"
+
+    def _validate(self) -> None:
+        if not self.fields:
+            raise DbtRuntimeError(
+                "partition_by requires at least one column in `fields`, but none were provided"
+            )
+        if self.method not in PARTITION_METHODS:
+            raise DbtRuntimeError(
+                f"Invalid partition_by method '{self.method}'. "
+                f"Supported methods are: {', '.join(PARTITION_METHODS)}"
+            )
+        if self.granularity is not None and self.granularity not in RANGE_GRANULARITIES:
+            raise DbtRuntimeError(
+                f"Invalid partition_by granularity '{self.granularity}'. "
+                f"Supported granularities are: {', '.join(RANGE_GRANULARITIES)}"
+            )
+        if self.granularity is not None and self.method != "range":
+            raise DbtRuntimeError(
+                "partition_by `granularity` is only supported for the `range` method"
+            )
+
+    @classmethod
+    def parse(cls, raw_partition_by: Any) -> Optional["PostgresPartitionConfig"]:
+        if raw_partition_by is None:
+            return None
+        try:
+            cls.validate(raw_partition_by)
+            partition_by: "PostgresPartitionConfig" = cls.from_dict(raw_partition_by)
+        except ValidationError as exc:
+            raise DbtRuntimeError(f"Could not parse partition_by config: {exc}")
+        except TypeError:
+            raise DbtRuntimeError(f"partition_by must be a dict, but got: {raw_partition_by}")
+        partition_by._validate()
+        return partition_by
+
+
 @dataclass
 class PostgresConfig(AdapterConfig):
     unlogged: Optional[bool] = None
     indexes: Optional[List[PostgresIndexConfig]] = None
+    partition_by: Optional[PostgresPartitionConfig] = field(default=None)
 
 
 class PostgresAdapter(SQLAdapter):
@@ -127,6 +195,10 @@ class PostgresAdapter(SQLAdapter):
     @available
     def parse_index(self, raw_index: Any) -> Optional[PostgresIndexConfig]:
         return PostgresIndexConfig.parse(raw_index)
+
+    @available
+    def parse_partition_by(self, raw_partition_by: Any) -> Optional[PostgresPartitionConfig]:
+        return PostgresPartitionConfig.parse(raw_partition_by)
 
     def _link_cached_database_relations(self, schemas: Set[str]):
         """
