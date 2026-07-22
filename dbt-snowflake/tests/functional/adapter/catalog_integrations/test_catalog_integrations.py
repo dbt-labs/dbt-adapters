@@ -74,5 +74,6 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         )
         assert "storage_serialization_policy = 'COMPATIBLE'" in iceberg_table_with_configs_sql
         assert "max_data_extension_time_in_days = 30" in iceberg_table_with_configs_sql
-        assert "change_tracking = FALSE" in iceberg_table_with_configs_sql
+        # change_tracking=false is ignored for Iceberg (Snowflake forbids turning it off)
+        assert "change_tracking" not in iceberg_table_with_configs_sql
         assert "data_retention_time_in_days = 1" in iceberg_table_with_configs_sql

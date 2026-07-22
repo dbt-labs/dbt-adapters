@@ -125,7 +125,7 @@ class BuiltInCatalogIntegration(CatalogIntegration):
             automatic_clustering=parse_model.automatic_clustering(model),
             storage_serialization_policy=storage_serialization_policy,
             max_data_extension_time_in_days=max_data_extension_time_in_days,
-            change_tracking=resolve_change_tracking(model, self.change_tracking),
+            change_tracking=resolve_change_tracking(model, self.change_tracking, is_iceberg=True),
             data_retention_time_in_days=data_retention_time_in_days,
             iceberg_version=iceberg_version,
             catalog_database=self.catalog_database,
