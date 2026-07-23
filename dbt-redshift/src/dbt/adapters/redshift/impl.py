@@ -209,11 +209,6 @@ class RedshiftAdapter(SQLAdapter):
         return bool(self.config.credentials.drop_without_cascade)
 
     @available
-    def use_grants_extended(self) -> bool:
-        """Whether to use extended grants support for groups and roles."""
-        return self.behavior.redshift_grants_extended.no_warn
-
-    @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
@@ -362,7 +357,7 @@ class RedshiftAdapter(SQLAdapter):
         grants_dict: Dict[str, List[str]] = {}
         current_user = self.config.credentials.user.lower()
 
-        if not self.use_grants_extended():
+        if not self.behavior.redshift_grants_extended.no_warn:
             if not self.use_show_apis():
                 # pg_user query returns a 'grantee' column — delegate to base.
                 return super().standardize_grants_dict(grants_table)
