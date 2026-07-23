@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from multiprocessing.context import SpawnContext
 from typing import Any, Dict, List, Optional, Set
@@ -79,7 +79,7 @@ class PostgresIndexConfig(dbtClassMixin):
 class PostgresConfig(AdapterConfig):
     unlogged: Optional[bool] = None
     indexes: Optional[List[PostgresIndexConfig]] = None
-    partition_by: Optional[PostgresPartitionConfig] = field(default=None)
+    partition_by: Optional[PostgresPartitionConfig] = None
 
 
 class PostgresAdapter(SQLAdapter):

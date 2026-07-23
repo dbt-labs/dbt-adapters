@@ -16,6 +16,11 @@ from dbt_common.exceptions import DbtRuntimeError
 PARTITION_METHODS = ("range", "list", "hash")
 RANGE_GRANULARITIES = ("hour", "day", "week", "month", "year")
 
+# Upper bound on auto-generated range partitions per build. Guards against, e.g.,
+# `granularity='hour'` over a multi-year range emitting tens of thousands of
+# `CREATE TABLE` statements in a single request.
+MAX_AUTO_PARTITIONS = 10000
+
 _GRANULARITY_NAME_FMT = {
     "year": "%Y",
     "month": "%Y%m",
@@ -72,6 +77,12 @@ def compute_partition_bounds(minimum: Any, maximum: Any, granularity: str) -> Li
 
     bounds: List[Dict[str, str]] = []
     while current <= end:
+        if len(bounds) >= MAX_AUTO_PARTITIONS:
+            raise DbtRuntimeError(
+                f"partition_by would auto-create more than {MAX_AUTO_PARTITIONS} '{granularity}' "
+                f"partitions for the range [{minimum}, {maximum}]. Use a coarser granularity "
+                "or declare explicit `partitions`."
+            )
         nxt = current + step
         bounds.append(
             {
@@ -91,7 +102,8 @@ class PostgresPartitionConfig(dbtClassMixin):
 
     - fields: one or more columns/expressions that make up the partition key
     - method: `range`, `list`, or `hash`
-    - granularity: for `range`, drives auto-management of partitions (bounds + names)
+    - granularity: for `range`, drives auto-management of partitions (bounds + names);
+      one of `hour`, `day`, `week`, `month`, `year`
     - default_partition: create a DEFAULT partition to catch rows outside every partition
     - partitions: explicit static partition definitions, e.g.
         range: {"name": "p2024", "from": "'2024-01-01'", "to": "'2025-01-01'"}

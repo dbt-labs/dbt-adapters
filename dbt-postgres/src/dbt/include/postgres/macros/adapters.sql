@@ -39,14 +39,26 @@
   {% call statement('rename_relation') -%}
     alter table {{ from_relation.render() }} rename to {{ target_name }}
   {%- endcall %}
-  {#-- keep child partition names in sync with the renamed parent (issue #679) --#}
-  {%- if to_relation.is_table -%}
+  {#--
+    Keep child partition names in sync with the renamed parent (issue #679).
+    Gate on the model's partition_by config first: this short-circuits before any
+    metadata query for every non-partitioned rename, so adapters that inherit this
+    macro but don't support partitioning (e.g. Redshift) never issue the pg_inherits
+    query, and plain Postgres pays no extra round-trip on ordinary table builds.
+  --#}
+  {%- if to_relation.is_table and postgres__is_partitioned_relation(to_relation) -%}
     {%- set children = postgres__get_partition_children(to_relation) -%}
-    {%- set prefix_len = from_relation.identifier | length -%}
+    {%- set prefix = from_relation.identifier ~ '__' -%}
     {%- for row in children.rows -%}
       {%- set old_name = row['name'] -%}
-      {%- if old_name[:prefix_len] == from_relation.identifier -%}
-        {%- set new_name = to_relation.identifier ~ old_name[prefix_len:] -%}
+      {%- if old_name.startswith(prefix) -%}
+        {%- set new_name = to_relation.identifier ~ '__' ~ old_name[prefix | length:] -%}
+        {%- if new_name | length > to_relation.relation_max_name_length() -%}
+          {%- do exceptions.raise_compiler_error(
+            "Renamed partition '" ~ new_name ~ "' exceeds the "
+            ~ to_relation.relation_max_name_length()
+            ~ " character limit. Shorten the model name or the partition names.") -%}
+        {%- endif -%}
         {% call statement('rename_partition') -%}
           alter table {{ adapter.quote(to_relation.schema) }}.{{ adapter.quote(old_name) }}
             rename to {{ adapter.quote(new_name) }}

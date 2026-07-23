@@ -149,18 +149,41 @@
 {#-- A partition scheme can't be changed in place; require a full refresh (issue #679). --#}
 {% macro postgres__assert_partition_scheme_unchanged(target_relation, partition_config) %}
   {%- set sql -%}
-    select pg_get_partkeydef('{{ target_relation.schema }}.{{ target_relation.identifier }}'::regclass) as partkey
+    select pg_get_partkeydef('{{ target_relation.render() }}'::regclass) as partkey
   {%- endset -%}
   {%- set existing_key = run_query(sql).columns[0].values()[0] -%}
   {%- if existing_key is not none -%}
-    {%- set normalized_existing = existing_key | lower | replace(' ', '') -%}
-    {%- set normalized_config = partition_config.render | lower | replace(' ', '') -%}
-    {%- if normalized_existing != normalized_config -%}
+    {#--
+      pg_get_partkeydef renders e.g. `RANGE (created_at)`. Compare structurally on
+      method + column list (lowercased, quote/space-stripped) rather than exact text,
+      so quoting/formatting differences don't trigger a spurious full-refresh demand.
+      Expression keys (with casts) may still over-trigger, which is safe: it only asks
+      for a --full-refresh, it never silently appends into the wrong scheme.
+    --#}
+    {%- set existing_method = existing_key.split('(', 1)[0] | trim | lower -%}
+    {%- set existing_cols = existing_key.split('(', 1)[1] | replace(')', '') | replace(' ', '') | replace('"', '') | lower -%}
+    {%- set config_method = partition_config.method | lower -%}
+    {%- set config_cols = partition_config.fields | join(',') | replace(' ', '') | replace('"', '') | lower -%}
+    {%- if existing_method != config_method or existing_cols != config_cols -%}
       {%- do exceptions.raise_compiler_error(
         "partition_by scheme changed from '" ~ existing_key ~ "' to '" ~ partition_config.render
         ~ "'. Postgres cannot repartition in place; run with --full-refresh to rebuild.") -%}
     {%- endif -%}
   {%- endif -%}
+{% endmacro %}
+
+
+{#-- Cheap check (single pg_class lookup) for whether `relation` is a partitioned table. --#}
+{% macro postgres__is_partitioned_relation(relation) %}
+  {% set sql -%}
+    select 1
+    from pg_class c
+    join pg_namespace n on n.oid = c.relnamespace
+    where c.relname = '{{ relation.identifier }}'
+      and n.nspname = '{{ relation.schema }}'
+      and c.relkind = 'p'
+  {%- endset %}
+  {{ return(run_query(sql) | length > 0) }}
 {% endmacro %}
 
 
