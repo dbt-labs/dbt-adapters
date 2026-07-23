@@ -1,5 +1,5 @@
 kind: Fixes
-body: Stop applying dist/sort configs to temporary tables created during incremental delete+insert and merge strategies, reducing unnecessary Redshift resource usage
+body: Stop applying dist/sort configs to temporary tables, reducing unnecessary Redshift resource usage
 time: 2026-07-21T15:15:04.774654-03:00
 custom:
     Author: alejandrofm

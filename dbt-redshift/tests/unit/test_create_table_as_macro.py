@@ -10,7 +10,13 @@ def _render_create_table_as(temporary, dist="my_col", sort=["my_col"]):
     )
     template = env.get_template("adapters.sql")
 
-    config_values = {"dist": dist, "sort_type": None, "sort": sort, "sql_header": None, "backup": None}
+    config_values = {
+        "dist": dist,
+        "sort_type": None,
+        "sort": sort,
+        "sql_header": None,
+        "backup": None,
+    }
     contract_config = SimpleNamespace(enforced=False)
     config = SimpleNamespace(
         get=lambda key, default=None, validator=None: (
