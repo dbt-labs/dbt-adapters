@@ -1,7 +1,10 @@
 {% macro postgres__create_table_as(temporary, relation, sql) -%}
   {%- set unlogged = config.get('unlogged', default=false) -%}
   {%- set sql_header = config.get('sql_header', none) -%}
-  {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) -%}
+  {#-- Only parse partition_by when it is actually configured: adapters that reuse the
+       postgres macros without subclassing PostgresAdapter (e.g. Redshift) have no
+       parse_partition_by, and Redshift also overrides this macro entirely. --#}
+  {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) if config.get('partition_by') is not none else none -%}
 
   {%- if partition_config is not none and not temporary -%}
     {{ postgres__create_partitioned_table_as(temporary, relation, sql, partition_config) }}

@@ -134,12 +134,18 @@
 {% endmacro %}
 
 
-{#-- Prepended to every incremental strategy: guard against repartitioning + create missing partitions. --#}
+{#--
+  Prepended to every incremental strategy: guard against repartitioning + create missing
+  partitions. Check the raw config *before* calling adapter.parse_partition_by, because
+  these postgres__ strategy macros are also dispatched to by adapters that reuse the
+  postgres macros without subclassing PostgresAdapter (e.g. Redshift), whose adapter has
+  no parse_partition_by. No partition_by config → no-op, no adapter call.
+--#}
 {% macro postgres__partition_ddl_for_incremental(arg_dict) %}
-  {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) -%}
-  {%- if partition_config is none -%}
+  {%- if config.get('partition_by') is none -%}
     {{ return('') }}
   {%- endif -%}
+  {%- set partition_config = adapter.parse_partition_by(config.get('partition_by')) -%}
   {%- set target_relation = arg_dict['target_relation'] -%}
   {{ postgres__assert_partition_scheme_unchanged(target_relation, partition_config) }}
   {{ return(postgres__create_incremental_missing_partitions(target_relation, arg_dict['temp_relation'], partition_config)) }}
