@@ -90,7 +90,7 @@ from dbt.adapters.bigquery.record.record_types import (
     BigQueryAdapterAlterTableAddRemoveColumnsRecord,
     BigQueryAdapterSyncStructColumnsRecord,
 )
-from dbt.adapters.bigquery.relation import BigQueryRelation
+from dbt.adapters.bigquery.relation import BigQueryRelation, is_lakehouse_schema
 from dbt.adapters.bigquery.relation_configs import (
     BigQueryBaseRelationConfig,
     BigQueryMaterializedViewConfig,
@@ -192,6 +192,7 @@ class BigqueryConfig(AdapterConfig):
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
     reservation: Optional[str] = None
+    temp_schema: Optional[str] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -276,6 +277,17 @@ class BigQueryAdapter(BaseAdapter):
         if is_cached:
             self.cache_dropped(relation)
 
+        if relation.is_lakehouse:
+            # the tables API cannot delete lakehouse catalog tables; DDL can.
+            # tolerate a missing namespace to match delete_table(not_found_ok=True)
+            try:
+                self.execute(f"drop table if exists {relation}")
+            except dbt_common.exceptions.DbtDatabaseError as e:
+                if "not found" not in str(e).lower():
+                    raise
+                logger.debug("Ignoring drop of {} in a missing namespace".format(relation))
+            return
+
         conn = self.connections.get_thread_connection()
 
         table_ref = self.get_table_ref_from_relation(relation)
@@ -291,6 +303,12 @@ class BigQueryAdapter(BaseAdapter):
     def rename_relation(
         self, from_relation: BigQueryRelation, to_relation: BigQueryRelation
     ) -> None:
+        if from_relation.is_lakehouse or to_relation.is_lakehouse:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Cannot rename {from_relation} to {to_relation}: rename requires a table "
+                "copy job, which is not supported for lakehouse catalog relations"
+            )
+
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
@@ -337,6 +355,15 @@ class BigQueryAdapter(BaseAdapter):
     def check_schema_exists(self, database: str, schema: str) -> bool:
         conn = self.connections.get_thread_connection()
         client = conn.handle
+
+        if is_lakehouse_schema(schema):
+            # a tables.list probe is unreliable for EMPTY namespaces;
+            # datasets.get resolves dotted ids (verified live)
+            try:
+                client.get_dataset(self.connections.dataset_ref(database, schema))
+                return True
+            except google.api_core.exceptions.NotFound:
+                return False
 
         dataset_ref = self.connections.dataset_ref(database, schema)
         # try to do things with the dataset. If it doesn't exist it will 404.
@@ -435,7 +462,11 @@ class BigQueryAdapter(BaseAdapter):
             #       won't need to do this
             max_results=100000,
         )
-        all_routines = client.list_routines(dataset_ref)
+        all_routines: Iterable[Any] = []
+        if not schema_relation.is_lakehouse:
+            all_routines = client.list_routines(dataset_ref)
+        # else: lakehouse namespaces do not contain routines and the routines API
+        # cannot address them
 
         # This will 404 if the dataset does not exist. This behavior mirrors
         # the implementation of list_relations for other adapters
@@ -469,6 +500,11 @@ class BigQueryAdapter(BaseAdapter):
         if table is not None:
             return self._bq_table_to_relation(table)
 
+        if is_lakehouse_schema(schema):
+            # lakehouse namespaces do not contain routines, and
+            # RoutineReference.from_string cannot parse a four-part id
+            return None
+
         # Fall back to checking if it's a routine (function/procedure)
         connection = self.connections.get_thread_connection()
         client = connection.handle
@@ -490,6 +526,16 @@ class BigQueryAdapter(BaseAdapter):
         # use SQL 'create schema'
         relation = relation.without_identifier()
 
+        if relation.is_lakehouse:
+            # lakehouse namespaces cannot be created from BigQuery in the current
+            # preview; accept ones that already exist and fail clearly otherwise
+            if self.check_schema_exists(relation.database, relation.schema):
+                return
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Lakehouse namespace {relation} does not exist. Create it with an engine "
+                "that manages the catalog (e.g. Spark or Trino) before running dbt."
+            )
+
         fire_event(SchemaCreation(relation=_make_ref_key_dict(relation)))
         kwargs = {
             "relation": relation,
@@ -500,6 +546,12 @@ class BigQueryAdapter(BaseAdapter):
         # don't want to (incorrectly) say that it's empty
 
     def drop_schema(self, relation: BigQueryRelation) -> None:
+        if relation.is_lakehouse:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Cannot drop namespace {relation.schema}: dropping namespaces is not "
+                "supported for lakehouse catalog relations"
+            )
+
         # still use a client method, rather than SQL 'drop schema ... cascade'
         database = relation.database
         schema = relation.schema
@@ -586,6 +638,15 @@ class BigQueryAdapter(BaseAdapter):
         id_field_name="thread_id",
     )
     def copy_table(self, source, destination, materialization):
+        # the copy materialization passes `source` as a list of relations
+        sources = source if isinstance(source, list) else [source]
+        for relation in [*sources, destination]:
+            if getattr(relation, "is_lakehouse", False):
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Cannot copy {source} to {destination}: table copy jobs are not "
+                    "supported for lakehouse catalog relations"
+                )
+
         if materialization == "incremental":
             write_disposition = WRITE_APPEND
         elif materialization == "table":
@@ -751,6 +812,16 @@ class BigQueryAdapter(BaseAdapter):
         if not relation:
             return True
 
+        if relation.is_lakehouse:
+            # lakehouse partition metadata is unreliable both ways: engine-created
+            # tables report timePartitioning=null even when partitioned, and
+            # BQ-created ones report synthetic fields (e.g. __PARTITIONTIME), so a
+            # config comparison would force a destructive drop+create on every run.
+            # `create or replace` with an unchanged partition spec is the documented
+            # path; a changed spec fails server-side with the table intact, and the
+            # materializations pre-drop on an explicit --full-refresh as recovery.
+            return True
+
         try:
             table = self.connections.get_bq_table(
                 database=relation.database, schema=relation.schema, identifier=relation.identifier
@@ -818,6 +889,13 @@ class BigQueryAdapter(BaseAdapter):
         if len(columns) == 0:
             return
 
+        if relation.is_lakehouse:
+            logger.warning(
+                "persist_docs column descriptions are not supported for lakehouse "
+                "catalog relations yet; skipping {}".format(relation)
+            )
+            return
+
         conn = self.connections.get_thread_connection()
         table_ref = self.get_table_ref_from_relation(relation)
         table = conn.handle.get_table(table_ref)
@@ -836,6 +914,13 @@ class BigQueryAdapter(BaseAdapter):
     def update_table_description(
         self, database: str, schema: str, identifier: str, description: str
     ):
+        if is_lakehouse_schema(schema):
+            logger.warning(
+                "persist_docs relation descriptions are not supported for lakehouse "
+                "catalog relations yet; skipping {}.{}.{}".format(database, schema, identifier)
+            )
+            return
+
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
@@ -863,6 +948,29 @@ class BigQueryAdapter(BaseAdapter):
         id_field_name="thread_id",
     )
     def alter_table_add_remove_columns(self, relation, add_columns, remove_columns):
+        if relation.is_lakehouse and add_columns:
+            # Validate every unsupported addition before issuing any DROP. A
+            # sync_all_columns run can contain removals and additions together,
+            # so checking this later could leave the target partially mutated.
+            nested_adds = [column.name for column in add_columns if "." in column.name]
+            if nested_adds:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Cannot add nested STRUCT fields to lakehouse catalog table "
+                    f"{relation}: {nested_adds}. Recreate the table with full_refresh "
+                    "or evolve the schema with an engine that manages the catalog."
+                )
+
+        if relation.is_lakehouse and add_columns and remove_columns:
+            # documented Lakehouse limitation: DROP COLUMN followed by re-adding
+            # the same column name is not supported; catch it before the drop runs
+            readded = {c.name for c in remove_columns} & {c.name for c in add_columns}
+            if readded:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"Cannot drop and re-add columns {sorted(readded)} on lakehouse "
+                    f"catalog table {relation}: BigQuery does not support re-adding a "
+                    "dropped column name on Lakehouse Iceberg tables. Recreate the "
+                    "table with full_refresh instead."
+                )
         conn = self.connections.get_thread_connection()
         client = conn.handle
 
@@ -906,6 +1014,16 @@ class BigQueryAdapter(BaseAdapter):
             schema_as_dicts = [field.to_api_repr() for field in table.schema]
 
         if add_columns:
+            if relation.is_lakehouse:
+                # the tables API cannot mutate lakehouse catalog tables; use DDL.
+                # ALTER TABLE can only add top-level columns.
+                add_clauses = [
+                    f"add column {self.quote(column.name)} {column.data_type}"
+                    for column in add_columns
+                ]
+                self.execute(f"alter table {relation.render()} {', '.join(add_clauses)}")
+                return
+
             additions = build_nested_additions(add_columns)
             schema_as_dicts = merge_nested_fields(schema_as_dicts, additions)
             new_schema = [SchemaField.from_api_repr(field) for field in schema_as_dicts]
@@ -1113,6 +1231,15 @@ class BigQueryAdapter(BaseAdapter):
         )
         return super()._catalog_filter_table(table, used_schemas)
 
+    @staticmethod
+    def _skip_lakehouse_catalog(database: Optional[str], schema: Optional[str]) -> bool:
+        if is_lakehouse_schema(schema):
+            # INFORMATION_SCHEMA cannot address lakehouse namespaces. Skip
+            # database-derived catalog enrichment for these relations.
+            logger.debug("Skipping catalog enrichment for {}.{}".format(database, schema))
+            return True
+        return False
+
     def _get_catalog_schemas(self, relation_config: Iterable[RelationConfig]) -> SchemaSearchMap:
         candidates = super()._get_catalog_schemas(relation_config)
         db_schemas: Dict[str, Set[str]] = {}
@@ -1120,6 +1247,8 @@ class BigQueryAdapter(BaseAdapter):
 
         for candidate, schemas in candidates.items():
             database = candidate.database
+            if self._skip_lakehouse_catalog(database, candidate.schema):
+                continue
             if database not in db_schemas:
                 db_schemas[database] = set(self.list_schemas(database))  # type:ignore
             if candidate.schema in db_schemas[database]:  # type:ignore
@@ -1140,6 +1269,8 @@ class BigQueryAdapter(BaseAdapter):
         for info_schema, rels in candidates.items():
             database = info_schema.database
             schema = info_schema.schema
+            if self._skip_lakehouse_catalog(database, schema):
+                continue
             if database not in schema_exists:
                 schema_exists[database] = {}
             if schema not in schema_exists[database]:
@@ -1189,6 +1320,12 @@ class BigQueryAdapter(BaseAdapter):
         table = client.get_table(table_ref)
         snapshot = datetime.now(tz=pytz.UTC)
 
+        if table.modified is None:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"BigQuery did not return a last-modified time for {source}. "
+                "Set `loaded_at_field` on this source to use a query-based freshness check."
+            )
+
         freshness = FreshnessResponse(
             max_loaded_at=table.modified,
             snapshotted_at=snapshot,
@@ -1221,12 +1358,41 @@ class BigQueryAdapter(BaseAdapter):
         for source in sources:
             self._check_for_wildcard_identifier(source)
 
-        # Legacy behavior: use metadata-based freshness for each source
-        if not self.behavior.bigquery_use_batch_source_freshness:
-            for source in sources:
+        # INFORMATION_SCHEMA.TABLE_STORAGE does not include lakehouse catalog
+        # tables; compute their freshness individually from the tables API.
+        # Errors stay isolated per source so one bad lakehouse source cannot
+        # invalidate the project-wide freshness cache dbt-core builds from this.
+        batch_sources: List[BaseRelation] = []
+        for source in sources:
+            if not getattr(source, "is_lakehouse", False):
+                batch_sources.append(source)
+                continue
+            try:
                 adapter_response, freshness_response = self.calculate_freshness_from_metadata(
                     source, macro_resolver
                 )
+            except (
+                google.api_core.exceptions.NotFound,
+                google.api_core.exceptions.Forbidden,
+                dbt_common.exceptions.DbtRuntimeError,
+            ) as e:
+                logger.warning("Could not compute metadata freshness for {}: {}".format(source, e))
+                continue
+            adapter_responses.append(adapter_response)
+            freshness_responses[source] = freshness_response
+
+        sources = batch_sources
+        if not sources:
+            # the batch macro below indexes relations[0]; nothing left to batch
+            return adapter_responses, freshness_responses
+
+        # Legacy behavior: use metadata-based freshness for each source
+        if not self.behavior.bigquery_use_batch_source_freshness:
+            for source in sources:
+                (
+                    adapter_response,
+                    freshness_response,
+                ) = self.calculate_freshness_from_metadata(source, macro_resolver)
                 adapter_responses.append(adapter_response)
                 freshness_responses[source] = freshness_response
             return adapter_responses, freshness_responses
@@ -1287,10 +1453,63 @@ class BigQueryAdapter(BaseAdapter):
 
         return opts
 
+    def _validate_lakehouse_options(self, config: Dict[str, Any], node: Dict[str, Any]) -> None:
+        schema = node.get("schema")
+        if not is_lakehouse_schema(schema):
+            return
+
+        relation_config = getattr(config, "model", None)
+        if relation_config and (catalog := parse_model.catalog_name(relation_config)):
+            if catalog != constants.DEFAULT_INFO_SCHEMA_CATALOG.name:
+                # a BigLake write integration would emit storage_uri and
+                # WITH CONNECTION into DDL the lakehouse catalog cannot accept
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"`catalog_name: {catalog}` cannot be combined with lakehouse schema "
+                    f"`{schema}`; remove the catalog config — Lakehouse "
+                    "Runtime Catalog tables are addressed directly as "
+                    "`project.catalog.namespace.table`"
+                )
+
+        if partition_config := self.parse_partition_by(config.get("partition_by")):
+            if partition_config.data_type.lower() not in (
+                "date",
+                "timestamp",
+                "datetime",
+                "int64",
+            ):
+                # the partition_by macro silently renders NO partition clause for
+                # unknown data types; on lakehouse that traps the user behind the
+                # same-spec CREATE OR REPLACE rule, so fail loudly instead
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    f"dbt-bigquery cannot render a partition clause for "
+                    f"`{partition_config.data_type}`; use date, timestamp, datetime, or int64"
+                )
+            if partition_config.copy_partitions:
+                raise dbt_common.exceptions.DbtRuntimeError(
+                    "`copy_partitions` uses BigQuery copy jobs, which are not supported "
+                    "for lakehouse catalog tables"
+                )
+
+    @available.parse_none
+    def validate_lakehouse_target(
+        self, config: Dict[str, Any], node: Dict[str, Any], language: Optional[str] = None
+    ) -> None:
+        """Reject semantic conflicts and incompatible PCNT writer transports."""
+        self._validate_lakehouse_options(config, node)
+        if (
+            is_lakehouse_schema(node.get("schema"))
+            and (language or node.get("language")) == "python"
+        ):
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "Python models cannot target lakehouse catalog relations: the BigQuery "
+                "Python connectors do not support four-part PCNT destinations"
+            )
+
     @available.parse(lambda *a, **k: {})
     def get_table_options(
         self, config: Dict[str, Any], node: Dict[str, Any], temporary: bool
     ) -> Dict[str, Any]:
+        self._validate_lakehouse_options(config, node)
         opts = self.get_common_options(config, node, temporary)
 
         if config.get("kms_key_name") is not None:

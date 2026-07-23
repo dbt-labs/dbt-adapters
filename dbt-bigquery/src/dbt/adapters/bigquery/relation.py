@@ -26,6 +26,17 @@ from dbt.adapters.bigquery.relation_configs._cluster import BigQueryClusterConfi
 Self = TypeVar("Self", bound="BigQueryRelation")
 
 
+def is_lakehouse_schema(schema: Optional[str]) -> bool:
+    """True when a schema/dataset id addresses a Lakehouse runtime catalog namespace.
+
+    BigQuery models `catalog.namespace` as a dataset whose id contains a dot;
+    regular dataset ids cannot contain dots, so a dotted schema is unambiguous.
+    This is the single definition of the discriminator — every lakehouse check
+    in the adapter must go through it (or the `is_lakehouse` relation property).
+    """
+    return schema is not None and "." in schema
+
+
 @dataclass(frozen=True, eq=False, repr=False)
 class BigQueryRelation(BaseRelation):
     quote_character: str = "`"
@@ -48,6 +59,21 @@ class BigQueryRelation(BaseRelation):
             }
         )
     )
+
+    def __post_init__(self) -> None:
+        if not self.is_lakehouse:
+            return
+
+        schema_parts = (self.schema or "").split(".")
+        if (
+            len(schema_parts) != 2
+            or not all(schema_parts)
+            or any(part != part.strip() for part in schema_parts)
+        ):
+            raise CompilationError(
+                f"Invalid BigQuery Lakehouse schema `{self.schema}`: expected exactly "
+                "`catalog.namespace` with both parts non-empty"
+            )
 
     def matches(
         self,
@@ -80,6 +106,18 @@ class BigQueryRelation(BaseRelation):
     @property
     def dataset(self):
         return self.schema
+
+    @property
+    def is_lakehouse(self) -> bool:
+        """True when this relation lives in a Lakehouse runtime catalog,
+        addressed as `project.catalog.namespace.table`."""
+        return is_lakehouse_schema(self.schema)
+
+    @property
+    def can_be_renamed(self) -> bool:
+        # BigQuery renames tables with a copy job + delete; copy jobs are not
+        # available for lakehouse catalog tables
+        return super().can_be_renamed and not self.is_lakehouse
 
     @classmethod
     def materialized_view_from_relation_config(
