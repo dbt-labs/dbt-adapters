@@ -1,0 +1,8 @@
+kind: Fixes
+body: Raise a clear dbt error, before the CREATE reaches Snowflake, when a model contract
+  declares a bare NUMBER/NUMERIC/DECIMAL (no precision/scale) on an Iceberg table, instead of
+  the opaque 099200 Snowflake returns at runtime. The user's declared type is not rewritten
+time: 2026-07-09T12:30:00.000000-07:00
+custom:
+  Author: sfc-gh-nijain
+  Issue: "2091"
