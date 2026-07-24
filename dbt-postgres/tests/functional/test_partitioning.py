@@ -323,7 +323,7 @@ microbatch_sql = """
     }
 ) }}
 
-select id, created_at from "{{ this.schema }}"."seed_events"
+select id, created_at, val from "{{ this.schema }}"."seed_events"
 """
 
 
@@ -333,6 +333,10 @@ def _skip_if_pg_lt_15(project):
         pytest.skip("microbatch/merge requires Postgres >= 15")
 
 
+def _partition_rowcount(project, child):
+    return _rowcount(project, child)
+
+
 class TestMicrobatchPartitioning:
     """PR 3: microbatch day-batches map onto day range partitions. Postgres >= 15."""
 
@@ -340,24 +344,67 @@ class TestMicrobatchPartitioning:
     def models(self):
         return {"mb_model.sql": microbatch_sql}
 
-    def test_microbatch_creates_day_partitions(self, project):
-        _skip_if_pg_lt_15(project)
+    def _seed(self, project, rows):
         schema = project.test_schema
         project.run_sql(
-            'create table if not exists "{}"."seed_events" (id int, created_at timestamp)'.format(
-                schema
-            )
+            'create table if not exists "{}"."seed_events" '
+            "(id int, created_at timestamp, val int)".format(schema)
         )
         project.run_sql('truncate "{}"."seed_events"'.format(schema))
-        project.run_sql(
-            'insert into "{}"."seed_events" values '
-            "(1, '2024-01-01'::timestamp), "
-            "(2, '2024-01-02'::timestamp), "
-            "(3, '2024-01-03'::timestamp)".format(schema)
+        values = ",".join("({}, '{}'::timestamp, {})".format(i, ts, v) for i, ts, v in rows)
+        project.run_sql('insert into "{}"."seed_events" values {}'.format(schema, values))
+
+    def test_microbatch_day_partitions_and_reprocessing(self, project):
+        _skip_if_pg_lt_15(project)
+        self._seed(
+            project,
+            [(1, "2024-01-01", 10), (2, "2024-01-02", 20), (3, "2024-01-03", 30)],
         )
-        run_dbt(["run", "--select", "mb_model"])
+
+        # first run, bounded to the three seeded days -> one batch (and partition) per day
+        run_dbt(
+            [
+                "run",
+                "--select",
+                "mb_model",
+                "--event-time-start",
+                "2024-01-01",
+                "--event-time-end",
+                "2024-01-04",
+            ]
+        )
         assert _relkind(project, "mb_model") == "p"
-        assert len(_child_partitions(project, "mb_model")) >= 3
+        children = _child_partitions(project, "mb_model")
+        assert "mb_model__p20240101" in children
+        assert "mb_model__p20240102" in children
+        assert "mb_model__p20240103" in children
+        assert _rowcount(project, "mb_model") == 3
+        # each day's row is routed to its own partition
+        assert _partition_rowcount(project, "mb_model__p20240102") == 1
+
+        # reprocessing a single day's batch is idempotent and merges on unique_key:
+        # bump id=2's value, reprocess only 2024-01-02, expect an update (not a dup)
+        self._seed(
+            project,
+            [(1, "2024-01-01", 10), (2, "2024-01-02", 99), (3, "2024-01-03", 30)],
+        )
+        run_dbt(
+            [
+                "run",
+                "--select",
+                "mb_model",
+                "--event-time-start",
+                "2024-01-02",
+                "--event-time-end",
+                "2024-01-03",
+            ]
+        )
+        assert _rowcount(project, "mb_model") == 3  # no duplicate row for id=2
+        updated = project.run_sql(
+            'select val from "{}"."mb_model" where id = 2'.format(project.test_schema),
+            fetch="one",
+        )
+        assert updated[0] == 99
 
 
 class TestRepartitionGuard:
