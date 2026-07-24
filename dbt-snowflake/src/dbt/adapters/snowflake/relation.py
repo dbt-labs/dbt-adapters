@@ -28,6 +28,7 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
+    SnowflakeDynamicTableQueryConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -105,6 +106,12 @@ class SnowflakeRelation(BaseRelation):
         new_dynamic_table = SnowflakeDynamicTableConfig.from_relation_config(relation_config)
 
         config_change_collection = SnowflakeDynamicTableConfigChangeset()
+
+        if new_dynamic_table.query != existing_dynamic_table.query:
+            config_change_collection.query = SnowflakeDynamicTableQueryConfigChange(
+                action=RelationConfigChangeAction.create,  # type:ignore
+                context=new_dynamic_table.query,
+            )
 
         if (
             new_dynamic_table.target_lag != existing_dynamic_table.target_lag
