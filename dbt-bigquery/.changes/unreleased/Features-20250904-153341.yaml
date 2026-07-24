@@ -1,0 +1,6 @@
+kind: Features
+body: Inject invocation_id into user agent string
+time: 2025-09-04T15:33:41.438521+12:00
+custom:
+    Author: jeremyyeo
+    Issue: "1280"
