@@ -6,7 +6,7 @@ import json
 from multiprocessing.context import SpawnContext
 import re
 import time
-from typing import Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
 from google.auth.exceptions import RefreshError
@@ -22,7 +22,7 @@ from google.cloud.bigquery import (
     Table,
     TableReference,
 )
-from google.cloud.exceptions import BadRequest, Forbidden, NotFound
+from google.cloud.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
 from dbt_common.events.contextvars import get_node_info
 from dbt_common.events.functions import fire_event
@@ -233,6 +233,22 @@ class BigQueryConnectionManager(BaseConnectionManager):
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
 
+    def _submit_or_attach(self, client: Client, job_id: str, submit: Callable):
+        """Submit a job, or attach to the existing one via get_job on 409 Conflict.
+
+        A stable job_id makes jobs.insert idempotent: a resubmission (dbt's retry
+        or the client library's transport retry after a lost response) attaches to
+        the in-flight job instead of spawning a second one that re-runs work.
+        """
+        try:
+            return submit()
+        except Conflict:
+            logger.debug(
+                f"Job {job_id} already exists; attaching to the in-flight job "
+                "instead of resubmitting to avoid duplicate execution."
+            )
+            return client.get_job(job_id)
+
     def raw_execute(
         self,
         sql,
@@ -277,9 +293,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_params["job_timeout_ms"] = int(model_timeout * 1000)
 
         with self.exception_handler(sql):
+            # Mint the job_id once, outside the retry closure, so a re-entry
+            # resubmits the same job instead of spawning a duplicate.
+            job_id = self.generate_job_id()
 
             def _execute_with_retry():
-                job_id = self.generate_job_id()
                 return self._query_and_results(
                     conn,
                     sql,
@@ -484,11 +502,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
             destination_ref.path,
         )
         with self.exception_handler(msg):
-            copy_job = client.copy_table(
-                source_ref_array,
-                destination_ref,
-                job_config=CopyJobConfig(write_disposition=write_disposition),
-                retry=self._retry.create_reopen_with_deadline(conn),
+            # Stable job_id: copy_table has no built-in 409 recovery of its own.
+            job_id = self.generate_job_id()
+            copy_job = self._submit_or_attach(
+                client,
+                job_id,
+                lambda: client.copy_table(
+                    source_ref_array,
+                    destination_ref,
+                    job_config=CopyJobConfig(write_disposition=write_disposition),
+                    job_id=job_id,
+                    retry=self._retry.create_reopen_with_deadline(conn),
+                ),
             )
             model_timeout = getattr(conn, "_bq_model_timeout", None)
             copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
@@ -626,13 +651,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
         polling_timeout = (
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
-        # Cannot reuse job_config if destination is set and ddl is used
-        query_job = client.query(
-            query=sql,
-            job_config=query_job_config,
-            job_id=job_id,
-            job_retry=None,
-            timeout=self._retry.create_job_creation_timeout(),
+        # Cannot reuse job_config if destination is set and ddl is used.
+        # job_id is stable across retries (see raw_execute).
+        query_job = self._submit_or_attach(
+            client,
+            job_id,
+            lambda: client.query(
+                query=sql,
+                job_config=query_job_config,
+                job_id=job_id,
+                job_retry=None,
+                timeout=self._retry.create_job_creation_timeout(),
+            ),
         )
         if (
             query_job.location is not None

@@ -1,6 +1,6 @@
 {% macro sync_column_schemas(on_schema_change, target_relation, schema_changes_dict) %}
   {%- set partitioned_by = config.get('partitioned_by', default=none) -%}
-  {% set table_type = config.get('table_type', default='hive') | lower %}
+  {% set table_type = resolve_table_type() %}
   {%- if partitioned_by is none -%}
       {%- set partitioned_by = [] -%}
   {%- endif %}
@@ -63,7 +63,7 @@
     3. Drop the existing column
     4. Rename the new column to existing column
   #}
-  {%- set table_type = config.get('table_type', 'hive') -%}
+  {%- set table_type = resolve_table_type() -%}
   {%- set tmp_column = column_name + '__dbt_alter' -%}
   {%- set new_ddl_data_type = ddl_data_type(new_column_type, table_type) -%}
 
