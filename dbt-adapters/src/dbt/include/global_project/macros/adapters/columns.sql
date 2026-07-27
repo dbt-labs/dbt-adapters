@@ -16,6 +16,30 @@
   {{ return(columns) }}
 {% endmacro %}
 
+{% macro get_columns_for_unit_tests(relation) -%}
+  {{ return(adapter.dispatch('get_columns_for_unit_tests', 'dbt')(relation)) }}
+{% endmacro %}
+
+{% macro default__get_columns_for_unit_tests(relation) -%}
+  {#-- Get native columns from information schema --#}
+  {% set columns = adapter.get_columns_in_relation(relation) %}
+
+  {#-- Add pseudocolumns that are queryable but not in information schema --#}
+  {% set pseudocolumns = adapter.get_pseudocolumns_for_relation(relation) %}
+
+  {#-- Merge two lists --#}
+  {% set all_columns = columns + pseudocolumns %}
+
+  {{ return(all_columns) }}
+{% endmacro %}
+
+{%- macro get_list_of_column_names(columns) -%}
+  {% set col_names = [] %}
+  {% for col in columns %}
+    {% do col_names.append(col.name) %}
+  {% endfor %}
+  {{ return(col_names) }}
+{% endmacro %}
 
 {% macro get_empty_subquery_sql(select_sql, select_sql_header=none) -%}
   {{ return(adapter.dispatch('get_empty_subquery_sql', 'dbt')(select_sql, select_sql_header)) }}
@@ -123,11 +147,11 @@
      alter {{ relation.type }} {{ relation.render() }}
 
             {% for column in add_columns %}
-               add column {{ column.name }} {{ column.data_type }}{{ ',' if not loop.last }}
+               add column {{ column.quoted }} {{ column.expanded_data_type }}{{ ',' if not loop.last }}
             {% endfor %}{{ ',' if add_columns and remove_columns }}
 
             {% for column in remove_columns %}
-                drop column {{ column.name }}{{ ',' if not loop.last }}
+                drop column {{ column.quoted }}{{ ',' if not loop.last }}
             {% endfor %}
 
   {%- endset -%}

@@ -932,6 +932,117 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         actual = adapter.get_common_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
+    def test_get_common_options_resource_tags(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "resource_tags": {"test-project/env": "dev", "test-project/team": "data"},
+        }
+        mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
+
+        expected = {"tags": [("test-project/env", "dev"), ("test-project/team", "data")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        # Compare as sets since tag order depends on dictionary ordering
+        self.assertEqual(set(actual["tags"]), set(expected["tags"]))
+
+    def test_get_common_options_resource_tags_empty(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "resource_tags": {},
+        }
+        mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
+
+        expected = {}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_resource_tags_and_labels(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "labels": {"label_key": "label_value"},
+            "resource_tags": {"test-project/tag_key": "tag_value"},
+        }
+        mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
+
+        expected_labels = [("label_key", "label_value")]
+        expected_tags = [("test-project/tag_key", "tag_value")]
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+
+        self.assertEqual(set(actual["labels"]), set(expected_labels))
+        self.assertEqual(set(actual["tags"]), set(expected_tags))
+
+    def test_get_common_options_resource_tags_none(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        config = {
+            "resource_tags": None,
+        }
+        mock_config.get.side_effect = lambda name, default=None: config.get(name, default)
+
+        expected = {}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+
+class TestGetColumnsAndPseudocolumnsForRelation(BaseTestBigQueryAdapter):
+    def _make_relation(self, identifier="my_table"):
+        relation = MagicMock()
+        relation.database = "my_project"
+        relation.schema = "my_dataset"
+        relation.identifier = identifier
+        return relation
+
+    def _make_schema_field(self, name, field_type):
+        field = MagicMock()
+        field.name = name
+        field.field_type = field_type
+        field.fields = []
+        field.mode = "NULLABLE"
+        return field
+
+    def test_returns_columns_and_file_name_for_external_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "EXTERNAL"
+        mock_table.schema = [self._make_schema_field("id", "INTEGER")]
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].name, "id")
+        self.assertEqual(result[1].name, "_FILE_NAME")
+        self.assertEqual(result[1].dtype, "STRING")
+
+    def test_returns_only_columns_for_regular_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "TABLE"
+        mock_table.schema = [self._make_schema_field("id", "INTEGER")]
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "id")
+
+    def test_returns_empty_when_table_not_found(self):
+        import google.cloud.exceptions
+
+        adapter = self.get_adapter("oauth")
+        with patch.object(
+            adapter.connections,
+            "get_bq_table",
+            side_effect=google.cloud.exceptions.NotFound("table not found"),
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(result, [])
+
 
 class TestBigQueryFilterCatalog(unittest.TestCase):
     def test__catalog_filter_table(self):
@@ -952,6 +1063,33 @@ class TestBigQueryFilterCatalog(unittest.TestCase):
             assert isinstance(row["table_database"], str)
             assert isinstance(row["table_name"], str)
             assert isinstance(row["something"], decimal.Decimal)
+
+
+class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
+    def test_filters_out_nonexistent_schemas(self):
+        adapter = self.get_adapter("oauth")
+        adapter.check_schema_exists = MagicMock(
+            side_effect=lambda database, schema: schema == "real_dataset"
+        )
+
+        normal_relation = BigQueryRelation.create(
+            database="test-project",
+            schema="real_dataset",
+            identifier="my_table",
+        )
+        info_schema_source = BigQueryRelation.create(
+            database="test-project",
+            schema="region-us.INFORMATION_SCHEMA",
+            identifier="COLUMN_FIELD_PATHS",
+        )
+
+        result = adapter._get_catalog_relations_by_info_schema(
+            [normal_relation, info_schema_source]
+        )
+
+        schemas_in_result = {info.schema for info in result.keys()}
+        assert "real_dataset" in schemas_in_result
+        assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
 
 
 class TestBigQueryAdapterConversions(TestAdapterConversions):
@@ -1118,3 +1256,51 @@ def test_sanitize_label_length(label_length):
         random.choice(string.ascii_uppercase + string.digits) for i in range(label_length)
     )
     assert len(_sanitize_label(random_string)) <= _VALIDATE_LABEL_LENGTH_LIMIT
+
+
+class TestPartitionConfigRenderWrappedInt64Range:
+    """Tests for render_wrapped() with int64 range partitions.
+
+    For int64 range partitions, render_wrapped normalizes field values
+    to their partition start value, preventing excessively large arrays when
+    computing partitions for replacement in insert_overwrite.
+    """
+
+    def test_int64_range_normalizes_to_partition_start(self):
+        """Values should be normalized using: value - MOD(value - start, interval)."""
+        config = PartitionConfig.parse(
+            {
+                "field": "partkey",
+                "data_type": "int64",
+                "range": {"start": 0, "end": 100000, "interval": 1000},
+            }
+        )
+        result = config.render_wrapped()
+        assert result == "(partkey - MOD(partkey - 0, 1000))"
+
+    def test_int64_range_with_nonzero_start(self):
+        config = PartitionConfig.parse(
+            {
+                "field": "id",
+                "data_type": "int64",
+                "range": {"start": 100, "end": 10000, "interval": 500},
+            }
+        )
+        result = config.render_wrapped()
+        assert result == "(id - MOD(id - 100, 500))"
+
+    def test_int64_range_with_alias(self):
+        config = PartitionConfig.parse(
+            {
+                "field": "partkey",
+                "data_type": "int64",
+                "range": {"start": 0, "end": 100000, "interval": 1000},
+            }
+        )
+        result = config.render_wrapped(alias="DBT_INTERNAL_DEST")
+        assert result == "(DBT_INTERNAL_DEST.partkey - MOD(DBT_INTERNAL_DEST.partkey - 0, 1000))"
+
+    def test_int64_without_range_returns_raw_field(self):
+        """int64 without range config should return the raw field name."""
+        config = PartitionConfig(field="id", data_type="int64")
+        assert config.render_wrapped() == "id"

@@ -1,3 +1,12 @@
+# **what?**
+# Automatically swaps issue labels when an issue with 'triage:awaiting-response' receives a comment.
+
+# **why?**
+# Streamlines the triage process by automatically moving issues from awaiting response to product review.
+
+# **when?**
+# This workflow runs when a comment is added to an issue that has the 'triage:awaiting-response' label.
+
 name: "Issue triage"
 run-name: "Issue triage - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 

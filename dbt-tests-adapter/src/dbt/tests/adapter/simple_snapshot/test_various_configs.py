@@ -10,7 +10,7 @@ from dbt.tests.util import (
     run_sql_with_adapter,
     update_config_file,
 )
-from tests.functional.adapter.simple_snapshot.fixtures import (
+from dbt.tests.adapter.simple_snapshot.fixtures import (
     create_multi_key_seed_sql,
     create_multi_key_snapshot_expected_sql,
     create_seed_sql,

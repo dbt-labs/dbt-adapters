@@ -1,0 +1,6 @@
+kind: Fixes
+body: Omit external volume from DDL when not provided in the YAML file
+time: 2025-07-18T09:22:25.851623+02:00
+custom:
+    Author: dlouseiro
+    Issue: "772"

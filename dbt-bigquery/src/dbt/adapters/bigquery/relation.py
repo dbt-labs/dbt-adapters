@@ -20,6 +20,7 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryOptionsConfigChange,
     BigQueryPartitionConfigChange,
 )
+from dbt.adapters.bigquery.relation_configs._cluster import BigQueryClusterConfig
 
 
 Self = TypeVar("Self", bound="BigQueryRelation")
@@ -108,7 +109,9 @@ class BigQueryRelation(BaseRelation):
                 action=RelationConfigChangeAction.alter,  # type:ignore
             )
 
-        if new_materialized_view.cluster != existing_materialized_view.cluster:
+        if cls._cluster_config_has_changed(
+            new_materialized_view.cluster, existing_materialized_view.cluster
+        ):
             config_change_collection.cluster = BigQueryClusterConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_materialized_view.cluster,
@@ -117,6 +120,19 @@ class BigQueryRelation(BaseRelation):
         if config_change_collection.has_changes:
             return config_change_collection
         return None
+
+    @staticmethod
+    def _cluster_config_has_changed(
+        new_cluster: Optional[BigQueryClusterConfig],
+        existing_cluster: Optional[BigQueryClusterConfig],
+    ) -> bool:
+        """Compare cluster configs using sorted fields for backward-compatible,
+        order-insensitive comparison."""
+        if new_cluster is None and existing_cluster is None:
+            return False
+        if new_cluster is None or existing_cluster is None:
+            return True
+        return sorted(new_cluster.fields) != sorted(existing_cluster.fields)
 
     def information_schema(self, identifier: Optional[str] = None) -> "BigQueryInformationSchema":
         return BigQueryInformationSchema.from_relation(self, identifier)
@@ -174,8 +190,8 @@ class BigQueryInformationSchema(InformationSchema):
     @classmethod
     def from_relation(cls, relation, information_schema_view):
         info_schema = super().from_relation(relation, information_schema_view)
-        if information_schema_view == "OBJECT_PRIVILEGES":
-            # OBJECT_PRIVILEGES require a location.  If the location is blank there is nothing
+        if information_schema_view in ("OBJECT_PRIVILEGES", "TABLE_STORAGE"):
+            # OBJECT_PRIVILEGES and TABLE_STORAGE require a location.  If the location is blank there is nothing
             # the user can do about it.
             if not relation.location:
                 msg = (

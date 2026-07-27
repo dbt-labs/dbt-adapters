@@ -3,6 +3,7 @@ import uuid
 from dbt.tests.util import run_dbt, write_file
 from dbt.tests.adapter.python_model.test_python_model import (
     BasePythonEmptyTests,
+    BasePythonMetaGetTests,
     BasePythonModelTests,
     BasePythonIncrementalTests,
     BasePythonSampleTests,
@@ -238,4 +239,8 @@ class TestEmptyModeWithPythonModel(BasePythonEmptyTests):
 
 
 class TestSampleModeWithPythonModel(BasePythonSampleTests):
+    pass
+
+
+class TestPythonMetaGetSnowflake(BasePythonMetaGetTests):
     pass

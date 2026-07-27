@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix references to function properties in function macros
+time: 2025-10-02T12:09:29.303025-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1365"

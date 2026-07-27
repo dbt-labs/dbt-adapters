@@ -109,3 +109,14 @@ TRUNCATE_RELATION = """
 {{ truncate_relation(my_seed) }}
 select * from {{ ref("my_seed") }}
 """
+
+# -- Seed --empty flag fixtures --
+
+seed_csv = """id,name,price,is_active,created_at
+1,Alice,1.23,true,2024-01-01 00:00:00
+2,Bob,99.99,false,2024-06-15 12:30:00
+"""
+
+model_reference_seed_sql = """
+select * from {{ ref('raw_seed') }}
+"""

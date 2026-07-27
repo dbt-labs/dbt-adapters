@@ -1,0 +1,7 @@
+kind: Features
+body: Add platform_detection_timeout_seconds configuration param to disable eager
+  metadata detection in the snowflake-connector
+time: 2025-10-23T11:49:39.025646-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1278"

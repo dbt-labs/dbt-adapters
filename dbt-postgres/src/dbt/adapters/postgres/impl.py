@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from multiprocessing.context import SpawnContext
 from typing import Any, List, Optional, Set
 
 from dbt.adapters.base import AdapterConfig, ConstraintSupport, available
@@ -16,6 +17,7 @@ from dbt.adapters.exceptions import (
     UnexpectedDbReferenceError,
 )
 from dbt.adapters.sql import SQLAdapter
+from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.dataclass_schema import ValidationError, dbtClassMixin
 from dbt_common.exceptions import DbtRuntimeError
@@ -27,6 +29,17 @@ from dbt.adapters.postgres.relation import PostgresRelation
 
 
 GET_RELATIONS_MACRO_NAME = "postgres__get_relations"
+
+POSTGRES_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
+    name="postgres_skip_autocommit_transaction_statements",
+    default=True,
+    description=(
+        "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
+        "since each statement is automatically committed. This reduces round-trips "
+        "to the database and avoids unnecessary transaction overhead."
+        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
+    ),
+)
 
 
 @dataclass
@@ -71,6 +84,8 @@ class PostgresAdapter(SQLAdapter):
 
     AdapterSpecificConfigs = PostgresConfig
 
+    connections: PostgresConnectionManager
+
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.ENFORCED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -84,6 +99,16 @@ class PostgresAdapter(SQLAdapter):
     _capabilities: CapabilityDict = CapabilityDict(
         {Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full)}
     )
+
+    def __init__(self, config, mp_context: SpawnContext) -> None:
+        super().__init__(config, mp_context)
+        self.connections.set_skip_transactions_checker(
+            lambda: self.behavior.postgres_skip_autocommit_transaction_statements.no_warn
+        )
+
+    @property
+    def _behavior_flags(self) -> List[BehaviorFlag]:
+        return [POSTGRES_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS]
 
     @classmethod
     def date_function(cls):

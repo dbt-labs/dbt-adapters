@@ -30,6 +30,13 @@ id,date_int
 40,20200102
 """.lstrip()
 
+seed_incremental_overwrite_range_with_interval_expected_csv = """
+id,id_bucket
+10,4
+20,5
+30,6
+""".lstrip()
+
 seed_incremental_overwrite_time_expected_csv = """
 id,date_hour
 10,2020-01-01 01:00:00

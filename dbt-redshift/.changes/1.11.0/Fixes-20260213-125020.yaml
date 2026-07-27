@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix dbt clone failing when persist_docs adds column comments to late binding views
+time: 2026-02-13T12:50:20.410997+05:30
+custom:
+    Author: tauhid621
+    Issue: "622"

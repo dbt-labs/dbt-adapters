@@ -1,0 +1,6 @@
+kind: Features
+body: Configure notebook execution job security labels to support cross-project runtime templates
+time: 2026-02-04T01:07:59.265166919Z
+custom:
+    Author: jialuoo
+    Issue: "1594"

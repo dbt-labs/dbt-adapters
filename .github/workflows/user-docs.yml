@@ -1,3 +1,12 @@
+# **what?**
+# Creates an issue in the docs repository when an issue is closed with the 'needs:docs' label.
+
+# **why?**
+# Ensures documentation updates are tracked and don't get forgotten when issues are closed.
+
+# **when?**
+# This workflow runs when an issue is labeled or closed, specifically when an issue is closed with the 'needs:docs' label.
+
 name: "User docs"
 run-name: "User docs - ${{ github.actor }} - #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
 

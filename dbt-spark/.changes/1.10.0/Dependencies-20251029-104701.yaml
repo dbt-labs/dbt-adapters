@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Drop support for python 3.9
+time: 2025-10-29T10:47:01.527892-05:00
+custom:
+  Author: QMalcolm
+  PR: "1412"

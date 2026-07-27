@@ -2,6 +2,7 @@ import abc
 import time
 from concurrent.futures import as_completed, Future
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from importlib import import_module
@@ -30,6 +31,10 @@ from dbt.adapters.record.base import (
     AdapterGetPartitionsMetadataRecord,
     AdapterConvertTypeRecord,
     AdapterStandardizeGrantsDictRecord,
+    AdapterListRelationsWithoutCachingRecord,
+    AdapterGetColumnsInRelationRecord,
+    AdapterGetPseudocolumnsForRelationRecord,
+    SubmitPythonJobRecord,
 )
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
@@ -78,6 +83,9 @@ from dbt.adapters.catalogs import (
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
     CatalogRelation,
+    CatalogV2,
+    CatalogWriteIntegrationConfig,
+    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
@@ -103,7 +111,9 @@ from dbt.adapters.exceptions import (
     UnexpectedNonTimestampError,
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
+from dbt.adapters.events.logging import AdapterLogger
 
+logger = AdapterLogger(__name__)
 if TYPE_CHECKING:
     import agate
 
@@ -153,14 +163,24 @@ def _catalog_filter_schemas(
     """Return a function that takes a row and decides if the row should be
     included in the catalog output.
     """
-    schemas = frozenset((d.lower(), s.lower()) for d, s in used_schemas)
+    schemas = frozenset(
+        (d.lower(), s.lower()) for d, s in used_schemas if d is not None and s is not None
+    )
+    if null_schemas := [d for d, s in used_schemas if d is None or s is None]:
+        logger.debug(
+            f"used_schemas contains None for either database or schema, skipping {null_schemas}"
+        )
 
     def test(row: "agate.Row") -> bool:
         table_database = _expect_row_value("table_database", row)
         table_schema = _expect_row_value("table_schema", row)
         # the schema may be present but None, which is not an error and should
         # be filtered out
+
         if table_schema is None:
+            return False
+        if table_database is None:
+            logger.debug(f"table_database is None, skipping {table_schema}")
             return False
         return (table_database.lower(), table_schema.lower()) in schemas
 
@@ -190,6 +210,17 @@ def _relation_name(rel: Optional[BaseRelation]) -> str:
         return str(rel)
 
 
+def _config_get(config: Any, key: str) -> Any:
+    """Read ``key`` from a node config that may not be dict-like.
+
+    Some node configs are typed, non-mapping objects (e.g. a saved-query export's
+    ``ExportConfig``, which has no ``.get``). Return None for those rather than
+    raising AttributeError.
+    """
+    get = getattr(config, "get", None)
+    return get(key) if callable(get) else None
+
+
 def log_code_execution(code_execution_function):
     # decorator to log code and execution time
     if code_execution_function.__name__ != "submit_python_job":
@@ -217,6 +248,14 @@ class PythonJobHelper:
 
     def submit(self, compiled_code: str) -> Any:
         raise NotImplementedError("PythonJobHelper submit function is not implemented yet")
+
+
+@dataclass
+class PythonSubmissionResult:
+    """Result from submitting a Python job."""
+
+    run_id: str
+    compiled_code: str
 
 
 class FreshnessResponse(TypedDict):
@@ -321,10 +360,58 @@ class BaseAdapter(metaclass=AdapterMeta):
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
         return self._catalog_client.get(name)
 
+    def bridge_v2_catalog(self, catalog: CatalogV2) -> CatalogIntegrationConfig:
+        """Translate a CatalogV2 (defined in dbt-core) into a CatalogWriteIntegrationConfig.
+
+        catalog is typed via CatalogV2 Protocol to avoid a circular dependency.
+        Adapters override the hook methods below rather than this method directly.
+        """
+        ct = catalog.catalog_type
+        platform_block = catalog.config.get(self.type(), {}) or {}
+        external_volume = platform_block.get("external_volume")
+        file_format = platform_block.get("file_format")
+        catalog_database = platform_block.get("catalog_database")
+        # Keep catalog_database in props so adapter overrides (e.g. Snowflake's
+        # _translate_v2_properties) can remap it to their platform-specific field name.
+        props = {
+            k: v for k, v in platform_block.items() if k not in {"external_volume", "file_format"}
+        }
+        return CatalogWriteIntegrationConfig(
+            name=catalog.name,
+            catalog_type=self._v2_to_v1_type(ct),
+            catalog_name=catalog.name,
+            table_format=self._v2_table_format(catalog),
+            external_volume=str(external_volume) if external_volume is not None else None,
+            file_format=str(file_format) if file_format is not None else None,
+            catalog_database=str(catalog_database) if catalog_database is not None else None,
+            adapter_properties=self._translate_v2_properties(ct, props),
+        )
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        """Map a v2 catalog type string to the v1 catalog_type expected by CatalogIntegration."""
+        return catalog_type
+
+    def _v2_table_format(self, catalog: CatalogV2) -> str:
+        """Return the table_format string to pass to CatalogWriteIntegrationConfig."""
+        return catalog.table_format.value
+
+    def _translate_v2_properties(self, catalog_type: str, props: Dict[str, Any]) -> Dict[str, Any]:
+        """Rename or inject adapter_properties keys for this adapter's CatalogIntegration."""
+        return props
+
     @available
-    def build_catalog_relation(self, config: RelationConfig) -> CatalogRelation:
-        catalog = self.get_catalog_integration(config.catalog)
-        return catalog.build_relation(config)
+    def build_catalog_relation(self, config: RelationConfig) -> Optional[CatalogRelation]:
+        if not config.config:
+            return None
+
+        # "catalog" is legacy, but we support it for backward compatibility
+        if catalog_name := _config_get(
+            config.config, CATALOG_INTEGRATION_MODEL_CONFIG_NAME
+        ) or _config_get(config.config, "catalog"):
+            catalog = self.get_catalog_integration(catalog_name)
+            return catalog.build_relation(config)
+
+        return None
 
     ###
     # Methods to set / access a macro resolver
@@ -722,12 +809,38 @@ class BaseAdapter(metaclass=AdapterMeta):
         """
         raise NotImplementedError("`rename_relation` is not implemented for this adapter!")
 
-    @auto_record_function("AdapterGetColumnsInRelation", group="Available")
+    @record_function(
+        AdapterGetColumnsInRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     @available.parse_list
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Get a list of the columns in the given Relation."""
         raise NotImplementedError("`get_columns_in_relation` is not implemented for this adapter!")
+
+    @record_function(
+        AdapterGetPseudocolumnsForRelationRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
+    @available.parse_list
+    def get_pseudocolumns_for_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Get a list of queryable pseudocolumns for the given relation.
+
+        Pseudocolumns are system-generated columns that can be queried but don't
+        appear in the information schema (e.g., BigQuery's _FILE_NAME for external tables).
+
+        Default implementation returns an empty list. Adapters should override this
+        to provide pseudocolumns specific to their platform.
+
+        :param relation: The relation to get pseudocolumns for
+        :return: List of Column objects representing queryable pseudocolumns
+        """
+        return []
 
     def get_catalog_for_single_relation(self, relation: BaseRelation) -> Optional[CatalogTable]:
         """Get catalog information including table-level and column-level metadata for a single relation."""
@@ -760,6 +873,12 @@ class BaseAdapter(metaclass=AdapterMeta):
             "`expand_target_column_types` is not implemented for this adapter!"
         )
 
+    @record_function(
+        AdapterListRelationsWithoutCachingRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
+    )
     @abc.abstractmethod
     def list_relations_without_caching(self, schema_relation: BaseRelation) -> List[BaseRelation]:
         """List relations in the given schema, bypassing the cache.
@@ -1676,6 +1795,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         raise NotImplementedError("default_python_submission_method is not specified")
 
     @log_code_execution
+    @record_function(
+        SubmitPythonJobRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+    )
     def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
         submission_method = parsed_model["config"].get(
             "submission_method", self.default_python_submission_method
@@ -1991,7 +2113,11 @@ def catch_as_completed(
         # we want to re-raise on ctrl+c and BaseException
         if exc is None:
             catalog = future.result()
-            tables.append(catalog)
+            # Skip empty catalog results to avoid agate type conflicts.
+            # Empty results cause agate to infer text columns (e.g. column_name)
+            # as Number, which conflicts with Text when merged with non-empty tables.
+            if len(catalog) > 0:
+                tables.append(catalog)
         elif isinstance(exc, KeyboardInterrupt) or not isinstance(exc, Exception):
             raise exc
         else:

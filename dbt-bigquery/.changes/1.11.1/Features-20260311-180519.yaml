@@ -1,0 +1,7 @@
+kind: Features
+body: Support PyPI packages for Python UDFs - when packages are specified in function
+  config, they are templated into OPTIONS(packages = [...]) for scalar Python UDFs
+time: 2026-03-11T18:05:19.567775-05:00
+custom:
+  Author: QMalcolm
+  Issue: "1737"

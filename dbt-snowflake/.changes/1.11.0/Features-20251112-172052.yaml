@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for python aggregate functions
+time: 2025-11-12T17:20:52.541505-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1432"

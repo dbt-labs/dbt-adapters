@@ -9,13 +9,15 @@ from dbt.adapters.postgres import PostgresAdapter
 
 class TestPostgresFilterCatalog(TestCase):
     def test__catalog_filter_table(self):
-        used_schemas = [["a", "B"], ["a", "1234"]]
+        used_schemas = [["a", "B"], ["a", "1234"], [None, "something"]]
         column_names = ["table_name", "table_database", "table_schema", "something"]
         rows = [
             ["foo", "a", "b", "1234"],  # include
             ["foo", "a", "1234", "1234"],  # include, w/ table schema as str
             ["foo", "c", "B", "1234"],  # skip
             ["1234", "A", "B", "1234"],  # include, w/ table name as str
+            ["1234", None, "B", "1234"],  # skip, w/ table database as None
+            ["1234", "A", None, "1234"],  # skip, w/ table schema as None
         ]
         table = agate.Table(rows, column_names, agate_helper.DEFAULT_TYPE_TESTER)
 

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Gate cross-database USE/RESET USE in pre_model_hook, post_model_hook, create_schema, and drop_schema behind the use_show_apis check to prevent incorrect database switching when datasharing is not enabled
+time: 2026-04-10T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: NA

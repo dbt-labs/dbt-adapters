@@ -20,10 +20,10 @@ RUN apt-get update \
         build-essential=12.10ubuntu1 \
         git-all=1:2.43.0-1ubuntu7.1 \
         libpq-dev=16.4-0ubuntu0.24.04.2 \
-        python3.9=3.9.20-1+noble1 \
-        python3.9-dev=3.9.20-1+noble1 \
-        python3.9-distutils=3.9.20-1+noble1 \
-        python3.9-venv=3.9.20-1+noble1 \
+        python3.10=3.10.19-1+noble1 \
+        python3.10-dev=3.10.19-1+noble1 \
+        python3.10-distutils=3.10.19-1+noble1 \
+        python3.10-venv=3.10.19-1+noble1 \
         python3-pip=24.0+dfsg-1ubuntu1 \
         python3-wheel=0.42.0-2 \
     && apt-get clean \
@@ -33,7 +33,7 @@ RUN apt-get update \
         /var/tmp/*
 
 # update the default system interpreter to the newly installed version
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 
 # install python dependencies
 RUN python -m pip install --upgrade "hatch==1.13.0" --no-cache-dir --compile

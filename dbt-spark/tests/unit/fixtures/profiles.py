@@ -85,6 +85,27 @@ def target_thrift_kerberos(base_project_cfg):
 
 
 @pytest.fixture(scope="session", autouse=True)
+def target_use_ssl_thrift_no_user(base_project_cfg):
+    return config_from_parts_or_dicts(
+        base_project_cfg,
+        {
+            "outputs": {
+                "test": {
+                    "type": "spark",
+                    "method": "thrift",
+                    "use_ssl": True,
+                    "auth": "NONE",
+                    "schema": "analytics",
+                    "host": "myorg.sparkhost.com",
+                    "port": 10001,
+                }
+            },
+            "target": "test",
+        },
+    )
+
+
+@pytest.fixture(scope="session", autouse=True)
 def target_use_ssl_thrift(base_project_cfg):
     return config_from_parts_or_dicts(
         base_project_cfg,

@@ -1,0 +1,6 @@
+kind: Features
+body: 'Redshift: Use native ALTER COLUMN TYPE for VARCHAR and VARBYTE column size changes; fall back to default for other type changes'
+time: 2026-02-11T17:14:44.749245+05:30
+custom:
+    Author: tauhid621
+    Issue: "649"

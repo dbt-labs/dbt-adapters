@@ -1,0 +1,6 @@
+kind: Features
+body: Remove catalog from target_relation in incremental macro
+time: 2025-10-08T16:23:21.153185-04:00
+custom:
+    Author: michelleark
+    Issue: "1376"

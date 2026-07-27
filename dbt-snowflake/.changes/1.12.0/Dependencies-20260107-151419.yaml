@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Update dbt-adapters dep to 1.22.3
+time: 2026-01-07T15:14:19.945895-08:00
+custom:
+  Author: colin-rogers-dbt
+  PR: "1528"

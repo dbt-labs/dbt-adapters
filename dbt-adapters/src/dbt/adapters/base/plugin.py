@@ -1,6 +1,8 @@
 from pathlib import Path
 from typing import List, Optional, Type
 
+import dbt.include.global_project  # noqa: F401 — triggers compat patch for dbt-core < 1.12
+
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.protocol import AdapterProtocol
 

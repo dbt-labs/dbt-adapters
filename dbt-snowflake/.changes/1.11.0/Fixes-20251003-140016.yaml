@@ -1,0 +1,6 @@
+kind: Fixes
+body: Set client prefetch threads to 1 to prevent deadlock at exit
+time: 2025-10-03T14:00:16.074315-05:00
+custom:
+    Author: wiggzz
+    Issue: "1368"

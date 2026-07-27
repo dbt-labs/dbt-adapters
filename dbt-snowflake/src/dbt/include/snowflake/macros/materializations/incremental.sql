@@ -12,41 +12,64 @@
 
        Low-level specifics:
        If an invalid option is specified, then we will raise an
-       excpetion with corresponding message.
+       exception with a corresponding message.
 
        Languages other than SQL (like Python) will use a temporary table.
-       With the default strategy of merge, the user may choose between a temporary
-       table and view (defaulting to view).
+       With the default strategy of merge, the user may choose between a
+       temporary table and view (defaulting to view).
 
-       The append strategy can use a view because it will run a single INSERT statement.
+       The append strategy can use a view because it will run a single INSERT
+       statement.
 
-       When unique_key is none, the delete+insert and microbatch strategies can use a view beacuse a
-       single INSERT statement is run with no DELETES as part of the statement.
-       Otherwise, play it safe by using a temporary table.
+       When unique_key is none, the delete+insert and microbatch strategies
+       can use a view because a single INSERT statement is run with no DELETES
+       as part of the statement. Otherwise, play it safe by using a table.
+
+       Catalog-linked databases (Iceberg tables) do not support temporary
+       relations or transient tables — only Iceberg tables are allowed. A
+       permanent table is used as the tmp relation for CLD models.
+
+       'transient' is also available as a user-facing tmp_relation_type for
+       non-Iceberg models. Unlike session-scoped temporary tables, transient
+       tables are visible to Snowflake's lineage tracking. Note that transient
+       tables share the regular schema namespace; use the
+       snowflake__resolve_incremental_tmp_relation dispatch macro to redirect
+       tmp relations to a dedicated schema to avoid name collisions when
+       multiple runs share the same target schema.
   #} */
 
-  {% if language == "python" and tmp_relation_type is not none %}
+  {% if language == "python" and tmp_relation_type is not none and tmp_relation_type != "table" %}
     {% do exceptions.raise_compiler_error(
       "Python models currently only support 'table' for tmp_relation_type but "
        ~ tmp_relation_type ~ " was specified."
     ) %}
   {% endif %}
 
-  {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type != "table" and unique_key is not none %}
+  {#-- Python always uses a temporary table, regardless of other conditions --#}
+  {% if language != "sql" %}
+    {{ return("table") }}
+  {% endif %}
+
+  {#-- CLD schemas only support Iceberg tables; use table (not transient) --#}
+  {% if snowflake__is_catalog_linked_database(relation=config.model) %}
+    {{ return("table") }}
+  {% endif %}
+
+  {% if strategy in ["delete+insert", "microbatch"] and tmp_relation_type is not none and tmp_relation_type not in ("table", "transient") and unique_key is not none %}
     {% do exceptions.raise_compiler_error(
       "In order to maintain consistent results when `unique_key` is not none,
-      the `" ~ strategy ~ "` strategy only supports `table` for `tmp_relation_type` but "
+      the `" ~ strategy ~ "` strategy only supports `table` or `transient` for `tmp_relation_type` but "
       ~ tmp_relation_type ~ " was specified."
       )
   %}
   {% endif %}
 
-  {% if language != "sql" %}
-    {{ return("table") }}
-  {% elif tmp_relation_type == "table" %}
+  {% if tmp_relation_type == "table" %}
     {{ return("table") }}
   {% elif tmp_relation_type == "view" %}
     {{ return("view") }}
+  {% elif tmp_relation_type == "transient" %}
+    {{ return("transient") }}
   {% elif strategy in ("default", "merge", "append", "insert_overwrite") %}
     {{ return("view") }}
   {% elif strategy in ["delete+insert", "microbatch"] and unique_key is none %}
@@ -54,6 +77,27 @@
   {% else %}
     {{ return("table") }}
   {% endif %}
+{% endmacro %}
+
+
+{% macro resolve_incremental_tmp_relation(tmp_relation) %}
+  {{ return(adapter.dispatch('resolve_incremental_tmp_relation', 'dbt')(tmp_relation)) }}
+{% endmacro %}
+
+
+{% macro snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+  {#--
+    Override this macro in your project to control where the incremental
+    tmp relation is created. Useful for redirecting to a dedicated scratch
+    schema to avoid name collisions when multiple runs share the same
+    target schema.
+
+    Example:
+      {% macro snowflake__resolve_incremental_tmp_relation(tmp_relation) %}
+        {{ return(tmp_relation.incorporate(schema='scratch')) }}
+      {% endmacro %}
+  --#}
+  {{ return(tmp_relation) }}
 {% endmacro %}
 
 {% materialization incremental, adapter='snowflake', supported_languages=['sql', 'python'] -%}
@@ -67,12 +111,14 @@
   {%- set identifier = this.name -%}
   {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
 
+  {%- set is_catalog_linked_db = snowflake__is_catalog_linked_database(relation=none, catalog_relation=catalog_relation) -%}
+
   {%- set target_relation = api.Relation.create(
 	identifier=identifier,
 	schema=schema,
 	database=database,
 	type='table',
-	table_format=catalog_relation.table_format
+	table_format=catalog_relation.table_format,
   ) -%}
 
   {% set existing_relation = load_relation(this) %}
@@ -81,7 +127,15 @@
   {%- set unique_key = config.get('unique_key') -%}
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
   {% set tmp_relation_type = dbt_snowflake_get_tmp_relation_type(incremental_strategy, unique_key, language) %}
-  {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type) %}
+
+  {% if is_catalog_linked_db %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_type, catalog=catalog_relation.catalog_name, is_table=true) %}
+  {% else %}
+    {#-- Transient tables are dropped with DROP TABLE, so the relation type must be 'table' --#}
+    {% set tmp_relation_object_type = 'table' if tmp_relation_type == 'transient' else tmp_relation_type %}
+    {% set tmp_relation = make_temp_relation(this).incorporate(type=tmp_relation_object_type) %}
+  {% endif %}
+  {% set tmp_relation = resolve_incremental_tmp_relation(tmp_relation) %}
 
   {% set grant_config = config.get('grants') %}
 
@@ -117,10 +171,18 @@
     %}
 
   {% else %}
-    {#-- Create the temp relation, either as a view or as a temp table --#}
-    {% if tmp_relation_type == 'view' %}
+    {#-- Create the temp relation as a view, temp table, or transient table --#}
+    {% if is_catalog_linked_db %}
+        {%- call statement('create_tmp_relation', language=language) -%}
+          {{ create_table_as(False, tmp_relation, compiled_code, language) }}
+        {%- endcall -%}
+    {% elif tmp_relation_type == 'view' %}
         {%- call statement('create_tmp_relation') -%}
           {{ snowflake__create_view_as_with_temp_flag(tmp_relation, compiled_code, True) }}
+        {%- endcall -%}
+    {% elif tmp_relation_type == 'transient' %}
+        {%- call statement('create_tmp_relation', language=language) -%}
+          {{ snowflake__create_table_transient_sql(tmp_relation, compiled_code) }}
         {%- endcall -%}
     {% else %}
         {%- call statement('create_tmp_relation', language=language) -%}
@@ -140,12 +202,13 @@
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
     {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
-    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': tmp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
+    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': tmp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates, 'catalog_relation': catalog_relation }) %}
 
     {%- call statement('main') -%}
       {{ strategy_sql_macro_func(strategy_arg_dict) }}
     {%- endcall -%}
   {% endif %}
+
 
   {% do drop_relation_if_exists(tmp_relation) %}
 

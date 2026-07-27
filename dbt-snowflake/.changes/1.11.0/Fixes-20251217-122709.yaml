@@ -1,0 +1,6 @@
+kind: Fixes
+body: Correct volatility specification for python functions
+time: 2025-12-17T12:27:09.977378-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1504"

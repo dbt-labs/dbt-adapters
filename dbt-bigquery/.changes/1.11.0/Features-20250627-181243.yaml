@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for BigQuery resource tags via `resource_tags` configuration option
+time: 2025-06-27T18:12:43.109922+09:00
+custom:
+    Author: tnk-ysk
+    Issue: 565 577

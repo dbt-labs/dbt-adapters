@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for UDF/UDAF default arguments
+time: 2025-11-19T15:38:20.786649-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1442"

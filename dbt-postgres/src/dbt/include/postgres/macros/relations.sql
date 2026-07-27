@@ -7,68 +7,39 @@
   #}
 
   {%- call statement('relations', fetch_result=True) -%}
-    with relation as (
-        select
-            pg_rewrite.ev_class as class,
-            pg_rewrite.oid as id
-        from pg_rewrite
-    ),
-    class as (
-        select
-            oid as id,
-            relname as name,
-            relnamespace as schema,
-            relkind as kind
-        from pg_class
-    ),
-    dependency as (
-        select distinct
-            pg_depend.objid as id,
-            pg_depend.refobjid as ref
-        from pg_depend
-    ),
-    schema as (
-        select
-            pg_namespace.oid as id,
-            pg_namespace.nspname as name
-        from pg_namespace
-        where nspname != 'information_schema' and nspname not like 'pg\_%'
-    ),
-    referenced as (
-        select
-            relation.id AS id,
-            referenced_class.name ,
-            referenced_class.schema ,
-            referenced_class.kind
-        from relation
-        join class as referenced_class on relation.class=referenced_class.id
-        where referenced_class.kind in ('r', 'v', 'm')
-    ),
-    relationships as (
-        select
-            referenced.name as referenced_name,
-            referenced.schema as referenced_schema_id,
-            dependent_class.name as dependent_name,
-            dependent_class.schema as dependent_schema_id,
-            referenced.kind as kind
-        from referenced
-        join dependency on referenced.id=dependency.id
-        join class as dependent_class on dependency.ref=dependent_class.id
-        where
-            (referenced.name != dependent_class.name or
-             referenced.schema != dependent_class.schema)
-    )
+    select distinct
+        dependent_namespace.nspname as dependent_schema,
+        dependent_class.relname as dependent_name,
+        referenced_namespace.nspname as referenced_schema,
+        referenced_class.relname as referenced_name
 
-    select
-        referenced_schema.name as referenced_schema,
-        relationships.referenced_name as referenced_name,
-        dependent_schema.name as dependent_schema,
-        relationships.dependent_name as dependent_name
-    from relationships
-    join schema as dependent_schema on relationships.dependent_schema_id=dependent_schema.id
-    join schema as referenced_schema on relationships.referenced_schema_id=referenced_schema.id
-    group by referenced_schema, referenced_name, dependent_schema, dependent_name
-    order by referenced_schema, referenced_name, dependent_schema, dependent_name;
+    -- Query for views: views are entries in pg_class with an entry in pg_rewrite, but we avoid
+    -- a seq scan on pg_rewrite by leveraging the fact there is an "internal" row in pg_depend for
+    -- the view...
+    from pg_class as dependent_class
+    join pg_namespace as dependent_namespace on dependent_namespace.oid = dependent_class.relnamespace
+    join pg_depend as dependent_depend on dependent_depend.refobjid = dependent_class.oid
+        and dependent_depend.classid = 'pg_rewrite'::regclass
+        and dependent_depend.refclassid = 'pg_class'::regclass
+        and dependent_depend.deptype = 'i'
+
+    -- ... and via pg_depend (that has a row per column, hence the need for "distinct" above, and
+    -- making sure to exclude the internal row to avoid a view appearing to depend on itself)...
+    join pg_depend as joining_depend on joining_depend.objid = dependent_depend.objid
+        and joining_depend.classid = 'pg_rewrite'::regclass
+        and joining_depend.refclassid = 'pg_class'::regclass
+        and joining_depend.refobjid != dependent_depend.refobjid
+
+    -- ... we can find the tables they query from in pg_class, but excluding system tables. Note we
+    -- don't need need to exclude _dependent_ system tables, because they only query from other
+    -- system tables, and so are automatically excluded by excluding _referenced_ system tables
+    join pg_class as referenced_class on referenced_class.oid = joining_depend.refobjid
+    join pg_namespace as referenced_namespace on referenced_namespace.oid = referenced_class.relnamespace
+        and referenced_namespace.nspname != 'information_schema'
+        and referenced_namespace.nspname not like 'pg\_%'
+
+    order by
+        dependent_schema, dependent_name, referenced_schema, referenced_name;
 
   {%- endcall -%}
 

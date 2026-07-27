@@ -13,6 +13,7 @@ from tests.unit.utils import config_from_parts_or_dicts, inject_adapter
 
 
 DEFAULT_SSL_CONFIG = RedshiftSSLConfig().to_dict()
+DEFAULT_TCP_KEEPALIVE_CONFIG = {"tcp_keepalive": True}
 
 
 class TestSSLMode(TestCase):
@@ -72,6 +73,7 @@ class TestSSLMode(TestCase):
             ssl=False,
             sslmode=None,
             is_serverless=False,
+            tcp_keepalive=True,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -92,6 +94,7 @@ class TestSSLMode(TestCase):
             ssl=True,
             sslmode="verify-ca",
             is_serverless=False,
+            tcp_keepalive=True,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -112,6 +115,7 @@ class TestSSLMode(TestCase):
             ssl=True,
             sslmode="verify-full",
             is_serverless=False,
+            tcp_keepalive=True,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -132,6 +136,7 @@ class TestSSLMode(TestCase):
             ssl=True,
             sslmode="verify-ca",
             is_serverless=False,
+            tcp_keepalive=True,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -152,6 +157,7 @@ class TestSSLMode(TestCase):
             ssl=True,
             sslmode="verify-ca",
             is_serverless=False,
+            tcp_keepalive=True,
         )
 
     @mock.patch("redshift_connector.connect", MagicMock())
@@ -170,5 +176,6 @@ class TestSSLMode(TestCase):
             region=None,
             timeout=30,
             **DEFAULT_SSL_CONFIG,
+            **DEFAULT_TCP_KEEPALIVE_CONFIG,
             is_serverless=False,
         )

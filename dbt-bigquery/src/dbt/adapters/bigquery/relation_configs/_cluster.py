@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Dict, FrozenSet, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from dbt.adapters.relation_configs import RelationConfigChange
 from dbt.adapters.contracts.relation import RelationConfig
@@ -16,11 +16,11 @@ class BigQueryClusterConfig(BigQueryBaseRelationConfig):
         - https://docs.getdbt.com/reference/resource-configs/bigquery-configs#using-table-partitioning-and-clustering
         - https://cloud.google.com/bigquery/docs/reference/standard-sql/data-definition-language#clustering_column_list
 
-    - fields: set of columns to cluster on
+    - fields: ordered columns to cluster on
         - Note: can contain up to four columns
     """
 
-    fields: FrozenSet[str]
+    fields: Tuple[str, ...]
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:
@@ -35,13 +35,13 @@ class BigQueryClusterConfig(BigQueryBaseRelationConfig):
             # users may input a single field as a string
             if isinstance(cluster_by, str):
                 cluster_by = [cluster_by]
-            config_dict.update({"fields": frozenset(cluster_by)})
+            config_dict.update({"fields": tuple(cluster_by)})
 
         return config_dict
 
     @classmethod
     def parse_bq_table(cls, table: BigQueryTable) -> Dict[str, Any]:
-        config_dict = {"fields": frozenset(table.clustering_fields)}
+        config_dict = {"fields": tuple(table.clustering_fields)}
         return config_dict
 
 

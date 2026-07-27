@@ -1,0 +1,6 @@
+kind: Features
+body: Migrate `list_schemas` and `check_schema_exists` to SVV_ALL_SCHEMAS when `redshift_use_show_apis` flag is enabled, enabling cross-database schema listing
+time: 2026-02-18T19:57:03.984597+05:30
+custom:
+    Author: tauhid621
+    Issue: "1623"

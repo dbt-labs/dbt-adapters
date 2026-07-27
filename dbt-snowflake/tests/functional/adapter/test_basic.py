@@ -89,7 +89,7 @@ class TestGetCatalogForSingleRelationSnowflake(BaseGetCatalogForSingleRelation):
                 "bytes": StatsItem(
                     id="bytes",
                     label="Approximate Size",
-                    value=2048,
+                    value=1024,
                     include=True,
                     description="Size of the table as reported by Snowflake",
                 ),

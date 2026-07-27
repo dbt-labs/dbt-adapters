@@ -1,3 +1,12 @@
+# **what?**
+# Orchestrates the internal publishing process: runs tests and publishes packages to AWS CodeArtifact.
+
+# **why?**
+# Ensures packages are tested before being published internally for use by dbt Cloud and other internal tools.
+
+# **when?**
+# This workflow can be manually triggered via workflow_dispatch or called by other workflows (like scheduled-publishing.yml).
+
 name: "Publish internal"
 run-name: "Publish internal - ${{ github.actor }} - package:${{ inputs.package }} branch:${{ inputs.branch }} skip-unit-tests:${{ inputs.skip-unit-tests }} skip-integration-tests:${{ inputs.skip-integration-tests }}"
 

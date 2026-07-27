@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixed a bug where a BigQuery job that fails with an internal error causes dbt to poll getQueryResults until the full job_execution_timeout_seconds elapses (potentially hours) instead of failing fast. The polling retry now short-circuits immediately when the underlying job has reached a terminal failed state, and the retry budget is controlled by job_retry_deadline_seconds (default 10 min) rather than job_execution_timeout_seconds.
+time: 2026-05-19T23:00:00.000000+05:30
+custom:
+    Author: aahelguha
+    Issue: "1956"

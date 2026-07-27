@@ -8,7 +8,7 @@
 {% macro default__create_columns(relation, columns) %}
   {% for column in columns %}
     {% call statement() %}
-      alter table {{ relation.render() }} add column "{{ column.name }}" {{ column.data_type }};
+      alter table {{ relation.render() }} add column {{ adapter.quote(column.name) }} {{ column.expanded_data_type }};
     {% endcall %}
   {% endfor %}
 {% endmacro %}
@@ -158,21 +158,31 @@
             and not (
                 --avoid updating the record's valid_to if the latest entry is marked as deleted
                 snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-                and snapshotted_data.{{ columns.dbt_valid_to }} is null
+                and
+                {% if config.get('dbt_valid_to_current') -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+                {%- else -%}
+                    snapshotted_data.{{ columns.dbt_valid_to }} is null
+                {%- endif %}
             )
             {%- endif %}
     )
     {%- endif %}
 
     {%- if strategy.hard_deletes == 'new_record' %}
-        {% set source_sql_cols = get_column_schema_from_query(source_sql) %}
+        {% set snapshotted_cols = get_list_of_column_names(get_columns_in_relation(target_relation)) %}
+        {% set source_col_names = get_columns_in_query(source_sql) %}
     ,
     deletion_records as (
 
         select
             'insert' as dbt_change_type,
-            {%- for col in source_sql_cols -%}
-            snapshotted_data.{{ adapter.quote(col.column) }},
+            {%- for col_name in source_col_names -%}
+            {%- if col_name in snapshotted_cols -%}
+            snapshotted_data.{{ adapter.quote(col_name) }},
+            {%- else -%}
+            source_data.{{ adapter.quote(col_name) }},
+            {%- endif -%}
             {% endfor -%}
             {%- if strategy.unique_key | is_list -%}
                 {%- for key in strategy.unique_key -%}
@@ -193,7 +203,12 @@
         and not (
             --avoid inserting a new record if the latest one is marked as deleted
             snapshotted_data.{{ columns.dbt_is_deleted }} = 'True'
-            and snapshotted_data.{{ columns.dbt_valid_to }} is null
+            and
+            {% if config.get('dbt_valid_to_current') -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} = {{ config.get('dbt_valid_to_current') }}
+            {%- else -%}
+                snapshotted_data.{{ columns.dbt_valid_to }} is null
+            {%- endif %}
             )
 
     )

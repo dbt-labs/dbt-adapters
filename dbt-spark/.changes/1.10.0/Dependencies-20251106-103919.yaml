@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Cap logbook at less than 1.9 to avoid breaking change
+time: 2025-11-06T10:39:19.285967-06:00
+custom:
+  Author: QMalcolm
+  PR: N/A

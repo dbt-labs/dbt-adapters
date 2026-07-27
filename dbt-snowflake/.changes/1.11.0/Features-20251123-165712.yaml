@@ -1,0 +1,6 @@
+kind: Features
+body: Log when underscores in Snowflake account names are replaced with hyphens.
+time: 2025-11-23T16:57:12.318393393-07:00
+custom:
+    Author: nishan-soni
+    Issue: "1467"

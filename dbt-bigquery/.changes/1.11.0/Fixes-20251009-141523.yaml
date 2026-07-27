@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix BigFrames python model + oauth + notebook template by adding a Request to
+  creds.refresh calll
+time: 2025-10-09T14:15:23.578214-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1379"

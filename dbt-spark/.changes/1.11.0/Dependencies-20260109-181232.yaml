@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Add support for Spark v4.x
+time: 2026-01-09T18:12:32.7973+01:00
+custom:
+    Author: thmshmm
+    PR: "1537"

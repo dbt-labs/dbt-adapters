@@ -1,3 +1,4 @@
+from dbt.adapters.snowflake.adapter_response import SnowflakeAdapterResponse
 from dbt.adapters.snowflake.column import SnowflakeColumn
 from dbt.adapters.snowflake.connections import SnowflakeConnectionManager
 from dbt.adapters.snowflake.connections import SnowflakeCredentials

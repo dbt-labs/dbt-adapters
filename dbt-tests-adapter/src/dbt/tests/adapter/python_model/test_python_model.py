@@ -172,6 +172,99 @@ class BasePythonIncrementalTests:
         )
 
 
+python_model_meta_get = """
+def model(dbt, session):
+    dbt.config(
+        materialized='table',
+        meta={
+            'owner': 'data-team',
+            'priority': 'high',
+            'version': 2
+        }
+    )
+    # Use config.meta_get to access meta values
+    owner = dbt.config.meta_get('owner')
+    priority = dbt.config.meta_get('priority', 'low')
+    version = dbt.config.meta_get('version')
+    missing = dbt.config.meta_get('nonexistent', 'default-value')
+
+    # Create a simple dataframe with meta info
+    data = [(1, owner, priority, str(version), missing)]
+    return session.createDataFrame(data, ['id', 'owner', 'priority', 'version', 'missing'])
+"""
+
+schema_yml_with_meta = """
+version: 2
+models:
+  - name: meta_from_schema
+    config:
+      materialized: table
+      meta:
+        owner: 'yaml-owner'
+        environment: 'production'
+"""
+
+python_model_meta_from_schema = """
+def model(dbt, session):
+    # Access meta values defined in schema.yml
+    owner = dbt.config.meta_get('owner')
+    environment = dbt.config.meta_get('environment', 'dev')
+
+    data = [(1, owner, environment)]
+    return session.createDataFrame(data, ['id', 'owner', 'environment'])
+"""
+
+
+class BasePythonMetaGetTests:
+    """Test dbt.config.meta_get() functionality in Python models"""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "meta_test.py": python_model_meta_get,
+            "meta_from_schema.py": python_model_meta_from_schema,
+            "schema.yml": schema_yml_with_meta,
+        }
+
+    def test_meta_get_basic(self, project):
+        """Test that dbt.config.meta_get() works with meta defined in Python model"""
+        results = run_dbt(["run", "-s", "meta_test"])
+        assert len(results) == 1
+
+        # Verify the model created successfully
+        test_schema_relation = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema
+        )
+        result = project.run_sql(
+            f"select owner, priority, version, missing from {test_schema_relation}.meta_test",
+            fetch="one",
+        )
+
+        # Check that meta values were correctly accessed
+        assert result[0] == "data-team"  # owner from meta
+        assert result[1] == "high"  # priority from meta
+        assert result[2] == "2"  # version from meta (converted to string)
+        assert result[3] == "default-value"  # missing key returned default
+
+    def test_meta_get_from_schema(self, project):
+        """Test that dbt.config.meta_get() works with meta defined in schema.yml"""
+        results = run_dbt(["run", "-s", "meta_from_schema"])
+        assert len(results) == 1
+
+        # Verify the model created successfully
+        test_schema_relation = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema
+        )
+        result = project.run_sql(
+            f"select owner, environment from {test_schema_relation}.meta_from_schema",
+            fetch="one",
+        )
+
+        # Check that meta values from schema.yml were correctly accessed
+        assert result[0] == "yaml-owner"  # owner from schema.yml
+        assert result[1] == "production"  # environment from schema.yml
+
+
 class _BaseSkipRefFiltering:
     @pytest.fixture(scope="class")
     def model_that_refs_input_py(self) -> str:

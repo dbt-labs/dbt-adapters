@@ -27,6 +27,11 @@ from dbt.adapters.contracts.relation import (
     RelationConfig,
     RelationType,
 )
+from dbt.adapters.relation_configs import (
+    RelationConfigBase,
+    RelationConfigValidationMixin,
+    RelationConfigValidationRule,
+)
 from dbt.adapters.exceptions import (
     ApproximateMatchError,
     MultipleDatabasesNotAllowedError,
@@ -43,6 +48,51 @@ class EventTimeFilter(FakeAPIObject):
     field_name: str
     start: Optional[datetime] = None
     end: Optional[datetime] = None
+
+
+@dataclass(frozen=True, eq=False, repr=False)
+class FunctionConfig(RelationConfigBase, RelationConfigValidationMixin):
+    language: str
+    type: str
+    runtime_version: Optional[str] = None
+    entry_point: Optional[str] = None
+
+    def _validate_runtime_version(self) -> bool:
+        if self.language == "python":
+            return self.runtime_version is not None
+        else:
+            return True
+
+    def _validate_entry_point(self) -> bool:
+        if self.language == "python":
+            return self.entry_point is not None
+        else:
+            return True
+
+    @property
+    def validation_rules(self) -> Set[RelationConfigValidationRule]:
+        return {
+            RelationConfigValidationRule(
+                validation_check=self.language != "" and self.language is not None,
+                validation_error=DbtRuntimeError("A `language` is required for functions"),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.type != "" and self.type is not None,
+                validation_error=DbtRuntimeError("A `type` is required for functions"),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.language != "python" or self.runtime_version is not None,
+                validation_error=DbtRuntimeError(
+                    "A `runtime_version` is required for python functions"
+                ),
+            ),
+            RelationConfigValidationRule(
+                validation_check=self.language != "python" or self.entry_point is not None,
+                validation_error=DbtRuntimeError(
+                    "An `entry_point` is required for python functions"
+                ),
+            ),
+        }
 
 
 @dataclass(frozen=True, eq=False, repr=False)
@@ -376,12 +426,17 @@ class BaseRelation(FakeAPIObject, Hashable):
         return hash(self.render())
 
     def __str__(self) -> str:
-        rendered = self.render() if self.limit is None else self.render_limited()
+        # TODO: This function seems to have more if's than it needs to. We should see if we can simplify it.
+        if self.is_function:
+            # If it's a function we skip all special rendering logic and just return the raw render
+            rendered = self.render()
+        else:
+            rendered = self.render() if self.limit is None else self.render_limited()
 
-        # Limited subquery is wrapped by the event time filter subquery, and not the other way around.
-        # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
-        if self.event_time_filter:
-            rendered = self.render_event_time_filtered(rendered)
+            # Limited subquery is wrapped by the event time filter subquery, and not the other way around.
+            # This is because in the context of resolving limited refs, we care more about performance than reliably producing a sample of a certain size.
+            if self.event_time_filter:
+                rendered = self.render_event_time_filtered(rendered)
 
         return rendered
 
@@ -426,6 +481,10 @@ class BaseRelation(FakeAPIObject, Hashable):
     def is_pointer(self) -> bool:
         return self.type == RelationType.PointerTable
 
+    @property
+    def is_function(self) -> bool:
+        return self.type == RelationType.Function
+
     @classproperty
     def Table(cls) -> str:
         return str(RelationType.Table)
@@ -451,8 +510,28 @@ class BaseRelation(FakeAPIObject, Hashable):
         return str(RelationType.PointerTable)
 
     @classproperty
+    def Function(cls) -> str:
+        return str(RelationType.Function)
+
+    @classproperty
     def get_relation_type(cls) -> Type[RelationType]:
         return RelationType
+
+    def get_function_config(self, model: Dict[str, Any]) -> Optional[FunctionConfig]:
+        # TODO: We shouldn't have to check the model.resource_type here. We should be alble to do self.is_function instead.
+        # However, somehow when we get here self.type is None, and thus self.is_function is False.
+        if model.get("resource_type") == "function":
+            return FunctionConfig(
+                language=model.get("language", ""),
+                type=model.get("config", {}).get("type", ""),
+                runtime_version=model.get("config", {}).get("runtime_version", None),
+                entry_point=model.get("config", {}).get("entry_point", None),
+            )
+        else:
+            return None
+
+    def get_function_macro_name(self, config: FunctionConfig) -> str:
+        return f"{config.type}_function_{config.language}"
 
 
 Info = TypeVar("Info", bound="InformationSchema")

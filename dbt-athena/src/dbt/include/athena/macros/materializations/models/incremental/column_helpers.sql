@@ -7,7 +7,7 @@
       alter {{ relation.type }} {{ relation.render_hive() }}
           add columns (
             {%- for column in add_columns -%}
-                {{ column.name }} {{ ddl_data_type(column.data_type, table_type) }}{{ ', ' if not loop.last }}
+                {{ column.quoted_hive }} {{ ddl_data_type(column.data_type, table_type) }}{{ ', ' if not loop.last }}
             {%- endfor -%}
           )
   {%- endset -%}
@@ -24,11 +24,12 @@
 
   {%- for column in remove_columns -%}
     {% set sql -%}
-      alter {{ relation.type }} {{ relation.render_hive() }} drop column {{ column.name }}
+      alter {{ relation.type }} {{ relation.render_hive() }} drop column {{ column.quoted_hive }}
     {% endset %}
     {% do run_query(sql) %}
   {%- endfor -%}
 {% endmacro %}
+
 
 {% macro alter_relation_replace_columns(relation, replace_columns = none, table_type = 'hive') -%}
   {% if replace_columns is none %}
@@ -39,7 +40,7 @@
       alter {{ relation.type }} {{ relation.render_hive() }}
           replace columns (
             {%- for column in replace_columns -%}
-                {{ column.name }} {{ ddl_data_type(column.data_type, table_type) }}{{ ', ' if not loop.last }}
+                {{ column.quoted_hive }} {{ ddl_data_type(column.data_type, table_type) }}{{ ', ' if not loop.last }}
             {%- endfor -%}
           )
   {%- endset -%}

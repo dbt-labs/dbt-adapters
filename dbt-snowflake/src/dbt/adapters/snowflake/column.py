@@ -1,11 +1,23 @@
 from dataclasses import dataclass
+import re
+from typing import Optional
 
 from dbt.adapters.base.column import Column
 from dbt_common.exceptions import DbtRuntimeError
 
+COLLATE_PATTERN = re.compile(r"collate\s+'([^']+)'(\s*rtrim)?", re.IGNORECASE)
+
+SNOWFLAKE_MAX_VARCHAR_LENGTH = 16777216
+ICEBERG_MAX_VARCHAR_LENGTH = 134217728
+ICEBERG_VARCHAR_PATTERN = re.compile(
+    r"\bVARCHAR\(" + str(ICEBERG_MAX_VARCHAR_LENGTH) + r"\)", re.IGNORECASE
+)
+
 
 @dataclass
 class SnowflakeColumn(Column):
+    collation: Optional[str] = None
+
     def is_integer(self) -> bool:
         # everything that smells like an int is actually a NUMBER(38, 0)
         return False
@@ -38,18 +50,66 @@ class SnowflakeColumn(Column):
             raise DbtRuntimeError("Called string_size() on non-string field!")
 
         if self.dtype == "text" or self.char_size is None:
-            return 16777216
+            return SNOWFLAKE_MAX_VARCHAR_LENGTH
         else:
             return int(self.char_size)
 
+    @property
+    def expanded_data_type(self) -> str:
+        """Include collation clause for string types where present."""
+        if self.collation and self.is_string():
+            return f"{self.data_type} collate '{self.collation}'"
+
+        return self.data_type
+
     @classmethod
     def from_description(cls, name: str, raw_data_type: str) -> "SnowflakeColumn":
-        # We want to pass through numeric parsing for composite types
+        """
+        Parse column information from raw data type string.
+        Handles Snowflake-specific syntax including COLLATE clause.
+
+        Examples:
+            VARCHAR(16777216) COLLATE 'en-ci-rtrim'
+            VARCHAR(100)
+            NUMBER(38,0)
+        """
+
+        # For composite types, skip numeric parsing and treat the type opaquely,
+        # only normalizing Iceberg-sized VARCHARs within the definition.
         if raw_data_type.lower().startswith(("array", "object", "map", "vector")):
-            column = cls(name, raw_data_type, None, None, None)
-        else:
-            column = super().from_description(name, raw_data_type)  # type:ignore
-        return column
+            normalized = cls._normalize_iceberg_varchar(raw_data_type)
+            return cls(name, normalized, None, None, None)
+
+        collation = None
+        # Check if there's a COLLATE clause and extract it
+        if raw_data_type.lower().startswith(
+            ("varchar", "character varying", "character", "varchar", "text")
+        ):
+            collate_match = COLLATE_PATTERN.search(raw_data_type, re.IGNORECASE)
+            collation = collate_match.group(1) if collate_match else None
+
+        # Parse the base type using parent class logic
+        raw_data_type_without_collation = COLLATE_PATTERN.sub("", raw_data_type).strip()
+        base_column = super().from_description(name, raw_data_type_without_collation)
+
+        # Create a SnowflakeColumn with the parsed information plus collation
+        return cls(
+            column=base_column.column,
+            dtype=base_column.dtype,
+            char_size=base_column.char_size,
+            numeric_precision=base_column.numeric_precision,
+            numeric_scale=base_column.numeric_scale,
+            collation=collation,
+        )
+
+    @staticmethod
+    def _normalize_iceberg_varchar(raw_data_type: str) -> str:
+        """Normalize Iceberg VARCHAR(134217728) to Snowflake VARCHAR(16777216) in composite types
+        (OBJECT, ARRAY, MAP, VECTOR)."""
+        return ICEBERG_VARCHAR_PATTERN.sub(
+            f"VARCHAR({SNOWFLAKE_MAX_VARCHAR_LENGTH})",
+            raw_data_type,
+        )
 
     def is_array(self) -> bool:
         return self.dtype.lower().startswith("array")

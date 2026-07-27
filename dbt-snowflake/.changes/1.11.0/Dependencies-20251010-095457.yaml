@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Upgrade snowflake-connector-python to 4.0.0
+time: 2025-10-10T09:54:57.268488-05:00
+custom:
+    Author: wiggzz
+    PR: "1368"

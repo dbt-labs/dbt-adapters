@@ -81,7 +81,7 @@ class TestDescribeRelation:
         assert results.partition.field == "record_date"
         assert results.partition.data_type == "datetime"
         assert results.partition.granularity == "day"
-        assert results.cluster.fields == frozenset({"id"})
+        assert results.cluster.fields == ("id",)
         assert results.options.enable_refresh is True
         assert results.options.refresh_interval_minutes == 30
 
@@ -95,6 +95,6 @@ class TestDescribeRelation:
         assert results.partition.field == "value"
         assert results.partition.data_type == "int64"
         assert results.partition.range == {"start": 0, "end": 500, "interval": 50}
-        assert results.cluster.fields == frozenset({"id"})
+        assert results.cluster.fields == ("id",)
         assert results.options.enable_refresh is False
         assert results.options.refresh_interval_minutes == 30  # BQ returns it to the default

@@ -1,0 +1,7 @@
+kind: Fixes
+body: Lazy-load aiplatform and nbformat imports to fix dbt parse performance regression
+  introduced in 1.9.2 by BigFrames support.
+time: 2026-02-06T12:00:00.000000-08:00
+custom:
+  Author: "b-per"
+  Issue: "1604"

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Enable discovering pre-existing functions by updating `list_relations_without_caching` to include function relations
+time: 2026-03-24T00:00:00.000000-06:00
+custom:
+  Author: QMalcolm
+  Issue: "1488"

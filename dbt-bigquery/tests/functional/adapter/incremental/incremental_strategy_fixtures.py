@@ -366,6 +366,52 @@ where date_day in ({{ config.get("partitions") | join(",") }})
 -- Test comment to prevent recurrence of https://github.com/dbt-labs/dbt-bigquery/issues/896
 """.lstrip()
 
+overwrite_copy_partitions_with_partitions_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        cluster_by="id",
+        partitions=["CAST('2020-01-01' AS DATE)","'2020-01-02'"],
+        partition_by={
+            "field": "date_day",
+            "data_type": "date",
+            "copy_partitions": true
+        }
+    )
+}}
+
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        select 1 as id, cast('2020-01-01' as date) as date_day union all
+        select 2 as id, cast('2020-01-01' as date) as date_day union all
+        select 3 as id, cast('2020-01-01' as date) as date_day union all
+        select 4 as id, cast('2020-01-01' as date) as date_day
+
+    {% else %}
+
+        -- we want to overwrite the 4 records in the 2020-01-01 partition
+        -- with the 2 records below, but add two more in the 2020-01-02 partition
+        select 10 as id, cast('2020-01-01' as date) as date_day union all
+        select 20 as id, cast('2020-01-01' as date) as date_day union all
+        select 30 as id, cast('2020-01-02' as date) as date_day union all
+        select 40 as id, cast('2020-01-02' as date) as date_day
+
+    {% endif %}
+
+)
+
+select * from data
+
+{% if is_incremental() %}
+where date_day in ({{ config.get("partitions") | join(",") }})
+{% endif %}
+-- Test comment to prevent recurrence of https://github.com/dbt-labs/dbt-bigquery/issues/896
+""".lstrip()
+
 overwrite_range_sql = """
 {{
     config(
@@ -411,6 +457,55 @@ select * from data
 
 {% if is_incremental() %}
 where date_int >= _dbt_max_partition
+{% endif %}
+""".lstrip()
+
+overwrite_range_with_interval_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        cluster_by="id",
+        partition_by={
+            "field": "id_bucket",
+            "data_type": "int64",
+            "range": {
+                "start": 0,
+                "end": 100,
+                "interval": 10
+            }
+        }
+    )
+}}
+
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        -- all 4 rows are in partition [0, 10)
+        select 1 as id, 1 as id_bucket union all
+        select 2 as id, 2 as id_bucket union all
+        select 3 as id, 3 as id_bucket union all
+        select 4 as id, 4 as id_bucket
+
+    {% else %}
+
+        -- these 3 rows are also in partition [0, 10)
+        -- insert_overwrite should replace the entire partition,
+        -- deleting all 4 original rows and inserting these 3
+        select 10 as id, 4 as id_bucket union all
+        select 20 as id, 5 as id_bucket union all
+        select 30 as id, 6 as id_bucket
+
+    {% endif %}
+
+)
+
+select * from data
+
+{% if is_incremental() %}
+where id_bucket >= _dbt_max_partition
 {% endif %}
 """.lstrip()
 

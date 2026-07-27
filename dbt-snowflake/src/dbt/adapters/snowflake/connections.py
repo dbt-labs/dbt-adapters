@@ -38,6 +38,8 @@ from snowflake.connector.errors import (
     BindUploadError,
 )
 
+from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
+
 from dbt_common.exceptions import (
     DbtInternalError,
     DbtRuntimeError,
@@ -47,6 +49,7 @@ from dbt_common.exceptions import DbtDatabaseError
 from dbt_common.record import get_record_mode_from_env, RecorderMode
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
+from dbt.adapters.snowflake.adapter_response import SnowflakeAdapterResponse
 from dbt.adapters.sql import SQLConnectionManager
 from dbt.adapters.events.logging import AdapterLogger
 from dbt_common.events.functions import warn_or_error
@@ -63,12 +66,25 @@ if TYPE_CHECKING:
 
 logger = AdapterLogger("Snowflake")
 
-if os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+
+def setup_snowflake_logging(level: str):
     for logger_name in ["snowflake.connector", "botocore", "boto3"]:
-        logger.debug(f"Setting {logger_name} to DEBUG")
-        logger.set_adapter_dependency_log_level(logger_name, "DEBUG")
+        logger.debug(f"Setting {logger_name} to {level} (file logging only)")
+        logger.set_adapter_dependency_log_level(logger_name, level)
+
+
+if snowflake_level := os.getenv("DBT_SNOWFLAKE_CONNECTOR_DEBUG_LOGGING"):
+    if snowflake_level.upper() in ["INFO", "DEBUG", "ERROR"]:
+        setup_snowflake_logging(snowflake_level.upper())
+    else:
+        setup_snowflake_logging("DEBUG")
+else:
+    setup_snowflake_logging("ERROR")
+
 
 _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
+
+ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
 
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
@@ -114,6 +130,13 @@ class SnowflakeCredentials(Credentials):
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
+    workload_identity_provider: Optional[str] = None
+    workload_identity_entra_resource: Optional[str] = None
+    # Setting this to 0.0 will disable platform detection which adds query latency
+    # this should only be set to a non-zero value if you are using WIF authentication
+    platform_detection_timeout_seconds: Optional[float] = (
+        None if workload_identity_provider else 0.0
+    )
 
     def __post_init__(self):
         if self.authenticator != "oauth" and (self.oauth_client_secret or self.oauth_client_id):
@@ -124,24 +147,35 @@ class SnowflakeCredentials(Credentials):
                 )
             )
 
-        if self.authenticator not in ["oauth", "jwt"]:
+        # workload_identity is matched case-insensitively to mirror auth_args(); the
+        # other authenticators stay case-sensitive to preserve existing behavior
+        is_workload_identity = (self.authenticator or "").lower() == "workload_identity"
+        if (
+            self.authenticator not in ["oauth", "jwt", "programmatic_access_token"]
+            and not is_workload_identity
+        ):
             if self.token:
                 warn_or_error(
                     AdapterEventWarning(
                         base_msg=(
-                            "The token parameter was set, but the authenticator was "
-                            "not set to 'oauth' or 'jwt'."
+                            "The token parameter was set, but the authenticator was not set "
+                            "to 'oauth', 'jwt', 'programmatic_access_token', or 'workload_identity'."
                         )
                     )
                 )
 
             if not self.user:
-                # The user attribute is only optional if 'authenticator' is 'jwt' or 'oauth'
+                # The user attribute is only optional if 'authenticator' is
+                # 'jwt', 'oauth', 'programmatic_access_token', or 'workload_identity'
                 warn_or_error(
                     AdapterEventError(base_msg="Invalid profile: 'user' is a required property.")
                 )
 
-        self.account = self.account.replace("_", "-")
+        self.account, sub_count = re.subn("_", "-", self.account)
+        if sub_count:
+            logger.debug(
+                "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
+            )
 
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
         # having both of these set to `True` could lead to hanging open connections, so it should be opt-in behavior
@@ -182,6 +216,9 @@ class SnowflakeCredentials(Credentials):
             "insecure_mode",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
+            "workload_identity_provider",
+            "workload_identity_entra_resource",
+            "platform_detection_timeout_seconds",
         )
 
     def auth_args(self):
@@ -231,6 +268,42 @@ class SnowflakeCredentials(Credentials):
                 # passed into the snowflake.connect method should still be 'oauth'
                 result["token"] = self.token
                 result["authenticator"] = "oauth"
+
+            elif self.authenticator == "programmatic_access_token":
+                # Snowflake Programmatic Access Tokens (PATs) are passed directly
+                # to the connector via the `token` field. The connector handles
+                # PAT auth natively since snowflake-connector-python v3.12.0.
+                result["token"] = self.token
+
+            elif self.authenticator.lower() == "workload_identity":
+                result["authenticator"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+
+                if (
+                    not self.workload_identity_provider
+                    or self.workload_identity_provider.upper()
+                    not in ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS
+                ):
+
+                    raise DbtConfigError(
+                        "workload_identity_provider must be set to one of the following values if authenticator='workload_identity'!:\n"
+                        f"{', '.join(ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS)}\n\n"
+                        f"Provided workload_identity_provider was '{self.workload_identity_provider}'"
+                    )
+
+                result["workload_identity_provider"] = self.workload_identity_provider
+
+                if self.token:
+                    result["token"] = self.token
+
+                if self.workload_identity_entra_resource:
+                    if self.workload_identity_provider.upper() != "AZURE":
+                        raise DbtConfigError(
+                            "workload_identity_entra_resource can only be set if workload_identity_provider is Azure"
+                        )
+
+                    result["workload_identity_entra_resource"] = (
+                        self.workload_identity_entra_resource
+                    )
 
             # enable id token cache for linux
             result["client_store_temporary_credential"] = True
@@ -393,7 +466,9 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
+                    platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
+                    ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
                     **creds.auth_args(),
                 )
 
@@ -448,17 +523,40 @@ class SnowflakeConnectionManager(SQLConnectionManager):
         logger.debug("Cancel query '{}': {}".format(connection_name, res))
 
     @classmethod
-    def get_response(cls, cursor) -> AdapterResponse:
+    def get_response(cls, cursor) -> SnowflakeAdapterResponse:
         code = cursor.sqlstate
 
         if code is None:
             code = "SUCCESS"
         query_id = str(cursor.sfqid) if cursor.sfqid is not None else None
-        return AdapterResponse(
-            _message="{} {}".format(code, cursor.rowcount),
-            rows_affected=cursor.rowcount,
+
+        # Extract DML stats from cursor.stats if available (snowflake-connector-python >= 4.2.0)
+        rows_inserted = None
+        rows_deleted = None
+        rows_updated = None
+        rows_duplicates = None
+        if hasattr(cursor, "stats") and cursor.stats is not None:
+            stats = cursor.stats
+            rows_inserted = getattr(stats, "num_rows_inserted", None)
+            rows_deleted = getattr(stats, "num_rows_deleted", None)
+            rows_updated = getattr(stats, "num_rows_updated", None)
+            rows_duplicates = getattr(stats, "num_dml_duplicates", None)
+
+        # For CTAS and similar operations, rowcount is typically 1 (the success message row)
+        # even when many rows are inserted. Use rows_inserted from stats for accurate reporting.
+        rows_affected = cursor.rowcount
+        if rows_inserted is not None and rows_inserted > 0:
+            rows_affected = rows_inserted
+
+        return SnowflakeAdapterResponse(
+            _message="{} {}".format(code, rows_affected),
+            rows_affected=rows_affected,
             code=code,
             query_id=query_id,
+            rows_inserted=rows_inserted,
+            rows_deleted=rows_deleted,
+            rows_updated=rows_updated,
+            rows_duplicates=rows_duplicates,
         )
 
     # disable transactional logic by default on Snowflake
