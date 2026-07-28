@@ -42,6 +42,44 @@ for package in packages:
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
 
+# Redshift type OID -> the data type name SHOW COLUMNS reports for that type.
+#
+# Used to describe temporary relations from the driver's cursor description when the
+# catalog cannot see them (see RedshiftAdapter.get_columns_in_temp_relation). Keying on the
+# OID rather than on redshift_connector's own type labels keeps this independent of driver
+# label changes, and lets the values match SHOW COLUMNS exactly -- necessary because
+# incremental schema comparison diffs columns described this way against columns of the
+# target relation, which are described by SHOW COLUMNS.
+#
+# Verified against `SHOW COLUMNS FROM TABLE` on Redshift 1.0.358853. Note in particular
+# that bpchar reports as "character" (not "character varying") and varbyte reports as
+# "binary varying" (not "varbyte"); getting either wrong produces a spurious type change
+# on every run.
+TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
+    16: "boolean",  # bool
+    20: "bigint",  # int8
+    21: "smallint",  # int2
+    23: "integer",  # int4
+    25: "character varying",  # text
+    700: "real",  # float4
+    701: "double precision",  # float8
+    1042: "character",  # bpchar
+    1043: "character varying",  # varchar
+    1082: "date",  # date
+    1083: "time without time zone",  # time
+    1114: "timestamp without time zone",  # timestamp
+    1184: "timestamp with time zone",  # timestamptz
+    1188: "interval year to month",  # intervaly2m
+    1190: "interval day to second",  # intervald2s
+    1266: "time with time zone",  # timetz
+    1700: "numeric",  # numeric
+    2935: "hllsketch",  # hllsketch
+    3000: "geometry",  # geometry
+    3001: "geography",  # geography
+    4000: "super",  # super
+    6551: "binary varying",  # varbyte
+}
+
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
     default=False,
@@ -198,6 +236,78 @@ class RedshiftAdapter(SQLAdapter):
         Returns True when the ``datasharing`` profile config is enabled.
         """
         return bool(self.config.credentials.datasharing)
+
+    @available
+    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[Any]:
+        """Describe a temporary relation without consulting the catalog.
+
+        When the connection's database is a datashare consumer database
+        (``svv_redshift_databases.database_type = 'shared'``), temporary relations are
+        created and remain queryable but are invisible to ``information_schema.columns``,
+        ``pg_attribute`` and ``svv_columns`` alike -- the session's temp schema belongs to
+        the default database while catalog views resolve against the consumer database.
+        ``SHOW COLUMNS`` cannot address them either, since it requires a database and
+        schema and temporary relations carry neither.
+
+        Reading the driver's cursor description is the only route that does not depend on
+        database context. Type codes are mapped back to the names ``SHOW COLUMNS`` reports
+        so that columns described this way compare equal to columns of the target relation
+        in ``check_for_schema_changes``.
+        """
+        sql = f"select * from {self.quote(relation.identifier)} limit 0"
+        _, cursor = self.connections.add_select_query(sql)
+
+        columns = []
+        for description in cursor.description or []:
+            # PEP 249: (name, type_code, display_size, internal_size, precision, scale, null_ok)
+            column_name = description[0]
+            type_code = description[1]
+            internal_size = description[3] if len(description) > 3 else None
+            precision = description[4] if len(description) > 4 else None
+            scale = description[5] if len(description) > 5 else None
+
+            data_type = self._temp_relation_data_type(type_code)
+
+            # Only string and exact-numeric types feed size into Column.data_type, which is
+            # what schema comparison comes down to. For every other type the size fields are
+            # ignored, so leave them unset rather than propagate the driver's display widths.
+            char_size = None
+            numeric_precision = None
+            numeric_scale = None
+            if data_type in ("character varying", "character"):
+                char_size = next((s for s in (precision, internal_size) if s and s > 0), None)
+            elif data_type == "numeric":
+                numeric_precision = precision
+                numeric_scale = scale
+
+            columns.append(
+                self.Column(
+                    column=column_name,
+                    dtype=data_type,
+                    char_size=char_size,
+                    numeric_precision=numeric_precision,
+                    numeric_scale=numeric_scale,
+                )
+            )
+
+        return columns
+
+    def _temp_relation_data_type(self, type_code: Any) -> str:
+        """Map a driver type code onto the data type name ``SHOW COLUMNS`` reports."""
+        data_type = TYPE_OID_TO_DATA_TYPE.get(type_code)
+        if data_type is not None:
+            return data_type
+
+        # Unrecognised type code: the driver's own label is closer than nothing, but it is
+        # not guaranteed to match SHOW COLUMNS, so surface it.
+        fallback = str(self.connections.data_type_code_to_name(type_code)).lower()
+        logger.debug(
+            f"No known Redshift data type for type code {type_code}; "
+            f"falling back to {fallback!r}. Schema comparison for this column may be "
+            f"inaccurate -- please report this at "
+            f"https://github.com/dbt-labs/dbt-adapters/issues"
+        )
+        return fallback
 
     @available
     def drop_without_cascade(self) -> bool:

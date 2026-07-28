@@ -130,7 +130,26 @@
   {% if redshift__use_show_apis() and relation.database and relation.schema %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
-    {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
+    {%- set columns = redshift__get_columns_in_relation_legacy(relation) -%}
+
+    {#-
+      A relation with no columns means the catalog could not see it, not that it has none.
+      This happens to temporary relations when the connection's database is a datashare
+      consumer database: the relation is created and stays queryable, but it is absent from
+      information_schema.columns, pg_attribute and svv_columns, because the session's temp
+      schema belongs to the default database while those views resolve against the consumer
+      database. SHOW COLUMNS cannot address it either -- it needs a database and schema, and
+      temporary relations have neither.
+
+      Left unhandled, an empty list makes on_schema_change='sync_all_columns' treat every
+      column in the target as removed and drop it. Fall back to describing the relation
+      through the driver, which does not depend on database context.
+    -#}
+    {%- if columns | length == 0 -%}
+      {{ return(adapter.get_columns_in_temp_relation(relation)) }}
+    {%- endif -%}
+
+    {{ return(columns) }}
   {% endif %}
 {% endmacro %}
 
