@@ -27,6 +27,31 @@ def test_renameable_relation():
     )
 
 
+def test_default_relation_is_not_iceberg_and_can_be_renamed():
+    relation = RedshiftRelation.create(
+        database="my_db",
+        schema="my_schema",
+        identifier="my_table",
+        type=RelationType.Table,
+    )
+    assert relation.table_format == "default"
+    assert relation.is_iceberg_format is False
+    assert relation.can_be_renamed is True
+
+
+def test_iceberg_relation_cannot_be_renamed():
+    relation = RedshiftRelation.create(
+        database="my_db",
+        schema="my_schema",
+        identifier="my_table",
+        type=RelationType.Table,
+        table_format="iceberg",
+    )
+    assert relation.is_iceberg_format is True
+    # Iceberg tables can't be renamed; replacing requires DROP + CREATE
+    assert relation.can_be_renamed is False
+
+
 @pytest.fixture
 def materialized_view_without_sort_key_from_db():
     materialized_view = agate.Table.from_object(

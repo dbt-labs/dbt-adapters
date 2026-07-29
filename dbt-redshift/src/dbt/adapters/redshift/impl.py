@@ -2,12 +2,16 @@ import os
 from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
+from urllib.parse import urlparse
+
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
 from datetime import datetime, timezone
-from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
+from typing import ClassVar, List, Optional, Set, Any, Dict, Tuple, Type, Mapping, Union
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
@@ -27,7 +31,9 @@ from dbt.adapters.events.logging import AdapterLogger
 
 import dbt_common.exceptions
 
-from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
+from dbt.adapters.catalogs import CatalogV2
+from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation, constants
+from dbt.adapters.redshift.catalogs import GlueCatalogIntegration
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -41,6 +47,10 @@ for package in packages:
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
+
+# Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
+# Remove once the dbt-adapters lower bound is bumped to the version that adds it.
+_CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
@@ -109,6 +119,14 @@ class RedshiftConfig(AdapterConfig):
     auto_refresh: Optional[bool] = False
     query_group: Optional[str] = None
 
+    # Apache Iceberg (AWS Glue Data Catalog) configs
+    table_format: Optional[str] = None
+    external_volume: Optional[str] = None
+    base_location_root: Optional[str] = None
+    base_location_subpath: Optional[str] = None
+    partition_by: Optional[Union[str, List[str]]] = None
+    table_properties: Optional[Dict[str, Any]] = None
+
 
 class RedshiftAdapter(SQLAdapter):
     Relation = RedshiftRelation
@@ -116,6 +134,8 @@ class RedshiftAdapter(SQLAdapter):
     connections: RedshiftConnectionManager
 
     AdapterSpecificConfigs = RedshiftConfig
+
+    CATALOG_INTEGRATIONS = [GlueCatalogIntegration]
 
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
@@ -130,8 +150,18 @@ class RedshiftAdapter(SQLAdapter):
             Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
             Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            **(
+                {_CATALOGS_V2_CAPABILITY: CapabilitySupport(support=Support.Full)}
+                if _CATALOGS_V2_CAPABILITY is not None
+                else {}
+            ),
         }
     )
+
+    # maps the v2 catalogs.yml `type` to this adapter's catalog integration type
+    _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
+        "glue": constants.GLUE_CATALOG_TYPE,
+    }
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
@@ -139,6 +169,73 @@ class RedshiftAdapter(SQLAdapter):
         self.connections.set_skip_transactions_checker(
             lambda: self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
+        self.add_catalog_integration(constants.DEFAULT_GLUE_CATALOG)
+
+    def _v2_to_v1_type(self, catalog_type: str) -> str:
+        return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
+
+    def _v2_table_format(self, catalog: CatalogV2) -> str:
+        return catalog.table_format.value.lower()
+
+    def _boto3_session(self) -> "boto3.session.Session":
+        """Build a boto3 session for S3 operations.
+
+        AWS credentials are sourced independently of the Redshift connection auth
+        (which may be username/password and carry no AWS identity), in order:
+          1. explicit ``access_key_id`` + ``secret_access_key`` from the profile,
+          2. a named ``iam_profile`` from the profile,
+          3. the standard AWS credential chain (``AWS_PROFILE`` / ``~/.aws`` /
+             environment variables / instance role).
+        """
+        creds = self.config.credentials
+        kwargs: Dict[str, Any] = {}
+        if getattr(creds, "region", None):
+            kwargs["region_name"] = creds.region
+        if getattr(creds, "access_key_id", None) and getattr(creds, "secret_access_key", None):
+            kwargs["aws_access_key_id"] = creds.access_key_id
+            kwargs["aws_secret_access_key"] = creds.secret_access_key
+        elif getattr(creds, "iam_profile", None):
+            kwargs["profile_name"] = creds.iam_profile
+        return boto3.session.Session(**kwargs)
+
+    @available
+    def delete_from_s3(self, s3_path: Optional[str]) -> None:
+        """Delete every object under an ``s3://bucket/prefix`` location.
+
+        Redshift's ``DROP TABLE`` on an Iceberg table only removes the AWS Glue
+        Data Catalog entry; it leaves the data/metadata files in S3. Since
+        ``CREATE TABLE ... USING ICEBERG`` requires an empty ``LOCATION``, we purge
+        the prefix here before re-creating the table (mirrors dbt-athena's
+        ``delete_from_s3``).
+
+        This needs AWS credentials with ``s3:DeleteObject``/``s3:ListBucket`` on the
+        bucket, resolved via ``_boto3_session`` (profile keys / ``iam_profile`` / the
+        default AWS chain) -- separate from the Redshift connection auth.
+        """
+        if not s3_path:
+            return
+        parsed = urlparse(s3_path)
+        bucket = parsed.netloc
+        prefix = parsed.path.lstrip("/")
+        if not bucket:
+            return
+        # scope deletion to this table's own folder so a prefix like ".../orders"
+        # does not also match a sibling ".../orders_partitioned"
+        if prefix and not prefix.endswith("/"):
+            prefix += "/"
+        logger.debug(f"Purging Iceberg S3 location: s3://{bucket}/{prefix}")
+        try:
+            s3 = self._boto3_session().resource("s3")
+            s3.Bucket(bucket).objects.filter(Prefix=prefix).delete()
+        except (NoCredentialsError, PartialCredentialsError) as exc:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "Could not find AWS credentials to clean up the Iceberg table's S3 "
+                f"location (s3://{bucket}/{prefix}). Redshift Iceberg models need AWS "
+                "credentials for S3 cleanup, separate from the database connection. "
+                "Provide `access_key_id`/`secret_access_key` or `iam_profile` in your "
+                "profile, or configure the standard AWS credential chain (AWS_PROFILE / "
+                "~/.aws / environment variables)."
+            ) from exc
 
     @property
     def _behavior_flags(self) -> List[BehaviorFlag]:
