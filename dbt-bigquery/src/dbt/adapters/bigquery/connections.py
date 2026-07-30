@@ -32,6 +32,7 @@ from dbt.adapters.base import BaseConnectionManager
 from dbt.adapters.contracts.connection import (
     AdapterRequiredConfig,
     AdapterResponse,
+    Connection,
     ConnectionState,
 )
 from dbt.adapters.events.logging import AdapterLogger
@@ -221,15 +222,18 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         return {}
 
-    def generate_job_id(self) -> str:
+    def generate_job_id(self, thread_id: Optional[Hashable] = None) -> str:
         # Generating a fresh job_id for every _query_and_results call to avoid job_id reuse.
         # Generating a job id instead of persisting a BigQuery-generated one after client.query is called.
         # Using BigQuery's job_id can lead to a race condition if a job has been started and a termination
         # is sent before the job_id was stored, leading to a failure to cancel the job.
         # By predetermining job_ids (uuid4), we can persist the job_id before the job has been kicked off.
         # Doing this, the race condition only leads to attempting to cancel a job that doesn't exist.
+        # thread_id lets a worker thread register its jobs under the thread that owns the
+        # model's connection, keeping cancel_open's thread -> jobs mapping coherent.
         job_id = str(uuid.uuid4())
-        thread_id = self.get_thread_identifier()
+        if thread_id is None:
+            thread_id = self.get_thread_identifier()
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
 
@@ -502,22 +506,56 @@ class BigQueryConnectionManager(BaseConnectionManager):
             destination_ref.path,
         )
         with self.exception_handler(msg):
-            # Stable job_id: copy_table has no built-in 409 recovery of its own.
-            job_id = self.generate_job_id()
-            copy_job = self._submit_or_attach(
-                client,
-                job_id,
-                lambda: client.copy_table(
-                    source_ref_array,
-                    destination_ref,
-                    job_config=CopyJobConfig(write_disposition=write_disposition),
-                    job_id=job_id,
-                    retry=self._retry.create_reopen_with_deadline(conn),
-                ),
-            )
             model_timeout = getattr(conn, "_bq_model_timeout", None)
             copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
-            copy_job.result(timeout=copy_timeout)
+            # Job-level retry: a copy job that fails server-side on a transient error
+            # (e.g. rateLimitExceeded) is resubmitted with a fresh job_id, mirroring the
+            # job-level retry that query jobs already get. Kept inside exception_handler
+            # so the retry predicate sees raw google exceptions (with `.errors`), not the
+            # converted DbtDatabaseError.
+            retry = self._retry.create_copy_job_retry()
+            retry(
+                lambda: self._copy_and_wait(
+                    client,
+                    conn,
+                    source_ref_array,
+                    destination_ref,
+                    write_disposition,
+                    copy_timeout,
+                )
+            )()
+
+    def _copy_and_wait(
+        self,
+        client: Client,
+        conn: Connection,
+        source_refs: List[TableReference],
+        destination_ref: TableReference,
+        write_disposition: str,
+        timeout: float,
+        owning_thread_id: Optional[Hashable] = None,
+    ) -> None:
+        """A single copy-job attempt: submit (or 409-attach) and wait for completion.
+
+        The job_id is minted here, inside the attempt, so that a caller retrying a
+        terminally failed job (create_copy_job_retry) resubmits with a fresh job_id --
+        resubmitting the failed id would 409-attach to the dead job and re-raise forever.
+        Within one attempt the stable job_id keeps jobs.insert idempotent: a transport
+        resubmission attaches to the in-flight job via _submit_or_attach.
+        """
+        job_id = self.generate_job_id(thread_id=owning_thread_id)
+        copy_job = self._submit_or_attach(
+            client,
+            job_id,
+            lambda: client.copy_table(
+                source_refs,
+                destination_ref,
+                job_config=CopyJobConfig(write_disposition=write_disposition),
+                job_id=job_id,
+                retry=self._retry.create_reopen_with_deadline(conn),
+            ),
+        )
+        copy_job.result(timeout=timeout)
 
     def write_dataframe_to_table(
         self,

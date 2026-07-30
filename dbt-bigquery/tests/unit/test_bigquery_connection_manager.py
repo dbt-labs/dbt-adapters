@@ -155,6 +155,88 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # We wait on the attached job, not a resubmitted one.
         existing_job.result.assert_called_once()
 
+    def _rebuild_retry_factory(self, job_retries, deadline_seconds=60):
+        # setUp pins job_retry_deadline_seconds=1, which starves the copy-job
+        # retry's backoff (initial 2s); rebuild the factory with a real budget.
+        self.credentials.job_retries = job_retries
+        self.credentials.job_retry_deadline_seconds = deadline_seconds
+        self.connections._retry = RetryFactory(self.credentials)
+
+    @patch("google.api_core.retry.retry_unary.time.sleep", return_value=None)
+    def test_copy_bq_table_retries_failed_job_with_fresh_job_id(self, _mock_sleep):
+        """A copy job that fails server-side on a transient error must be
+        resubmitted with a NEW job_id: CopyJob has no job_retry of its own, and
+        resubmitting the failed job's id would 409-attach to the dead job."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self._rebuild_retry_factory(job_retries=1)
+
+        job_ids_used = []
+
+        def make_copy_job(*args, **kwargs):
+            job_ids_used.append(kwargs.get("job_id"))
+            mock_job = Mock()
+            if len(job_ids_used) == 1:
+                mock_job.result.side_effect = exceptions.Forbidden(
+                    "rate limited", errors=[{"reason": "rateLimitExceeded"}]
+                )
+            return mock_job
+
+        self.mock_client.copy_table.side_effect = make_copy_job
+
+        self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 2)
+        self.assertIsNotNone(job_ids_used[0])
+        self.assertNotEqual(job_ids_used[0], job_ids_used[1])
+
+    def test_copy_bq_table_does_not_retry_quota_exceeded(self):
+        """quotaExceeded signals a daily quota, not a transient rate limit;
+        retrying cannot succeed and burns more of the quota (failed copy jobs
+        still count against it). Fail fast on the first attempt."""
+        from dbt_common.exceptions import DbtDatabaseError
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self._rebuild_retry_factory(job_retries=3)
+
+        mock_job = Mock()
+        mock_job.result.side_effect = exceptions.Forbidden(
+            "quota exceeded",
+            errors=[{"reason": "quotaExceeded", "message": "quota exceeded"}],
+        )
+        self.mock_client.copy_table.return_value = mock_job
+
+        with self.assertRaises(DbtDatabaseError):
+            self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 1)
+
+    def test_copy_bq_table_no_retry_when_job_retries_zero(self):
+        from dbt_common.exceptions import DbtDatabaseError
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self._rebuild_retry_factory(job_retries=0)
+
+        mock_job = Mock()
+        mock_job.result.side_effect = exceptions.Forbidden(
+            "rate limited",
+            errors=[{"reason": "rateLimitExceeded", "message": "rate limited"}],
+        )
+        self.mock_client.copy_table.return_value = mock_job
+
+        with self.assertRaises(DbtDatabaseError):
+            self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 1)
+
+    def test_generate_job_id_registers_under_given_thread(self):
+        """generate_job_id(thread_id=...) must register the job under the
+        provided thread's list (the model's owning thread), not the caller's."""
+        job_id = self.connections.generate_job_id(thread_id="owner-thread")
+        self.assertIn(job_id, self.connections.jobs_by_thread["owner-thread"])
+        self.assertNotIn(
+            job_id, self.connections.jobs_by_thread[self.connections.get_thread_identifier()]
+        )
+
     def test_job_labels_valid_json(self):
         expected = {"key": "value"}
         labels = self.connections._labels_from_query_comment(json.dumps(expected))
