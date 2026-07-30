@@ -1,5 +1,5 @@
 kind: Features
-body: Omit base_location from Iceberg DDL when no external_volume is configured (Snowflake-managed storage)
+body: Emit `external_volume = 'SNOWFLAKE_MANAGED'` and suppress `base_location` when no external_volume is configured or external_volume is set to SNOWFLAKE_MANAGED, enabling Snowflake Horizon managed storage Iceberg tables to work out of the box
 time: 2026-07-30T12:37:46.043851+05:30
 custom:
     Author: aahel
