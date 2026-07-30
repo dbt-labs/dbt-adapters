@@ -12,6 +12,7 @@ from functools import cached_property
 from hashlib import md5
 from typing import Any, Dict, NamedTuple, Optional, Tuple, TypedDict
 
+import boto3
 import botocore
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.invocation import get_invocation_id
@@ -39,6 +40,7 @@ from dbt.adapters.athena.constants import (
     LOGGER,
 )
 from dbt.adapters.athena.exceptions import SparkSessionTerminatedError
+from dbt.adapters.athena.session import get_boto3_session_from_credentials
 from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 from dbt.adapters.athena.spark_connect.errors import (
     is_grpc_permission_denied,
@@ -200,6 +202,8 @@ class SparkConnectSubmitter:
         if not compiled_code.strip():
             return SparkConnectResult(SparkConnect=True, SparkSessionId=None)
 
+        self._install_assumed_default_session()
+
         pool_start = time.monotonic()
         last_error: Optional[BaseException] = None
         last_session_id: Optional[str] = None
@@ -242,6 +246,15 @@ class SparkConnectSubmitter:
             f"attempts (last session {last_session_id}): "
             f"{type(last_error).__name__}: {last_error}"
         ) from last_error
+
+    def _install_assumed_default_session(self) -> None:
+        # Spark Connect runs the model body client-side via exec(), so a bare
+        # boto3.client(...) in the model uses the process-default session (the
+        # caller), not assume_role_arn.
+        if not self.credentials.assume_role_arn:
+            return
+        assumed = get_boto3_session_from_credentials(self.credentials)
+        boto3.setup_default_session(botocore_session=assumed._session)
 
     def _is_transient_failure(self, e: BaseException) -> bool:
         return is_transient_spark_error(e)

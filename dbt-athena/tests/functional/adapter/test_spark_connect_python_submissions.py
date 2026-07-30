@@ -36,6 +36,11 @@ requires_spark_workgroup = pytest.mark.skipif(
     reason="DBT_TEST_ATHENA_SPARK_WORK_GROUP must point to a Spark 3.5 workgroup.",
 )
 
+requires_assume_role = pytest.mark.skipif(
+    not os.getenv("DBT_TEST_ATHENA_ASSUME_ROLE_ARN"),
+    reason="DBT_TEST_ATHENA_ASSUME_ROLE_ARN must be set to verify model boto3 identity.",
+)
+
 
 @requires_spark_workgroup
 class TestSparkConnectPythonModel(BasePythonModelTests):
@@ -126,3 +131,38 @@ class TestSparkConnectPythonMultiModel:
         results = run_dbt(["run"])
         assert len(results) == 3
         assert all(r.status == "success" for r in results)
+
+
+_identity_probe_python = """
+def model(dbt, spark):
+    dbt.config(materialized='table', spark_engine_version='3.5')
+    import boto3
+
+    arn = boto3.client("sts").get_caller_identity()["Arn"]
+    return spark.createDataFrame([(arn,)], ["caller_arn"])
+"""
+
+
+@requires_spark_workgroup
+@requires_assume_role
+class TestSparkConnectPythonModelAssumedIdentity:
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"models": {"+materialized": "table"}}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"identity_probe.py": _identity_probe_python}
+
+    def test_model_boto3_runs_as_assumed_role(self, project):
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        assert results[0].status == "success"
+
+        caller_arn = project.run_sql(
+            f"select caller_arn from {project.test_schema}.identity_probe", fetch="one"
+        )[0]
+
+        role_name = os.environ["DBT_TEST_ATHENA_ASSUME_ROLE_ARN"].rsplit("/", 1)[-1]
+        assert ":assumed-role/" in caller_arn
+        assert role_name in caller_arn

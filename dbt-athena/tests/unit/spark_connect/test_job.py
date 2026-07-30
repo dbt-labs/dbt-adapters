@@ -43,6 +43,7 @@ class TestSparkConnectSubmission:
         credentials.aws_session_token = None
         credentials.region_name = "us-east-1"
         credentials.aws_profile_name = None
+        credentials.assume_role_arn = None
         credentials.spark_work_group = "test-workgroup"
         credentials.spark_connect_max_sessions = 2
         credentials.spark_connect_session_concurrency = None
@@ -188,6 +189,56 @@ class TestSparkConnectSubmission:
         mock_pool.acquire.assert_called_once()
         mock_pool.release.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_not_called()
+
+    def test_assume_role_installs_assumed_default_session(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_credentials.assume_role_arn = "arn:aws:iam::123456789012:role/dbt"
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        assumed_session = Mock()
+        assumed_session._session = Mock()
+        get_session = Mock(return_value=assumed_session)
+        setup_default = Mock()
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.get_boto3_session_from_credentials",
+            get_session,
+        )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.boto3.setup_default_session", setup_default
+        )
+
+        submitter.submit("x = 1")
+
+        get_session.assert_called_once_with(mock_credentials)
+        setup_default.assert_called_once_with(botocore_session=assumed_session._session)
+
+    def test_no_assume_role_leaves_default_session_untouched(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_credentials.assume_role_arn = None
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        get_session = Mock()
+        setup_default = Mock()
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.get_boto3_session_from_credentials",
+            get_session,
+        )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.boto3.setup_default_session", setup_default
+        )
+
+        submitter.submit("x = 1")
+
+        get_session.assert_not_called()
+        setup_default.assert_not_called()
 
     def test_transient_error_retries_with_new_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
