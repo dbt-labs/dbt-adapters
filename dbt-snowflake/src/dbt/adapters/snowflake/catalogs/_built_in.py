@@ -117,9 +117,17 @@ class BuiltInCatalogIntegration(CatalogIntegration):
 
         iceberg_version = parse_model.iceberg_version(model) or self.iceberg_version
 
+        ev = parse_model.external_volume(model) or self.external_volume
+        # Normalize: absent or SNOWFLAKE_MANAGED → always emit SNOWFLAKE_MANAGED, never base_location
+        if not ev or ev.upper() == "SNOWFLAKE_MANAGED":
+            ev = "SNOWFLAKE_MANAGED"
+            base_loc = None
+        else:
+            base_loc = parse_model.base_location(model)
+
         return BuiltInCatalogRelation(
-            base_location=parse_model.base_location(model),
-            external_volume=parse_model.external_volume(model) or self.external_volume,
+            base_location=base_loc,
+            external_volume=ev,
             cluster_by=parse_model.cluster_by(model),
             partition_by=parse_model.partition_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),

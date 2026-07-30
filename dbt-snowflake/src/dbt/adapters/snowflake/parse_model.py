@@ -35,8 +35,9 @@ def base_location(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
-    # Snowflake-managed storage (no external_volume) does not accept base_location
-    if not model.config.get("external_volume"):
+    ev = model.config.get("external_volume")
+    # Snowflake-managed storage does not accept base_location
+    if not ev or ev.upper() == "SNOWFLAKE_MANAGED":
         return None
 
     prefix = (

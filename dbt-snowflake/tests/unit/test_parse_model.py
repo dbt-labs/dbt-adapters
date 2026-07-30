@@ -28,6 +28,9 @@ def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
         # No external_volume → Snowflake-managed storage → base_location suppressed
         ({"fake_attr": "fake_value"}, None),
         ({"base_location_root": None, "base_location_subpath": None}, None),
+        # SNOWFLAKE_MANAGED (case-insensitive) → managed storage → base_location suppressed
+        ({"external_volume": "SNOWFLAKE_MANAGED"}, None),
+        ({"external_volume": "snowflake_managed"}, None),
         # external_volume present → user-defined storage → base_location generated
         (
             {
