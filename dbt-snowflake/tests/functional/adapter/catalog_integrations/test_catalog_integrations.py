@@ -11,6 +11,11 @@ def get_cleaned_model_ddl_from_file(file_name: str) -> str:
         return re.sub(r"\s+", " ", ddl_file.read())
 
 
+def get_cleaned_compiled_ddl_from_file(file_name: str) -> str:
+    with open(f"target/compiled/test/models/{file_name}", "r") as ddl_file:
+        return re.sub(r"\s+", " ", ddl_file.read())
+
+
 MODEL__BASIC_ICEBERG_TABLE = """
                             {{ config(materialized='table', catalog_name='basic_iceberg_catalog') }}
                             select 1 as id
@@ -69,6 +74,8 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         assert "max_data_extension_time_in_days = 60" in iceberg_sql
         assert "change_tracking = TRUE" in iceberg_sql
         assert "data_retention_time_in_days = 0" in iceberg_sql
+        # external_volume present → base_location must be emitted
+        assert "base_location" in iceberg_sql
         iceberg_table_with_configs_sql = get_cleaned_model_ddl_from_file(
             "iceberg_table_with_configs.sql"
         )
@@ -77,3 +84,56 @@ class TestSnowflakeBuiltInCatalogIntegration(BaseCatalogIntegrationValidation):
         # change_tracking=false is ignored for Iceberg (Snowflake forbids turning it off)
         assert "change_tracking" not in iceberg_table_with_configs_sql
         assert "data_retention_time_in_days = 1" in iceberg_table_with_configs_sql
+
+
+MODEL__MANAGED_STORAGE_ICEBERG_TABLE = """
+    {{ config(materialized='table', table_format='iceberg') }}
+    select 1 as id
+    """
+
+SEED = """
+id,value
+1,100
+2,200
+""".strip()
+
+MODEL__MANAGED_STORAGE_DYNAMIC_ICEBERG_TABLE = """
+    {{ config(
+        materialized='dynamic_table',
+        snowflake_warehouse='DBT_TESTING',
+        target_lag='2 minutes',
+        table_format='iceberg',
+    ) }}
+    select * from {{ ref('seed') }}
+    """
+
+
+class TestSnowflakeManagedStorageIcebergDDL:
+    """
+    Verifies that base_location is omitted when no external_volume is configured
+    (Snowflake-managed storage / Horizon). A successful run proves the DDL was
+    accepted by Snowflake — it rejects base_location for managed storage.
+    """
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {"seed.csv": SEED}
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "managed_iceberg.sql": MODEL__MANAGED_STORAGE_ICEBERG_TABLE,
+            "managed_dynamic_iceberg.sql": MODEL__MANAGED_STORAGE_DYNAMIC_ICEBERG_TABLE,
+        }
+
+    def test_managed_storage_omits_base_location(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+
+        table_sql = get_cleaned_model_ddl_from_file("managed_iceberg.sql")
+        assert "base_location" not in table_sql
+        assert "catalog = 'SNOWFLAKE'" in table_sql
+
+        dynamic_sql = get_cleaned_model_ddl_from_file("managed_dynamic_iceberg.sql")
+        assert "base_location" not in dynamic_sql
+        assert "catalog = 'SNOWFLAKE'" in dynamic_sql

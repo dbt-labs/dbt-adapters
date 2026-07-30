@@ -1,0 +1,6 @@
+kind: Features
+body: Omit base_location from Iceberg DDL when no external_volume is configured (Snowflake-managed storage)
+time: 2026-07-30T12:37:46.043851+05:30
+custom:
+    Author: aahelguha
+    Issue: "2100"
