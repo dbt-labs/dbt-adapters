@@ -25,24 +25,32 @@ def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
 @pytest.mark.parametrize(
     "config,expected",
     [
+        # No external_volume → Snowflake-managed storage → base_location suppressed
+        ({"fake_attr": "fake_value"}, None),
+        ({"base_location_root": None, "base_location_subpath": None}, None),
+        # external_volume present → user-defined storage → base_location generated
         (
-            {"fake_attr": "fake_value"},  # we check if not model.config
+            {
+                "external_volume": "s3_vol",
+                "base_location_root": None,
+                "base_location_subpath": None,
+            },
             "_dbt/fake_schema/fake_table",
         ),
         (
-            {"base_location_root": None, "base_location_subpath": None},
-            "_dbt/fake_schema/fake_table",
-        ),
-        (
-            {"base_location_root": "root_path", "base_location_subpath": "subpath"},
+            {
+                "external_volume": "s3_vol",
+                "base_location_root": "root_path",
+                "base_location_subpath": "subpath",
+            },
             "root_path/fake_schema/fake_table/subpath",
         ),
         (
-            {"base_location_subpath": "subpath"},
+            {"external_volume": "s3_vol", "base_location_subpath": "subpath"},
             "_dbt/fake_schema/fake_table/subpath",
         ),
         (
-            {"base_location_root": "root_path"},
+            {"external_volume": "s3_vol", "base_location_root": "root_path"},
             "root_path/fake_schema/fake_table",
         ),
     ],

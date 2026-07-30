@@ -35,6 +35,10 @@ def base_location(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
+    # Snowflake-managed storage (no external_volume) does not accept base_location
+    if not model.config.get("external_volume"):
+        return None
+
     prefix = (
         model.config.get("base_location_root") or "_dbt"
     )  # use "_dbt" even when users pass in None
