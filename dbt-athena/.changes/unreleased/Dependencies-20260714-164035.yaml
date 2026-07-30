@@ -1,0 +1,6 @@
+kind: Dependencies
+body: Pin pyathena to <3.34
+time: 2026-07-14T16:40:35.144165+05:30
+custom:
+    Author: ash2shukla
+    PR: '2071'

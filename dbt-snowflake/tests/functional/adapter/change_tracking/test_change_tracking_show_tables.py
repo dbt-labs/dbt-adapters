@@ -99,7 +99,8 @@ class TestIcebergTableChangeTrackingShowTables(BaseCatalogIntegrationValidation)
     def test_change_tracking_on_iceberg_from_catalog_default(self, project):
         assert query_change_tracking_from_show_tables(project, "basic_iceberg_table") == "ON"
 
-    def test_change_tracking_off_iceberg_from_model_config(self, project):
+    def test_change_tracking_false_ignored_for_iceberg(self, project):
+        # change_tracking=false is ignored for Iceberg; Snowflake keeps it ON
         assert (
-            query_change_tracking_from_show_tables(project, "iceberg_table_with_configs") == "OFF"
+            query_change_tracking_from_show_tables(project, "iceberg_table_with_configs") == "ON"
         )

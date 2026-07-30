@@ -986,6 +986,64 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         self.assertEqual(expected, actual)
 
 
+class TestGetColumnsAndPseudocolumnsForRelation(BaseTestBigQueryAdapter):
+    def _make_relation(self, identifier="my_table"):
+        relation = MagicMock()
+        relation.database = "my_project"
+        relation.schema = "my_dataset"
+        relation.identifier = identifier
+        return relation
+
+    def _make_schema_field(self, name, field_type):
+        field = MagicMock()
+        field.name = name
+        field.field_type = field_type
+        field.fields = []
+        field.mode = "NULLABLE"
+        return field
+
+    def test_returns_columns_and_file_name_for_external_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "EXTERNAL"
+        mock_table.schema = [self._make_schema_field("id", "INTEGER")]
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].name, "id")
+        self.assertEqual(result[1].name, "_FILE_NAME")
+        self.assertEqual(result[1].dtype, "STRING")
+
+    def test_returns_only_columns_for_regular_table(self):
+        adapter = self.get_adapter("oauth")
+        mock_table = MagicMock(spec=Table)
+        mock_table.table_type = "TABLE"
+        mock_table.schema = [self._make_schema_field("id", "INTEGER")]
+        with patch.object(
+            adapter.connections, "get_bq_table", return_value=mock_table
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].name, "id")
+
+    def test_returns_empty_when_table_not_found(self):
+        import google.cloud.exceptions
+
+        adapter = self.get_adapter("oauth")
+        with patch.object(
+            adapter.connections,
+            "get_bq_table",
+            side_effect=google.cloud.exceptions.NotFound("table not found"),
+        ) as mock_get:
+            result = adapter.get_columns_and_pseudocolumns_for_relation(self._make_relation())
+        mock_get.assert_called_once()
+        self.assertEqual(result, [])
+
+
 class TestBigQueryFilterCatalog(unittest.TestCase):
     def test__catalog_filter_table(self):
         used_schemas = [["a", "B"], ["a", "1234"]]
