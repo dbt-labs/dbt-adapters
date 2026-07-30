@@ -1,12 +1,13 @@
 from collections import defaultdict
-from concurrent.futures import TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
 import json
 from multiprocessing.context import SpawnContext
 import re
+import threading
 import time
-from typing import Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Callable, Dict, Hashable, List, Optional, Sequence, Tuple, TYPE_CHECKING
 import uuid
 
 from google.auth.exceptions import RefreshError
@@ -556,6 +557,110 @@ class BigQueryConnectionManager(BaseConnectionManager):
             ),
         )
         copy_job.result(timeout=timeout)
+
+    def copy_partitioned_tables(
+        self,
+        source,
+        destination,
+        partition_ids: Sequence[str],
+        write_disposition: str,
+        max_workers: int = 1,
+    ) -> None:
+        """Copy each `source$<partition_id>` into `destination$<partition_id>`, one
+        copy job per partition, with up to max_workers jobs in flight at once.
+
+        Thread-safety: the connection, client, per-job timeout, and owning thread id
+        are all resolved here on the calling thread; workers share the one BigQuery
+        Client (documented thread-safe) and never touch the thread-local connection
+        registry. Each distinct partition id is submitted at most once, so no two
+        in-flight jobs ever target the same partition decorator.
+
+        Failure semantics: the first terminal (post-retry) failure stops NEW
+        partitions from being submitted; in-flight copies are left to finish
+        (BigQuery cannot cancel a running copy job). Any failure raises
+        DbtDatabaseError enumerating copied/failed/skipped partitions. Partitions
+        already copied stay in place -- same partial-state-on-failure behavior as
+        the serial path, and self-healing on re-run since the strategy rebuilds
+        the tmp table and re-copies.
+        """
+        conn = self.get_thread_connection()
+        client: Client = conn.handle
+        owning_thread_id = self.get_thread_identifier()
+        model_timeout = getattr(conn, "_bq_model_timeout", None)
+        copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
+
+        logger.debug(
+            'Copying {} partition(s) from "{}" to "{}" with up to {} concurrent copy jobs',
+            len(partition_ids),
+            f"{source.database}.{source.schema}.{source.table}",
+            f"{destination.database}.{destination.schema}.{destination.table}",
+            max_workers,
+        )
+
+        stop_submitting = threading.Event()
+
+        def _copy_partition(partition_id: str) -> Tuple[str, str, Optional[Exception]]:
+            if stop_submitting.is_set():
+                return partition_id, "skipped", None
+            src = self.table_ref(source.database, source.schema, f"{source.table}${partition_id}")
+            dst = self.table_ref(
+                destination.database, destination.schema, f"{destination.table}${partition_id}"
+            )
+            try:
+                # A fresh Retry per partition: the _DeferredException predicate is
+                # stateful, so retry budgets must not be shared across partitions.
+                retry = self._retry.create_copy_job_retry()
+                retry(
+                    lambda: self._copy_and_wait(
+                        client,
+                        conn,
+                        [src],
+                        dst,
+                        write_disposition,
+                        copy_timeout,
+                        owning_thread_id=owning_thread_id,
+                    )
+                )()
+                return partition_id, "copied", None
+            except Exception as e:  # terminal, post-retry failure
+                stop_submitting.set()
+                return partition_id, "failed", e
+
+        outcomes: List[Tuple[str, str, Optional[Exception]]] = []
+        if max_workers <= 1:
+            for partition_id in partition_ids:
+                outcomes.append(_copy_partition(partition_id))
+        else:
+            executor = ThreadPoolExecutor(
+                max_workers=max_workers, thread_name_prefix="bq-copy-partition"
+            )
+            try:
+                futures = [executor.submit(_copy_partition, pid) for pid in partition_ids]
+                for future in as_completed(futures):
+                    outcomes.append(future.result())
+            except BaseException:
+                # e.g. KeyboardInterrupt on the calling thread: stop submitting new
+                # partitions and wait for in-flight jobs (they cannot be cancelled).
+                stop_submitting.set()
+                executor.shutdown(wait=True, cancel_futures=True)
+                raise
+            else:
+                executor.shutdown(wait=True)
+
+        failures = [(pid, error) for pid, outcome, error in outcomes if outcome == "failed"]
+        if failures:
+            copied = sorted(pid for pid, outcome, _ in outcomes if outcome == "copied")
+            skipped = sorted(pid for pid, outcome, _ in outcomes if outcome == "skipped")
+            failed = sorted(pid for pid, _ in failures)
+            first_error = failures[0][1]
+            raise DbtDatabaseError(
+                f"Copied {len(copied)} of {len(partition_ids)} partition(s) into "
+                f'"{destination.database}.{destination.schema}.{destination.table}". '
+                f"{len(failed)} partition cop(y/ies) failed after retries: {failed}; "
+                f"{len(skipped)} partition(s) were not attempted after the first failure. "
+                f"First error: {first_error!r}. The destination table may be partially "
+                "updated; re-running the model rebuilds all affected partitions."
+            )
 
     def write_dataframe_to_table(
         self,

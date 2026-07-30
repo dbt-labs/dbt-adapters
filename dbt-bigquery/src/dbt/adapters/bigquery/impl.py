@@ -192,6 +192,7 @@ class BigqueryConfig(AdapterConfig):
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
     reservation: Optional[str] = None
+    copy_partitions_concurrency: Optional[int] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -600,6 +601,48 @@ class BigQueryAdapter(BaseAdapter):
         self.connections.copy_bq_table(source, destination, write_disposition)
 
         return "COPY TABLE with materialization: {}".format(materialization)
+
+    @available.parse(lambda *a, **k: "")
+    def copy_partitions(
+        self,
+        source: BigQueryRelation,
+        destination: BigQueryRelation,
+        partitions: List[Any],
+        partition_by: PartitionConfig,
+        default_concurrency: Optional[int] = None,
+    ) -> str:
+        """Replace each `destination$<partition_id>` with `source$<partition_id>`,
+        one copy job per partition (the insert_overwrite + copy_partitions path).
+
+        Concurrency resolution, most specific wins:
+        `partition_by.copy_partitions_concurrency` > the model-level
+        `copy_partitions_concurrency` config (passed by the macro as
+        `default_concurrency`) > 1 (serial, the pre-existing behavior).
+        """
+        # partition_by.copy_partitions_concurrency was validated by PartitionConfig.parse;
+        # default_concurrency arrives raw from config.get and is validated here.
+        concurrency = partition_by.copy_partitions_concurrency
+        if concurrency is None:
+            concurrency = PartitionConfig.validate_copy_partitions_concurrency(default_concurrency)
+        concurrency = concurrency or 1
+
+        partition_ids = [partition_by.render_partition_id(p) for p in partitions]
+        if not partition_ids:
+            return "COPY PARTITIONS (0 partitions)"
+
+        max_workers = concurrency
+        if getattr(self.config.args, "single_threaded", False):
+            max_workers = 1
+        max_workers = max(1, min(max_workers, len(partition_ids)))
+
+        self.connections.copy_partitioned_tables(
+            source, destination, partition_ids, WRITE_TRUNCATE, max_workers
+        )
+
+        return (
+            f"COPY PARTITIONS ({len(partition_ids)} partitions, "
+            f"up to {max_workers} concurrent copy jobs)"
+        )
 
     @available.parse(lambda *a, **k: [])
     def get_column_schema_from_query(self, sql: str) -> List[BigQueryColumn]:

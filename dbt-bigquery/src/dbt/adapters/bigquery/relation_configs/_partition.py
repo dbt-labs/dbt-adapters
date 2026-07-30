@@ -16,9 +16,48 @@ class PartitionConfig(dbtClassMixin):
     range: Optional[Dict[str, Any]] = None
     time_ingestion_partitioning: bool = False
     copy_partitions: bool = False
+    copy_partitions_concurrency: Optional[int] = None
 
     PARTITION_DATE = "_PARTITIONDATE"
     PARTITION_TIME = "_PARTITIONTIME"
+
+    # Bounded by BigQuery's partitioned-table metadata rate limit: 50
+    # modifications per 10 seconds per destination table, which includes copy
+    # jobs. Transient overshoot is retried with backoff, but a wide-open pool
+    # would just trade wall-clock for rate-limit churn.
+    MAX_COPY_PARTITIONS_CONCURRENCY = 32
+
+    _PARTITION_ID_FORMATS = {
+        "hour": "%Y%m%d%H",
+        "day": "%Y%m%d",
+        "month": "%Y%m",
+        "year": "%Y",
+    }
+
+    def render_partition_id(self, partition: Any) -> str:
+        """The partition decorator suffix for `table$<partition_id>`, as used by
+        copy_partitions. Ports the formatting previously inlined in the
+        bq_copy_partitions macro."""
+        if self.data_type == "int64":
+            return str(partition)
+        return partition.strftime(self._PARTITION_ID_FORMATS[self.granularity])
+
+    @classmethod
+    def validate_copy_partitions_concurrency(cls, value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise dbt_common.exceptions.base.DbtValidationError(
+                f"`copy_partitions_concurrency` must be an integer between 1 and "
+                f"{cls.MAX_COPY_PARTITIONS_CONCURRENCY}, got {value!r}"
+            )
+        if not 1 <= value <= cls.MAX_COPY_PARTITIONS_CONCURRENCY:
+            raise dbt_common.exceptions.base.DbtValidationError(
+                f"`copy_partitions_concurrency` must be between 1 and "
+                f"{cls.MAX_COPY_PARTITIONS_CONCURRENCY} (BigQuery rate-limits partition "
+                f"modifications per destination table), got {value}"
+            )
+        return value
 
     def data_type_for_partition(self):
         """Return the data type of partitions for replacement.
@@ -101,12 +140,14 @@ class PartitionConfig(dbtClassMixin):
             return None
         try:
             cls.validate(raw_partition_by)
-            return cls.from_dict(
+            config = cls.from_dict(
                 {
                     key: (value.lower() if isinstance(value, str) else value)
                     for key, value in raw_partition_by.items()
                 }
             )
+            cls.validate_copy_partitions_concurrency(config.copy_partitions_concurrency)
+            return config
         except ValidationError as exc:
             raise dbt_common.exceptions.base.DbtValidationError(
                 "Could not parse partition config"
@@ -134,6 +175,8 @@ class PartitionConfig(dbtClassMixin):
             del config_dict["time_ingestion_partitioning"]
         if "copy_partitions" in config_dict:
             del config_dict["copy_partitions"]
+        if "copy_partitions_concurrency" in config_dict:
+            del config_dict["copy_partitions_concurrency"]
         return config_dict
 
     @classmethod

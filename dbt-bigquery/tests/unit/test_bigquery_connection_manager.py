@@ -228,6 +228,123 @@ class TestBigQueryConnectionManager(unittest.TestCase):
 
         self.assertEqual(self.mock_client.copy_table.call_count, 1)
 
+    def _copy_partitioned(self, partition_ids, max_workers):
+        source = BigQueryRelation.create(
+            database="project", schema="dataset", identifier="tmp_table"
+        )
+        destination = BigQueryRelation.create(
+            database="project", schema="dataset", identifier="target_table"
+        )
+        self.connections.copy_partitioned_tables(
+            source,
+            destination,
+            partition_ids,
+            dbt.adapters.bigquery.impl.WRITE_TRUNCATE,
+            max_workers=max_workers,
+        )
+
+    def test_copy_partitioned_tables_submits_one_job_per_partition(self):
+        partition_ids = ["20260101", "20260102", "20260103", "20260104"]
+
+        self._copy_partitioned(partition_ids, max_workers=3)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 4)
+        copied_pairs = set()
+        job_ids = set()
+        for call in self.mock_client.copy_table.call_args_list:
+            args, kwargs = call
+            self.assertEqual(len(args[0]), 1)
+            copied_pairs.add((args[0][0].table_id, args[1].table_id))
+            job_ids.add(kwargs["job_id"])
+        self.assertEqual(
+            copied_pairs,
+            {(f"tmp_table${pid}", f"target_table${pid}") for pid in partition_ids},
+        )
+        # every partition gets its own job
+        self.assertEqual(len(job_ids), 4)
+
+    def test_copy_partitioned_tables_aggregates_failures(self):
+        """A terminal failure on one partition must not silently succeed: the
+        in-flight partitions finish, then a DbtDatabaseError enumerates the
+        copied/failed/skipped partitions."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        from dbt_common.exceptions import DbtDatabaseError
+
+        def make_copy_job(sources, dest, job_config=None, job_id=None, retry=None):
+            mock_job = Mock()
+            if dest.table_id.endswith("$20260102"):
+                mock_job.result.side_effect = exceptions.Forbidden(
+                    "quota exceeded",
+                    errors=[{"reason": "quotaExceeded", "message": "quota exceeded"}],
+                )
+            return mock_job
+
+        self.mock_client.copy_table.side_effect = make_copy_job
+
+        with self.assertRaises(DbtDatabaseError) as ctx:
+            self._copy_partitioned(["20260101", "20260102", "20260103", "20260104"], max_workers=4)
+
+        message = str(ctx.exception)
+        self.assertIn("20260102", message)
+        self.assertIn("of 4 partition(s)", message)
+        self.assertIn("quota exceeded", message)
+
+    def test_copy_partitioned_tables_stops_submitting_after_failure(self):
+        """Serial path: the first terminal failure prevents the remaining
+        partitions from being submitted (they would burn daily copy-job quota)."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        from dbt_common.exceptions import DbtDatabaseError
+
+        mock_job = Mock()
+        mock_job.result.side_effect = exceptions.Forbidden(
+            "quota exceeded",
+            errors=[{"reason": "quotaExceeded", "message": "quota exceeded"}],
+        )
+        self.mock_client.copy_table.return_value = mock_job
+
+        with self.assertRaises(DbtDatabaseError) as ctx:
+            self._copy_partitioned(["20260101", "20260102", "20260103"], max_workers=1)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 1)
+        self.assertIn("2 partition(s) were not attempted", str(ctx.exception))
+
+    @patch("google.api_core.retry.retry_unary.time.sleep", return_value=None)
+    def test_copy_partitioned_tables_retries_rate_limited_partition(self, _mock_sleep):
+        """A rate-limited partition is retried (fresh job_id) and the run
+        succeeds; the other partitions are unaffected."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        self._rebuild_retry_factory(job_retries=1)
+
+        rate_limited_attempts = []
+
+        def make_copy_job(sources, dest, job_config=None, job_id=None, retry=None):
+            mock_job = Mock()
+            if dest.table_id.endswith("$20260102"):
+                rate_limited_attempts.append(job_id)
+                if len(rate_limited_attempts) == 1:
+                    mock_job.result.side_effect = exceptions.Forbidden(
+                        "rate limited",
+                        errors=[{"reason": "rateLimitExceeded", "message": "rate limited"}],
+                    )
+            return mock_job
+
+        self.mock_client.copy_table.side_effect = make_copy_job
+
+        self._copy_partitioned(["20260101", "20260102"], max_workers=2)
+
+        self.assertEqual(self.mock_client.copy_table.call_count, 3)
+        self.assertEqual(len(rate_limited_attempts), 2)
+        self.assertNotEqual(rate_limited_attempts[0], rate_limited_attempts[1])
+
+    def test_copy_partitioned_tables_registers_jobs_under_owning_thread(self):
+        """Worker threads must register their job ids under the calling thread's
+        entry in jobs_by_thread, so cancel_open still maps threads to jobs."""
+        self._copy_partitioned(["20260101", "20260102"], max_workers=2)
+
+        owning_thread = self.connections.get_thread_identifier()
+        self.assertEqual(len(self.connections.jobs_by_thread), 1)
+        self.assertEqual(len(self.connections.jobs_by_thread[owning_thread]), 2)
+
     def test_generate_job_id_registers_under_given_thread(self):
         """generate_job_id(thread_id=...) must register the job under the
         provided thread's list (the model's owning thread), not the caller's."""
