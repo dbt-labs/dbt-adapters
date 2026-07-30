@@ -103,15 +103,12 @@ def is_transient(model: RelationConfig) -> Optional[bool]:
 
     Returns:
         None if there is no materialized config on the model; this shouldn't happen
-        False if we know this is an iceberg table format (excludes format set by the catalog)
         True if the user has set it to True or if the user has explicitly unset it
         False otherwise
     """
     if not model.config:
         return None
 
-    if table_format(model) == constants.ICEBERG_TABLE_FORMAT:
-        return False
     return model.config.get("transient", False) or model.config.get("transient", True)
 
 

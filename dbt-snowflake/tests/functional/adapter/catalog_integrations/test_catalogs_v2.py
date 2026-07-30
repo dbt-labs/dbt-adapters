@@ -84,6 +84,7 @@ class TestSnowflakeV2HorizonCatalog:
         run_dbt(["run"])
 
         basic_sql = get_cleaned_model_ddl_from_file("horizon_iceberg.sql")
+        assert "transient iceberg table" in basic_sql.lower()
         assert "external_volume = 's3_iceberg_snow'" in basic_sql
         assert "storage_serialization_policy = 'OPTIMIZED'" in basic_sql
         assert "change_tracking = TRUE" in basic_sql

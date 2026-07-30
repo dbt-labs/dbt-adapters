@@ -1,0 +1,6 @@
+kind: Features
+body: Snowflake Horizon (SNOWFLAKE_MANAGED) Iceberg tables now support transient=true, matching regular Snowflake table behavior
+time: 2026-05-28T19:26:35.123507+05:30
+custom:
+    Author: aahelguha
+    Issue: "1985"
