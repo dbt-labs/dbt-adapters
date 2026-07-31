@@ -213,9 +213,9 @@ class SnowflakeRelation(BaseRelation):
         # target_lag: the ACTION distinguishes the three transitions, which have
         # different full-refresh consequences.
         if new.target_lag_normalized != existing.target_lag_normalized:
-            if existing.target_lag is None:
+            if existing.target_lag_normalized is None:
                 action = RelationConfigChangeAction.create  # static -> dynamic
-            elif new.target_lag is None:
+            elif new.target_lag_normalized is None:
                 action = RelationConfigChangeAction.drop  # dynamic -> static
             else:
                 action = RelationConfigChangeAction.alter
@@ -230,10 +230,10 @@ class SnowflakeRelation(BaseRelation):
                 context=new.cluster_by,
             )
 
-        if new.refresh_warehouse_normalized != existing.refresh_warehouse_normalized:
+        if new.warehouse_parameter_normalized != existing.refresh_warehouse_normalized:
             changeset.refresh_warehouse = SnowflakeInteractiveTableRefreshWarehouseConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
-                context=new.refresh_warehouse,
+                context=new.warehouse_parameter,
             )
 
         if (

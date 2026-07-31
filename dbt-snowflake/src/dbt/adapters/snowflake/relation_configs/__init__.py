@@ -19,7 +19,6 @@ from dbt.adapters.snowflake.relation_configs.interactive_table import (
     SnowflakeInteractiveTableInitializationWarehouseConfigChange,
     SnowflakeInteractiveTableRefreshWarehouseConfigChange,
     SnowflakeInteractiveTableTargetLagConfigChange,
-    SnowflakeInteractiveTableWarehouseConfigChange,
 )
 from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,

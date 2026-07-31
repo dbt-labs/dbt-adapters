@@ -186,6 +186,24 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         return _normalize_warehouse(self.snowflake_warehouse)
 
     @property
+    def warehouse_parameter(self) -> Optional[str]:
+        """The value that ends up being the interactive table's refresh warehouse.
+
+        Snowflake requires WAREHOUSE whenever TARGET_LAG is set, so a dynamic
+        interactive table always has a real refresh warehouse -- even a user who
+        configures only `snowflake_warehouse` (the ordinary dbt-snowflake way to
+        say which warehouse a model uses) gets one. When `refresh_warehouse` is
+        set it takes precedence, as it is the explicit override for the table's
+        self-refresh warehouse; otherwise `snowflake_warehouse` serves both roles,
+        the way it does for dynamic tables.
+        """
+        return self.refresh_warehouse or self.snowflake_warehouse
+
+    @property
+    def warehouse_parameter_normalized(self) -> Optional[str]:
+        return _normalize_warehouse(self.warehouse_parameter)
+
+    @property
     def snowflake_initialization_warehouse_normalized(self) -> Optional[str]:
         return _normalize_warehouse(self.snowflake_initialization_warehouse)
 
@@ -266,15 +284,6 @@ class SnowflakeInteractiveTableClusterByConfigChange(RelationConfigChange):
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
-class SnowflakeInteractiveTableWarehouseConfigChange(RelationConfigChange):
-    context: Optional[str] = None
-
-    @property
-    def requires_full_refresh(self) -> bool:
-        return False
-
-
-@dataclass(frozen=True, eq=True, unsafe_hash=True)
 class SnowflakeInteractiveTableRefreshWarehouseConfigChange(RelationConfigChange):
     context: Optional[str] = None
 
@@ -296,7 +305,6 @@ class SnowflakeInteractiveTableInitializationWarehouseConfigChange(RelationConfi
 class SnowflakeInteractiveTableConfigChangeset:
     target_lag: Optional[SnowflakeInteractiveTableTargetLagConfigChange] = None
     cluster_by: Optional[SnowflakeInteractiveTableClusterByConfigChange] = None
-    snowflake_warehouse: Optional[SnowflakeInteractiveTableWarehouseConfigChange] = None
     refresh_warehouse: Optional[SnowflakeInteractiveTableRefreshWarehouseConfigChange] = None
     snowflake_initialization_warehouse: Optional[
         SnowflakeInteractiveTableInitializationWarehouseConfigChange
@@ -307,7 +315,6 @@ class SnowflakeInteractiveTableConfigChangeset:
         return [
             self.target_lag,
             self.cluster_by,
-            self.snowflake_warehouse,
             self.refresh_warehouse,
             self.snowflake_initialization_warehouse,
         ]

@@ -322,3 +322,95 @@ def test_builder_marks_target_lag_addition_as_create():
     )
     assert changeset.target_lag.action == RelationConfigChangeAction.create
     assert changeset.requires_full_refresh is True
+
+
+# --- warehouse fallback (Item 1) ----------------------------------------------
+
+
+def test_warehouse_parameter_falls_back_to_snowflake_warehouse():
+    desired = SnowflakeInteractiveTableConfig.from_relation_config(
+        model_config(snowflake_warehouse="analytics_wh")
+    )
+    assert desired.warehouse_parameter == "analytics_wh"
+
+
+def test_refresh_warehouse_takes_precedence_over_snowflake_warehouse():
+    desired = SnowflakeInteractiveTableConfig.from_relation_config(
+        model_config(snowflake_warehouse="wh_a", refresh_warehouse="wh_b")
+    )
+    assert desired.warehouse_parameter == "wh_b"
+
+
+def test_snowflake_warehouse_only_produces_no_phantom_diff():
+    """Configuring only `snowflake_warehouse` -- the ordinary dbt-snowflake way
+    to say which warehouse a model uses -- must not diff against the
+    readback's refresh_warehouse when Snowflake reports that same warehouse
+    back. Snowflake requires WAREHOUSE whenever TARGET_LAG is set, so an
+    interactive table with only snowflake_warehouse configured still reads
+    back a real refresh_warehouse; comparing that against a None desired
+    refresh_warehouse would be a phantom diff on every run."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(target_lag="1 hour", refresh_warehouse="ANALYTICS_WH"),
+        model_config(target_lag="1 hour", snowflake_warehouse="analytics_wh"),
+    )
+    assert changeset is None or changeset.has_changes is False
+
+
+def test_builder_detects_genuine_warehouse_change_with_raw_context():
+    """A real change is still caught, and `context` carries the raw effective
+    value (not normalized/casefolded) with its original casing."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(target_lag="1 hour", refresh_warehouse="OLD_WH"),
+        model_config(target_lag="1 hour", snowflake_warehouse="New_Wh"),
+    )
+    assert changeset.refresh_warehouse.context == "New_Wh"
+
+
+# --- target_lag action/normalization consistency (Item 2) --------------------
+
+
+def test_builder_classifies_literal_none_string_target_lag_as_drop():
+    """The readback side can NEVER carry the literal string "NONE" --
+    `agate.Text()`'s default `null_values` (`'', 'na', 'n/a', 'none', 'null',
+    '.'`, case-insensitive) coerce it to a true `None` at Table-construction
+    time, before any of our code runs. But `new.target_lag` comes from the
+    model config's `extra.get("target_lag")` entirely raw -- no agate
+    coercion applies on that side. A user writing `target_lag: 'none'` to
+    make an existing dynamic table static puts the literal string "none"
+    into `new.target_lag`, not a true `None`. The action-selection branch
+    must test `target_lag_normalized` (which treats "none" as absent) on
+    both sides, matching the gating condition, or this dynamic->static
+    transition is misclassified as `alter` -- which Snowflake rejects
+    (001420) instead of the `drop`-and-rebuild this requires."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(target_lag="1 hour", refresh_warehouse="WH"),
+        model_config(target_lag="none"),
+    )
+    assert changeset.target_lag.action == RelationConfigChangeAction.drop
+    assert changeset.requires_full_refresh is True
+
+
+# --- aggregation coverage across mixed changes (Item 3) -----------------------
+
+
+def test_changeset_aggregates_full_refresh_across_mixed_changes():
+    """A single changeset containing both a full-refresh-requiring change
+    (cluster_by) and a non-full-refresh one (target_lag alter) must still
+    report requires_full_refresh True -- the scenario the `any()`
+    aggregation exists for."""
+    changeset = SnowflakeInteractiveTableConfigChangeset(
+        target_lag=SnowflakeInteractiveTableTargetLagConfigChange(
+            action=RelationConfigChangeAction.alter, context="2 hours"
+        ),
+        cluster_by=SnowflakeInteractiveTableClusterByConfigChange(
+            action=RelationConfigChangeAction.alter, context="id"
+        ),
+    )
+    assert changeset.has_changes is True
+    assert changeset.requires_full_refresh is True
