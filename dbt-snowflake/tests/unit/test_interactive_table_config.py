@@ -6,6 +6,7 @@ import pytest
 from dbt.adapters.snowflake.relation_configs.interactive_table import (
     INTERACTIVE_TABLE_COLUMNS,
     SnowflakeInteractiveTableConfig,
+    _normalize_cluster_by,
 )
 
 
@@ -121,6 +122,24 @@ def test_a_real_cluster_by_change_is_still_detected():
     )
     existing = SnowflakeInteractiveTableConfig.from_relation_results(readback(cluster_by="(id)"))
     assert desired.cluster_by_normalized != existing.cluster_by_normalized
+
+
+def test_cluster_by_with_mismatched_outer_parens_is_not_stripped():
+    """`(a)` followed by `to_date(ts)` starts with `(` and ends with `)`, but the
+    leading paren is closed by the one after `a`, not the trailing one -- these are
+    NOT a single balanced outer pair and must be left alone."""
+    assert _normalize_cluster_by("(a), to_date(ts)") == "(a), to_date(ts)"
+
+
+def test_singly_and_doubly_wrapped_cluster_by_lists_normalize_the_same():
+    """`(a), (b)` (two independently parenthesized keys) and `((a), (b))` (the same
+    list wrapped in one more outer pair) denote the SAME clustering key list and
+    must compare equal."""
+    assert _normalize_cluster_by("(a), (b)") == _normalize_cluster_by("((a), (b))")
+
+
+def test_single_balanced_outer_pair_still_strips():
+    assert _normalize_cluster_by("(id)") == "id"
 
 
 @pytest.mark.parametrize(

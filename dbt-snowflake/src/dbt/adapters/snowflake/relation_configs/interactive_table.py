@@ -42,6 +42,27 @@ def _normalize_warehouse(value: Optional[str]) -> Optional[str]:
     return stripped.casefold()
 
 
+def _has_balanced_outer_parens(text: str) -> bool:
+    """True when the `(` at index 0 is the one closed by the `)` at the final
+    index -- i.e. nesting depth first returns to 0 exactly at the last character.
+
+    A mere `startswith("(") and endswith(")")` check is NOT a balance check: the
+    leading and trailing parens can belong to unrelated groups, e.g.
+    `(a), to_date(ts)`.
+    """
+    if not (text.startswith("(") and text.endswith(")")):
+        return False
+    depth = 0
+    for index, char in enumerate(text):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index == len(text) - 1
+    return False
+
+
 def _normalize_cluster_by(value: Optional[str]) -> Optional[str]:
     """`SHOW` returns clustering keys parenthesized -- `(id, name)` -- while the
     model config yields a bare `id, name`. Strip ONE balanced outer paren pair so
@@ -55,7 +76,7 @@ def _normalize_cluster_by(value: Optional[str]) -> Optional[str]:
     text = value.strip()
     if text.casefold() in _ABSENT:
         return None
-    if text.startswith("(") and text.endswith(")"):
+    if _has_balanced_outer_parens(text):
         text = text[1:-1].strip()
     parts = [part.strip() for part in text.split(",")]
     return ", ".join(part for part in parts if part).casefold()
