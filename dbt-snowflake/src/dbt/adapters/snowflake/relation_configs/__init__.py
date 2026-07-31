@@ -12,6 +12,9 @@ from dbt.adapters.snowflake.relation_configs.dynamic_table import (
     SnowflakeDynamicTableClusterByConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
 )
+from dbt.adapters.snowflake.relation_configs.interactive_table import (
+    SnowflakeInteractiveTableConfig,
+)
 from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,
     SnowflakeQuotePolicy,
