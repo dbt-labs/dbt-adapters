@@ -38,7 +38,7 @@ class AthenaSparkSessionConfig:
 
     @property
     def is_spark_connect(self) -> bool:
-        """True when the model requests Apache Spark 3.5+ via Spark Connect."""
+        """True when the model requests Apache Spark 3.5, which runs via Spark Connect."""
         return self.spark_engine_version == "3.5"
 
     def set_timeout(self) -> int:

@@ -4,7 +4,9 @@ import sys
 import time
 from unittest.mock import MagicMock, Mock, patch
 
+import boto3
 import botocore.exceptions
+import botocore.session
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -200,7 +202,6 @@ class TestSparkConnectSubmission:
         self._stub_endpoint_and_channel(submitter, monkeypatch)
 
         assumed_session = Mock()
-        assumed_session._session = Mock()
         get_session = Mock(return_value=assumed_session)
         setup_default = Mock()
         monkeypatch.setattr(
@@ -210,11 +211,46 @@ class TestSparkConnectSubmission:
         monkeypatch.setattr(
             "dbt.adapters.athena.spark_connect.job.boto3.setup_default_session", setup_default
         )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.boto3.DEFAULT_SESSION", None, raising=False
+        )
 
         submitter.submit("x = 1")
 
         get_session.assert_called_once_with(mock_credentials)
-        setup_default.assert_called_once_with(botocore_session=assumed_session._session)
+        assert boto3.DEFAULT_SESSION is assumed_session
+        setup_default.assert_not_called()
+
+    def test_assume_role_default_session_survives_s3_client_creation(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        # Regression: re-wrapping the assumed session as the default double-
+        # registers boto3's s3 client-class handler, so boto3.client("s3")
+        # raises a duplicate upload_file injection.
+        mock_credentials.assume_role_arn = "arn:aws:iam::123456789012:role/dbt"
+        mock_pool = Mock()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        base = botocore.session.Session()
+        base.set_config_variable("region", "us-east-1")
+        assumed_session = boto3.session.Session(
+            botocore_session=base,
+            aws_access_key_id="AKIA_ASSUMED",
+            aws_secret_access_key="SECRET",
+            aws_session_token="TOKEN",
+        )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.get_boto3_session_from_credentials",
+            Mock(return_value=assumed_session),
+        )
+        monkeypatch.setattr(boto3, "DEFAULT_SESSION", None, raising=False)
+
+        submitter.submit("x = 1")
+
+        boto3.client("s3", region_name="us-east-1")
+        assert boto3.DEFAULT_SESSION is assumed_session
 
     def test_no_assume_role_leaves_default_session_untouched(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
@@ -227,6 +263,7 @@ class TestSparkConnectSubmission:
 
         get_session = Mock()
         setup_default = Mock()
+        sentinel = Mock()
         monkeypatch.setattr(
             "dbt.adapters.athena.spark_connect.job.get_boto3_session_from_credentials",
             get_session,
@@ -234,11 +271,15 @@ class TestSparkConnectSubmission:
         monkeypatch.setattr(
             "dbt.adapters.athena.spark_connect.job.boto3.setup_default_session", setup_default
         )
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.boto3.DEFAULT_SESSION", sentinel, raising=False
+        )
 
         submitter.submit("x = 1")
 
         get_session.assert_not_called()
         setup_default.assert_not_called()
+        assert boto3.DEFAULT_SESSION is sentinel
 
     def test_transient_error_retries_with_new_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch

@@ -138,6 +138,7 @@ def model(dbt, spark):
     dbt.config(materialized='table', spark_engine_version='3.5')
     import boto3
 
+    boto3.client("s3")
     arn = boto3.client("sts").get_caller_identity()["Arn"]
     return spark.createDataFrame([(arn,)], ["caller_arn"])
 """

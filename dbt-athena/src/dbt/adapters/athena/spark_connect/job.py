@@ -254,7 +254,10 @@ class SparkConnectSubmitter:
         if not self.credentials.assume_role_arn:
             return
         assumed = get_boto3_session_from_credentials(self.credentials)
-        boto3.setup_default_session(botocore_session=assumed._session)
+        # Assign directly; setup_default_session(botocore_session=assumed._session)
+        # re-registers the creating-client-class.s3 handler and breaks the model's
+        # first boto3.client("s3") with a duplicate upload_file injection error.
+        boto3.DEFAULT_SESSION = assumed
 
     def _is_transient_failure(self, e: BaseException) -> bool:
         return is_transient_spark_error(e)
