@@ -14,12 +14,12 @@ from dbt.tests.adapter.simple_snapshot.fixtures import (
 from dbt.tests.util import check_relations_equal, run_dbt
 
 
-def spark_sql(sql):
+def spark_sql(sql: str) -> str:
     return sql.replace("TEXT", "STRING").replace("text", "string")
 
 
 @pytest.mark.skip_profile("apache_spark", "spark_session")
-class TestSparkSnapshotMultiUniqueKey:
+class TestSnapshotMultiUniqueKeySpark:
     @pytest.fixture(scope="class")
     def models(self):
         return {
@@ -49,4 +49,8 @@ class TestSparkSnapshotMultiUniqueKey:
         results = run_dbt(["snapshot"])
         assert len(results) == 1
 
-        check_relations_equal(project.adapter, ["snapshot_actual", "snapshot_expected"])
+        check_relations_equal(
+            project.adapter,
+            ["snapshot_actual", "snapshot_expected"],
+            compare_snapshot_cols=True,
+        )
