@@ -48,6 +48,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.InteractiveTable,  # type: ignore
             }
         )
     )
@@ -58,6 +59,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.DynamicTable,  # type: ignore
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
+                SnowflakeRelationType.InteractiveTable,  # type: ignore
             }
         )
     )
@@ -65,6 +67,10 @@ class SnowflakeRelation(BaseRelation):
     @property
     def is_dynamic_table(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_interactive_table(self) -> bool:
+        return self.type == SnowflakeRelationType.InteractiveTable
 
     @property
     def is_materialized_view(self) -> bool:
@@ -77,6 +83,10 @@ class SnowflakeRelation(BaseRelation):
     @classproperty
     def DynamicTable(cls) -> str:
         return str(SnowflakeRelationType.DynamicTable)
+
+    @classproperty
+    def InteractiveTable(cls) -> str:
+        return str(SnowflakeRelationType.InteractiveTable)
 
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
