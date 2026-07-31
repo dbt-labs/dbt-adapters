@@ -13,7 +13,13 @@ from dbt.adapters.snowflake.relation_configs.dynamic_table import (
     SnowflakeDynamicTableTransientConfigChange,
 )
 from dbt.adapters.snowflake.relation_configs.interactive_table import (
+    SnowflakeInteractiveTableClusterByConfigChange,
     SnowflakeInteractiveTableConfig,
+    SnowflakeInteractiveTableConfigChangeset,
+    SnowflakeInteractiveTableInitializationWarehouseConfigChange,
+    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
+    SnowflakeInteractiveTableTargetLagConfigChange,
+    SnowflakeInteractiveTableWarehouseConfigChange,
 )
 from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeIncludePolicy,

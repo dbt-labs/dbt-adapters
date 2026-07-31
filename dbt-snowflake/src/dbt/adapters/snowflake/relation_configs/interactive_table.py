@@ -2,7 +2,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.relation_configs import RelationResults
+from dbt.adapters.relation_configs import (
+    RelationConfigChange,
+    RelationConfigChangeAction,
+    RelationResults,
+)
 
 from dbt.adapters.snowflake import parse_model
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
@@ -235,3 +239,83 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             # other two warehouse fields.
             "snowflake_initialization_warehouse": _absent_to_none(get("initialization_warehouse")),
         }
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeInteractiveTableTargetLagConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        # Only a value-to-value change is alterable. Snowflake rejects ALTERing a
+        # lag away (dynamic -> static) or onto a static table (001420), so both
+        # transitions must rebuild.
+        return self.action != RelationConfigChangeAction.alter
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeInteractiveTableClusterByConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        # DIVERGES from dynamic tables (which return False and emit
+        # `ALTER DYNAMIC TABLE ... CLUSTER BY`). Snowflake rejects
+        # `ALTER ... CLUSTER BY` on an interactive table with 001003.
+        return True
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeInteractiveTableWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeInteractiveTableRefreshWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, eq=True, unsafe_hash=True)
+class SnowflakeInteractiveTableInitializationWarehouseConfigChange(RelationConfigChange):
+    context: Optional[str] = None
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return False
+
+
+@dataclass
+class SnowflakeInteractiveTableConfigChangeset:
+    target_lag: Optional[SnowflakeInteractiveTableTargetLagConfigChange] = None
+    cluster_by: Optional[SnowflakeInteractiveTableClusterByConfigChange] = None
+    snowflake_warehouse: Optional[SnowflakeInteractiveTableWarehouseConfigChange] = None
+    refresh_warehouse: Optional[SnowflakeInteractiveTableRefreshWarehouseConfigChange] = None
+    snowflake_initialization_warehouse: Optional[
+        SnowflakeInteractiveTableInitializationWarehouseConfigChange
+    ] = None
+
+    @property
+    def _changes(self) -> list:
+        return [
+            self.target_lag,
+            self.cluster_by,
+            self.snowflake_warehouse,
+            self.refresh_warehouse,
+            self.snowflake_initialization_warehouse,
+        ]
+
+    @property
+    def requires_full_refresh(self) -> bool:
+        return any(change.requires_full_refresh for change in self._changes if change)
+
+    @property
+    def has_changes(self) -> bool:
+        return any(change is not None for change in self._changes)

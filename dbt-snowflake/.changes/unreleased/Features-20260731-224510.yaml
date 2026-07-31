@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add the foundation for the Snowflake interactive_table materialization: relation type registration, listing discriminator, and relation config with change detection'
+time: 2026-07-31T22:45:10.242695+05:30
+custom:
+    Author: namangoyal-dbt
+    Issue: "1780"

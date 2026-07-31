@@ -28,6 +28,12 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
     SnowflakeDynamicTableTransientConfigChange,
+    SnowflakeInteractiveTableClusterByConfigChange,
+    SnowflakeInteractiveTableConfig,
+    SnowflakeInteractiveTableConfigChangeset,
+    SnowflakeInteractiveTableInitializationWarehouseConfigChange,
+    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
+    SnowflakeInteractiveTableTargetLagConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -41,6 +47,7 @@ class SnowflakeRelation(BaseRelation):
     require_alias: bool = False
     relation_configs = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
+        SnowflakeRelationType.InteractiveTable: SnowflakeInteractiveTableConfig,
     }
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -97,7 +104,11 @@ class SnowflakeRelation(BaseRelation):
         relation_type: str = config.config.materialized  # type:ignore
 
         if relation_config := cls.relation_configs.get(relation_type):
-            return relation_config.from_relation_config(config)
+            # A second, differently-typed `relation_configs` entry (interactive
+            # table) makes mypy widen the dict's value type to plain `type`,
+            # which has no `from_relation_config`. Both entries share that
+            # classmethod via `SnowflakeRelationConfigBase`.
+            return relation_config.from_relation_config(config)  # type:ignore
 
         raise DbtRuntimeError(
             f"from_config() is not supported for the provided relation type: {relation_type}"
@@ -189,6 +200,54 @@ class SnowflakeRelation(BaseRelation):
         if config_change_collection.has_changes:
             return config_change_collection
         return None
+
+    @classmethod
+    def interactive_table_config_changeset(
+        cls, relation_results: RelationResults, relation_config: RelationConfig
+    ) -> Optional[SnowflakeInteractiveTableConfigChangeset]:
+        existing = SnowflakeInteractiveTableConfig.from_relation_results(relation_results)
+        new = SnowflakeInteractiveTableConfig.from_relation_config(relation_config)
+
+        changeset = SnowflakeInteractiveTableConfigChangeset()
+
+        # target_lag: the ACTION distinguishes the three transitions, which have
+        # different full-refresh consequences.
+        if new.target_lag_normalized != existing.target_lag_normalized:
+            if existing.target_lag is None:
+                action = RelationConfigChangeAction.create  # static -> dynamic
+            elif new.target_lag is None:
+                action = RelationConfigChangeAction.drop  # dynamic -> static
+            else:
+                action = RelationConfigChangeAction.alter
+            changeset.target_lag = SnowflakeInteractiveTableTargetLagConfigChange(
+                action=action,  # type:ignore
+                context=new.target_lag,
+            )
+
+        if new.cluster_by_normalized != existing.cluster_by_normalized:
+            changeset.cluster_by = SnowflakeInteractiveTableClusterByConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new.cluster_by,
+            )
+
+        if new.refresh_warehouse_normalized != existing.refresh_warehouse_normalized:
+            changeset.refresh_warehouse = SnowflakeInteractiveTableRefreshWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new.refresh_warehouse,
+            )
+
+        if (
+            new.snowflake_initialization_warehouse_normalized
+            != existing.snowflake_initialization_warehouse_normalized
+        ):
+            changeset.snowflake_initialization_warehouse = (
+                SnowflakeInteractiveTableInitializationWarehouseConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=new.snowflake_initialization_warehouse,
+                )
+            )
+
+        return changeset if changeset.has_changes else None
 
     def as_case_sensitive(self) -> "SnowflakeRelation":
         path_part_map = {}

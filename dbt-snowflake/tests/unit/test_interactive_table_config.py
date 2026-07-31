@@ -211,3 +211,114 @@ def test_target_lag_fallback_collapses_internal_whitespace():
     returned as-is; double internal whitespace must not create a phantom
     diff between two spellings of the same lag."""
     assert _normalize_target_lag("2 weeks") == _normalize_target_lag("2  weeks")
+
+
+from dbt.adapters.relation_configs import RelationConfigChangeAction
+from dbt.adapters.snowflake.relation_configs.interactive_table import (
+    SnowflakeInteractiveTableClusterByConfigChange,
+    SnowflakeInteractiveTableConfigChangeset,
+    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
+    SnowflakeInteractiveTableTargetLagConfigChange,
+)
+
+
+def test_cluster_by_change_requires_full_refresh():
+    """DIVERGES from dynamic tables, which return False here."""
+    change = SnowflakeInteractiveTableClusterByConfigChange(
+        action=RelationConfigChangeAction.alter, context="id, name"
+    )
+    assert change.requires_full_refresh is True
+
+
+def test_target_lag_value_change_does_not_require_full_refresh():
+    change = SnowflakeInteractiveTableTargetLagConfigChange(
+        action=RelationConfigChangeAction.alter, context="2 hours"
+    )
+    assert change.requires_full_refresh is False
+
+
+def test_target_lag_removal_requires_full_refresh():
+    change = SnowflakeInteractiveTableTargetLagConfigChange(
+        action=RelationConfigChangeAction.drop, context=None
+    )
+    assert change.requires_full_refresh is True
+
+
+def test_target_lag_addition_requires_full_refresh():
+    change = SnowflakeInteractiveTableTargetLagConfigChange(
+        action=RelationConfigChangeAction.create, context="1 hour"
+    )
+    assert change.requires_full_refresh is True
+
+
+def test_warehouse_change_does_not_require_full_refresh():
+    change = SnowflakeInteractiveTableRefreshWarehouseConfigChange(
+        action=RelationConfigChangeAction.alter, context="OTHER_WH"
+    )
+    assert change.requires_full_refresh is False
+
+
+def test_changeset_aggregates_full_refresh():
+    changeset = SnowflakeInteractiveTableConfigChangeset(
+        target_lag=SnowflakeInteractiveTableTargetLagConfigChange(
+            action=RelationConfigChangeAction.alter, context="2 hours"
+        ),
+    )
+    assert changeset.has_changes is True
+    assert changeset.requires_full_refresh is False
+
+    changeset = SnowflakeInteractiveTableConfigChangeset(
+        cluster_by=SnowflakeInteractiveTableClusterByConfigChange(
+            action=RelationConfigChangeAction.alter, context="id"
+        ),
+    )
+    assert changeset.requires_full_refresh is True
+
+
+def test_empty_changeset_has_no_changes():
+    assert SnowflakeInteractiveTableConfigChangeset().has_changes is False
+
+
+# --- the builder: identical config must produce NO changes -------------------
+
+
+def test_identical_config_produces_no_changes():
+    """The phantom-diff guard, end to end: readback formatting differs from the
+    configured text in every field, yet nothing changed."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(
+            cluster_by="(id)",
+            target_lag="1 minute",
+            refresh_warehouse="ANALYTICS_WH",
+        ),
+        model_config(
+            cluster_by=["id"],
+            target_lag="60 seconds",
+            refresh_warehouse="analytics_wh",
+        ),
+    )
+    assert changeset is None or changeset.has_changes is False
+
+
+def test_builder_marks_target_lag_removal_as_drop():
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(target_lag="1 hour", refresh_warehouse="WH"),
+        model_config(target_lag=None),
+    )
+    assert changeset.target_lag.action == RelationConfigChangeAction.drop
+    assert changeset.requires_full_refresh is True
+
+
+def test_builder_marks_target_lag_addition_as_create():
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(target_lag=None),
+        model_config(target_lag="1 hour", refresh_warehouse="WH"),
+    )
+    assert changeset.target_lag.action == RelationConfigChangeAction.create
+    assert changeset.requires_full_refresh is True
