@@ -303,7 +303,7 @@ class SnowflakeAdapter(SQLAdapter):
 
         row = object_metadata[0]
 
-        is_interactive = row.get("is_interactive") in ("Y", "YES")
+        is_interactive = self._interactive_flag_is_set(row)
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
         kind = row.get("kind")
 

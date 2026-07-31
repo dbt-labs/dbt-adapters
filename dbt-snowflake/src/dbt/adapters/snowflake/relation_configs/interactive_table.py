@@ -182,20 +182,24 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         return _normalize_warehouse(self.refresh_warehouse)
 
     @property
-    def snowflake_warehouse_normalized(self) -> Optional[str]:
-        return _normalize_warehouse(self.snowflake_warehouse)
-
-    @property
     def warehouse_parameter(self) -> Optional[str]:
-        """The value that ends up being the interactive table's refresh warehouse.
+        """The value that would be the interactive table's refresh warehouse,
+        if this config is dynamic.
 
-        Snowflake requires WAREHOUSE whenever TARGET_LAG is set, so a dynamic
-        interactive table always has a real refresh warehouse -- even a user who
-        configures only `snowflake_warehouse` (the ordinary dbt-snowflake way to
-        say which warehouse a model uses) gets one. When `refresh_warehouse` is
-        set it takes precedence, as it is the explicit override for the table's
-        self-refresh warehouse; otherwise `snowflake_warehouse` serves both roles,
-        the way it does for dynamic tables.
+        This property is unconditional -- it always resolves a preferred
+        warehouse when either field is set, regardless of `target_lag` -- since
+        that's just "which of the two warehouse fields wins". When
+        `refresh_warehouse` is set it takes precedence, as it is the explicit
+        override for the table's self-refresh warehouse; otherwise
+        `snowflake_warehouse` serves both roles, the way it does for dynamic
+        tables.
+
+        Snowflake requires WAREHOUSE whenever TARGET_LAG is set, and REJECTS it
+        otherwise, so this value is only meaningful for the interactive table's
+        actual refresh warehouse when the config is dynamic (`is_dynamic`). A
+        static table has no refresh warehouse regardless of what this property
+        returns; callers comparing against a readback's `refresh_warehouse` must
+        gate on `is_dynamic` (or `target_lag_normalized`) themselves.
         """
         return self.refresh_warehouse or self.snowflake_warehouse
 
@@ -209,8 +213,14 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
 
     @property
     def is_dynamic(self) -> bool:
-        """A target_lag makes an interactive table auto-refreshing."""
-        return self.target_lag is not None
+        """A target_lag makes an interactive table auto-refreshing.
+
+        Must use `target_lag_normalized`, not `target_lag`: the literal string
+        `'none'` (and other absence spellings) means "no lag" and must read as
+        static here too, matching how the changeset builder classifies
+        transitions -- see `test_builder_classifies_literal_none_string_target_lag_as_drop`.
+        """
+        return self.target_lag_normalized is not None
 
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> dict:

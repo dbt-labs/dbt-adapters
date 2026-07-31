@@ -299,7 +299,7 @@ def test_identical_config_produces_no_changes():
             refresh_warehouse="analytics_wh",
         ),
     )
-    assert changeset is None or changeset.has_changes is False
+    assert changeset is None
 
 
 def test_builder_marks_target_lag_removal_as_drop():
@@ -355,7 +355,7 @@ def test_snowflake_warehouse_only_produces_no_phantom_diff():
         readback(target_lag="1 hour", refresh_warehouse="ANALYTICS_WH"),
         model_config(target_lag="1 hour", snowflake_warehouse="analytics_wh"),
     )
-    assert changeset is None or changeset.has_changes is False
+    assert changeset is None
 
 
 def test_builder_detects_genuine_warehouse_change_with_raw_context():
@@ -368,6 +368,22 @@ def test_builder_detects_genuine_warehouse_change_with_raw_context():
         model_config(target_lag="1 hour", snowflake_warehouse="New_Wh"),
     )
     assert changeset.refresh_warehouse.context == "New_Wh"
+
+
+def test_static_snowflake_warehouse_only_produces_no_phantom_diff():
+    """A STATIC interactive table (no target_lag) has no refresh warehouse in
+    Snowflake -- WAREHOUSE is only accepted when TARGET_LAG is set, so a
+    static table always reads back `refresh_warehouse = NULL`. A project-wide
+    `snowflake_warehouse` (e.g. via `models: +snowflake_warehouse:`) must not
+    diff against that None readback just because `warehouse_parameter` falls
+    back to it -- that fallback is only meaningful for a dynamic table."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(),
+        model_config(snowflake_warehouse="analytics_wh"),
+    )
+    assert changeset is None
 
 
 # --- target_lag action/normalization consistency (Item 2) --------------------
@@ -397,6 +413,24 @@ def test_builder_classifies_literal_none_string_target_lag_as_drop():
 
 
 # --- aggregation coverage across mixed changes (Item 3) -----------------------
+
+
+def test_is_dynamic_is_false_for_literal_none_string_target_lag():
+    """Item 2: `is_dynamic` must agree with `target_lag_normalized`, the same
+    signal the changeset builder uses to classify transitions. `target_lag='none'`
+    is the readback/config spelling of absence (see
+    `test_builder_classifies_literal_none_string_target_lag_as_drop`), so
+    `is_dynamic` must be False here even though `target_lag` itself is the
+    non-None string `'none'`."""
+    config = SnowflakeInteractiveTableConfig.from_relation_config(model_config(target_lag="none"))
+    assert config.is_dynamic is False
+
+
+def test_is_dynamic_is_true_for_a_real_target_lag():
+    config = SnowflakeInteractiveTableConfig.from_relation_config(
+        model_config(target_lag="1 hour")
+    )
+    assert config.is_dynamic is True
 
 
 def test_changeset_aggregates_full_refresh_across_mixed_changes():

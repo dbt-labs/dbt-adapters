@@ -230,10 +230,22 @@ class SnowflakeRelation(BaseRelation):
                 context=new.cluster_by,
             )
 
-        if new.warehouse_parameter_normalized != existing.refresh_warehouse_normalized:
+        # `warehouse_parameter` resolves unconditionally, but Snowflake only
+        # accepts (and only reports back) a refresh warehouse when the table is
+        # dynamic -- a static desired config has no real refresh warehouse to
+        # compare, no matter what `snowflake_warehouse` is set to. Gate it here
+        # rather than on `existing`, which must stay whatever Snowflake reported.
+        if new.target_lag_normalized is not None:
+            desired_refresh_warehouse = new.warehouse_parameter
+            desired_refresh_warehouse_normalized = new.warehouse_parameter_normalized
+        else:
+            desired_refresh_warehouse = None
+            desired_refresh_warehouse_normalized = None
+
+        if desired_refresh_warehouse_normalized != existing.refresh_warehouse_normalized:
             changeset.refresh_warehouse = SnowflakeInteractiveTableRefreshWarehouseConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
-                context=new.warehouse_parameter,
+                context=desired_refresh_warehouse,
             )
 
         if (
