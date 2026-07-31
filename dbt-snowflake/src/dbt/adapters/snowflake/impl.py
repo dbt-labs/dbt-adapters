@@ -303,10 +303,13 @@ class SnowflakeAdapter(SQLAdapter):
 
         row = object_metadata[0]
 
+        is_interactive = row.get("is_interactive") in ("Y", "YES")
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
         kind = row.get("kind")
 
-        if is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
+        if is_interactive and kind == str(SnowflakeRelationType.Table).upper():
+            table_type = str(SnowflakeRelationType.InteractiveTable).upper()
+        elif is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
             table_type = str(SnowflakeRelationType.DynamicTable).upper()
         else:
             table_type = kind
@@ -421,6 +424,11 @@ class SnowflakeAdapter(SQLAdapter):
         schema_functions = schema_functions.rename(
             column_names=[col.lower() for col in schema_functions.column_names]
         )
+        # Accounts without the interactive-table feature omit this column entirely.
+        # agate's .select() raises on a missing column, which would break
+        # list_relations for an ENTIRE SCHEMA -- so only ask for it when present.
+        if "is_interactive" in schema_objects.column_names:
+            tabular_columns.append("is_interactive")
         tabular_relations = [
             self._parse_list_relations_result(obj)
             for obj in schema_objects.select(tabular_columns)
@@ -432,16 +440,43 @@ class SnowflakeAdapter(SQLAdapter):
         ]
         return tabular_relations + function_relations
 
-    def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+    @staticmethod
+    def _interactive_flag_is_set(result: "agate.Row") -> bool:
+        """Absent column, NULL, and empty string all mean "not interactive".
 
+        agate's Row.get returns None both for a column that is absent from the
+        row and for a NULL cell, so one call covers every degradation path.
+        """
+        value = result.get("is_interactive")
+        if value is None:
+            return False
+        return str(value).strip().upper() in ("Y", "YES")
+
+    @classmethod
+    def _tabular_relation_type(cls, kind: str, result: "agate.Row"):
         try:
-            relation_type = self.Relation.get_relation_type(relation_type.lower())
+            relation_type = cls.Relation.get_relation_type(kind.lower())
         except ValueError:
-            relation_type = self.Relation.External
+            return cls.Relation.External
 
-        if relation_type == self.Relation.Table and is_dynamic == "Y":
-            relation_type = self.Relation.DynamicTable
+        if relation_type == cls.Relation.Table:
+            # Interactive tables report kind=TABLE. A *dynamic* interactive table
+            # sets BOTH is_interactive and is_dynamic, so interactive must be
+            # checked first or it is misclassified as a plain dynamic table.
+            if cls._interactive_flag_is_set(result):
+                return cls.Relation.InteractiveTable
+            if result["is_dynamic"] == "Y":
+                return cls.Relation.DynamicTable
+
+        return relation_type
+
+    def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database = result["database_name"]
+        schema = result["schema_name"]
+        identifier = result["name"]
+        is_iceberg = result["is_iceberg"]
+
+        relation_type = self._tabular_relation_type(result["kind"], result)
 
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
