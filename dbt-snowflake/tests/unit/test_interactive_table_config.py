@@ -6,7 +6,9 @@ import pytest
 from dbt.adapters.snowflake.relation_configs.interactive_table import (
     INTERACTIVE_TABLE_COLUMNS,
     SnowflakeInteractiveTableConfig,
+    _absent_to_none,
     _normalize_cluster_by,
+    _normalize_target_lag,
 )
 
 
@@ -87,7 +89,9 @@ def test_every_readback_column_round_trips_by_value():
     assert existing.database_name == "db"
     assert existing.target_lag == "1 hour"
     assert existing.refresh_warehouse == "MY_WH"
-    assert existing.snowflake_initialization_warehouse == "init_wh"
+    # Stored raw -- casefolding is a comparison concern, not a load-time one.
+    assert existing.snowflake_initialization_warehouse == "INIT_WH"
+    assert existing.snowflake_initialization_warehouse_normalized == "init_wh"
     assert existing.cluster_by == "(id, name)"
 
 
@@ -117,10 +121,20 @@ def test_cluster_by_stored_value_keeps_exact_text_for_ddl():
 
 
 def test_a_real_cluster_by_change_is_still_detected():
+    """Non-vacuous: both sides are meaningfully transformed by normalization
+    (the readback side has its outer parens stripped, and both sides are
+    casefolded from upper to lower) yet the underlying key lists genuinely
+    differ ('name' vs 'other') and must still compare unequal afterward. This
+    proves normalization doesn't over-collapse a real difference -- comparing
+    raw, untransformed strings (e.g. 'id, name' vs '(id)') would pass even if
+    `_normalize_cluster_by` were replaced by the identity function, so it
+    wouldn't prove anything about normalization itself."""
     desired = SnowflakeInteractiveTableConfig.from_relation_config(
-        model_config(cluster_by=["id", "name"])
+        model_config(cluster_by=["ID", "NAME"])
     )
-    existing = SnowflakeInteractiveTableConfig.from_relation_results(readback(cluster_by="(id)"))
+    existing = SnowflakeInteractiveTableConfig.from_relation_results(
+        readback(cluster_by="(ID, OTHER)")
+    )
     assert desired.cluster_by_normalized != existing.cluster_by_normalized
 
 
@@ -178,3 +192,22 @@ def test_static_interactive_table_has_no_target_lag_or_warehouse():
     existing = SnowflakeInteractiveTableConfig.from_relation_results(readback())
     assert existing.target_lag is None
     assert existing.refresh_warehouse is None
+
+
+def test_absent_to_none_collapses_sentinels_without_casefolding():
+    """`_absent_to_none` is the LOAD-TIME helper: it only collapses the wire
+    spellings of absence to None. Casefolding is a comparison concern owned
+    by `_normalize_warehouse` and must NOT happen here, or the stored value
+    would silently diverge from what Snowflake actually reported."""
+    assert _absent_to_none("") is None
+    assert _absent_to_none("none") is None
+    assert _absent_to_none("NONE") is None
+    assert _absent_to_none("  ") is None
+    assert _absent_to_none("INIT_WH") == "INIT_WH"
+
+
+def test_target_lag_fallback_collapses_internal_whitespace():
+    """Unrecognized target_lag forms fall back to a casefolded string
+    returned as-is; double internal whitespace must not create a phantom
+    diff between two spellings of the same lag."""
+    assert _normalize_target_lag("2 weeks") == _normalize_target_lag("2  weeks")

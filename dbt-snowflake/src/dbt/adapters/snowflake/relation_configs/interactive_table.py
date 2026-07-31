@@ -42,6 +42,24 @@ def _normalize_warehouse(value: Optional[str]) -> Optional[str]:
     return stripped.casefold()
 
 
+def _absent_to_none(value: Optional[str]) -> Optional[str]:
+    """Collapse the wire spellings of "not set" to None, at LOAD time.
+
+    Deliberately does NOT casefold: that's a comparison concern owned by
+    `_normalize_warehouse`. This is only for values that are the wire
+    spelling of ABSENCE -- Snowflake reads back `''` for an unset
+    initialization warehouse, and that must become `None` at load so
+    absence detection works. Anything else is stored byte-faithful to what
+    Snowflake reported.
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    if stripped.casefold() in _ABSENT:
+        return None
+    return stripped
+
+
 def _has_balanced_outer_parens(text: str) -> bool:
     """True when the `(` at index 0 is the one closed by the `)` at the final
     index -- i.e. nesting depth first returns to 0 exactly at the last character.
@@ -85,7 +103,9 @@ def _normalize_cluster_by(value: Optional[str]) -> Optional[str]:
 def _normalize_target_lag(value: Optional[str]) -> Optional[str]:
     """Snowflake canonicalizes lag units on readback (`60 seconds` -> `1 minute`).
     Convert both sides to a comparable count of seconds where possible; fall back
-    to a casefolded string so unrecognized forms still compare sanely.
+    to a casefolded string so unrecognized forms still compare sanely. The
+    fallback also collapses internal whitespace runs to a single space, so
+    e.g. `2 weeks` and `2  weeks` still compare equal.
 
     `DOWNSTREAM` is a legal value and is not a duration.
     """
@@ -112,8 +132,8 @@ def _normalize_target_lag(value: Optional[str]) -> Optional[str]:
         try:
             return str(int(parts[0]) * units[parts[1]])
         except ValueError:
-            return text
-    return text
+            return " ".join(parts)
+    return " ".join(parts)
 
 
 @dataclass(frozen=True, eq=True, unsafe_hash=True)
@@ -207,10 +227,11 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             "cluster_by": get("cluster_by"),
             "target_lag": get("target_lag"),
             "refresh_warehouse": get("refresh_warehouse"),
-            # Normalized at LOAD time, not comparison time: '' / 'NONE' are the
+            # Collapsed at LOAD time, not comparison time: '' / 'NONE' are the
             # readback spelling of absence, and the alter macro's `unset` branch
-            # keys on this being falsy.
-            "snowflake_initialization_warehouse": _normalize_warehouse(
-                get("initialization_warehouse")
-            ),
+            # keys on this being falsy. Casefolding is a comparison concern
+            # (see `_normalize_warehouse` / `*_normalized`), so it stays out of
+            # this load-time step -- the stored value stays raw, like the
+            # other two warehouse fields.
+            "snowflake_initialization_warehouse": _absent_to_none(get("initialization_warehouse")),
         }
