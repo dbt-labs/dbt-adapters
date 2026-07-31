@@ -92,12 +92,38 @@ def _normalize_cluster_by(value: Optional[str]) -> Optional[str]:
 
     Deliberately NOT a strip-to-first-paren: that would corrupt an expression
     like `to_date(ts)`, which legitimately contains parens.
+
+    Snowflake may also prefix that parenthesized list with `LINEAR` --
+    `LINEAR(ID, VAL)` -- on readback. This is UNVERIFIED against a live
+    warehouse: nobody has captured a real `SHOW INTERACTIVE TABLES` value, and
+    the closest evidence is a comment on the dynamic-table functional test at
+    `tests/functional/relation_tests/dynamic_table_tests/test_configuration_changes.py:406`,
+    which notes Snowflake "typically" returns cluster_by with a `LINEAR`
+    prefix and deliberately asserts only substring membership rather than
+    pinning the format. Because a `cluster_by` diff forces a full refresh,
+    guessing wrong here is expensive, so this function tolerates BOTH
+    spellings rather than picking one.
+
+    A leading, case-insensitive `LINEAR` is stripped ONLY when the remainder
+    (after skipping whitespace) is itself a balanced parenthesized group
+    closing at the end of the string -- reusing `_has_balanced_outer_parens`
+    on that remainder. This leaves a column or expression literally named
+    `linear` alone: bare `linear` has no following paren group to satisfy that
+    check, and `linear(a), b` is a multi-key list whose leading group closes
+    before the final character, not at it. The single-key case `LINEAR(ts)`
+    is genuinely ambiguous -- it could be Snowflake's wrapper around key `ts`,
+    or a call to a function named `linear` -- and is deliberately treated as
+    the wrapper, consistent with how a bare `(ts)` is already unwrapped.
     """
     if value is None:
         return None
     text = value.strip()
     if text.casefold() in _ABSENT:
         return None
+    if text.casefold().startswith("linear"):
+        remainder = text[len("linear") :].lstrip()
+        if _has_balanced_outer_parens(remainder):
+            text = remainder
     if _has_balanced_outer_parens(text):
         text = text[1:-1].strip()
     parts = [part.strip() for part in text.split(",")]

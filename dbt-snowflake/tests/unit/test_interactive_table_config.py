@@ -156,6 +156,40 @@ def test_single_balanced_outer_pair_still_strips():
     assert _normalize_cluster_by("(id)") == "id"
 
 
+# --- LINEAR prefix tolerance (UNVERIFIED against a live warehouse -- see the
+# docstring on `_normalize_cluster_by`) -----------------------------------------
+
+
+def test_linear_prefixed_bare_and_parenthesized_cluster_by_normalize_the_same():
+    assert (
+        _normalize_cluster_by("LINEAR(ID, VAL)")
+        == _normalize_cluster_by("(ID, VAL)")
+        == _normalize_cluster_by("ID, VAL")
+    )
+
+
+def test_linear_prefix_match_is_case_insensitive():
+    assert _normalize_cluster_by("linear(ID, VAL)") == _normalize_cluster_by("LINEAR(ID, VAL)")
+
+
+def test_linear_named_column_alone_is_untouched():
+    assert _normalize_cluster_by("linear") == "linear"
+
+
+def test_parenthesized_linear_named_column_still_unwraps():
+    """A column named `linear` wrapped in the ordinary outer-paren spelling
+    unwraps just like any other single key -- the LINEAR-prefix handling
+    must not interfere with this unrelated case."""
+    assert _normalize_cluster_by("(linear)") == "linear"
+
+
+def test_linear_function_call_as_one_of_several_keys_is_untouched():
+    """`linear(a)` here is a clustering EXPRESSION (a call to a function named
+    `linear`), not Snowflake's wrapper -- the leading group doesn't close at
+    the final character because `, b` follows it."""
+    assert _normalize_cluster_by("linear(a), b") == "linear(a), b"
+
+
 @pytest.mark.parametrize(
     "configured,returned",
     [("60 seconds", "1 minute"), ("120 seconds", "2 minutes"), ("1 hour", "1 hour")],
