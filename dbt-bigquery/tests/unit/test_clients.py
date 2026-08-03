@@ -28,6 +28,11 @@ from dbt.adapters.bigquery.clients import _bigquery_endpoint
         ("   ", None),
         ("https://", None),
         ("https://bq-proxy\n.example.com", None),
+        ("https://bq-proxy .example.com", None),
+        ("https://ftp://bq-proxy.example.com", None),
+        ("ftp://bq-proxy.example.com", None),
+        ("https:/bq-proxy.example.com", None),
+        ("HTTPS:/bq-proxy.example.com", None),
     ],
 )
 def test_bigquery_endpoint(api_endpoint, expected):

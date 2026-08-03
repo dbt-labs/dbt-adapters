@@ -31,8 +31,10 @@ _logger = AdapterLogger("BigQuery")
 
 # splits an endpoint into scheme and host. the scheme is optional and may repeat, in which
 # case the group holds the last (innermost) one, i.e. the scheme the user actually meant;
-# slashes around the host are dropped so they don't double up against the client's path
-_API_ENDPOINT = re.compile(r"(?:(?P<scheme>https?)://)*/*(?P<host>.*?)/*", re.IGNORECASE)
+# slashes around the host are dropped so they don't double up against the client's path.
+# the host is deliberately \S rather than . so that embedded whitespace fails the match
+# outright instead of reaching the client -- keep it that way
+_API_ENDPOINT = re.compile(r"(?:(?P<scheme>https?)://)*/*(?P<host>\S*?)/*", re.IGNORECASE)
 
 
 def create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
@@ -97,7 +99,14 @@ def _bigquery_endpoint(api_endpoint: Optional[str]) -> Optional[str]:
 
     match = _API_ENDPOINT.fullmatch(endpoint)
     if not match or not (host := match["host"]):
-        _logger.warning(f"Ignoring api_endpoint {api_endpoint}: could not parse a host")
+        _logger.warning(f"Ignoring api_endpoint {api_endpoint!r}: could not parse a host")
+        return None
+
+    # a scheme left over in the host means the value is malformed in a way the pattern
+    # can't read as a repeated prefix: an unsupported scheme (`ftp://host`) or a mistyped
+    # separator (`https:/host`, which would otherwise resolve the literal host `https`)
+    if "://" in host or host.lower().startswith(("http:", "https:")):
+        _logger.warning(f"Ignoring api_endpoint {api_endpoint!r}: {host!r} is not a usable host")
         return None
 
     normalized = f"{(match['scheme'] or 'https').lower()}://{host}"
