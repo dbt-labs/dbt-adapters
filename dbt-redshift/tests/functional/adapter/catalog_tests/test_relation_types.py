@@ -44,11 +44,16 @@ class TestCatalogRelationTypes:
         assert node.metadata.type == relation_type
 
 
-class TestCatalogRelationTypesShowApis(TestCatalogRelationTypes):
-    """Same relation type tests but with SHOW/SVV APIs enabled."""
+class TestCatalogRelationTypesDatasharing(TestCatalogRelationTypes):
+    """Same relation type tests but with datasharing config enabled."""
 
     @pytest.fixture(scope="class")
-    def project_config_update(self):
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
         return {
-            "flags": {"redshift_use_show_apis": True},
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
         }

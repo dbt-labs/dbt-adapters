@@ -1,13 +1,18 @@
+import os
 import unittest
 from unittest import mock
 import re
 from jinja2 import Environment, FileSystemLoader
 
+MACROS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "../../src/dbt/include/snowflake/macros")
+)
+
 
 class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
     def setUp(self):
         self.jinja_env = Environment(
-            loader=FileSystemLoader("src/dbt/include/snowflake/macros"),
+            loader=FileSystemLoader(MACROS_DIR),
             extensions=[
                 "jinja2.ext.do",
             ],

@@ -1,0 +1,6 @@
+kind: Features
+body: Add scheduler configuration support for Snowflake dynamic tables, enabling dbt-managed refresh scheduling that is decoupled from upstream and downstream dynamic table dependencies.
+time: 2026-03-12T15:07:24-07:00
+custom:
+    Author: ibelianski
+    Issue: none

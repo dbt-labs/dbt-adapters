@@ -31,11 +31,11 @@ class ColumnsInRelation:
         assert actual_columns == expected_columns
 
 
-class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
+class TestColumnsInRelationDatasharingOff(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "name": "test_columns_in_relation_behavior_flag_off",
+            "name": "test_columns_in_relation_datasharing_off",
         }
 
     @pytest.fixture(scope="class")
@@ -47,12 +47,22 @@ class TestColumnsInRelationBehaviorFlagOff(ColumnsInRelation):
         ]
 
 
-class TestColumnsInRelationBehaviorFlagOn(ColumnsInRelation):
+class TestColumnsInRelationDatasharingOn(ColumnsInRelation):
     @pytest.fixture(scope="class")
     def project_config_update(self):
         return {
-            "name": "test_columns_in_relation_behavior_flag_on",
-            "flags": {"redshift_use_show_apis": True},
+            "name": "test_columns_in_relation_datasharing_on",
+        }
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "datasharing": True}
+                },
+                "target": "default",
+            }
         }
 
     @pytest.fixture(scope="class")

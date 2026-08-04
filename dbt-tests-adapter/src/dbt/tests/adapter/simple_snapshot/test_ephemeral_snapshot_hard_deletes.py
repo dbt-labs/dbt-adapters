@@ -27,6 +27,11 @@ _source_alter_sql = """
 alter table {database}.{schema}.src_customers add column dummy_column VARCHAR(50) default 'dummy_value';
 """
 
+# SQL to delete a row from source table (simulating a hard delete)
+_source_delete_sql = """
+delete from {database}.{schema}.src_customers where id = 3;
+"""
+
 # Sources YAML configuration
 _sources_yml = """
 version: 2
@@ -54,6 +59,32 @@ snapshots:
       unique_key: id
       strategy: check
       check_cols: all
+      hard_deletes: new_record
+"""
+
+# Snapshots YAML with timestamp strategy and hard_deletes: new_record
+_snapshots_timestamp_yml = """
+snapshots:
+  - name: snapshot_customers
+    relation: ref('ephemeral_customers')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: new_record
+"""
+
+# Snapshots YAML with specific check_cols (not including the new column)
+_snapshots_specific_check_cols_yml = """
+snapshots:
+  - name: snapshot_customers
+    relation: ref('ephemeral_customers')
+    config:
+      unique_key: id
+      strategy: check
+      check_cols:
+        - first_name
+        - email
       hard_deletes: new_record
 """
 
@@ -101,7 +132,10 @@ class BaseSnapshotEphemeralHardDeletes:
         assert len(results) == 1  # type: ignore
 
         snapshot_result = project.run_sql(
-            "select count(*) as row_count from snapshot_customers", fetch="one"
+            "select count(*) as row_count from {schema}.snapshot_customers".format(
+                schema=project.test_schema
+            ),
+            fetch="one",
         )
         assert snapshot_result[0] == 3  # Should have 3 rows from initial data
 
@@ -111,3 +145,175 @@ class BaseSnapshotEphemeralHardDeletes:
 
         results = run_dbt(["snapshot"])
         assert len(results) == 1  # type: ignore
+
+
+class BaseSnapshotNewColumnTimestampStrategy:
+    """Test that adding a new column works with timestamp strategy + hard_deletes: new_record."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "_sources.yml": _sources_yml,
+            "ephemeral_customers.sql": _ephemeral_customers_sql,
+            "snapshots.yml": _snapshots_timestamp_yml,
+            "ref_snapshot.sql": _ref_snapshot_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def source_create_sql(self):
+        return _source_create_sql
+
+    @pytest.fixture(scope="class")
+    def source_insert_sql(self):
+        return _source_insert_sql
+
+    @pytest.fixture(scope="class")
+    def source_alter_sql(self):
+        return _source_alter_sql
+
+    def test_snapshot_new_column_timestamp_strategy(
+        self, project, source_create_sql, source_insert_sql, source_alter_sql
+    ):
+        project.run_sql(
+            source_create_sql.format(database=project.database, schema=project.test_schema)
+        )
+        project.run_sql(
+            source_insert_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+        # Add a new column to the source
+        project.run_sql(
+            source_alter_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        # Snapshot should succeed with the new column
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+
+class BaseSnapshotNewColumnSpecificCheckCols:
+    """Test that adding a new column works when check_cols is a specific list
+    that does NOT include the new column (original issue #852 scenario)."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "_sources.yml": _sources_yml,
+            "ephemeral_customers.sql": _ephemeral_customers_sql,
+            "snapshots.yml": _snapshots_specific_check_cols_yml,
+            "ref_snapshot.sql": _ref_snapshot_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def source_create_sql(self):
+        return _source_create_sql
+
+    @pytest.fixture(scope="class")
+    def source_insert_sql(self):
+        return _source_insert_sql
+
+    @pytest.fixture(scope="class")
+    def source_alter_sql(self):
+        return _source_alter_sql
+
+    def test_snapshot_new_column_specific_check_cols(
+        self, project, source_create_sql, source_insert_sql, source_alter_sql
+    ):
+        project.run_sql(
+            source_create_sql.format(database=project.database, schema=project.test_schema)
+        )
+        project.run_sql(
+            source_insert_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+        # Add a new column NOT in check_cols
+        project.run_sql(
+            source_alter_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        # Snapshot should succeed — new column should be added to snapshot table
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+
+class BaseSnapshotNewColumnWithDeletes:
+    """Test that adding a new column AND deleting a row at the same time works.
+    This exercises the deletion_records CTE which must handle new columns with NULL."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "_sources.yml": _sources_yml,
+            "ephemeral_customers.sql": _ephemeral_customers_sql,
+            "snapshots.yml": _snapshots_yml,
+            "ref_snapshot.sql": _ref_snapshot_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def source_create_sql(self):
+        return _source_create_sql
+
+    @pytest.fixture(scope="class")
+    def source_insert_sql(self):
+        return _source_insert_sql
+
+    @pytest.fixture(scope="class")
+    def source_alter_sql(self):
+        return _source_alter_sql
+
+    @pytest.fixture(scope="class")
+    def source_delete_sql(self):
+        return _source_delete_sql
+
+    def test_snapshot_new_column_with_deletes(
+        self, project, source_create_sql, source_insert_sql, source_alter_sql, source_delete_sql
+    ):
+        project.run_sql(
+            source_create_sql.format(database=project.database, schema=project.test_schema)
+        )
+        project.run_sql(
+            source_insert_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        # Initial snapshot: 3 rows
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+        snapshot_result = project.run_sql(
+            "select count(*) as row_count from {schema}.snapshot_customers".format(
+                schema=project.test_schema
+            ),
+            fetch="one",
+        )
+        assert snapshot_result[0] == 3
+
+        # Add a new column AND delete a row at the same time
+        project.run_sql(
+            source_alter_sql.format(database=project.database, schema=project.test_schema)
+        )
+        project.run_sql(
+            source_delete_sql.format(database=project.database, schema=project.test_schema)
+        )
+
+        # Snapshot should succeed — deletion_records CTE must handle the new column
+        results = run_dbt(["snapshot"])
+        assert len(results) == 1  # type: ignore
+
+        # Should have 6 rows:
+        # - 3 original rows (now invalidated, dbt_valid_to set) because check_cols=all
+        #   with a new column means row_changed=TRUE for all rows
+        # - 2 new insert rows for surviving ids (1, 2) with the new column
+        # - 1 deletion record for id=3 (dbt_is_deleted='True', new column is NULL)
+        snapshot_result = project.run_sql(
+            "select count(*) as row_count from {schema}.snapshot_customers".format(
+                schema=project.test_schema
+            ),
+            fetch="one",
+        )
+        assert snapshot_result[0] == 6

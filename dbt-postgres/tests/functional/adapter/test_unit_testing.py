@@ -3,7 +3,10 @@ from dbt.tests.adapter.unit_testing.test_invalid_input import BaseUnitTestInvali
 from dbt.tests.adapter.unit_testing.test_quoted_reserved_word_column_names import (
     BaseUnitTestQuotedReservedWordColumnNames,
 )
-from dbt.tests.adapter.unit_testing.test_types import BaseUnitTestingTypes
+from dbt.tests.adapter.unit_testing.test_types import (
+    BaseUnitTestingTypes,
+    BaseUnitTestingVarcharFixtureNoTruncation,
+)
 
 
 class TestPostgresUnitTestCaseInsensitivity(BaseUnitTestCaseInsensivity):
@@ -19,4 +22,8 @@ class TestPostgresUnitTestingTypes(BaseUnitTestingTypes):
 
 
 class TestPostgresUnitTestQuotedReservedWordColumnNames(BaseUnitTestQuotedReservedWordColumnNames):
+    pass
+
+
+class TestPostgresUnitTestingVarcharFixtureNoTruncation(BaseUnitTestingVarcharFixtureNoTruncation):
     pass

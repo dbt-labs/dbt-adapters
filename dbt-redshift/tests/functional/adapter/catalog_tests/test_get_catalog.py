@@ -6,6 +6,12 @@ import pytest
 
 class TestGetCatalog:
     @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target):
+        outputs = {"default": dbt_profile_target}
+        outputs["default"]["retry_all"] = True
+        return outputs
+
+    @pytest.fixture(scope="class")
     def my_schema(self, project, adapter):
         schema = adapter.Relation.create(
             database=project.database,
@@ -143,13 +149,23 @@ class TestGetCatalog:
         assert len(catalog) == 17
 
 
-class TestGetCatalogShowApis(TestGetCatalog):
-    """Same catalog tests but with SHOW/SVV APIs enabled."""
+class TestGetCatalogDatasharing(TestGetCatalog):
+    """Same catalog tests but with datasharing enabled."""
 
     @pytest.fixture(scope="class")
-    def project_config_update(self):
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
         return {
-            "flags": {"redshift_use_show_apis": True},
+            "test": {
+                "outputs": {
+                    "default": {
+                        **dbt_profile_target,
+                        "schema": unique_schema,
+                        "datasharing": True,
+                        "retry_all": True,
+                    }
+                },
+                "target": "default",
+            }
         }
 
     def test_get_one_catalog_by_relations(

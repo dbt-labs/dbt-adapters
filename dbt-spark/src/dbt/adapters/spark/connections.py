@@ -40,7 +40,7 @@ try:
     import thrift
     import ssl
     import thrift_sasl
-    from puresasl.client import SASLClient
+    from pyhive.sasl_compat import PureSASLClient as SASLClient
 except ImportError:
     TTransportException = None
     pass  # done deliberately: setting modules to None explicitly violates MyPy contracts by degrading type semantics
@@ -665,7 +665,9 @@ class SparkConnectionManager(SQLConnectionManager):
                     logger.warning(msg)
                     time.sleep(creds.connect_timeout)
                 else:
-                    raise FailedToConnectError("failed to connect") from e
+                    raise FailedToConnectError(
+                        f"failed to connect: {type(e).__name__}: {e}"
+                    ) from e
         else:
             raise exc  # type: ignore
 
@@ -720,6 +722,10 @@ def build_ssl_transport(
             sasl_auth = "GSSAPI"
         else:
             sasl_auth = "PLAIN"
+            if username is None:
+                # Username doesn't matter in NONE mode, just needs
+                # to be nonempty.
+                username = "dbt"
             if password is None:
                 # Password doesn't matter in NONE mode, just needs
                 # to be nonempty.

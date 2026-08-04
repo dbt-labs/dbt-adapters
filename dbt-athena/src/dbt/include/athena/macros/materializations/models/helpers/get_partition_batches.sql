@@ -1,7 +1,7 @@
 {% macro get_partition_batches(sql, as_subquery=True) -%}
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
-    {%- set athena_partitions_limit = config.get('partitions_limit', 100) | int -%}
+    {%- set athena_partitions_limit = [1, config.get('partitions_limit', 100) | int] | max -%}
     {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
 
@@ -52,30 +52,44 @@
     {# Create conditions for each batch #}
     {%- set partitions_batches = [] -%}
     {%- if ns.is_bucketed -%}
-        {# Group non-empty partition conditions into batches respecting athena_partitions_limit #}
-        {%- set partition_batches = [] -%}
+        {%- set non_bucket_condition_chunks = [] -%}
         {%- set non_empty_partitions = ns.partitions | select | list -%}
-        {%- if non_empty_partitions | length > 0 -%}
-            {%- for i in range(0, non_empty_partitions | length, athena_partitions_limit) -%}
-                {%- set batch = non_empty_partitions[i:i + athena_partitions_limit] -%}
-                {%- do partition_batches.append(batch | join(' or ')) -%}
+        {%- set num_partition_values = non_empty_partitions | length -%}
+
+        {# Coordinate chunk sizes so partition × bucket ≤ partitions_limit #}
+        {%- if num_partition_values > 0 -%}
+            {%- set partition_chunk_size = [num_partition_values, athena_partitions_limit] | min -%}
+            {%- set bucket_chunk_size = [1, (athena_partitions_limit / partition_chunk_size) | int] | max -%}
+
+            {%- for i in range(0, num_partition_values, partition_chunk_size) -%}
+                {%- set batch = non_empty_partitions[i:i + partition_chunk_size] -%}
+                {%- do non_bucket_condition_chunks.append(batch | join(' or ')) -%}
             {%- endfor -%}
+        {%- else -%}
+            {%- set bucket_chunk_size = athena_partitions_limit -%}
         {%- endif -%}
 
-        {# For each bucket, chunk the IN clause values by athena_partitions_limit and combine with partition batches #}
-        {%- for bucket_num in ns.bucket_numbers -%}
-            {%- set values = ns.bucket_conditions[bucket_num] -%}
-
-            {%- for ci in range(0, values | length, athena_partitions_limit) -%}
-                {%- set chunk = values[ci:ci + athena_partitions_limit] -%}
-                {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ chunk | join(", ") ~ ")" -%}
-
-                {%- if partition_batches | length > 0 -%}
-                    {%- for pb in partition_batches -%}
+        {# Group bucket numbers so that partition_chunk × bucket_group ≤ limit.
+           Values within the same bucket share one Iceberg partition, so grouping
+           bucket numbers controls open-partition count.
+           Values are still chunked by athena_partitions_limit to avoid exceeding
+           Athena's query size limit. #}
+        {%- for bi in range(0, ns.bucket_numbers | length, bucket_chunk_size) -%}
+            {%- set bucket_group = ns.bucket_numbers[bi:bi + bucket_chunk_size] -%}
+            {%- set all_values = [] -%}
+            {%- for bn in bucket_group -%}
+                {%- for v in ns.bucket_conditions[bn] -%}
+                    {%- do all_values.append(v) -%}
+                {%- endfor -%}
+            {%- endfor -%}
+            {%- for vi in range(0, all_values | length, athena_partitions_limit) -%}
+                {%- set value_chunk = all_values[vi:vi + athena_partitions_limit] -%}
+                {%- set bucket_cond = ns.bucket_column ~ " IN (" ~ value_chunk | join(", ") ~ ")" -%}
+                {%- if non_bucket_condition_chunks | length > 0 -%}
+                    {%- for pb in non_bucket_condition_chunks -%}
                         {%- do partitions_batches.append("(" ~ pb ~ ") and " ~ bucket_cond) -%}
                     {%- endfor -%}
                 {%- else -%}
-                    {# Bucket-only case (no non-bucket partition columns) #}
                     {%- do partitions_batches.append(bucket_cond) -%}
                 {%- endif -%}
             {%- endfor -%}

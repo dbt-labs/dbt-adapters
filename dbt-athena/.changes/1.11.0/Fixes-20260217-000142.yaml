@@ -1,0 +1,6 @@
+kind: Fixes
+body: Override check_schema_exists in Athena adapter to use Glue API
+time: 2026-02-17T00:01:42.422978+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1650"

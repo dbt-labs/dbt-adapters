@@ -382,3 +382,115 @@ class TestCalculateFreshnessFromCustomSQL:
         assert freshness_response["max_loaded_at"] == expected_min_date
         assert freshness_response["snapshotted_at"] == current_time
         assert isinstance(freshness_response["age"], float)
+
+
+class TestGrantsMacroQuotesGrantees:
+    """Test that get_grant_sql and get_revoke_sql macros properly quote grantees.
+
+    This is critical for the grants system to work with usernames/roles that contain
+    special characters like hyphens, colons, or spaces (e.g., IAM role names like
+    'IAMR:db-dev-role' or SCIM-managed roles with hyphens).
+
+    See: https://github.com/dbt-labs/dbt-adapters/issues/1550
+    """
+
+    @pytest.fixture
+    def jinja_env(self):
+        """Set up Jinja environment to load actual macro files."""
+        from jinja2 import Environment, FileSystemLoader
+
+        return Environment(
+            loader=FileSystemLoader("src/dbt/include/global_project/macros/adapters"),
+            extensions=["jinja2.ext.do"],
+        )
+
+    @pytest.fixture
+    def default_context(self):
+        """Create default context with mock adapter."""
+        from unittest.mock import Mock
+
+        adapter = Mock()
+        adapter.quote = lambda identifier: f'"{identifier}"'
+
+        return {
+            "adapter": adapter,
+            "return": lambda r: r,
+        }
+
+    @pytest.fixture
+    def mock_relation(self):
+        """Create a mock relation."""
+        from unittest.mock import Mock
+
+        relation = Mock()
+        relation.render.return_value = '"my_schema"."my_table"'
+        return relation
+
+    def _get_template(self, jinja_env, default_context):
+        """Load the apply_grants.sql template."""
+        return jinja_env.get_template("apply_grants.sql", globals=default_context)
+
+    def _run_grant_macro(self, template, relation, privilege, grantees):
+        """Run the default__get_grant_sql macro."""
+        import re
+
+        result = template.module.default__get_grant_sql(relation, privilege, grantees)
+        return re.sub(r"\s+", " ", result.strip())
+
+    def _run_revoke_macro(self, template, relation, privilege, grantees):
+        """Run the default__get_revoke_sql macro."""
+        import re
+
+        result = template.module.default__get_revoke_sql(relation, privilege, grantees)
+        return re.sub(r"\s+", " ", result.strip())
+
+    # Test cases: (grantees_list, expected_quoted_in_output)
+    grantee_test_cases = [
+        # Single grantee with hyphen (Redshift IAM role style)
+        (["db-dev-role"], ['"db-dev-role"']),
+        # Single grantee with colon and hyphen (full IAM role name)
+        (["IAMR:db-dev-role"], ['"IAMR:db-dev-role"']),
+        # Multiple grantees with special characters
+        (
+            ["IAMR:db-dev-role", "test-user", "normal_user"],
+            ['"IAMR:db-dev-role"', '"test-user"', '"normal_user"'],
+        ),
+        # Grantee with spaces
+        (["user name"], ['"user name"']),
+        # Standard grantee (should still be quoted for SQL safety)
+        (["normal_user"], ['"normal_user"']),
+    ]
+
+    def test_grant_macro_does_not_quote_grantees(self, jinja_env, default_context, mock_relation):
+        """Verify that the grant macro does NOT quote grantees (preserves user input as-is).
+
+        Users control grantee names in their dbt config. If they write 'my_role',
+        they expect case-insensitive behavior. Quoting would change semantics.
+        """
+        template = self._get_template(jinja_env, default_context)
+        result = self._run_grant_macro(template, mock_relation, "select", ["my_role"])
+
+        # Grantee should NOT be quoted - preserves original behavior
+        assert "to my_role" in result
+        assert 'to "my_role"' not in result
+
+    @pytest.mark.parametrize("grantees,expected_quoted", grantee_test_cases)
+    def test_revoke_macro_quotes_grantees(
+        self, jinja_env, default_context, mock_relation, grantees, expected_quoted
+    ):
+        """Verify that the revoke macro properly quotes grantees with special characters.
+
+        Grantee names in REVOKE come from database's SHOW GRANTS output, not user config.
+        Quoting ensures we reference the exact identifier the database returned, which
+        is necessary for names with special characters (hyphens, colons, etc.).
+        """
+        template = self._get_template(jinja_env, default_context)
+        result = self._run_revoke_macro(template, mock_relation, "select", grantees)
+
+        # Verify all expected quoted grantees appear in the output
+        for quoted in expected_quoted:
+            assert quoted in result, f"Expected {quoted} in output: {result}"
+
+        # Verify the SQL structure is correct
+        assert result.startswith("revoke select on")
+        assert "from" in result

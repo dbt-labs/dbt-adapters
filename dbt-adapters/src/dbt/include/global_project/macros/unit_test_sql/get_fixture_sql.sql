@@ -5,7 +5,7 @@
 {%- if not column_name_to_data_types -%}
 {#-- Use defer_relation IFF it is available in the manifest and 'this' is missing from the database --#}
 {%-   set this_or_defer_relation = defer_relation if (defer_relation and not load_relation(this)) else this -%}
-{%-   set columns_in_relation = adapter.get_columns_in_relation(this_or_defer_relation) -%}
+{%-   set columns_in_relation = get_columns_for_unit_tests(this_or_defer_relation) -%}
 
 {%-   set column_name_to_data_types = {} -%}
 {%-   set column_name_to_quoted = {} -%}
@@ -83,6 +83,11 @@ union all
         {%- endif -%}
 
         {%- set column_type = column_name_to_data_types[column_name] %}
+
+        {#-- For string fixture values, strip varchar length to prevent silent truncation (GH-11974) --#}
+        {%- if column_value is string and 'varying' in column_type -%}
+            {%- set column_type = column_type.split('(')[0] -%}
+        {%- endif -%}
 
         {#-- sanitize column_value: wrap yaml strings in quotes, apply cast --#}
         {%- set column_value_clean = column_value -%}

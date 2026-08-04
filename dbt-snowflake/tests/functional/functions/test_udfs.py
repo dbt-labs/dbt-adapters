@@ -2,7 +2,10 @@ import pytest
 from dbt.contracts.graph.nodes import FunctionNode
 from dbt.contracts.results import RunStatus
 from dbt.events.types import JinjaLogWarning
-from dbt.tests.adapter.functions.files import MY_UDF_YML, MY_UDF_WITH_DEFAULT_ARG_YML
+from dbt.tests.adapter.functions.files import (
+    MY_UDF_WITH_DEFAULT_ARG_YML,
+    MY_UDF_YML,
+)
 from dbt.tests.adapter.functions.test_udfs import (
     UDFsBasic,
     DeterministicUDF,
@@ -15,6 +18,8 @@ from dbt.tests.adapter.functions.test_udfs import (
     SqlUDFDefaultArgSupport,
     PythonUDFDefaultArgSupport,
     PythonUDFVolatilitySupport,
+    CanFindScalarFunctionRelation,
+    PythonUDFWithPackagesSupported,
 )
 from dbt.tests.util import run_dbt
 from dbt_common.events.event_catcher import EventCatcher
@@ -109,4 +114,19 @@ class TestSnowflakeDefaultArgsSupportPythonUDFs(PythonUDFDefaultArgSupport):
 
 
 class TestSnowflakePythonUDFVolatilitySupport(PythonUDFVolatilitySupport):
+    pass
+
+
+class TestSnowflakeCanFindScalarFunctionRelation(CanFindScalarFunctionRelation):
+    @pytest.fixture(scope="class")
+    def functions(self):
+        return {
+            "price_for_xlarge.sql": MY_UDF_SQL,
+            "price_for_xlarge.yml": MY_UDF_YML,
+        }
+
+
+class TestSnowflakePythonUDFWithPackages(PythonUDFWithPackagesSupported):
+    """Python UDF with packages: templating and execution (uses default expected_packages_sql_fragment for Snowflake)."""
+
     pass

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fixed a bug where incremental models fail when using flag enable_truthy_nulls_equals_macro
+time: 2026-04-29T17:40:56.058336+05:30
+custom:
+    Author: sriramr98
+    Issue: "1902"

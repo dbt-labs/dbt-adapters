@@ -1,48 +1,76 @@
 import json
 import re
-import time
-from concurrent.futures.thread import ThreadPoolExecutor
+from weakref import WeakSet
+from collections import deque
+from collections.abc import Iterator
 from contextlib import contextmanager
-from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime, time, timezone, tzinfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from decimal import Decimal
-from typing import Any, ContextManager, Dict, List, Optional, Tuple
-
-from dbt_common.exceptions import ConnectionError, DbtRuntimeError
-from dbt_common.utils import md5
-from pyathena.connection import Connection as AthenaConnection
-from pyathena.cursor import Cursor
-from pyathena.error import OperationalError, ProgrammingError
-
-# noinspection PyProtectedMember
-from pyathena.formatter import (
-    _DEFAULT_FORMATTERS,
-    Formatter,
-    _escape_hive,
-    _escape_presto,
+from ipaddress import IPv4Address, IPv6Address, ip_address
+from time import sleep
+from typing import (
+    Any,
+    Callable,
+    cast,
+    Deque,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    TypeAlias,
+    Union,
 )
-from pyathena.model import AthenaQueryExecution
-from pyathena.result_set import AthenaResultSet
-from pyathena.util import RetryConfig
+from typing_extensions import Self
+from uuid import UUID
+
+from boto3.session import Session as BotoSession
+from botocore.config import Config as BotoConfig
+from mypy_boto3_athena.client import AthenaClient
+from mypy_boto3_athena.type_defs import (
+    ColumnInfoTypeDef,
+    GetQueryResultsInputTypeDef,
+    DatumTypeDef,
+    QueryExecutionTypeDef,
+    RowTypeDef,
+)
+from dbt_common.exceptions import ConnectionError, DbtRuntimeError
+from dbt_common.utils.encoding import md5
+
 from tenacity import (
-    retry,
+    Retrying,
     retry_if_exception,
     stop_after_attempt,
     wait_random_exponential,
 )
-from typing_extensions import Self
 
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.exceptions import (
+    AthenaError,
+    AthenaQueryCancelledError,
+    AthenaQueryFailedError,
+)
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
+from dbt.adapters.athena.connections_legacy import (
+    AthenaConnectionManager as PyAthenaConnectionManager,
+)
 from dbt.adapters.contracts.connection import (
     AdapterResponse,
     Connection,
     ConnectionState,
     Credentials,
 )
-from dbt.adapters.sql import SQLConnectionManager
+from dbt.adapters.sql.connections import SQLConnectionManager
+
+
+Cell: TypeAlias = Union[
+    None, str, int, float, bool, date, datetime, time, bytes, UUID, IPv4Address, IPv6Address, Any
+]
+Row: TypeAlias = Tuple[Cell, ...]
+ColumnMetadata: TypeAlias = Tuple[str, str, None, None, None, None, None]
 
 
 @dataclass
@@ -52,8 +80,8 @@ class AthenaAdapterResponse(AdapterResponse):
 
 @dataclass
 class AthenaCredentials(Credentials):
-    s3_staging_dir: str
     region_name: str
+    s3_staging_dir: Optional[str] = None
     endpoint_url: Optional[str] = None
     work_group: Optional[str] = None
     skip_workgroup_check: bool = False
@@ -61,6 +89,12 @@ class AthenaCredentials(Credentials):
     aws_access_key_id: Optional[str] = None
     aws_secret_access_key: Optional[str] = None
     aws_session_token: Optional[str] = None
+    assume_role_arn: Optional[str] = None
+    # external_id is not a secret; it is a shared condition value to prevent confused deputy attacks.
+    # See: https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_create_for-user_externalid.html
+    assume_role_external_id: Optional[str] = None
+    assume_role_session_name: str = "dbt-athena"
+    assume_role_duration_seconds: int = 3600
     poll_interval: float = 1.0
     debug_query_state: bool = False
     _ALIASES = {"catalog": "database"}
@@ -75,6 +109,7 @@ class AthenaCredentials(Credentials):
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
+    connection_manager: str = "api"
 
     @property
     def type(self) -> str:
@@ -82,7 +117,15 @@ class AthenaCredentials(Credentials):
 
     @property
     def unique_field(self) -> str:
-        return f"athena-{md5(self.s3_staging_dir)}"
+        if self.s3_staging_dir is not None:
+            key = self.s3_staging_dir
+        elif self.s3_data_dir is not None:
+            key = self.s3_data_dir
+        elif self.work_group is not None:
+            key = self.work_group
+        else:
+            key = "primary"
+        return f"athena-{md5(key)}"
 
     @property
     def effective_num_retries(self) -> int:
@@ -90,145 +133,564 @@ class AthenaCredentials(Credentials):
 
     def _connection_keys(self) -> Tuple[str, ...]:
         return (
-            "s3_staging_dir",
-            "work_group",
-            "skip_workgroup_check",
-            "region_name",
-            "database",
-            "schema",
-            "poll_interval",
-            "aws_profile_name",
+            "assume_role_arn",
+            "assume_role_duration_seconds",
+            "assume_role_external_id",
+            "assume_role_session_name",
             "aws_access_key_id",
+            "aws_profile_name",
+            # aws_secret_access_key and aws_session_token are intentionally omitted: they are
+            # secrets and _connection_keys controls what is surfaced (e.g. by `dbt debug`).
+            "connection_manager",
+            "database",
+            "debug_query_state",
             "endpoint_url",
+            "lf_tags_database",
+            "num_boto3_retries",
+            "num_iceberg_retries",
+            "num_retries",
+            "poll_interval",
+            "region_name",
             "s3_data_dir",
             "s3_data_naming",
+            "s3_staging_dir",
             "s3_tmp_table_dir",
-            "debug_query_state",
+            "schema",
             "seed_s3_upload_args",
-            "lf_tags_database",
+            "skip_workgroup_check",
             "spark_work_group",
+            "work_group",
         )
 
 
-class AthenaCursor(Cursor):
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-        self._executor = ThreadPoolExecutor()
+class AthenaParameterFormatter:
+    def format(self, operation: str, parameters: Optional[List[Any]] = None) -> str:
+        if operation is None or not operation.strip():
+            raise ValueError("Query is none or empty.")
+        elif not (parameters is None or isinstance(parameters, list)):
+            raise ValueError("Parameters must be a list.")
 
-    def _collect_result_set(self, query_id: str) -> AthenaResultSet:
-        query_execution = self._poll(query_id)
-        return self._result_set_class(
-            connection=self._connection,
-            converter=self._converter,
-            query_execution=query_execution,
-            arraysize=self._arraysize,
-            retry_config=self._retry_config,
+        if operation.upper().startswith(("VACUUM", "OPTIMIZE")):
+            operation = operation.replace('"', "")
+        elif not operation.upper().startswith(("SELECT", "WITH", "INSERT")):
+            operation = operation.replace("\n\n    ", "\n")
+
+        if parameters is not None:
+            kwargs = [self._format_value(v) for v in parameters]
+            operation = (operation % tuple(kwargs)).strip()
+
+        return operation.strip()
+
+    def _format_value(self, value: Any, force_str: bool = False) -> Union[str, int, float]:
+        if value is None:
+            return "NULL"
+        elif isinstance(value, bool):
+            return str(value).upper()
+        elif isinstance(value, int) and force_str:
+            return str(value)
+        elif isinstance(value, int):
+            return value
+        elif isinstance(value, float) and force_str:
+            return f"{value:f}"
+        elif isinstance(value, float):
+            return value
+        elif isinstance(value, Decimal) and value == int(value):
+            return f"DECIMAL '{value}'"
+        elif isinstance(value, Decimal):
+            return f"DECIMAL '{value:f}'"
+        elif isinstance(value, datetime):
+            return f"""TIMESTAMP '{value.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]}'"""
+        elif isinstance(value, date):
+            return f"DATE '{value:%Y-%m-%d}'"
+        elif isinstance(value, str):
+            escaped = value.replace("'", "''")
+            return f"'{escaped}'"
+        elif isinstance(value, list) or isinstance(value, set) or isinstance(value, tuple):
+            formatted = [str(self._format_value(v, True)) for v in value]
+            return f'({", ".join(formatted)})'
+        else:
+            raise TypeError(f"No parameter formatter found for type {type(value)}.")
+
+
+API_REQUEST_ERROR_NAMES = [
+    "TooManyRequestsException",
+    "ThrottlingException",
+    "InternalServerException",
+]
+
+
+def _is_api_request_error(exception: BaseException) -> bool:
+    """Whether an exception represents a transient, retriable Athena API request error.
+
+    Prefers the structured botocore error code and falls back to a substring match so the
+    same detection is used both when starting a query and when polling its status.
+    """
+    error_code = getattr(exception, "response", {}).get("Error", {}).get("Code", None)
+    if error_code in API_REQUEST_ERROR_NAMES:
+        return True
+    return any(error_name in str(exception) for error_name in API_REQUEST_ERROR_NAMES)
+
+
+class AthenaCursor:
+    query: Optional[str]
+    state: Optional[str]
+    data_scanned_in_bytes: int
+
+    STATE_SUCCEEDED: str = "SUCCEEDED"
+    STATE_CANCELLED: str = "CANCELLED"
+    STATE_FAILED: str = "FAILED"
+
+    def __init__(
+        self,
+        athena_client: AthenaClient,
+        credentials: AthenaCredentials,
+        formatter: AthenaParameterFormatter = AthenaParameterFormatter(),
+        poll_delay: Callable[[float], None] = sleep,
+        retry_interval_multiplier: int = 1,
+    ) -> None:
+        self._client = athena_client
+        self._credentials = credentials
+        self._poll_delay = poll_delay
+        self._formatter = formatter
+        self._with_throttling_retries = Retrying(
+            retry=retry_if_exception(_is_api_request_error),
+            stop=stop_after_attempt(self._credentials.num_retries + 1),
+            wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
+            reraise=True,
         )
-
-    def _poll(self, query_id: str) -> AthenaQueryExecution:
-        try:
-            query_execution = self.__poll(query_id)
-        except KeyboardInterrupt as e:
-            if self._kill_on_interrupt:
-                LOGGER.warning("Query canceled by user.")
-                self._cancel(query_id)
-                query_execution = self.__poll(query_id)
-            else:
-                raise e
-        return query_execution
-
-    def __poll(self, query_id: str) -> AthenaQueryExecution:
-        while True:
-            query_execution = self._get_query_execution(query_id)
-            if query_execution.state in [
-                AthenaQueryExecution.STATE_SUCCEEDED,
-                AthenaQueryExecution.STATE_FAILED,
-                AthenaQueryExecution.STATE_CANCELLED,
-            ]:
-                return query_execution
-
-            if self.connection.cursor_kwargs.get("debug_query_state", False):
-                LOGGER.debug(
-                    f"Query state is: {query_execution.state}. Sleeping for {self._poll_interval}..."
+        self._with_iceberg_retries = Retrying(
+            retry=retry_if_exception(
+                lambda e: (
+                    isinstance(e, AthenaQueryFailedError)
+                    and e.error_type == AthenaQueryFailedError.TYPE_ICEBERG_ERROR
+                    and "ICEBERG_COMMIT_ERROR" in str(e)
                 )
-            time.sleep(self._poll_interval)
+            ),
+            stop=stop_after_attempt(self._credentials.num_iceberg_retries + 1),
+            wait=wait_random_exponential(max=100, multiplier=retry_interval_multiplier),
+            reraise=True,
+        )
+        self._reset()
+
+    def _reset(self) -> None:
+        self.query = None
+        self.state = None
+        self.data_scanned_in_bytes = 0
+        self._update_count: Optional[int] = None
+        self._column_info: List[ColumnMetadata] = []
+        self._query_execution_id: Optional[str] = None
+        self._result_set: Optional[AthenaResultSet] = None
 
     def execute(
         self,
         operation: str,
-        parameters: Optional[Dict[str, Any]] = None,
-        work_group: Optional[str] = None,
-        s3_staging_dir: Optional[str] = None,
-        endpoint_url: Optional[str] = None,
-        cache_size: int = 0,
-        cache_expiration_time: int = 0,
-        catch_partitions_limit: bool = False,
-        **kwargs: Dict[str, Any],
+        parameters: Optional[List[Any]] = None,
     ) -> Self:
-        @retry(
-            # No need to retry if TOO_MANY_OPEN_PARTITIONS occurs.
-            # Otherwise, Athena throws ICEBERG_FILESYSTEM_ERROR after retry,
-            # because not all files are removed immediately after first try to create table
-            retry=retry_if_exception(
-                lambda e: (
-                    False
-                    if catch_partitions_limit and "TOO_MANY_OPEN_PARTITIONS" in str(e)
-                    else True
+        self._reset()
+        self.query = self._formatter.format(operation, parameters)
+        LOGGER.debug(f"Execute: {self.query}")
+        self._with_iceberg_retries(self._run_query)
+        return self
+
+    def _run_query(self) -> None:
+        self._with_throttling_retries(self._start_execution)
+        self._await_completion()
+
+    def _start_execution(self) -> None:
+        request = {
+            "QueryString": self.query,
+            "QueryExecutionContext": {
+                "Catalog": self._credentials.database,
+                "Database": self._credentials.schema,
+            },
+        }
+        if self._credentials.work_group is not None:
+            request["WorkGroup"] = self._credentials.work_group
+        if self._credentials.s3_staging_dir is not None:
+            request["ResultConfiguration"] = {
+                "OutputLocation": self._credentials.s3_staging_dir,
+            }
+        start_response = self._client.start_query_execution(**request)
+        self._query_execution_id = start_response["QueryExecutionId"]
+        LOGGER.debug(f"Athena query {self._query_execution_id} started")
+
+    def _await_completion(self) -> None:
+        if self._query_execution_id is None:
+            return
+        while True:
+            try:
+                status_response = self._client.get_query_execution(
+                    QueryExecutionId=self._query_execution_id
                 )
-            ),
-            stop=stop_after_attempt(self._retry_config.attempt),
-            wait=wait_random_exponential(
-                multiplier=self._retry_config.attempt,
-                max=self._retry_config.max_delay,
-                exp_base=self._retry_config.exponential_base,
-            ),
-            reraise=True,
-        )
-        def inner() -> AthenaCursor:
-            num_iceberg_retries = self.connection.cursor_kwargs.get("num_iceberg_retries") + 1
-
-            @retry(
-                # Nested retry is needed to handle ICEBERG_COMMIT_ERROR for parallel inserts
-                retry=retry_if_exception(lambda e: "ICEBERG_COMMIT_ERROR" in str(e)),
-                stop=stop_after_attempt(num_iceberg_retries),
-                wait=wait_random_exponential(
-                    multiplier=num_iceberg_retries,
-                    max=self._retry_config.max_delay,
-                    exp_base=self._retry_config.exponential_base,
-                ),
-                reraise=True,
-            )
-            def execute_with_iceberg_retries() -> AthenaCursor:
-                query_id = self._execute(
-                    operation,
-                    parameters=parameters,
-                    work_group=work_group,
-                    s3_staging_dir=s3_staging_dir,
-                    cache_size=cache_size,
-                    cache_expiration_time=cache_expiration_time,
-                )
-
-                LOGGER.debug(f"Athena query ID {query_id}")
-
-                query_execution = self._executor.submit(
-                    self._collect_result_set, query_id
-                ).result()
-                if query_execution.state == AthenaQueryExecution.STATE_SUCCEEDED:
-                    self.result_set = self._result_set_class(
-                        self._connection,
-                        self._converter,
-                        query_execution,
-                        self.arraysize,
-                        self._retry_config,
+            except Exception as e:
+                if _is_api_request_error(e):
+                    LOGGER.warning(
+                        f"Athena query {self._query_execution_id} got error while polling status, will retry: {e}"
                     )
-                    return self
+                    self._poll_delay(self._credentials.poll_interval)
+                    continue
+                else:
+                    raise e
+            query_execution = status_response.get("QueryExecution", {})
+            status = query_execution.get("Status", {})
+            self.state = status.get("State", None)
+            LOGGER.debug(f"Athena query {self._query_execution_id} has state {self.state}")
+            if self.state == AthenaCursor.STATE_SUCCEEDED:
+                statistics = status_response.get("QueryExecution", {}).get("Statistics", {})
+                self.data_scanned_in_bytes = statistics.get("DataScannedInBytes", 0)
+                if self._query_execution_id:
+                    plain_text = self._is_plain_text_result(query_execution)
+                    self._result_set = AthenaResultSet(
+                        self._client, self._query_execution_id, plain_text
+                    )
+                    break
+                else:
+                    raise AthenaError("Could not create result set, query execution ID lost")
+            elif self.state == AthenaCursor.STATE_FAILED:
+                raise AthenaQueryFailedError(
+                    status.get("AthenaError", {}), status.get("StateChangeReason")
+                )
+            elif self.state == AthenaCursor.STATE_CANCELLED:
+                raise AthenaQueryCancelledError(status.get("StateChangeReason", None))
+            # Query is still queued or running; wait before polling again.
+            self._poll_delay(self._credentials.poll_interval)
 
-                LOGGER.debug(f"Athena query failed: {query_execution.state_change_reason}")
-                raise OperationalError(query_execution.state_change_reason)
+    def cancel(self) -> None:
+        if self._query_execution_id:
+            self._client.stop_query_execution(QueryExecutionId=self._query_execution_id)
 
-            return execute_with_iceberg_retries()
+    def _is_plain_text_result(self, query_execution: QueryExecutionTypeDef) -> bool:
+        statement_type = query_execution.get("StatementType", None)
+        statement_subtype = query_execution.get("SubstatementType", None)
+        return (
+            statement_type == "DDL"
+            or statement_type == "UTILITY"
+            or statement_subtype == "EXPLAIN"
+        )
 
-        return inner()
+    @property
+    def description(self) -> Optional[List[ColumnMetadata]]:
+        if self._result_set:
+            return self._result_set.column_info
+        else:
+            return None
+
+    @property
+    def rowcount(self) -> int:
+        if self._result_set:
+            return self._result_set.update_count
+        else:
+            return -1
+
+    def fetchone(self) -> Optional[Row]:
+        rows = self.fetchmany(1)
+        return rows[0] if rows else None
+
+    def fetchmany(self, limit: Optional[int] = None) -> List[Row]:
+        if self._result_set:
+            if limit is None:
+                return list(self._result_set)
+            else:
+                rows = []
+                for row in self._result_set:
+                    rows.append(row)
+                    if limit is not None and len(rows) == limit:
+                        break
+                return rows
+        else:
+            raise AthenaError(f"Cannot fetch from a cursor with state {self.state}")
+
+    def fetchall(self) -> List[Row]:
+        return self.fetchmany()
+
+
+class AthenaResultSet(Iterator[Row]):
+    def __init__(
+        self,
+        athena_client: AthenaClient,
+        query_execution_id: str,
+        is_plain_text: bool,
+        limit: Optional[int] = None,
+    ) -> None:
+        self._client = athena_client
+        self._query_execution_id = query_execution_id
+        self._limit = limit
+        self._headers_skipped = False
+        self._is_plain_text = is_plain_text
+        self._rows: Deque[Row] = deque()
+        self._next_token: Optional[str] = None
+        self._column_info: Optional[List[ColumnMetadata]] = None
+        self._update_count: Optional[int] = None
+        self._items = 0
+
+    def __iter__(self) -> Self:
+        return self
+
+    def __next__(self) -> Row:
+        if not self._rows and (self._next_token is not None or not self._headers_skipped):
+            self._load_page()
+        if self._rows and (self._limit is None or self._items < self._limit):
+            self._items += 1
+            return self._rows.popleft()
+        else:
+            raise StopIteration
+
+    @property
+    def column_info(self) -> List[ColumnMetadata]:
+        if not self._column_info:
+            self._load_page()
+        if self._column_info:
+            return self._column_info
+        else:
+            return []
+
+    @property
+    def update_count(self) -> int:
+        if self._update_count is None:
+            self._load_page()
+        if self._update_count is not None:
+            return self._update_count
+        else:
+            return -1
+
+    def _load_page(self) -> None:
+        request: GetQueryResultsInputTypeDef = {"QueryExecutionId": self._query_execution_id}
+        if self._next_token:
+            request["NextToken"] = self._next_token
+        results_response = self._client.get_query_results(**request)
+        self._next_token = results_response.get("NextToken", None)
+        result_set = results_response.get("ResultSet", {})
+        page_rows = result_set.get("Rows", [])
+        if not self._headers_skipped:
+            if not self._is_plain_text:
+                page_rows = page_rows[1:]
+            self._column_info = self._convert_column_info(
+                result_set.get("ResultSetMetadata", {}).get("ColumnInfo", [])
+            )
+            self._update_count = results_response.get("UpdateCount", -1)
+            self._headers_skipped = True
+        self._rows += [self._convert_row(row) for row in page_rows]
+
+    def _convert_column_info(self, column_info: List[ColumnInfoTypeDef]) -> List[ColumnMetadata]:
+        return [(info["Name"], info["Type"], None, None, None, None, None) for info in column_info]
+
+    def _convert_row(self, row: RowTypeDef) -> Row:
+        if self._column_info:
+            return tuple(
+                self._convert_type(self._column_info[index], datum)
+                for index, datum in enumerate(row.get("Data", []))
+            )
+        elif self._is_plain_text:
+            return tuple(datum.get("VarCharValue") for datum in row.get("Data", []))
+        else:
+            raise AthenaError("No column info found")
+
+    def _convert_type(self, column_info: ColumnMetadata, datum: DatumTypeDef) -> Cell:
+        if "VarCharValue" not in datum:
+            return None
+        value = datum["VarCharValue"]
+        type = column_info[1]
+        if (
+            type == "int"
+            or type == "integer"
+            or type == "bigint"
+            or type == "tinyint"
+            or type == "smallint"
+        ):
+            return int(value)
+        elif type == "float" or type == "double":
+            return float(value)
+        elif type == "boolean":
+            return value.lower() != "false"
+        elif type == "date":
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        elif type == "timestamp":
+            return self._parse_timestamp(value)
+        elif type == "timestamp with time zone":
+            return self._parse_timestamp_with_time_zone(value)
+        elif type == "time":
+            return self._parse_time(value)
+        elif type == "time with time zone":
+            return self._parse_time_with_time_zone(value)
+        elif type == "varbinary":
+            return bytes.fromhex(value)
+        elif type == "json":
+            return json.loads(value)
+        elif type == "uuid":
+            return UUID(value)
+        elif type == "ipaddress":
+            return ip_address(value)
+        elif type == "array":
+            return self._parse_array(value)
+        elif type == "map" or type == "row":
+            return self._parse_map_or_row(value)
+        else:
+            return value
+
+    TIMESTAMP_FORMATS = [
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+    ]
+
+    def _parse_timestamp(self, value: str) -> datetime:
+        for fmt in self.__class__.TIMESTAMP_FORMATS:
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                pass
+        raise ValueError(f'Could not parse timestamp "{value}"')
+
+    def _parse_timestamp_with_time_zone(self, value: str) -> datetime:
+        try:
+            timestamp_value, tz_value = value.rsplit(" ", 1)
+            timestamp = self._parse_timestamp(timestamp_value)
+            tz = self._parse_time_zone(tz_value)
+            return timestamp.replace(tzinfo=tz)
+        except ValueError:
+            raise ValueError(f'Could not parse timestamp with time zone "{value}"')
+
+    def _parse_time_zone(self, value: str) -> tzinfo:
+        if value == "UTC":
+            return timezone.utc
+        try:
+            parsed = datetime.strptime(value, "%z").tzinfo
+            if parsed is not None:
+                return parsed
+        except ValueError:
+            pass
+        try:
+            return ZoneInfo(value)
+        except ZoneInfoNotFoundError:
+            raise ValueError(f'Could not parse time zone "{value}"')
+
+    TIME_FORMATS = [
+        "%H:%M:%S.%f",
+        "%H:%M:%S",
+    ]
+
+    def _parse_time(self, value: str) -> time:
+        for fmt in self.__class__.TIME_FORMATS:
+            try:
+                return datetime.strptime(value, fmt).time()
+            except ValueError:
+                pass
+        raise ValueError(f'Could not parse time "{value}"')
+
+    def _parse_time_with_time_zone(self, value: str) -> time:
+        try:
+            parts = re.split(r"(?=[- +])", value)
+            time = self._parse_time(parts[0])
+            tz = self._parse_time_zone(parts[-1].strip())
+            return time.replace(tzinfo=tz)
+        except ValueError:
+            raise ValueError(f'Could not parse time with time zone "{value}"')
+
+    def _parse_array(self, value: str) -> List[Any]:
+        if value == "[]":
+            return []
+
+        result: List[Any] = []
+        current_element = ""
+        nesting = 0
+
+        for char in value[1:-1]:
+            if char in ("[", "{"):
+                nesting += 1
+            elif char in ("]", "}"):
+                nesting -= 1
+
+            if char == "," and nesting == 0:
+                result.append(self._process_nested_value(current_element.strip()))
+                current_element = ""
+            else:
+                current_element += char
+
+        if len(current_element.strip()) > 0:
+            result.append(self._process_nested_value(current_element.strip()))
+
+        return result
+
+    def _parse_map_or_row(self, value: str) -> Dict[str, Any]:
+        if value == "{}":
+            return {}
+
+        result: Dict[str, Any] = {}
+        current_key = ""
+        current_value: Optional[str] = None
+        nesting = 0
+
+        for char in value[1:-1]:
+            if char in ("{", "["):
+                nesting += 1
+            elif char in ("}", "]"):
+                nesting -= 1
+
+            if char == "=" and nesting == 0:
+                current_value = ""
+            elif char == "," and nesting == 0:
+                result[current_key.strip()] = self._process_nested_value(
+                    (current_value or "").strip()
+                )
+                current_key = ""
+                current_value = None
+            elif current_value is not None:
+                current_value += char
+            else:
+                current_key += char
+
+        if len(current_key.strip()) > 0 and current_value is not None:
+            result[current_key.strip()] = self._process_nested_value(current_value.strip())
+
+        return result
+
+    def _process_nested_value(self, value: str) -> Any:
+        if value.startswith("["):
+            return self._parse_array(value)
+        elif value.startswith("{"):
+            return self._parse_map_or_row(value)
+        else:
+            return value
+
+
+class AthenaConnection(Connection):
+    session: BotoSession
+    region_name: str
+
+    def __init__(
+        self,
+        credentials: AthenaCredentials,
+        boto_session_factory: Callable[[Connection], BotoSession] = get_boto3_session,
+    ) -> None:
+        self.credentials = self._athena_credentials = credentials
+        self.session = boto_session_factory(self)
+        self.region_name = self.credentials.region_name
+        self._client = None
+        self._cursors: WeakSet = WeakSet()
+
+    def connect(self, boto_config_factory: Callable[..., BotoConfig] = get_boto3_config) -> Self:
+        boto_config = boto_config_factory(
+            num_retries=self._athena_credentials.effective_num_retries
+        )
+        client_kwargs = {
+            "region_name": self.region_name,
+            "config": boto_config,
+        }
+        if self._athena_credentials.endpoint_url:
+            client_kwargs["endpoint_url"] = self._athena_credentials.endpoint_url
+        self._client = self.session.client("athena", **client_kwargs)
+        return self
+
+    def cursor(self) -> AthenaCursor:
+        if self._client is not None:
+            cursor = AthenaCursor(self._client, self._athena_credentials)
+            self._cursors.add(cursor)
+            return cursor
+        else:
+            raise ConnectionError("Not connected")
+
+    def cancel(self) -> None:
+        for cursor in self._cursors:
+            cursor.cancel()
 
 
 class AthenaConnectionManager(SQLConnectionManager):
@@ -238,17 +700,17 @@ class AthenaConnectionManager(SQLConnectionManager):
         self.query_header = AthenaMacroQueryStringSetter(self.profile, query_header_context)
 
     @classmethod
-    def data_type_code_to_name(cls, type_code: str) -> str:  # type:ignore
+    def data_type_code_to_name(cls, type_code: int | str) -> str:
         """
         Get the string representation of the data type from the Athena metadata. Dbt performs a
         query to retrieve the types of the columns in the SQL query. Then these types are compared
         to the types in the contract config, simplified because they need to match what is returned
         by Athena metadata (we are only interested in the broader type, without subtypes nor granularity).
         """
-        return type_code.split("(")[0].split("<")[0].upper()
+        return str(type_code).split("(")[0].split("<")[0].upper()
 
-    @contextmanager  # type: ignore
-    def exception_handler(self, sql: str) -> ContextManager:  # type: ignore
+    @contextmanager
+    def exception_handler(self, sql: str) -> Iterator[None]:
         try:
             yield
         except Exception as e:
@@ -262,49 +724,30 @@ class AthenaConnectionManager(SQLConnectionManager):
             return connection
 
         try:
-            creds: AthenaCredentials = connection.credentials
-
-            handle = AthenaConnection(
-                s3_staging_dir=creds.s3_staging_dir,
-                endpoint_url=creds.endpoint_url,
-                catalog_name=creds.database,
-                schema_name=creds.schema,
-                work_group=creds.work_group,
-                cursor_class=AthenaCursor,
-                cursor_kwargs={
-                    "debug_query_state": creds.debug_query_state,
-                    "num_iceberg_retries": creds.num_iceberg_retries,
-                },
-                formatter=AthenaParameterFormatter(),
-                poll_interval=creds.poll_interval,
-                session=get_boto3_session(connection),
-                retry_config=RetryConfig(
-                    attempt=creds.num_retries + 1,
-                    exceptions=(
-                        "ThrottlingException",
-                        "TooManyRequestsException",
-                        "InternalServerException",
-                    ),
-                ),
-                config=get_boto3_config(num_retries=creds.effective_num_retries),
-            )
-
-            connection.state = ConnectionState.OPEN  # type:ignore
-            connection.handle = handle
-
+            credentials = cast(AthenaCredentials, connection.credentials)
+            if (
+                credentials.connection_manager is not None
+                and credentials.connection_manager.lower() == "pyathena"
+            ):
+                return PyAthenaConnectionManager.open(connection)
+            else:
+                connection.handle = AthenaConnection(credentials).connect()
+                connection.state = ConnectionState.OPEN  # type: ignore[assignment]
+        except ConnectionError as exc:
+            raise exc
         except Exception as exc:
             LOGGER.exception(
                 f"Got an error when attempting to open a Athena connection due to {exc}"
             )
             connection.handle = None
-            connection.state = ConnectionState.FAIL  # type:ignore
+            connection.state = ConnectionState.FAIL  # type: ignore[assignment]
             raise ConnectionError(str(exc))
 
         return connection
 
     @classmethod
     def get_response(cls, cursor: AthenaCursor) -> AthenaAdapterResponse:
-        code = "OK" if cursor.state == AthenaQueryExecution.STATE_SUCCEEDED else "ERROR"
+        code = "OK" if cursor.state == AthenaCursor.STATE_SUCCEEDED else "ERROR"
         rowcount, data_scanned_in_bytes = cls.process_query_stats(cursor)
         return AthenaAdapterResponse(
             _message=f"{code} {rowcount}",
@@ -320,7 +763,9 @@ class AthenaConnectionManager(SQLConnectionManager):
         The function looks for all statements that contains rowcount or data_scanned_in_bytes,
         then strip the SELECT statements, and pick the value between curly brackets.
         """
-        if all(map(cursor.query.__contains__, ["rowcount", "data_scanned_in_bytes"])):
+        if cursor.query is not None and all(
+            map(cursor.query.__contains__, ["rowcount", "data_scanned_in_bytes"])
+        ):
             try:
                 query_split = cursor.query.lower().split("select")[-1]
                 # query statistics are in the format {"rowcount":1, "data_scanned_in_bytes": 3}
@@ -335,7 +780,8 @@ class AthenaConnectionManager(SQLConnectionManager):
         return cursor.rowcount, cursor.data_scanned_in_bytes
 
     def cancel(self, connection: Connection) -> None:
-        pass
+        if connection.handle:
+            connection.handle.cancel()
 
     def add_begin_query(self) -> None:
         pass
@@ -348,42 +794,3 @@ class AthenaConnectionManager(SQLConnectionManager):
 
     def commit(self) -> None:
         pass
-
-
-class AthenaParameterFormatter(Formatter):
-    def __init__(self) -> None:
-        super().__init__(mappings=deepcopy(_DEFAULT_FORMATTERS), default=None)
-
-    def format(self, operation: str, parameters: Optional[List[str]] = None) -> str:
-        if not operation or not operation.strip():
-            raise ProgrammingError("Query is none or empty.")
-        operation = operation.strip()
-
-        if operation.upper().startswith(("SELECT", "WITH", "INSERT")):
-            escaper = _escape_presto
-        elif operation.upper().startswith(("VACUUM", "OPTIMIZE")):
-            operation = operation.replace('"', "")
-        else:
-            # Fixes ParseException that comes with newer version of PyAthena
-            operation = operation.replace("\n\n    ", "\n")
-
-            escaper = _escape_hive
-
-        kwargs: Optional[List[str]] = None
-        if parameters is not None:
-            kwargs = list()
-            if isinstance(parameters, list):
-                for v in parameters:
-                    # TODO Review this annoying Decimal hack, unsure if issue in dbt, agate or pyathena
-                    if isinstance(v, Decimal) and v == int(v):
-                        v = int(v)
-
-                    func = self.get(v)
-                    if not func:
-                        raise TypeError(f"{type(v)} is not defined formatter.")
-                    kwargs.append(func(self, escaper, v))
-            else:
-                raise ProgrammingError(
-                    f"Unsupported parameter (Support for list only): {parameters}"
-                )
-        return (operation % tuple(kwargs)).strip() if kwargs is not None else operation.strip()
