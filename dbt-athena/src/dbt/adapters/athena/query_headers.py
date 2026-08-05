@@ -32,7 +32,8 @@ class _AthenaQueryComment(_QueryComment):
         ):
             return sql
 
-        cleaned_query_comment = self.query_comment.strip().replace("\n", " ")
+        cleaned_query_comment = " ".join(self.query_comment.strip().splitlines())
+        cleaned_query_comment = cleaned_query_comment.replace("/*", "").replace("*/", "")
 
         if self.append:
             # replace last ';' with '<comment>;'

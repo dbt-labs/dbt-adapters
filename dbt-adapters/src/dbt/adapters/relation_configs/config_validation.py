@@ -38,9 +38,7 @@ class RelationConfigValidationMixin:
 
     def run_validation_rules(self):
         for validation_rule in self.validation_rules:
-            try:
-                assert validation_rule.validation_check
-            except AssertionError:
+            if not validation_rule.validation_check:
                 if validation_rule.validation_error:
                     raise validation_rule.validation_error
                 else:
