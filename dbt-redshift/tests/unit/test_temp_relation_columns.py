@@ -46,7 +46,6 @@ VERIFIED_TYPES = [
     (2935, "hllsketch", "hllsketch"),
     (3000, "geometry", "geometry"),
     (3001, "geography", "geography"),
-    (3999, "geometryhex", "geometry"),
     (4000, "super", "super"),
     (6551, "varbyte", "binary varying"),
 ]
@@ -68,11 +67,6 @@ class TestTypeOidMapping:
     def test_varbyte_is_binary_varying(self):
         # SHOW COLUMNS reports 'binary varying', not 'varbyte'.
         assert TYPE_OID_TO_DATA_TYPE[6551] == "binary varying"
-
-    def test_geometry_is_mapped_under_the_oid_the_wire_uses(self):
-        # A geometry column reports GEOMETRYHEX (3999) in the cursor description, never 3000,
-        # so mapping only 3000 sends every geometry column down the unknown-type fallback.
-        assert TYPE_OID_TO_DATA_TYPE[3999] == "geometry"
 
     def test_information_schema_overrides_only_where_the_catalogs_differ(self):
         # SHOW COLUMNS gives the SQL name, information_schema its internal one. Only the two

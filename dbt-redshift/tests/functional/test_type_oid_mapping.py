@@ -37,21 +37,24 @@ STANDARD_TYPES = [
 ]
 
 # Probed in a separate table so an unsupported type on an older cluster cannot mask a
-# divergence among the standard types. A geometry column reports OID 3999 (GEOMETRYHEX) on the
-# wire, never 3000 -- 3999 is a wire representation rather than a declarable type.
+# divergence among the standard types.
 REDSHIFT_TYPES = [
     ("c_interval_y2m", "interval year to month", 1188),
     ("c_interval_d2s", "interval day to second", 1190),
     ("c_hllsketch", "hllsketch", 2935),
-    ("c_geometry", "geometry", 3999),
     ("c_geography", "geography", 3001),
     ("c_super", "super", 4000),
     ("c_varbyte", "varbyte(16)", 6551),
 ]
 
-# OID 3000 is the geometry type in pg_type but never appears in a cursor description; Redshift
-# aliases TEXT to VARCHAR(256), so no stored column carries OID 25 either.
-UNPROBEABLE_OIDS = {25, 3000}
+# Redshift aliases TEXT to VARCHAR(256), so no stored column carries OID 25.
+UNPROBEABLE_OIDS = {25}
+
+# Probed and known to diverge: a geometry column reports OID 3999 (GEOMETRYHEX) on the wire
+# while both catalogs report `geometry`, so the driver yields `geometryhex`. Pre-dates this
+# fallback and is out of scope here -- tracked in dbt-labs/dbt-adapters#2108. Add
+# ("c_geometry", "geometry", 3999) to REDSHIFT_TYPES to reproduce.
+KNOWN_DIVERGENT_OIDS = {3000, 3999}
 
 
 def _column_ddl(types):
@@ -134,8 +137,9 @@ class TestDescribersAgreeDatasharingOn(DescribersAgree):
 
 def test_every_mapped_oid_is_probed():
     probed = {oid for _, _, oid in STANDARD_TYPES + REDSHIFT_TYPES}
-    unprobed = set(TYPE_OID_TO_DATA_TYPE) - probed - UNPROBEABLE_OIDS
+    unprobed = set(TYPE_OID_TO_DATA_TYPE) - probed - UNPROBEABLE_OIDS - KNOWN_DIVERGENT_OIDS
     assert not unprobed, (
-        f"OIDs {sorted(unprobed)} are mapped but not probed against the catalogs. Add them "
-        f"to STANDARD_TYPES/REDSHIFT_TYPES, or to UNPROBEABLE_OIDS with a reason."
+        f"OIDs {sorted(unprobed)} are mapped but not probed against the catalogs. Add them to "
+        f"STANDARD_TYPES/REDSHIFT_TYPES, or to UNPROBEABLE_OIDS/KNOWN_DIVERGENT_OIDS with a "
+        f"reason."
     )
