@@ -42,19 +42,12 @@ for package in packages:
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
 
-# Redshift type OID -> the data type name SHOW COLUMNS reports for that type.
-#
-# Used to describe temporary relations from the driver's cursor description when the
-# catalog cannot see them (see RedshiftAdapter.get_columns_in_temp_relation). Keying on the
-# OID rather than on redshift_connector's own type labels keeps this independent of driver
-# label changes, and lets the values match SHOW COLUMNS exactly -- necessary because
-# incremental schema comparison diffs columns described this way against columns of the
-# target relation, which are described by SHOW COLUMNS.
-#
-# Verified against `SHOW COLUMNS FROM TABLE` on Redshift 1.0.358853. Note in particular
-# that bpchar reports as "character" (not "character varying") and varbyte reports as
-# "binary varying" (not "varbyte"); getting either wrong produces a spurious type change
-# on every run.
+# Redshift type OID -> SQL data type name, as reported by both the legacy path's
+# information_schema.columns.data_type and SHOW COLUMNS. Used to describe temp relations
+# from the driver's cursor description (see get_columns_in_temp_relation); the names have
+# to match whichever of those two paths described the target relation, or schema comparison
+# reports a type change on every run. Verified against SHOW COLUMNS on Redshift 1.0.358853
+# -- note bpchar reports as "character", and varbyte as "binary varying".
 TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
     16: "boolean",  # bool
     20: "bigint",  # int8
@@ -239,31 +232,18 @@ class RedshiftAdapter(SQLAdapter):
 
     @available
     def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[Any]:
-        """Describe a temporary relation without consulting the catalog.
+        """Describe a temporary relation from the driver instead of the catalog.
 
-        When the connection's database is a datashare consumer database
-        (``svv_redshift_databases.database_type = 'shared'``), temporary relations are
-        created and remain queryable but are invisible to ``information_schema.columns``,
-        ``pg_attribute`` and ``svv_columns`` alike -- the session's temp schema belongs to
-        the default database while catalog views resolve against the consumer database.
-        ``SHOW COLUMNS`` cannot address them either, since it requires a database and
-        schema and temporary relations carry neither.
+        Needed when the connection's database is a datashare consumer database: temp
+        relations stay queryable but are invisible to ``information_schema.columns``,
+        ``pg_attribute`` and ``svv_columns`` alike, and ``SHOW COLUMNS`` cannot address
+        them because they carry no database or schema.
 
-        Reading the driver's cursor description is the only route that does not depend on
-        database context. Type codes are mapped back to the names ``SHOW COLUMNS`` reports
-        so that columns described this way compare equal to columns of the target relation
-        in ``check_for_schema_changes``.
-
-        Size/precision/scale cannot come from ``cursor.description``: ``redshift_connector``
-        (the version dbt-redshift depends on) hardcodes those PEP 249 fields to ``None`` --
-        verified directly against its source (``Cursor._getDescription``), not merely
-        undocumented. The real values are still on the wire: the driver parses the
-        Postgres-protocol row description into ``cursor.ps["row_desc"]``, which carries
-        ``type_modifier`` (``pg_attribute.atttypmod``) per column but never surfaces it
-        through the public API. Reading it directly is the only way to get real sizes;
-        without it, every sized string/numeric column looks "changed" against the target
-        on the very next run, and Redshift's add/copy/drop/rename response to that
-        reorders the column and can silently narrow its scale.
+        Sizes come from ``cursor.ps["row_desc"]``'s ``type_modifier``, not from
+        ``cursor.description``: ``redshift_connector`` hardcodes the PEP 249
+        size/precision/scale fields to ``None`` (see its ``Cursor._getDescription``).
+        Without real sizes, every sized column looks changed against the target on the
+        next run and gets needlessly rewritten.
         """
         sql = f"select * from {self.quote(relation.identifier)} limit 0"
         _, cursor = self.connections.add_select_query(sql)
@@ -319,14 +299,25 @@ class RedshiftAdapter(SQLAdapter):
         return columns
 
     def _temp_relation_data_type(self, type_code: Any) -> str:
-        """Map a driver type code onto the data type name ``SHOW COLUMNS`` reports."""
+        """Map a driver type code onto its SQL data type name."""
         data_type = TYPE_OID_TO_DATA_TYPE.get(type_code)
         if data_type is not None:
             return data_type
 
-        # Unrecognised type code: the driver's own label is closer than nothing, but it is
-        # not guaranteed to match SHOW COLUMNS, so surface it.
-        fallback = str(self.connections.data_type_code_to_name(type_code)).lower()
+        # Unmapped OID. The driver's own label is closer than nothing, but its lookup is an
+        # IntEnum call that raises for codes it doesn't recognise either -- and a column
+        # whose type cannot be named at all is better reported than described with an
+        # invented name, which would only fail later as invalid DDL.
+        try:
+            fallback = str(self.connections.data_type_code_to_name(type_code)).lower()
+        except Exception as exc:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Cannot describe temporary relation column: Redshift returned type code "
+                f"{type_code}, which neither dbt-redshift nor redshift_connector "
+                f"recognises. Please report this at "
+                f"https://github.com/dbt-labs/dbt-adapters/issues"
+            ) from exc
+
         logger.debug(
             f"No known Redshift data type for type code {type_code}; "
             f"falling back to {fallback!r}. Schema comparison for this column may be "

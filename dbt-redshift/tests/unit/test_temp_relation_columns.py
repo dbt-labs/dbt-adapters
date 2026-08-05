@@ -5,27 +5,25 @@ Needed when the connection's database is a datashare consumer database, where te
 relations are invisible to information_schema.columns, pg_attribute and svv_columns
 (dbt-labs/dbt-adapters#1947, #1991).
 
-The expected data type names below are ground truth captured from
-`SHOW COLUMNS FROM TABLE` on Redshift 1.0.358853. They must match exactly, because
-incremental schema comparison diffs temp-relation columns (described here) against
-target-relation columns (described by SHOW COLUMNS); any mismatch produces a spurious
-type change on every run.
+The expected data type names below are ground truth captured from `SHOW COLUMNS FROM TABLE`
+on Redshift 1.0.358853. They must match the catalog exactly: schema comparison diffs
+temp-relation columns (described here) against target-relation columns (described by the
+catalog), so any mismatch produces a spurious type change on every run.
 
-Size/precision/scale cannot come from cursor.description's PEP 249 fields: verified
-directly against redshift_connector's source, those are hardcoded to None -- not merely
-undocumented, dead on every version dbt-redshift depends on. The real values come from
-cursor.ps["row_desc"]'s type_modifier (pg_attribute.atttypmod), which the driver parses
-off the wire but never surfaces through the public API. The stub below mirrors that split
-so these tests fail the same way the real driver would if the decode logic regresses.
+The cursor stub mirrors the real driver's split -- PEP 249 size/precision/scale fields
+hardcoded to None on `description`, real type_modifier on `ps["row_desc"]`, and a type-name
+lookup that raises rather than returning a label for an unrecognised OID -- so a regression
+in the decode logic fails here the same way it would against the real driver.
 """
 
 from unittest import mock
 
 import pytest
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.redshift.impl import TYPE_OID_TO_DATA_TYPE, RedshiftAdapter
 
-# (oid, typname, data type name reported by SHOW COLUMNS)
+# (oid, typname, data type name reported by the catalog)
 VERIFIED_TYPES = [
     (16, "bool", "boolean"),
     (20, "int8", "bigint"),
@@ -54,10 +52,10 @@ VERIFIED_TYPES = [
 
 class TestTypeOidMapping:
     @pytest.mark.parametrize("oid,typname,expected", VERIFIED_TYPES)
-    def test_oid_maps_to_show_columns_data_type(self, oid, typname, expected):
+    def test_oid_maps_to_catalog_data_type(self, oid, typname, expected):
         assert (
             TYPE_OID_TO_DATA_TYPE[oid] == expected
-        ), f"OID {oid} ({typname}) must map to the name SHOW COLUMNS reports"
+        ), f"OID {oid} ({typname}) must map to the name the catalog reports"
 
     def test_bpchar_is_character_not_character_varying(self):
         # char(n) and varchar(n) both satisfy Column.is_string(), so confusing them yields
@@ -80,6 +78,10 @@ def _numeric_modifier(precision, scale):
     return ((precision << 16) | scale) + 4
 
 
+# OIDs redshift_connector names but this adapter does not map, and the labels it gives them.
+DRIVER_ONLY_TYPES = {1015: "VARCHAR_ARRAY", 28: "XID"}
+
+
 class _StubConnections:
     def __init__(self, cursor):
         self._cursor = cursor
@@ -90,7 +92,12 @@ class _StubConnections:
 
     @staticmethod
     def data_type_code_to_name(type_code):
-        return "UNKNOWN"
+        # The real implementation is `RedshiftOID(oid).name` -- an IntEnum call, so it
+        # raises for any OID missing from the driver's own table rather than returning a
+        # label for it.
+        if type_code not in DRIVER_ONLY_TYPES:
+            raise ValueError(f"{type_code} is not a valid RedshiftOID")
+        return DRIVER_ONLY_TYPES[type_code]
 
 
 class _StubAdapter:
@@ -185,12 +192,23 @@ class TestGetColumnsInTempRelation:
         assert by_name["amount"].numeric_precision is None
         assert by_name["amount"].numeric_scale is None
 
-    def test_falls_back_to_driver_label_for_unknown_type_code(self):
-        adapter = self._adapter_with_columns([("mystery", 999999, None)])
+    def test_falls_back_to_driver_label_for_unmapped_type_code(self):
+        # An OID this adapter doesn't map but the driver can still name.
+        adapter = self._adapter_with_columns([("tags", 1015, None)])
         columns = RedshiftAdapter.get_columns_in_temp_relation(
             adapter, mock.Mock(identifier="model__dbt_tmp123")
         )
-        assert [c.dtype for c in columns] == ["unknown"]
+        assert [c.dtype for c in columns] == ["varchar_array"]
+
+    def test_raises_for_type_code_neither_side_recognises(self):
+        # The driver's lookup raises rather than yielding a label, and a column whose type
+        # cannot be named at all would only fail later as invalid DDL -- so fail here, with
+        # the offending type code in the message.
+        adapter = self._adapter_with_columns([("mystery", 999999, None)])
+        with pytest.raises(DbtRuntimeError, match="999999"):
+            RedshiftAdapter.get_columns_in_temp_relation(
+                adapter, mock.Mock(identifier="model__dbt_tmp123")
+            )
 
     def test_empty_description_yields_no_columns(self):
         adapter = self._adapter_with_columns(None)
