@@ -10,6 +10,13 @@ The expected data type names below are ground truth captured from
 incremental schema comparison diffs temp-relation columns (described here) against
 target-relation columns (described by SHOW COLUMNS); any mismatch produces a spurious
 type change on every run.
+
+Size/precision/scale cannot come from cursor.description's PEP 249 fields: verified
+directly against redshift_connector's source, those are hardcoded to None -- not merely
+undocumented, dead on every version dbt-redshift depends on. The real values come from
+cursor.ps["row_desc"]'s type_modifier (pg_attribute.atttypmod), which the driver parses
+off the wire but never surfaces through the public API. The stub below mirrors that split
+so these tests fail the same way the real driver would if the decode logic regresses.
 """
 
 from unittest import mock
@@ -63,6 +70,16 @@ class TestTypeOidMapping:
         assert TYPE_OID_TO_DATA_TYPE[6551] == "binary varying"
 
 
+def _varlen_modifier(length):
+    """Postgres/Redshift wire-protocol atttypmod for a declared string length."""
+    return length + 4
+
+
+def _numeric_modifier(precision, scale):
+    """Postgres/Redshift wire-protocol atttypmod for a declared numeric(precision, scale)."""
+    return ((precision << 16) | scale) + 4
+
+
 class _StubConnections:
     def __init__(self, cursor):
         self._cursor = cursor
@@ -77,13 +94,31 @@ class _StubConnections:
 
 
 class _StubAdapter:
-    """Minimal stand-in exposing only what get_columns_in_temp_relation touches."""
+    """Minimal stand-in exposing only what get_columns_in_temp_relation touches.
+
+    Mirrors the real ``redshift_connector`` cursor: ``description`` carries the PEP 249
+    tuple with size/precision/scale hardcoded to ``None`` (verified against the driver's
+    source -- these fields are never populated), and ``ps["row_desc"]`` carries the real
+    per-column ``type_modifier`` the driver parses off the wire but doesn't surface
+    through the public API.
+    """
 
     Column = None  # set below to _FakeColumn
 
-    def __init__(self, description):
+    def __init__(self, columns):
+        # columns: list of (name, type_code, type_modifier_or_None)
         cursor = mock.Mock()
-        cursor.description = description
+        cursor.description = (
+            [(name, type_code, None, None, None, None, None) for name, type_code, _ in columns]
+            if columns is not None
+            else None
+        )
+        cursor.ps = {
+            "row_desc": [
+                {"type_modifier": modifier if modifier is not None else -1}
+                for _, _, modifier in (columns or [])
+            ]
+        }
         self.connections = _StubConnections(cursor)
 
     @staticmethod
@@ -94,28 +129,27 @@ class _StubAdapter:
 
 
 class TestGetColumnsInTempRelation:
-    def _adapter_with_description(self, description):
-        adapter = _StubAdapter(description)
+    def _adapter_with_columns(self, columns):
+        adapter = _StubAdapter(columns)
         adapter.Column = _FakeColumn
         return adapter
 
     def test_describes_columns_with_sizes_only_where_they_matter(self):
-        # (name, type_code, display_size, internal_size, precision, scale, null_ok)
-        description = [
-            ("id", 23, None, None, 10, 0, True),  # int4  -> integer
-            ("name", 1043, None, None, 256, 0, True),  # varchar -> character varying(256)
-            ("code", 1042, None, None, 10, 0, True),  # bpchar  -> character(10)
-            ("amount", 1700, None, None, 18, 4, True),  # numeric -> numeric(18,4)
-            ("ratio", 701, None, None, 17, 17, True),  # float8  -> double precision
-            ("payload", 6551, None, None, 50, 0, True),  # varbyte -> binary varying
+        columns = [
+            ("id", 23, None),  # int4  -> integer, no modifier
+            ("name", 1043, _varlen_modifier(256)),  # varchar(256) -> character varying(256)
+            ("code", 1042, _varlen_modifier(10)),  # bpchar(10)  -> character(10)
+            ("amount", 1700, _numeric_modifier(18, 4)),  # numeric(18,4)
+            ("ratio", 701, None),  # float8  -> double precision, no modifier
+            ("payload", 6551, None),  # varbyte -> binary varying, no modifier
         ]
-        adapter = self._adapter_with_description(description)
+        adapter = self._adapter_with_columns(columns)
 
-        columns = RedshiftAdapter.get_columns_in_temp_relation(
+        result = RedshiftAdapter.get_columns_in_temp_relation(
             adapter, mock.Mock(identifier="model__dbt_tmp123")
         )
 
-        assert [(c.column, c.dtype) for c in columns] == [
+        assert [(c.column, c.dtype) for c in result] == [
             ("id", "integer"),
             ("name", "character varying"),
             ("code", "character"),
@@ -124,33 +158,61 @@ class TestGetColumnsInTempRelation:
             ("payload", "binary varying"),
         ]
 
-        by_name = {c.column: c for c in columns}
-        # string types carry char_size
+        by_name = {c.column: c for c in result}
+        # string types carry char_size, decoded from type_modifier
         assert by_name["name"].char_size == 256
         assert by_name["code"].char_size == 10
-        # exact numerics carry precision and scale
+        # exact numerics carry precision and scale, decoded from type_modifier
         assert by_name["amount"].numeric_precision == 18
         assert by_name["amount"].numeric_scale == 4
-        # everything else leaves sizes unset -- the driver reports display widths for these
-        # (int4 -> 10, float8 -> 17/17) which are not the values SHOW COLUMNS reports
+        # everything else leaves sizes unset
         assert by_name["id"].numeric_precision is None
         assert by_name["ratio"].numeric_precision is None
         assert by_name["ratio"].numeric_scale is None
         assert by_name["payload"].char_size is None
 
+    def test_unconstrained_string_and_numeric_leave_size_unset(self):
+        # type_modifier == -1 means "no modifier" (unconstrained/default size).
+        columns = [("name", 1043, -1), ("amount", 1700, -1)]
+        adapter = self._adapter_with_columns(columns)
+
+        result = RedshiftAdapter.get_columns_in_temp_relation(
+            adapter, mock.Mock(identifier="model__dbt_tmp123")
+        )
+
+        by_name = {c.column: c for c in result}
+        assert by_name["name"].char_size is None
+        assert by_name["amount"].numeric_precision is None
+        assert by_name["amount"].numeric_scale is None
+
     def test_falls_back_to_driver_label_for_unknown_type_code(self):
-        adapter = self._adapter_with_description([("mystery", 999999, None, None, 0, 0, True)])
+        adapter = self._adapter_with_columns([("mystery", 999999, None)])
         columns = RedshiftAdapter.get_columns_in_temp_relation(
             adapter, mock.Mock(identifier="model__dbt_tmp123")
         )
         assert [c.dtype for c in columns] == ["unknown"]
 
     def test_empty_description_yields_no_columns(self):
-        adapter = self._adapter_with_description(None)
+        adapter = self._adapter_with_columns(None)
         columns = RedshiftAdapter.get_columns_in_temp_relation(
             adapter, mock.Mock(identifier="model__dbt_tmp123")
         )
         assert columns == []
+
+    def test_missing_row_desc_falls_back_to_no_size_info(self):
+        # cursor.ps["row_desc"] is undocumented driver internals; if a future driver
+        # version removes or restructures it, columns should still come back (without
+        # sizes) rather than raising.
+        adapter = self._adapter_with_columns([("amount", 1700, _numeric_modifier(18, 4))])
+        adapter.connections._cursor.ps = {}
+
+        columns = RedshiftAdapter.get_columns_in_temp_relation(
+            adapter, mock.Mock(identifier="model__dbt_tmp123")
+        )
+
+        assert columns[0].dtype == "numeric"
+        assert columns[0].numeric_precision is None
+        assert columns[0].numeric_scale is None
 
 
 class _FakeColumn:

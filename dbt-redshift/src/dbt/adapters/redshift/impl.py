@@ -253,32 +253,58 @@ class RedshiftAdapter(SQLAdapter):
         database context. Type codes are mapped back to the names ``SHOW COLUMNS`` reports
         so that columns described this way compare equal to columns of the target relation
         in ``check_for_schema_changes``.
+
+        Size/precision/scale cannot come from ``cursor.description``: ``redshift_connector``
+        (the version dbt-redshift depends on) hardcodes those PEP 249 fields to ``None`` --
+        verified directly against its source (``Cursor._getDescription``), not merely
+        undocumented. The real values are still on the wire: the driver parses the
+        Postgres-protocol row description into ``cursor.ps["row_desc"]``, which carries
+        ``type_modifier`` (``pg_attribute.atttypmod``) per column but never surfaces it
+        through the public API. Reading it directly is the only way to get real sizes;
+        without it, every sized string/numeric column looks "changed" against the target
+        on the very next run, and Redshift's add/copy/drop/rename response to that
+        reorders the column and can silently narrow its scale.
         """
         sql = f"select * from {self.quote(relation.identifier)} limit 0"
         _, cursor = self.connections.add_select_query(sql)
 
+        # `cursor.ps["row_desc"]` is an internal, undocumented structure of
+        # `redshift_connector`, not a public API -- there is no supported alternative for
+        # reaching `type_modifier`. `_getDescription` builds `cursor.description` from this
+        # same list, in the same order, so index-aligned lookup here is safe.
+        try:
+            row_descriptions = cursor.ps["row_desc"]
+        except (AttributeError, KeyError, TypeError):
+            row_descriptions = []
+
         columns = []
-        for description in cursor.description or []:
+        for i, description in enumerate(cursor.description or []):
             # PEP 249: (name, type_code, display_size, internal_size, precision, scale, null_ok)
             column_name = description[0]
             type_code = description[1]
-            internal_size = description[3] if len(description) > 3 else None
-            precision = description[4] if len(description) > 4 else None
-            scale = description[5] if len(description) > 5 else None
+
+            type_modifier = None
+            if i < len(row_descriptions):
+                type_modifier = row_descriptions[i].get("type_modifier")
 
             data_type = self._temp_relation_data_type(type_code)
 
             # Only string and exact-numeric types feed size into Column.data_type, which is
             # what schema comparison comes down to. For every other type the size fields are
-            # ignored, so leave them unset rather than propagate the driver's display widths.
+            # ignored, so leave them unset.
             char_size = None
             numeric_precision = None
             numeric_scale = None
-            if data_type in ("character varying", "character"):
-                char_size = next((s for s in (precision, internal_size) if s and s > 0), None)
-            elif data_type == "numeric":
-                numeric_precision = precision
-                numeric_scale = scale
+            if type_modifier is not None and type_modifier >= 0:
+                # Postgres wire-protocol convention: VARHDRSZ (4 bytes) is added to both a
+                # string's declared length and a numeric's packed (precision, scale) pair.
+                # -1 means "no modifier" (unconstrained/default size) and is left unset.
+                raw_modifier = type_modifier - 4
+                if data_type in ("character varying", "character"):
+                    char_size = raw_modifier if raw_modifier > 0 else None
+                elif data_type == "numeric":
+                    numeric_precision = raw_modifier >> 16
+                    numeric_scale = raw_modifier & 0xFFFF
 
             columns.append(
                 self.Column(
