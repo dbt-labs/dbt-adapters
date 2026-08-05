@@ -1,36 +1,19 @@
 """
-Pins TYPE_OID_TO_DATA_TYPE against the catalogs that actually describe target relations.
+Pins TYPE_OID_TO_DATA_TYPE against the catalogs that describe target relations.
 
-``get_columns_in_temp_relation`` describes a temp relation from the driver's cursor
-description, mapping type OIDs through ``TYPE_OID_TO_DATA_TYPE``. Those columns are then
-diffed against the target relation, which is described by one of two *other* paths depending
-on the ``datasharing`` profile flag:
+get_columns_in_temp_relation maps type OIDs through TYPE_OID_TO_DATA_TYPE, and those columns
+are diffed against a target described by SHOW COLUMNS (when `datasharing` is on) or by
+information_schema (when it is off). The map has to agree with both, or every column of that
+type reads as changed on every run. Its values were captured from SHOW COLUMNS, so this is
+what establishes that information_schema agrees.
 
-    | datasharing | target described by                      | reports            |
-    |-------------|------------------------------------------|--------------------|
-    | true        | redshift__get_columns_in_relation_show   | SHOW COLUMNS       |
-    | false       | redshift__get_columns_in_relation_legacy | information_schema |
-
-The map has to agree with whichever one ran, or every column of that type reads as changed
-on every run. Its values were captured from SHOW COLUMNS, so this test is what establishes
-that information_schema agrees rather than assuming it does.
-
-Comparing information_schema directly is faithful to the legacy macro: for a regular table
-its ``bound_views`` CTE selects ``data_type`` from information_schema and the final select
-passes it through unchanged.
-
-Types are declared with DDL rather than built from casts so the declared type is
-unambiguous. Unit coverage for the map itself is in tests/unit/test_temp_relation_columns.py.
+Unit coverage for the map itself is in tests/unit/test_temp_relation_columns.py.
 """
 
 from dbt.adapters.redshift import RedshiftRelation
 from dbt.adapters.redshift.impl import TYPE_OID_TO_DATA_TYPE
 
-# (column name, DDL type, data type name the catalogs are expected to report, type OID)
-#
-# SQL standard types. Both catalogs report the standard name for these, and the legacy macro
-# already depends on that -- its unbound_views CTE normalizes to the literal strings
-# 'character varying' and 'numeric'.
+# (column name, DDL type, expected data type name, type OID)
 STANDARD_TYPES = [
     ("c_boolean", "boolean", "boolean", 16),
     ("c_bigint", "bigint", "bigint", 20),
@@ -48,11 +31,8 @@ STANDARD_TYPES = [
     ("c_numeric", "numeric(18,2)", "numeric", 1700),
 ]
 
-# Redshift-proprietary types. These are the entries in doubt: information_schema is inherited
-# from Postgres 8.0.2, which reports 'USER-DEFINED' for types it does not recognize, so
-# agreement with SHOW COLUMNS is exactly what needs demonstrating rather than assuming.
-# Kept in their own probe table so an unsupported type on an older cluster cannot mask a
-# divergence among the standard types above.
+# Probed in a separate table so an unsupported type on an older cluster cannot mask a
+# divergence among the standard types.
 REDSHIFT_TYPES = [
     ("c_interval_y2m", "interval year to month", "interval year to month", 1188),
     ("c_interval_d2s", "interval day to second", "interval day to second", 1190),
@@ -63,10 +43,8 @@ REDSHIFT_TYPES = [
     ("c_varbyte", "varbyte(16)", "binary varying", 6551),
 ]
 
-# OID 25 (text) is deliberately absent from both lists: Redshift treats TEXT as an alias for
-# VARCHAR(256), so no stored column ever carries that OID and there is no catalog row to
-# compare against. The driver only produces it for expression results, which is why the map's
-# entry for it is an inference rather than a capture.
+# Redshift aliases TEXT to VARCHAR(256), so no stored column carries OID 25 and there is no
+# catalog row to compare against.
 UNPROBEABLE_OIDS = {25}
 
 
@@ -75,17 +53,12 @@ def _column_ddl(types):
 
 
 def _show_columns_data_types(project, relation):
-    """data_type per column as SHOW COLUMNS reports it, keyed by column name."""
     with project.adapter.connection_named("_test"):
-        _, table = project.adapter.execute(
-            f"show columns from table {relation}",
-            fetch=True,
-        )
+        _, table = project.adapter.execute(f"show columns from table {relation}", fetch=True)
     return {row["column_name"]: row["data_type"] for row in table.rows}
 
 
 def _information_schema_data_types(project, identifier):
-    """data_type per column as information_schema reports it, keyed by column name."""
     rows = project.run_sql(
         f"""
         select column_name, data_type
@@ -99,11 +72,7 @@ def _information_schema_data_types(project, identifier):
 
 
 def _driver_data_types(project, identifier, column_ddl):
-    """dtype per column as the driver-based fallback reports it, keyed by column name.
-
-    The temp relation has to be created and described on the same connection, since temp
-    relations are session-scoped.
-    """
+    # Temp relations are session-scoped, so create and describe on the same connection.
     relation = RedshiftRelation.create(identifier=identifier).include(database=False, schema=False)
     with project.adapter.connection_named("_test"):
         project.adapter.execute(f"create temp table {identifier} ({column_ddl})")
@@ -131,8 +100,6 @@ class TestTypeOidMappingMatchesCatalogs:
         for name, ddl, expected, oid in types:
             reported = {"TYPE_OID_TO_DATA_TYPE": TYPE_OID_TO_DATA_TYPE.get(oid)}
             reported.update({source: names.get(name) for source, names in described.items()})
-            # Any disagreement matters, including all three catalogs agreeing on a name the
-            # map does not carry -- that is still a type change on every run.
             if len(set(reported.values())) > 1:
                 divergences.append((ddl, oid, expected, reported))
 
@@ -149,7 +116,6 @@ class TestTypeOidMappingMatchesCatalogs:
         self._assert_describers_agree(project, REDSHIFT_TYPES, "type_probe_redshift")
 
     def test_every_mapped_oid_is_probed(self):
-        """A new entry in the map must come with evidence, or be explicitly exempted."""
         probed = {oid for _, _, _, oid in STANDARD_TYPES + REDSHIFT_TYPES}
         unprobed = set(TYPE_OID_TO_DATA_TYPE) - probed - UNPROBEABLE_OIDS
         assert not unprobed, (

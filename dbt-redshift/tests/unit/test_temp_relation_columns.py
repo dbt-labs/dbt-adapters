@@ -5,15 +5,12 @@ Needed when the connection's database is a datashare consumer database, where te
 relations are invisible to information_schema.columns, pg_attribute and svv_columns
 (dbt-labs/dbt-adapters#1947, #1991).
 
-The expected data type names below are ground truth captured from `SHOW COLUMNS FROM TABLE`
-on Redshift 1.0.358853. They must match the catalog exactly: schema comparison diffs
-temp-relation columns (described here) against target-relation columns (described by the
-catalog), so any mismatch produces a spurious type change on every run.
+The expected data type names are ground truth captured from `SHOW COLUMNS FROM TABLE` on
+Redshift 1.0.358853, and must match the catalog exactly or every column of that type reads as
+changed on every run. tests/functional/test_type_oid_mapping.py checks that live.
 
-The cursor stub mirrors the real driver's split -- PEP 249 size/precision/scale fields
-hardcoded to None on `description`, real type_modifier on `ps["row_desc"]`, and a type-name
-lookup that raises rather than returning a label for an unrecognised OID -- so a regression
-in the decode logic fails here the same way it would against the real driver.
+The cursor stub mirrors the real driver: dead PEP 249 size fields on `description`, real
+type_modifier on `ps["row_desc"]`, and a type-name lookup that raises for an unknown OID.
 """
 
 from unittest import mock
@@ -92,23 +89,15 @@ class _StubConnections:
 
     @staticmethod
     def data_type_code_to_name(type_code):
-        # The real implementation is `RedshiftOID(oid).name` -- an IntEnum call, so it
-        # raises for any OID missing from the driver's own table rather than returning a
-        # label for it.
+        # The real implementation is `RedshiftOID(oid).name`, an IntEnum call, so it raises
+        # rather than returning a label for an OID the driver doesn't know.
         if type_code not in DRIVER_ONLY_TYPES:
             raise ValueError(f"{type_code} is not a valid RedshiftOID")
         return DRIVER_ONLY_TYPES[type_code]
 
 
 class _StubAdapter:
-    """Minimal stand-in exposing only what get_columns_in_temp_relation touches.
-
-    Mirrors the real ``redshift_connector`` cursor: ``description`` carries the PEP 249
-    tuple with size/precision/scale hardcoded to ``None`` (verified against the driver's
-    source -- these fields are never populated), and ``ps["row_desc"]`` carries the real
-    per-column ``type_modifier`` the driver parses off the wire but doesn't surface
-    through the public API.
-    """
+    """Minimal stand-in exposing only what get_columns_in_temp_relation touches."""
 
     Column = None  # set below to _FakeColumn
 
