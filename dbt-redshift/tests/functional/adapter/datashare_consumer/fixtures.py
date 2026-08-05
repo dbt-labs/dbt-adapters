@@ -8,6 +8,16 @@ import pytest
 #
 # Setting one up (Redshift Serverless, two namespaces):
 #
+#   for role in producer consumer; do
+#     aws redshift-serverless create-namespace --namespace-name rs-$role \
+#       --admin-username admin --admin-user-password '<password>' --db-name dev
+#     aws redshift-serverless create-workgroup --workgroup-name rs-$role-wg \
+#       --namespace-name rs-$role --base-capacity 8 --publicly-accessible
+#   done
+#
+# Both workgroups need inbound 5439 from the test runner. The namespace GUIDs below come from
+# `get-namespace --query namespace.namespaceId`. Then:
+#
 #   -- producer namespace, database `dev`
 #   create schema shared_sch;
 #   create table shared_sch.orders (id int);

@@ -18,7 +18,11 @@ from unittest import mock
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
-from dbt.adapters.redshift.impl import TYPE_OID_TO_DATA_TYPE, RedshiftAdapter
+from dbt.adapters.redshift.impl import (
+    TYPE_OID_TO_DATA_TYPE,
+    TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE,
+    RedshiftAdapter,
+)
 
 # (oid, typname, data type name reported by the catalog)
 VERIFIED_TYPES = [
@@ -42,6 +46,7 @@ VERIFIED_TYPES = [
     (2935, "hllsketch", "hllsketch"),
     (3000, "geometry", "geometry"),
     (3001, "geography", "geography"),
+    (3999, "geometryhex", "geometry"),
     (4000, "super", "super"),
     (6551, "varbyte", "binary varying"),
 ]
@@ -63,6 +68,19 @@ class TestTypeOidMapping:
     def test_varbyte_is_binary_varying(self):
         # SHOW COLUMNS reports 'binary varying', not 'varbyte'.
         assert TYPE_OID_TO_DATA_TYPE[6551] == "binary varying"
+
+    def test_geometry_is_mapped_under_the_oid_the_wire_uses(self):
+        # A geometry column reports GEOMETRYHEX (3999) in the cursor description, never 3000,
+        # so mapping only 3000 sends every geometry column down the unknown-type fallback.
+        assert TYPE_OID_TO_DATA_TYPE[3999] == "geometry"
+
+    def test_information_schema_overrides_only_where_the_catalogs_differ(self):
+        # SHOW COLUMNS gives the SQL name, information_schema its internal one. Only the two
+        # interval types diverge; anything else here would be a silent behaviour change.
+        assert TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE == {
+            1188: "intervaly2m",
+            1190: "intervald2s",
+        }
 
 
 def _varlen_modifier(length):
@@ -100,6 +118,10 @@ class _StubAdapter:
     """Minimal stand-in exposing only what get_columns_in_temp_relation touches."""
 
     Column = None  # set below to _FakeColumn
+    datasharing = True  # SHOW COLUMNS names; flip to get information_schema names
+
+    def use_show_apis(self):
+        return self.datasharing
 
     def __init__(self, columns):
         # columns: list of (name, type_code, type_modifier_or_None)
@@ -180,6 +202,24 @@ class TestGetColumnsInTempRelation:
         assert by_name["name"].char_size is None
         assert by_name["amount"].numeric_precision is None
         assert by_name["amount"].numeric_scale is None
+
+    def test_interval_follows_the_describer_the_target_used(self):
+        # datasharing off means the target was described by information_schema, which names the
+        # interval types differently -- following SHOW COLUMNS there is a type change per run.
+        columns = [("span", 1188, -1)]
+
+        adapter = self._adapter_with_columns(columns)
+        relation = mock.Mock(identifier="model__dbt_tmp123")
+        assert RedshiftAdapter.get_columns_in_temp_relation(adapter, relation)[0].dtype == (
+            "interval year to month"
+        )
+
+        adapter = self._adapter_with_columns(columns)
+        adapter.datasharing = False
+        assert (
+            RedshiftAdapter.get_columns_in_temp_relation(adapter, relation)[0].dtype
+            == "intervaly2m"
+        )
 
     def test_falls_back_to_driver_label_for_unmapped_type_code(self):
         # An OID this adapter doesn't map but the driver can still name.

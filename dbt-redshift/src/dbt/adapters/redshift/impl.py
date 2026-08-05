@@ -69,8 +69,18 @@ TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
     2935: "hllsketch",  # hllsketch
     3000: "geometry",  # geometry
     3001: "geography",  # geography
+    3999: "geometry",  # geometryhex -- what the wire returns for a geometry column
     4000: "super",  # super
     6551: "binary varying",  # varbyte
+}
+
+# information_schema reports its internal type name where SHOW COLUMNS reports the SQL name,
+# so a fallback column only compares equal if it follows whichever path described the target.
+# Everything else in the map above agrees across both; these are the exceptions, verified in
+# tests/functional/test_type_oid_mapping.py.
+TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE: Dict[int, str] = {
+    1188: "intervaly2m",  # SHOW COLUMNS: interval year to month
+    1190: "intervald2s",  # SHOW COLUMNS: interval day to second
 }
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
@@ -299,7 +309,16 @@ class RedshiftAdapter(SQLAdapter):
         return columns
 
     def _temp_relation_data_type(self, type_code: Any) -> str:
-        """Map a driver type code onto its SQL data type name."""
+        """Map a driver type code onto the name the target relation's describer reports.
+
+        The target goes through SHOW COLUMNS when ``datasharing`` is on and through
+        information_schema when it is off, and the two disagree on a few type names.
+        """
+        if not self.use_show_apis():
+            data_type = TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE.get(type_code)
+            if data_type is not None:
+                return data_type
+
         data_type = TYPE_OID_TO_DATA_TYPE.get(type_code)
         if data_type is not None:
             return data_type
