@@ -133,7 +133,9 @@ class TestSnowflakeManagedStorageIcebergDDL:
         table_sql = get_cleaned_model_ddl_from_file("managed_iceberg.sql")
         assert "base_location" not in table_sql
         assert "catalog = 'SNOWFLAKE'" in table_sql
+        assert "external_volume = 'SNOWFLAKE_MANAGED'" in table_sql
 
         dynamic_sql = get_cleaned_model_ddl_from_file("managed_dynamic_iceberg.sql")
         assert "base_location" not in dynamic_sql
         assert "catalog = 'SNOWFLAKE'" in dynamic_sql
+        assert "external_volume = 'SNOWFLAKE_MANAGED'" in dynamic_sql
