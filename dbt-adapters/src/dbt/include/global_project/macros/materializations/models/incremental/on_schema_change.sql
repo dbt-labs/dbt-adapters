@@ -27,36 +27,6 @@
 
   {%- set source_columns = adapter.get_columns_in_relation(source_relation) -%}
   {%- set target_columns = adapter.get_columns_in_relation(target_relation) -%}
-
-  {#-
-    An empty source column list is a metadata failure, not a real schema. This materialization
-    just built and populated `source_relation`, so it necessarily has columns. If column
-    introspection comes back empty it means the adapter could not see the relation -- and
-    continuing would compute "every target column is missing from the source", which under
-    on_schema_change='sync_all_columns' drops every column in the target table.
-    Fail loudly instead of silently destroying the target schema.
-  -#}
-  {%- if source_columns | length == 0 -%}
-    {%- set empty_source_columns_msg -%}
-      Could not read any columns for {{ source_relation }} while checking for schema changes on
-      incremental model {{ target_relation }}.
-
-      This is a metadata failure rather than an empty schema: {{ source_relation }} was just built
-      by this run, so it does have columns. Continuing would treat every column in
-      {{ target_relation }} as removed and, with on_schema_change='sync_all_columns', drop them.
-
-      Common causes:
-        - the warehouse does not expose this intermediate/temporary relation to the catalog views
-          the adapter reads column metadata from
-        - the connection's database differs from the one the temporary relation was created in
-
-      Workarounds:
-        - set on_schema_change='ignore' to skip this check
-        - run the model with --full-refresh to rebuild it
-    {%- endset -%}
-    {%- do exceptions.raise_compiler_error(empty_source_columns_msg) -%}
-  {%- endif -%}
-
   {%- set source_not_in_target = diff_columns(source_columns, target_columns) -%}
   {%- set target_not_in_source = diff_columns(target_columns, source_columns) -%}
 
@@ -153,6 +123,47 @@
     {% else %}
 
       {% set schema_changes_dict = check_for_schema_changes(source_relation, target_relation) %}
+
+      {#-
+        An empty source column list is an introspection failure, not a real schema -- this run just
+        built source_relation. sync_all_columns would drop every target column and fail would report
+        a bogus diff, so both refuse. append_new_columns never drops, and the caller substitutes the
+        target's columns for our empty return, so it warns instead of breaking a working run.
+      -#}
+      {%- if schema_changes_dict['source_columns'] | length == 0 -%}
+        {%- set empty_source_columns_msg -%}
+          Could not read any columns for {{ source_relation }} while checking for schema changes on
+          incremental model {{ target_relation }} (on_schema_change='{{ on_schema_change }}').
+
+          This is a metadata failure rather than an empty schema: {{ source_relation }} was just
+          built by this run, so it does have columns.
+
+          Common causes:
+            - the warehouse does not expose this temporary relation to the catalog views the
+              adapter reads column metadata from
+            - the connection's database differs from the one the temporary relation was created in
+
+          {% if on_schema_change == 'append_new_columns' -%}
+          Continuing, because on_schema_change='append_new_columns' never drops columns and dbt
+          will insert using {{ target_relation }}'s existing columns. No new column can be
+          detected this run, so if the model added one it stays missing until introspection works
+          or you run with --full-refresh.
+          {%- else -%}
+          Refusing to continue: dbt cannot determine which columns changed, so it cannot safely
+          apply on_schema_change='{{ on_schema_change }}'. With 'sync_all_columns' this would
+          silently drop every column in {{ target_relation }}.
+
+          Workarounds:
+            - set on_schema_change='ignore' to skip this check
+            - run the model with --full-refresh to rebuild it
+          {%- endif %}
+        {%- endset -%}
+        {%- if on_schema_change == 'append_new_columns' -%}
+          {%- do exceptions.warn(empty_source_columns_msg) -%}
+        {%- else -%}
+          {%- do exceptions.raise_compiler_error(empty_source_columns_msg) -%}
+        {%- endif -%}
+      {%- endif -%}
 
       {% if schema_changes_dict['schema_changed'] %}
 
