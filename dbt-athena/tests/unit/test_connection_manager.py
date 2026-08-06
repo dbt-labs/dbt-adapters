@@ -2,18 +2,17 @@ from multiprocessing import get_context
 from unittest import mock
 
 import pytest
-from pyathena.model import AthenaQueryExecution
 
 from dbt.adapters.athena import AthenaConnectionManager
-from dbt.adapters.athena.connections import AthenaAdapterResponse
+from dbt.adapters.athena.connections import AthenaAdapterResponse, AthenaCursor
 
 
 class TestAthenaConnectionManager:
     @pytest.mark.parametrize(
         ("state", "result"),
         (
-            pytest.param(AthenaQueryExecution.STATE_SUCCEEDED, "OK"),
-            pytest.param(AthenaQueryExecution.STATE_CANCELLED, "ERROR"),
+            pytest.param(AthenaCursor.STATE_SUCCEEDED, "OK"),
+            pytest.param(AthenaCursor.STATE_CANCELLED, "ERROR"),
         ),
     )
     def test_get_response(self, state, result):
@@ -33,3 +32,10 @@ class TestAthenaConnectionManager:
         assert cm.data_type_code_to_name("array<string>") == "ARRAY"
         assert cm.data_type_code_to_name("map<int, boolean>") == "MAP"
         assert cm.data_type_code_to_name("DECIMAL(3, 7)") == "DECIMAL"
+
+    def test_cancel_tells_the_connection_to_cancel(self):
+        connection = mock.MagicMock()
+        connection.handle = mock.MagicMock()
+        cm = AthenaConnectionManager(mock.MagicMock(), get_context("spawn"))
+        cm.cancel(connection)
+        connection.handle.cancel.assert_called_once()

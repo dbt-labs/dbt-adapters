@@ -297,6 +297,49 @@ def test_connnections_credentials_passes_through_wif_params():
     assert auth_args["token"] == "test_token"
 
 
+def test_connnections_credentials_wif_oidc_token_and_no_user_no_warning():
+    """OIDC workload identity uses a token and no user; neither should trigger
+    the 'token set but authenticator wrong' warning nor the 'user required' error.
+
+    If 'workload_identity' is ever removed from the allowlist in __post_init__,
+    warn_or_error would be called and this assertion would fail.
+    """
+    credentials = {
+        "account": "test_account",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "workload_identity",
+        "workload_identity_provider": "OIDC",
+        "token": "oidc_jwt_token",
+        # intentionally no 'user' — not required for workload identity
+    }
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        connections.SnowflakeCredentials(**credentials)
+        mock_warn.assert_not_called()
+
+
+def test_connnections_credentials_workload_identity_authenticator_is_case_insensitive():
+    """workload_identity is matched case-insensitively in both __post_init__ validation
+    and auth_args (e.g. 'WORKLOAD_IDENTITY'). Other authenticators stay case-sensitive."""
+    credentials = {
+        "account": "test_account",
+        "database": "database",
+        "warehouse": "warehouse",
+        "schema": "schema",
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_provider": "OIDC",
+        "token": "oidc_jwt_token",
+        # no 'user' — must not trip validation despite the uppercase authenticator
+    }
+    with patch("dbt.adapters.snowflake.connections.warn_or_error") as mock_warn:
+        creds = connections.SnowflakeCredentials(**credentials)
+        mock_warn.assert_not_called()
+    auth_args = creds.auth_args()
+    assert auth_args["authenticator"] == "WORKLOAD_IDENTITY"
+    assert auth_args["token"] == "oidc_jwt_token"
+
+
 def test_connnections_credentials_wif_authenticator_fails_without_provider():
     credentials = {
         "account": "account_id_with_underscores",

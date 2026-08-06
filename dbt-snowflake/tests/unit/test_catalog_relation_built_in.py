@@ -60,9 +60,9 @@ def test_iceberg_base_location_built_in(fake_integration, config, expected):
     "config,expected",
     [
         (None, None),
-        (False, "FALSE"),
+        (False, None),  # false ignored for Iceberg
         (True, "TRUE"),
-        ("False", "FALSE"),
+        ("False", None),  # false ignored for Iceberg
         ("True", "TRUE"),
     ],
 )
@@ -121,7 +121,8 @@ def test_model_config_overrides_adapter_properties():
     model = deepcopy(model_base)
     model.config.update({"change_tracking": False})
     relation = integration.build_relation(model)
-    assert relation.change_tracking == "FALSE"
+    # model false overrides adapter true, then is omitted (None) since Iceberg can't disable it
+    assert relation.change_tracking is None
 
 
 @pytest.mark.parametrize(
