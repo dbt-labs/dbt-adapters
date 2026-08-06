@@ -90,6 +90,7 @@ class TestSnowflakeV2HorizonCatalog:
 
         configs_sql = get_cleaned_model_ddl_from_file("horizon_with_configs.sql")
         assert "storage_serialization_policy = 'COMPATIBLE'" in configs_sql
-        assert "change_tracking = FALSE" in configs_sql
+        # change_tracking=false is ignored for Iceberg (Snowflake forbids turning it off)
+        assert "change_tracking" not in configs_sql
         assert "max_data_extension_time_in_days = 30" in configs_sql
         assert "data_retention_time_in_days = 1" in configs_sql
