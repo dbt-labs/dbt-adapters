@@ -2,8 +2,8 @@
 
 ### impl.py
 
-The class `SQLAdapter` in [base/imply.py](https://github.com/dbt-labs/dbt-core/blob/main/core/dbt/adapters/base/impl.py)
-is a (mostly) abstract object that adapter objects inherit from.
+The class `BaseAdapter` in [impl.py](impl.py)
+is an abstract object that adapter objects inherit from.
 The base class scaffolds out methods that every adapter project
 usually should implement for smooth communication between dbt and database.
 
