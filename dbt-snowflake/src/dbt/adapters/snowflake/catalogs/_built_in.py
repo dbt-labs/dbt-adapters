@@ -118,9 +118,9 @@ class BuiltInCatalogIntegration(CatalogIntegration):
         iceberg_version = parse_model.iceberg_version(model) or self.iceberg_version
 
         ev = parse_model.external_volume(model) or self.external_volume
-        # Normalize: absent or SNOWFLAKE_MANAGED → always emit SNOWFLAKE_MANAGED, never base_location
+        # Suppress base_location when no external_volume is configured or when
+        # SNOWFLAKE_MANAGED is set — both indicate Snowflake-managed storage.
         if not ev or ev.upper() == "SNOWFLAKE_MANAGED":
-            ev = "SNOWFLAKE_MANAGED"
             base_loc = None
         else:
             base_loc = parse_model.base_location(model)

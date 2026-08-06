@@ -25,10 +25,14 @@ def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
 @pytest.mark.parametrize(
     "config,expected",
     [
-        # No external_volume → Snowflake-managed storage → base_location suppressed
-        ({"fake_attr": "fake_value"}, None),
-        ({"base_location_root": None, "base_location_subpath": None}, None),
-        # SNOWFLAKE_MANAGED (case-insensitive) → managed storage → base_location suppressed
+        # No external_volume in model config → path generated; _built_in.py decides
+        # whether to use it based on the fully-resolved external_volume
+        ({"fake_attr": "fake_value"}, "_dbt/fake_schema/fake_table"),
+        (
+            {"base_location_root": None, "base_location_subpath": None},
+            "_dbt/fake_schema/fake_table",
+        ),
+        # SNOWFLAKE_MANAGED explicitly in model config → suppressed here
         ({"external_volume": "SNOWFLAKE_MANAGED"}, None),
         ({"external_volume": "snowflake_managed"}, None),
         # external_volume present → user-defined storage → base_location generated

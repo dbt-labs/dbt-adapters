@@ -35,9 +35,11 @@ def base_location(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
+    # Suppress base_location when SNOWFLAKE_MANAGED is explicitly set in model config.
+    # The "no external_volume" case is handled upstream in _built_in.py where the
+    # fully-resolved external_volume (including catalog integration defaults) is known.
     ev = model.config.get("external_volume")
-    # Snowflake-managed storage does not accept base_location
-    if not ev or ev.upper() == "SNOWFLAKE_MANAGED":
+    if ev and ev.upper() == "SNOWFLAKE_MANAGED":
         return None
 
     prefix = (
