@@ -1304,3 +1304,24 @@ class TestPartitionConfigRenderWrappedInt64Range:
         """int64 without range config should return the raw field name."""
         config = PartitionConfig(field="id", data_type="int64")
         assert config.render_wrapped() == "id"
+
+
+class TestClustersMatch:
+    @pytest.mark.parametrize(
+        "table_fields,conf_cluster,expected",
+        [
+            # case-only difference must still match (BigQuery identifiers are case-insensitive)
+            (["A"], ["a"], True),
+            (["a", "b"], ["a", "b"], True),
+            (["a"], "a", True),  # str config is wrapped into a list
+            (["a"], ["b"], False),
+            (["a", "b"], ["b", "a"], False),  # clustering order is significant
+            (None, None, True),
+            ([], None, True),
+            (None, ["a"], False),
+        ],
+    )
+    def test_clusters_match(self, table_fields, conf_cluster, expected):
+        table = MagicMock()
+        table.clustering_fields = table_fields
+        assert BigQueryAdapter._clusters_match(table, conf_cluster) is expected
