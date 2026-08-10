@@ -1,0 +1,8 @@
+kind: Fixes
+body: Describe temporary relations from the driver when the connection targets a datashare
+    consumer database, where they are invisible to all catalog views. Previously this made
+    on_schema_change='sync_all_columns' drop every column in the target table.
+time: 2026-07-28T12:00:03.029795-07:00
+custom:
+    Author: will-sargent-dbtlabs
+    Issue: "1947 1991"
