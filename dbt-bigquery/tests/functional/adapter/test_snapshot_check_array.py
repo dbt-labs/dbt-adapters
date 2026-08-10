@@ -54,6 +54,7 @@ SNAPSHOT_CHECK_ALL_SQL = """
         unique_key='id',
         strategy='check',
         check_cols='all',
+        invalidate_hard_deletes=True,
     ) }}
     select * from {{ ref('fact') }}
 {% endsnapshot %}
@@ -141,7 +142,7 @@ class TestSnapshotCheckArrayColumns(BaseSimpleSnapshotBase):
 
     def test_deletes_are_captured_by_snapshot(self, project):
         """
-        Hard-delete the last 2 records. With invalidate_hard_deletes (default),
+        Hard-delete the last 2 records. With invalidate_hard_deletes enabled,
         deleted ids get their records closed out.
         """
         self.delete_fact_records("id between 4 and 5")
