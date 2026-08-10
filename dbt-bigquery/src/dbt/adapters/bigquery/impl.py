@@ -613,11 +613,6 @@ class BigQueryAdapter(BaseAdapter):
     ) -> str:
         """Replace each `destination$<partition_id>` with `source$<partition_id>`,
         one copy job per partition (the insert_overwrite + copy_partitions path).
-
-        Concurrency resolution, most specific wins:
-        `partition_by.copy_partitions_concurrency` > the model-level
-        `copy_partitions_concurrency` config (passed by the macro as
-        `default_concurrency`) > 1 (serial, the pre-existing behavior).
         """
         # partition_by.copy_partitions_concurrency was validated by PartitionConfig.parse;
         # default_concurrency arrives raw from config.get and is validated here.

@@ -102,10 +102,6 @@ class RetryFactory:
         """
         Job-level retry for copy jobs.
         Callers are expected to mint the job_id inside the retried closure.
-
-        The predicate defers to _job_should_retry, which retries transient
-        reasons (rateLimitExceeded, backendError, internalError, ...)
-        and never quotaExceeded (daily quotas).
         """
         return (
             DEFAULT_JOB_RETRY.with_predicate(_DeferredException(self._retries))

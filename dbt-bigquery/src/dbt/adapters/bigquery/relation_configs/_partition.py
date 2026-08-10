@@ -23,8 +23,7 @@ class PartitionConfig(dbtClassMixin):
 
     # Bounded by BigQuery's partitioned-table metadata rate limit: 50
     # modifications per 10 seconds per destination table, which includes copy
-    # jobs. Transient overshoot is retried with backoff, but a wide-open pool
-    # would just trade wall-clock for rate-limit churn.
+    # jobs.
     MAX_COPY_PARTITIONS_CONCURRENCY = 32
 
     _PARTITION_ID_FORMATS = {

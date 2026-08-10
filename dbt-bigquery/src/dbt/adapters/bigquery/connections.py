@@ -562,16 +562,12 @@ class BigQueryConnectionManager(BaseConnectionManager):
         Thread-safety: the connection, client, per-job timeout, and owning thread id
         are all resolved here on the calling thread; workers share the one BigQuery
         Client (documented thread-safe) and never touch the thread-local connection
-        registry. Each distinct partition id is submitted at most once, so no two
-        in-flight jobs ever target the same partition decorator.
+        registry.
 
         Failure semantics: the first terminal (post-retry) failure stops NEW
-        partitions from being submitted; in-flight copies are left to finish
-        (BigQuery cannot cancel a running copy job). Any failure raises
-        DbtDatabaseError enumerating copied/failed/skipped partitions. Partitions
-        already copied stay in place -- same partial-state-on-failure behavior as
-        the serial path, and self-healing on re-run since the strategy rebuilds
-        the tmp table and re-copies.
+        partitions from being submitted; any failure raises DbtDatabaseError
+        enumerating copied/failed/skipped partitions. Partitions already copied
+        stay in place.
         """
         conn = self.get_thread_connection()
         client: Client = conn.handle
@@ -629,8 +625,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 for future in as_completed(futures):
                     outcomes.append(future.result())
             except BaseException:
-                # e.g. KeyboardInterrupt on the calling thread: stop submitting new
-                # partitions and wait for in-flight jobs (they cannot be cancelled).
+                # e.g. KeyboardInterrupt on the calling thread
                 stop_submitting.set()
                 executor.shutdown(wait=True, cancel_futures=True)
                 raise
