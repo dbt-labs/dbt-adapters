@@ -1,5 +1,5 @@
 kind: Features
-body: Emit `external_volume = 'SNOWFLAKE_MANAGED'` and suppress `base_location` when no external_volume is configured or external_volume is set to SNOWFLAKE_MANAGED, enabling Snowflake Horizon managed storage Iceberg tables to work out of the box
+body: Add `snowflake_managed_iceberg_default` behavior flag. When enabled, Iceberg tables without an explicit `external_volume` emit `external_volume = 'SNOWFLAKE_MANAGED'` and suppress `base_location`, enabling Snowflake Horizon managed storage out of the box. Setting `external_volume = 'SNOWFLAKE_MANAGED'` explicitly in model config always suppresses `base_location` regardless of the flag.
 time: 2026-07-30T12:37:46.043851+05:30
 custom:
     Author: aahel
