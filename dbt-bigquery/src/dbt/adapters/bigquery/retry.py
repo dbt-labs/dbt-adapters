@@ -101,18 +101,11 @@ class RetryFactory:
     def create_copy_job_retry(self) -> Retry:
         """
         Job-level retry for copy jobs.
-
-        CopyJob.result() has no job_retry parameter (only QueryJob does), so a
-        copy job that fails server-side is never resubmitted by the client
-        library -- we must do it ourselves, and with a fresh job_id per attempt:
-        resubmitting the failed job's id would 409-attach to the dead job.
         Callers are expected to mint the job_id inside the retried closure.
 
         The predicate defers to _job_should_retry, which retries transient
-        reasons (rateLimitExceeded, backendError, internalError, ...) -- the
-        set BigQuery documents as "transient; you can retry with an exponential
-        backoff" -- and never quotaExceeded (daily quotas). The attempt budget
-        comes from the profile's job_retries setting.
+        reasons (rateLimitExceeded, backendError, internalError, ...)
+        and never quotaExceeded (daily quotas).
         """
         return (
             DEFAULT_JOB_RETRY.with_predicate(_DeferredException(self._retries))

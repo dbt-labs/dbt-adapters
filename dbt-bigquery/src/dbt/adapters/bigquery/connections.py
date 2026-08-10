@@ -509,11 +509,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
         with self.exception_handler(msg):
             model_timeout = getattr(conn, "_bq_model_timeout", None)
             copy_timeout = model_timeout or self._retry.create_job_execution_timeout(fallback=300)
-            # Job-level retry: a copy job that fails server-side on a transient error
-            # (e.g. rateLimitExceeded) is resubmitted with a fresh job_id, mirroring the
-            # job-level retry that query jobs already get. Kept inside exception_handler
-            # so the retry predicate sees raw google exceptions (with `.errors`), not the
-            # converted DbtDatabaseError.
+            # resubmitted copy job with a fresh job_id, mirroring the
+            # job-level retry that query jobs already get.
             retry = self._retry.create_copy_job_retry()
             retry(
                 lambda: self._copy_and_wait(
@@ -536,14 +533,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         timeout: float,
         owning_thread_id: Optional[Hashable] = None,
     ) -> None:
-        """A single copy-job attempt: submit (or 409-attach) and wait for completion.
-
-        The job_id is minted here, inside the attempt, so that a caller retrying a
-        terminally failed job (create_copy_job_retry) resubmits with a fresh job_id --
-        resubmitting the failed id would 409-attach to the dead job and re-raise forever.
-        Within one attempt the stable job_id keeps jobs.insert idempotent: a transport
-        resubmission attaches to the in-flight job via _submit_or_attach.
-        """
+        """A single copy-job attempt: submit (or 409-attach) and wait for completion."""
         job_id = self.generate_job_id(thread_id=owning_thread_id)
         copy_job = self._submit_or_attach(
             client,

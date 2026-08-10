@@ -5,4 +5,4 @@ body: Retry BigQuery copy jobs on transient errors (e.g. rateLimitExceeded, back
 time: 2026-07-30T12:07:10.000000-07:00
 custom:
     Author: bordway-shop
-    Issue: "TBD"
+    Issue: "559"
