@@ -28,6 +28,21 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
     labels: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
     tags: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
 
+    def to_dict(self) -> Dict[str, Any]:
+        expiration = self.expiration_timestamp
+        if isinstance(expiration, datetime):
+            expiration = expiration.isoformat()
+        return {
+            "enable_refresh": self.enable_refresh,
+            "refresh_interval_minutes": self.refresh_interval_minutes,
+            "expiration_timestamp": expiration,
+            "max_staleness": self.max_staleness,
+            "kms_key_name": self.kms_key_name,
+            "description": self.description,
+            "labels": dict(self.labels),
+            "tags": dict(self.tags),
+        }
+
     def __hash__(self) -> int:
         """Custom hash method to handle unhashable dict fields."""
         hashable_fields = []
