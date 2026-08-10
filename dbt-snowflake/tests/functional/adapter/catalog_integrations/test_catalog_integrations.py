@@ -116,6 +116,10 @@ class TestSnowflakeManagedStorageIcebergDDL:
     """
 
     @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"snowflake_managed_iceberg_default": True}}
+
+    @pytest.fixture(scope="class")
     def seeds(self):
         return {"seed.csv": SEED}
 

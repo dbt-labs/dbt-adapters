@@ -72,6 +72,17 @@ SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
+    name="snowflake_managed_iceberg_default",
+    default=False,
+    description=(
+        "When enabled, Iceberg tables without an explicit external_volume emit "
+        "external_volume = 'SNOWFLAKE_MANAGED' and suppress base_location, enabling "
+        "Snowflake Horizon managed storage out of the box. When disabled (default), no "
+        "external_volume clause is emitted and Snowflake resolves the schema or account default."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -157,7 +168,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES]
+        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -645,6 +656,10 @@ CALL {proc_name}();
         """
         if catalog := parse_model.catalog_name(model):
             catalog_integration = self.get_catalog_integration(catalog)
+            if isinstance(catalog_integration, BuiltInCatalogIntegration):
+                catalog_integration.use_snowflake_managed_storage_default = (
+                    self.behavior.snowflake_managed_iceberg_default.no_warn
+                )
             return catalog_integration.build_relation(model)
         return None
 
