@@ -39,8 +39,8 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
             "max_staleness": self.max_staleness,
             "kms_key_name": self.kms_key_name,
             "description": self.description,
-            "labels": dict(self.labels),
-            "tags": dict(self.tags),
+            "labels": dict(self.labels) if self.labels is not None else None,
+            "tags": dict(self.tags) if self.tags is not None else None,
         }
 
     def __hash__(self) -> int:
