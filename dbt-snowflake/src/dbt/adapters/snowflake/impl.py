@@ -11,10 +11,13 @@ from typing import (
     Dict,
     FrozenSet,
     Tuple,
+    Iterable,
+    Set,
 )
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -163,6 +166,9 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+        # Populated in set_relations_cache when the project contains function nodes.
+        # Avoids unconditional SHOW USER FUNCTIONS on every schema (dbt-adapters#2106).
+        self._list_function_relations: bool = False
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
@@ -386,15 +392,48 @@ class SnowflakeAdapter(SQLAdapter):
             column_types=column_types,
         )
 
+    def set_relations_cache(
+        self,
+        relation_configs: Iterable[RelationConfig],
+        clear: bool = False,
+        required_schemas: Optional[Set[BaseRelation]] = None,
+    ) -> None:
+        # Materialize once — relation_configs may be a one-shot iterable, and we
+        # need it both to detect function nodes and to populate the cache.
+        configs = list(relation_configs)
+        flag = self.config.flags.get("list_function_relations")
+        if flag is not None:
+            self._list_function_relations = bool(flag)
+        else:
+            self._list_function_relations = any(
+                str(getattr(cfg, "resource_type", "")).lower() == "function" for cfg in configs
+            )
+        super().set_relations_cache(configs, clear=clear, required_schemas=required_schemas)
+
+    def _should_list_function_relations(self) -> bool:
+        """Whether to issue SHOW USER FUNCTIONS while listing schema relations.
+
+        Defaults to skipping the call unless the project has function nodes (or
+        ``flags.list_function_relations`` is set explicitly). Projects without
+        UDFs were paying one SHOW per schema on every invocation after 1.12.0.
+        """
+        flag = self.config.flags.get("list_function_relations")
+        if flag is not None:
+            return bool(flag)
+        return self._list_function_relations
+
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:
         kwargs = {"schema_relation": schema_relation}
+        list_functions = self._should_list_function_relations()
 
         try:
             schema_objects = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
-            schema_functions = self.execute_macro(
-                LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs
+            schema_functions = (
+                self.execute_macro(LIST_FUNCTION_RELATIONS_MACRO_NAME, kwargs=kwargs)
+                if list_functions
+                else None
             )
         except DbtDatabaseError as exc:
             # if the schema doesn't exist, we just want to return.
@@ -414,17 +453,20 @@ class SnowflakeAdapter(SQLAdapter):
             "is_dynamic",
             "is_iceberg",
         ]
-        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
         schema_objects = schema_objects.rename(
             column_names=[col.lower() for col in schema_objects.column_names]
-        )
-        schema_functions = schema_functions.rename(
-            column_names=[col.lower() for col in schema_functions.column_names]
         )
         tabular_relations = [
             self._parse_list_relations_result(obj)
             for obj in schema_objects.select(tabular_columns)
         ]
+        if schema_functions is None:
+            return tabular_relations
+
+        function_columns = ["catalog_name", "schema_name", "name", "is_builtin"]
+        schema_functions = schema_functions.rename(
+            column_names=[col.lower() for col in schema_functions.column_names]
+        )
         function_relations = [
             self._parse_list_function_relations_result(obj)
             for obj in schema_functions.select(function_columns)
