@@ -349,7 +349,11 @@ class SnowflakeAdapter(SQLAdapter):
         }
 
         catalog_columns = {
-            c.column: ColumnMetadata(type=c.dtype, index=i + 1, name=c.column)
+            c.column: ColumnMetadata(
+                type=c.data_type if c.is_numeric() else c.dtype,
+                index=i + 1,
+                name=c.column,
+            )
             for i, c in enumerate(self.get_columns_in_relation(relation))
         }
 
