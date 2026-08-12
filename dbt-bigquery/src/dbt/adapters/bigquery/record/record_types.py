@@ -66,7 +66,7 @@ class BigQueryAdapterDescribeRelationResult:
     def __init__(self, return_val):
         # Handle BigQueryBaseRelationConfig by converting to dict
         if return_val is not None and not isinstance(return_val, dict):
-            self.return_val = dataclasses.asdict(return_val)
+            self.return_val = return_val.to_dict()
         else:
             self.return_val = return_val
 
