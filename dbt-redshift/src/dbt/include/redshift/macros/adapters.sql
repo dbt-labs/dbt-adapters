@@ -132,24 +132,7 @@
   {% elif redshift__use_show_apis() %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
-    {%- set columns = redshift__get_columns_in_relation_legacy(relation) -%}
-
-    {#-
-      A temp relation with no columns means the catalog could not see it, not that it has
-      none: when the connection's database is a datashare consumer database, temp relations
-      stay queryable but are absent from information_schema.columns, pg_attribute and
-      svv_columns. Left unhandled, an empty list makes on_schema_change='sync_all_columns'
-      treat every column in the target as removed and drop it.
-
-      Only temp relations are affected, and only they can be described this way: the driver
-      query is unqualified, so it resolves to the right relation only when there is no
-      database or schema to qualify it with.
-    -#}
-    {%- if columns | length == 0 and not relation.database and not relation.schema -%}
-      {{ return(adapter.get_columns_in_temp_relation(relation)) }}
-    {%- endif -%}
-
-    {{ return(columns) }}
+    {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
   {% endif %}
 {% endmacro %}
 
