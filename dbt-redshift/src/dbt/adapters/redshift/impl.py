@@ -11,6 +11,7 @@ from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import (
@@ -239,8 +240,26 @@ class RedshiftAdapter(SQLAdapter):
         """
         return bool(self.config.credentials.datasharing)
 
-    @available
-    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[Any]:
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a relation, falling back to the driver when the catalog cannot see it.
+
+        On a datashare consumer database, temp relations stay queryable but are absent from
+        ``information_schema.columns``, ``pg_attribute`` and ``svv_columns``; the empty
+        result makes ``on_schema_change='sync_all_columns'`` drop every column in the
+        target. Only unqualified relations can take the fallback, since the driver query
+        has no database or schema to qualify itself with.
+
+        In an override rather than in the macro so that ``@supports_replay`` records the
+        fallback under the existing ``AdapterGetColumnsInRelationRecord``.
+        """
+        columns = super().get_columns_in_relation(relation)
+
+        if not columns and not relation.database and not relation.schema:
+            return self.get_columns_in_temp_relation(relation)
+
+        return columns
+
+    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Describe a temporary relation from the driver instead of the catalog.
 
         Needed when the connection's database is a datashare consumer database: temp

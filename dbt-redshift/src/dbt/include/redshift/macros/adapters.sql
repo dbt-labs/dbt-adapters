@@ -127,28 +127,40 @@
   {# relation from temp tables does not have a database or schema. #}
   {# use legacy pattern until SHOW COLUMNS supports temp tables #}
 
-  {% if redshift__use_show_apis() and relation.database and relation.schema %}
+  {% if not relation.database and not relation.schema %}
+    {{ return(redshift__get_columns_in_relation_unqualified(relation)) }}
+  {% elif redshift__use_show_apis() %}
     {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
-    {%- set columns = redshift__get_columns_in_relation_legacy(relation) -%}
+    {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
+  {% endif %}
+{% endmacro %}
 
-    {#-
-      A temp relation with no columns means the catalog could not see it, not that it has
-      none: when the connection's database is a datashare consumer database, temp relations
-      stay queryable but are absent from information_schema.columns, pg_attribute and
-      svv_columns. Left unhandled, an empty list makes on_schema_change='sync_all_columns'
-      treat every column in the target as removed and drop it.
 
-      Only temp relations are affected, and only they can be described this way: the driver
-      query is unqualified, so it resolves to the right relation only when there is no
-      database or schema to qualify it with.
-    -#}
-    {%- if columns | length == 0 and not relation.database and not relation.schema -%}
-      {{ return(adapter.get_columns_in_temp_relation(relation)) }}
-    {%- endif -%}
+{% macro redshift__get_columns_in_relation_unqualified(relation) -%}
+  {# An unqualified relation is a temp table, which can never be a late-binding or #}
+  {# external view, so skip pg_get_late_binding_view_cols() -- it expands every #}
+  {# late-binding view in the session and dominates the legacy query's runtime. #}
+  {# Fall back to the legacy query if nothing matches, for any other caller. #}
+  {% call statement('get_columns_in_relation', fetch_result=True) %}
+      select
+        column_name,
+        data_type,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
 
+      from information_schema."columns"
+      where table_name = '{{ relation.identifier }}'
+      order by ordinal_position
+  {% endcall %}
+  {% set table = load_result('get_columns_in_relation').table %}
+  {% set columns = sql_convert_columns_in_relation(table) %}
+
+  {% if columns %}
     {{ return(columns) }}
   {% endif %}
+  {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
 {% endmacro %}
 
 
