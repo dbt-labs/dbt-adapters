@@ -13,9 +13,9 @@
   {%- set compiled_code_without_comments = modules.re.sub("(?s)/\\*.*?\\*/|--[^\\n\\r]*|#[^\\n\\r]*", " ", compiled_code) -%}
   {%- set compiled_code_without_comments_or_strings = modules.re.sub("'(?:''|[^'])*'", " ", compiled_code_without_comments) -%}
   {%- set uses_dbt_max_partition = modules.re.search("(^|[^A-Za-z0-9_])_dbt_max_partition([^A-Za-z0-9_]|$)", compiled_code_without_comments_or_strings) is not none -%}
-  {%- set relation_exists = load_relation(relation) is not none -%}
 
-  {%- if uses_dbt_max_partition and relation_exists -%}
+  {#- `and` short-circuits, so the relation lookup only runs when the token is used. -#}
+  {%- if uses_dbt_max_partition and load_relation(relation) is not none -%}
 
     declare _dbt_max_partition {{ partition_by.data_type_for_partition() }} default (
       select max({{ partition_by.field }}) from {{ this }}
