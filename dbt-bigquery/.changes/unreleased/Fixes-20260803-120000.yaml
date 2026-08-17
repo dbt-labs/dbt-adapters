@@ -1,0 +1,7 @@
+kind: Fixes
+body: Normalize a custom `api_endpoint` so bare hosts and duplicated `https://` prefixes
+  no longer produce a literal `https` hostname
+time: 2026-08-03T12:00:00.000000-05:00
+custom:
+    Author: tauhidanjum
+    Issue: "2103"

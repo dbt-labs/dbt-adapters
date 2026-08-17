@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Optional, TYPE_CHECKING
 
 # Lazy-loaded inside create_notebook_client() to avoid slowing down every
@@ -27,6 +28,13 @@ from dbt.adapters.bigquery.credentials import (
 
 
 _logger = AdapterLogger("BigQuery")
+
+# splits an endpoint into scheme and host. the scheme is optional and may repeat, in which
+# case the group holds the last (innermost) one, i.e. the scheme the user actually meant;
+# slashes around the host are dropped so they don't double up against the client's path.
+# the host is deliberately \S rather than . so that embedded whitespace fails the match
+# outright instead of reaching the client -- keep it that way
+_API_ENDPOINT = re.compile(r"(?:(?P<scheme>https?)://)*/*(?P<host>\S*?)/*", re.IGNORECASE)
 
 
 def create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
@@ -72,9 +80,38 @@ def _create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
         location=getattr(credentials, "location", None),
         client_info=ClientInfo(user_agent=f"dbt-bigquery-{dbt_version.version}"),
         client_options=ClientOptions(
-            quota_project_id=credentials.quota_project, api_endpoint=credentials.api_endpoint
+            quota_project_id=credentials.quota_project,
+            api_endpoint=_bigquery_endpoint(credentials.api_endpoint),
         ),
     )
+
+
+def _bigquery_endpoint(api_endpoint: Optional[str]) -> Optional[str]:
+    """Normalize a user-supplied `api_endpoint` into a scheme-qualified base URL.
+
+    google-cloud-bigquery uses this value verbatim as the base of every REST URL it
+    builds, so a bare host yields a schemeless URL and a value that picked up an extra
+    scheme somewhere upstream (`https://https://host`) resolves the literal host `https`.
+    Accept both forms instead. See https://github.com/dbt-labs/dbt-adapters/issues/2103
+    """
+    if not (endpoint := (api_endpoint or "").strip()):
+        return None
+
+    match = _API_ENDPOINT.fullmatch(endpoint)
+    if not match or not (host := match["host"]):
+        _logger.warning(f"Ignoring api_endpoint {api_endpoint!r}: could not parse a host")
+        return None
+
+    # a scheme left over in the host means the value is malformed in a way the pattern
+    # can't read as a repeated prefix: an unsupported scheme (`ftp://host`) or a mistyped
+    # separator (`https:/host`, which would otherwise resolve the literal host `https`)
+    if "://" in host or host.lower().startswith(("http:", "https:")):
+        _logger.warning(f"Ignoring api_endpoint {api_endpoint!r}: {host!r} is not a usable host")
+        return None
+
+    normalized = f"{(match['scheme'] or 'https').lower()}://{host}"
+    _logger.debug(f"Using api_endpoint {normalized}")
+    return normalized
 
 
 def _dataproc_endpoint(credentials: BigQueryCredentials) -> str:
