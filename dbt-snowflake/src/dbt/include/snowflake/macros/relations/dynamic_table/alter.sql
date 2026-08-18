@@ -1,15 +1,13 @@
-{% macro snowflake__get_alter_dynamic_table_as_sql(
-    existing_relation,
-    configuration_changes,
-    target_relation,
-    sql
-) -%}
-    {{- log('Applying ALTER to: ' ~ existing_relation) -}}
+{% macro snowflake__get_alter_dynamic_table_as_sql(existing_relation, configuration_changes) -%}
+{#-
+    Produce DDL that alters a dynamic iceberg table using ALTER DYNAMIC TABLE statements.
 
-    {% if configuration_changes.requires_full_refresh %}
-        {{- get_replace_sql(existing_relation, target_relation, sql) -}}
+    Snowflake does not support CREATE OR ALTER DYNAMIC ICEBERG TABLE,
+    so we fall back to individual ALTER statements for iceberg tables.
 
-    {% else %}
+    The requires_full_refresh check is handled by the caller
+    (snowflake__get_create_or_alter_dynamic_table_sql) before dispatching here.
+-#}
 
         {%- set target_lag = configuration_changes.target_lag -%}
         {%- if target_lag -%}{{- log('Applying UPDATE TARGET_LAG to: ' ~ existing_relation) -}}{%- endif -%}
@@ -68,7 +66,5 @@
         {% if has_prior_statements %};{% endif %}
         alter dynamic table {{ existing_relation }} drop clustering key
         {% endif %}
-
-    {%- endif -%}
 
 {%- endmacro %}

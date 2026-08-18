@@ -94,6 +94,67 @@ select * from {{ ref('my_seed') }}
 """
 
 
+DYNAMIC_TABLE_FULL_CONFIG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 hour',
+    refresh_mode='AUTO',
+    initialize='ON_CREATE',
+    scheduler='ENABLE',
+    snowflake_initialization_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    cluster_by=["HASH(id)", "id"],
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_CLUSTER_BY_SINGLE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 hour',
+    refresh_mode='AUTO',
+    cluster_by="id",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_CLUSTER_BY_TWO_COLUMNS = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='1 hour',
+    refresh_mode='AUTO',
+    cluster_by=["id", "value"],
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_EXTRA_COLUMN = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select *, 1 as extra_col from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_EXTRA_COLUMN_TARGET_LAG_FIVE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select *, 1 as extra_col from {{ ref('my_seed') }}
+"""
+
+
 DYNAMIC_ICEBERG_TABLE_ALTER = """
 {{ config(
     materialized='dynamic_table',
@@ -438,6 +499,126 @@ select * from {{ ref('my_seed') }}
 """
 
 
+# Iceberg initialization_warehouse fixtures
+DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_WITHOUT_INIT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Iceberg immutable_where fixtures
+DYNAMIC_ICEBERG_TABLE_WITH_IMMUTABLE_WHERE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 100",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_WITH_IMMUTABLE_WHERE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    immutable_where="id < 50",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_WITHOUT_IMMUTABLE_WHERE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Iceberg cluster_by fixtures
+DYNAMIC_ICEBERG_TABLE_WITH_CLUSTER_BY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by="id",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_WITH_CLUSTER_BY_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    cluster_by="value",
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_ICEBERG_TABLE_WITHOUT_CLUSTER_BY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select id, value from {{ ref('my_seed') }}
+"""
+
+
 # Iceberg Scheduler fixtures
 DYNAMIC_ICEBERG_TABLE_SCHEDULER_DISABLED = """
 {{ config(
@@ -458,6 +639,105 @@ DYNAMIC_ICEBERG_TABLE_SCHEDULER_ENABLED = """
     snowflake_warehouse='DBT_TESTING',
     target_lag='2 minutes',
     scheduler='ENABLE',
+    table_format="iceberg",
+    external_volume="s3_iceberg_snow",
+    base_location_subpath="subpath",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Row access policy / table tag fixtures (INFO_SCHEMA)
+DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    row_access_policy='always_true on (id)',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_ROW_ACCESS_POLICY_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+    row_access_policy='always_true on (id)',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_ROW_ACCESS_POLICY = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_TAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+    table_tag="tag_name = 'tag_value'",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITH_TAG_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='5 minutes',
+    refresh_mode='INCREMENTAL',
+    table_tag="tag_name = 'tag_value'",
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+DYNAMIC_TABLE_WITHOUT_TAG = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Warehouse change fixture (uses alt warehouse env var)
+DYNAMIC_TABLE_ALT_WAREHOUSE = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse=env_var('SNOWFLAKE_TEST_ALT_WAREHOUSE', 'DBT_TESTING'),
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+# Iceberg initialization_warehouse alter fixture (literal warehouse, like INFO_SCHEMA equivalent)
+DYNAMIC_ICEBERG_TABLE_WITH_INIT_WAREHOUSE_ALTER = """
+{{ config(
+    materialized='dynamic_table',
+    snowflake_warehouse='DBT_TESTING',
+    snowflake_initialization_warehouse='DBT_TESTING',
+    target_lag='2 minutes',
+    refresh_mode='INCREMENTAL',
     table_format="iceberg",
     external_volume="s3_iceberg_snow",
     base_location_subpath="subpath",
