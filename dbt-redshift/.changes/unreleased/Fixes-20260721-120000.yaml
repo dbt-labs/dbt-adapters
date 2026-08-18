@@ -1,0 +1,6 @@
+kind: Fixes
+body: Restore transaction state after execute() retries a query by closing and reopening the connection, so a later commit no longer fails with "transaction ... does not have one open"
+time: 2026-07-21T12:00:00.000000+05:30
+custom:
+    Author: namangoyal
+    Issue: "626"
