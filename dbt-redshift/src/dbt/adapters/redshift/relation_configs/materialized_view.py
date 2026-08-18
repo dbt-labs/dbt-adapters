@@ -203,12 +203,26 @@ class RedshiftMaterializedViewConfig(RedshiftRelationConfigBase, RelationConfigV
             bool_filter = {"t": True, "f": False}
             config_dict["autorefresh"] = bool_filter.get(autorefresh_value, autorefresh_value)
 
-        # the default for materialized views differs from the default for diststyle in general
-        # only set it if we got a value
-        if materialized_view.get("diststyle"):
-            config_dict.update(
-                {"dist": RedshiftDistConfig.parse_relation_results(materialized_view)}
-            )
+        # Handle distribution style configuration - KEY needs a dist key column
+        if diststyle := materialized_view.get("diststyle"):
+            if "KEY" in diststyle.upper() and (columns := relation_results.get("columns")):
+                # We have a distribution key column
+                dist_column = next(
+                    (row for row in columns.rows if row.get("is_dist_key")),
+                    None,
+                )
+                config_dict.update(
+                    {
+                        "dist": RedshiftDistConfig.parse_relation_results(
+                            materialized_view, dist_column
+                        )
+                    }
+                )
+            else:
+                # Other distribution styles do not need a column to be specified
+                config_dict.update(
+                    {"dist": RedshiftDistConfig.parse_relation_results(materialized_view)}
+                )
 
         if columns := relation_results.get("columns"):
             sort_columns = [row for row in columns.rows if row.get("sort_key_position", 0) > 0]

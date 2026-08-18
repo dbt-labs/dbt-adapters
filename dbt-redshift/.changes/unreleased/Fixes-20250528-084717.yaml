@@ -1,0 +1,6 @@
+kind: Fixes
+body: Use svv_redshift_columns to retrieve sort and distkey column names
+time: 2025-05-28T08:47:17.831209-04:00
+custom:
+    Author: peterferris-st
+    Issue: "1096"
