@@ -494,3 +494,85 @@ class TestGrantsMacroQuotesGrantees:
         # Verify the SQL structure is correct
         assert result.startswith("revoke select on")
         assert "from" in result
+
+
+class TestRelationsCacheForSchemas:
+    @pytest.fixture
+    def adapter(self):
+        config = MagicMock()
+
+        class TestAdapter(BaseAdapter):
+            def convert_boolean_type(self, *args, **kwargs):
+                return None
+
+            def convert_date_type(self, *args, **kwargs):
+                return None
+
+            def convert_datetime_type(self, *args, **kwargs):
+                return None
+
+            def convert_number_type(self, *args, **kwargs):
+                return None
+
+            def convert_text_type(self, *args, **kwargs):
+                return None
+
+            def convert_time_type(self, *args, **kwargs):
+                return None
+
+            def create_schema(self, *args, **kwargs):
+                return None
+
+            def date_function(self, *args, **kwargs):
+                return None
+
+            def drop_relation(self, *args, **kwargs):
+                return None
+
+            def drop_schema(self, *args, **kwargs):
+                return None
+
+            def expand_column_types(self, *args, **kwargs):
+                return None
+
+            def get_columns_in_relation(self, *args, **kwargs):
+                return None
+
+            def is_cancelable(self, *args, **kwargs):
+                return False
+
+            def list_relations_without_caching(self, *args, **kwargs):
+                return []
+
+            def list_schemas(self, *args, **kwargs):
+                return []
+
+            def quote(self, *args, **kwargs):
+                return ""
+
+            def rename_relation(self, *args, **kwargs):
+                return None
+
+            def truncate_relation(self, *args, **kwargs):
+                return None
+
+        return TestAdapter(config, MagicMock())
+
+    def test_empty_cache_schemas_is_not_expanded_to_default(self, adapter):
+        """An explicitly empty `cache_schemas` means "nothing to cache" and
+        must not be re-expanded to every schema in the project (the bug
+        behind dbt-labs/dbt-adapters#2126)."""
+        with patch.object(adapter, "_get_cache_schemas") as mock_get_cache_schemas:
+            adapter._relations_cache_for_schemas([], cache_schemas=set())
+
+        mock_get_cache_schemas.assert_not_called()
+
+    def test_none_cache_schemas_falls_back_to_computed_schemas(self, adapter):
+        """`cache_schemas=None` (the default) still computes the project-wide
+        default via `_get_cache_schemas`."""
+        with patch.object(
+            adapter, "_get_cache_schemas", return_value=set()
+        ) as mock_get_cache_schemas:
+            adapter._relations_cache_for_schemas([], cache_schemas=None)
+
+        mock_get_cache_schemas.assert_called_once_with([])
