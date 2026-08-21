@@ -15,6 +15,7 @@ from google.cloud.dataproc_v1 import BatchControllerClient, JobControllerClient
 from google.cloud.storage import Client as StorageClient
 from google.cloud.storage.retry import DEFAULT_RETRY as GCS_DEFAULT_RETRY
 from google.oauth2.credentials import Credentials as GoogleCredentials
+from dbt_common.invocation import get_invocation_id
 
 from dbt.adapters.events.logging import AdapterLogger
 
@@ -70,7 +71,9 @@ def _create_bigquery_client(credentials: BigQueryCredentials) -> BigQueryClient:
         credentials.execution_project,
         create_google_credentials(credentials),
         location=getattr(credentials, "location", None),
-        client_info=ClientInfo(user_agent=f"dbt-bigquery-{dbt_version.version}"),
+        client_info=ClientInfo(
+            user_agent=f"dbt-bigquery-{dbt_version.version} dbt-invocation-id/{get_invocation_id()}"
+        ),
         client_options=ClientOptions(
             quota_project_id=credentials.quota_project, api_endpoint=credentials.api_endpoint
         ),
