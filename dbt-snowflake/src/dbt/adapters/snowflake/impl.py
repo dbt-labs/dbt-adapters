@@ -83,6 +83,17 @@ SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_CATALOG_SCAN_PER_SCHEMA = BehaviorFlag(
+    name="snowflake_catalog_scan_per_schema",
+    default=False,
+    description=(
+        "When enabled, catalog queries scan one schema at a time and union the results, "
+        "rather than filtering with an `or` that can make Snowflake materialize the whole "
+        "database's metadata. Each schema in use adds a scan, so this helps projects using "
+        "few schemas against a metadata-heavy database, and hurts those using many."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -168,7 +179,11 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_CATALOG_SCAN_PER_SCHEMA,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
