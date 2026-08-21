@@ -1,0 +1,8 @@
+kind: Fixes
+body: Map values by column name rather than column position in the Snowflake `insert_overwrite`
+  incremental strategy, so an enforced contract or a column appended by `on_schema_change`
+  can no longer silently write values into the wrong columns
+time: 2026-08-21T10:15:00.000000-05:00
+custom:
+  Author: tauhid621
+  Issue: "1511"

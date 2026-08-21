@@ -89,6 +89,14 @@ class TestInsertOverwriteIncremental:
         assert "2025-01-01" not in output
         assert run_results[0].adapter_response["code"] == "SUCCESS"
 
+        # `overwrite_columns` is a partial list here: event_date is omitted, and because
+        # insert overwrite truncates the target first, an omitted column is NULLed rather
+        # than preserved. Pinned so the behaviour is not changed unintentionally.
+        assert project.run_sql(
+            f"select id, value, event_date from {project.test_schema}.incremental_with_cols",
+            fetch="all",
+        ) == [(2, "cat", None)]
+
         run_results, output = run_dbt_and_capture(
             [
                 "show",
