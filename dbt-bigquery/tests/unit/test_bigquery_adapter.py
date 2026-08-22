@@ -27,6 +27,7 @@ from dbt.context.providers import RuntimeConfigObject, generate_runtime_macro_co
 
 from google.cloud.bigquery import AccessEntry
 
+from .test_bigquery_label_merge import merge_config_levels
 from .utils import (
     config_from_parts_or_dicts,
     inject_adapter,
@@ -878,6 +879,30 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         mock_config.get.side_effect = lambda name: config.get(name)
 
         expected = {"labels": [("meta_label", "value2"), ("existing_label", "value1")]}
+        actual = adapter.get_common_options(mock_config, node={}, temporary=False)
+        self.assertEqual(expected, actual)
+
+    def test_get_common_options_labels_merged_across_config_levels(self):
+        adapter = self.get_adapter("oauth")
+        mock_config = create_autospec(RuntimeConfigObject)
+        # labels set in dbt_project.yml at the project level, then the folder
+        # level, then in the model's own config() block
+        config = merge_config_levels(
+            {"labels_from_meta": True, "meta": {"meta_label": "value2"}},
+            {"labels": {"dbt_project": "labelstest"}},
+            {"labels": {"layer": "intermediate"}},
+            {"labels": {"schedule": "daily", "dbt_project": ""}},
+        )
+        mock_config.get.side_effect = lambda name: config.get(name)
+
+        expected = {
+            "labels": [
+                ("meta_label", "value2"),
+                ("dbt_project", ""),
+                ("layer", "intermediate"),
+                ("schedule", "daily"),
+            ]
+        }
         actual = adapter.get_common_options(mock_config, node={}, temporary=False)
         self.assertEqual(expected, actual)
 
