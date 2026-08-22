@@ -1,0 +1,6 @@
+kind: Features
+body: allow external_volume at config level
+time: 2026-01-15T19:13:08.979211Z
+custom:
+    Author: borjavb
+    Issue: "1552"
