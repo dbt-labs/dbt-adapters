@@ -1,0 +1,7 @@
+kind: Fixes
+body: Skip unconditional SHOW USER FUNCTIONS during schema listing unless the
+  project has function nodes (or flags.list_function_relations is enabled)
+time: 2026-08-11T04:15:00.000000-05:00
+custom:
+  Author: dgvj-work
+  Issue: "2106"
