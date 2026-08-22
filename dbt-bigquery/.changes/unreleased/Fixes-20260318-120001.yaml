@@ -1,0 +1,6 @@
+kind: Fixes
+body: "Fix snapshot strategy='check' failing on ARRAY columns by wrapping comparisons in TO_JSON_STRING"
+time: 2026-03-18T12:00:01.000000+00:00
+custom:
+    Author: antoniabadarau
+    Issue: "1782"
