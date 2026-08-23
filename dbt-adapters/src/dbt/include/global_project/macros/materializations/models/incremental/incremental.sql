@@ -12,11 +12,7 @@
   -- configs
   {%- set unique_key = config.get('unique_key') -%}
   {%- set full_refresh_mode = (should_full_refresh()  or existing_relation.is_view) -%}
-  {%- set schema_change_plan = adapter.plan_incremental_schema_change(config.get('on_schema_change')) -%}
-  {%- set on_schema_change = schema_change_plan.strategy.value -%}
-  {%- if schema_change_plan.was_coerced -%}
-    {% do log(schema_change_plan.provenance[-1].detail) %}
-  {%- endif -%}
+  {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
 
   -- the temp_ and backup_ relations should not already exist in the database; get_relation
   -- will return None in that case. Otherwise, we get a relation that we can drop

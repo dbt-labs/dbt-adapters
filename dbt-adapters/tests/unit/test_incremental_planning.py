@@ -181,6 +181,13 @@ def test_invalid_incremental_schema_change_strategy_uses_default_with_provenance
     assert plan.was_coerced is True
 
 
+def test_incremental_schema_change_resolver_honors_compatibility_macro_default():
+    plan = resolve_incremental_schema_change_plan("replace_everything", default="fail")
+
+    assert plan.strategy == IncrementalSchemaChangeStrategy.FAIL
+    assert plan.was_coerced is True
+
+
 def test_incremental_arguments_normalize_at_the_legacy_macro_boundary():
     target_relation = object()
     temp_relation = object()

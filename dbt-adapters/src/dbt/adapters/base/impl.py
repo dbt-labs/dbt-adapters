@@ -1886,9 +1886,9 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     def plan_incremental_schema_change(
-        self, requested_strategy: Optional[str]
+        self, requested_strategy: Optional[str], default: str = "ignore"
     ) -> IncrementalSchemaChangePlan:
-        return resolve_incremental_schema_change_plan(requested_strategy)
+        return resolve_incremental_schema_change_plan(requested_strategy, default=default)
 
     @available.parse_none
     def plan_incremental_arguments(
