@@ -1,8 +1,14 @@
 from dbt.adapters.planning.create_from_query import (
+    CatalogBindingState,
+    CatalogFacts,
+    CreateFromQueryFacts,
     CreateFromQueryPlan,
     CreateFromQueryStrategy,
     DdlAtomicity,
+    FormatFacts,
     PlanProvenance,
+    RelationFacts,
+    RuntimeFacts,
 )
 from dbt.adapters.planning.incremental import (
     IncrementalMutationArguments,
@@ -15,10 +21,16 @@ from dbt.adapters.planning.incremental import (
 )
 
 __all__ = [
+    "CatalogBindingState",
+    "CatalogFacts",
+    "CreateFromQueryFacts",
     "CreateFromQueryPlan",
     "CreateFromQueryStrategy",
     "DdlAtomicity",
+    "FormatFacts",
     "PlanProvenance",
+    "RelationFacts",
+    "RuntimeFacts",
     "IncrementalMutationArguments",
     "IncrementalMutationPlan",
     "IncrementalMutationStrategy",

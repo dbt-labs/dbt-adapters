@@ -114,13 +114,19 @@ from dbt.adapters.exceptions import (
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.planning import (
+    CatalogBindingState,
+    CatalogFacts,
     CreateFromQueryPlan,
+    CreateFromQueryFacts,
     DdlAtomicity,
+    FormatFacts,
     IncrementalMutationArguments,
     IncrementalMutationPlan,
     IncrementalMutationStrategy,
     IncrementalSchemaChangePlan,
     PlanProvenance,
+    RelationFacts,
+    RuntimeFacts,
     resolve_incremental_mutation_plan,
     resolve_incremental_schema_change_plan,
 )
@@ -427,19 +433,115 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     def plan_create_from_query(
-        self, temporary: bool, relation: BaseRelation
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig] = None,
     ) -> CreateFromQueryPlan:
         """Resolve how to create ``relation`` from a query before rendering SQL.
 
-        Adapters may override this operation-specific resolver to inspect the
-        resolved relation, catalog binding, format, runtime, or probe results.
-        The renderer must consume the returned plan rather than repeat that
-        inference in Jinja.
+        Adapters may override the fact-building or strategy-resolution hooks.
+        The renderer consumes the returned plan rather than inferring relation,
+        catalog, format, or runtime state in Jinja.
         """
+
+        facts = self.build_create_from_query_facts(temporary, relation, model)
+        return self.resolve_create_from_query_plan(temporary, facts)
+
+    @staticmethod
+    def _create_from_query_fact_value(value: Any, *, canonical: bool = False) -> Optional[str]:
+        if value is None:
+            return None
+        raw_value = getattr(value, "value", value)
+        result = str(raw_value)
+        return result.casefold() if canonical else result
+
+    def get_create_from_query_runtime_facts(
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig],
+    ) -> RuntimeFacts:
+        """Return execution-runtime facts; adapters may add a resolved version."""
+
+        return RuntimeFacts(engine=self.type())
+
+    def build_create_from_query_facts(
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig] = None,
+    ) -> CreateFromQueryFacts:
+        """Build immutable resolver inputs from authoritative adapter objects."""
+
+        model_config = getattr(model, "config", None)
+        integration_name = self._create_from_query_fact_value(
+            _config_get(model_config, CATALOG_INTEGRATION_MODEL_CONFIG_NAME)
+            or _config_get(model_config, "catalog")
+            or getattr(relation, "catalog", None)
+        )
+        catalog_relation = self.build_catalog_relation(model) if model is not None else None
+
+        if catalog_relation is not None:
+            catalog_type = self._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_type", None), canonical=True
+            )
+            catalog_name = self._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_name", None)
+            )
+            catalog_facts = CatalogFacts(
+                state=CatalogBindingState.RESOLVED,
+                integration_name=integration_name or catalog_name or catalog_type,
+                catalog_type=catalog_type,
+                catalog_name=catalog_name,
+                catalog_database=self._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_database", None)
+                ),
+                external_volume=self._create_from_query_fact_value(
+                    getattr(catalog_relation, "external_volume", None)
+                ),
+            )
+        elif integration_name is not None:
+            catalog_facts = CatalogFacts(
+                state=CatalogBindingState.NAMED,
+                integration_name=integration_name,
+            )
+        else:
+            catalog_facts = CatalogFacts(state=CatalogBindingState.UNBOUND)
+
+        format_source = catalog_relation if catalog_relation is not None else relation
+        return CreateFromQueryFacts(
+            relation=RelationFacts(
+                database=self._create_from_query_fact_value(getattr(relation, "database", None)),
+                schema=self._create_from_query_fact_value(getattr(relation, "schema", None)),
+                identifier=self._create_from_query_fact_value(
+                    getattr(relation, "identifier", None)
+                ),
+                relation_type=self._create_from_query_fact_value(
+                    getattr(relation, "type", None), canonical=True
+                ),
+            ),
+            catalog=catalog_facts,
+            format=FormatFacts(
+                table_format=self._create_from_query_fact_value(
+                    getattr(format_source, "table_format", None), canonical=True
+                ),
+                file_format=self._create_from_query_fact_value(
+                    getattr(format_source, "file_format", None), canonical=True
+                ),
+            ),
+            runtime=self.get_create_from_query_runtime_facts(temporary, relation, model),
+        )
+
+    def resolve_create_from_query_plan(
+        self, temporary: bool, facts: CreateFromQueryFacts
+    ) -> CreateFromQueryPlan:
+        """Select a physical strategy from typed, already-resolved facts."""
 
         return CreateFromQueryPlan.ctas(
             temporary=temporary,
             atomicity=DdlAtomicity.UNKNOWN,
+            facts=facts,
             provenance=(
                 PlanProvenance(
                     rule="base.create_from_query.ctas",

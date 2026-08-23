@@ -3,7 +3,7 @@
 {%- endmacro %}
 
 {% macro default__get_create_table_as_sql(temporary, relation, sql) -%}
-  {% set plan = adapter.plan_create_from_query(temporary, relation) %}
+  {% set plan = adapter.plan_create_from_query(temporary, relation, config.model) %}
   {{ return(render_create_from_query_plan(plan, relation, sql)) }}
 {% endmacro %}
 
