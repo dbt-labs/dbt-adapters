@@ -33,7 +33,8 @@
   {% set to_drop = [] %}
 
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
-  {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
+  {% set incremental_plan = adapter.plan_incremental_mutation(incremental_strategy) %}
+  {% set strategy_sql_macro_func = adapter.get_incremental_plan_macro(context, incremental_plan) %}
 
   {% if existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
@@ -59,8 +60,14 @@
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
-    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': temp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
-    {% set build_sql = strategy_sql_macro_func(strategy_arg_dict) %}
+    {% set strategy_args = adapter.plan_incremental_arguments(
+        target_relation=target_relation,
+        temp_relation=temp_relation,
+        unique_key=unique_key,
+        dest_columns=dest_columns,
+        incremental_predicates=incremental_predicates
+    ) %}
+    {% set build_sql = strategy_sql_macro_func(strategy_args.to_macro_dict()) %}
 
   {% endif %}
 
