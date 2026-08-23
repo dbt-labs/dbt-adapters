@@ -102,6 +102,7 @@ def test_unsupported_builtin_strategy_is_an_explicit_plan():
             "supported_languages": [],
         },
         "temp_relation_type": None,
+        "catalog_staging": "standard",
         "reason": "The incremental strategy 'merge' is not valid for this adapter",
     }
 
@@ -277,6 +278,32 @@ def test_incremental_offer_resolves_typed_staging_requirements():
     assert plan.strategy == IncrementalMutationStrategy.DELETE_INSERT
     assert plan.requirements == requirements
     assert plan.temp_relation_type == IncrementalTempRelationType.TRANSIENT
+
+
+def test_incremental_plan_carries_resolved_catalog_staging_to_renderer():
+    facts = IncrementalMutationFacts(
+        requested_strategy="merge",
+        language="sql",
+        unique_key_present=True,
+        catalog_staging=IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
+    )
+    requirements = IncrementalStrategyRequirements(
+        unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+        source_consistency=IncrementalSourceConsistency.SINGLE_EVALUATION,
+        allowed_temp_relation_types=(IncrementalTempRelationType.TABLE,),
+        default_temp_relation_type=IncrementalTempRelationType.TABLE,
+    )
+    offer = IncrementalMutationStrategyOffer.available(
+        strategy=IncrementalMutationStrategy.MERGE,
+        renderer_macro="get_incremental_merge_sql",
+        atomicity=DdlAtomicity.UNKNOWN,
+        requirements=requirements,
+        provenance=(PlanProvenance(rule="test.offer", detail="test offer"),),
+    )
+
+    plan = resolve_incremental_mutation_offers(facts=facts, offers=(offer,))
+
+    assert plan.catalog_staging == IncrementalCatalogStaging.PERMANENT_TABLE_ONLY
 
 
 def test_incremental_offer_rejects_staging_that_cannot_provide_stable_reuse():

@@ -358,6 +358,7 @@ class IncrementalMutationPlan:
     provenance: Tuple[PlanProvenance, ...]
     requirements: Optional[IncrementalStrategyRequirements] = None
     temp_relation_type: Optional[IncrementalTempRelationType] = None
+    catalog_staging: IncrementalCatalogStaging = IncrementalCatalogStaging.STANDARD
     reason: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -383,6 +384,8 @@ class IncrementalMutationPlan:
             self.temp_relation_type, IncrementalTempRelationType
         ):
             raise TypeError("Incremental plan temp relation type must be typed")
+        if not isinstance(self.catalog_staging, IncrementalCatalogStaging):
+            raise TypeError("Incremental plan catalog staging must be typed")
         if self.reason is not None and not isinstance(self.reason, str):
             raise TypeError("Incremental plan reason must be a string")
 
@@ -428,6 +431,7 @@ class IncrementalMutationPlan:
             "temp_relation_type": (
                 None if self.temp_relation_type is None else self.temp_relation_type.value
             ),
+            "catalog_staging": self.catalog_staging.value,
             "reason": self.reason,
         }
 
@@ -587,6 +591,7 @@ def resolve_incremental_mutation_offers(
             atomicity=offer.atomicity,
             requirements=offer.requirements,
             temp_relation_type=temp_relation_type,
+            catalog_staging=facts.catalog_staging,
             provenance=offer.provenance,
         )
 
@@ -597,6 +602,7 @@ def resolve_incremental_mutation_offers(
         renderer_macro=None,
         atomicity=DdlAtomicity.NONE,
         requirements=last_requirements,
+        catalog_staging=facts.catalog_staging,
         provenance=tuple(rejected_provenance),
         reason=reason,
     )
