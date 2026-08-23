@@ -112,6 +112,14 @@ from dbt.adapters.exceptions import (
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.planning import (
+    CreateFromQueryPlan,
+    DdlAtomicity,
+    IncrementalMutationPlan,
+    IncrementalMutationStrategy,
+    PlanProvenance,
+    resolve_incremental_mutation_plan,
+)
 
 logger = AdapterLogger(__name__)
 if TYPE_CHECKING:
@@ -412,6 +420,29 @@ class BaseAdapter(metaclass=AdapterMeta):
             return catalog.build_relation(config)
 
         return None
+
+    @available
+    def plan_create_from_query(
+        self, temporary: bool, relation: BaseRelation
+    ) -> CreateFromQueryPlan:
+        """Resolve how to create ``relation`` from a query before rendering SQL.
+
+        Adapters may override this operation-specific resolver to inspect the
+        resolved relation, catalog binding, format, runtime, or probe results.
+        The renderer must consume the returned plan rather than repeat that
+        inference in Jinja.
+        """
+
+        return CreateFromQueryPlan.ctas(
+            temporary=temporary,
+            atomicity=DdlAtomicity.UNKNOWN,
+            provenance=(
+                PlanProvenance(
+                    rule="base.create_from_query.ctas",
+                    detail="Base adapter create-from-query behavior uses create table as select",
+                ),
+            ),
+        )
 
     ###
     # Methods to set / access a macro resolver
@@ -1839,6 +1870,41 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return builtin_strategies
 
+    @available
+    def plan_incremental_mutation(
+        self, requested_strategy: Optional[str]
+    ) -> IncrementalMutationPlan:
+        return resolve_incremental_mutation_plan(
+            requested_strategy,
+            valid_strategies=self.valid_incremental_strategies(),
+            builtin_strategies=self.builtin_incremental_strategies(),
+        )
+
+    @available.parse_none
+    def get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
+        if plan.strategy == IncrementalMutationStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Incremental mutation is unsupported")
+
+        if (
+            getattr(type(self), "get_incremental_strategy_macro", None)
+            is BaseAdapter.get_incremental_strategy_macro
+        ):
+            return self._get_incremental_plan_macro(model_context, plan)
+
+        # Preserve adapter overrides of the established public selector.
+        return self.get_incremental_strategy_macro(model_context, plan.requested_strategy)
+
+    def _get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
+        macro_name = plan.renderer_macro
+        if macro_name not in model_context:
+            raise DbtRuntimeError(
+                'dbt could not find an incremental strategy macro with the name "{}" in {}'.format(
+                    macro_name, self.config.project_name
+                )
+            )
+
+        return model_context[macro_name]
+
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
         """Gets the macro for the given incremental strategy.
@@ -1852,31 +1918,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         a "builtin", and nothing will break (and that is desirable).
         """
 
-        # Construct macro_name from strategy name
-        if strategy is None:
-            strategy = "default"
-
-        # validate strategies for this adapter
-        valid_strategies = self.valid_incremental_strategies()
-        valid_strategies.append("default")
-        builtin_strategies = self.builtin_incremental_strategies()
-        if strategy in builtin_strategies and strategy not in valid_strategies:
-            raise DbtRuntimeError(
-                f"The incremental strategy '{strategy}' is not valid for this adapter"
-            )
-
-        strategy = strategy.replace("+", "_")
-        macro_name = f"get_incremental_{strategy}_sql"
-        # The model_context should have callable objects for all macros
-        if macro_name not in model_context:
-            raise DbtRuntimeError(
-                'dbt could not find an incremental strategy macro with the name "{}" in {}'.format(
-                    macro_name, self.config.project_name
-                )
-            )
-
-        # This returns a callable macro
-        return model_context[macro_name]
+        plan = self.plan_incremental_mutation(strategy)
+        if plan.strategy == IncrementalMutationStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Incremental mutation is unsupported")
+        return self._get_incremental_plan_macro(model_context, plan)
 
     @classmethod
     def _parse_column_constraint(cls, raw_constraint: Dict[str, Any]) -> ColumnLevelConstraint:

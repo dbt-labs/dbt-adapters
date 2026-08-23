@@ -3,7 +3,26 @@
 {%- endmacro %}
 
 {% macro default__get_create_table_as_sql(temporary, relation, sql) -%}
-  {{ return(create_table_as(temporary, relation, sql)) }}
+  {% set plan = adapter.plan_create_from_query(temporary, relation) %}
+  {{ return(render_create_from_query_plan(plan, relation, sql)) }}
+{% endmacro %}
+
+
+{% macro render_create_from_query_plan(plan, relation, sql) -%}
+  {{ return(adapter.dispatch('render_create_from_query_plan', 'dbt')(plan, relation, sql)) }}
+{% endmacro %}
+
+
+{% macro default__render_create_from_query_plan(plan, relation, sql) -%}
+  {% if plan.strategy == 'ctas' %}
+    {{ return(create_table_as(plan.temporary, relation, sql)) }}
+  {% elif plan.strategy == 'unsupported' %}
+    {{ exceptions.raise_compiler_error(plan.reason) }}
+  {% else %}
+    {{ exceptions.raise_compiler_error(
+      "Create-from-query strategy '" ~ plan.strategy ~ "' requires an adapter-specific renderer"
+    ) }}
+  {% endif %}
 {% endmacro %}
 
 

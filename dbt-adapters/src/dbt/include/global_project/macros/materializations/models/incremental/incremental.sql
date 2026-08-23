@@ -33,7 +33,8 @@
   {% set to_drop = [] %}
 
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
-  {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
+  {% set incremental_plan = adapter.plan_incremental_mutation(incremental_strategy) %}
+  {% set strategy_sql_macro_func = adapter.get_incremental_plan_macro(context, incremental_plan) %}
 
   {% if existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
