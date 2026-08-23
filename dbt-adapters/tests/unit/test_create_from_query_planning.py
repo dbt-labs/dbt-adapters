@@ -8,6 +8,9 @@ from dbt.adapters.planning import (
     CatalogFacts,
     CreateFromQueryFacts,
     CreateFromQueryPlan,
+    CreateFromQueryRenderArguments,
+    CreateFromQueryRenderKind,
+    CreateFromQueryRenderResult,
     CreateFromQueryStrategyOffer,
     CreateFromQueryStrategy,
     DdlAtomicity,
@@ -19,7 +22,6 @@ from dbt.adapters.planning import (
     resolve_create_from_query_offers,
 )
 from dbt_common.exceptions import DbtRuntimeError
-
 
 PROVENANCE = (
     PlanProvenance(
@@ -48,6 +50,7 @@ class PlanningAdapter:
     build_create_from_query_facts = BaseAdapter.build_create_from_query_facts
     resolve_create_from_query_plan = BaseAdapter.resolve_create_from_query_plan
     get_create_from_query_strategy_offers = BaseAdapter.get_create_from_query_strategy_offers
+    resolve_create_from_query_render = BaseAdapter.resolve_create_from_query_render
 
     catalog_relation = None
 
@@ -91,6 +94,85 @@ def test_base_adapter_resolves_portable_ctas_plan():
         ),
     )
     assert "plan_create_from_query" in BaseAdapter._available_
+
+
+def test_base_adapter_renders_portable_ctas_without_jinja():
+    plan = CreateFromQueryPlan.ctas(
+        temporary=False,
+        atomicity=DdlAtomicity.UNKNOWN,
+        facts=FACTS,
+        provenance=PROVENANCE,
+    )
+
+    result = BaseAdapter.resolve_create_from_query_render(
+        PlanningAdapter(),
+        plan,
+        CreateFromQueryRenderArguments(
+            relation_sql='"analytics"."mart"."orders"',
+            query="select 1 as id",
+            sql_header="alter session set query_tag = 'dbt'",
+        ),
+    )
+
+    assert result.kind == CreateFromQueryRenderKind.SQL
+    assert result.sql == (
+        "alter session set query_tag = 'dbt'\n\n"
+        "create table\n"
+        '  "analytics"."mart"."orders"\n'
+        "as (\n"
+        "select 1 as id\n"
+        ");"
+    )
+    assert result.renderer_macro is None
+    assert result.provenance[-1].rule == "base.create_from_query.render.python_ctas"
+
+
+@pytest.mark.parametrize(
+    "arguments,reason",
+    [
+        (
+            CreateFromQueryRenderArguments(
+                relation_sql="orders",
+                query="select 1",
+                contract_enforced=True,
+            ),
+            "contracts",
+        ),
+        (
+            CreateFromQueryRenderArguments(
+                relation_sql="orders",
+                query="select 1",
+                legacy_renderer_override="macro.project.create_table_as",
+            ),
+            "overrides",
+        ),
+    ],
+)
+def test_base_adapter_returns_typed_legacy_fallback(arguments, reason):
+    plan = CreateFromQueryPlan.ctas(
+        temporary=False,
+        atomicity=DdlAtomicity.UNKNOWN,
+        facts=FACTS,
+        provenance=PROVENANCE,
+    )
+
+    result = BaseAdapter.resolve_create_from_query_render(PlanningAdapter(), plan, arguments)
+
+    assert result.kind == CreateFromQueryRenderKind.LEGACY_MACRO
+    assert result.renderer_macro == "get_create_table_as_sql"
+    assert reason in result.reason
+    assert result.provenance[:1] == PROVENANCE
+    assert result.provenance[-1].rule == "base.create_from_query.render.legacy_macro"
+
+
+def test_render_result_rejects_contradictory_payloads():
+    with pytest.raises(ValueError, match="cannot contain fallback"):
+        CreateFromQueryRenderResult(
+            kind=CreateFromQueryRenderKind.SQL,
+            sql="create table orders as select 1",
+            renderer_macro="create_table_as",
+            provenance=PROVENANCE,
+        )
 
 
 def test_plan_serializes_to_stable_primitives():

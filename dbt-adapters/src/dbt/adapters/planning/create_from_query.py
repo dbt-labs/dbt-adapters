@@ -36,6 +36,13 @@ class StrategyOfferStatus(str, Enum):
     REJECTED = "rejected"
 
 
+class CreateFromQueryRenderKind(str, Enum):
+    """How a resolved create-from-query plan will be rendered."""
+
+    SQL = "sql"
+    LEGACY_MACRO = "legacy_macro"
+
+
 @dataclass(frozen=True)
 class PlanProvenance:
     """Rule and evidence that caused a resolver to select a plan."""
@@ -425,6 +432,104 @@ class CreateFromQueryPlan:
             "renderer_macro": self.renderer_macro,
             "provenance": [item.to_dict() for item in self.provenance],
             "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class CreateFromQueryRenderArguments:
+    """Late-bound values used to render an already-resolved physical plan.
+
+    These values are deliberately separate from ``CreateFromQueryPlan``: a plan
+    remains serializable, while rendered relation text and compiled SQL only
+    exist in the execution runtime.
+    """
+
+    relation_sql: str
+    query: str
+    sql_header: Optional[str] = None
+    contract_enforced: bool = False
+    legacy_renderer_override: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for value, field_name in (
+            (self.relation_sql, "Create-from-query relation SQL"),
+            (self.query, "Create-from-query query"),
+        ):
+            if not isinstance(value, str):
+                raise TypeError(f"{field_name} must be a string")
+            if not value.strip():
+                raise ValueError(f"{field_name} must not be empty")
+        _validate_optional_string(self.sql_header, "Create-from-query SQL header")
+        if not isinstance(self.contract_enforced, bool):
+            raise TypeError("Create-from-query contract enforcement must be a bool")
+        _validate_optional_string(
+            self.legacy_renderer_override,
+            "Create-from-query legacy renderer override",
+        )
+
+
+@dataclass(frozen=True)
+class CreateFromQueryRenderResult:
+    """Validated SQL or an explicit request to use the compatibility renderer."""
+
+    kind: CreateFromQueryRenderKind
+    provenance: Tuple[PlanProvenance, ...]
+    sql: Optional[str] = None
+    renderer_macro: Optional[str] = None
+    reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, CreateFromQueryRenderKind):
+            raise TypeError("Create-from-query render kind must be a CreateFromQueryRenderKind")
+        if not isinstance(self.provenance, tuple):
+            raise TypeError("Create-from-query render provenance must be an immutable tuple")
+        if not self.provenance:
+            raise ValueError("Create-from-query render result must include provenance")
+        if not all(isinstance(item, PlanProvenance) for item in self.provenance):
+            raise TypeError("Create-from-query render provenance must contain PlanProvenance")
+        _validate_optional_string(self.sql, "Rendered create-from-query SQL")
+        _validate_optional_string(self.renderer_macro, "Create-from-query fallback macro")
+        _validate_optional_string(self.reason, "Create-from-query fallback reason")
+
+        if self.kind == CreateFromQueryRenderKind.SQL:
+            if self.sql is None:
+                raise ValueError("SQL render result must contain SQL")
+            if self.renderer_macro is not None or self.reason is not None:
+                raise ValueError("SQL render result cannot contain fallback fields")
+        else:
+            if self.sql is not None:
+                raise ValueError("Legacy macro render result cannot contain SQL")
+            if self.renderer_macro is None or self.reason is None:
+                raise ValueError("Legacy macro render result requires a macro and reason")
+
+    @classmethod
+    def rendered_sql(
+        cls, sql: str, provenance: Tuple[PlanProvenance, ...]
+    ) -> "CreateFromQueryRenderResult":
+        return cls(kind=CreateFromQueryRenderKind.SQL, sql=sql, provenance=provenance)
+
+    @classmethod
+    def legacy_macro(
+        cls,
+        *,
+        renderer_macro: str,
+        reason: str,
+        provenance: Tuple[PlanProvenance, ...],
+    ) -> "CreateFromQueryRenderResult":
+        return cls(
+            kind=CreateFromQueryRenderKind.LEGACY_MACRO,
+            renderer_macro=renderer_macro,
+            reason=reason,
+            provenance=provenance,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "kind": self.kind.value,
+            "sql": self.sql,
+            "renderer_macro": self.renderer_macro,
+            "reason": self.reason,
+            "provenance": [item.to_dict() for item in self.provenance],
         }
 
 

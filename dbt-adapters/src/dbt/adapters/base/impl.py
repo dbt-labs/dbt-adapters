@@ -117,6 +117,8 @@ from dbt.adapters.planning import (
     CatalogBindingState,
     CatalogFacts,
     CreateFromQueryPlan,
+    CreateFromQueryRenderArguments,
+    CreateFromQueryRenderResult,
     CreateFromQueryFacts,
     CreateFromQueryStrategy,
     CreateFromQueryStrategyOffer,
@@ -582,6 +584,63 @@ class BaseAdapter(metaclass=AdapterMeta):
                         rule="base.create_from_query.ctas",
                         detail="Base adapter create-from-query behavior uses create table as select",
                     ),
+                ),
+            ),
+        )
+
+    @available
+    def resolve_create_from_query_render(
+        self,
+        plan: CreateFromQueryPlan,
+        arguments: CreateFromQueryRenderArguments,
+    ) -> CreateFromQueryRenderResult:
+        """Render portable CTAS or select an explicit compatibility boundary."""
+
+        if plan.strategy == CreateFromQueryStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Create from query is unsupported")
+
+        fallback_reason: Optional[str] = None
+        if arguments.legacy_renderer_override is not None:
+            fallback_reason = (
+                "A project or adapter overrides the legacy create-from-query renderer "
+                f"({arguments.legacy_renderer_override})"
+            )
+        elif plan.strategy != CreateFromQueryStrategy.CTAS:
+            fallback_reason = (
+                f"Strategy '{plan.strategy.value}' does not have a portable Python renderer"
+            )
+        elif arguments.contract_enforced and not plan.temporary:
+            fallback_reason = "Enforced table contracts still require the compatibility renderer"
+
+        if fallback_reason is not None:
+            return CreateFromQueryRenderResult.legacy_macro(
+                renderer_macro="get_create_table_as_sql",
+                reason=fallback_reason,
+                provenance=plan.provenance
+                + (
+                    PlanProvenance(
+                        rule="base.create_from_query.render.legacy_macro",
+                        detail=fallback_reason,
+                    ),
+                ),
+            )
+
+        header = f"{arguments.sql_header}\n\n" if arguments.sql_header is not None else ""
+        temporary = "temporary " if plan.temporary else ""
+        rendered_sql = (
+            f"{header}create {temporary}table\n"
+            f"  {arguments.relation_sql}\n"
+            "as (\n"
+            f"{arguments.query}\n"
+            ");"
+        )
+        return CreateFromQueryRenderResult.rendered_sql(
+            rendered_sql,
+            provenance=plan.provenance
+            + (
+                PlanProvenance(
+                    rule="base.create_from_query.render.python_ctas",
+                    detail="Portable CTAS rendered from validated plan and execution arguments",
                 ),
             ),
         )
