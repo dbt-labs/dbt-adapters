@@ -125,6 +125,61 @@ def test_base_adapter_resolver_uses_adapter_strategy_support():
     assert plan.strategy == IncrementalMutationStrategy.UNSUPPORTED
 
 
+def test_base_adapter_resolver_passes_actual_mutation_facts_to_offers():
+    captured_facts = []
+    requirements = IncrementalStrategyRequirements(
+        unique_key=IncrementalUniqueKeyRequirement.REQUIRED,
+        source_consistency=IncrementalSourceConsistency.STABLE_REUSE,
+        allowed_temp_relation_types=(IncrementalTempRelationType.TABLE,),
+        default_temp_relation_type=IncrementalTempRelationType.TABLE,
+        supported_languages=("python",),
+    )
+
+    def offers(facts):
+        captured_facts.append(facts)
+        return (
+            IncrementalMutationStrategyOffer.available(
+                strategy=IncrementalMutationStrategy.MERGE,
+                renderer_macro="get_incremental_merge_sql",
+                atomicity=DdlAtomicity.UNKNOWN,
+                requirements=requirements,
+                provenance=(
+                    PlanProvenance(rule="test.actual_facts", detail="Actual facts accepted"),
+                ),
+            ),
+        )
+
+    adapter = SimpleNamespace(
+        build_incremental_mutation_facts=lambda **kwargs: BaseAdapter.build_incremental_mutation_facts(
+            adapter, **kwargs
+        ),
+        get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
+        get_incremental_mutation_strategy_offers=offers,
+    )
+    catalog_relation = object()
+
+    plan = BaseAdapter.plan_incremental_mutation(
+        adapter,
+        "merge",
+        language="python",
+        unique_key=["account_id"],
+        requested_temp_relation_type="table",
+        catalog_relation=catalog_relation,
+    )
+
+    assert captured_facts == [
+        IncrementalMutationFacts(
+            requested_strategy="merge",
+            language="python",
+            unique_key_present=True,
+            requested_temp_relation_type="table",
+            catalog_staging=IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
+        )
+    ]
+    assert plan.temp_relation_type == IncrementalTempRelationType.TABLE
+    assert plan.catalog_staging == IncrementalCatalogStaging.PERMANENT_TABLE_ONLY
+
+
 def test_plan_macro_selection_preserves_missing_macro_error():
     adapter = SimpleNamespace(
         config=SimpleNamespace(project_name="test_project"),
@@ -151,9 +206,15 @@ def test_plan_macro_selection_preserves_missing_macro_error():
 
 
 def test_plan_macro_selection_rejects_unsupported_plan():
-    adapter = SimpleNamespace(
-        config=SimpleNamespace(project_name="test_project"),
-        get_incremental_strategy_macro=lambda context, strategy: None,
+    adapter = SimpleNamespace(config=SimpleNamespace(project_name="test_project"))
+    adapter.get_incremental_strategy_macro = BaseAdapter.get_incremental_strategy_macro.__get__(
+        adapter
+    )
+    adapter._get_incremental_plan_macro = BaseAdapter._get_incremental_plan_macro.__get__(adapter)
+    adapter.plan_incremental_mutation = lambda strategy: resolve_incremental_mutation_plan(
+        strategy,
+        valid_strategies=["append"],
+        builtin_strategies=BUILTIN_STRATEGIES,
     )
     plan = resolve_incremental_mutation_plan(
         "merge",
@@ -176,6 +237,21 @@ def test_plan_macro_selection_preserves_legacy_adapter_override():
         builtin_strategies=BUILTIN_STRATEGIES,
     )
 
+    assert BaseAdapter.get_incremental_plan_macro(adapter, {}, plan) is selected_macro
+
+
+def test_plan_macro_selection_delegates_rejected_plan_to_legacy_adapter_override():
+    selected_macro = object()
+    adapter = SimpleNamespace(
+        get_incremental_strategy_macro=lambda context, strategy: selected_macro,
+    )
+    plan = resolve_incremental_mutation_plan(
+        "merge",
+        valid_strategies=["append"],
+        builtin_strategies=BUILTIN_STRATEGIES,
+    )
+
+    assert plan.strategy == IncrementalMutationStrategy.UNSUPPORTED
     assert BaseAdapter.get_incremental_plan_macro(adapter, {}, plan) is selected_macro
 
 
@@ -278,6 +354,74 @@ def test_incremental_offer_resolves_typed_staging_requirements():
     assert plan.strategy == IncrementalMutationStrategy.DELETE_INSERT
     assert plan.requirements == requirements
     assert plan.temp_relation_type == IncrementalTempRelationType.TRANSIENT
+
+
+def test_incremental_offer_preserves_rejections_before_selected_fallback():
+    facts = IncrementalMutationFacts(
+        requested_strategy="merge",
+        language="sql",
+        unique_key_present=True,
+    )
+    requirements = IncrementalStrategyRequirements(
+        unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+        source_consistency=IncrementalSourceConsistency.SINGLE_EVALUATION,
+    )
+    rejected = IncrementalMutationStrategyOffer.rejected(
+        strategy=IncrementalMutationStrategy.MERGE,
+        reason="Preferred merge implementation is unavailable",
+        requirements=requirements,
+        provenance=(
+            PlanProvenance(
+                rule="test.preferred.rejected",
+                detail="Preferred merge implementation is unavailable",
+            ),
+        ),
+    )
+    fallback = IncrementalMutationStrategyOffer.available(
+        strategy=IncrementalMutationStrategy.MERGE,
+        renderer_macro="get_incremental_merge_sql",
+        atomicity=DdlAtomicity.UNKNOWN,
+        requirements=requirements,
+        provenance=(PlanProvenance(rule="test.fallback", detail="Fallback selected"),),
+    )
+
+    plan = resolve_incremental_mutation_offers(facts=facts, offers=(rejected, fallback))
+
+    assert plan.provenance == rejected.provenance + fallback.provenance
+
+
+@pytest.mark.parametrize("unique_key", [None, "", "   ", [], ()])
+def test_incremental_facts_treat_empty_unique_keys_as_absent(unique_key):
+    adapter = SimpleNamespace(
+        get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.STANDARD
+    )
+
+    facts = BaseAdapter.build_incremental_mutation_facts(
+        adapter,
+        requested_strategy="merge",
+        language="sql",
+        unique_key=unique_key,
+        requested_temp_relation_type=None,
+        catalog_relation=None,
+    )
+
+    assert facts.unique_key_present is False
+
+
+def test_incremental_facts_reject_invalid_unique_key_columns():
+    adapter = SimpleNamespace(
+        get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.STANDARD
+    )
+
+    with pytest.raises(ValueError, match="non-empty strings"):
+        BaseAdapter.build_incremental_mutation_facts(
+            adapter,
+            requested_strategy="merge",
+            language="sql",
+            unique_key=["account_id", ""],
+            requested_temp_relation_type=None,
+            catalog_relation=None,
+        )
 
 
 def test_incremental_plan_carries_resolved_catalog_staging_to_renderer():

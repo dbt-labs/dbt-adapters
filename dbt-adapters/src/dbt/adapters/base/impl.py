@@ -2077,10 +2077,26 @@ class BaseAdapter(metaclass=AdapterMeta):
         return IncrementalMutationFacts(
             requested_strategy=requested_strategy or "default",
             language=language,
-            unique_key_present=unique_key is not None,
+            unique_key_present=BaseAdapter._incremental_unique_key_present(unique_key),
             requested_temp_relation_type=requested_temp_relation_type,
             catalog_staging=self.get_incremental_catalog_staging(catalog_relation),
         )
+
+    @staticmethod
+    def _incremental_unique_key_present(
+        unique_key: Optional[Union[str, Sequence[str]]],
+    ) -> bool:
+        if unique_key is None:
+            return False
+        if isinstance(unique_key, str):
+            return bool(unique_key.strip())
+
+        keys = tuple(unique_key)
+        if not keys:
+            return False
+        if not all(isinstance(key, str) and key.strip() for key in keys):
+            raise ValueError("Incremental unique key columns must be non-empty strings")
+        return True
 
     def get_incremental_catalog_staging(
         self, catalog_relation: Optional[CatalogRelation]
@@ -2158,17 +2174,18 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse_none
     def get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
+        if (
+            getattr(type(self), "get_incremental_strategy_macro", None)
+            is not BaseAdapter.get_incremental_strategy_macro
+        ):
+            # Preserve adapter overrides of the established public selector. The
+            # override may support strategies unknown to the base planner.
+            return self.get_incremental_strategy_macro(model_context, plan.requested_strategy)
+
         if plan.strategy == IncrementalMutationStrategy.UNSUPPORTED:
             raise DbtRuntimeError(plan.reason or "Incremental mutation is unsupported")
 
-        if (
-            getattr(type(self), "get_incremental_strategy_macro", None)
-            is BaseAdapter.get_incremental_strategy_macro
-        ):
-            return self._get_incremental_plan_macro(model_context, plan)
-
-        # Preserve adapter overrides of the established public selector.
-        return self.get_incremental_strategy_macro(model_context, plan.requested_strategy)
+        return self._get_incremental_plan_macro(model_context, plan)
 
     def _get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
         macro_name = plan.renderer_macro

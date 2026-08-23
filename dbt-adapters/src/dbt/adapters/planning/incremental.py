@@ -566,14 +566,21 @@ def resolve_incremental_mutation_offers(
     last_requirements: Optional[IncrementalStrategyRequirements] = None
     for offer in offers:
         last_requirements = offer.requirements
-        rejected_provenance.extend(offer.provenance)
         if offer.status == StrategyOfferStatus.REJECTED:
             rejected_reasons.append(offer.reason or "Incremental strategy offer was rejected")
+            rejected_provenance.extend(offer.provenance)
             continue
 
         requirement_error = _incremental_requirement_error(facts, offer.requirements)
         if requirement_error is not None:
             rejected_reasons.append(requirement_error)
+            rejected_provenance.extend(offer.provenance)
+            rejected_provenance.append(
+                PlanProvenance(
+                    rule="incremental.offer.requirements.rejected",
+                    detail=requirement_error,
+                )
+            )
             continue
 
         requested_temp_relation_type = None
@@ -592,7 +599,7 @@ def resolve_incremental_mutation_offers(
             requirements=offer.requirements,
             temp_relation_type=temp_relation_type,
             catalog_staging=facts.catalog_staging,
-            provenance=offer.provenance,
+            provenance=tuple(rejected_provenance) + offer.provenance,
         )
 
     reason = "; ".join(dict.fromkeys(rejected_reasons))

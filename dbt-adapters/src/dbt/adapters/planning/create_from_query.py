@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 class CreateFromQueryStrategy(str, Enum):
@@ -453,6 +453,7 @@ def resolve_create_from_query_offers(
     if not all(isinstance(offer, CreateFromQueryStrategyOffer) for offer in resolved_offers):
         raise TypeError("Create-from-query offers must contain strategy offers")
 
+    rejected_provenance: List[PlanProvenance] = []
     for offer in resolved_offers:
         if offer.status == StrategyOfferStatus.AVAILABLE:
             return CreateFromQueryPlan(
@@ -461,8 +462,9 @@ def resolve_create_from_query_offers(
                 temporary=temporary,
                 facts=facts,
                 renderer_macro=offer.renderer_macro,
-                provenance=offer.provenance,
+                provenance=tuple(rejected_provenance) + offer.provenance,
             )
+        rejected_provenance.extend(offer.provenance)
 
     reasons = tuple(offer.reason for offer in resolved_offers if offer.reason is not None)
     reason = "; ".join(reasons) or "All create-from-query strategies were rejected"

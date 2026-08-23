@@ -372,6 +372,7 @@ def test_offer_resolver_selects_first_available_strategy():
     assert plan.strategy == CreateFromQueryStrategy.CREATE_THEN_INSERT
     assert plan.renderer_macro == "create_table_then_insert"
     assert plan.atomicity == DdlAtomicity.TRANSACTION
+    assert plan.provenance == rejected_ctas.provenance + create_then_insert.provenance
 
 
 def test_offer_resolver_preserves_all_rejection_reasons():
