@@ -12,7 +12,11 @@
   -- configs
   {%- set unique_key = config.get('unique_key') -%}
   {%- set full_refresh_mode = (should_full_refresh()  or existing_relation.is_view) -%}
-  {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
+  {%- set schema_change_plan = adapter.plan_incremental_schema_change(config.get('on_schema_change')) -%}
+  {%- set on_schema_change = schema_change_plan.strategy.value -%}
+  {%- if schema_change_plan.was_coerced -%}
+    {% do log(schema_change_plan.provenance[-1].detail) %}
+  {%- endif -%}
 
   -- the temp_ and backup_ relations should not already exist in the database; get_relation
   -- will return None in that case. Otherwise, we get a relation that we can drop
@@ -60,8 +64,14 @@
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
-    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': temp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
-    {% set build_sql = strategy_sql_macro_func(strategy_arg_dict) %}
+    {% set strategy_args = adapter.plan_incremental_arguments(
+        target_relation=target_relation,
+        temp_relation=temp_relation,
+        unique_key=unique_key,
+        dest_columns=dest_columns,
+        incremental_predicates=incremental_predicates
+    ) %}
+    {% set build_sql = strategy_sql_macro_func(strategy_args.to_macro_dict()) %}
 
   {% endif %}
 

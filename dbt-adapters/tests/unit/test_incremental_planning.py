@@ -5,8 +5,11 @@ import pytest
 from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.planning import (
     DdlAtomicity,
+    IncrementalMutationArguments,
     IncrementalMutationStrategy,
+    IncrementalSchemaChangeStrategy,
     resolve_incremental_mutation_plan,
+    resolve_incremental_schema_change_plan,
 )
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -140,3 +143,89 @@ def test_plan_macro_selection_preserves_legacy_adapter_override():
     )
 
     assert BaseAdapter.get_incremental_plan_macro(adapter, {}, plan) is selected_macro
+
+
+@pytest.mark.parametrize(
+    "requested,expected",
+    [
+        (None, IncrementalSchemaChangeStrategy.IGNORE),
+        ("ignore", IncrementalSchemaChangeStrategy.IGNORE),
+        ("append_new_columns", IncrementalSchemaChangeStrategy.APPEND_NEW_COLUMNS),
+        ("sync_all_columns", IncrementalSchemaChangeStrategy.SYNC_ALL_COLUMNS),
+        ("fail", IncrementalSchemaChangeStrategy.FAIL),
+    ],
+)
+def test_resolves_incremental_schema_change_strategy(requested, expected):
+    plan = resolve_incremental_schema_change_plan(requested)
+
+    assert plan.strategy == expected
+    assert plan.was_coerced is False
+
+
+def test_invalid_incremental_schema_change_strategy_uses_default_with_provenance():
+    plan = resolve_incremental_schema_change_plan("replace_everything")
+
+    assert plan.to_dict() == {
+        "requested_strategy": "replace_everything",
+        "strategy": "ignore",
+        "provenance": [
+            {
+                "rule": "incremental.schema_change.invalid_default",
+                "detail": (
+                    "Invalid value for on_schema_change (replace_everything) specified. "
+                    "Setting default value of ignore."
+                ),
+            }
+        ],
+    }
+    assert plan.was_coerced is True
+
+
+def test_incremental_arguments_normalize_at_the_legacy_macro_boundary():
+    target_relation = object()
+    temp_relation = object()
+    dest_columns = [object(), object()]
+
+    arguments = IncrementalMutationArguments.from_values(
+        target_relation=target_relation,
+        temp_relation=temp_relation,
+        unique_key=["account_id", "event_id"],
+        dest_columns=dest_columns,
+        incremental_predicates=["DBT_INTERNAL_DEST.event_at > date '2026-01-01'"],
+    )
+
+    assert arguments.unique_key == ("account_id", "event_id")
+    assert arguments.dest_columns == tuple(dest_columns)
+    assert arguments.incremental_predicates == ("DBT_INTERNAL_DEST.event_at > date '2026-01-01'",)
+    assert arguments.to_macro_dict() == {
+        "target_relation": target_relation,
+        "temp_relation": temp_relation,
+        "unique_key": ["account_id", "event_id"],
+        "dest_columns": dest_columns,
+        "incremental_predicates": ["DBT_INTERNAL_DEST.event_at > date '2026-01-01'"],
+    }
+
+
+@pytest.mark.parametrize(
+    "kwargs,exception,error",
+    [
+        ({"target_relation": None}, ValueError, "target relation"),
+        ({"temp_relation": None}, ValueError, "temporary relation"),
+        ({"unique_key": ""}, ValueError, "unique key"),
+        ({"unique_key": []}, ValueError, "unique key columns"),
+        ({"incremental_predicates": [""]}, ValueError, "predicates"),
+        ({"incremental_predicates": "id > 1"}, TypeError, "sequence"),
+    ],
+)
+def test_incremental_arguments_reject_invalid_inputs(kwargs, exception, error):
+    values = {
+        "target_relation": object(),
+        "temp_relation": object(),
+        "unique_key": None,
+        "dest_columns": [],
+        "incremental_predicates": None,
+    }
+    values.update(kwargs)
+
+    with pytest.raises(exception, match=error):
+        IncrementalMutationArguments.from_values(**values)

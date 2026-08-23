@@ -17,6 +17,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Type,
@@ -115,10 +116,13 @@ from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.planning import (
     CreateFromQueryPlan,
     DdlAtomicity,
+    IncrementalMutationArguments,
     IncrementalMutationPlan,
     IncrementalMutationStrategy,
+    IncrementalSchemaChangePlan,
     PlanProvenance,
     resolve_incremental_mutation_plan,
+    resolve_incremental_schema_change_plan,
 )
 
 logger = AdapterLogger(__name__)
@@ -1878,6 +1882,30 @@ class BaseAdapter(metaclass=AdapterMeta):
             requested_strategy,
             valid_strategies=self.valid_incremental_strategies(),
             builtin_strategies=self.builtin_incremental_strategies(),
+        )
+
+    @available
+    def plan_incremental_schema_change(
+        self, requested_strategy: Optional[str]
+    ) -> IncrementalSchemaChangePlan:
+        return resolve_incremental_schema_change_plan(requested_strategy)
+
+    @available.parse_none
+    def plan_incremental_arguments(
+        self,
+        *,
+        target_relation: Any,
+        temp_relation: Any,
+        unique_key: Optional[Union[str, Sequence[str]]],
+        dest_columns: Iterable[Any],
+        incremental_predicates: Optional[Sequence[str]],
+    ) -> IncrementalMutationArguments:
+        return IncrementalMutationArguments.from_values(
+            target_relation=target_relation,
+            temp_relation=temp_relation,
+            unique_key=unique_key,
+            dest_columns=dest_columns,
+            incremental_predicates=incremental_predicates,
         )
 
     @available.parse_none
