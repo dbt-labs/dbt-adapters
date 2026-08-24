@@ -12,6 +12,7 @@ from dbt.adapters.planning import (
     ExistingIndexStrategy,
     FormatFacts,
     IncrementalLifecyclePlan,
+    IncrementalMutationFacts,
     IncrementalMutationPlan,
     IncrementalMutationStrategy,
     MaterializationExecutionFacts,
@@ -238,6 +239,11 @@ def test_incremental_lifecycle_program_carries_schema_and_mutation_order() -> No
                 rule="test.incremental.merge",
                 detail="Test merge strategy",
             ),
+        ),
+        facts=IncrementalMutationFacts(
+            requested_strategy="merge",
+            language="sql",
+            unique_key_present=False,
         ),
     )
 

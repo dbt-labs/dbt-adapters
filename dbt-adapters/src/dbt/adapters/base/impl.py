@@ -537,6 +537,12 @@ class BaseAdapter(metaclass=AdapterMeta):
             catalog_facts = CatalogFacts(state=CatalogBindingState.UNBOUND)
 
         format_source = catalog_relation if catalog_relation is not None else relation
+        table_format = self._create_from_query_fact_value(
+            getattr(format_source, "table_format", None), canonical=True
+        )
+        file_format = self._create_from_query_fact_value(
+            getattr(format_source, "file_format", None), canonical=True
+        )
         return CreateFromQueryFacts(
             relation=RelationFacts(
                 database=self._create_from_query_fact_value(getattr(relation, "database", None)),
@@ -550,12 +556,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             ),
             catalog=catalog_facts,
             format=FormatFacts(
-                table_format=self._create_from_query_fact_value(
-                    getattr(format_source, "table_format", None), canonical=True
-                ),
-                file_format=self._create_from_query_fact_value(
-                    getattr(format_source, "file_format", None), canonical=True
-                ),
+                table_format=table_format,
+                file_format=file_format,
+                table_provider=file_format or table_format,
             ),
             runtime=self.get_create_from_query_runtime_facts(temporary, relation, model),
         )
@@ -2081,13 +2084,16 @@ class BaseAdapter(metaclass=AdapterMeta):
         requires_drop = (
             bool(needs_to_drop(existing_relation)) if callable(needs_to_drop) else False
         )
+        existing_table_format = self._create_from_query_fact_value(
+            getattr(existing_relation, "table_format", None), canonical=True
+        )
+        existing_file_format = self._create_from_query_fact_value(
+            getattr(existing_relation, "file_format", None), canonical=True
+        )
         existing_format = FormatFacts(
-            table_format=self._create_from_query_fact_value(
-                getattr(existing_relation, "table_format", None), canonical=True
-            ),
-            file_format=self._create_from_query_fact_value(
-                getattr(existing_relation, "file_format", None), canonical=True
-            ),
+            table_format=existing_table_format,
+            file_format=existing_file_format,
+            table_provider=existing_file_format or existing_table_format,
         )
         return TableMaterializationFacts(
             create=create_facts,
@@ -2307,12 +2313,51 @@ class BaseAdapter(metaclass=AdapterMeta):
         requested_temp_relation_type: Optional[str],
         catalog_relation: Optional[CatalogRelation],
     ) -> IncrementalMutationFacts:
+        if catalog_relation is None:
+            catalog = CatalogFacts(state=CatalogBindingState.UNBOUND)
+            format_facts = FormatFacts()
+        else:
+            catalog = CatalogFacts(
+                state=CatalogBindingState.RESOLVED,
+                catalog_type=BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_type", None), canonical=True
+                )
+                or "default",
+                catalog_name=BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_name", None)
+                ),
+                catalog_database=BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_database", None)
+                ),
+                catalog_provider=BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_provider", None), canonical=True
+                ),
+                external_volume=BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "external_volume", None)
+                ),
+            )
+            file_format = BaseAdapter._create_from_query_fact_value(
+                getattr(catalog_relation, "file_format", None), canonical=True
+            )
+            table_format = BaseAdapter._create_from_query_fact_value(
+                getattr(catalog_relation, "table_format", None), canonical=True
+            )
+            format_facts = FormatFacts(
+                table_format=table_format,
+                file_format=file_format,
+                table_provider=file_format or table_format,
+            )
         return IncrementalMutationFacts(
             requested_strategy=requested_strategy or "default",
             language=language,
             unique_key_present=BaseAdapter._incremental_unique_key_present(unique_key),
             requested_temp_relation_type=requested_temp_relation_type,
             catalog_staging=self.get_incremental_catalog_staging(catalog_relation),
+            catalog=catalog,
+            format=format_facts,
+            runtime=RuntimeFacts(
+                engine=self.type() if callable(getattr(self, "type", None)) else "unknown"
+            ),
         )
 
     @staticmethod

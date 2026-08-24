@@ -80,6 +80,9 @@ class MaterializationOperationKind(str, Enum):
     CREATE_FROM_QUERY = "create_from_query"
     INSERT_FROM_QUERY = "insert_from_query"
     CREATE_FROM_RELATION = "create_from_relation"
+    CREATE_STRUCTURE_FROM_RELATION = "create_structure_from_relation"
+    APPLY_ALTER_CONSTRAINTS = "apply_alter_constraints"
+    INSERT_FROM_RELATION = "insert_from_relation"
     EXPAND_TARGET_COLUMN_TYPES = "expand_target_column_types"
     PROCESS_SCHEMA_CHANGES = "process_schema_changes"
     PROCESS_CONFIG_CHANGES = "process_config_changes"
@@ -233,6 +236,9 @@ class MaterializationOperation:
             MaterializationOperationKind.CREATE_FROM_QUERY,
             MaterializationOperationKind.INSERT_FROM_QUERY,
             MaterializationOperationKind.CREATE_FROM_RELATION,
+            MaterializationOperationKind.CREATE_STRUCTURE_FROM_RELATION,
+            MaterializationOperationKind.APPLY_ALTER_CONSTRAINTS,
+            MaterializationOperationKind.INSERT_FROM_RELATION,
             MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
             MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
             MaterializationOperationKind.PROCESS_CONFIG_CHANGES,
@@ -255,6 +261,8 @@ class MaterializationOperation:
             self.kind
             in {
                 MaterializationOperationKind.CREATE_FROM_RELATION,
+                MaterializationOperationKind.CREATE_STRUCTURE_FROM_RELATION,
+                MaterializationOperationKind.INSERT_FROM_RELATION,
                 MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
                 MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
                 MaterializationOperationKind.PROCESS_CONFIG_CHANGES,

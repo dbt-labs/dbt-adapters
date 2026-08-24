@@ -204,7 +204,11 @@ def test_plan_serializes_to_stable_primitives():
                 "catalog_provider": None,
                 "external_volume": None,
             },
-            "format": {"table_format": None, "file_format": None},
+            "format": {
+                "table_format": None,
+                "file_format": None,
+                "table_provider": None,
+            },
             "runtime": {"engine": "test", "version": None},
         },
         "renderer_macro": "create_table_then_insert",
@@ -334,7 +338,11 @@ def test_builds_canonical_facts_from_resolved_adapter_objects():
             "catalog_provider": None,
             "external_volume": "analytics_volume",
         },
-        "format": {"table_format": "iceberg", "file_format": "parquet"},
+        "format": {
+            "table_format": "iceberg",
+            "file_format": "parquet",
+            "table_provider": "parquet",
+        },
         "runtime": {"engine": "test", "version": None},
     }
 

@@ -3,8 +3,12 @@ from enum import Enum
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from dbt.adapters.planning.create_from_query import (
+    CatalogBindingState,
+    CatalogFacts,
     DdlAtomicity,
+    FormatFacts,
     PlanProvenance,
+    RuntimeFacts,
     StrategyOfferStatus,
 )
 from dbt.adapters.planning.materialization import (
@@ -125,6 +129,10 @@ class IncrementalMutationFacts:
     unique_key_present: bool
     requested_temp_relation_type: Optional[str] = None
     catalog_staging: IncrementalCatalogStaging = IncrementalCatalogStaging.STANDARD
+    catalog: CatalogFacts = CatalogFacts(state=CatalogBindingState.UNBOUND)
+    format: FormatFacts = FormatFacts()
+    runtime: RuntimeFacts = RuntimeFacts(engine="unknown")
+    capabilities: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.requested_strategy, str) or not self.requested_strategy.strip():
@@ -140,6 +148,32 @@ class IncrementalMutationFacts:
             raise ValueError("Requested incremental temporary relation type cannot be empty")
         if not isinstance(self.catalog_staging, IncrementalCatalogStaging):
             raise TypeError("Incremental catalog staging must be typed")
+        if not isinstance(self.catalog, CatalogFacts):
+            raise TypeError("Incremental catalog facts must be typed")
+        if not isinstance(self.format, FormatFacts):
+            raise TypeError("Incremental format facts must be typed")
+        if not isinstance(self.runtime, RuntimeFacts):
+            raise TypeError("Incremental runtime facts must be typed")
+        if not isinstance(self.capabilities, tuple) or not all(
+            isinstance(capability, str) and capability.strip()
+            for capability in self.capabilities
+        ):
+            raise ValueError("Incremental capabilities must be immutable non-empty strings")
+        if len(set(self.capabilities)) != len(self.capabilities):
+            raise ValueError("Incremental capabilities cannot contain duplicates")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "requested_strategy": self.requested_strategy,
+            "language": self.language,
+            "unique_key_present": self.unique_key_present,
+            "requested_temp_relation_type": self.requested_temp_relation_type,
+            "catalog_staging": self.catalog_staging.value,
+            "catalog": self.catalog.to_dict(),
+            "format": self.format.to_dict(),
+            "runtime": self.runtime.to_dict(),
+            "capabilities": list(self.capabilities),
+        }
 
 
 @dataclass(frozen=True)
@@ -189,6 +223,7 @@ class IncrementalMutationStrategyOffer:
     atomicity: DdlAtomicity
     requirements: IncrementalStrategyRequirements
     provenance: Tuple[PlanProvenance, ...]
+    renderer_variant: Optional[str] = None
     reason: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -204,12 +239,18 @@ class IncrementalMutationStrategyOffer:
             raise ValueError("Incremental offer must include immutable provenance")
         if not all(isinstance(item, PlanProvenance) for item in self.provenance):
             raise TypeError("Incremental offer provenance must contain PlanProvenance")
+        if self.renderer_variant is not None and (
+            not isinstance(self.renderer_variant, str) or not self.renderer_variant.strip()
+        ):
+            raise ValueError("Incremental renderer variant must be a non-empty string")
         if self.status == StrategyOfferStatus.AVAILABLE:
             if not self.renderer_macro or not self.renderer_macro.strip():
                 raise ValueError("Available incremental offer must select a renderer macro")
             if self.reason is not None:
                 raise ValueError("Available incremental offer cannot include a rejection reason")
         else:
+            if self.renderer_variant is not None:
+                raise ValueError("Rejected incremental offer cannot select a renderer variant")
             if self.renderer_macro is not None:
                 raise ValueError("Rejected incremental offer cannot select a renderer macro")
             if self.atomicity != DdlAtomicity.NONE:
@@ -226,6 +267,7 @@ class IncrementalMutationStrategyOffer:
         atomicity: DdlAtomicity,
         requirements: IncrementalStrategyRequirements,
         provenance: Tuple[PlanProvenance, ...],
+        renderer_variant: Optional[str] = None,
     ) -> "IncrementalMutationStrategyOffer":
         return cls(
             status=StrategyOfferStatus.AVAILABLE,
@@ -234,6 +276,7 @@ class IncrementalMutationStrategyOffer:
             atomicity=atomicity,
             requirements=requirements,
             provenance=provenance,
+            renderer_variant=renderer_variant,
         )
 
     @classmethod
@@ -420,6 +463,8 @@ class IncrementalMutationPlan:
     renderer_macro: Optional[str]
     atomicity: DdlAtomicity
     provenance: Tuple[PlanProvenance, ...]
+    facts: IncrementalMutationFacts
+    renderer_variant: Optional[str] = None
     requirements: Optional[IncrementalStrategyRequirements] = None
     temp_relation_type: Optional[IncrementalTempRelationType] = None
     catalog_staging: IncrementalCatalogStaging = IncrementalCatalogStaging.STANDARD
@@ -440,6 +485,12 @@ class IncrementalMutationPlan:
             raise ValueError("Incremental plan must include provenance")
         if not all(isinstance(item, PlanProvenance) for item in self.provenance):
             raise TypeError("Incremental plan provenance must contain PlanProvenance")
+        if not isinstance(self.facts, IncrementalMutationFacts):
+            raise TypeError("Incremental plan facts must be typed")
+        if self.renderer_variant is not None and (
+            not isinstance(self.renderer_variant, str) or not self.renderer_variant.strip()
+        ):
+            raise ValueError("Incremental plan renderer variant must be a non-empty string")
         if self.requirements is not None and not isinstance(
             self.requirements, IncrementalStrategyRequirements
         ):
@@ -460,6 +511,8 @@ class IncrementalMutationPlan:
                 raise ValueError("Unsupported incremental plan cannot promise atomicity")
             if self.temp_relation_type is not None:
                 raise ValueError("Unsupported incremental plan cannot select a temp relation type")
+            if self.renderer_variant is not None:
+                raise ValueError("Unsupported incremental plan cannot select a renderer variant")
             if not self.reason or not self.reason.strip():
                 raise ValueError("Unsupported incremental plan must include a reason")
         else:
@@ -475,6 +528,8 @@ class IncrementalMutationPlan:
             "renderer_macro": self.renderer_macro,
             "atomicity": self.atomicity.value,
             "provenance": [item.to_dict() for item in self.provenance],
+            "facts": self.facts.to_dict(),
+            "renderer_variant": self.renderer_variant,
             "requirements": (
                 None
                 if self.requirements is None
@@ -731,6 +786,8 @@ def resolve_incremental_mutation_offers(
             strategy=offer.strategy,
             renderer_macro=offer.renderer_macro,
             atomicity=offer.atomicity,
+            facts=facts,
+            renderer_variant=offer.renderer_variant,
             requirements=offer.requirements,
             temp_relation_type=temp_relation_type,
             catalog_staging=facts.catalog_staging,
@@ -743,6 +800,7 @@ def resolve_incremental_mutation_offers(
         strategy=IncrementalMutationStrategy.UNSUPPORTED,
         renderer_macro=None,
         atomicity=DdlAtomicity.NONE,
+        facts=facts,
         requirements=last_requirements,
         catalog_staging=facts.catalog_staging,
         provenance=tuple(rejected_provenance),

@@ -166,15 +166,18 @@ class FormatFacts:
 
     table_format: Optional[str] = None
     file_format: Optional[str] = None
+    table_provider: Optional[str] = None
 
     def __post_init__(self) -> None:
         _validate_optional_string(self.table_format, "Table format")
         _validate_optional_string(self.file_format, "File format")
+        _validate_optional_string(self.table_provider, "Table provider")
 
     def to_dict(self) -> Dict[str, Optional[str]]:
         return {
             "table_format": self.table_format,
             "file_format": self.file_format,
+            "table_provider": self.table_provider,
         }
 
 
