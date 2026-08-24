@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 from dbt.adapters.base.relation import BaseRelation, Policy
 from dbt.adapters.contracts.relation import ComponentName
+from dbt_common.exceptions import DbtRuntimeError
 
 
 @dataclass
@@ -30,6 +31,10 @@ class SparkRelation(BaseRelation):
     # TODO: make this a dict everywhere
     information: Optional[str] = None
     require_alias: bool = False
+
+    def __post_init__(self) -> None:
+        if self.database is not None and not self.database.strip():
+            raise DbtRuntimeError("Catalog cannot be empty")
 
     def _is_exactish_match(self, field: ComponentName, value: str) -> bool:
         if self.quote_policy.get_part(field) is False:

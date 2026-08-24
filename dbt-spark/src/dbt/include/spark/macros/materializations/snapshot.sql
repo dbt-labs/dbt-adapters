@@ -18,7 +18,7 @@
     merge into {{ target }} as DBT_INTERNAL_DEST
     {% if target.is_iceberg %}
       {# create view only supports a name (no catalog, or schema) #}
-      using {{ source.identifier }} as DBT_INTERNAL_SOURCE
+      using {{ source.include(database=false, schema=false) }} as DBT_INTERNAL_SOURCE
     {% else %}
       using {{ source }} as DBT_INTERNAL_SOURCE
     {% endif %}
@@ -46,15 +46,13 @@
 
     {% if target_relation.is_iceberg %}
       {# iceberg catalog does not support create view, but regular spark does. We removed the catalog and schema #}
-      {%- set tmp_relation = api.Relation.create(identifier=tmp_identifier,
-                                                    schema=none,
-                                                    database=none,
-                                                    type='view') -%}
+      {%- set tmp_relation = target_relation.incorporate(
+            path={'identifier': tmp_identifier, 'schema': none, 'database': none},
+            type='view') -%}
     {% else %}
-      {%- set tmp_relation = api.Relation.create(identifier=tmp_identifier,
-                                                    schema=target_relation.schema,
-                                                    database=target_relation.database,
-                                                    type='view') -%}
+      {%- set tmp_relation = target_relation.incorporate(
+            path={'identifier': tmp_identifier},
+            type='view') -%}
     {% endif %}
 
     {% set select = snapshot_staging_table(strategy, sql, target_relation) %}
@@ -100,6 +98,10 @@
           schema=model.schema,
           identifier=target_table,
           type='table') -%}
+
+  {%- if not target_relation_exists -%}
+    {%- set target_relation = this.incorporate(type='table') -%}
+  {%- endif -%}
 
   {%- if file_format not in ['delta', 'iceberg', 'hudi'] -%}
     {% set invalid_format_msg -%}

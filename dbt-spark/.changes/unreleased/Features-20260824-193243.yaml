@@ -1,5 +1,5 @@
 kind: Features
-body: Add catalog-qualified three-part identifiers to dbt-spark while preserving legacy matching database and schema profiles as two-part identifiers.
+body: Add catalog-qualified three-part identifiers to dbt-spark. Profile `catalog` maps to dbt's `database`; model and source `database` configurations now select a catalog. Legacy profiles with matching `database` and `schema` remain two-part.
 time: 2026-08-24T19:32:43.000000+05:30
 custom:
   Author: Amogh-2404

@@ -326,7 +326,13 @@
 {% macro spark__list_schemas(database) -%}
   {% call statement('list_schemas', fetch_result=True, auto_begin=False) %}
     {% if database %}
-      show namespaces in {{ adapter.quote(database) }}
+      {# dbt-core's create_schemas passes str(relation), which may already be quoted. #}
+      {% if database.startswith('`') and database.endswith('`') %}
+        {% set quoted_database = database %}
+      {% else %}
+        {% set quoted_database = adapter.quote(database) %}
+      {% endif %}
+      show namespaces in {{ quoted_database }}
     {% else %}
       show databases
     {% endif %}

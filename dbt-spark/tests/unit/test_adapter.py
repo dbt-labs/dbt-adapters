@@ -442,6 +442,15 @@ class TestSparkAdapter(unittest.TestCase):
         )
         self.assertEqual(relation.render(), "catalog.analytics.events")
 
+        for blank_database in ("", "   "):
+            with self.subTest(blank_database=blank_database):
+                with self.assertRaisesRegex(DbtRuntimeError, "Catalog cannot be empty"):
+                    adapter.Relation.create(
+                        database=blank_database,
+                        schema="analytics",
+                        identifier="events",
+                    )
+
     def test_profile_with_database(self):
         profile = {
             "outputs": {
@@ -544,6 +553,15 @@ class TestSparkAdapter(unittest.TestCase):
                     relation = adapter.get_relation(database, requested_schema, "EVENTS")
 
                 self.assertEqual(relation, discovered)
+
+    def test_check_schema_exists_is_case_insensitive(self):
+        adapter = SparkAdapter(self.target_http, get_context("spawn"))
+        with mock.patch.object(
+            adapter,
+            "execute_macro",
+            return_value=[("analytics",), ("staging",)],
+        ):
+            self.assertTrue(adapter.check_schema_exists("MyCatalog", "Analytics"))
 
     def test_profile_with_cluster_and_sql_endpoint(self):
         profile = {
@@ -867,6 +885,29 @@ class TestListRelationsWithoutCaching(unittest.TestCase):
         second = adapter.cache.get_relations("catalog_two", "analytics")
         self.assertEqual([relation.database for relation in first], ["catalog_one"])
         self.assertEqual([relation.database for relation in second], ["catalog_two"])
+
+    def test_discovered_relation_preserves_quote_policy(self):
+        adapter = self._make_adapter()
+        schema_relation = adapter.Relation.create(
+            database="catalog-name",
+            schema="namespace-name",
+            identifier="",
+            quote_policy={"database": True, "schema": True, "identifier": True},
+        ).without_identifier()
+        rows = [("namespace-name", "table-name", False, "Type: MANAGED\n")]
+
+        relations = adapter._build_spark_relation_list(
+            rows,
+            adapter._get_relation_information,
+            schema_relation,
+        )
+
+        self.assertEqual(len(relations), 1)
+        self.assertEqual(relations[0].quote_policy, schema_relation.quote_policy)
+        self.assertEqual(
+            relations[0].render(),
+            "`catalog-name`.`namespace-name`.`table-name`",
+        )
 
     def test_unknown_error_is_raised(self):
         """An unexpected error from the metastore should propagate rather than

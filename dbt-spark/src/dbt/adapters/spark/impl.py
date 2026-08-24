@@ -243,6 +243,7 @@ class SparkAdapter(SQLAdapter):
                 database=schema_relation.database,
                 schema=relation_schema,
                 identifier=name,
+                quote_policy=schema_relation.quote_policy,
                 type=rel_type,
                 information=information,
                 is_delta=is_delta,
@@ -456,9 +457,7 @@ class SparkAdapter(SQLAdapter):
 
     def check_schema_exists(self, database: str, schema: str) -> bool:
         results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
-
-        exists = True if schema in [row[0] for row in results] else False
-        return exists
+        return schema.lower() in (str(row[0]).lower() for row in results)
 
     def get_rows_different_sql(
         self,

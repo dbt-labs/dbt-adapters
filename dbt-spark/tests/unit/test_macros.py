@@ -82,9 +82,12 @@ class TestSparkMacros(unittest.TestCase):
         template = self.jinja_env.get_template("adapters.sql", globals=context)
 
         sql = template.module.spark__list_schemas("catalog-name")
+        prequoted_sql = template.module.spark__list_schemas("`catalog-name`")
         default_sql = template.module.spark__list_schemas(None)
 
         self.assertIn("show namespaces in `catalog-name`", sql)
+        self.assertIn("show namespaces in `catalog-name`", prequoted_sql)
+        self.assertNotIn("``catalog-name``", prequoted_sql)
         self.assertIn("show databases", default_sql)
 
     def test_generate_database_name_uses_default_implementation(self):
@@ -123,10 +126,11 @@ class TestSparkMacros(unittest.TestCase):
         helper_macros = source.split("{% materialization", maxsplit=1)[0]
         template = self.jinja_env.from_string(helper_macros, globals=context)
         target_relation = SparkRelation.create(
-            database="catalog",
-            schema="analytics",
-            identifier="events_snapshot",
+            database="catalog-name",
+            schema="analytics-name",
+            identifier="events-snapshot",
             type="table",
+            quote_policy={"database": True, "schema": True, "identifier": True},
         )
 
         template.module.spark_build_snapshot_staging_table(
@@ -135,7 +139,62 @@ class TestSparkMacros(unittest.TestCase):
 
         self.assertEqual(
             str(captured["relation"]),
-            "catalog.analytics.events_snapshot__dbt_tmp",
+            "`catalog-name`.`analytics-name`.`events-snapshot__dbt_tmp`",
+        )
+        self.assertEqual(captured["relation"].quote_policy, target_relation.quote_policy)
+
+    def test_iceberg_snapshot_uses_quoted_unqualified_staging_relation(self):
+        captured = {}
+
+        def statement(*args, caller=None, **kwargs):
+            return caller()
+
+        def create_view_as(relation, sql):
+            captured["relation"] = relation
+            return f"create view {relation} as {sql}"
+
+        context = {
+            **self.default_context,
+            "statement": statement,
+            "snapshot_staging_table": lambda strategy, sql, target: "select 1",
+            "create_view_as": create_view_as,
+        }
+        source, _, _ = self.jinja_env.loader.get_source(
+            self.jinja_env, "materializations/snapshot.sql"
+        )
+        helper_macros = source.split("{% materialization", maxsplit=1)[0]
+        template = self.jinja_env.from_string(helper_macros, globals=context)
+        target_relation = SparkRelation.create(
+            database="catalog-name",
+            schema="analytics-name",
+            identifier="events-snapshot",
+            type="table",
+            is_iceberg=True,
+            quote_policy={"database": True, "schema": True, "identifier": True},
+        )
+
+        template.module.spark_build_snapshot_staging_table(
+            mock.Mock(), "select 1", target_relation
+        )
+
+        staging_relation = captured["relation"]
+        self.assertEqual(str(staging_relation), "`events-snapshot__dbt_tmp`")
+        self.assertIsNone(staging_relation.database)
+        self.assertIsNone(staging_relation.schema)
+        self.assertEqual(staging_relation.quote_policy, target_relation.quote_policy)
+
+        self.config["snapshot_table_column_names"] = SimpleNamespace(
+            dbt_scd_id="dbt_scd_id",
+            dbt_valid_to="dbt_valid_to",
+        )
+        merge_sql = template.module.spark__snapshot_merge_sql(
+            target_relation,
+            staging_relation,
+            ["id"],
+        )
+        self.assertIn(
+            "using `events-snapshot__dbt_tmp` as DBT_INTERNAL_SOURCE",
+            merge_sql,
         )
 
     def test_macros_create_table_as(self):
