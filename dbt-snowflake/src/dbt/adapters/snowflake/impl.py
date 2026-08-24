@@ -1,76 +1,80 @@
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
-    ClassVar,
-    Mapping,
     Any,
-    Optional,
-    List,
-    Union,
+    ClassVar,
     Dict,
     FrozenSet,
+    List,
+    Optional,
     Tuple,
+    Union,
 )
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.capability import (
+    Capability,
     CapabilityDict,
     CapabilitySupport,
     Support,
-    Capability,
 )
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogRelation,
 )
-
 from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
 from dbt.adapters.planning import (
+    DirectReplaceTable,
+    DirectReplaceView,
+    IncompatibleRelationStrategy,
     MaterializationExecutionFacts,
+    MaterializationStatementStrategy,
     MaterializationTransactionMode,
     PlanProvenance,
-    TableLifecyclePlan,
+    SnapshotMaterializationPlan,
+    TableMaterializationStrategy,
+    ViewMaterializationStrategy,
 )
-from dbt.adapters.cache import _make_ref_key_dict
+from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.sql.impl import (
-    LIST_SCHEMAS_MACRO_NAME,
-    LIST_RELATIONS_MACRO_NAME,
     LIST_FUNCTION_RELATIONS_MACRO_NAME,
-)
-from dbt_common.contracts.constraints import ConstraintType
-from dbt_common.contracts.metadata import (
-    TableMetadata,
-    StatsDict,
-    StatsItem,
-    CatalogTable,
-    ColumnMetadata,
+    LIST_RELATIONS_MACRO_NAME,
+    LIST_SCHEMAS_MACRO_NAME,
 )
 from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.contracts.constraints import ConstraintType
+from dbt_common.contracts.metadata import (
+    CatalogTable,
+    ColumnMetadata,
+    StatsDict,
+    StatsItem,
+    TableMetadata,
+)
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
-from dbt.adapters.snowflake import constants, parse_model
-
 if TYPE_CHECKING:
     from dbt.adapters.catalogs import CatalogV2
+import agate
+from dbt.adapters.snowflake import (
+    SnowflakeColumn,
+    SnowflakeConnectionManager,
+    SnowflakeRelation,
+)
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
-    InfoSchemaCatalogIntegration,
     IcebergRestCatalogIntegration,
+    InfoSchemaCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
-
-from dbt.adapters.snowflake import SnowflakeColumn
-from dbt.adapters.snowflake import SnowflakeConnectionManager
-from dbt.adapters.snowflake import SnowflakeRelation
-
-import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
@@ -169,19 +173,86 @@ class SnowflakeAdapter(SQLAdapter):
         materialization_macro_id: str,
         language: str,
         model: Optional[RelationConfig] = None,
-    ) -> Optional[TableLifecyclePlan]:
+    ) -> Optional[TableMaterializationStrategy]:
         if (
             language != "sql"
             or materialization_macro_id != "macro.dbt_snowflake.materialization_table_snowflake"
         ):
             return super().plan_table_materialization(materialization_macro_id, language, model)
-        return TableLifecyclePlan.direct_replace(
+        return DirectReplaceTable(
+            statement=MaterializationStatementStrategy.AUTO_BEGIN,
             setup_macro="set_query_tag",
             teardown_macro="unset_query_tag",
             provenance=(
                 PlanProvenance(
                     rule="materialization.table.direct_replace",
                     detail="Snowflake table materialization replaces the target relation directly",
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_view_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[ViewMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_snowflake.materialization_view_snowflake"
+        ):
+            return super().plan_view_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return DirectReplaceView(
+            statement=MaterializationStatementStrategy.AUTO_BEGIN,
+            incompatible_relation=IncompatibleRelationStrategy.DROP,
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            persist_column_docs=False,
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.view.snowflake",
+                    detail=(
+                        "Snowflake view materialization uses create-or-replace under "
+                        "the adapter query-tag envelope"
+                    ),
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_snapshot_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[SnapshotMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_snowflake.materialization_snapshot_snowflake"
+        ):
+            return super().plan_snapshot_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return SnapshotMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.snapshot.snowflake",
+                    detail=(
+                        "Snowflake snapshot uses the shared typed lifecycle under "
+                        "the adapter query-tag envelope"
+                    ),
                 ),
             ),
         )
@@ -335,7 +406,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
-        self.execute("use warehouse {}".format(warehouse))
+        self.execute(f"use warehouse {warehouse}")
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         default_warehouse = self.config.credentials.warehouse
@@ -590,7 +661,7 @@ class SnowflakeAdapter(SQLAdapter):
                 "SHARE",
                 "DATABASE_ROLE",
             ]:
-                if privilege in grants_dict.keys():
+                if privilege in grants_dict:
                     grants_dict[privilege].append(grantee)
                 else:
                     grants_dict.update({privilege: [grantee]})

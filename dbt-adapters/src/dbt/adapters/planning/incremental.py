@@ -1,6 +1,7 @@
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from dbt.adapters.planning.create_from_query import (
     CatalogBindingState,
@@ -10,10 +11,6 @@ from dbt.adapters.planning.create_from_query import (
     PlanProvenance,
     RuntimeFacts,
     StrategyOfferStatus,
-)
-from dbt.adapters.planning.materialization import (
-    MaterializationOperation,
-    TableMaterializationFacts,
 )
 
 
@@ -155,8 +152,7 @@ class IncrementalMutationFacts:
         if not isinstance(self.runtime, RuntimeFacts):
             raise TypeError("Incremental runtime facts must be typed")
         if not isinstance(self.capabilities, tuple) or not all(
-            isinstance(capability, str) and capability.strip()
-            for capability in self.capabilities
+            isinstance(capability, str) and capability.strip() for capability in self.capabilities
         ):
             raise ValueError("Incremental capabilities must be immutable non-empty strings")
         if len(set(self.capabilities)) != len(self.capabilities):
@@ -552,77 +548,6 @@ class IncrementalMutationPlan:
             ),
             "catalog_staging": self.catalog_staging.value,
             "reason": self.reason,
-        }
-
-
-@dataclass(frozen=True)
-class IncrementalLifecyclePlan:
-    """Resolved live facts and ordered operations for one incremental run."""
-
-    mutation: IncrementalMutationPlan
-    schema_change: IncrementalSchemaChangePlan
-    facts: TableMaterializationFacts
-    full_refresh: bool
-    operations: Tuple[MaterializationOperation, ...]
-    provenance: Tuple[PlanProvenance, ...]
-    partition: Optional[IncrementalPartitionFacts] = None
-
-    def __post_init__(self) -> None:
-        if not isinstance(self.mutation, IncrementalMutationPlan):
-            raise TypeError("Incremental lifecycle requires a typed mutation plan")
-        if not isinstance(self.schema_change, IncrementalSchemaChangePlan):
-            raise TypeError("Incremental lifecycle requires a typed schema-change plan")
-        if not isinstance(self.facts, TableMaterializationFacts):
-            raise TypeError("Incremental lifecycle requires typed materialization facts")
-        if not isinstance(self.full_refresh, bool):
-            raise TypeError("Incremental lifecycle full-refresh state must be a boolean")
-        if not isinstance(self.operations, tuple) or not self.operations:
-            raise ValueError("Incremental lifecycle requires immutable ordered operations")
-        if not all(isinstance(item, MaterializationOperation) for item in self.operations):
-            raise TypeError("Incremental lifecycle operations must be typed")
-        if not isinstance(self.provenance, tuple) or not self.provenance:
-            raise ValueError("Incremental lifecycle requires immutable provenance")
-        if not all(isinstance(item, PlanProvenance) for item in self.provenance):
-            raise TypeError("Incremental lifecycle provenance must be typed")
-        if self.partition is not None and not isinstance(
-            self.partition, IncrementalPartitionFacts
-        ):
-            raise TypeError("Incremental lifecycle partition facts must be typed")
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "mutation": self.mutation.to_dict(),
-            "schema_change": self.schema_change.to_dict(),
-            "facts": self.facts.to_dict(),
-            "full_refresh": self.full_refresh,
-            "partition": self.partition.to_dict() if self.partition is not None else None,
-            "operations": [item.to_dict() for item in self.operations],
-            "provenance": [item.to_dict() for item in self.provenance],
-        }
-
-
-@dataclass(frozen=True)
-class IncrementalMaterializationPlan:
-    """Adapter opt-in to the Python incremental lifecycle executor."""
-
-    materialization_macro_id: str
-    provenance: Tuple[PlanProvenance, ...]
-
-    def __post_init__(self) -> None:
-        if (
-            not isinstance(self.materialization_macro_id, str)
-            or not self.materialization_macro_id.strip()
-        ):
-            raise ValueError("Incremental materialization macro id must be non-empty")
-        if not isinstance(self.provenance, tuple) or not self.provenance:
-            raise ValueError("Incremental materialization plan requires immutable provenance")
-        if not all(isinstance(item, PlanProvenance) for item in self.provenance):
-            raise TypeError("Incremental materialization provenance must be typed")
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "materialization_macro_id": self.materialization_macro_id,
-            "provenance": [item.to_dict() for item in self.provenance],
         }
 
 

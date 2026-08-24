@@ -1,17 +1,17 @@
 import os
+from collections import namedtuple
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from multiprocessing.context import SpawnContext
+from typing import Any, Dict, List, Optional, Set, Tuple, Type
 
 import agate
-from dbt_common.behavior_flags import BehaviorFlag
-from dbt_common.contracts.constraints import ConstraintType
-from datetime import datetime, timezone
-from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
-from collections import namedtuple
+import dbt_common.exceptions
 from dbt.adapters.base import PythonJobHelper
-from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
 from dbt.adapters.base.column import Column as BaseColumn
+from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
 from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import (
@@ -20,25 +20,29 @@ from dbt.adapters.capability import (
     CapabilitySupport,
     Support,
 )
-from dbt.adapters.protocol import MacroResolverProtocol
+from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.planning import (
+    ExistingIndexStrategy,
     MaterializationExecutionFacts,
+    MaterializationHookStrategy,
     MaterializationStatementStrategy,
     MaterializationTransactionMode,
     MaterializationTransactionStrategy,
     PlanProvenance,
+    StageAndSwapTable,
+    StageAndSwapView,
+    TableDocumentationStrategy,
     TableIndexStrategy,
-    TableLifecyclePlan,
+    TableMaterializationStrategy,
+    ViewMaterializationStrategy,
 )
-from dbt.adapters.sql import SQLAdapter
-from dbt.adapters.contracts.connection import AdapterResponse
-from dbt.adapters.events.logging import AdapterLogger
-
-
-import dbt_common.exceptions
-
+from dbt.adapters.protocol import MacroResolverProtocol
 from dbt.adapters.redshift import RedshiftConnectionManager, RedshiftRelation
+from dbt.adapters.sql import SQLAdapter
+from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.contracts.constraints import ConstraintType
 
 logger = AdapterLogger("Redshift")
 packages = ["redshift_connector", "redshift_connector.core"]
@@ -190,7 +194,7 @@ class RedshiftAdapter(SQLAdapter):
         materialization_macro_id: str,
         language: str,
         model: Optional[RelationConfig] = None,
-    ) -> Optional[TableLifecyclePlan]:
+    ) -> Optional[TableMaterializationStrategy]:
         if (
             language != "sql"
             or materialization_macro_id != "macro.dbt_redshift.materialization_table_redshift"
@@ -205,8 +209,10 @@ class RedshiftAdapter(SQLAdapter):
         skip_transaction_statements = (
             autocommit and self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
         )
-        return TableLifecyclePlan.stage_and_swap(
+        return StageAndSwapTable(
             indexes=TableIndexStrategy.AFTER_SWAP,
+            existing_indexes=ExistingIndexStrategy.PRESERVE,
+            documentation=TableDocumentationStrategy.BEFORE_COMMIT,
             transaction=(
                 MaterializationTransactionStrategy.ADAPTER_MANAGED
                 if autocommit
@@ -217,6 +223,7 @@ class RedshiftAdapter(SQLAdapter):
                 if skip_transaction_statements
                 else MaterializationStatementStrategy.AUTO_BEGIN
             ),
+            hooks=MaterializationHookStrategy.SPLIT,
             provenance=(
                 PlanProvenance(
                     rule="materialization.table.redshift",
@@ -226,6 +233,34 @@ class RedshiftAdapter(SQLAdapter):
                     ),
                 ),
             ),
+        )
+
+    @available.parse_none
+    def plan_view_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[ViewMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt_redshift.materialization_view_redshift"
+        ):
+            return super().plan_view_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return StageAndSwapView(
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.view.redshift",
+                    detail=(
+                        "Redshift view materialization stages and swaps views while "
+                        "dropping existing relations that cannot be renamed"
+                    ),
+                ),
+            )
         )
 
     def get_table_materialization_execution_facts(
@@ -298,7 +333,7 @@ class RedshiftAdapter(SQLAdapter):
         # because max() raises ane exception if its argument has no members.
         lens = [len(d.encode("utf-8")) for d in column.values_without_nulls()]
         max_len = max(lens) if lens else 64
-        return "varchar({})".format(max_len)
+        return f"varchar({max_len})"
 
     @classmethod
     def convert_time_type(cls, agate_table: "agate.Table", col_idx):
@@ -453,9 +488,7 @@ class RedshiftAdapter(SQLAdapter):
 
         if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
-                "Cross-db references allowed only in RA3.* node or with datasharing enabled. ({} vs {})".format(
-                    database, expected
-                )
+                f"Cross-db references allowed only in RA3.* node or with datasharing enabled. ({database} vs {expected})"
             )
         # return an empty string on success so macros can call this
         return ""

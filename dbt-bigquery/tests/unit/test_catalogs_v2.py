@@ -11,9 +11,11 @@ from dbt.adapters.planning import (
     CatalogBindingState,
     CatalogFacts,
     CreateFromQueryFacts,
+    DirectMutateExisting,
+    DirectReplaceView,
     ExistingRelationFacts,
     FormatFacts,
-    MaterializationOperationKind,
+    IncompatibleRelationStrategy,
     MaterializationStatementStrategy,
     MaterializationTransactionMode,
     RelationFacts,
@@ -72,6 +74,20 @@ class TestBigQueryTableMaterializationPlanning:
         )
 
         assert plan.statement == MaterializationStatementStrategy.NO_AUTO_BEGIN
+
+    def test_view_plan_preserves_wrong_type_and_authorized_view_behavior(self):
+        plan = self.adapter.plan_view_materialization(
+            "macro.dbt_bigquery.materialization_view_bigquery",
+            "sql",
+        )
+
+        assert isinstance(plan, DirectReplaceView)
+        assert plan.statement == MaterializationStatementStrategy.NO_AUTO_BEGIN
+        assert (
+            plan.incompatible_relation
+            == IncompatibleRelationStrategy.DROP_ON_FULL_REFRESH
+        )
+        assert plan.grant_access is True
 
     def test_biglake_provider_and_iceberg_capabilities_are_explicit(self):
         catalog_relation = SimpleNamespace(
@@ -153,7 +169,9 @@ class TestBigQueryIncrementalMaterializationPlanning:
         )
 
         assert plan is not None
-        assert plan.materialization_macro_id.endswith("materialization_incremental_bigquery")
+        assert plan.materialization_macro_id.endswith(
+            "materialization_incremental_bigquery"
+        )
 
     def test_partition_config_is_normalized_into_plan_facts(self):
         model = SimpleNamespace(
@@ -179,34 +197,33 @@ class TestBigQueryIncrementalMaterializationPlanning:
         assert facts.require_partition_filter is True
         assert facts.static_partitions == ("date('2026-08-22')",)
 
-    def test_merge_lifecycle_program_owns_staging_schema_and_mutation(self):
+    def test_merge_lifecycle_resolves_to_direct_mutation(self):
         model = SimpleNamespace(config={"partition_by": {"field": "event_date"}})
-        self.adapter.build_table_materialization_facts = MagicMock(return_value=_table_facts())
+        self.adapter.build_table_materialization_facts = MagicMock(
+            return_value=_table_facts()
+        )
         mutation = self.adapter.plan_incremental_mutation("merge", language="sql")
 
-        lifecycle = self.adapter.resolve_incremental_lifecycle_plan(
+        facts = self.adapter.build_incremental_lifecycle_facts(
             mutation,
             model,
             MagicMock(),
             MagicMock(),
             full_refresh=False,
             on_schema_change="append_new_columns",
-            staging_is_temporary=True,
             contract_enforced=False,
         )
+        materialization = self.adapter.plan_incremental_materialization(
+            "macro.dbt_bigquery.materialization_incremental_bigquery", "sql"
+        )
+        assert materialization is not None
+        strategy = materialization.resolve(mutation, facts)
 
-        assert [operation.kind for operation in lifecycle.operations] == [
-            MaterializationOperationKind.RUN_HOOKS,
-            MaterializationOperationKind.CREATE_FROM_QUERY,
-            MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
-            MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
-            MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
-            MaterializationOperationKind.RUN_HOOKS,
-            MaterializationOperationKind.APPLY_GRANTS,
-            MaterializationOperationKind.PERSIST_DOCUMENTATION,
-        ]
-        assert lifecycle.partition is not None
-        assert lifecycle.partition.field == "event_date"
+        assert isinstance(strategy, DirectMutateExisting)
+        assert strategy.mutation is mutation
+        assert strategy.schema_change.strategy.value == "append_new_columns"
+        assert strategy.partition is not None
+        assert strategy.partition.field == "event_date"
 
     def test_unknown_incremental_strategy_is_rejected_by_typed_planner(self):
         plan = self.adapter.plan_incremental_mutation("custom", language="sql")
@@ -214,7 +231,7 @@ class TestBigQueryIncrementalMaterializationPlanning:
         assert plan.strategy.value == "unsupported"
         assert "Expected one of" in (plan.reason or "")
 
-    def test_copy_partitions_is_an_explicit_operation_not_renderer_side_effect(self):
+    def test_copy_partitions_is_an_explicit_strategy_decision(self):
         model = SimpleNamespace(
             config={
                 "partition_by": {
@@ -224,26 +241,32 @@ class TestBigQueryIncrementalMaterializationPlanning:
                 "partitions": ["date('2026-08-23')"],
             }
         )
-        self.adapter.build_table_materialization_facts = MagicMock(return_value=_table_facts())
-        mutation = self.adapter.plan_incremental_mutation("insert_overwrite", language="sql")
+        self.adapter.build_table_materialization_facts = MagicMock(
+            return_value=_table_facts()
+        )
+        mutation = self.adapter.plan_incremental_mutation(
+            "insert_overwrite", language="sql"
+        )
 
-        lifecycle = self.adapter.resolve_incremental_lifecycle_plan(
+        facts = self.adapter.build_incremental_lifecycle_facts(
             mutation,
             model,
             MagicMock(),
             MagicMock(),
             full_refresh=False,
             on_schema_change="ignore",
-            staging_is_temporary=True,
             contract_enforced=False,
         )
+        materialization = self.adapter.plan_incremental_materialization(
+            "macro.dbt_bigquery.materialization_incremental_bigquery", "sql"
+        )
+        assert materialization is not None
+        strategy = materialization.resolve(mutation, facts)
 
-        assert MaterializationOperationKind.COPY_INCREMENTAL_PARTITIONS in {
-            operation.kind for operation in lifecycle.operations
-        }
-        assert MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION not in {
-            operation.kind for operation in lifecycle.operations
-        }
+        assert isinstance(strategy, DirectMutateExisting)
+        assert strategy.copy_partitions is True
+        assert strategy.partition is not None
+        assert strategy.partition.static_partitions == ("date('2026-08-23')",)
 
     def test_partition_copy_executes_from_typed_static_partition_facts(self):
         partition = self.adapter._incremental_partition_facts(
@@ -269,13 +292,17 @@ class TestBigQueryIncrementalMaterializationPlanning:
         assert partition is not None
         self.adapter.execute_incremental_partition_copy(source, target, partition)
 
-        source.incorporate.assert_called_once_with(path={"identifier": "source$20260823"})
-        target.incorporate.assert_called_once_with(path={"identifier": "target$20260823"})
+        source.incorporate.assert_called_once_with(
+            path={"identifier": "source$20260823"}
+        )
+        target.incorporate.assert_called_once_with(
+            path={"identifier": "target$20260823"}
+        )
         self.adapter.copy_table.assert_called_once_with(
             source_partition, target_partition, "table"
         )
 
-    def test_ingestion_time_partitioning_plans_create_then_insert(self):
+    def test_ingestion_time_partitioning_is_carried_by_the_strategy(self):
         model = SimpleNamespace(
             config={
                 "partition_by": {
@@ -284,23 +311,29 @@ class TestBigQueryIncrementalMaterializationPlanning:
                 }
             }
         )
-        self.adapter.build_table_materialization_facts = MagicMock(return_value=_table_facts())
+        self.adapter.build_table_materialization_facts = MagicMock(
+            return_value=_table_facts()
+        )
         mutation = self.adapter.plan_incremental_mutation("merge", language="sql")
 
-        lifecycle = self.adapter.resolve_incremental_lifecycle_plan(
+        facts = self.adapter.build_incremental_lifecycle_facts(
             mutation,
             model,
             MagicMock(),
             MagicMock(),
             full_refresh=False,
             on_schema_change="ignore",
-            staging_is_temporary=True,
             contract_enforced=False,
         )
+        materialization = self.adapter.plan_incremental_materialization(
+            "macro.dbt_bigquery.materialization_incremental_bigquery", "sql"
+        )
+        assert materialization is not None
+        strategy = materialization.resolve(mutation, facts)
 
-        kinds = [operation.kind for operation in lifecycle.operations]
-        create_index = kinds.index(MaterializationOperationKind.CREATE_FROM_QUERY)
-        assert kinds[create_index + 1] == MaterializationOperationKind.INSERT_FROM_QUERY
+        assert isinstance(strategy, DirectMutateExisting)
+        assert strategy.partition is not None
+        assert strategy.partition.time_ingestion_partitioning is True
 
     def test_ingestion_time_insert_renders_only_from_typed_partition_facts(self):
         relation = MagicMock()
@@ -327,6 +360,9 @@ class TestBigQueryIncrementalMaterializationPlanning:
             None,
         )
 
-        assert "insert into `project.dataset.target` (_PARTITIONTIME, `id`, `payload`)" in sql
+        assert (
+            "insert into `project.dataset.target` (_PARTITIONTIME, `id`, `payload`)"
+            in sql
+        )
         assert "TIMESTAMP(`event_date`) as _PARTITIONTIME" in sql
         assert "* EXCEPT(`event_date`)" in sql

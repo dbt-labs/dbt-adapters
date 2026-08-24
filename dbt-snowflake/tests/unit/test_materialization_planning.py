@@ -1,11 +1,13 @@
 from dbt.adapters.planning import (
-    MaterializationHookStrategy,
+    DirectReplaceTable,
+    DirectReplaceView,
+    IncompatibleRelationStrategy,
     MaterializationTransactionMode,
-    MaterializationTransactionStrategy,
-    TableReplacementStrategy,
+    SnapshotMaterializationPlan,
+    StageAndSwapTable,
 )
-from dbt.adapters.snowflake.impl import SnowflakeAdapter
 from dbt.adapters.snowflake import constants
+from dbt.adapters.snowflake.impl import SnowflakeAdapter
 from dbt.adapters.snowflake.relation import SnowflakeRelation
 
 
@@ -20,9 +22,7 @@ def test_snowflake_sql_table_resolves_to_direct_replace() -> None:
         "sql",
     )
 
-    assert plan.replacement == TableReplacementStrategy.DIRECT_REPLACE
-    assert plan.transaction == MaterializationTransactionStrategy.ADAPTER_MANAGED
-    assert plan.hooks == MaterializationHookStrategy.IN_TRANSACTION
+    assert isinstance(plan, DirectReplaceTable)
     assert plan.setup_macro == "set_query_tag"
     assert plan.teardown_macro == "unset_query_tag"
 
@@ -41,8 +41,31 @@ def test_snowflake_resolver_preserves_default_and_python_fallbacks() -> None:
         "python",
     )
 
-    assert default_plan.replacement == TableReplacementStrategy.STAGE_AND_SWAP
+    assert isinstance(default_plan, StageAndSwapTable)
     assert python_plan is None
+
+
+def test_snowflake_view_and_snapshot_keep_query_tag_envelope() -> None:
+    adapter = _adapter()
+
+    view = SnowflakeAdapter.plan_view_materialization(
+        adapter,
+        "macro.dbt_snowflake.materialization_view_snowflake",
+        "sql",
+    )
+    snapshot = SnowflakeAdapter.plan_snapshot_materialization(
+        adapter,
+        "macro.dbt_snowflake.materialization_snapshot_snowflake",
+        "sql",
+    )
+
+    assert isinstance(view, DirectReplaceView)
+    assert view.incompatible_relation == IncompatibleRelationStrategy.DROP
+    assert view.persist_column_docs is False
+    assert view.setup_macro == "set_query_tag"
+    assert isinstance(snapshot, SnapshotMaterializationPlan)
+    assert snapshot.setup_macro == "set_query_tag"
+    assert snapshot.teardown_macro == "unset_query_tag"
 
 
 def test_snowflake_target_relation_uses_resolved_catalog_format() -> None:
@@ -56,7 +79,9 @@ def test_snowflake_target_relation_uses_resolved_catalog_format() -> None:
         "CatalogRelation", (), {"table_format": constants.ICEBERG_TABLE_FORMAT}
     )()
 
-    target = SnowflakeAdapter.resolve_table_materialization_relation(adapter, object(), relation)
+    target = SnowflakeAdapter.resolve_table_materialization_relation(
+        adapter, object(), relation
+    )
 
     assert target.type == "table"
     assert target.table_format == constants.ICEBERG_TABLE_FORMAT
@@ -75,7 +100,9 @@ def test_snowflake_glue_catalog_provider_is_explicit_in_runtime_facts() -> None:
     )()
     adapter.build_catalog_relation = lambda model: catalog_relation
 
-    provider = adapter.get_create_from_query_catalog_provider(catalog_relation, object())
+    provider = adapter.get_create_from_query_catalog_provider(
+        catalog_relation, object()
+    )
     facts = adapter.get_table_materialization_execution_facts(
         object(),
         SnowflakeRelation.create(

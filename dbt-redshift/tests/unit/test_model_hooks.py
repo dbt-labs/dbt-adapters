@@ -1,10 +1,11 @@
-from dbt.adapters.redshift import RedshiftAdapter
 from dbt.adapters.planning import (
     MaterializationStatementStrategy,
     MaterializationTransactionMode,
     MaterializationTransactionStrategy,
+    StageAndSwapView,
     TableIndexStrategy,
 )
+from dbt.adapters.redshift import RedshiftAdapter
 
 
 def _make_adapter(
@@ -26,6 +27,16 @@ def _make_adapter(
 
 
 class TestTableMaterializationPlanning:
+    def test_view_uses_typed_stage_and_swap(self, mocker):
+        adapter = _make_adapter(mocker)
+
+        plan = adapter.plan_view_materialization(
+            "macro.dbt_redshift.materialization_view_redshift",
+            "sql",
+        )
+
+        assert isinstance(plan, StageAndSwapView)
+
     def test_transactional_connection_uses_explicit_stage_and_swap(self, mocker):
         adapter = _make_adapter(mocker, autocommit=False)
 

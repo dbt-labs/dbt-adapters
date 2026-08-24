@@ -1,6 +1,7 @@
 import abc
 import time
-from concurrent.futures import as_completed, Future
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import Future, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,35 +9,21 @@ from enum import Enum
 from importlib import import_module
 from multiprocessing.context import SpawnContext
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
     FrozenSet,
-    Iterable,
-    Iterator,
     List,
-    Mapping,
     Optional,
-    Sequence,
     Set,
     Tuple,
     Type,
     TypedDict,
     Union,
-    TYPE_CHECKING,
 )
-import pytz
 
-from dbt.adapters.record.base import (
-    AdapterExecuteRecord,
-    AdapterGetPartitionsMetadataRecord,
-    AdapterConvertTypeRecord,
-    AdapterStandardizeGrantsDictRecord,
-    AdapterListRelationsWithoutCachingRecord,
-    AdapterGetColumnsInRelationRecord,
-    AdapterGetPseudocolumnsForRelationRecord,
-    SubmitPythonJobRecord,
-)
+import pytz
 from dbt_common.behavior_flags import Behavior, BehaviorFlag
 from dbt_common.clients.jinja import CallableMacroGenerator
 from dbt_common.contracts.constraints import (
@@ -71,27 +58,27 @@ from dbt.adapters.base.connections import (
 )
 from dbt.adapters.base.meta import AdapterMeta, available, available_property
 from dbt.adapters.base.relation import (
+    AdapterTrackingRelationInfo,
     BaseRelation,
     ComponentName,
     InformationSchema,
     SchemaSearchMap,
-    AdapterTrackingRelationInfo,
 )
 from dbt.adapters.cache import RelationsCache, _make_ref_key_dict
 from dbt.adapters.capability import Capability, CapabilityDict
 from dbt.adapters.catalogs import (
+    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
     CatalogIntegration,
     CatalogIntegrationClient,
     CatalogIntegrationConfig,
     CatalogRelation,
     CatalogV2,
     CatalogWriteIntegrationConfig,
-    CATALOG_INTEGRATION_MODEL_CONFIG_NAME,
 )
 from dbt.adapters.contracts.connection import Credentials
 from dbt.adapters.contracts.macros import MacroResolverProtocol
 from dbt.adapters.contracts.relation import RelationConfig
-
+from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import (
     CacheMiss,
     CatalogGenerationError,
@@ -111,22 +98,21 @@ from dbt.adapters.exceptions import (
     SnapshotTargetNotSnapshotTableError,
     UnexpectedNonTimestampError,
 )
-from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
-from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.planning import (
     CatalogBindingState,
     CatalogFacts,
+    CreateFromQueryFacts,
     CreateFromQueryPlan,
     CreateFromQueryRenderArguments,
     CreateFromQueryRenderResult,
-    CreateFromQueryFacts,
     CreateFromQueryStrategy,
     CreateFromQueryStrategyOffer,
     DdlAtomicity,
+    ExistingIndexStrategy,
     ExistingRelationFacts,
     FormatFacts,
     IncrementalCatalogStaging,
-    IncrementalLifecyclePlan,
+    IncrementalLifecycleFacts,
     IncrementalMaterializationPlan,
     IncrementalMutationArguments,
     IncrementalMutationFacts,
@@ -137,22 +123,39 @@ from dbt.adapters.planning import (
     IncrementalSourceConsistency,
     IncrementalStrategyRequirements,
     IncrementalUniqueKeyRequirement,
+    MaterializationExecutionFacts,
+    MaterializationHookStrategy,
+    MaterializationStatementStrategy,
+    MaterializationTransactionMode,
+    MaterializationTransactionStrategy,
     PlanProvenance,
     RelationFacts,
     RuntimeFacts,
-    MaterializationExecutionFacts,
-    MaterializationOperation,
-    MaterializationOperationKind,
-    MaterializationRelationRole,
-    MaterializationTransactionMode,
-    TableLifecyclePlan,
+    SnapshotMaterializationPlan,
+    StageAndSwapTable,
+    StageAndSwapView,
+    TableDocumentationStrategy,
+    TableIndexStrategy,
     TableMaterializationFacts,
-    resolve_table_materialization_operations,
-    resolve_create_from_query_offers,
+    TableMaterializationStrategy,
+    ViewMaterializationFacts,
+    ViewMaterializationStrategy,
     incremental_renderer_macro,
     incremental_strategy,
+    resolve_create_from_query_offers,
     resolve_incremental_mutation_offers,
     resolve_incremental_schema_change_plan,
+)
+from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
+from dbt.adapters.record.base import (
+    AdapterConvertTypeRecord,
+    AdapterExecuteRecord,
+    AdapterGetColumnsInRelationRecord,
+    AdapterGetPartitionsMetadataRecord,
+    AdapterGetPseudocolumnsForRelationRecord,
+    AdapterListRelationsWithoutCachingRecord,
+    AdapterStandardizeGrantsDictRecord,
+    SubmitPythonJobRecord,
 )
 
 logger = AdapterLogger(__name__)
@@ -193,9 +196,7 @@ def _parse_callback_empty_table(*args, **kwargs) -> Tuple[str, "agate.Table"]:
 
 def _expect_row_value(key: str, row: "agate.Row"):
     if key not in row.keys():
-        raise DbtInternalError(
-            'Got a row without "{}" column, columns: {}'.format(key, row.keys())
-        )
+        raise DbtInternalError(f'Got a row without "{key}" column, columns: {row.keys()}')
     return row[key]
 
 
@@ -595,7 +596,6 @@ class BaseAdapter(metaclass=AdapterMeta):
             CreateFromQueryStrategyOffer.available(
                 strategy=CreateFromQueryStrategy.CTAS,
                 atomicity=DdlAtomicity.UNKNOWN,
-                renderer_macro="render_create_from_query_ctas",
                 provenance=(
                     PlanProvenance(
                         rule="base.create_from_query.ctas",
@@ -661,22 +661,6 @@ class BaseAdapter(metaclass=AdapterMeta):
                 ),
             ),
         )
-
-    @available.parse_none
-    def get_create_from_query_plan_macro(
-        self, model_context: Dict[str, Any], plan: CreateFromQueryPlan
-    ):
-        if plan.strategy == CreateFromQueryStrategy.UNSUPPORTED:
-            raise DbtRuntimeError(plan.reason or "Create from query is unsupported")
-
-        macro_name = plan.renderer_macro
-        if macro_name not in model_context:
-            raise DbtRuntimeError(
-                'dbt could not find a create-from-query renderer macro with the name "{}" in {}'.format(
-                    macro_name, self.config.project_name
-                )
-            )
-        return model_context[macro_name]
 
     ###
     # Methods to set / access a macro resolver
@@ -1193,7 +1177,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         for row in grants_table:
             grantee = row["grantee"]
             privilege = row["privilege_type"]
-            if privilege in grants_dict.keys():
+            if privilege in grants_dict:
                 grants_dict[privilege].append(grantee)
             else:
                 grants_dict.update({privilege: [grantee]})
@@ -1645,12 +1629,10 @@ class BaseAdapter(metaclass=AdapterMeta):
             if project is None:
                 package_name = "any package"
             else:
-                package_name = 'the "{}" package'.format(project)
+                package_name = f'the "{project}" package'
 
             raise DbtRuntimeError(
-                'dbt could not find a macro with the name "{}" in {}'.format(
-                    macro_name, package_name
-                )
+                f'dbt could not find a macro with the name "{macro_name}" in {package_name}'
             )
 
         macro_context = self._macro_context_generator(macro, self.config, resolver, project)
@@ -1726,7 +1708,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         used_schemas: FrozenSet[Tuple[str, str]],
         relations: Optional[Set[BaseRelation]] = None,
     ):
-        catalogs: "agate.Table"
+        catalogs: agate.Table
         if (
             relations is None
             or len(relations) > self.MAX_SCHEMA_METADATA_RELATIONS
@@ -1771,7 +1753,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         used_schemas: FrozenSet[Tuple[str, str]],
     ) -> Tuple["agate.Table", List[Exception]]:
         with executor(self.config) as tpe:
-            futures: List[Future["agate.Table"]] = []
+            futures: List[Future[agate.Table]] = []
             schema_map: SchemaSearchMap = self._get_catalog_schemas(relation_configs)
             for info, schemas in schema_map.items():
                 if len(schemas) == 0:
@@ -1789,7 +1771,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         self, used_schemas: FrozenSet[Tuple[str, str]], relations: Set[BaseRelation]
     ) -> Tuple["agate.Table", List[Exception]]:
         with executor(self.config) as tpe:
-            futures: List[Future["agate.Table"]] = []
+            futures: List[Future[agate.Table]] = []
             relations_by_schema = self._get_catalog_relations_by_info_schema(relations)
             for info_schema in relations_by_schema:
                 name = ".".join([str(info_schema.database), "information_schema"])
@@ -1982,7 +1964,6 @@ class BaseAdapter(metaclass=AdapterMeta):
         The pre-model hook may return anything as a context, which will be
         passed to the post-model hook.
         """
-        pass
 
     @available.parse_none
     def plan_table_materialization(
@@ -1990,7 +1971,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         materialization_macro_id: str,
         language: str,
         model: Optional[RelationConfig] = None,
-    ) -> Optional[TableLifecyclePlan]:
+    ) -> Optional[TableMaterializationStrategy]:
         """Select a typed Python lifecycle for a built-in table materialization.
 
         Adapter packages opt their own built-in macro into Python execution by
@@ -2002,13 +1983,66 @@ class BaseAdapter(metaclass=AdapterMeta):
             or materialization_macro_id != "macro.dbt.materialization_table_default"
         ):
             return None
-        return TableLifecyclePlan.stage_and_swap(
+        return StageAndSwapTable(
+            indexes=TableIndexStrategy.BEFORE_SWAP,
+            existing_indexes=ExistingIndexStrategy.PRESERVE,
+            documentation=TableDocumentationStrategy.BEFORE_COMMIT,
+            transaction=MaterializationTransactionStrategy.EXPLICIT_COMMIT,
+            hooks=MaterializationHookStrategy.SPLIT,
+            statement=MaterializationStatementStrategy.AUTO_BEGIN,
             provenance=(
                 PlanProvenance(
                     rule="materialization.table.default",
                     detail="Built-in SQL table materialization uses stage-and-swap replacement",
                 ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_view_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[ViewMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt.materialization_view_default"
+        ):
+            return None
+        return StageAndSwapView(
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.view.default",
+                    detail="Built-in SQL view materialization uses stage-and-swap replacement",
+                ),
             )
+        )
+
+    @available.parse_none
+    def plan_snapshot_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[SnapshotMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt.materialization_snapshot_default"
+        ):
+            return None
+        return SnapshotMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.snapshot.default",
+                    detail=(
+                        "Built-in SQL snapshot materialization resolves initial-create "
+                        "or staged-merge lifecycle from validated runtime facts"
+                    ),
+                ),
+            ),
         )
 
     @available
@@ -2018,6 +2052,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Build late-bound target relation arguments for a resolved lifecycle."""
 
         return relation.incorporate(type="table")
+
+    @available
+    def resolve_view_materialization_relation(
+        self, model: RelationConfig, relation: BaseRelation
+    ) -> BaseRelation:
+        return relation.incorporate(type="view")
 
     @available.parse_none
     def resolve_table_materialization_existing_relation(
@@ -2031,34 +2071,14 @@ class BaseAdapter(metaclass=AdapterMeta):
             identifier=relation.identifier,
         )
 
-    @available
-    def resolve_table_lifecycle_plan(
-        self,
-        plan: TableLifecyclePlan,
-        model: RelationConfig,
-        target_relation: BaseRelation,
-        existing_relation: Optional[BaseRelation],
-        config: Mapping[str, Any],
-    ) -> TableLifecyclePlan:
-        """Resolve live physical facts into a complete ordered lifecycle."""
-
-        facts = self.build_table_materialization_facts(
-            model,
-            target_relation,
-            existing_relation,
-        )
-        return plan.resolve(
-            facts=facts,
-            operations=resolve_table_materialization_operations(plan, facts),
-            provenance=(
-                PlanProvenance(
-                    rule="materialization.table.runtime_facts",
-                    detail=(
-                        "Table lifecycle resolved from live relation, catalog, format, "
-                        "and runtime facts"
-                    ),
-                ),
-            ),
+    @available.parse_none
+    def resolve_view_materialization_existing_relation(
+        self, relation: BaseRelation
+    ) -> Optional[BaseRelation]:
+        return self.get_relation(
+            database=relation.database,
+            schema=relation.schema,
+            identifier=relation.identifier,
         )
 
     def build_table_materialization_facts(
@@ -2124,6 +2144,23 @@ class BaseAdapter(metaclass=AdapterMeta):
             execution=execution_facts,
         )
 
+    def build_view_materialization_facts(
+        self,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        existing_relation: Optional[BaseRelation],
+        *,
+        full_refresh: bool,
+    ) -> ViewMaterializationFacts:
+        return ViewMaterializationFacts(
+            relation=self.build_table_materialization_facts(
+                model,
+                target_relation,
+                existing_relation,
+            ),
+            full_refresh=full_refresh,
+        )
+
     def get_table_materialization_execution_facts(
         self,
         model: RelationConfig,
@@ -2143,7 +2180,6 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         The second parameter is the value returned by pre_mdoel_hook.
         """
-        pass
 
     # Methods used in adapter tests
     def update_column_sql(
@@ -2193,9 +2229,9 @@ class BaseAdapter(metaclass=AdapterMeta):
         names: List[str]
         if column_names is None:
             columns = self.get_columns_in_relation(relation_a)
-            names = sorted((self.quote(c.name) for c in columns))
+            names = sorted(self.quote(c.name) for c in columns)
         else:
-            names = sorted((self.quote(n) for n in column_names))
+            names = sorted(self.quote(n) for n in column_names)
         columns_csv = ", ".join(names)
 
         sql = COLUMNS_EQUAL_SQL.format(
@@ -2228,9 +2264,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         )
         if submission_method not in self.python_submission_helpers:
             raise NotImplementedError(
-                "Submission method {} is not supported for current adapter".format(
-                    submission_method
-                )
+                f"Submission method {submission_method} is not supported for current adapter"
             )
         job_helper = self.python_submission_helpers[submission_method](
             parsed_model, self.connections.profile.credentials
@@ -2320,9 +2354,12 @@ class BaseAdapter(metaclass=AdapterMeta):
             catalog = CatalogFacts(state=CatalogBindingState.UNBOUND)
             format_facts = FormatFacts()
         else:
-            catalog_type = BaseAdapter._create_from_query_fact_value(
-                getattr(catalog_relation, "catalog_type", None), canonical=True
-            ) or "default"
+            catalog_type = (
+                BaseAdapter._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_type", None), canonical=True
+                )
+                or "default"
+            )
             catalog_name = BaseAdapter._create_from_query_fact_value(
                 getattr(catalog_relation, "catalog_name", None)
             )
@@ -2437,7 +2474,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         return resolve_incremental_schema_change_plan(requested_strategy, default=default)
 
     @available
-    def resolve_incremental_lifecycle_plan(
+    def build_incremental_lifecycle_facts(
         self,
         mutation_plan: IncrementalMutationPlan,
         model: RelationConfig,
@@ -2446,162 +2483,19 @@ class BaseAdapter(metaclass=AdapterMeta):
         *,
         full_refresh: bool,
         on_schema_change: Optional[str],
-        staging_is_temporary: bool,
         contract_enforced: bool,
-        materialization_plan: Optional[IncrementalMaterializationPlan] = None,
-    ) -> IncrementalLifecyclePlan:
-        """Resolve live incremental state into one ordered mutation program."""
+    ) -> IncrementalLifecycleFacts:
+        """Build the typed live inputs consumed by an incremental resolver."""
 
-        facts = self.build_table_materialization_facts(
-            model,
-            target_relation,
-            existing_relation,
-        )
-        schema_change = self.plan_incremental_schema_change(on_schema_change)
-        existing = MaterializationRelationRole.EXISTING
-        target = MaterializationRelationRole.TARGET
-        intermediate = MaterializationRelationRole.INTERMEDIATE
-        backup = MaterializationRelationRole.BACKUP
-        temp = MaterializationRelationRole.TEMP
-        operations = [
-            MaterializationOperation(
-                kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
-                relation=intermediate,
+        return IncrementalLifecycleFacts(
+            table=self.build_table_materialization_facts(
+                model,
+                target_relation,
+                existing_relation,
             ),
-            MaterializationOperation(
-                kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
-                relation=backup,
-            ),
-            MaterializationOperation(
-                kind=MaterializationOperationKind.RUN_HOOKS,
-                name="pre",
-                inside_transaction=False,
-            ),
-            MaterializationOperation(
-                kind=MaterializationOperationKind.RUN_HOOKS,
-                name="pre",
-                inside_transaction=True,
-            ),
-        ]
-        if existing_relation is None:
-            operations.extend(
-                (
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.CREATE_FROM_QUERY,
-                        relation=target,
-                        temporary=False,
-                        auto_begin=True,
-                    ),
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.CREATE_INDEXES,
-                        relation=target,
-                    ),
-                )
-            )
-        elif full_refresh:
-            operations.extend(
-                (
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.CREATE_FROM_QUERY,
-                        relation=intermediate,
-                        temporary=False,
-                        auto_begin=True,
-                    ),
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.CREATE_INDEXES,
-                        relation=intermediate,
-                    ),
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.RENAME_RELATION,
-                        relation=existing,
-                        destination=backup,
-                    ),
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.RENAME_RELATION,
-                        relation=intermediate,
-                        destination=target,
-                    ),
-                )
-            )
-        else:
-            operations.append(
-                MaterializationOperation(
-                    kind=MaterializationOperationKind.CREATE_FROM_QUERY,
-                    relation=temp,
-                    temporary=staging_is_temporary,
-                    auto_begin=True,
-                )
-            )
-            if not contract_enforced:
-                operations.append(
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
-                        relation=target,
-                        source=temp,
-                    )
-                )
-            operations.extend(
-                (
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
-                        relation=existing,
-                        source=temp,
-                    ),
-                    MaterializationOperation(
-                        kind=MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
-                        relation=target,
-                        source=temp,
-                    ),
-                )
-            )
-        operations.extend(
-            (
-                MaterializationOperation(
-                    kind=MaterializationOperationKind.APPLY_GRANTS,
-                    relation=target,
-                ),
-                MaterializationOperation(
-                    kind=MaterializationOperationKind.PERSIST_DOCUMENTATION,
-                    relation=target,
-                ),
-                MaterializationOperation(
-                    kind=MaterializationOperationKind.RUN_HOOKS,
-                    name="post",
-                    inside_transaction=True,
-                ),
-                MaterializationOperation(kind=MaterializationOperationKind.COMMIT),
-            )
-        )
-        if existing_relation is not None and full_refresh:
-            operations.append(
-                MaterializationOperation(
-                    kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
-                    relation=backup,
-                )
-            )
-        operations.append(
-            MaterializationOperation(
-                kind=MaterializationOperationKind.RUN_HOOKS,
-                name="post",
-                inside_transaction=False,
-            )
-        )
-        return IncrementalLifecyclePlan(
-            mutation=mutation_plan,
-            schema_change=schema_change,
-            facts=facts,
+            schema_change=self.plan_incremental_schema_change(on_schema_change),
             full_refresh=full_refresh,
-            operations=tuple(operations),
-            provenance=(() if materialization_plan is None else materialization_plan.provenance)
-            + (
-                PlanProvenance(
-                    rule="incremental.lifecycle.runtime_facts",
-                    detail=(
-                        "Incremental lifecycle resolved from mutation, schema, relation, "
-                        "catalog, format, and runtime facts"
-                    ),
-                ),
-            ),
+            contract_enforced=contract_enforced,
         )
 
     @available.parse_none
@@ -2643,9 +2537,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         macro_name = plan.renderer_macro
         if macro_name not in model_context:
             raise DbtRuntimeError(
-                'dbt could not find an incremental strategy macro with the name "{}" in {}'.format(
-                    macro_name, self.config.project_name
-                )
+                f'dbt could not find an incremental strategy macro with the name "{macro_name}" in {self.config.project_name}'
             )
 
         return model_context[macro_name]
@@ -2893,7 +2785,7 @@ def catch_as_completed(
     from dbt_common.clients.agate_helper import merge_tables
 
     # catalogs: "agate.Table" =".Table(rows=[])
-    tables: List["agate.Table"] = []
+    tables: List[agate.Table] = []
     exceptions: List[Exception] = []
 
     for future in as_completed(futures):

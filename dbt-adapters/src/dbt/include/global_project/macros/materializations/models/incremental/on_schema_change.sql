@@ -1,9 +1,18 @@
 {% macro incremental_validate_on_schema_change(on_schema_change, default='ignore') %}
-  {% set schema_change_plan = adapter.plan_incremental_schema_change(on_schema_change, default) %}
-  {% if schema_change_plan.was_coerced %}
-    {% do log(schema_change_plan.provenance[-1].detail) %}
-  {% endif %}
-  {{ return(schema_change_plan.strategy.value) }}
+
+   {% if on_schema_change not in ['sync_all_columns', 'append_new_columns', 'fail', 'ignore'] %}
+
+     {% set log_message = 'Invalid value for on_schema_change (%s) specified. Setting default value of %s.' % (on_schema_change, default) %}
+     {% do log(log_message) %}
+
+     {{ return(default) }}
+
+   {% else %}
+
+     {{ return(on_schema_change) }}
+
+   {% endif %}
+
 {% endmacro %}
 
 

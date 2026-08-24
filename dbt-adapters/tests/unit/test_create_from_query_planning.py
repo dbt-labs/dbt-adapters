@@ -1,7 +1,6 @@
 from types import SimpleNamespace
 
 import pytest
-
 from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.planning import (
     CatalogBindingState,
@@ -11,8 +10,8 @@ from dbt.adapters.planning import (
     CreateFromQueryRenderArguments,
     CreateFromQueryRenderKind,
     CreateFromQueryRenderResult,
-    CreateFromQueryStrategyOffer,
     CreateFromQueryStrategy,
+    CreateFromQueryStrategyOffer,
     DdlAtomicity,
     FormatFacts,
     PlanProvenance,
@@ -21,7 +20,6 @@ from dbt.adapters.planning import (
     StrategyOfferStatus,
     resolve_create_from_query_offers,
 )
-from dbt_common.exceptions import DbtRuntimeError
 
 PROVENANCE = (
     PlanProvenance(
@@ -180,7 +178,6 @@ def test_plan_serializes_to_stable_primitives():
         temporary=True,
         atomicity=DdlAtomicity.TRANSACTION,
         facts=FACTS,
-        renderer_macro="create_table_then_insert",
         provenance=PROVENANCE,
     )
 
@@ -211,7 +208,6 @@ def test_plan_serializes_to_stable_primitives():
             },
             "runtime": {"engine": "test", "version": None},
         },
-        "renderer_macro": "create_table_then_insert",
         "provenance": [
             {
                 "rule": "test.create_from_query",
@@ -229,7 +225,6 @@ def test_unsupported_plan_requires_reason_and_cannot_promise_atomicity():
             atomicity=DdlAtomicity.NONE,
             temporary=False,
             facts=FACTS,
-            renderer_macro=None,
             provenance=PROVENANCE,
         )
 
@@ -239,7 +234,6 @@ def test_unsupported_plan_requires_reason_and_cannot_promise_atomicity():
             atomicity=DdlAtomicity.STATEMENT,
             temporary=False,
             facts=FACTS,
-            renderer_macro=None,
             provenance=PROVENANCE,
             reason="CTAS and create-then-insert are unavailable",
         )
@@ -252,7 +246,6 @@ def test_supported_plan_cannot_include_unsupported_reason():
             atomicity=DdlAtomicity.STATEMENT,
             temporary=False,
             facts=FACTS,
-            renderer_macro="create_table_as",
             provenance=PROVENANCE,
             reason="This state is contradictory",
         )
@@ -287,7 +280,6 @@ def test_plan_rejects_untyped_fields(field, value, error):
         "atomicity": DdlAtomicity.STATEMENT,
         "temporary": False,
         "facts": FACTS,
-        "renderer_macro": "create_table_as",
         "provenance": PROVENANCE,
     }
     kwargs[field] = value
@@ -449,7 +441,6 @@ def test_offer_resolver_selects_first_available_strategy():
     create_then_insert = CreateFromQueryStrategyOffer.available(
         strategy=CreateFromQueryStrategy.CREATE_THEN_INSERT,
         atomicity=DdlAtomicity.TRANSACTION,
-        renderer_macro="create_table_then_insert",
         provenance=PROVENANCE,
     )
 
@@ -460,7 +451,6 @@ def test_offer_resolver_selects_first_available_strategy():
     )
 
     assert plan.strategy == CreateFromQueryStrategy.CREATE_THEN_INSERT
-    assert plan.renderer_macro == "create_table_then_insert"
     assert plan.atomicity == DdlAtomicity.TRANSACTION
     assert plan.provenance == rejected_ctas.provenance + create_then_insert.provenance
 
@@ -486,56 +476,15 @@ def test_offer_resolver_preserves_all_rejection_reasons():
     )
 
     assert plan.strategy == CreateFromQueryStrategy.UNSUPPORTED
-    assert plan.renderer_macro is None
     assert plan.reason == "CTAS unavailable; INSERT unavailable"
     assert len(plan.provenance) == 2
 
 
-def test_available_offer_requires_renderer_and_rejected_offer_requires_reason():
-    with pytest.raises(ValueError, match="renderer macro"):
-        CreateFromQueryStrategyOffer(
-            strategy=CreateFromQueryStrategy.CTAS,
-            status=StrategyOfferStatus.AVAILABLE,
-            atomicity=DdlAtomicity.UNKNOWN,
-            renderer_macro=None,
-            provenance=PROVENANCE,
-        )
-
+def test_rejected_offer_requires_reason():
     with pytest.raises(ValueError, match="include a reason"):
         CreateFromQueryStrategyOffer(
             strategy=CreateFromQueryStrategy.CTAS,
             status=StrategyOfferStatus.REJECTED,
             atomicity=DdlAtomicity.NONE,
-            renderer_macro=None,
             provenance=PROVENANCE,
         )
-
-
-def test_plan_macro_selector_returns_typed_offer_renderer():
-    renderer = object()
-    adapter = SimpleNamespace(config=SimpleNamespace(project_name="test_project"))
-    plan = CreateFromQueryPlan.ctas(
-        temporary=False,
-        atomicity=DdlAtomicity.UNKNOWN,
-        facts=FACTS,
-        provenance=PROVENANCE,
-    )
-
-    selected = BaseAdapter.get_create_from_query_plan_macro(
-        adapter, {"render_create_from_query_ctas": renderer}, plan
-    )
-
-    assert selected is renderer
-
-
-def test_plan_macro_selector_rejects_unsupported_plan():
-    adapter = SimpleNamespace(config=SimpleNamespace(project_name="test_project"))
-    plan = CreateFromQueryPlan.unsupported(
-        temporary=False,
-        facts=FACTS,
-        reason="No viable strategy",
-        provenance=PROVENANCE,
-    )
-
-    with pytest.raises(DbtRuntimeError, match="No viable strategy"):
-        BaseAdapter.get_create_from_query_plan_macro(adapter, {}, plan)
