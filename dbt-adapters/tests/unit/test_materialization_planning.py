@@ -4,15 +4,27 @@ import pytest
 
 from dbt.adapters.base.impl import BaseAdapter
 from dbt.adapters.planning import (
+    CatalogBindingState,
+    CatalogFacts,
+    CreateFromQueryFacts,
+    ExistingRelationFacts,
     ExistingIndexStrategy,
+    FormatFacts,
+    MaterializationExecutionFacts,
     MaterializationHookStrategy,
+    MaterializationOperationKind,
     MaterializationStatementStrategy,
     MaterializationTransactionStrategy,
+    MaterializationTransactionMode,
     PlanProvenance,
+    RelationFacts,
+    RuntimeFacts,
     TableDocumentationStrategy,
     TableIndexStrategy,
     TableLifecyclePlan,
+    TableMaterializationFacts,
     TableReplacementStrategy,
+    resolve_table_materialization_operations,
 )
 
 
@@ -46,6 +58,8 @@ def test_default_sql_table_resolves_to_stage_and_swap() -> None:
         "statement": "auto_begin",
         "setup_macro": None,
         "teardown_macro": None,
+        "facts": None,
+        "operations": [],
         "provenance": [
             {
                 "rule": "materialization.table.default",
@@ -105,3 +119,108 @@ def test_execution_envelope_macros_must_be_paired() -> None:
             setup_macro="set_query_tag",
             provenance=_provenance(),
         )
+
+
+def _facts(*, can_be_renamed: bool = True, requires_drop: bool = False):
+    relation = RelationFacts(
+        database="db",
+        schema="schema",
+        identifier="table",
+        relation_type="table",
+    )
+    return TableMaterializationFacts(
+        create=CreateFromQueryFacts(
+            relation=relation,
+            catalog=CatalogFacts(state=CatalogBindingState.UNBOUND),
+            format=FormatFacts(),
+            runtime=RuntimeFacts(engine="test"),
+        ),
+        existing=ExistingRelationFacts(
+            relation=relation,
+            format=FormatFacts(),
+            can_be_renamed=can_be_renamed,
+            can_be_replaced=False,
+            requires_drop_before_replace=requires_drop,
+        ),
+    )
+
+
+def test_stage_and_swap_program_drops_unrenameable_existing_relation() -> None:
+    plan = TableLifecyclePlan.stage_and_swap(provenance=_provenance())
+    facts = _facts(can_be_renamed=False)
+
+    resolved = plan.resolve(
+        facts=facts,
+        operations=resolve_table_materialization_operations(plan, facts),
+    )
+
+    existing_mutations = [
+        operation.kind
+        for operation in resolved.operations
+        if operation.relation is not None and operation.relation.value == "existing"
+    ]
+    assert existing_mutations == [MaterializationOperationKind.DROP_RELATION_IF_EXISTS]
+    assert resolved.is_resolved
+    assert resolved.to_dict()["facts"]["existing"]["can_be_renamed"] is False
+
+
+def test_direct_replace_program_carries_drop_decision_and_envelope() -> None:
+    plan = TableLifecyclePlan.direct_replace(
+        setup_macro="set_query_tag",
+        teardown_macro="unset_query_tag",
+        provenance=_provenance(),
+    )
+    facts = _facts(requires_drop=True)
+
+    operations = resolve_table_materialization_operations(plan, facts)
+    resolved = plan.resolve(facts=facts, operations=operations)
+
+    assert [operation.kind for operation in resolved.operations] == [
+        MaterializationOperationKind.INVOKE_CALLBACK,
+        MaterializationOperationKind.RUN_HOOKS,
+        MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+        MaterializationOperationKind.CREATE_FROM_QUERY,
+        MaterializationOperationKind.RUN_HOOKS,
+        MaterializationOperationKind.APPLY_GRANTS,
+        MaterializationOperationKind.PERSIST_DOCUMENTATION,
+        MaterializationOperationKind.INVOKE_CALLBACK,
+    ]
+
+
+def test_base_adapter_builds_live_replacement_facts() -> None:
+    adapter = MagicMock()
+    create_facts = _facts().create
+    adapter.build_create_from_query_facts.return_value = create_facts
+    adapter.get_table_materialization_execution_facts.return_value = (
+        MaterializationExecutionFacts(
+            transaction_mode=MaterializationTransactionMode.TRANSACTIONAL
+        )
+    )
+    adapter._create_from_query_fact_value.side_effect = lambda value, **_: (
+        None if value is None else str(getattr(value, "value", value)).casefold()
+    )
+    target = MagicMock()
+    target.needs_to_drop.return_value = True
+    existing = MagicMock()
+    existing.database = "DB"
+    existing.schema = "SCHEMA"
+    existing.identifier = "TABLE"
+    existing.type = "view"
+    existing.table_format = "iceberg"
+    existing.file_format = "parquet"
+    existing.can_be_renamed = False
+    existing.can_be_replaced = False
+    existing.is_shallow_clone = False
+
+    facts = BaseAdapter.build_table_materialization_facts(
+        adapter,
+        MagicMock(),
+        target,
+        existing,
+    )
+
+    target.needs_to_drop.assert_called_once_with(existing)
+    assert facts.existing is not None
+    assert facts.existing.relation.relation_type == "view"
+    assert facts.existing.format.table_format == "iceberg"
+    assert facts.existing.requires_drop_before_replace is True

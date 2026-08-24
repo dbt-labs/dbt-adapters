@@ -21,6 +21,16 @@ from dbt.adapters.capability import (
     Support,
 )
 from dbt.adapters.protocol import MacroResolverProtocol
+from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.planning import (
+    MaterializationExecutionFacts,
+    MaterializationStatementStrategy,
+    MaterializationTransactionMode,
+    MaterializationTransactionStrategy,
+    PlanProvenance,
+    TableIndexStrategy,
+    TableLifecyclePlan,
+)
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
@@ -168,11 +178,81 @@ class RedshiftAdapter(SQLAdapter):
 
     _capabilities = CapabilityDict(
         {
-            Capability.SchemaMetadataByRelations: CapabilitySupport(support=Support.Full),
-            Capability.TableLastModifiedMetadata: CapabilitySupport(support=Support.Full),
-            Capability.TableLastModifiedMetadataBatch: CapabilitySupport(support=Support.Full),
+            Capability.SchemaMetadataByRelations: CapabilitySupport(
+                support=Support.Full
+            ),
+            Capability.TableLastModifiedMetadata: CapabilitySupport(
+                support=Support.Full
+            ),
+            Capability.TableLastModifiedMetadataBatch: CapabilitySupport(
+                support=Support.Full
+            ),
         }
     )
+
+    @available.parse_none
+    def plan_table_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[TableLifecyclePlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_redshift.materialization_table_redshift"
+        ):
+            return super().plan_table_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+
+        autocommit = bool(getattr(self.config.credentials, "autocommit", False))
+        skip_transaction_statements = (
+            autocommit
+            and self.behavior.redshift_skip_autocommit_transaction_statements.no_warn
+        )
+        return TableLifecyclePlan.stage_and_swap(
+            indexes=TableIndexStrategy.AFTER_SWAP,
+            transaction=(
+                MaterializationTransactionStrategy.ADAPTER_MANAGED
+                if autocommit
+                else MaterializationTransactionStrategy.EXPLICIT_COMMIT
+            ),
+            statement=(
+                MaterializationStatementStrategy.NO_AUTO_BEGIN
+                if skip_transaction_statements
+                else MaterializationStatementStrategy.AUTO_BEGIN
+            ),
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.table.redshift",
+                    detail=(
+                        "Redshift table materialization uses stage-and-swap with "
+                        "post-swap indexes and connection-resolved transaction behavior"
+                    ),
+                ),
+            ),
+        )
+
+    def get_table_materialization_execution_facts(
+        self,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+    ) -> MaterializationExecutionFacts:
+        autocommit = bool(getattr(self.config.credentials, "autocommit", False))
+        capabilities = []
+        if self.behavior.redshift_skip_autocommit_transaction_statements.no_warn:
+            capabilities.append("skip_autocommit_transaction_statements")
+        return MaterializationExecutionFacts(
+            transaction_mode=(
+                MaterializationTransactionMode.AUTOCOMMIT
+                if autocommit
+                else MaterializationTransactionMode.TRANSACTIONAL
+            ),
+            capabilities=tuple(capabilities),
+        )
 
     def __init__(self, config, mp_context: SpawnContext) -> None:
         super().__init__(config, mp_context)
@@ -379,7 +459,11 @@ class RedshiftAdapter(SQLAdapter):
         expected = self.config.credentials.database
         ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
+        if (
+            database.lower() != expected.lower()
+            and not ra3_node
+            and not self.use_show_apis()
+        ):
             raise dbt_common.exceptions.NotImplementedError(
                 "Cross-db references allowed only in RA3.* node or with datasharing enabled. ({} vs {})".format(
                     database, expected
@@ -407,8 +491,12 @@ class RedshiftAdapter(SQLAdapter):
         for row in show_tables.rows:
             table_type = (row["table_type"] or "").strip().upper()
             if table_type == "VIEW":
-                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
-                relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
+                subtype = (
+                    (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                )
+                relation_type = (
+                    "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
+                )
             else:
                 relation_type = "table"
 
@@ -460,7 +548,9 @@ class RedshiftAdapter(SQLAdapter):
     ) -> "agate.Table":
         """Build the base catalog by joining SHOW TABLES metadata with SVV_REDSHIFT_COLUMNS."""
         if not show_tables_results or not svv_columns.rows:
-            return agate.Table([], column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES)
+            return agate.Table(
+                [], column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES
+            )
 
         table_meta: Dict[tuple, tuple] = {}
         for show_table in show_tables_results:
@@ -468,12 +558,18 @@ class RedshiftAdapter(SQLAdapter):
             has_subtype = "table_subtype" in show_table.column_names
             for row in show_table.rows:
                 table_type = (row["table_type"] or "").strip().upper()
-                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                subtype = (
+                    (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                )
                 catalog_type = _SHOW_TABLE_TYPE_MAP.get(
                     subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
                 )
 
-                key = (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+                key = (
+                    row["database_name"],
+                    row["schema_name"].lower(),
+                    row["table_name"].lower(),
+                )
                 table_meta[key] = (
                     row["database_name"],
                     row["schema_name"],
@@ -486,7 +582,11 @@ class RedshiftAdapter(SQLAdapter):
         catalog_rows = []
         for row in svv_columns.rows:
             meta = table_meta.get(
-                (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+                (
+                    row["database_name"],
+                    row["schema_name"].lower(),
+                    row["table_name"].lower(),
+                )
             )
             if meta:
                 catalog_rows.append(
@@ -500,7 +600,9 @@ class RedshiftAdapter(SQLAdapter):
                 )
 
         return agate.Table(
-            catalog_rows, column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES
+            catalog_rows,
+            column_names=CATALOG_COLUMNS,
+            column_types=CATALOG_COLUMN_TYPES,
         )
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
@@ -599,7 +701,9 @@ class RedshiftAdapter(SQLAdapter):
         macro_resolver: Optional[MacroResolverProtocol] = None,
     ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
         if not self.use_show_apis():
-            return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
+            return super().calculate_freshness_from_metadata_batch(
+                sources, macro_resolver
+            )
 
         source_lookup = {
             (
@@ -612,9 +716,9 @@ class RedshiftAdapter(SQLAdapter):
 
         sources_by_schema: Dict[Tuple[str, str], List[BaseRelation]] = {}
         for source in sources:
-            sources_by_schema.setdefault((source.database or "", source.schema or ""), []).append(
-                source
-            )
+            sources_by_schema.setdefault(
+                (source.database or "", source.schema or ""), []
+            ).append(source)
 
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
@@ -628,7 +732,9 @@ class RedshiftAdapter(SQLAdapter):
             adapter_response, table = result.response, result.table
             adapter_responses.append(adapter_response)
 
-            requested_identifiers = {(s.identifier or "").lower() for s in schema_sources}
+            requested_identifiers = {
+                (s.identifier or "").lower() for s in schema_sources
+            }
             snapshot_time = datetime.now(timezone.utc)
 
             for row in table:
@@ -650,7 +756,9 @@ class RedshiftAdapter(SQLAdapter):
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
-        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
+        allow_multiple_databases = (
+            self.config.credentials.ra3_node or self.use_show_apis()
+        )
         try:
             return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
@@ -663,7 +771,9 @@ class RedshiftAdapter(SQLAdapter):
         """
         return ["append", "delete+insert", "merge", "microbatch"]
 
-    def timestamp_add_sql(self, add_to: str, number: int = 1, interval: str = "hour") -> str:
+    def timestamp_add_sql(
+        self, add_to: str, number: int = 1, interval: str = "hour"
+    ) -> str:
         return f"{add_to} + interval '{number} {interval}'"
 
     def _link_cached_database_relations(self, schemas: Set[str]):
@@ -713,7 +823,9 @@ class RedshiftAdapter(SQLAdapter):
     def default_python_submission_method(self) -> str:
         return super().default_python_submission_method
 
-    def generate_python_submission_response(self, submission_result: Any) -> AdapterResponse:
+    def generate_python_submission_response(
+        self, submission_result: Any
+    ) -> AdapterResponse:
         return super().generate_python_submission_response(submission_result)
 
     def debug_query(self):
@@ -735,7 +847,9 @@ class RedshiftAdapter(SQLAdapter):
     def _needs_query_group_change(self, config: Mapping[str, Any]) -> bool:
         model_query_group = config.get("query_group")
         default_query_group = self.config.credentials.query_group
-        return model_query_group is not None and model_query_group != default_query_group
+        return (
+            model_query_group is not None and model_query_group != default_query_group
+        )
 
     def _use_database(self, database: str) -> None:
         self.execute(f"USE {self.quote(database)}")
@@ -756,7 +870,9 @@ class RedshiftAdapter(SQLAdapter):
         )
 
     def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
-        return self.use_show_apis() and self._is_different_database(config.get("database"))
+        return self.use_show_apis() and self._is_different_database(
+            config.get("database")
+        )
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         if self._needs_query_group_change(config):
@@ -765,7 +881,9 @@ class RedshiftAdapter(SQLAdapter):
             self._use_database(self._normalize_database(str(config.get("database"))))
         return None
 
-    def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
+    def post_model_hook(
+        self, config: Mapping[str, Any], context: Optional[str]
+    ) -> None:
         if self._needs_query_group_change(config):
             self._apply_query_group(self.config.credentials.query_group)
         if self._needs_database_change(config):
@@ -774,7 +892,9 @@ class RedshiftAdapter(SQLAdapter):
     @contextmanager
     def _use_database_context(self, relation):
         """Issue USE <database> / RESET USE around cross-database operations."""
-        needs_use = self.use_show_apis() and self._is_different_database(relation.database)
+        needs_use = self.use_show_apis() and self._is_different_database(
+            relation.database
+        )
         if needs_use:
             self._use_database(self._normalize_database(str(relation.database)))
         try:
