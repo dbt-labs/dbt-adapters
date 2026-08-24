@@ -293,8 +293,9 @@
 {% endmacro %}
 
 {% macro spark__list_relations_without_caching(relation) %}
+  {% set schema_relation = relation if relation is string else relation.without_identifier() %}
   {% call statement('list_relations_without_caching', fetch_result=True) -%}
-    show table extended in {{ relation.schema }} like '*'
+    show table extended in {{ schema_relation }} like '*'
   {% endcall %}
 
   {% do return(load_result('list_relations_without_caching').table) %}
@@ -304,8 +305,9 @@
   {#-- Spark with iceberg tables don't work with show table extended for #}
   {#-- V2 iceberg tables #}
   {#-- https://issues.apache.org/jira/browse/SPARK-33393 #}
+  {% set schema_relation = schema_relation if schema_relation is string else schema_relation.without_identifier() %}
   {% call statement('list_relations_without_caching_show_tables', fetch_result=True) -%}
-    show tables in {{ schema_relation.schema }} like '*'
+    show tables in {{ schema_relation }} like '*'
   {% endcall %}
 
   {% do return(load_result('list_relations_without_caching_show_tables').table) %}
@@ -323,7 +325,11 @@
 
 {% macro spark__list_schemas(database) -%}
   {% call statement('list_schemas', fetch_result=True, auto_begin=False) %}
-    show databases
+    {% if database %}
+      show namespaces in {{ adapter.quote(database) }}
+    {% else %}
+      show databases
+    {% endif %}
   {% endcall %}
   {{ return(load_result('list_schemas').table) }}
 {% endmacro %}
@@ -350,7 +356,7 @@
 
 
 {% macro spark__generate_database_name(custom_database_name=none, node=none) -%}
-  {% do return(None) %}
+  {% do return(default__generate_database_name(custom_database_name, node)) %}
 {%- endmacro %}
 
 {% macro spark__persist_docs(relation, model, for_relation, for_columns) -%}

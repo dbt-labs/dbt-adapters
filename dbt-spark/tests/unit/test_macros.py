@@ -1,7 +1,10 @@
 import unittest
 from unittest import mock
 import re
+from types import SimpleNamespace
 from jinja2 import Environment, FileSystemLoader
+
+from dbt.adapters.spark import SparkRelation
 
 
 class TestSparkMacros(unittest.TestCase):
@@ -42,6 +45,98 @@ class TestSparkMacros(unittest.TestCase):
 
     def test_macros_load(self):
         self.jinja_env.get_template("adapters.sql")
+
+    def test_list_relations_uses_catalog_qualified_namespace(self):
+        def statement(*args, caller=None, **kwargs):
+            return caller()
+
+        context = {
+            **self.default_context,
+            "statement": statement,
+            "load_result": lambda name: SimpleNamespace(table=""),
+        }
+        template = self.jinja_env.get_template("adapters.sql", globals=context)
+
+        relation = mock.Mock()
+        relation.without_identifier.return_value = "catalog.analytics"
+        sql = template.module.spark__list_relations_without_caching(relation)
+        fallback_sql = template.module.list_relations_show_tables_without_caching(relation)
+
+        self.assertIn("show table extended in catalog.analytics like '*'", sql)
+        self.assertIn("show tables in catalog.analytics like '*'", fallback_sql)
+        self.assertEqual(relation.without_identifier.call_count, 2)
+
+        string_sql = template.module.spark__list_relations_without_caching("catalog.analytics")
+        self.assertIn("show table extended in catalog.analytics like '*'", string_sql)
+
+    def test_list_schemas_uses_quoted_catalog(self):
+        def statement(*args, caller=None, **kwargs):
+            return caller()
+
+        context = {
+            **self.default_context,
+            "statement": statement,
+            "load_result": lambda name: SimpleNamespace(table=""),
+        }
+        context["adapter"].quote.return_value = "`catalog-name`"
+        template = self.jinja_env.get_template("adapters.sql", globals=context)
+
+        sql = template.module.spark__list_schemas("catalog-name")
+        default_sql = template.module.spark__list_schemas(None)
+
+        self.assertIn("show namespaces in `catalog-name`", sql)
+        self.assertIn("show databases", default_sql)
+
+    def test_generate_database_name_uses_default_implementation(self):
+        default_generate_database_name = mock.Mock(return_value="catalog")
+        context = {
+            **self.default_context,
+            "default__generate_database_name": default_generate_database_name,
+        }
+        template = self.jinja_env.get_template("adapters.sql", globals=context)
+        node = mock.Mock()
+
+        template.module.spark__generate_database_name("catalog", node)
+
+        default_generate_database_name.assert_called_once_with("catalog", node)
+
+    def test_snapshot_staging_relation_preserves_catalog(self):
+        captured = {}
+
+        def statement(*args, caller=None, **kwargs):
+            return caller()
+
+        def create_view_as(relation, sql):
+            captured["relation"] = relation
+            return f"create view {relation} as {sql}"
+
+        context = {
+            **self.default_context,
+            "api": SimpleNamespace(Relation=SparkRelation),
+            "statement": statement,
+            "snapshot_staging_table": lambda strategy, sql, target: "select 1",
+            "create_view_as": create_view_as,
+        }
+        source, _, _ = self.jinja_env.loader.get_source(
+            self.jinja_env, "materializations/snapshot.sql"
+        )
+        helper_macros = source.split("{% materialization", maxsplit=1)[0]
+        template = self.jinja_env.from_string(helper_macros, globals=context)
+        target_relation = SparkRelation.create(
+            database="catalog",
+            schema="analytics",
+            identifier="events_snapshot",
+            type="table",
+        )
+
+        template.module.spark_build_snapshot_staging_table(
+            mock.Mock(), "select 1", target_relation
+        )
+
+        self.assertEqual(
+            str(captured["relation"]),
+            "catalog.analytics.events_snapshot__dbt_tmp",
+        )
 
     def test_macros_create_table_as(self):
         template = self.__get_template("adapters.sql")

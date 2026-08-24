@@ -1,0 +1,6 @@
+kind: Features
+body: Add catalog-qualified three-part identifiers to dbt-spark while preserving legacy matching database and schema profiles as two-part identifiers.
+time: 2026-08-24T19:32:43.000000+05:30
+custom:
+  Author: Amogh-2404
+  Issue: "495 2129"

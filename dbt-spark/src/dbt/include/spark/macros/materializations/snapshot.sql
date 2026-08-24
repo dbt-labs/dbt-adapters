@@ -53,7 +53,7 @@
     {% else %}
       {%- set tmp_relation = api.Relation.create(identifier=tmp_identifier,
                                                     schema=target_relation.schema,
-                                                    database=none,
+                                                    database=target_relation.database,
                                                     type='view') -%}
     {% endif %}
 
@@ -96,7 +96,7 @@
   {%- set grant_config = config.get('grants') -%}
 
   {% set target_relation_exists, target_relation = get_or_create_relation(
-          database=none,
+          database=model.database,
           schema=model.schema,
           identifier=target_table,
           type='table') -%}
@@ -119,7 +119,7 @@
   {% endif %}
 
   {% if not adapter.check_schema_exists(model.database, model.schema) %}
-    {% do create_schema(model.schema) %}
+    {% do create_schema(target_relation.without_identifier()) %}
   {% endif %}
 
   {%- if not target_relation.is_table -%}

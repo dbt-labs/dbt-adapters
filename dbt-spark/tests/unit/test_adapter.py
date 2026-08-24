@@ -1,6 +1,7 @@
 import unittest
 import pytest
 from multiprocessing import get_context
+from types import SimpleNamespace
 from unittest import mock
 
 from dbt_common.exceptions import DbtRuntimeError
@@ -9,7 +10,9 @@ from pyhive import hive
 from dbt.adapters.spark import SparkAdapter, SparkColumn, SparkRelation
 from dbt.adapters.spark.connections import build_ssl_transport
 from dbt.adapters.spark.impl import (
+    DESCRIBE_TABLE_EXTENDED_MACRO_NAME,
     LIST_RELATIONS_MACRO_NAME,
+    LIST_RELATIONS_SHOW_TABLES_MACRO_NAME,
     SCHEMA_NOT_FOUND_MESSAGES,
     TABLE_OR_VIEW_NOT_FOUND_MESSAGES,
 )
@@ -431,11 +434,13 @@ class TestSparkAdapter(unittest.TestCase):
 
     def test_relation_with_database(self):
         adapter = SparkAdapter(self.target_http, get_context("spawn"))
-        # fine
-        adapter.Relation.create(schema="different", identifier="table")
-        with self.assertRaises(DbtRuntimeError):
-            # not fine - database set
-            adapter.Relation.create(database="something", schema="different", identifier="table")
+        relation = adapter.Relation.create(schema="analytics", identifier="events")
+        self.assertEqual(relation.render(), "analytics.events")
+
+        relation = adapter.Relation.create(
+            database="catalog", schema="analytics", identifier="events"
+        )
+        self.assertEqual(relation.render(), "catalog.analytics.events")
 
     def test_profile_with_database(self):
         profile = {
@@ -443,7 +448,6 @@ class TestSparkAdapter(unittest.TestCase):
                 "test": {
                     "type": "spark",
                     "method": "http",
-                    # not allowed
                     "database": "analytics2",
                     "schema": "analytics",
                     "host": "myorg.sparkhost.com",
@@ -455,8 +459,91 @@ class TestSparkAdapter(unittest.TestCase):
             },
             "target": "test",
         }
-        with self.assertRaises(DbtRuntimeError):
-            config_from_parts_or_dicts(self.base_project_cfg, profile)
+        config = config_from_parts_or_dicts(self.base_project_cfg, profile)
+        self.assertEqual(config.credentials.database, "analytics2")
+        self.assertEqual(config.credentials.schema, "analytics")
+
+    def test_profile_with_catalog_alias(self):
+        profile = {
+            "outputs": {
+                "test": {
+                    "type": "spark",
+                    "method": "http",
+                    "catalog": "analytics_catalog",
+                    "schema": "analytics",
+                    "host": "myorg.sparkhost.com",
+                    "port": 443,
+                    "token": "abc123",
+                    "organization": "0123456789",
+                    "cluster": "01234-23423-coffeetime",
+                }
+            },
+            "target": "test",
+        }
+        config = config_from_parts_or_dicts(self.base_project_cfg, profile)
+        self.assertEqual(config.credentials.database, "analytics_catalog")
+        self.assertEqual(config.credentials.schema, "analytics")
+
+    def test_catalog_alias_supports_matching_catalog_and_schema(self):
+        profile = {
+            "outputs": {
+                "test": {
+                    "type": "spark",
+                    "method": "http",
+                    "catalog": "analytics",
+                    "schema": "analytics",
+                    "host": "myorg.sparkhost.com",
+                    "port": 443,
+                    "token": "abc123",
+                    "organization": "0123456789",
+                    "cluster": "01234-23423-coffeetime",
+                }
+            },
+            "target": "test",
+        }
+        config = config_from_parts_or_dicts(self.base_project_cfg, profile)
+        self.assertEqual(config.credentials.database, "analytics")
+        self.assertEqual(config.credentials.schema, "analytics")
+
+    def test_profile_with_matching_database_and_schema(self):
+        profile = {
+            "outputs": {
+                "test": {
+                    "type": "spark",
+                    "method": "http",
+                    "database": "analytics",
+                    "schema": "analytics",
+                    "host": "myorg.sparkhost.com",
+                    "port": 443,
+                    "token": "abc123",
+                    "organization": "0123456789",
+                    "cluster": "01234-23423-coffeetime",
+                }
+            },
+            "target": "test",
+        }
+        config = config_from_parts_or_dicts(self.base_project_cfg, profile)
+        self.assertIsNone(config.credentials.database)
+        self.assertEqual(config.credentials.schema, "analytics")
+
+    def test_get_relation_matches_unquoted_identifiers_case_insensitively(self):
+        adapter = SparkAdapter(self.target_http, get_context("spawn"))
+        cases = [
+            (None, "Analytics", "analytics"),
+            ("MyCatalog", "Analytics", "analytics"),
+        ]
+
+        for database, requested_schema, returned_schema in cases:
+            with self.subTest(database=database):
+                discovered = adapter.Relation.create(
+                    database=database,
+                    schema=returned_schema,
+                    identifier="events",
+                )
+                with mock.patch.object(adapter, "list_relations", return_value=[discovered]):
+                    relation = adapter.get_relation(database, requested_schema, "EVENTS")
+
+                self.assertEqual(relation, discovered)
 
     def test_profile_with_cluster_and_sql_endpoint(self):
         profile = {
@@ -727,8 +814,59 @@ class TestListRelationsWithoutCaching(unittest.TestCase):
     def _make_adapter(self):
         return SparkAdapter(self.target_http, get_context("spawn"))
 
-    def _make_schema_relation(self, adapter, schema="analytics"):
-        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+    def _make_schema_relation(self, adapter, schema="analytics", database=None):
+        return adapter.Relation.create(
+            database=database, schema=schema, identifier=""
+        ).without_identifier()
+
+    def test_relations_keep_requested_catalog_and_namespace(self):
+        adapter = self._make_adapter()
+        schema_relation = self._make_schema_relation(
+            adapter, database="catalog", schema="analytics"
+        )
+        rows = [
+            ("", "dbt_tmp", True),
+            ("analytics", "events", False),
+        ]
+
+        def execute_macro_side_effect(macro_name, *args, **kwargs):
+            if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+                return rows
+            if macro_name == DESCRIBE_TABLE_EXTENDED_MACRO_NAME:
+                return [
+                    ("Type", "MANAGED", None),
+                    ("Provider", "iceberg", None),
+                ]
+            self.fail(f"Unexpected macro: {macro_name}")
+
+        with mock.patch.object(adapter, "execute_macro", side_effect=execute_macro_side_effect):
+            result = adapter.list_relations_without_caching(schema_relation)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].database, "catalog")
+        self.assertEqual(result[0].schema, "analytics")
+        self.assertEqual(result[0].identifier, "events")
+        self.assertTrue(result[0].is_iceberg)
+
+    def test_relations_with_same_name_are_isolated_by_catalog(self):
+        adapter = self._make_adapter()
+        rows = [("analytics", "events", False, "Type: MANAGED\n")]
+
+        for database in ("catalog_one", "catalog_two"):
+            schema_relation = self._make_schema_relation(
+                adapter, database=database, schema="analytics"
+            )
+            relations = adapter._build_spark_relation_list(
+                rows,
+                adapter._get_relation_information,
+                schema_relation,
+            )
+            adapter.cache.add(relations[0])
+
+        first = adapter.cache.get_relations("catalog_one", "analytics")
+        second = adapter.cache.get_relations("catalog_two", "analytics")
+        self.assertEqual([relation.database for relation in first], ["catalog_one"])
+        self.assertEqual([relation.database for relation in second], ["catalog_two"])
 
     def test_unknown_error_is_raised(self):
         """An unexpected error from the metastore should propagate rather than
@@ -749,15 +887,19 @@ class TestListRelationsWithoutCaching(unittest.TestCase):
         """When the schema/database genuinely does not exist (legacy Hive
         'Database not found' message), an empty list should be returned."""
         adapter = self._make_adapter()
-        schema_relation = self._make_schema_relation(adapter, schema="nonexistent")
+        for database in (None, "catalog"):
+            with self.subTest(database=database):
+                schema_relation = self._make_schema_relation(
+                    adapter, database=database, schema="nonexistent"
+                )
 
-        with mock.patch.object(
-            adapter,
-            "execute_macro",
-            side_effect=DbtRuntimeError("Database not found"),
-        ):
-            result = adapter.list_relations_without_caching(schema_relation)
-            self.assertEqual(result, [])
+                with mock.patch.object(
+                    adapter,
+                    "execute_macro",
+                    side_effect=DbtRuntimeError("Database not found"),
+                ):
+                    result = adapter.list_relations_without_caching(schema_relation)
+                    self.assertEqual(result, [])
 
 
 @pytest.mark.parametrize("not_found_msg", SCHEMA_NOT_FOUND_MESSAGES)
@@ -817,8 +959,53 @@ class TestListRelationsIcebergV2Fallback(unittest.TestCase):
     def _make_adapter(self):
         return SparkAdapter(self.target_http, get_context("spawn"))
 
-    def _make_schema_relation(self, adapter, schema="analytics"):
-        return adapter.Relation.create(schema=schema, identifier="").without_identifier()
+    def _make_schema_relation(self, adapter, schema="analytics", database=None):
+        return adapter.Relation.create(
+            database=database, schema=schema, identifier=""
+        ).without_identifier()
+
+    def test_fallback_describes_requested_relation(self):
+        cases = [
+            ("catalog", "analytics", "catalog.analytics.events"),
+            (None, "nessie.analytics", "nessie.analytics.events"),
+        ]
+
+        for database, schema, expected_table_name in cases:
+            with self.subTest(database=database, schema=schema):
+                adapter = self._make_adapter()
+                schema_relation = self._make_schema_relation(
+                    adapter, database=database, schema=schema
+                )
+                described_relations = []
+
+                def execute_macro_side_effect(macro_name, *args, **kwargs):
+                    if macro_name == LIST_RELATIONS_MACRO_NAME:
+                        if database is not None:
+                            self.fail("Catalog-qualified discovery must use SHOW TABLES")
+                        raise DbtRuntimeError(ICEBERG_V2_ERROR)
+                    if macro_name == LIST_RELATIONS_SHOW_TABLES_MACRO_NAME:
+                        return [("analytics", "events", False)]
+                    if macro_name == DESCRIBE_TABLE_EXTENDED_MACRO_NAME:
+                        described_relations.append(kwargs["kwargs"]["table_name"])
+                        return [
+                            ("Type", "MANAGED", None),
+                            ("Provider", "iceberg", None),
+                        ]
+                    self.fail(f"Unexpected macro: {macro_name}")
+
+                with mock.patch.object(
+                    adapter, "execute_macro", side_effect=execute_macro_side_effect
+                ):
+                    result = adapter.list_relations_without_caching(schema_relation)
+
+                self.assertEqual(
+                    [str(relation) for relation in described_relations], [expected_table_name]
+                )
+                self.assertEqual(len(result), 1)
+                self.assertEqual(result[0].database, database)
+                self.assertEqual(result[0].schema, schema)
+                self.assertEqual(result[0].identifier, "events")
+                self.assertTrue(result[0].is_iceberg)
 
     def test_iceberg_v2_fallback_returns_relations(self):
         """When the primary macro raises the v2-table error, the fallback SHOW TABLES
@@ -879,6 +1066,7 @@ class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
         # so parse_columns_from_information will return an empty list.
         information = "id: int\n" "name: string\n" "Provider: iceberg\n" "Owner: root\n"
         relation = SparkRelation.create(
+            database="catalog",
             schema="default",
             identifier="orders",
             type=SparkRelation.get_relation_type.Table,
@@ -918,6 +1106,7 @@ class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
         self.assertEqual(len(result), 2)
         self.assertEqual(result[0]["column_name"], "id")
         self.assertEqual(result[0]["column_type"], "int")
+        self.assertEqual(result[0]["table_database"], "catalog")
         self.assertEqual(result[1]["column_name"], "name")
         self.assertEqual(result[1]["column_type"], "string")
 
@@ -968,3 +1157,67 @@ class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
             result = list(adapter._get_columns_for_catalog(relation))
 
         self.assertEqual(result, [])
+
+
+def test_get_catalog_supports_multiple_databases(target_http):
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    relation_configs = [
+        SimpleNamespace(
+            resource_type="model",
+            name=f"events_{database}",
+            description="",
+            database=database,
+            schema="analytics",
+            identifier="events",
+            compiled_code=None,
+            meta={},
+            tags=[],
+            quoting_dict={},
+            config=None,
+            catalog_name=None,
+        )
+        for database in ("catalog_one", "catalog_two")
+    ]
+    thread_pool = mock.MagicMock()
+    executor_context = mock.MagicMock()
+    executor_context.__enter__.return_value = thread_pool
+
+    with mock.patch("dbt.adapters.spark.impl.executor", return_value=executor_context):
+        with mock.patch("dbt.adapters.spark.impl.catch_as_completed", return_value=([], [])):
+            catalogs, exceptions = adapter.get_catalog(relation_configs, frozenset())
+
+    assert catalogs == []
+    assert exceptions == []
+    connection_names = [call.args[1] for call in thread_pool.submit_connected.call_args_list]
+    assert connection_names == ["catalog_one.analytics", "catalog_two.analytics"]
+
+
+@pytest.mark.parametrize("database", ["catalog_one", "catalog_two"])
+def test_get_one_catalog_preserves_database_in_rows(target_http, database):
+    adapter = SparkAdapter(target_http, get_context("spawn"))
+    information_schema = mock.MagicMock(database=database)
+    relation = SparkRelation.create(
+        database=database,
+        schema="analytics",
+        identifier="events",
+        type=SparkRelation.get_relation_type.Table,
+    )
+    column = {
+        "table_database": database,
+        "table_schema": "analytics",
+        "table_name": "events",
+        "column_name": "id",
+        "column_type": "int",
+    }
+
+    with mock.patch.object(adapter, "list_relations", return_value=[relation]) as list_relations:
+        with mock.patch.object(adapter, "_get_columns_for_catalog", return_value=[column]):
+            result = adapter._get_one_catalog(
+                information_schema,
+                {"analytics"},
+                frozenset({(database, "analytics")}),
+            )
+
+    list_relations.assert_called_once_with(database, "analytics")
+    assert len(result.rows) == 1
+    assert result.rows[0]["table_database"] == database
