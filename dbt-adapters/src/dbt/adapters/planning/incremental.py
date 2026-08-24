@@ -57,6 +57,66 @@ class IncrementalCatalogStaging(str, Enum):
 
 
 @dataclass(frozen=True)
+class IncrementalPartitionFacts:
+    """Normalized partition inputs that affect incremental execution."""
+
+    field: str
+    data_type: str
+    granularity: Optional[str] = None
+    range_start: Optional[int] = None
+    range_end: Optional[int] = None
+    range_interval: Optional[int] = None
+    time_ingestion_partitioning: bool = False
+    copy_partitions: bool = False
+    require_partition_filter: bool = False
+    static_partitions: Tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.field, str) or not self.field.strip():
+            raise ValueError("Incremental partition facts require a field")
+        if not isinstance(self.data_type, str) or not self.data_type.strip():
+            raise ValueError("Incremental partition facts require a data type")
+        if self.granularity is not None and (
+            not isinstance(self.granularity, str) or not self.granularity.strip()
+        ):
+            raise ValueError("Incremental partition granularity cannot be empty")
+        range_values = (self.range_start, self.range_end, self.range_interval)
+        if any(value is not None for value in range_values) and not all(
+            isinstance(value, int) for value in range_values
+        ):
+            raise ValueError("Incremental partition range must provide integer start/end/interval")
+        if not isinstance(self.time_ingestion_partitioning, bool):
+            raise TypeError("Incremental ingestion-time partitioning must be a boolean")
+        if not isinstance(self.copy_partitions, bool):
+            raise TypeError("Incremental copy-partitions selection must be a boolean")
+        if not isinstance(self.require_partition_filter, bool):
+            raise TypeError("Incremental partition-filter requirement must be a boolean")
+        if not isinstance(self.static_partitions, tuple) or not all(
+            isinstance(value, str) and value.strip() for value in self.static_partitions
+        ):
+            raise ValueError("Incremental static partitions must be immutable SQL expressions")
+
+    def to_dict(self) -> Dict[str, Any]:
+        range_config = None
+        if self.range_start is not None:
+            range_config = {
+                "start": self.range_start,
+                "end": self.range_end,
+                "interval": self.range_interval,
+            }
+        return {
+            "field": self.field,
+            "data_type": self.data_type,
+            "granularity": self.granularity,
+            "range": range_config,
+            "time_ingestion_partitioning": self.time_ingestion_partitioning,
+            "copy_partitions": self.copy_partitions,
+            "require_partition_filter": self.require_partition_filter,
+            "static_partitions": list(self.static_partitions),
+        }
+
+
+@dataclass(frozen=True)
 class IncrementalMutationFacts:
     """Typed, renderer-independent inputs used to choose an incremental strategy."""
 
@@ -450,6 +510,7 @@ class IncrementalLifecyclePlan:
     full_refresh: bool
     operations: Tuple[MaterializationOperation, ...]
     provenance: Tuple[PlanProvenance, ...]
+    partition: Optional[IncrementalPartitionFacts] = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.mutation, IncrementalMutationPlan):
@@ -468,6 +529,10 @@ class IncrementalLifecyclePlan:
             raise ValueError("Incremental lifecycle requires immutable provenance")
         if not all(isinstance(item, PlanProvenance) for item in self.provenance):
             raise TypeError("Incremental lifecycle provenance must be typed")
+        if self.partition is not None and not isinstance(
+            self.partition, IncrementalPartitionFacts
+        ):
+            raise TypeError("Incremental lifecycle partition facts must be typed")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -475,6 +540,7 @@ class IncrementalLifecyclePlan:
             "schema_change": self.schema_change.to_dict(),
             "facts": self.facts.to_dict(),
             "full_refresh": self.full_refresh,
+            "partition": self.partition.to_dict() if self.partition is not None else None,
             "operations": [item.to_dict() for item in self.operations],
             "provenance": [item.to_dict() for item in self.provenance],
         }

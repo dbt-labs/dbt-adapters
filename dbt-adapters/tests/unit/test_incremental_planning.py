@@ -10,6 +10,7 @@ from dbt.adapters.planning import (
     IncrementalMutationFacts,
     IncrementalMutationStrategyOffer,
     IncrementalMutationStrategy,
+    IncrementalPartitionFacts,
     IncrementalSourceConsistency,
     IncrementalStrategyRequirements,
     IncrementalTempRelationType,
@@ -29,6 +30,29 @@ BUILTIN_STRATEGIES = [
     "insert_overwrite",
     "microbatch",
 ]
+
+
+def test_incremental_partition_facts_are_validated_and_serializable():
+    facts = IncrementalPartitionFacts(
+        field="event_id",
+        data_type="int64",
+        range_start=0,
+        range_end=100,
+        range_interval=10,
+        copy_partitions=True,
+        static_partitions=("0", "10"),
+    )
+
+    assert facts.to_dict() == {
+        "field": "event_id",
+        "data_type": "int64",
+        "granularity": None,
+        "range": {"start": 0, "end": 100, "interval": 10},
+        "time_ingestion_partitioning": False,
+        "copy_partitions": True,
+        "require_partition_filter": False,
+        "static_partitions": ["0", "10"],
+    }
 
 
 @pytest.mark.parametrize(

@@ -69,6 +69,34 @@
 
 {% endmacro %}
 
+{# Typed Core resolves strategy, staging, and normalized partition facts before this leaf renderer. #}
+{% macro bigquery__get_incremental_merge_sql(arg_dict) %}
+  {% set partition_by = adapter.parse_partition_by(arg_dict.get('partition_plan')) %}
+  {{ return(bq_generate_incremental_merge_build_sql(
+      arg_dict['temp_relation'], arg_dict['target_relation'], '', arg_dict['unique_key'],
+      partition_by, arg_dict['dest_columns'], true, arg_dict['incremental_predicates'],
+      arg_dict.get('require_partition_filter', false)
+  )) }}
+{% endmacro %}
+
+{% macro bigquery__get_incremental_insert_overwrite_sql(arg_dict) %}
+  {% set partition_by = adapter.parse_partition_by(arg_dict.get('partition_plan')) %}
+  {{ return(bq_generate_incremental_insert_overwrite_build_sql(
+      arg_dict['temp_relation'], arg_dict['target_relation'], '', arg_dict['unique_key'],
+      partition_by, arg_dict.get('partitions'), arg_dict['dest_columns'], true,
+      partition_by.copy_partitions
+  )) }}
+{% endmacro %}
+
+{% macro bigquery__get_incremental_microbatch_sql(arg_dict) %}
+  {% set partition_by = adapter.parse_partition_by(arg_dict.get('partition_plan')) %}
+  {{ return(bq_generate_microbatch_build_sql(
+      arg_dict['temp_relation'], arg_dict['target_relation'], '', arg_dict['unique_key'],
+      partition_by, arg_dict.get('partitions'), arg_dict['dest_columns'], true,
+      partition_by.copy_partitions
+  )) }}
+{% endmacro %}
+
 {% materialization incremental, adapter='bigquery', supported_languages=['sql', 'python'] -%}
 
   {%- set unique_key = config.get('unique_key') -%}

@@ -12,6 +12,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Tuple,
     TYPE_CHECKING,
@@ -76,7 +77,23 @@ from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.events.logging import AdapterLogger
 from dbt.adapters.events.types import SchemaCreation, SchemaDrop
 from dbt.adapters.planning import (
+    DdlAtomicity,
+    IncrementalLifecyclePlan,
+    IncrementalMaterializationPlan,
+    IncrementalMutationArguments,
+    IncrementalMutationFacts,
+    IncrementalMutationPlan,
+    IncrementalMutationStrategy,
+    IncrementalMutationStrategyOffer,
+    IncrementalPartitionFacts,
+    IncrementalSourceConsistency,
+    IncrementalStrategyRequirements,
+    IncrementalTempRelationType,
+    IncrementalUniqueKeyRequirement,
     MaterializationExecutionFacts,
+    MaterializationOperation,
+    MaterializationOperationKind,
+    MaterializationRelationRole,
     MaterializationStatementStrategy,
     MaterializationTransactionMode,
     PlanProvenance,
@@ -302,6 +319,374 @@ class BigQueryAdapter(BaseAdapter):
                 ),
             ),
         )
+
+    @available.parse_none
+    def plan_incremental_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[IncrementalMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_bigquery.materialization_incremental_bigquery"
+        ):
+            return super().plan_incremental_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return IncrementalMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            provenance=(
+                PlanProvenance(
+                    rule="incremental.materialization.bigquery",
+                    detail=(
+                        "BigQuery SQL incremental materialization uses a typed partition-aware "
+                        "operation program"
+                    ),
+                ),
+            ),
+        )
+
+    def valid_incremental_strategies(self) -> List[str]:
+        return ["merge", "insert_overwrite", "microbatch"]
+
+    def get_incremental_mutation_strategy_offers(
+        self, facts: IncrementalMutationFacts
+    ) -> Tuple[IncrementalMutationStrategyOffer, ...]:
+        requested = "merge" if facts.requested_strategy == "default" else facts.requested_strategy
+        strategy = {
+            "merge": IncrementalMutationStrategy.MERGE,
+            "insert_overwrite": IncrementalMutationStrategy.INSERT_OVERWRITE,
+            "microbatch": IncrementalMutationStrategy.MICROBATCH,
+        }.get(requested)
+        if strategy is None:
+            requirements = IncrementalStrategyRequirements(
+                unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+                source_consistency=IncrementalSourceConsistency.STABLE_REUSE,
+                supported_languages=("sql",),
+            )
+            reason = (
+                f"Invalid incremental strategy provided: {facts.requested_strategy}. "
+                "Expected one of: 'merge', 'insert_overwrite', 'microbatch'"
+            )
+            return (
+                IncrementalMutationStrategyOffer.rejected(
+                    strategy=IncrementalMutationStrategy.CUSTOM,
+                    reason=reason,
+                    requirements=requirements,
+                    provenance=(
+                        PlanProvenance(
+                            rule="incremental.bigquery.unsupported",
+                            detail=reason,
+                        ),
+                    ),
+                ),
+            )
+        requirements = IncrementalStrategyRequirements(
+            unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+            source_consistency=IncrementalSourceConsistency.STABLE_REUSE,
+            allowed_temp_relation_types=(IncrementalTempRelationType.TABLE,),
+            default_temp_relation_type=IncrementalTempRelationType.TABLE,
+            supported_languages=("sql",),
+        )
+        return (
+            self._bigquery_incremental_offer(
+                strategy=strategy,
+                renderer_macro=f"get_incremental_{requested}_sql",
+                requirements=requirements,
+            ),
+        )
+
+    @staticmethod
+    def _bigquery_incremental_offer(
+        *,
+        strategy: IncrementalMutationStrategy,
+        renderer_macro: str,
+        requirements: IncrementalStrategyRequirements,
+    ) -> IncrementalMutationStrategyOffer:
+        return IncrementalMutationStrategyOffer.available(
+            strategy=strategy,
+            renderer_macro=renderer_macro,
+            atomicity=DdlAtomicity.STATEMENT,
+            requirements=requirements,
+            provenance=(
+                PlanProvenance(
+                    rule=f"incremental.bigquery.{strategy.value}",
+                    detail=f"BigQuery strategy resolves to {renderer_macro}",
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _incremental_partition_facts(
+        model: RelationConfig,
+    ) -> Optional[IncrementalPartitionFacts]:
+        raw_partition = model.config.get("partition_by")
+        partition = PartitionConfig.parse(raw_partition)
+        if partition is None:
+            return None
+        range_config = partition.range or {}
+        configured_partitions = model.config.get("partitions") or ()
+        return IncrementalPartitionFacts(
+            field=partition.field,
+            data_type=partition.data_type,
+            granularity=partition.granularity,
+            range_start=range_config.get("start"),
+            range_end=range_config.get("end"),
+            range_interval=range_config.get("interval"),
+            time_ingestion_partitioning=partition.time_ingestion_partitioning,
+            copy_partitions=partition.copy_partitions,
+            require_partition_filter=bool(model.config.get("require_partition_filter")),
+            static_partitions=tuple(str(value) for value in configured_partitions),
+        )
+
+    @available
+    def resolve_incremental_lifecycle_plan(
+        self,
+        mutation_plan: IncrementalMutationPlan,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        existing_relation: Optional[BaseRelation],
+        *,
+        full_refresh: bool,
+        on_schema_change: Optional[str],
+        staging_is_temporary: bool,
+        contract_enforced: bool,
+        materialization_plan: Optional[IncrementalMaterializationPlan] = None,
+    ) -> IncrementalLifecyclePlan:
+        facts = self.build_table_materialization_facts(model, target_relation, existing_relation)
+        schema_change = self.plan_incremental_schema_change(on_schema_change)
+        partition = self._incremental_partition_facts(model)
+        strategy = mutation_plan.strategy
+        if (
+            strategy
+            in {
+                IncrementalMutationStrategy.INSERT_OVERWRITE,
+                IncrementalMutationStrategy.MICROBATCH,
+            }
+            and partition is None
+        ):
+            raise dbt_common.exceptions.CompilationError(
+                f"The '{mutation_plan.requested_strategy}' strategy requires partition_by"
+            )
+        if (
+            partition is not None
+            and partition.copy_partitions
+            and strategy
+            not in {
+                IncrementalMutationStrategy.INSERT_OVERWRITE,
+                IncrementalMutationStrategy.MICROBATCH,
+            }
+        ):
+            raise dbt_common.exceptions.CompilationError(
+                "copy_partitions requires insert_overwrite or microbatch"
+            )
+        if strategy == IncrementalMutationStrategy.MICROBATCH:
+            batch_size = model.config.get("batch_size")
+            if partition is None or partition.granularity != batch_size:
+                raise dbt_common.exceptions.CompilationError(
+                    "microbatch requires partition_by.granularity to match batch_size"
+                )
+
+        target = MaterializationRelationRole.TARGET
+        existing = MaterializationRelationRole.EXISTING
+        temp = MaterializationRelationRole.TEMP
+        operations = [
+            MaterializationOperation(
+                kind=MaterializationOperationKind.RUN_HOOKS,
+                name="pre",
+                inside_transaction=True,
+            )
+        ]
+
+        def append_create(relation: MaterializationRelationRole, *, temporary: bool) -> None:
+            operations.append(
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.CREATE_FROM_QUERY,
+                    relation=relation,
+                    temporary=temporary,
+                    auto_begin=False,
+                )
+            )
+            if partition is not None and partition.time_ingestion_partitioning:
+                operations.append(
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.INSERT_FROM_QUERY,
+                        relation=relation,
+                    )
+                )
+
+        if existing_relation is None:
+            append_create(target, temporary=False)
+        elif full_refresh:
+            if facts.existing is not None and facts.existing.requires_drop_before_replace:
+                operations.append(
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+                        relation=existing,
+                    )
+                )
+            append_create(target, temporary=False)
+        else:
+            mutation_operation = (
+                MaterializationOperationKind.COPY_INCREMENTAL_PARTITIONS
+                if partition is not None and partition.copy_partitions
+                else MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION
+            )
+            append_create(temp, temporary=True)
+            operations.extend(
+                (
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+                        relation=existing,
+                        source=temp,
+                    ),
+                    MaterializationOperation(
+                        kind=mutation_operation,
+                        relation=target,
+                        source=temp,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+                        relation=temp,
+                    ),
+                )
+            )
+        operations.extend(
+            (
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.RUN_HOOKS,
+                    name="post",
+                    inside_transaction=True,
+                ),
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.APPLY_GRANTS,
+                    relation=target,
+                ),
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.PERSIST_DOCUMENTATION,
+                    relation=target,
+                ),
+            )
+        )
+        return IncrementalLifecyclePlan(
+            mutation=mutation_plan,
+            schema_change=schema_change,
+            facts=facts,
+            full_refresh=full_refresh,
+            partition=partition,
+            operations=tuple(operations),
+            provenance=(() if materialization_plan is None else materialization_plan.provenance)
+            + (
+                PlanProvenance(
+                    rule="incremental.bigquery.runtime_facts",
+                    detail="BigQuery lifecycle resolved from relation and partition facts",
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_incremental_arguments(
+        self,
+        *,
+        target_relation: Any,
+        temp_relation: Any,
+        unique_key: Optional[Union[str, Sequence[str]]],
+        dest_columns: Iterable[Any],
+        incremental_predicates: Optional[Sequence[str]],
+        adapter_arguments: Optional[Mapping[str, Any]] = None,
+    ) -> IncrementalMutationArguments:
+        arguments = dict(adapter_arguments or {})
+        partition_plan = arguments.get("partition_plan")
+        if partition_plan is not None:
+            raw_partition = dict(partition_plan)
+            static_partitions = raw_partition.pop("static_partitions", None)
+            require_partition_filter = raw_partition.pop("require_partition_filter", False)
+            arguments["partition_plan"] = raw_partition
+            arguments["partitions"] = static_partitions or None
+            arguments["require_partition_filter"] = require_partition_filter
+            partition = self.parse_partition_by(raw_partition)
+            if partition is not None and partition.time_ingestion_partitioning:
+                dest_columns = self.add_time_ingestion_partition_column(
+                    partition, list(dest_columns)
+                )
+        return super().plan_incremental_arguments(
+            target_relation=target_relation,
+            temp_relation=temp_relation,
+            unique_key=unique_key,
+            dest_columns=dest_columns,
+            incremental_predicates=incremental_predicates,
+            adapter_arguments=arguments,
+        )
+
+    def render_incremental_insert_from_query(
+        self,
+        relation: BaseRelation,
+        query: str,
+        partition: IncrementalPartitionFacts,
+        sql_header: Optional[str],
+    ) -> str:
+        if not partition.time_ingestion_partitioning:
+            raise dbt_common.exceptions.CompilationError(
+                "Insert-from-query execution requires ingestion-time partition facts"
+            )
+        columns = self.get_columns_in_relation(relation)
+        destination_columns = ", ".join(self.quote(column.name) for column in columns)
+        partition_field = self.quote(partition.field)
+        header = f"{sql_header}\n" if sql_header else ""
+        return (
+            f"{header}insert into {relation} (_PARTITIONTIME, {destination_columns})\n"
+            f"select TIMESTAMP({partition_field}) as _PARTITIONTIME, "
+            f"* EXCEPT({partition_field}) from (\n{query}\n);"
+        )
+
+    def execute_incremental_partition_copy(
+        self,
+        source_relation: BaseRelation,
+        target_relation: BaseRelation,
+        partition: IncrementalPartitionFacts,
+    ) -> None:
+        raw_partition = partition.to_dict()
+        raw_partition.pop("static_partitions")
+        raw_partition.pop("require_partition_filter")
+        partition_config = self.parse_partition_by(raw_partition)
+        if partition_config is None:
+            raise dbt_common.exceptions.CompilationError(
+                "Partition-copy execution requires partition facts"
+            )
+
+        if partition.static_partitions:
+            partition_sql = (
+                "select partition_literal from unnest(["
+                + ", ".join(partition.static_partitions)
+                + "]) as partition_literal"
+            )
+        else:
+            partition_sql = (
+                f"select distinct {partition_config.render_wrapped()} " f"from {source_relation}"
+            )
+        _, table = self.execute(partition_sql, fetch=True)
+        for value in table.columns[0].values():
+            if partition.data_type == "int64":
+                suffix = str(value)
+            else:
+                formats = {
+                    "hour": "%Y%m%d%H",
+                    "day": "%Y%m%d",
+                    "month": "%Y%m",
+                    "year": "%Y",
+                }
+                suffix = value.strftime(formats[partition.granularity or "day"])
+            source_partition = source_relation.incorporate(
+                path={"identifier": f"{source_relation.identifier}${suffix}"}
+            )
+            target_partition = target_relation.incorporate(
+                path={"identifier": f"{target_relation.identifier}${suffix}"}
+            )
+            self.copy_table(source_partition, target_partition, "table")
 
     def get_create_from_query_catalog_provider(
         self,

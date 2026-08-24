@@ -78,6 +78,7 @@ class MaterializationOperationKind(str, Enum):
     DROP_RELATION_IF_EXISTS = "drop_relation_if_exists"
     RUN_HOOKS = "run_hooks"
     CREATE_FROM_QUERY = "create_from_query"
+    INSERT_FROM_QUERY = "insert_from_query"
     CREATE_FROM_RELATION = "create_from_relation"
     EXPAND_TARGET_COLUMN_TYPES = "expand_target_column_types"
     PROCESS_SCHEMA_CHANGES = "process_schema_changes"
@@ -86,6 +87,7 @@ class MaterializationOperationKind(str, Enum):
     APPLY_CONFIG_CHANGES = "apply_config_changes"
     SET_INCREMENTAL_OVERWRITE_MODE = "set_incremental_overwrite_mode"
     EXECUTE_INCREMENTAL_MUTATION = "execute_incremental_mutation"
+    COPY_INCREMENTAL_PARTITIONS = "copy_incremental_partitions"
     RENAME_RELATION = "rename_relation"
     CREATE_INDEXES = "create_indexes"
     APPLY_GRANTS = "apply_grants"
@@ -229,6 +231,7 @@ class MaterializationOperation:
         relation_required = {
             MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
             MaterializationOperationKind.CREATE_FROM_QUERY,
+            MaterializationOperationKind.INSERT_FROM_QUERY,
             MaterializationOperationKind.CREATE_FROM_RELATION,
             MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
             MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
@@ -236,6 +239,7 @@ class MaterializationOperation:
             MaterializationOperationKind.CAPTURE_CONFIG_CHANGES,
             MaterializationOperationKind.APPLY_CONFIG_CHANGES,
             MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
+            MaterializationOperationKind.COPY_INCREMENTAL_PARTITIONS,
             MaterializationOperationKind.RENAME_RELATION,
             MaterializationOperationKind.CREATE_INDEXES,
             MaterializationOperationKind.APPLY_GRANTS,
@@ -256,6 +260,7 @@ class MaterializationOperation:
                 MaterializationOperationKind.PROCESS_CONFIG_CHANGES,
                 MaterializationOperationKind.APPLY_CONFIG_CHANGES,
                 MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
+                MaterializationOperationKind.COPY_INCREMENTAL_PARTITIONS,
             }
             and self.source is None
         ):

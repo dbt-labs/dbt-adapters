@@ -20,7 +20,7 @@
 
 
 {% macro bq_generate_incremental_merge_build_sql(
-    tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, incremental_predicates
+    tmp_relation, target_relation, sql, unique_key, partition_by, dest_columns, tmp_relation_exists, incremental_predicates, require_partition_filter=none
 ) %}
     {%- set source_sql -%}
         {%- if tmp_relation_exists -%}
@@ -43,7 +43,20 @@
     {%- endset -%}
 
     {%- set predicates = [] if incremental_predicates is none else [] + incremental_predicates -%}
-    {%- set avoid_require_partition_filter = predicate_for_avoid_require_partition_filter() -%}
+    {%- if require_partition_filter is none -%}
+      {# Legacy materialization compatibility; typed plans always provide this fact. #}
+      {%- set avoid_require_partition_filter = predicate_for_avoid_require_partition_filter() -%}
+    {%- elif require_partition_filter -%}
+      {%- set partition_field = partition_by.time_partitioning_field() if partition_by.time_ingestion_partitioning else partition_by.field -%}
+      {% set avoid_require_partition_filter %}
+        (
+          `DBT_INTERNAL_DEST`.`{{ partition_field }}` is null
+          or `DBT_INTERNAL_DEST`.`{{ partition_field }}` is not null
+        )
+      {% endset %}
+    {%- else -%}
+      {%- set avoid_require_partition_filter = none -%}
+    {%- endif -%}
     {%- if avoid_require_partition_filter is not none -%}
         {% do predicates.append(avoid_require_partition_filter) %}
     {%- endif -%}
