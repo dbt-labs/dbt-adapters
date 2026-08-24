@@ -92,6 +92,28 @@ class TestBigQueryTableMaterializationPlanning:
         assert facts.transaction_mode == MaterializationTransactionMode.NONE
         assert "biglake_iceberg" in facts.capabilities
 
+    def test_biglake_provider_is_retained_in_incremental_facts(self):
+        catalog_relation = SimpleNamespace(
+            catalog_type=constants.BIGLAKE_CATALOG_TYPE,
+            catalog_name="analytics",
+            catalog_database="lakehouse",
+            table_format=constants.ICEBERG_TABLE_FORMAT,
+            file_format="parquet",
+            external_volume=None,
+        )
+
+        facts = self.adapter.build_incremental_mutation_facts(
+            requested_strategy="merge",
+            language="sql",
+            unique_key="id",
+            requested_temp_relation_type=None,
+            catalog_relation=catalog_relation,
+        )
+
+        assert facts.catalog.catalog_provider == "biglake"
+        assert facts.catalog.integration_name == "analytics"
+        assert facts.format.table_provider == "parquet"
+
     def test_changed_partitioning_forces_drop_before_replace(self):
         existing = MagicMock()
         existing.is_table = True

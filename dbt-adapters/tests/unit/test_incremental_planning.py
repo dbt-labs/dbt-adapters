@@ -204,6 +204,9 @@ def test_base_adapter_resolver_passes_actual_mutation_facts_to_offers():
             adapter, **kwargs
         ),
         get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
+        get_create_from_query_catalog_provider=lambda catalog_relation, model: (
+            BaseAdapter.get_create_from_query_catalog_provider(adapter, catalog_relation, model)
+        ),
         get_incremental_mutation_strategy_offers=offers,
     )
     catalog_relation = object()
@@ -475,6 +478,42 @@ def test_incremental_facts_reject_invalid_unique_key_columns():
             requested_temp_relation_type=None,
             catalog_relation=None,
         )
+
+
+def test_incremental_facts_retain_explicit_catalog_provider():
+    adapter = SimpleNamespace(
+        get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.STANDARD,
+        get_create_from_query_catalog_provider=lambda catalog_relation, model: (
+            BaseAdapter.get_create_from_query_catalog_provider(
+                adapter,
+                catalog_relation,
+                model,
+            )
+        ),
+    )
+    catalog_relation = SimpleNamespace(
+        catalog_type="iceberg_rest",
+        catalog_name="shared_catalog",
+        catalog_database="analytics",
+        catalog_provider="glue",
+        table_format="iceberg",
+        file_format="parquet",
+        external_volume=None,
+    )
+
+    facts = BaseAdapter.build_incremental_mutation_facts(
+        adapter,
+        requested_strategy="merge",
+        language="sql",
+        unique_key="id",
+        requested_temp_relation_type=None,
+        catalog_relation=catalog_relation,
+    )
+
+    assert facts.catalog.integration_name == "shared_catalog"
+    assert facts.catalog.catalog_provider == "glue"
+    assert facts.format.table_format == "iceberg"
+    assert facts.format.table_provider == "parquet"
 
 
 def test_incremental_plan_carries_resolved_catalog_staging_to_renderer():

@@ -207,6 +207,7 @@ class MaterializationOperation:
     source: Optional[MaterializationRelationRole] = None
     destination: Optional[MaterializationRelationRole] = None
     name: Optional[str] = None
+    renderer_variant: Optional[str] = None
     inside_transaction: Optional[bool] = None
     temporary: Optional[bool] = None
     auto_begin: Optional[bool] = None
@@ -223,6 +224,12 @@ class MaterializationOperation:
                 raise TypeError(f"Materialization operation {field_name} must be typed")
         if self.name is not None and (not isinstance(self.name, str) or not self.name.strip()):
             raise ValueError("Materialization operation name must be a non-empty string")
+        if self.renderer_variant is not None and (
+            not isinstance(self.renderer_variant, str) or not self.renderer_variant.strip()
+        ):
+            raise ValueError(
+                "Materialization operation renderer variant must be a non-empty string"
+            )
         for value, field_name in (
             (self.inside_transaction, "inside_transaction"),
             (self.temporary, "temporary"),
@@ -304,6 +311,7 @@ class MaterializationOperation:
             "source": self.source.value if self.source is not None else None,
             "destination": (self.destination.value if self.destination is not None else None),
             "name": self.name,
+            "renderer_variant": self.renderer_variant,
             "inside_transaction": self.inside_transaction,
             "temporary": self.temporary,
             "auto_begin": self.auto_begin,

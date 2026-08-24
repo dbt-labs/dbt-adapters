@@ -570,7 +570,10 @@ class BaseAdapter(metaclass=AdapterMeta):
     ) -> Optional[str]:
         """Return a canonical catalog provider when the adapter resolves one."""
 
-        return None
+        return BaseAdapter._create_from_query_fact_value(
+            getattr(catalog_relation, "catalog_provider", None),
+            canonical=True,
+        )
 
     def resolve_create_from_query_plan(
         self, temporary: bool, facts: CreateFromQueryFacts
@@ -2317,20 +2320,23 @@ class BaseAdapter(metaclass=AdapterMeta):
             catalog = CatalogFacts(state=CatalogBindingState.UNBOUND)
             format_facts = FormatFacts()
         else:
+            catalog_type = BaseAdapter._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_type", None), canonical=True
+            ) or "default"
+            catalog_name = BaseAdapter._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_name", None)
+            )
             catalog = CatalogFacts(
                 state=CatalogBindingState.RESOLVED,
-                catalog_type=BaseAdapter._create_from_query_fact_value(
-                    getattr(catalog_relation, "catalog_type", None), canonical=True
-                )
-                or "default",
-                catalog_name=BaseAdapter._create_from_query_fact_value(
-                    getattr(catalog_relation, "catalog_name", None)
-                ),
+                integration_name=catalog_name or catalog_type,
+                catalog_type=catalog_type,
+                catalog_name=catalog_name,
                 catalog_database=BaseAdapter._create_from_query_fact_value(
                     getattr(catalog_relation, "catalog_database", None)
                 ),
-                catalog_provider=BaseAdapter._create_from_query_fact_value(
-                    getattr(catalog_relation, "catalog_provider", None), canonical=True
+                catalog_provider=self.get_create_from_query_catalog_provider(
+                    catalog_relation,
+                    None,
                 ),
                 external_volume=BaseAdapter._create_from_query_fact_value(
                     getattr(catalog_relation, "external_volume", None)

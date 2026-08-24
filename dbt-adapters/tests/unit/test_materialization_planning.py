@@ -17,7 +17,9 @@ from dbt.adapters.planning import (
     IncrementalMutationStrategy,
     MaterializationExecutionFacts,
     MaterializationHookStrategy,
+    MaterializationOperation,
     MaterializationOperationKind,
+    MaterializationRelationRole,
     MaterializationStatementStrategy,
     MaterializationTransactionStrategy,
     MaterializationTransactionMode,
@@ -118,6 +120,16 @@ def test_execution_envelope_macros_must_be_paired() -> None:
             setup_macro="set_query_tag",
             provenance=_provenance(),
         )
+
+
+def test_materialization_operation_serializes_renderer_variant() -> None:
+    operation = MaterializationOperation(
+        kind=MaterializationOperationKind.OPTIMIZE,
+        relation=MaterializationRelationRole.TARGET,
+        renderer_variant="zorder",
+    )
+
+    assert operation.to_dict()["renderer_variant"] == "zorder"
 
 
 def _facts(*, can_be_renamed: bool = True, requires_drop: bool = False):

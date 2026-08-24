@@ -93,3 +93,34 @@ def test_snowflake_glue_catalog_provider_is_explicit_in_runtime_facts() -> None:
         "iceberg",
         "glue_linked_catalog",
     )
+
+
+def test_snowflake_glue_catalog_provider_is_retained_in_incremental_plan() -> None:
+    adapter = _adapter()
+    catalog_relation = type(
+        "CatalogRelation",
+        (),
+        {
+            "catalog_type": constants.ICEBERG_REST_CATALOG_TYPE,
+            "catalog_name": "aws_glue_catalog",
+            "catalog_database": "analytics",
+            "catalog_linked_database_type": "glue",
+            "table_format": constants.ICEBERG_TABLE_FORMAT,
+            "file_format": constants.ICEBERG_TABLE_FORMAT,
+            "external_volume": None,
+        },
+    )()
+
+    facts = SnowflakeAdapter.build_incremental_mutation_facts(
+        adapter,
+        requested_strategy="merge",
+        language="sql",
+        unique_key="id",
+        requested_temp_relation_type=None,
+        catalog_relation=catalog_relation,
+    )
+
+    assert facts.catalog.integration_name == "aws_glue_catalog"
+    assert facts.catalog.catalog_provider == "glue"
+    assert facts.catalog.catalog_database == "analytics"
+    assert facts.format.table_provider == constants.ICEBERG_TABLE_FORMAT.casefold()
