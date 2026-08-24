@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix "list object has no element 0" in batch source freshness when no selected
+    source is metadata-based (all declare a loaded_at_field)
+time: 2026-07-22T12:15:00.000000+09:00
+custom:
+    Author: ota2000
+    Issue: "1789"
