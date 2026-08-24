@@ -110,8 +110,7 @@ class MaterializationExecutionFacts:
         if not isinstance(self.capabilities, tuple):
             raise TypeError("Materialization capabilities must be an immutable tuple")
         if not all(
-            isinstance(capability, str) and capability.strip()
-            for capability in self.capabilities
+            isinstance(capability, str) and capability.strip() for capability in self.capabilities
         ):
             raise ValueError("Materialization capabilities must be non-empty strings")
         if len(set(self.capabilities)) != len(self.capabilities):
@@ -172,12 +171,8 @@ class TableMaterializationFacts:
 
     def __post_init__(self) -> None:
         if not isinstance(self.create, CreateFromQueryFacts):
-            raise TypeError(
-                "Table materialization facts require create-from-query facts"
-            )
-        if self.existing is not None and not isinstance(
-            self.existing, ExistingRelationFacts
-        ):
+            raise TypeError("Table materialization facts require create-from-query facts")
+        if self.existing is not None and not isinstance(self.existing, ExistingRelationFacts):
             raise TypeError("Existing table state must contain ExistingRelationFacts")
         if not isinstance(self.execution, MaterializationExecutionFacts):
             raise TypeError("Table materialization execution facts must be typed")
@@ -213,21 +208,15 @@ class MaterializationOperation:
         ):
             if value is not None and not isinstance(value, MaterializationRelationRole):
                 raise TypeError(f"Materialization operation {field_name} must be typed")
-        if self.name is not None and (
-            not isinstance(self.name, str) or not self.name.strip()
-        ):
-            raise ValueError(
-                "Materialization operation name must be a non-empty string"
-            )
+        if self.name is not None and (not isinstance(self.name, str) or not self.name.strip()):
+            raise ValueError("Materialization operation name must be a non-empty string")
         for value, field_name in (
             (self.inside_transaction, "inside_transaction"),
             (self.temporary, "temporary"),
             (self.auto_begin, "auto_begin"),
         ):
             if value is not None and not isinstance(value, bool):
-                raise TypeError(
-                    f"Materialization operation {field_name} must be a boolean"
-                )
+                raise TypeError(f"Materialization operation {field_name} must be a boolean")
 
         relation_required = {
             MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
@@ -244,15 +233,9 @@ class MaterializationOperation:
         }
         if self.kind in relation_required and self.relation is None:
             raise ValueError(f"{self.kind.value} operation requires a relation role")
-        if (
-            self.kind == MaterializationOperationKind.CREATE_FROM_RELATION
-            and self.source is None
-        ):
+        if self.kind == MaterializationOperationKind.CREATE_FROM_RELATION and self.source is None:
             raise ValueError("create_from_relation operation requires a source role")
-        if (
-            self.kind == MaterializationOperationKind.RENAME_RELATION
-            and self.destination is None
-        ):
+        if self.kind == MaterializationOperationKind.RENAME_RELATION and self.destination is None:
             raise ValueError("rename_relation operation requires a destination role")
         if (
             self.kind
@@ -263,10 +246,7 @@ class MaterializationOperation:
             and self.name is None
         ):
             raise ValueError(f"{self.kind.value} operation requires a name")
-        if (
-            self.kind == MaterializationOperationKind.RUN_HOOKS
-            and self.inside_transaction is None
-        ):
+        if self.kind == MaterializationOperationKind.RUN_HOOKS and self.inside_transaction is None:
             raise ValueError("run_hooks operation requires transaction placement")
         if self.kind == MaterializationOperationKind.CREATE_FROM_QUERY:
             if self.temporary is None or self.auto_begin is None:
@@ -279,9 +259,7 @@ class MaterializationOperation:
             "kind": self.kind.value,
             "relation": self.relation.value if self.relation is not None else None,
             "source": self.source.value if self.source is not None else None,
-            "destination": (
-                self.destination.value if self.destination is not None else None
-            ),
+            "destination": (self.destination.value if self.destination is not None else None),
             "name": self.name,
             "inside_transaction": self.inside_transaction,
             "temporary": self.temporary,
@@ -327,15 +305,11 @@ class TableLifecyclePlan:
             raise ValueError("Table lifecycle plan must include provenance")
         if not all(isinstance(item, PlanProvenance) for item in self.provenance):
             raise TypeError("Table lifecycle provenance must contain PlanProvenance")
-        if self.facts is not None and not isinstance(
-            self.facts, TableMaterializationFacts
-        ):
+        if self.facts is not None and not isinstance(self.facts, TableMaterializationFacts):
             raise TypeError("Table lifecycle facts must be typed")
         if not isinstance(self.operations, tuple):
             raise TypeError("Table lifecycle operations must be an immutable tuple")
-        if not all(
-            isinstance(item, MaterializationOperation) for item in self.operations
-        ):
+        if not all(isinstance(item, MaterializationOperation) for item in self.operations):
             raise TypeError("Table lifecycle operations must be typed")
         if (self.facts is None) != (not self.operations):
             raise ValueError(
@@ -347,18 +321,14 @@ class TableLifecyclePlan:
             (self.teardown_macro, "teardown macro"),
         ):
             if value is not None and (not isinstance(value, str) or not value.strip()):
-                raise ValueError(
-                    f"Table lifecycle {field_name} must be a non-empty string"
-                )
+                raise ValueError(f"Table lifecycle {field_name} must be a non-empty string")
         if (self.setup_macro is None) != (self.teardown_macro is None):
             raise ValueError("Table lifecycle setup and teardown macros must be paired")
         if (
             self.documentation == TableDocumentationStrategy.AFTER_COMMIT
             and self.transaction != MaterializationTransactionStrategy.EXPLICIT_COMMIT
         ):
-            raise ValueError(
-                "Post-commit documentation requires explicit transaction control"
-            )
+            raise ValueError("Post-commit documentation requires explicit transaction control")
         if (
             self.replacement == TableReplacementStrategy.DIRECT_REPLACE
             and self.indexes == TableIndexStrategy.BEFORE_SWAP
@@ -368,9 +338,7 @@ class TableLifecyclePlan:
             self.replacement == TableReplacementStrategy.DIRECT_REPLACE
             and self.existing_indexes == ExistingIndexStrategy.DROP_BEFORE_SWAP
         ):
-            raise ValueError(
-                "Direct replacement has no swap boundary for existing indexes"
-            )
+            raise ValueError("Direct replacement has no swap boundary for existing indexes")
 
     @property
     def is_resolved(self) -> bool:
@@ -603,9 +571,7 @@ def resolve_table_materialization_operations(
             )
         )
     if plan.transaction == MaterializationTransactionStrategy.EXPLICIT_COMMIT:
-        operations.append(
-            MaterializationOperation(kind=MaterializationOperationKind.COMMIT)
-        )
+        operations.append(MaterializationOperation(kind=MaterializationOperationKind.COMMIT))
     if plan.documentation == TableDocumentationStrategy.AFTER_COMMIT:
         operations.extend(
             (

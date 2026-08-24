@@ -56,9 +56,7 @@ def test_snowflake_target_relation_uses_resolved_catalog_format() -> None:
         "CatalogRelation", (), {"table_format": constants.ICEBERG_TABLE_FORMAT}
     )()
 
-    target = SnowflakeAdapter.resolve_table_materialization_relation(
-        adapter, object(), relation
-    )
+    target = SnowflakeAdapter.resolve_table_materialization_relation(adapter, object(), relation)
 
     assert target.type == "table"
     assert target.table_format == constants.ICEBERG_TABLE_FORMAT
@@ -77,9 +75,7 @@ def test_snowflake_glue_catalog_provider_is_explicit_in_runtime_facts() -> None:
     )()
     adapter.build_catalog_relation = lambda model: catalog_relation
 
-    provider = adapter.get_create_from_query_catalog_provider(
-        catalog_relation, object()
-    )
+    provider = adapter.get_create_from_query_catalog_provider(catalog_relation, object())
     facts = adapter.get_table_materialization_execution_facts(
         object(),
         SnowflakeRelation.create(

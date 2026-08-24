@@ -30,9 +30,7 @@ from dbt.adapters.planning import (
 
 def _adapter() -> MagicMock:
     adapter = MagicMock(spec=BaseAdapter)
-    adapter.plan_table_materialization = BaseAdapter.plan_table_materialization.__get__(
-        adapter
-    )
+    adapter.plan_table_materialization = BaseAdapter.plan_table_materialization.__get__(adapter)
     return adapter
 
 
@@ -63,9 +61,7 @@ def test_default_sql_table_resolves_to_stage_and_swap() -> None:
         "provenance": [
             {
                 "rule": "materialization.table.default",
-                "detail": (
-                    "Built-in SQL table materialization uses stage-and-swap replacement"
-                ),
+                "detail": ("Built-in SQL table materialization uses stage-and-swap replacement"),
             }
         ],
     }
@@ -81,9 +77,7 @@ def test_default_sql_table_resolves_to_stage_and_swap() -> None:
 def test_default_resolver_leaves_overrides_and_non_sql_on_jinja_path(
     macro_id: str, language: str
 ) -> None:
-    assert (
-        BaseAdapter.plan_table_materialization(_adapter(), macro_id, language) is None
-    )
+    assert BaseAdapter.plan_table_materialization(_adapter(), macro_id, language) is None
 
 
 def test_direct_replace_supports_a_paired_execution_envelope() -> None:
@@ -191,10 +185,8 @@ def test_base_adapter_builds_live_replacement_facts() -> None:
     adapter = MagicMock()
     create_facts = _facts().create
     adapter.build_create_from_query_facts.return_value = create_facts
-    adapter.get_table_materialization_execution_facts.return_value = (
-        MaterializationExecutionFacts(
-            transaction_mode=MaterializationTransactionMode.TRANSACTIONAL
-        )
+    adapter.get_table_materialization_execution_facts.return_value = MaterializationExecutionFacts(
+        transaction_mode=MaterializationTransactionMode.TRANSACTIONAL
     )
     adapter._create_from_query_fact_value.side_effect = lambda value, **_: (
         None if value is None else str(getattr(value, "value", value)).casefold()
