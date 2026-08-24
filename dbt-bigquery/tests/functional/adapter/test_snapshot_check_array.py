@@ -1,10 +1,10 @@
 """
-Tests for BigQuery snapshots with ARRAY columns using strategy='check'.
+Tests for BigQuery snapshots with ARRAY and JSON columns using strategy='check'.
 
-BigQuery does not support `!=` on ARRAY types, so the default snapshot_check_strategy
-generates invalid SQL when check_cols includes an ARRAY column. The
-bigquery__snapshot_check_row_changed override fixes this by wrapping comparisons
-in TO_JSON_STRING().
+BigQuery does not support `!=` on ARRAY or JSON types, so the default
+snapshot_check_strategy generates invalid SQL when check_cols includes an ARRAY or
+JSON column. The bigquery__snapshot_check_row_changed override fixes this by wrapping
+comparisons in TO_JSON_STRING().
 """
 
 import pytest
@@ -24,7 +24,8 @@ select
     gender,
     ip_address,
     updated_at,
-    [gender, ip_address] as tags
+    [gender, ip_address] as tags,
+    to_json(struct(gender as gender, ip_address as ip_address)) as metadata
 from (
     select 1 as id, 'Judith' as first_name, 'Kennedy' as last_name, 'jkennedy0@phpbb.com' as email, 'Female' as gender, '54.60.24.128' as ip_address, timestamp('2015-12-24') as updated_at union all
     select 2, 'Arthur', 'Kelly', 'akelly1@eepurl.com', 'Male', '62.56.24.215', timestamp('2015-10-28') union all
@@ -120,6 +121,25 @@ class TestSnapshotCheckArrayColumns(BaseSimpleSnapshotBase):
             f"""
             update {fact}
             set tags = ['updated_tag1', 'updated_tag2']
+            where id between 4 and 5
+            """
+        )
+        run_dbt(["snapshot"])
+        self._assert_results(
+            ids_with_current_snapshot_records=range(1, 6),
+            ids_with_closed_out_snapshot_records=range(4, 6),
+        )
+
+    def test_json_updates_are_captured_by_snapshot(self, project):
+        """
+        Update JSON column values. The check strategy must detect the change
+        via TO_JSON_STRING wrapping.
+        """
+        fact = relation_from_name(project.adapter, "fact")
+        project.run_sql(
+            f"""
+            update {fact}
+            set metadata = to_json(struct('updated' as gender, 'updated' as ip_address))
             where id between 4 and 5
             """
         )

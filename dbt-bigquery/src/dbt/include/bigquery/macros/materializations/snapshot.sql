@@ -15,17 +15,17 @@
 {% endmacro %}
 
 {% macro bigquery__snapshot_check_row_changed(check_cols, snapshotted_rel, current_rel, node) %}
-    {#-- Detect REPEATED (ARRAY) columns that need TO_JSON_STRING wrapping
-         since BigQuery does not support != on ARRAY types. --#}
-    {% set repeated_cols = [] %}
+    {#-- Detect REPEATED (ARRAY) and JSON columns that need TO_JSON_STRING wrapping
+         since BigQuery does not support != on ARRAY or JSON types. --#}
+    {% set json_string_cols = [] %}
     {% for col in adapter.get_columns_in_select_sql(get_empty_subquery_sql(node['compiled_code'])) %}
-        {% if col.mode == 'REPEATED' %}
-            {% do repeated_cols.append(adapter.quote(col.column)) %}
+        {% if col.mode == 'REPEATED' or col.dtype | upper == 'JSON' %}
+            {% do json_string_cols.append(adapter.quote(col.column)) %}
         {% endif %}
     {% endfor %}
 
     {%- for col in check_cols -%}
-        {%- if col in repeated_cols -%}
+        {%- if col in json_string_cols -%}
         TO_JSON_STRING({{ snapshotted_rel }}.{{ col }}) != TO_JSON_STRING({{ current_rel }}.{{ col }})
         {%- else -%}
         {{ snapshotted_rel }}.{{ col }} != {{ current_rel }}.{{ col }}
