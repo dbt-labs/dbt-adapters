@@ -127,6 +127,7 @@ from dbt.adapters.planning import (
     FormatFacts,
     IncrementalCatalogStaging,
     IncrementalLifecyclePlan,
+    IncrementalMaterializationPlan,
     IncrementalMutationArguments,
     IncrementalMutationFacts,
     IncrementalMutationPlan,
@@ -2253,6 +2254,28 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return builtin_strategies
 
+    @available.parse_none
+    def plan_incremental_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[IncrementalMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt.materialization_incremental_default"
+        ):
+            return None
+        return IncrementalMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            provenance=(
+                PlanProvenance(
+                    rule="incremental.materialization.default",
+                    detail="Built-in SQL incremental materialization uses ordered Python execution",
+                ),
+            ),
+        )
+
     @available
     def plan_incremental_mutation(
         self,
@@ -2374,6 +2397,7 @@ class BaseAdapter(metaclass=AdapterMeta):
         on_schema_change: Optional[str],
         staging_is_temporary: bool,
         contract_enforced: bool,
+        materialization_plan: Optional[IncrementalMaterializationPlan] = None,
     ) -> IncrementalLifecyclePlan:
         """Resolve live incremental state into one ordered mutation program."""
 
@@ -2517,7 +2541,8 @@ class BaseAdapter(metaclass=AdapterMeta):
             facts=facts,
             full_refresh=full_refresh,
             operations=tuple(operations),
-            provenance=(
+            provenance=(() if materialization_plan is None else materialization_plan.provenance)
+            + (
                 PlanProvenance(
                     rule="incremental.lifecycle.runtime_facts",
                     detail=(

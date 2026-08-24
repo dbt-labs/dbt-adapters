@@ -81,6 +81,8 @@ class MaterializationOperationKind(str, Enum):
     CREATE_FROM_RELATION = "create_from_relation"
     EXPAND_TARGET_COLUMN_TYPES = "expand_target_column_types"
     PROCESS_SCHEMA_CHANGES = "process_schema_changes"
+    PROCESS_CONFIG_CHANGES = "process_config_changes"
+    SET_INCREMENTAL_OVERWRITE_MODE = "set_incremental_overwrite_mode"
     EXECUTE_INCREMENTAL_MUTATION = "execute_incremental_mutation"
     RENAME_RELATION = "rename_relation"
     CREATE_INDEXES = "create_indexes"
@@ -228,6 +230,7 @@ class MaterializationOperation:
             MaterializationOperationKind.CREATE_FROM_RELATION,
             MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
             MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+            MaterializationOperationKind.PROCESS_CONFIG_CHANGES,
             MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
             MaterializationOperationKind.RENAME_RELATION,
             MaterializationOperationKind.CREATE_INDEXES,
@@ -246,6 +249,7 @@ class MaterializationOperation:
                 MaterializationOperationKind.CREATE_FROM_RELATION,
                 MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
                 MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+                MaterializationOperationKind.PROCESS_CONFIG_CHANGES,
                 MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
             }
             and self.source is None
@@ -253,6 +257,11 @@ class MaterializationOperation:
             raise ValueError(f"{self.kind.value} operation requires a source role")
         if self.kind == MaterializationOperationKind.RENAME_RELATION and self.destination is None:
             raise ValueError("rename_relation operation requires a destination role")
+        if (
+            self.kind == MaterializationOperationKind.SET_INCREMENTAL_OVERWRITE_MODE
+            and self.name not in {"DYNAMIC", "STATIC"}
+        ):
+            raise ValueError("set_incremental_overwrite_mode requires DYNAMIC or STATIC")
         if (
             self.kind
             in {

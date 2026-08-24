@@ -19,6 +19,7 @@ from dbt.adapters.planning.create_from_query import (
 from dbt.adapters.planning.incremental import (
     IncrementalCatalogStaging,
     IncrementalLifecyclePlan,
+    IncrementalMaterializationPlan,
     IncrementalMutationArguments,
     IncrementalMutationFacts,
     IncrementalMutationPlan,
@@ -74,6 +75,7 @@ __all__ = [
     "resolve_create_from_query_offers",
     "IncrementalCatalogStaging",
     "IncrementalLifecyclePlan",
+    "IncrementalMaterializationPlan",
     "IncrementalMutationArguments",
     "IncrementalMutationFacts",
     "IncrementalMutationPlan",

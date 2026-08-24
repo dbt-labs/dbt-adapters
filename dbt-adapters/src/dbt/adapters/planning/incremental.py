@@ -480,6 +480,31 @@ class IncrementalLifecyclePlan:
         }
 
 
+@dataclass(frozen=True)
+class IncrementalMaterializationPlan:
+    """Adapter opt-in to the Python incremental lifecycle executor."""
+
+    materialization_macro_id: str
+    provenance: Tuple[PlanProvenance, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.materialization_macro_id, str)
+            or not self.materialization_macro_id.strip()
+        ):
+            raise ValueError("Incremental materialization macro id must be non-empty")
+        if not isinstance(self.provenance, tuple) or not self.provenance:
+            raise ValueError("Incremental materialization plan requires immutable provenance")
+        if not all(isinstance(item, PlanProvenance) for item in self.provenance):
+            raise TypeError("Incremental materialization provenance must be typed")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "materialization_macro_id": self.materialization_macro_id,
+            "provenance": [item.to_dict() for item in self.provenance],
+        }
+
+
 _BUILTIN_STRATEGIES = {
     "default": IncrementalMutationStrategy.ADAPTER_DEFAULT,
     "append": IncrementalMutationStrategy.APPEND,
