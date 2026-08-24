@@ -35,6 +35,16 @@ from dbt.adapters.planning.incremental import (
     resolve_incremental_mutation_plan,
     resolve_incremental_schema_change_plan,
 )
+from dbt.adapters.planning.materialization import (
+    ExistingIndexStrategy,
+    MaterializationHookStrategy,
+    MaterializationStatementStrategy,
+    MaterializationTransactionStrategy,
+    TableDocumentationStrategy,
+    TableIndexStrategy,
+    TableLifecyclePlan,
+    TableReplacementStrategy,
+)
 
 __all__ = [
     "CatalogBindingState",
@@ -70,4 +80,12 @@ __all__ = [
     "resolve_incremental_mutation_offers",
     "resolve_incremental_mutation_plan",
     "resolve_incremental_schema_change_plan",
+    "ExistingIndexStrategy",
+    "MaterializationHookStrategy",
+    "MaterializationStatementStrategy",
+    "MaterializationTransactionStrategy",
+    "TableDocumentationStrategy",
+    "TableIndexStrategy",
+    "TableLifecyclePlan",
+    "TableReplacementStrategy",
 ]

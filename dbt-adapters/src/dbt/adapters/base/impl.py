@@ -137,6 +137,7 @@ from dbt.adapters.planning import (
     PlanProvenance,
     RelationFacts,
     RuntimeFacts,
+    TableLifecyclePlan,
     resolve_create_from_query_offers,
     incremental_renderer_macro,
     incremental_strategy,
@@ -1971,6 +1972,65 @@ class BaseAdapter(metaclass=AdapterMeta):
         passed to the post-model hook.
         """
         pass
+
+    @available.parse_none
+    def plan_table_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[TableLifecyclePlan]:
+        """Select a typed Python lifecycle for a built-in table materialization.
+
+        Adapter packages opt their own built-in macro into Python execution by
+        overriding this resolver. Project overrides remain on the Jinja path.
+        """
+
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt.materialization_table_default"
+        ):
+            return None
+        return TableLifecyclePlan.stage_and_swap(
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.table.default",
+                    detail="Built-in SQL table materialization uses stage-and-swap replacement",
+                ),
+            )
+        )
+
+    @available
+    def resolve_table_materialization_relation(
+        self, model: RelationConfig, relation: BaseRelation
+    ) -> BaseRelation:
+        """Build late-bound target relation arguments for a resolved lifecycle."""
+
+        return relation.incorporate(type="table")
+
+    @available.parse_none
+    def resolve_table_materialization_existing_relation(
+        self, relation: BaseRelation
+    ) -> Optional[BaseRelation]:
+        """Resolve current target state for a direct-replacement lifecycle."""
+
+        return self.get_relation(
+            database=relation.database,
+            schema=relation.schema,
+            identifier=relation.identifier,
+        )
+
+    @available
+    def resolve_table_lifecycle_plan(
+        self,
+        plan: TableLifecyclePlan,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        config: Mapping[str, Any],
+    ) -> TableLifecyclePlan:
+        """Resolve runtime-dependent policies without changing lifecycle shape."""
+
+        return plan
 
     def post_model_hook(self, config: Mapping[str, Any], context: Any) -> None:
         """A hook for running some operation after the model materialization

@@ -25,6 +25,7 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.planning import PlanProvenance, TableLifecyclePlan
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -151,6 +152,42 @@ class SnowflakeAdapter(SQLAdapter):
             ),
         }
     )
+
+    @available.parse_none
+    def plan_table_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[TableLifecyclePlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_snowflake.materialization_table_snowflake"
+        ):
+            return super().plan_table_materialization(materialization_macro_id, language, model)
+        return TableLifecyclePlan.direct_replace(
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.table.direct_replace",
+                    detail="Snowflake table materialization replaces the target relation directly",
+                ),
+            ),
+        )
+
+    @available
+    def resolve_table_materialization_relation(
+        self, model: RelationConfig, relation: SnowflakeRelation
+    ) -> SnowflakeRelation:
+        catalog_relation = self.build_catalog_relation(model)
+        table_format = (
+            catalog_relation.table_format
+            if catalog_relation is not None
+            else constants.INFO_SCHEMA_TABLE_FORMAT
+        )
+        return relation.incorporate(type="table", table_format=table_format)
 
     _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
         "horizon": "BUILT_IN",
