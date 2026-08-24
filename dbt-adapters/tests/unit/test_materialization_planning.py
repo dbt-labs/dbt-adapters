@@ -7,9 +7,13 @@ from dbt.adapters.planning import (
     CatalogBindingState,
     CatalogFacts,
     CreateFromQueryFacts,
+    DdlAtomicity,
     ExistingRelationFacts,
     ExistingIndexStrategy,
     FormatFacts,
+    IncrementalLifecyclePlan,
+    IncrementalMutationPlan,
+    IncrementalMutationStrategy,
     MaterializationExecutionFacts,
     MaterializationHookStrategy,
     MaterializationOperationKind,
@@ -216,3 +220,46 @@ def test_base_adapter_builds_live_replacement_facts() -> None:
     assert facts.existing.relation.relation_type == "view"
     assert facts.existing.format.table_format == "iceberg"
     assert facts.existing.requires_drop_before_replace is True
+
+
+def test_incremental_lifecycle_program_carries_schema_and_mutation_order() -> None:
+    adapter = MagicMock()
+    adapter.build_table_materialization_facts.return_value = _facts()
+    adapter.plan_incremental_schema_change = BaseAdapter.plan_incremental_schema_change.__get__(
+        adapter
+    )
+    mutation = IncrementalMutationPlan(
+        requested_strategy="merge",
+        strategy=IncrementalMutationStrategy.MERGE,
+        renderer_macro="get_incremental_merge_sql",
+        atomicity=DdlAtomicity.TRANSACTION,
+        provenance=(
+            PlanProvenance(
+                rule="test.incremental.merge",
+                detail="Test merge strategy",
+            ),
+        ),
+    )
+
+    plan = BaseAdapter.resolve_incremental_lifecycle_plan(
+        adapter,
+        mutation,
+        MagicMock(),
+        MagicMock(),
+        MagicMock(),
+        full_refresh=False,
+        on_schema_change="sync_all_columns",
+        staging_is_temporary=False,
+        contract_enforced=False,
+    )
+
+    assert isinstance(plan, IncrementalLifecyclePlan)
+    assert plan.schema_change.strategy.value == "sync_all_columns"
+    assert [operation.kind.value for operation in plan.operations[4:8]] == [
+        "create_from_query",
+        "expand_target_column_types",
+        "process_schema_changes",
+        "execute_incremental_mutation",
+    ]
+    assert plan.operations[4].relation.value == "temp"
+    assert plan.operations[4].temporary is False

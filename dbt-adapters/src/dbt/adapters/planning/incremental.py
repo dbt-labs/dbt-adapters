@@ -7,6 +7,10 @@ from dbt.adapters.planning.create_from_query import (
     PlanProvenance,
     StrategyOfferStatus,
 )
+from dbt.adapters.planning.materialization import (
+    MaterializationOperation,
+    TableMaterializationFacts,
+)
 
 
 class IncrementalMutationStrategy(str, Enum):
@@ -433,6 +437,46 @@ class IncrementalMutationPlan:
             ),
             "catalog_staging": self.catalog_staging.value,
             "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
+class IncrementalLifecyclePlan:
+    """Resolved live facts and ordered operations for one incremental run."""
+
+    mutation: IncrementalMutationPlan
+    schema_change: IncrementalSchemaChangePlan
+    facts: TableMaterializationFacts
+    full_refresh: bool
+    operations: Tuple[MaterializationOperation, ...]
+    provenance: Tuple[PlanProvenance, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.mutation, IncrementalMutationPlan):
+            raise TypeError("Incremental lifecycle requires a typed mutation plan")
+        if not isinstance(self.schema_change, IncrementalSchemaChangePlan):
+            raise TypeError("Incremental lifecycle requires a typed schema-change plan")
+        if not isinstance(self.facts, TableMaterializationFacts):
+            raise TypeError("Incremental lifecycle requires typed materialization facts")
+        if not isinstance(self.full_refresh, bool):
+            raise TypeError("Incremental lifecycle full-refresh state must be a boolean")
+        if not isinstance(self.operations, tuple) or not self.operations:
+            raise ValueError("Incremental lifecycle requires immutable ordered operations")
+        if not all(isinstance(item, MaterializationOperation) for item in self.operations):
+            raise TypeError("Incremental lifecycle operations must be typed")
+        if not isinstance(self.provenance, tuple) or not self.provenance:
+            raise ValueError("Incremental lifecycle requires immutable provenance")
+        if not all(isinstance(item, PlanProvenance) for item in self.provenance):
+            raise TypeError("Incremental lifecycle provenance must be typed")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "mutation": self.mutation.to_dict(),
+            "schema_change": self.schema_change.to_dict(),
+            "facts": self.facts.to_dict(),
+            "full_refresh": self.full_refresh,
+            "operations": [item.to_dict() for item in self.operations],
+            "provenance": [item.to_dict() for item in self.provenance],
         }
 
 

@@ -68,6 +68,7 @@ class MaterializationRelationRole(str, Enum):
     INTERMEDIATE = "intermediate"
     BACKUP = "backup"
     STAGING = "staging"
+    TEMP = "temp"
 
 
 class MaterializationOperationKind(str, Enum):
@@ -78,6 +79,9 @@ class MaterializationOperationKind(str, Enum):
     RUN_HOOKS = "run_hooks"
     CREATE_FROM_QUERY = "create_from_query"
     CREATE_FROM_RELATION = "create_from_relation"
+    EXPAND_TARGET_COLUMN_TYPES = "expand_target_column_types"
+    PROCESS_SCHEMA_CHANGES = "process_schema_changes"
+    EXECUTE_INCREMENTAL_MUTATION = "execute_incremental_mutation"
     RENAME_RELATION = "rename_relation"
     CREATE_INDEXES = "create_indexes"
     APPLY_GRANTS = "apply_grants"
@@ -222,6 +226,9 @@ class MaterializationOperation:
             MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
             MaterializationOperationKind.CREATE_FROM_QUERY,
             MaterializationOperationKind.CREATE_FROM_RELATION,
+            MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
+            MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+            MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
             MaterializationOperationKind.RENAME_RELATION,
             MaterializationOperationKind.CREATE_INDEXES,
             MaterializationOperationKind.APPLY_GRANTS,
@@ -233,8 +240,17 @@ class MaterializationOperation:
         }
         if self.kind in relation_required and self.relation is None:
             raise ValueError(f"{self.kind.value} operation requires a relation role")
-        if self.kind == MaterializationOperationKind.CREATE_FROM_RELATION and self.source is None:
-            raise ValueError("create_from_relation operation requires a source role")
+        if (
+            self.kind
+            in {
+                MaterializationOperationKind.CREATE_FROM_RELATION,
+                MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
+                MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+                MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
+            }
+            and self.source is None
+        ):
+            raise ValueError(f"{self.kind.value} operation requires a source role")
         if self.kind == MaterializationOperationKind.RENAME_RELATION and self.destination is None:
             raise ValueError("rename_relation operation requires a destination role")
         if (

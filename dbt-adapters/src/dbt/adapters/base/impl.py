@@ -126,6 +126,7 @@ from dbt.adapters.planning import (
     ExistingRelationFacts,
     FormatFacts,
     IncrementalCatalogStaging,
+    IncrementalLifecyclePlan,
     IncrementalMutationArguments,
     IncrementalMutationFacts,
     IncrementalMutationPlan,
@@ -139,6 +140,9 @@ from dbt.adapters.planning import (
     RelationFacts,
     RuntimeFacts,
     MaterializationExecutionFacts,
+    MaterializationOperation,
+    MaterializationOperationKind,
+    MaterializationRelationRole,
     MaterializationTransactionMode,
     TableLifecyclePlan,
     TableMaterializationFacts,
@@ -2357,6 +2361,172 @@ class BaseAdapter(metaclass=AdapterMeta):
         self, requested_strategy: Optional[str], default: str = "ignore"
     ) -> IncrementalSchemaChangePlan:
         return resolve_incremental_schema_change_plan(requested_strategy, default=default)
+
+    @available
+    def resolve_incremental_lifecycle_plan(
+        self,
+        mutation_plan: IncrementalMutationPlan,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        existing_relation: Optional[BaseRelation],
+        *,
+        full_refresh: bool,
+        on_schema_change: Optional[str],
+        staging_is_temporary: bool,
+        contract_enforced: bool,
+    ) -> IncrementalLifecyclePlan:
+        """Resolve live incremental state into one ordered mutation program."""
+
+        facts = self.build_table_materialization_facts(
+            model,
+            target_relation,
+            existing_relation,
+        )
+        schema_change = self.plan_incremental_schema_change(on_schema_change)
+        existing = MaterializationRelationRole.EXISTING
+        target = MaterializationRelationRole.TARGET
+        intermediate = MaterializationRelationRole.INTERMEDIATE
+        backup = MaterializationRelationRole.BACKUP
+        temp = MaterializationRelationRole.TEMP
+        operations = [
+            MaterializationOperation(
+                kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+                relation=intermediate,
+            ),
+            MaterializationOperation(
+                kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+                relation=backup,
+            ),
+            MaterializationOperation(
+                kind=MaterializationOperationKind.RUN_HOOKS,
+                name="pre",
+                inside_transaction=False,
+            ),
+            MaterializationOperation(
+                kind=MaterializationOperationKind.RUN_HOOKS,
+                name="pre",
+                inside_transaction=True,
+            ),
+        ]
+        if existing_relation is None:
+            operations.extend(
+                (
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.CREATE_FROM_QUERY,
+                        relation=target,
+                        temporary=False,
+                        auto_begin=True,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.CREATE_INDEXES,
+                        relation=target,
+                    ),
+                )
+            )
+        elif full_refresh:
+            operations.extend(
+                (
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.CREATE_FROM_QUERY,
+                        relation=intermediate,
+                        temporary=False,
+                        auto_begin=True,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.CREATE_INDEXES,
+                        relation=intermediate,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.RENAME_RELATION,
+                        relation=existing,
+                        destination=backup,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.RENAME_RELATION,
+                        relation=intermediate,
+                        destination=target,
+                    ),
+                )
+            )
+        else:
+            operations.append(
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.CREATE_FROM_QUERY,
+                    relation=temp,
+                    temporary=staging_is_temporary,
+                    auto_begin=True,
+                )
+            )
+            if not contract_enforced:
+                operations.append(
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.EXPAND_TARGET_COLUMN_TYPES,
+                        relation=target,
+                        source=temp,
+                    )
+                )
+            operations.extend(
+                (
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.PROCESS_SCHEMA_CHANGES,
+                        relation=existing,
+                        source=temp,
+                    ),
+                    MaterializationOperation(
+                        kind=MaterializationOperationKind.EXECUTE_INCREMENTAL_MUTATION,
+                        relation=target,
+                        source=temp,
+                    ),
+                )
+            )
+        operations.extend(
+            (
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.APPLY_GRANTS,
+                    relation=target,
+                ),
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.PERSIST_DOCUMENTATION,
+                    relation=target,
+                ),
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.RUN_HOOKS,
+                    name="post",
+                    inside_transaction=True,
+                ),
+                MaterializationOperation(kind=MaterializationOperationKind.COMMIT),
+            )
+        )
+        if existing_relation is not None and full_refresh:
+            operations.append(
+                MaterializationOperation(
+                    kind=MaterializationOperationKind.DROP_RELATION_IF_EXISTS,
+                    relation=backup,
+                )
+            )
+        operations.append(
+            MaterializationOperation(
+                kind=MaterializationOperationKind.RUN_HOOKS,
+                name="post",
+                inside_transaction=False,
+            )
+        )
+        return IncrementalLifecyclePlan(
+            mutation=mutation_plan,
+            schema_change=schema_change,
+            facts=facts,
+            full_refresh=full_refresh,
+            operations=tuple(operations),
+            provenance=(
+                PlanProvenance(
+                    rule="incremental.lifecycle.runtime_facts",
+                    detail=(
+                        "Incremental lifecycle resolved from mutation, schema, relation, "
+                        "catalog, format, and runtime facts"
+                    ),
+                ),
+            ),
+        )
 
     @available.parse_none
     def plan_incremental_arguments(
