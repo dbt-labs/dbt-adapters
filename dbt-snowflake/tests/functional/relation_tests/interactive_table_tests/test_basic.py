@@ -27,11 +27,26 @@ _alt_warehouse_configured = pytest.mark.skipif(
     "this test needs two real, different warehouses to observe an ALTER.",
 )
 
-# An interactive-type warehouse (created via `CREATE WAREHOUSE ... WAREHOUSE_TYPE =
-# INTERACTIVE`), needed only for the attach/detach tests. Task 11 (live verification)
-# must set this env var to a real interactive warehouse, or update the default here.
+# An interactive-type warehouse, needed only for the attach/detach tests below.
+# Set up via `CREATE WAREHOUSE ... WAREHOUSE_TYPE = INTERACTIVE, AUTO_SUSPEND >= 86400`
+# (Snowflake requires that minimum suspend time for interactive warehouses). It is
+# NOT auto-created by the test suite -- it must already exist in the target account,
+# since these tests attach/detach the target table against a real interactive
+# warehouse. See SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE in test.env.example.
 INTERACTIVE_WAREHOUSE = os.getenv(
     "SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE", "DBT_TESTING_INTERACTIVE"
+)
+
+# Unlike ALT_WAREHOUSE (whose default, "DBT_TESTING", is a real warehouse guaranteed
+# to exist), the default above is just a made-up name with no guarantee it exists
+# anywhere. The only way to know these tests are safe to run is if someone
+# deliberately set the env var, so skip on "unset" rather than "equals the default" --
+# otherwise a `dbt run` against an account without this warehouse would hard-fail with
+# an opaque "warehouse does not exist" error instead of skipping cleanly.
+_interactive_warehouse_configured = pytest.mark.skipif(
+    os.getenv("SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE") is None,
+    reason="SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE not set; this test needs a real "
+    "WAREHOUSE_TYPE = INTERACTIVE warehouse to exist in the target account.",
 )
 
 
@@ -403,6 +418,7 @@ class TestStaticTableNoDiffRegression:
         assert_message_not_in_logs("alter interactive table", logs)
 
 
+@_interactive_warehouse_configured
 class TestWarehouseAttachDetach:
     """Task 6: snowflake_interactive_warehouses attach/detach via
     `alter warehouse ... add/drop tables`, driven by the warehouse-sync macro
