@@ -56,8 +56,11 @@ def query_change_tracking_from_show_tables(project, name: str) -> str:
 def query_relation_type(project, name: str) -> Optional[str]:
     relation = relation_from_name(project.adapter, name)
     sql = f"""
+        -- INFORMATION_SCHEMA.TABLES reports TABLE_TYPE = 'INTERACTIVE TABLE' for BOTH static and
+        -- dynamic interactive tables (IS_DYNAMIC varies but doesn't affect the relation_type here).
         select
             case table_type
+                when 'INTERACTIVE TABLE' then 'interactive_table'
                 when 'BASE TABLE' then iff(is_dynamic = 'YES', 'dynamic_table', 'table')
                 when 'VIEW' then 'view'
                 when 'EXTERNAL TABLE' then 'external_table'
