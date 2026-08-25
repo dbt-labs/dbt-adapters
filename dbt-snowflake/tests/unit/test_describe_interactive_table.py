@@ -25,13 +25,15 @@ def _show_result(rows):
     return agate.Table(data, keys, column_types=column_types)
 
 
-def _relation(identifier="orders", quote_identifier=False):
+def _relation(
+    identifier="orders", quote_identifier=False, quote_database=False, quote_schema=False
+):
     return SnowflakeRelation.create(
         database="my_db",
         schema="my_schema",
         identifier=identifier,
         quote_policy=SnowflakeQuotePolicy(
-            database=False, schema=False, identifier=quote_identifier
+            database=quote_database, schema=quote_schema, identifier=quote_identifier
         ),
     )
 
@@ -63,15 +65,46 @@ def test_happy_path_returns_expected_dict_shape():
         ]
     )
     relation = _relation(identifier="orders", quote_identifier=False)
+    fake_adapter = _fake_adapter(show_table)
 
-    result = _describe(_fake_adapter(show_table), relation)
+    result = _describe(fake_adapter, relation)
 
+    fake_adapter.execute.assert_called_once_with(
+        "show interactive tables like 'orders' in schema my_db.my_schema", fetch=True
+    )
     assert set(result.keys()) == {"interactive_table"}
     table = result["interactive_table"]
     assert list(table.column_names) == list(INTERACTIVE_TABLE_COLUMNS)
     row = table.rows[0]
     assert row["name"] == "ORDERS"
     assert row["cluster_by"] == "LINEAR(ID)"
+
+
+def test_quoted_database_and_schema_produce_quoted_show_sql():
+    """When quote_policy.database/schema are True, the SHOW statement must
+    quote them -- unquoted would silently fold a case-sensitive name."""
+    show_table = _show_result(
+        [
+            {
+                "name": "ORDERS",
+                "schema_name": "my_schema",
+                "database_name": "my_db",
+                "text": "t1",
+                "target_lag": None,
+                "refresh_warehouse": None,
+                "initialization_warehouse": None,
+                "cluster_by": "(ID)",
+            }
+        ]
+    )
+    relation = _relation(identifier="orders", quote_database=True, quote_schema=True)
+    fake_adapter = _fake_adapter(show_table)
+
+    _describe(fake_adapter, relation)
+
+    fake_adapter.execute.assert_called_once_with(
+        'show interactive tables like \'orders\' in schema "my_db"."my_schema"', fetch=True
+    )
 
 
 def test_multi_row_show_result_is_filtered_to_exact_match():
