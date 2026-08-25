@@ -301,9 +301,13 @@ class SnowflakeInteractiveTableTargetLagConfigChange(RelationConfigChange):
 
     @property
     def requires_full_refresh(self) -> bool:
-        # Only a value-to-value change is alterable. Snowflake rejects ALTERing a
-        # lag away (dynamic -> static) or onto a static table (001420), so both
-        # transitions must rebuild.
+        # Only a value-to-value change is alterable via `ALTER INTERACTIVE TABLE
+        # ... SET TARGET_LAG`. Both transitions must rebuild: unsetting a lag
+        # (dynamic -> static) is rejected with "invalid value 'null' for
+        # property 'TARGET_LAG'" (001422); setting one on an already-static
+        # table (static -> dynamic) is rejected with "invalid property
+        # 'TARGET_LAG' for 'TABLE'" (001420). Both confirmed live against
+        # ktb38830, 2026-08-25.
         return self.action != RelationConfigChangeAction.alter
 
 

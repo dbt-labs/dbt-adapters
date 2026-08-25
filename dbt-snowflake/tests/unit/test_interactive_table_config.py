@@ -404,6 +404,24 @@ def test_builder_detects_genuine_warehouse_change_with_raw_context():
     assert changeset.refresh_warehouse.context == "New_Wh"
 
 
+def test_static_snowflake_initialization_warehouse_only_produces_no_phantom_diff():
+    """A STATIC interactive table (no target_lag) has no initialization warehouse
+    concept in Snowflake -- INITIALIZATION_WAREHOUSE is only accepted (and only
+    reported back) when TARGET_LAG is set, so a static table always reads back
+    `initialization_warehouse = NULL`. A project-wide
+    `snowflake_initialization_warehouse` (e.g. via `models: +snowflake_initialization_warehouse:`)
+    must not diff against that None readback -- mirrors
+    `test_static_snowflake_warehouse_only_produces_no_phantom_diff` for
+    `refresh_warehouse`."""
+    from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+    changeset = SnowflakeRelation.interactive_table_config_changeset(
+        readback(),
+        model_config(snowflake_initialization_warehouse="analytics_wh"),
+    )
+    assert changeset is None
+
+
 def test_static_snowflake_warehouse_only_produces_no_phantom_diff():
     """A STATIC interactive table (no target_lag) has no refresh warehouse in
     Snowflake -- WAREHOUSE is only accepted when TARGET_LAG is set, so a

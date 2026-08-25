@@ -248,14 +248,25 @@ class SnowflakeRelation(BaseRelation):
                 context=desired_refresh_warehouse,
             )
 
+        # Snowflake only accepts (and only reports back) an initialization
+        # warehouse when the table is dynamic -- same reasoning as
+        # `refresh_warehouse` above. Gate on the desired side, not `existing`,
+        # which must stay whatever Snowflake reported.
+        if new.target_lag_normalized is not None:
+            desired_init_warehouse = new.snowflake_initialization_warehouse
+            desired_init_warehouse_normalized = new.snowflake_initialization_warehouse_normalized
+        else:
+            desired_init_warehouse = None
+            desired_init_warehouse_normalized = None
+
         if (
-            new.snowflake_initialization_warehouse_normalized
+            desired_init_warehouse_normalized
             != existing.snowflake_initialization_warehouse_normalized
         ):
             changeset.snowflake_initialization_warehouse = (
                 SnowflakeInteractiveTableInitializationWarehouseConfigChange(
                     action=RelationConfigChangeAction.alter,  # type:ignore
-                    context=new.snowflake_initialization_warehouse,
+                    context=desired_init_warehouse,
                 )
             )
 
