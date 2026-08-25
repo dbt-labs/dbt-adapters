@@ -249,9 +249,11 @@ class SnowflakeRelation(BaseRelation):
             )
 
         # Snowflake only accepts (and only reports back) an initialization
-        # warehouse when the table is dynamic -- same reasoning as
-        # `refresh_warehouse` above. Gate on the desired side, not `existing`,
-        # which must stay whatever Snowflake reported.
+        # warehouse when the table is dynamic -- confirmed live: a static
+        # table rejects INITIALIZATION_WAREHOUSE outright (001420, "invalid
+        # property 'INITIALIZATION_WAREHOUSE' for 'TABLE'"), the same
+        # rejection shape as `refresh_warehouse` above. Gate on the desired
+        # side, not `existing`, which must stay whatever Snowflake reported.
         if new.target_lag_normalized is not None:
             desired_init_warehouse = new.snowflake_initialization_warehouse
             desired_init_warehouse_normalized = new.snowflake_initialization_warehouse_normalized

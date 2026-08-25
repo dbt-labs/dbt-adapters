@@ -96,15 +96,16 @@ def _normalize_cluster_by(value: Optional[str]) -> Optional[str]:
     like `to_date(ts)`, which legitimately contains parens.
 
     Snowflake may also prefix that parenthesized list with `LINEAR` --
-    `LINEAR(ID, VAL)` -- on readback. This is UNVERIFIED against a live
-    warehouse: nobody has captured a real `SHOW INTERACTIVE TABLES` value, and
-    the closest evidence is a comment on the dynamic-table functional test at
-    `tests/functional/relation_tests/dynamic_table_tests/test_configuration_changes.py:406`,
-    which notes Snowflake "typically" returns cluster_by with a `LINEAR`
-    prefix and deliberately asserts only substring membership rather than
-    pinning the format. Because a `cluster_by` diff forces a full refresh,
-    guessing wrong here is expensive, so this function tolerates BOTH
-    spellings rather than picking one.
+    `LINEAR(ID, VAL)` -- on readback. A live probe against a real warehouse
+    confirmed `SHOW INTERACTIVE TABLES` returns bare parens with no `LINEAR`
+    prefix (`INFORMATION_SCHEMA.TABLES.CLUSTERING_KEY` does use the `LINEAR`
+    form for the same table, but that's a different metadata source dbt
+    doesn't read). Live functional tests further confirm this tolerant
+    design is adequate in practice: a static interactive table with
+    `cluster_by='id'`, re-run with no changes, correctly no-ops rather than
+    forcing a full refresh. Because a `cluster_by` diff forces a full
+    refresh, guessing wrong here is expensive, so this function tolerates
+    BOTH spellings rather than depending on which one is real.
 
     A leading, case-insensitive `LINEAR` is stripped ONLY when the remainder
     (after skipping whitespace) is itself a balanced parenthesized group
@@ -336,8 +337,9 @@ class SnowflakeInteractiveTableTargetLagConfigChange(RelationConfigChange):
         # (dynamic -> static) is rejected with "invalid value 'null' for
         # property 'TARGET_LAG'" (001422); setting one on an already-static
         # table (static -> dynamic) is rejected with "invalid property
-        # 'TARGET_LAG' for 'TABLE'" (001420). Both confirmed live against
-        # ktb38830, 2026-08-25.
+        # 'TARGET_LAG' for 'TABLE'" (001420). Both confirmed live against a
+        # real Snowflake account with the interactive-table feature enabled,
+        # 2026-08-25.
         return self.action != RelationConfigChangeAction.alter
 
 
