@@ -15,6 +15,18 @@ from tests.functional.utils import (
 # Get the alternate warehouse from environment, default to DBT_TESTING if not set.
 ALT_WAREHOUSE = os.getenv("SNOWFLAKE_TEST_ALT_WAREHOUSE", "DBT_TESTING")
 
+# Some ALTER-vs-value-change tests compare a "before" state against an "after"
+# state that also resolves to ALT_WAREHOUSE. When SNOWFLAKE_TEST_ALT_WAREHOUSE
+# isn't set, both states collapse to the same default warehouse ("DBT_TESTING"),
+# so there's no real diff for Snowflake to ALTER -- the assertion that an ALTER
+# fired would be false, not a signal about the product code. Skip cleanly
+# instead of asserting something that can't be true without a second warehouse.
+_alt_warehouse_configured = pytest.mark.skipif(
+    ALT_WAREHOUSE == "DBT_TESTING",
+    reason="SNOWFLAKE_TEST_ALT_WAREHOUSE not set to a distinct warehouse; "
+    "this test needs two real, different warehouses to observe an ALTER.",
+)
+
 # An interactive-type warehouse (created via `CREATE WAREHOUSE ... WAREHOUSE_TYPE =
 # INTERACTIVE`), needed only for the attach/detach tests. Task 11 (live verification)
 # must set this env var to a real interactive warehouse, or update the default here.
@@ -135,6 +147,7 @@ class TestTargetLagValueChange:
         assert dt.target_lag == "2 hours"
 
 
+@_alt_warehouse_configured
 class TestRefreshWarehouseChange:
     """A refresh_warehouse-only change is alterable in place, not a replace."""
 
@@ -219,6 +232,7 @@ class TestInitializationWarehouseChanges:
         assert it.snowflake_initialization_warehouse is not None
         assert ALT_WAREHOUSE.upper() in it.snowflake_initialization_warehouse.upper()
 
+    @_alt_warehouse_configured
     def test_alter_initialization_warehouse(self, project):
         it_before = describe_interactive_table(project, "interactive_table_init_wh")
         assert it_before.snowflake_initialization_warehouse is not None
