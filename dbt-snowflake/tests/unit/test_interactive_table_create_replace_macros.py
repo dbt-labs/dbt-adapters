@@ -95,6 +95,8 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
             config,
         )
 
+        self.assertIn("create interactive table test_db.test_schema.test_table", ddl)
+        self.assertIn("cluster by (id)", ddl)
         self.assertNotIn("initialization_warehouse", ddl)
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
@@ -113,6 +115,8 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
             config,
         )
 
+        self.assertIn("create or replace interactive table test_db.test_schema.test_table", ddl)
+        self.assertIn("cluster by (id)", ddl)
         self.assertNotIn("initialization_warehouse", ddl)
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
@@ -135,6 +139,8 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
             config,
         )
 
+        self.assertIn("create interactive table test_db.test_schema.test_table", ddl)
+        self.assertIn("cluster by (id)", ddl)
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
 
@@ -152,6 +158,8 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
             config,
         )
 
+        self.assertIn("create or replace interactive table test_db.test_schema.test_table", ddl)
+        self.assertIn("cluster by (id)", ddl)
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
 
