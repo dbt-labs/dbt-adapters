@@ -22,7 +22,7 @@ ALT_WAREHOUSE = os.getenv("SNOWFLAKE_TEST_ALT_WAREHOUSE", "DBT_TESTING")
 # fired would be false, not a signal about the product code. Skip cleanly
 # instead of asserting something that can't be true without a second warehouse.
 _alt_warehouse_configured = pytest.mark.skipif(
-    ALT_WAREHOUSE == "DBT_TESTING",
+    ALT_WAREHOUSE.strip().upper() == "DBT_TESTING",
     reason="SNOWFLAKE_TEST_ALT_WAREHOUSE not set to a distinct warehouse; "
     "this test needs two real, different warehouses to observe an ALTER.",
 )
