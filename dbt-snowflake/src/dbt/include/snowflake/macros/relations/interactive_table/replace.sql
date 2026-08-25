@@ -7,8 +7,8 @@
         {% if interactive_table.is_dynamic %}
         target_lag = '{{ interactive_table.target_lag }}'
         {{ optional('warehouse', interactive_table.warehouse_parameter, equals_char='= ') }}
-        {% endif %}
         {{ optional('initialization_warehouse', interactive_table.snowflake_initialization_warehouse, equals_char='= ') }}
+        {% endif %}
         as (
             {{ sql }}
         )
