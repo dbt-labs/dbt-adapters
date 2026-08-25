@@ -453,7 +453,7 @@ def test_builder_classifies_literal_none_string_target_lag_as_drop():
     must test `target_lag_normalized` (which treats "none" as absent) on
     both sides, matching the gating condition, or this dynamic->static
     transition is misclassified as `alter` -- which Snowflake rejects
-    (001420) instead of the `drop`-and-rebuild this requires."""
+    (001422) instead of the `drop`-and-rebuild this requires."""
     from dbt.adapters.snowflake.relation import SnowflakeRelation
 
     changeset = SnowflakeRelation.interactive_table_config_changeset(
