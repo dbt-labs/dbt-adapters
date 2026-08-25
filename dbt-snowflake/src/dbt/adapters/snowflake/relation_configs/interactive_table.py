@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from dbt_common.exceptions import CompilationError
+
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.relation_configs import (
     RelationConfigChange,
@@ -251,13 +253,41 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
     @classmethod
     def parse_relation_config(cls, relation_config: RelationConfig) -> dict:
         extra = relation_config.config.extra if relation_config.config else {}
+
+        cluster_by = parse_model.cluster_by(relation_config)
+        if not cluster_by or not str(cluster_by).strip():
+            raise CompilationError(
+                f"Interactive tables require a non-empty `cluster_by` config: "
+                f"{relation_config.identifier}"
+            )
+
+        if str(extra.get("table_format", "")).strip().casefold() == "iceberg":
+            raise CompilationError(
+                f"Interactive tables do not support `table_format: iceberg`: "
+                f"{relation_config.identifier}"
+            )
+
+        if extra.get("transient"):
+            raise CompilationError(
+                f"Interactive tables do not support `transient: true`: "
+                f"{relation_config.identifier}"
+            )
+
+        target_lag = extra.get("target_lag")
+        warehouse = extra.get("refresh_warehouse") or extra.get("snowflake_warehouse")
+        if target_lag and str(target_lag).strip().casefold() not in _ABSENT and not warehouse:
+            raise CompilationError(
+                f"Interactive tables with `target_lag` set require a warehouse "
+                f"(`refresh_warehouse` or `snowflake_warehouse`): {relation_config.identifier}"
+            )
+
         return {
             "name": relation_config.identifier,
             "schema_name": relation_config.schema,
             "database_name": relation_config.database,
             "query": relation_config.compiled_code,
-            "cluster_by": parse_model.cluster_by(relation_config),
-            "target_lag": extra.get("target_lag"),
+            "cluster_by": cluster_by,
+            "target_lag": target_lag,
             "snowflake_warehouse": extra.get("snowflake_warehouse"),
             "refresh_warehouse": extra.get("refresh_warehouse"),
             "snowflake_initialization_warehouse": extra.get("snowflake_initialization_warehouse"),

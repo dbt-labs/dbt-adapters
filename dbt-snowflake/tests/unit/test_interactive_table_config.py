@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import agate
 import pytest
+from dbt_common.exceptions import CompilationError
 
 from dbt.adapters.snowflake.relation_configs.interactive_table import (
     INTERACTIVE_TABLE_COLUMNS,
@@ -196,7 +197,7 @@ def test_linear_function_call_as_one_of_several_keys_is_untouched():
 )
 def test_canonicalized_target_lag_readback_is_not_a_change(configured, returned):
     desired = SnowflakeInteractiveTableConfig.from_relation_config(
-        model_config(target_lag=configured)
+        model_config(target_lag=configured, snowflake_warehouse="wh")
     )
     existing = SnowflakeInteractiveTableConfig.from_relation_results(readback(target_lag=returned))
     assert desired.target_lag_normalized == existing.target_lag_normalized
@@ -480,9 +481,41 @@ def test_is_dynamic_is_false_for_literal_none_string_target_lag():
 
 def test_is_dynamic_is_true_for_a_real_target_lag():
     config = SnowflakeInteractiveTableConfig.from_relation_config(
-        model_config(target_lag="1 hour")
+        model_config(target_lag="1 hour", snowflake_warehouse="wh")
     )
     assert config.is_dynamic is True
+
+
+# --- compile-time validations (Task 2) ----------------------------------------
+
+
+def test_missing_cluster_by_raises():
+    relation_config = model_config(cluster_by=None)
+    with pytest.raises(CompilationError, match="cluster_by"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+def test_iceberg_table_format_raises():
+    relation_config = model_config(table_format="iceberg")
+    with pytest.raises(CompilationError, match="iceberg"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+def test_transient_raises():
+    relation_config = model_config(transient=True)
+    with pytest.raises(CompilationError, match="transient"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+def test_target_lag_without_warehouse_raises():
+    relation_config = model_config(target_lag="1 hour")
+    with pytest.raises(CompilationError, match="warehouse"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+def test_target_lag_with_warehouse_does_not_raise():
+    relation_config = model_config(target_lag="1 hour", snowflake_warehouse="wh")
+    SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)  # should not raise
 
 
 def test_changeset_aggregates_full_refresh_across_mixed_changes():
