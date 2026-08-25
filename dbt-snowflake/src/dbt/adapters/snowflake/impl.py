@@ -54,6 +54,7 @@ from dbt.adapters.snowflake.catalogs import (
     IcebergRestCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
+from dbt.adapters.snowflake.relation_configs.interactive_table import INTERACTIVE_TABLE_COLUMNS
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -734,6 +735,44 @@ CALL {proc_name}();
             )
 
         return {"dynamic_table": selected}
+
+    @available
+    def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """Get all relevant metadata about an interactive table.
+
+        SHOW INTERACTIVE TABLES LIKE uses pattern matching, so results are
+        filtered to an exact name match after fetching, respecting quote policy
+        (unquoted identifiers are stored upper-case in Snowflake metadata).
+        """
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_sql = (
+            f"show interactive tables like '{relation.identifier}' in schema {database}.{schema}"
+        )
+        res, tables_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get interactive table metadata: {show_sql} failed")
+
+        tables_table = tables_table.rename(
+            column_names=[name.lower() for name in tables_table.column_names]
+        )
+
+        if quoting.identifier:
+            exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
+        else:
+            identifier_upper = (relation.identifier or "").upper()
+            exact_match = tables_table.where(
+                lambda row: (row.get("name") or "").upper() == identifier_upper
+            )
+        if len(exact_match.rows) == 0:
+            raise DbtRuntimeError(f"Could not find interactive table: {relation.identifier}")
+
+        available_columns = [c.lower() for c in exact_match.column_names]
+        select_columns = [c for c in INTERACTIVE_TABLE_COLUMNS if c in available_columns]
+        selected = exact_match.select(select_columns)
+
+        return {"interactive_table": selected}
 
     def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
