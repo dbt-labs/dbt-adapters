@@ -215,7 +215,38 @@ class TestSyncInteractiveWarehouses:
 
         self._run()
 
-        assert self.statements == []
+        assert self.statements == [
+            (
+                "attach_interactive_warehouse_1",
+                "alter warehouse my_wh add tables (my_db.my_schema.my_table)",
+            )
+        ]
+
+    def test_partial_attach_reattaches_existing_and_attaches_new(self):
+        """Desired has one warehouse already attached and one new one; current has
+        one no-longer-desired warehouse. All three cases fire in a single run:
+        the already-attached warehouse still gets an (idempotent) attach statement,
+        proving attach is unconditional, while only the no-longer-desired warehouse
+        gets detached."""
+        self.config_value = ["IW1", "IW2"]
+        self.current_value = ["IW1", "IW3"]
+
+        self._run()
+
+        assert self.statements == [
+            (
+                "attach_interactive_warehouse_1",
+                "alter warehouse IW1 add tables (my_db.my_schema.my_table)",
+            ),
+            (
+                "attach_interactive_warehouse_2",
+                "alter warehouse IW2 add tables (my_db.my_schema.my_table)",
+            ),
+            (
+                "detach_interactive_warehouse_1",
+                "alter warehouse IW3 drop tables (my_db.my_schema.my_table)",
+            ),
+        ]
 
     def test_string_config_is_treated_as_single_element_list(self):
         self.config_value = "IW1"
