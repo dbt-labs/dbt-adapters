@@ -192,7 +192,9 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
     def test_alter_relation_comment_interactive_table(self):
         """Test alter_relation_comment for an interactive table"""
         template = self.__get_template("adapters.sql")
-        relation = self.__create_mock_relation(relation_type="table", is_interactive_table=True)
+        relation = self.__create_mock_relation(
+            relation_type="interactive_table", is_interactive_table=True
+        )
         comment = "This is an interactive table comment"
 
         sql = self.__run_macro(template, "snowflake__alter_relation_comment", relation, comment)
