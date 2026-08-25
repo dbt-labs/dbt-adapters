@@ -7,7 +7,10 @@ from dbt.tests.util import (
     set_model_file,
 )
 
-from dbt.adapters.snowflake.relation_configs import SnowflakeDynamicTableConfig
+from dbt.adapters.snowflake.relation_configs import (
+    SnowflakeDynamicTableConfig,
+    SnowflakeInteractiveTableConfig,
+)
 
 
 def query_change_tracking_from_show_tables(project, name: str) -> str:
@@ -114,6 +117,23 @@ def describe_dynamic_table(project, name: str) -> Optional[SnowflakeDynamicTable
     assert found == 1, f"Multiple dynamic tables found: {names}"
 
     return SnowflakeDynamicTableConfig.from_relation_results(results)
+
+
+def describe_interactive_table(project, name: str) -> Optional[SnowflakeInteractiveTableConfig]:
+    macro = "snowflake__describe_interactive_table"
+    interactive_table = relation_from_name(project.adapter, name)
+    kwargs = {"relation": interactive_table}
+    with get_connection(project.adapter):
+        results = project.adapter.execute_macro(macro, kwargs=kwargs)
+
+    assert (
+        len(results["interactive_table"].rows) > 0
+    ), f"Interactive table {interactive_table} not found"
+    found = len(results["interactive_table"].rows)
+    names = ", ".join([table.get("name") for table in results["interactive_table"].rows])
+    assert found == 1, f"Multiple interactive tables found: {names}"
+
+    return SnowflakeInteractiveTableConfig.from_relation_results(results)
 
 
 def query_transient_status(project, name: str) -> bool:
