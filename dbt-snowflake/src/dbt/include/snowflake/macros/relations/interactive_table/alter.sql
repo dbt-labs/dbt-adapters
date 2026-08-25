@@ -13,7 +13,8 @@
 
     Mirrors fs's (v2/Fusion) `snowflake__get_alter_interactive_table_as_sql` /
     `snowflake__alter_interactive_table_sql` statement shape exactly -- confirmed live
-    against ktb38830, 2026-08-25 -- combining target_lag/warehouse/initialization_warehouse
+    against a real Snowflake account with the interactive-table feature enabled, 2026-08-25 --
+    combining target_lag/warehouse/initialization_warehouse
     into one `alter interactive table t set ...` statement (space-separated assignments,
     not semicolon-chained), plus a separate `unset initialization_warehouse` statement when
     that field is being cleared rather than changed to a new value.
@@ -38,7 +39,7 @@
     {% if has_set_changes -%}
     alter interactive table {{ existing_relation }} set
         {% if target_lag and target_lag.context %}target_lag = '{{ target_lag.context }}'{% endif %}
-        {% if refresh_warehouse %}warehouse = {{ refresh_warehouse.context }}{% endif %}
+        {% if refresh_warehouse and refresh_warehouse.context %}warehouse = {{ refresh_warehouse.context }}{% endif %}
         {% if init_warehouse and init_warehouse.context %}initialization_warehouse = {{ init_warehouse.context }}{% endif %}
     {%- endif %}
 
