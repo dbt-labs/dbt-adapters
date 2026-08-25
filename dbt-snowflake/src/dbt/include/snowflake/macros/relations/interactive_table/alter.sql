@@ -34,7 +34,9 @@
         can't be cleared without a dynamic<->static transition, which `requires_full_refresh`
         already routes to `get_replace_sql` above, so this macro never sees a clear for
         either of them. -#}
-    {%- set has_set_changes = target_lag or refresh_warehouse or (init_warehouse and init_warehouse.context) -%}
+    {%- set has_set_changes = (target_lag and target_lag.context)
+        or (refresh_warehouse and refresh_warehouse.context)
+        or (init_warehouse and init_warehouse.context) -%}
 
     {% if has_set_changes -%}
     alter interactive table {{ existing_relation }} set
