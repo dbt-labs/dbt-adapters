@@ -118,16 +118,20 @@ class TestCompileValidation:
         assert "require a warehouse" in results[0].message
 
 
-class TestTargetLagValueChange:
-    """A target_lag value-to-value change is alterable in place."""
+class AlterOrReplaceTestBase:
+    """Shared scaffolding for the ALTER-vs-REPLACE tests below: seed the shared
+    seed data, apply on_configuration_change, full-refresh before each test, and
+    reset any models mutated by a test back to their baseline content afterward.
+
+    Subclasses provide their own `models` fixture and set `RESET_MODELS` to a
+    `{model_name: baseline_content}` mapping covering every model they mutate.
+    """
+
+    RESET_MODELS: dict = {}
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
         yield {"my_seed.csv": models.SEED}
-
-    @pytest.fixture(scope="class", autouse=True)
-    def models(self):
-        yield {"interactive_table_target_lag.sql": models.INTERACTIVE_TABLE_DYNAMIC}
 
     @pytest.fixture(scope="class")
     def project_config_update(self):
@@ -143,7 +147,18 @@ class TestTargetLagValueChange:
     def setup_method(self, project, setup_class):
         run_dbt(["run", "--full-refresh"])
         yield
-        update_model(project, "interactive_table_target_lag", models.INTERACTIVE_TABLE_DYNAMIC)
+        for model_name, reset_content in self.RESET_MODELS.items():
+            update_model(project, model_name, reset_content)
+
+
+class TestTargetLagValueChange(AlterOrReplaceTestBase):
+    """A target_lag value-to-value change is alterable in place."""
+
+    RESET_MODELS = {"interactive_table_target_lag": models.INTERACTIVE_TABLE_DYNAMIC}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"interactive_table_target_lag.sql": models.INTERACTIVE_TABLE_DYNAMIC}
 
     def test_alter_target_lag_value(self, project):
         update_model(
@@ -163,32 +178,14 @@ class TestTargetLagValueChange:
 
 
 @_alt_warehouse_configured
-class TestRefreshWarehouseChange:
+class TestRefreshWarehouseChange(AlterOrReplaceTestBase):
     """A refresh_warehouse-only change is alterable in place, not a replace."""
 
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        yield {"my_seed.csv": models.SEED}
+    RESET_MODELS = {"interactive_table_refresh_wh": models.INTERACTIVE_TABLE_DYNAMIC}
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
         yield {"interactive_table_refresh_wh.sql": models.INTERACTIVE_TABLE_DYNAMIC}
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_class(self, project):
-        run_dbt(["seed"])
-        yield
-        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_method(self, project, setup_class):
-        run_dbt(["run", "--full-refresh"])
-        yield
-        update_model(project, "interactive_table_refresh_wh", models.INTERACTIVE_TABLE_DYNAMIC)
 
     def test_alter_refresh_warehouse(self, project):
         update_model(
@@ -207,40 +204,20 @@ class TestRefreshWarehouseChange:
         assert ALT_WAREHOUSE.upper() in dt.refresh_warehouse.upper()
 
 
-class TestInitializationWarehouseChanges:
+class TestInitializationWarehouseChanges(AlterOrReplaceTestBase):
     """snowflake_initialization_warehouse changes, mirroring
     dynamic_table_tests.test_configuration_changes.TestInitializationWarehouseChanges.
     """
 
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        yield {"my_seed.csv": models.SEED}
+    RESET_MODELS = {
+        "interactive_table_init_wh": models.INTERACTIVE_TABLE_DYNAMIC_WITH_INIT_WAREHOUSE
+    }
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
         yield {
             "interactive_table_init_wh.sql": models.INTERACTIVE_TABLE_DYNAMIC_WITH_INIT_WAREHOUSE,
         }
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_class(self, project):
-        run_dbt(["seed"])
-        yield
-        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_method(self, project, setup_class):
-        run_dbt(["run", "--full-refresh"])
-        yield
-        update_model(
-            project,
-            "interactive_table_init_wh",
-            models.INTERACTIVE_TABLE_DYNAMIC_WITH_INIT_WAREHOUSE,
-        )
 
     def test_create_with_initialization_warehouse(self, project):
         it = describe_interactive_table(project, "interactive_table_init_wh")
@@ -285,33 +262,15 @@ class TestInitializationWarehouseChanges:
         assert it_after.snowflake_initialization_warehouse is None
 
 
-class TestClusterByChange:
+class TestClusterByChange(AlterOrReplaceTestBase):
     """cluster_by has no ALTER path on an interactive table (001003), so a
     change must force a full CREATE OR REPLACE."""
 
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        yield {"my_seed.csv": models.SEED}
+    RESET_MODELS = {"interactive_table_cluster": models.INTERACTIVE_TABLE_DYNAMIC}
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
         yield {"interactive_table_cluster.sql": models.INTERACTIVE_TABLE_DYNAMIC}
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_class(self, project):
-        run_dbt(["seed"])
-        yield
-        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_method(self, project, setup_class):
-        run_dbt(["run", "--full-refresh"])
-        yield
-        update_model(project, "interactive_table_cluster", models.INTERACTIVE_TABLE_DYNAMIC)
 
     def test_cluster_by_change_forces_replace(self, project):
         update_model(
@@ -329,15 +288,16 @@ class TestClusterByChange:
         assert "VALUE" in it.cluster_by.upper()
 
 
-class TestTargetLagTransitions:
+class TestTargetLagTransitions(AlterOrReplaceTestBase):
     """Snowflake rejects ALTER for both a dynamic->static and a static->dynamic
     target_lag transition (001422 / 001420, confirmed live 2026-08-25), so both
     directions must force a full CREATE OR REPLACE.
     """
 
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        yield {"my_seed.csv": models.SEED}
+    RESET_MODELS = {
+        "interactive_table_d2s": models.INTERACTIVE_TABLE_DYNAMIC,
+        "interactive_table_s2d": models.INTERACTIVE_TABLE_STATIC,
+    }
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
@@ -345,23 +305,6 @@ class TestTargetLagTransitions:
             "interactive_table_d2s.sql": models.INTERACTIVE_TABLE_DYNAMIC,
             "interactive_table_s2d.sql": models.INTERACTIVE_TABLE_STATIC,
         }
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_class(self, project):
-        run_dbt(["seed"])
-        yield
-        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_method(self, project, setup_class):
-        run_dbt(["run", "--full-refresh"])
-        yield
-        update_model(project, "interactive_table_d2s", models.INTERACTIVE_TABLE_DYNAMIC)
-        update_model(project, "interactive_table_s2d", models.INTERACTIVE_TABLE_STATIC)
 
     def test_dynamic_to_static_forces_replace(self, project):
         update_model(project, "interactive_table_d2s", models.INTERACTIVE_TABLE_STATIC)
