@@ -245,6 +245,47 @@ class TestSnowflakeAdapter(unittest.TestCase):
             self.adapter.post_model_hook(config, result)
             self.mock_execute.assert_not_called()
 
+    def _dynamic_table_create_or_alter_enabled(
+        self, flag_on=True, catalog_type="INFO_SCHEMA", catalog_relation_none=False
+    ):
+        """Drive adapter.dynamic_table_create_or_alter_enabled with its two collaborators mocked:
+        the behavior flag and the catalog relation. The gate is flag + native catalog only
+        (refresh_mode and scheduler don't factor in, so they are not mocked). catalog_relation_none
+        makes build_catalog_relation return None (a non-DT / catalog-less model)."""
+        with (
+            mock.patch.object(
+                type(self.adapter), "behavior", new_callable=mock.PropertyMock
+            ) as mock_behavior,
+            mock.patch.object(self.adapter, "build_catalog_relation") as mock_build_catalog,
+        ):
+            mock_behavior.return_value.snowflake_dynamic_table_create_or_alter.no_warn = flag_on
+            mock_build_catalog.return_value = (
+                None if catalog_relation_none else mock.Mock(catalog_type=catalog_type)
+            )
+            return self.adapter.dynamic_table_create_or_alter_enabled(mock.Mock())
+
+    def test_dt_coa_enabled_for_native(self):
+        # The gate checks only the flag and the native (INFO_SCHEMA) catalog, so one case suffices
+        # -- refresh_mode and scheduler do not affect the decision.
+        self.assertTrue(self._dynamic_table_create_or_alter_enabled())
+
+    def test_dt_coa_disabled_for_iceberg(self):
+        # BUILT_IN == Iceberg: deliberately excluded from the COA path for now. Snowflake supports
+        # Iceberg COA (since 2026-08-13); this adapter just hasn't implemented that DDL path yet.
+        self.assertFalse(self._dynamic_table_create_or_alter_enabled(catalog_type="BUILT_IN"))
+
+    def test_dt_coa_disabled_when_flag_off(self):
+        self.assertFalse(self._dynamic_table_create_or_alter_enabled(flag_on=False))
+
+    def test_dt_coa_disabled_when_catalog_relation_none(self):
+        # build_catalog_relation can return None (e.g. a catalog-less model); the getattr fallback
+        # must yield False rather than raise.
+        self.assertFalse(self._dynamic_table_create_or_alter_enabled(catalog_relation_none=True))
+
+    def test_dt_coa_disabled_when_catalog_type_missing(self):
+        # A catalog relation whose catalog_type is None must not match INFO_SCHEMA.
+        self.assertFalse(self._dynamic_table_create_or_alter_enabled(catalog_type=None))
+
     def test_cancel_open_connections_empty(self):
         self.assertEqual(len(list(self.adapter.cancel_open_connections())), 0)
 
