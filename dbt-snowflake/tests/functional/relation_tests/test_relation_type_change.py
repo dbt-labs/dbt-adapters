@@ -51,6 +51,7 @@ relations = [
     Model(models.ICEBERG_TABLE, "table", "iceberg"),
     Model(models.INCREMENTAL_ICEBERG_TABLE, "table", "iceberg", is_incremental=True),
     Model(models.DYNAMIC_ICEBERG_TABLE, "dynamic_table", "iceberg"),
+    Model(models.INTERACTIVE_TABLE, "interactive_table", "default"),
 ]
 scenarios = [Scenario(*scenario) for scenario in product(relations, relations)]
 
@@ -67,6 +68,13 @@ def requires_full_refresh(scenario) -> bool:
             and scenario.initial.table_format != scenario.final.table_format,
             # we can't swap from an incremental to a dynamic table because the materialization does not handle this case
             scenario.initial.relation_type == "dynamic_table" and scenario.final.is_incremental,
+            # same underlying gap as above: the incremental materialization only special-cases
+            # an existing view (drop + recreate) or a table_format mismatch (raises); any other
+            # non-table existing relation -- interactive_table included -- falls through to
+            # running the incremental strategy's DML directly against it, which an
+            # auto-refreshing (target_lag-bearing) interactive table cannot accept
+            scenario.initial.relation_type == "interactive_table"
+            and scenario.final.is_incremental,
         ]
     )
 
