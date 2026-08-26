@@ -10,6 +10,7 @@ from typing import (
     Union,
     Dict,
     FrozenSet,
+    Set,
     Tuple,
 )
 
@@ -172,6 +173,11 @@ class SnowflakeAdapter(SQLAdapter):
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
+        # Names of databases backed by an external catalog, collected as integrations register.
+        self._catalog_linked_databases: Set[str] = set()
+        # (database, schema, casefolded relation identifier) triples where the catalog holds two or
+        # more relations whose identifiers differ only by case. See _record_case_variant_relations.
+        self._case_variant_relations: Set[Tuple[str, str, str]] = set()
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
 
@@ -195,7 +201,10 @@ class SnowflakeAdapter(SQLAdapter):
         # don't mutate the object that dbt-core passes in
         catalog_integration = deepcopy(catalog_integration)
         catalog_integration.name = catalog_integration.name.upper()
-        return super().add_catalog_integration(catalog_integration)
+        integration = super().add_catalog_integration(catalog_integration)
+        if linked_database := getattr(integration, "catalog_linked_database", None):
+            self._catalog_linked_databases.add(linked_database.upper())
+        return integration
 
     def get_catalog_integration(self, name: str) -> CatalogIntegration:
         # Snowflake uppercases everything in their metadata tables
@@ -213,6 +222,11 @@ class SnowflakeAdapter(SQLAdapter):
         # the column names to their lowercased forms.
         lowered = table.rename(column_names=[c.lower() for c in table.column_names])
         return super()._catalog_filter_table(lowered, used_schemas)
+
+    def _is_catalog_linked_database(self, database) -> bool:
+        if not database:
+            return False
+        return self._strip_quotes(database).upper() in self._catalog_linked_databases
 
     def _make_match_kwargs(self, database, schema, identifier):
         # if any path part is already quoted then consider same casing but without quotes
@@ -441,7 +455,38 @@ class SnowflakeAdapter(SQLAdapter):
             for obj in schema_functions.select(function_columns)
             if obj["is_builtin"] == "N"
         ]
-        return tabular_relations + function_relations
+        relations = tabular_relations + function_relations
+        self._record_case_variant_relations(schema_relation, relations)
+        return relations
+
+    def _record_case_variant_relations(self, schema_relation, relations) -> None:
+        """Note the case each relation identifier is stored under in a catalog-linked database.
+
+        This is the only place that information is visible: the relation cache keys on lowercased
+        names (see reference_keys._make_ref_key), so `t_orders` and `T_ORDERS` collapse into a single
+        cache entry and a later lookup can neither tell that two objects exist nor recover the case
+        of the one it has. Recording it here costs no extra query -- this list is already fetched
+        once per schema per run.
+
+        Recording only. Nothing reads either collection yet.
+        """
+        if not self._is_catalog_linked_database(schema_relation.database):
+            return
+        self.Relation.record_stored_case(relations)
+        seen: Dict[str, str] = {}
+        for relation in relations:
+            if relation.identifier is None:
+                continue
+            key = self._strip_quotes(str(relation.identifier)).casefold()
+            if key in seen and seen[key] != relation.identifier:
+                self._case_variant_relations.add(
+                    (
+                        self._strip_quotes(str(schema_relation.database)).casefold(),
+                        self._strip_quotes(str(schema_relation.schema)).casefold(),
+                        key,
+                    )
+                )
+            seen[key] = relation.identifier
 
     def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
         database, schema, identifier, relation_type, is_dynamic, is_iceberg = result

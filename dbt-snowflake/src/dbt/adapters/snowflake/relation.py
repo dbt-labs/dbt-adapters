@@ -1,6 +1,6 @@
 import textwrap
 from dataclasses import dataclass, field
-from typing import FrozenSet, Optional, Type, Iterator, Tuple
+from typing import ClassVar, Dict, FrozenSet, Optional, Set, Type, Iterator, Tuple
 
 
 from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
@@ -42,6 +42,15 @@ class SnowflakeRelation(BaseRelation):
     relation_configs = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
     }
+
+    # Stored relation-identifier casing for relations in catalog-linked databases, keyed by the
+    # casefolded (database, schema, relation identifier). Populated by SnowflakeAdapter as it lists
+    # a schema. Only catalog-linked databases are recorded, so membership doubles as the signal
+    # that a relation needs its stored case applied.
+    _stored_case: ClassVar[Dict[Tuple[str, str, str], Tuple[str, str]]] = {}
+    # Keys where the catalog holds two or more relations whose identifiers differ only by case, so
+    # no single stored form can be chosen.
+    _ambiguous_case: ClassVar[Set[Tuple[str, str, str]]] = set()
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
             {
@@ -81,6 +90,38 @@ class SnowflakeRelation(BaseRelation):
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
         return SnowflakeRelationType
+
+    @classmethod
+    def _stored_case_key(cls, relation) -> Optional[Tuple[str, str, str]]:
+        parts = (relation.database, relation.schema, relation.identifier)
+        if any(part is None for part in parts):
+            return None
+        return tuple(str(part).strip('"').casefold() for part in parts)  # type: ignore[return-value]
+
+    @classmethod
+    def record_stored_case(cls, relations) -> None:
+        """Record the case each relation identifier is stored under, and which collide by case.
+
+        Called by the adapter while listing a catalog-linked schema, where the catalog's own listing
+        is still un-deduped -- the relation cache keys on lowercased names, so two relations whose
+        identifiers differ only by case collapse to one entry and become invisible later.
+
+        Both parts come from the listed relation itself, never from the schema that was searched for:
+        the search carries the case written in the project, while the listing carries the case the
+        catalog actually holds. Recording the searched schema would store a name that does not exist.
+        """
+        for relation in relations:
+            if relation.database is None or relation.schema is None or relation.identifier is None:
+                continue
+            key = (
+                str(relation.database).strip('"').casefold(),
+                str(relation.schema).strip('"').casefold(),
+                str(relation.identifier).strip('"').casefold(),
+            )
+            previous = cls._stored_case.get(key)
+            if previous is not None and previous[1] != relation.identifier:
+                cls._ambiguous_case.add(key)
+            cls._stored_case[key] = (relation.schema, relation.identifier)
 
     @classmethod
     def from_config(cls, config: RelationConfig) -> RelationConfigBase:
