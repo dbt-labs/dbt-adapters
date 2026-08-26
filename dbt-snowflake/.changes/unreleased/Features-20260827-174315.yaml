@@ -1,0 +1,12 @@
+kind: Features
+body: 'Add the `snowflake_dynamic_table_create_or_alter` behavior flag. When enabled,
+    native dynamic tables are synced with CREATE OR ALTER DYNAMIC TABLE on every run,
+    so edits to the model''s SQL deploy without `--full-refresh`. Note: for INCREMENTAL
+    and AUTO refresh modes, a definition edit reinitializes the table (incremental
+    state is discarded). Schema changes that CREATE OR ALTER cannot express (e.g.
+    column reorder, mid-list insert) still require `--full-refresh`. Iceberg dynamic
+    tables are unaffected.'
+time: 2026-08-27T17:43:15.027603+00:00
+custom:
+    Author: HeisenBug-QAQ
+    Issue: "1825"

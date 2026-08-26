@@ -1,14 +1,33 @@
 """
-Unit tests for SnowflakeDynamicTableConfig, testing:
+Unit tests for SnowflakeDynamicTableConfig / SnowflakeDynamicTableConfigChangeset, covering:
 - snowflake_initialization_warehouse parameter
 - refresh_warehouse parameter and warehouse_parameter property
 - immutable_where parameter
 - transient parameter
-- scheduler parameter
+- scheduler parameter (+ target_lag validation)
+
+No database required -- these are pure Python. There are three test shapes here:
+
+  1. Config parsing -- `SnowflakeDynamicTableConfig.from_dict({...})` then assert an
+     attribute parsed as expected (optional / defaults to None / accepts a value).
+     Classes named Test<Attr>Optional.
+  2. Changeset semantics -- construct a `SnowflakeDynamicTableConfigChangeset(...)`
+     directly and assert `.has_changes` / `.requires_full_refresh`. This pins which
+     attribute changes can be ALTERed in place vs. force a rebuild (the veto the COA
+     path relies on -- transient/refresh_mode -> full refresh; warehouse/scheduler/
+     immutable_where -> alter). Classes named Test<Attr>Changeset.
+  3. Change detection -- build a mock existing table (`_make_relation_results`, a SHOW
+     row as an agate table) and a desired config (`_make_relation_config`, a mock
+     RelationConfig), call `SnowflakeRelation.dynamic_table_config_changeset(...)`, and
+     assert whether a change is detected. Classes named Test<Attr>ChangeDetectionLogic.
 """
 
 import pytest
 
+from dbt.adapters.snowflake.impl import (
+    SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER,
+    SnowflakeAdapter,
+)
 from dbt.adapters.relation_configs import RelationConfigChangeAction
 from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfig,
@@ -1212,3 +1231,23 @@ class TestRefreshWarehouseChangeset:
 
         if changeset is not None:
             assert changeset.snowflake_warehouse is None
+
+
+class TestCreateOrAlterBehaviorFlag:
+    """The CREATE OR ALTER path is opt-in: this locks the default-off safety contract and
+    that the flag stays wired into the adapter, so neither can be changed unnoticed."""
+
+    def test_flag_name_is_stable(self):
+        # the name is the public API users type in dbt_project.yml flags: {...}
+        assert SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER["name"] == (
+            "snowflake_dynamic_table_create_or_alter"
+        )
+
+    def test_flag_defaults_off(self):
+        # default MUST be False: enabling it changes query-evolution behavior for every DT
+        assert SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER["default"] is False
+
+    def test_flag_is_registered_on_the_adapter(self):
+        # _behavior_flags is an instance property whose body ignores self, so fget(None) is safe
+        flags = SnowflakeAdapter._behavior_flags.fget(None)
+        assert SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER in flags
