@@ -53,6 +53,17 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         )
         self.default_context["optional"] = optional_template.module.optional
 
+        # `snowflake__interactive_table_ddl_body_sql()` is likewise called by bare
+        # name from `create.sql`/`replace.sql`, relying on dbt-core's compiled
+        # macro namespace. Load the real shared macro and inject it the same way
+        # `optional` is injected above.
+        ddl_body_template = self.jinja_env.get_template(
+            "relations/interactive_table/ddl_body.sql", globals=self.default_context
+        )
+        self.default_context["snowflake__interactive_table_ddl_body_sql"] = (
+            ddl_body_template.module.snowflake__interactive_table_ddl_body_sql
+        )
+
     def __get_template(self, template_filename):
         return self.jinja_env.get_template(template_filename, globals=self.default_context)
 
