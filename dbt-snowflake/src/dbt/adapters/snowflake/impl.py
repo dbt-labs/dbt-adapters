@@ -228,6 +228,41 @@ class SnowflakeAdapter(SQLAdapter):
             return False
         return self._strip_quotes(database).upper() in self._catalog_linked_databases
 
+    def _make_match(self, relations_list, database, schema, identifier):
+        """Refuse to resolve a relation identifier that another relation matches apart from case.
+
+        When the catalog holds two relations whose identifiers differ only by case, neither is a safe
+        answer: the other is equally plausible as the model's target, so binding to either silently
+        can read or overwrite the wrong object. Stock dbt picks whichever one its folded name matches
+        and ignores the twin; here we stop instead. That costs a case which "works" today, and the
+        trade is deliberate -- silently operating on the wrong table is worse than stopping.
+
+        The cache cannot show the collision: it keys on lowercased names, so the pair collapsed to
+        one entry before arriving here. It is recorded during the schema listing, while the catalog's
+        own listing is still un-deduped.
+
+        Everything else defers to default matching, unchanged.
+        """
+        if not self._is_catalog_linked_database(database):
+            return super()._make_match(relations_list, database, schema, identifier)
+
+        if identifier is not None and self._has_case_variants(database, schema, identifier):
+            raise DbtRuntimeError(
+                f"Cannot resolve '{self._strip_quotes(str(identifier))}' in catalog-linked database "
+                f"'{self._strip_quotes(str(database))}': the catalog holds more than one relation "
+                "whose identifier differs only by case. dbt cannot tell which one you mean, and "
+                "choosing either could read or overwrite the wrong object. Rename or remove one of "
+                "them, or set an explicit `alias` and enable `quoting` for the identifier."
+            )
+
+        return super()._make_match(relations_list, database, schema, identifier)
+
+    def _has_case_variants(self, database, schema, identifier) -> bool:
+        def norm(value) -> str:
+            return self._strip_quotes(str(value)).casefold() if value is not None else ""
+
+        return (norm(database), norm(schema), norm(identifier)) in self._case_variant_relations
+
     def _make_match_kwargs(self, database, schema, identifier):
         # if any path part is already quoted then consider same casing but without quotes
         quoting = self.config.quoting
