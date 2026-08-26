@@ -106,12 +106,25 @@ def test_variants_recorded_for_a_different_identifier_do_not_block(adapter):
     assert adapter._make_match(relations, LINKED_DB, "SCHEMA_A", "T_ORDERS") == relations
 
 
-def test_unambiguous_case_mismatch_still_raises_at_this_commit(adapter):
-    """Resolving these is the next commit's job; here it must still behave as stock does."""
+def test_resolves_identifier_differing_only_by_case(adapter):
     relations = [relation(LINKED_DB, "SCHEMA_A", "t_orders")]
 
+    assert adapter._make_match(relations, LINKED_DB, "SCHEMA_A", "T_ORDERS") == relations
+
+
+def test_resolves_schema_differing_only_by_case(adapter):
+    """A-08: the schema alone can be the driver, with the relation identifier matching exactly."""
+    relations = [relation(LINKED_DB, "schema_a", "T_ORDERS")]
+
+    assert adapter._make_match(relations, LINKED_DB, "SCHEMA_A", "T_ORDERS") == relations
+
+
+def test_non_linked_database_still_raises_on_a_case_mismatch(adapter):
+    """The contrast with the two tests above: off a catalog-linked database, stock behavior holds."""
+    relations = [relation("OTHER", "SCHEMA_A", "t_orders")]
+
     with pytest.raises(ApproximateMatchError):
-        adapter._make_match(relations, LINKED_DB, "SCHEMA_A", "T_ORDERS")
+        adapter._make_match(relations, "OTHER", "SCHEMA_A", "T_ORDERS")
 
 
 def test_no_match_returns_empty_rather_than_raising(adapter):

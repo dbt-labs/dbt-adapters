@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from dbt.adapters.snowflake.relation import SnowflakeRelation
@@ -21,6 +23,21 @@ def listed(database, schema, identifier):
         identifier=identifier,
         quote_policy={"database": True, "schema": True, "identifier": True},
     )
+
+
+def configured(database, schema, identifier, quoting=None):
+    """A relation built from project config, the way `this` / `ref()` / `source()` are."""
+    relation_config = SimpleNamespace(
+        database=database,
+        schema=schema,
+        identifier=identifier,
+        quoting_dict={},
+        config={},
+    )
+    has_quoting = SimpleNamespace(
+        quoting=quoting or {"database": False, "schema": False, "identifier": False}
+    )
+    return SnowflakeRelation.create_from(has_quoting, relation_config)
 
 
 def test_records_the_stored_case_of_each_relation_identifier():
@@ -81,3 +98,56 @@ def test_stored_case_key_strips_quotes():
     relation = listed('"db"', '"my_schema"', '"my_table"')
 
     assert SnowflakeRelation._stored_case_key(relation) == ("db", "my_schema", "my_table")
+
+
+def test_create_from_is_unchanged_when_nothing_recorded():
+    """Nothing recorded means not a catalog-linked database, so the relation is untouched."""
+    relation = configured("db", "my_schema", "my_table")
+
+    assert relation.schema == "my_schema"
+    assert relation.identifier == "my_table"
+    assert relation.quote_policy.schema is False
+    assert relation.quote_policy.identifier is False
+
+
+def test_create_from_applies_the_stored_case_and_quotes():
+    SnowflakeRelation.record_stored_case([listed("db", "MY_SCHEMA", "My_Table")])
+
+    relation = configured("db", "my_schema", "my_table")
+
+    assert relation.schema == "MY_SCHEMA"
+    assert relation.identifier == "My_Table"
+    assert relation.quote_policy.schema is True
+    assert relation.quote_policy.identifier is True
+
+
+def test_create_from_quotes_even_when_the_case_already_matches():
+    """Quoting is the operative part: unquoted `my_table` folds to MY_TABLE and misses."""
+    SnowflakeRelation.record_stored_case([listed("db", "my_schema", "my_table")])
+
+    relation = configured("db", "my_schema", "my_table")
+
+    assert relation.identifier == "my_table"
+    assert relation.quote_policy.identifier is True
+    assert relation.render() == 'db."my_schema"."my_table"'
+
+
+def test_create_from_leaves_ambiguous_identifiers_alone():
+    """No single stored form can be chosen; the adapter's lookup raises on these instead."""
+    SnowflakeRelation.record_stored_case(
+        [listed("db", "my_schema", "my_table"), listed("db", "my_schema", "MY_TABLE")]
+    )
+
+    relation = configured("db", "my_schema", "my_table")
+
+    assert relation.identifier == "my_table"
+    assert relation.quote_policy.identifier is False
+
+
+def test_create_from_ignores_relations_that_were_not_recorded():
+    SnowflakeRelation.record_stored_case([listed("db", "MY_SCHEMA", "Recorded")])
+
+    relation = configured("db", "MY_SCHEMA", "not_recorded")
+
+    assert relation.identifier == "not_recorded"
+    assert relation.quote_policy.identifier is False

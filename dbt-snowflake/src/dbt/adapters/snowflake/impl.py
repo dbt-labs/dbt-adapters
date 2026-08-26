@@ -16,6 +16,7 @@ from typing import (
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import ApproximateMatchError
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -25,7 +26,7 @@ from dbt.adapters.catalogs import (
 
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
-from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.events.types import AdapterEventWarning, ColTypeChange
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -41,7 +42,7 @@ from dbt_common.contracts.metadata import (
     ColumnMetadata,
 )
 from dbt_common.behavior_flags import BehaviorFlag
-from dbt_common.events.functions import fire_event
+from dbt_common.events.functions import fire_event, warn_or_error
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
@@ -178,6 +179,8 @@ class SnowflakeAdapter(SQLAdapter):
         # (database, schema, casefolded relation identifier) triples where the catalog holds two or
         # more relations whose identifiers differ only by case. See _record_case_variant_relations.
         self._case_variant_relations: Set[Tuple[str, str, str]] = set()
+        # Relations already warned about, so the case-variant notice fires once each.
+        self._warned_case_variants: Set[str] = set()
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
 
@@ -229,23 +232,27 @@ class SnowflakeAdapter(SQLAdapter):
         return self._strip_quotes(database).upper() in self._catalog_linked_databases
 
     def _make_match(self, relations_list, database, schema, identifier):
-        """Refuse to resolve a relation identifier that another relation matches apart from case.
+        """Resolve a relation in a catalog-linked database whose stored case differs from dbt's.
 
-        When the catalog holds two relations whose identifiers differ only by case, neither is a safe
-        answer: the other is equally plausible as the model's target, so binding to either silently
-        can read or overwrite the wrong object. Stock dbt picks whichever one its folded name matches
-        and ignores the twin; here we stop instead. That costs a case which "works" today, and the
-        trade is deliberate -- silently operating on the wrong table is worse than stopping.
+        An external catalog stores relation identifiers in its own case -- lowercase for Glue and
+        Unity, and lowercase for any catalog that normalizes. dbt folds its search to uppercase (each
+        part behind its own `quoting` flag, see _make_match_kwargs) and BaseRelation.matches()
+        compares byte-exact, so the lookup raises ApproximateMatchError. All three parts are
+        affected: a schema-only difference fails a lookup whose table name matches exactly.
 
-        The cache cannot show the collision: it keys on lowercased names, so the pair collapsed to
-        one entry before arriving here. It is recorded during the schema listing, while the catalog's
-        own listing is still un-deduped.
-
-        Everything else defers to default matching, unchanged.
+        Ambiguity is still settled first, before any matching is attempted -- see below. Otherwise
+        default matching runs first and its result is returned untouched, so anything that resolves
+        today keeps resolving identically. Only when default matching finds nothing and would have
+        raised do we fall back to comparing case-insensitively.
         """
         if not self._is_catalog_linked_database(database):
             return super()._make_match(relations_list, database, schema, identifier)
 
+        # When two relations' identifiers differ only by case, neither is a safe answer: the other is
+        # equally plausible as the model's target, so binding to either silently can read or overwrite
+        # the wrong object. The cache cannot show the collision -- it keys on lowercased names, so the
+        # pair collapsed to one entry before arriving here; it is recorded during the schema listing,
+        # while the catalog's own listing is still un-deduped.
         if identifier is not None and self._has_case_variants(database, schema, identifier):
             raise DbtRuntimeError(
                 f"Cannot resolve '{self._strip_quotes(str(identifier))}' in catalog-linked database "
@@ -255,7 +262,61 @@ class SnowflakeAdapter(SQLAdapter):
                 "them, or set an explicit `alias` and enable `quoting` for the identifier."
             )
 
-        return super()._make_match(relations_list, database, schema, identifier)
+        try:
+            exact = super()._make_match(relations_list, database, schema, identifier)
+        except ApproximateMatchError:
+            # A relation matches apart from case. Fall through and resolve it below rather than
+            # refusing: on a catalog-linked database that is the interop case dbt exists to serve.
+            exact = []
+        if exact:
+            return exact
+
+        matches = [
+            relation
+            for relation in relations_list
+            if self._matches_ignoring_case(relation, database, schema, identifier)
+        ]
+        for match in matches:
+            self._warn_case_variant_adopted(match, identifier)
+        return matches
+
+    def _warn_case_variant_adopted(self, relation, identifier) -> None:
+        """Note that dbt bound to a relation stored under a different case than it emits.
+
+        Stock dbt refuses this outright, so surface it once per relation: the object may have been
+        created by another engine, and dbt is now managing it.
+        """
+        key = str(relation)
+        if key in self._warned_case_variants:
+            return
+        self._warned_case_variants.add(key)
+        warn_or_error(
+            AdapterEventWarning(
+                base_msg=(
+                    f"dbt resolved '{self._strip_quotes(str(identifier))}' to {relation}, which is "
+                    "stored under a different case in the catalog-linked database. dbt will manage "
+                    "that object. If it is not meant to be managed by dbt, rename one of them or "
+                    "set an explicit `alias` on the model."
+                )
+            )
+        )
+
+    def _matches_ignoring_case(self, relation, database, schema, identifier) -> bool:
+        def part_matches(part, search) -> bool:
+            if search is None:
+                return True
+            if part is None:
+                return False
+            return (
+                self._strip_quotes(str(part)).casefold()
+                == self._strip_quotes(str(search)).casefold()
+            )
+
+        return (
+            part_matches(relation.database, database)
+            and part_matches(relation.schema, schema)
+            and part_matches(relation.identifier, identifier)
+        )
 
     def _has_case_variants(self, database, schema, identifier) -> bool:
         def norm(value) -> str:
@@ -503,7 +564,8 @@ class SnowflakeAdapter(SQLAdapter):
         of the one it has. Recording it here costs no extra query -- this list is already fetched
         once per schema per run.
 
-        Recording only. Nothing reads either collection yet.
+        Two consumers: SnowflakeRelation.create_from applies the stored case to relations built
+        from configuration, and _make_match refuses to resolve an identifier that collides by case.
         """
         if not self._is_catalog_linked_database(schema_relation.database):
             return

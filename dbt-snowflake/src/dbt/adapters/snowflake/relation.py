@@ -1,6 +1,6 @@
 import textwrap
 from dataclasses import dataclass, field
-from typing import ClassVar, Dict, FrozenSet, Optional, Set, Type, Iterator, Tuple
+from typing import ClassVar, Dict, FrozenSet, Iterator, Optional, Set, Tuple, Type
 
 
 from dbt.adapters.base.relation import BaseRelation, EventTimeFilter
@@ -45,11 +45,11 @@ class SnowflakeRelation(BaseRelation):
 
     # Stored relation-identifier casing for relations in catalog-linked databases, keyed by the
     # casefolded (database, schema, relation identifier). Populated by SnowflakeAdapter as it lists
-    # a schema. Only catalog-linked databases are recorded, so membership doubles as the signal
-    # that a relation needs its stored case applied.
+    # a schema; read by create_from below. Only catalog-linked databases are recorded, so membership
+    # doubles as the signal that a relation needs its stored case applied.
     _stored_case: ClassVar[Dict[Tuple[str, str, str], Tuple[str, str]]] = {}
     # Keys where the catalog holds two or more relations whose identifiers differ only by case, so
-    # no single stored form can be chosen.
+    # no single stored form can be chosen. Left alone here; the adapter's relation lookup raises.
     _ambiguous_case: ClassVar[Set[Tuple[str, str, str]]] = set()
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -90,6 +90,37 @@ class SnowflakeRelation(BaseRelation):
     @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
         return SnowflakeRelationType
+
+    @classmethod
+    def create_from(cls, quoting, relation_config, **kwargs) -> "SnowflakeRelation":
+        """Build a relation, applying the stored relation-identifier case for catalog-linked databases.
+
+        A catalog-linked database stores relation identifiers in the external catalog's case.
+        Relations built from configuration -- `this`, `ref()`, `source()` -- carry the name as written
+        in the project and render it unquoted, so Snowflake folds it. When the stored name is not
+        that folded form the reference fails with 002003, which surfaces inside the model's own SQL
+        (an `is_incremental()` filter selecting from `{{ this }}`) before any DML is generated.
+
+        Substituting the stored name and quoting it makes the reference resolve exactly. Quoting is
+        the operative part: the stored name often matches the configured name character for
+        character (both `t_orders`) and still fails, because unquoted `t_orders` folds to `T_ORDERS`.
+
+        Applies only where the stored case is known, which is only ever recorded for catalog-linked
+        databases and only once a schema has been listed. Before that -- at parse time, and on a
+        first run when the relation does not exist -- the relation is returned unchanged, so nothing
+        about creation changes.
+        """
+        relation = super().create_from(quoting, relation_config, **kwargs)
+        key = cls._stored_case_key(relation)
+        if key is None or key in cls._ambiguous_case:
+            return relation
+        stored = cls._stored_case.get(key)
+        if stored is None:
+            return relation
+        schema, identifier = stored
+        return relation.incorporate(path={"schema": schema, "identifier": identifier}).quote(
+            schema=True, identifier=True
+        )
 
     @classmethod
     def _stored_case_key(cls, relation) -> Optional[Tuple[str, str, str]]:

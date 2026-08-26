@@ -1,0 +1,10 @@
+kind: Fixes
+body: Resolve relations in catalog-linked databases whose stored relation identifier
+  differs in case from the name dbt emits, on both `CASE_SENSITIVE` and
+  `CASE_INSENSITIVE` catalogs. Where two relations' identifiers differ only by case,
+  dbt now errors instead of silently binding to one of them. Regular Snowflake
+  databases and Snowflake-managed Iceberg are unaffected.
+time: 2026-08-26T10:15:00.000000-05:00
+custom:
+  Author: ppruett
+  Issue: "0"
