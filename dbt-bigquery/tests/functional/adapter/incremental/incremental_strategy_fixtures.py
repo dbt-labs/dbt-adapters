@@ -460,6 +460,53 @@ where date_int >= _dbt_max_partition
 {% endif %}
 """.lstrip()
 
+overwrite_range_with_require_partition_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        cluster_by="id",
+        partition_by={
+            "field": "date_int",
+            "data_type": "int64",
+            "range": {
+                "start": 20200101,
+                "end": 20200110,
+                "interval": 1
+            }
+        },
+        post_hook="
+            create or replace view `{{ schema }}.incremental_overwrite_range_with_require_partition_view`
+            as select * from {{ this }} where date_int is null or date_int is not null
+        ",
+        require_partition_filter=true
+    )
+}}
+
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        select 1 as id, 20200101 as date_int union all
+        select 2 as id, 20200101 as date_int union all
+        select 3 as id, 20200101 as date_int union all
+        select 4 as id, 20200101 as date_int
+
+    {% else %}
+
+        select 10 as id, 20200101 as date_int union all
+        select 20 as id, 20200101 as date_int union all
+        select 30 as id, 20200102 as date_int union all
+        select 40 as id, 20200102 as date_int
+
+    {% endif %}
+
+)
+
+select * from data
+""".lstrip()
+
 overwrite_range_with_interval_sql = """
 {{
     config(
