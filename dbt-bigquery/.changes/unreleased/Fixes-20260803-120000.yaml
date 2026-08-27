@@ -1,7 +1,8 @@
 kind: Fixes
 body: Normalize a custom `api_endpoint` so bare hosts and duplicated `https://` prefixes
-  no longer produce a literal `https` hostname
+  no longer produce a literal `https` hostname. An `api_endpoint` that cannot be parsed
+  now raises a config error rather than silently falling back to the public BigQuery API
 time: 2026-08-03T12:00:00.000000-05:00
 custom:
-    Author: tauhidanjum
+    Author: tauhid621
     Issue: "2103"

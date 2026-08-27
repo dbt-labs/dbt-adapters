@@ -1,5 +1,7 @@
 import pytest
 
+from dbt_common.exceptions import DbtConfigError
+
 from dbt.adapters.bigquery.clients import _bigquery_endpoint
 
 
@@ -22,18 +24,47 @@ from dbt.adapters.bigquery.clients import _bigquery_endpoint
         ("HTTPS://bq-proxy.example.com", "https://bq-proxy.example.com"),
         ("https://bq-proxy.example.com/", "https://bq-proxy.example.com"),
         (" https://bq-proxy.example.com \n", "https://bq-proxy.example.com"),
-        # nothing usable, fall back to the client default
+        # userinfo is passed through, requests reads it as basic auth
+        ("dbt:s3cr3t@bq-proxy.example.com", "https://dbt:s3cr3t@bq-proxy.example.com"),
+        # ipv6 literals keep their brackets
+        ("https://[::1]:9050", "https://[::1]:9050"),
+        ("[::1]:9050", "https://[::1]:9050"),
+        # no endpoint configured, fall back to the client default
         (None, None),
         ("", None),
         ("   ", None),
-        ("https://", None),
-        ("https://bq-proxy\n.example.com", None),
-        ("https://bq-proxy .example.com", None),
-        ("https://ftp://bq-proxy.example.com", None),
-        ("ftp://bq-proxy.example.com", None),
-        ("https:/bq-proxy.example.com", None),
-        ("HTTPS:/bq-proxy.example.com", None),
     ],
 )
 def test_bigquery_endpoint(api_endpoint, expected):
     assert _bigquery_endpoint(api_endpoint) == expected
+
+
+@pytest.mark.parametrize(
+    "api_endpoint",
+    [
+        "https://",
+        "https://bq-proxy\n.example.com",
+        "https://bq-proxy .example.com",
+        "https://ftp://bq-proxy.example.com",
+        "ftp://bq-proxy.example.com",
+        "https:/bq-proxy.example.com",
+        "HTTPS:/bq-proxy.example.com",
+        "https://bq-proxy.example.com:notaport",
+        "https://bq-proxy.example.com:-1",
+        "https://bq-proxy.example.com?dataset=x",
+        "https://[::1",
+    ],
+)
+def test_bigquery_endpoint_rejects_unparseable(api_endpoint):
+    # falling back to the public bigquery.googleapis.com would silently send queries
+    # somewhere other than the endpoint the user configured
+    with pytest.raises(DbtConfigError):
+        _bigquery_endpoint(api_endpoint)
+
+
+def test_bigquery_endpoint_error_omits_the_endpoint():
+    # an endpoint that failed to parse may still carry a password
+    with pytest.raises(DbtConfigError) as e:
+        _bigquery_endpoint("https://dbt:s3cr3t@bq-proxy .example.com")
+
+    assert "s3cr3t" not in str(e.value)
