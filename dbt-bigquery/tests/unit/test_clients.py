@@ -56,14 +56,12 @@ def test_bigquery_endpoint(api_endpoint, expected):
     ],
 )
 def test_bigquery_endpoint_rejects_unparseable(api_endpoint):
-    # falling back to the public bigquery.googleapis.com would silently send queries
-    # somewhere other than the endpoint the user configured
     with pytest.raises(DbtConfigError):
         _bigquery_endpoint(api_endpoint)
 
 
 def test_bigquery_endpoint_error_omits_the_endpoint():
-    # an endpoint that failed to parse may still carry a password
+    # a value that failed to parse may still carry a password
     with pytest.raises(DbtConfigError) as e:
         _bigquery_endpoint("https://dbt:s3cr3t@bq-proxy .example.com")
 

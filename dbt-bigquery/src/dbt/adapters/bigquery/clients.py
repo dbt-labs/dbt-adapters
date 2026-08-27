@@ -30,7 +30,6 @@ from dbt.adapters.bigquery.credentials import (
 
 _logger = AdapterLogger("BigQuery")
 
-# the only schemes a BigQuery REST endpoint can meaningfully use
 _API_ENDPOINT_SCHEMES = ("http", "https")
 
 
@@ -87,35 +86,30 @@ def _bigquery_endpoint(api_endpoint: Optional[str]) -> Optional[str]:
     """Normalize a user-supplied `api_endpoint` into a scheme-qualified base URL.
 
     google-cloud-bigquery uses this value verbatim as the base of every REST URL it
-    builds, so a bare host yields a schemeless URL and a value that picked up an extra
-    scheme somewhere upstream (`https://https://host`) resolves the literal host `https`.
-    Accept both forms instead. See https://github.com/dbt-labs/dbt-adapters/issues/2103
-
-    Anything else raises rather than returning `None`, which would fall back to the
-    public `bigquery.googleapis.com` and quietly send queries somewhere the user did not
-    ask for. The endpoint itself is never logged: it may carry `user:password@` userinfo,
-    which is passed through to the client because requests reads it as basic auth.
+    builds, so a bare host yields a schemeless URL and a duplicated scheme
+    (`https://https://host`) resolves the literal host `https`. Accept both forms and
+    raise on anything else, since returning `None` falls back to the public
+    bigquery.googleapis.com. The endpoint is never logged; it may carry `user:password@`
+    userinfo. See https://github.com/dbt-labs/dbt-adapters/issues/2103
     """
     if not (endpoint := (api_endpoint or "").strip()):
         return None
 
-    # peel off any repeated scheme prefix; the innermost one is what the user meant
+    # the innermost of a repeated scheme prefix is what the user meant
     scheme = "https"
     while (head := endpoint.partition("://"))[1] and head[0].lower() in _API_ENDPOINT_SCHEMES:
         scheme, endpoint = head[0].lower(), head[2]
 
     try:
-        # the leading `//` forces the remainder to parse as a netloc, without which a
-        # bare `localhost:9050` reads `localhost` as the scheme. both the split and the
-        # port raise on malformed input, e.g. `[::1` and `host:notaport`
+        # the leading `//` forces the remainder to parse as a netloc; without it a bare
+        # `localhost:9050` reads `localhost` as the scheme
         split = urlsplit(f"//{endpoint.lstrip('/')}")
         split.port  # noqa: B018  # a property access, but it validates the port
     except ValueError as e:
         raise DbtConfigError(f"Invalid api_endpoint: {e}") from e
 
     # urlsplit accepts more than the client can use: it drops newlines and tabs silently,
-    # reads an unsupported scheme (`ftp://host`) as part of the host, and reads a mistyped
-    # separator (`https:/host`) as the host `https`
+    # and reads an unsupported or mistyped scheme (`ftp://host`, `https:/host`) as a host
     if (
         any(map(str.isspace, endpoint))
         or "://" in endpoint
