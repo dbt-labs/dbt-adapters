@@ -24,16 +24,16 @@
 
     {{ config.get('sql_header', '') }}
 
-    {#-- Name both sides so values map by column name; target and tmp relation do not always
-         agree on column order. https://github.com/dbt-labs/dbt-adapters/issues/1511 --#}
+    {#-- Name both sides: target and tmp relation do not always agree on column order.
+         https://github.com/dbt-labs/dbt-adapters/issues/1511 --#}
     {%- if overwrite_columns -%}
-        {#-- joined as given, for callers already passing pre-quoted identifiers --#}
+        {#-- joined as given, for pre-quoted identifiers --#}
         {%- set columns_csv = ', '.join(overwrite_columns) -%}
     {%- elif dest_columns -%}
         {%- set columns_csv = get_quoted_csv(dest_columns | map(attribute='name')) -%}
     {%- else -%}
         {%- set columns_csv = none -%}
-    {%- endif -%}
+    {%- endif %}
 
     insert overwrite into {{ target.render() }} {{ '(' ~ columns_csv ~ ')' if columns_csv }}
         select {{ columns_csv if columns_csv else '*' }}

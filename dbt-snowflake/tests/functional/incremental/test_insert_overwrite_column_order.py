@@ -1,10 +1,7 @@
 """
-Regression tests for https://github.com/dbt-labs/dbt-adapters/issues/1511.
-
-`insert overwrite ... select *` mapped values by position, but the target and tmp relation do
-not always agree on column order: an enforced contract builds the target in contract order
-while the tmp relation follows model SQL order, and `on_schema_change='append_new_columns'`
-appends to the end of the target. Either way values could land in the wrong columns.
+Regression tests for https://github.com/dbt-labs/dbt-adapters/issues/1511: `insert overwrite
+... select *` mapped values by position, but the target and tmp relation do not always agree
+on column order.
 """
 
 import pytest
@@ -12,13 +9,18 @@ import pytest
 from dbt.tests.util import run_dbt, write_file
 
 
-def _model(select_list, tmp_relation_type="view", overwrite_columns=None):
+def _model(
+    select_list,
+    tmp_relation_type="view",
+    overwrite_columns=None,
+    on_schema_change="append_new_columns",
+):
     overwrite = f"    overwrite_columns={overwrite_columns!r},\n" if overwrite_columns else ""
     return f"""
 {{{{ config(
     materialized='incremental',
     incremental_strategy='insert_overwrite',
-    on_schema_change='append_new_columns',
+    on_schema_change='{on_schema_change}',
     tmp_relation_type='{tmp_relation_type}',
 {overwrite}) }}}}
 
@@ -41,8 +43,7 @@ def _contract_yml(names, columns):
     return f"version: 2\nmodels:\n{models}"
 
 
-# swapped relative to the contract, and same data type so a positional overwrite is silently
-# valid rather than a cast error
+# swapped vs the contract, same data type so a positional overwrite is silent, not a cast error
 _SELECT_SWAPPED = """    '2025-01-01'::date as column1,
     'a'::varchar(10) as column2,
     44::number(38,0) as column4,
@@ -85,13 +86,22 @@ def _physical_column_order(project, model):
     ]
 
 
-class TestInsertOverwriteContractColumnOrder:
-    """Contract order differs from model SQL order."""
+class BaseInsertOverwriteContractColumnOrder:
+    """Contract order differs from model SQL order.
+
+    `on_schema_change` picks which relation `dest_columns` comes from, so both are covered.
+    """
+
+    on_schema_change: str
 
     @pytest.fixture(scope="class")
     def models(self):
         models = {
-            f"{tmp}_tmp.sql": _model(_SELECT_SWAPPED, tmp_relation_type=tmp)
+            f"{tmp}_tmp.sql": _model(
+                _SELECT_SWAPPED,
+                tmp_relation_type=tmp,
+                on_schema_change=self.on_schema_change,
+            )
             for tmp in _TMP_RELATION_TYPES
         }
         models["schema.yml"] = _contract_yml(
@@ -112,6 +122,16 @@ class TestInsertOverwriteContractColumnOrder:
             assert project.run_sql(
                 f"select column3, column4 from {project.test_schema}.{tmp}_tmp", fetch="one"
             ) == (33, 44), f"tmp_relation_type={tmp} did not map by column name"
+
+
+class TestInsertOverwriteContractColumnOrder(BaseInsertOverwriteContractColumnOrder):
+    on_schema_change = "append_new_columns"  # dest_columns comes from the tmp relation
+
+
+class TestInsertOverwriteContractColumnOrderSchemaChangeIgnore(
+    BaseInsertOverwriteContractColumnOrder
+):
+    on_schema_change = "ignore"  # the default: dest_columns falls back to the target
 
 
 class TestInsertOverwriteAppendedColumnOrder:
@@ -148,10 +168,9 @@ class TestInsertOverwriteAppendedColumnOrder:
         run_dbt(["run"])
 
         for tmp in _TMP_RELATION_TYPES:
-            # guard against a vacuous test
             assert _physical_column_order(project, f"{tmp}_tmp")[-1] == "COLUMN2B", (
-                f"expected COLUMN2B appended last for tmp_relation_type={tmp}; "
-                "if this changes, this test no longer exercises the divergence"
+                f"COLUMN2B not appended last for tmp_relation_type={tmp}; "
+                "this test no longer exercises the divergence"
             )
             assert project.run_sql(
                 f"select column2b, column3, column4 from {project.test_schema}.{tmp}_tmp",
@@ -210,13 +229,14 @@ class TestInsertOverwriteRenamedColumn:
         )
         results = run_dbt(["run"], expect_pass=False)
         assert str(results[0].status) == "error"
+        # the tmp relation has no `b`, so the named select list fails to compile
+        message = results[0].message.lower()
+        assert "invalid identifier" in message, message
+        assert '"b"' in message, message
 
 
 class TestInsertOverwriteDroppedColumn:
-    """Intentional behaviour change: the retained column is now NULLed, not a count error.
-
-    Matches how every other strategy behaves via get_insert_into_sql.
-    """
+    """Intentional behaviour change: the retained column is now NULLed, not a count error."""
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -235,3 +255,27 @@ class TestInsertOverwriteDroppedColumn:
         assert project.run_sql(
             f"select a, b, c from {project.test_schema}.dropped", fetch="one"
         ) == (1, 2, None)
+
+
+class TestInsertOverwriteAddedColumn:
+    """Intentional behaviour change: under `ignore` a new column is dropped, not an error."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"added.sql": _uncontracted_model("1 as a, 2 as b", "ignore")}
+
+    def test_added_column_is_dropped(self, project):
+        run_dbt(["run"])
+        run_dbt(["run"])
+        write_file(
+            _uncontracted_model("1 as a, 2 as b, 3 as c", "ignore"),
+            project.project_root,
+            "models",
+            "added.sql",
+        )
+        run_dbt(["run"])
+        assert project.run_sql(f"select a, b from {project.test_schema}.added", fetch="one") == (
+            1,
+            2,
+        )
+        assert "C" not in _physical_column_order(project, "added")
