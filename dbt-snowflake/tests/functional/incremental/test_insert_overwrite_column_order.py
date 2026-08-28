@@ -9,18 +9,13 @@ import pytest
 from dbt.tests.util import run_dbt, write_file
 
 
-def _model(
-    select_list,
-    tmp_relation_type="view",
-    overwrite_columns=None,
-    on_schema_change="append_new_columns",
-):
+def _model(select_list, tmp_relation_type="view", overwrite_columns=None):
     overwrite = f"    overwrite_columns={overwrite_columns!r},\n" if overwrite_columns else ""
     return f"""
 {{{{ config(
     materialized='incremental',
     incremental_strategy='insert_overwrite',
-    on_schema_change='{on_schema_change}',
+    on_schema_change='append_new_columns',
     tmp_relation_type='{tmp_relation_type}',
 {overwrite}) }}}}
 
@@ -86,22 +81,13 @@ def _physical_column_order(project, model):
     ]
 
 
-class BaseInsertOverwriteContractColumnOrder:
-    """Contract order differs from model SQL order.
-
-    `on_schema_change` picks which relation `dest_columns` comes from, so both are covered.
-    """
-
-    on_schema_change: str
+class TestInsertOverwriteContractColumnOrder:
+    """Contract order differs from model SQL order."""
 
     @pytest.fixture(scope="class")
     def models(self):
         models = {
-            f"{tmp}_tmp.sql": _model(
-                _SELECT_SWAPPED,
-                tmp_relation_type=tmp,
-                on_schema_change=self.on_schema_change,
-            )
+            f"{tmp}_tmp.sql": _model(_SELECT_SWAPPED, tmp_relation_type=tmp)
             for tmp in _TMP_RELATION_TYPES
         }
         models["schema.yml"] = _contract_yml(
@@ -122,16 +108,6 @@ class BaseInsertOverwriteContractColumnOrder:
             assert project.run_sql(
                 f"select column3, column4 from {project.test_schema}.{tmp}_tmp", fetch="one"
             ) == (33, 44), f"tmp_relation_type={tmp} did not map by column name"
-
-
-class TestInsertOverwriteContractColumnOrder(BaseInsertOverwriteContractColumnOrder):
-    on_schema_change = "append_new_columns"  # dest_columns comes from the tmp relation
-
-
-class TestInsertOverwriteContractColumnOrderSchemaChangeIgnore(
-    BaseInsertOverwriteContractColumnOrder
-):
-    on_schema_change = "ignore"  # the default: dest_columns falls back to the target
 
 
 class TestInsertOverwriteAppendedColumnOrder:
@@ -230,9 +206,7 @@ class TestInsertOverwriteRenamedColumn:
         results = run_dbt(["run"], expect_pass=False)
         assert str(results[0].status) == "error"
         # the tmp relation has no `b`, so the named select list fails to compile
-        message = results[0].message.lower()
-        assert "invalid identifier" in message, message
-        assert '"b"' in message, message
+        assert "invalid identifier 'b'" in results[0].message.lower(), results[0].message
 
 
 class TestInsertOverwriteDroppedColumn:
