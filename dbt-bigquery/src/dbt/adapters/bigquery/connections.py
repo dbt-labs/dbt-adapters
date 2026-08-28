@@ -21,6 +21,7 @@ from google.cloud.bigquery import (
     SchemaField,
     Table,
     TableReference,
+    WriteDisposition,
 )
 from google.cloud.exceptions import BadRequest, Conflict, Forbidden, NotFound
 
@@ -534,6 +535,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             skip_leading_rows=1,
             schema=table_schema,
             field_delimiter=field_delimiter,
+            # Seeds always fully replace the target; don't rely on BigQuery's
+            # job-level default (WRITE_APPEND) if the caller's drop was skipped.
+            write_disposition=WriteDisposition.WRITE_TRUNCATE,
         )
         table = self.table_ref(database, schema, identifier)
         self._write_file_to_table(client, file_path, table, load_config, fallback_timeout)
