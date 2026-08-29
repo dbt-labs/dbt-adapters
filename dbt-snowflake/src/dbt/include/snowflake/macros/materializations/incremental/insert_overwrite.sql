@@ -20,12 +20,12 @@
 
     {%- set dml -%}
 
-    {%- set overwrite_columns = config.get('overwrite_columns', []) -%}
-
     {{ config.get('sql_header', '') }}
 
-    {% set target_columns_list = '(' ~ ', '.join(overwrite_columns) ~ ')' if overwrite_columns else '' %}
-    {% set source_query_columns_list = ', '.join(overwrite_columns) if overwrite_columns else '*' %}
+    {%- set dest_cols_csv = get_quoted_csv(dest_columns | map(attribute='name')) -%}
+
+    {% set target_columns_list = '(' ~ dest_cols_csv ~ ')' %}
+    {% set source_query_columns_list = '*' %}
     insert overwrite into {{ target.render() }} {{ target_columns_list }}
         select {{ source_query_columns_list }}
         from {{ source.render() }}
