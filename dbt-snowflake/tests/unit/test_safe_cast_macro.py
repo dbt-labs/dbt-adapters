@@ -27,7 +27,7 @@ class TestSnowflakeSafeCastMacro(unittest.TestCase):
             "adapter": mock.Mock(),
             "dbt": mock.Mock(
                 string_literal=lambda v: f"'{v}'",
-                escape_single_quotes=lambda v: v.replace("'", "''"),
+                escape_single_quotes=lambda v: v.replace("'", "\\'"),
             ),
             "return": lambda r: r,
         }
@@ -65,7 +65,7 @@ class TestSnowflakeSafeCastMacro(unittest.TestCase):
 
         sql = self.__safe_cast(template, field, "OBJECT")
 
-        self.assertEqual(sql, "try_cast({'note': 'it''s fine'} as OBJECT)")
+        self.assertEqual(sql, "try_cast({'note': 'it\\'s fine'} as OBJECT)")
 
     def test_a_plain_scalar_field_is_unaffected(self):
         template = self.__get_template()
