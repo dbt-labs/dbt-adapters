@@ -1,0 +1,7 @@
+kind: Fixes
+body: Fix batch metadata source freshness reporting another project's table when
+    two sources in different projects share a dataset/schema name
+time: 2026-08-29T11:46:24.000000+00:00
+custom:
+    Author: afonsojanu
+    Issue: "2107"
