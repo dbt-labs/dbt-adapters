@@ -1,9 +1,0 @@
-kind: Fixes
-body: Add the `snowflake_catalog_scan_per_schema` behavior flag, disabled by default.
-  Catalog queries scan one schema at a time and union the results, rather than filtering
-  with an `or` that can make Snowflake materialize the whole database's metadata. Faster
-  where few schemas are in use, slower where many are
-time: 2026-08-04T10:15:00.000000-05:00
-custom:
-  Author: tauhid621
-  Issue: ""
