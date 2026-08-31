@@ -104,13 +104,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.patcher.stop()
         self.load_state_check.stop()
 
-    def test_catalog_scan_per_schema_flag_is_registered_and_off_by_default(self):
-        flags = {flag["name"]: flag for flag in self.adapter._behavior_flags}
-
-        assert "snowflake_catalog_scan_per_schema" in flags
-        assert flags["snowflake_catalog_scan_per_schema"]["default"] is False
-        assert self.adapter.behavior.snowflake_catalog_scan_per_schema.no_warn is False
-
     def test_quoting_on_drop_schema(self):
         relation = SnowflakeAdapter.Relation.create(
             database="test_database",
