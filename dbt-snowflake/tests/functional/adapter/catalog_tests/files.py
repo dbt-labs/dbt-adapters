@@ -30,3 +30,21 @@ MY_DYNAMIC_TABLE = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+MY_TABLE_IN_ANOTHER_SCHEMA = """
+{{ config(
+    materialized='table',
+    schema='another',
+) }}
+select * from {{ ref('my_seed') }}
+"""
+
+
+MY_VIEW_IN_ANOTHER_SCHEMA = """
+{{ config(
+    materialized='view',
+    schema='another',
+) }}
+select * from {{ ref('my_seed') }}
+"""
