@@ -10,6 +10,11 @@ from typing_extensions import Self
 
 from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
+from dbt.adapters.snowflake.relation_configs._normalize import (
+    normalize_cluster_by as _normalize_cluster_by,
+    normalize_target_lag as _normalize_target_lag,
+    normalize_warehouse as _normalize_warehouse,
+)
 
 if TYPE_CHECKING:
     import agate
@@ -89,6 +94,21 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         When only snowflake_warehouse is set it serves both roles, preserving existing behaviour.
         """
         return self.refresh_warehouse or self.snowflake_warehouse
+
+    # --- normalized views, for COMPARISON ONLY -------------------------------
+    # These never replace the stored values: DDL needs the user's exact text.
+
+    @property
+    def cluster_by_normalized(self) -> Optional[str]:
+        return _normalize_cluster_by(self.cluster_by)  # type: ignore[arg-type]
+
+    @property
+    def target_lag_normalized(self) -> Optional[str]:
+        return _normalize_target_lag(self.target_lag)
+
+    @property
+    def snowflake_initialization_warehouse_normalized(self) -> Optional[str]:
+        return _normalize_warehouse(self.snowflake_initialization_warehouse)
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> Self:

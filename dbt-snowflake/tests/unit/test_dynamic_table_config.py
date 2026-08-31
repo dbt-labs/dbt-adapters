@@ -481,6 +481,159 @@ class TestTransientChangeDetectionLogic:
             assert changeset.transient is None
 
 
+class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
+    """
+    Tests for SnowflakeRelation.dynamic_table_config_changeset() normalizing cluster_by,
+    target_lag, and snowflake_initialization_warehouse before comparing -- mirroring the
+    already-correct normalization on the interactive_table side (`_normalize_cluster_by`,
+    `_normalize_target_lag`, `_normalize_warehouse`), which dynamic_table never had.
+    """
+
+    @staticmethod
+    def _make_relation_results(cluster_by=None, target_lag="1 hour", init_warehouse=None):
+        import agate
+
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": target_lag,
+            "warehouse": "MY_WH",
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+            "cluster_by": cluster_by,
+            "initialization_warehouse": init_warehouse,
+        }
+        column_types = [agate.Text()] * len(dt_row_data)
+
+        return {
+            "dynamic_table": agate.Table(
+                [list(dt_row_data.values())],
+                list(dt_row_data.keys()),
+                column_types,
+            )
+        }
+
+    @staticmethod
+    def _make_relation_config(cluster_by=None, target_lag="1 hour", init_warehouse=None):
+        from unittest.mock import MagicMock
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        relation_config.config.extra = {
+            "target_lag": target_lag,
+            "snowflake_warehouse": "MY_WH",
+            "snowflake_initialization_warehouse": init_warehouse,
+            "cluster_by": cluster_by,
+        }
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return relation_config
+
+    # --- cluster_by: LINEAR prefix (live-probe-confirmed SHOW DYNAMIC TABLES format) ---
+
+    def test_linear_wrapped_readback_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(id, val)")
+        relation_config = self._make_relation_config(cluster_by=["id", "val"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.cluster_by is None
+
+    def test_case_differing_cluster_by_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(ID, VAL)")
+        relation_config = self._make_relation_config(cluster_by=["id", "val"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.cluster_by is None
+
+    def test_genuine_cluster_by_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(id, val)")
+        relation_config = self._make_relation_config(cluster_by=["id", "other"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.cluster_by is not None
+        assert changeset.requires_full_refresh is False
+
+    # --- target_lag: unit normalization ---
+
+    def test_normalized_target_lag_readback_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(target_lag="1 minute")
+        relation_config = self._make_relation_config(target_lag="60 seconds")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.target_lag is None
+
+    def test_genuine_target_lag_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(target_lag="1 minute")
+        relation_config = self._make_relation_config(target_lag="2 minutes")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.target_lag is not None
+
+    # --- snowflake_initialization_warehouse: case-insensitivity ---
+
+    def test_case_differing_init_warehouse_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse="MY_INIT_WH")
+        relation_config = self._make_relation_config(init_warehouse="my_init_wh")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_initialization_warehouse is None
+
+    def test_genuine_init_warehouse_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse="MY_INIT_WH")
+        relation_config = self._make_relation_config(init_warehouse="OTHER_WH")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.snowflake_initialization_warehouse is not None
+
+
 class TestSchedulerOptional:
     """Tests to verify scheduler is an optional parameter for dynamic tables."""
 

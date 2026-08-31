@@ -128,7 +128,7 @@ class SnowflakeRelation(BaseRelation):
         config_change_collection = SnowflakeDynamicTableConfigChangeset()
 
         if (
-            new_dynamic_table.target_lag != existing_dynamic_table.target_lag
+            new_dynamic_table.target_lag_normalized != existing_dynamic_table.target_lag_normalized
             and new_dynamic_table.target_lag is not None
         ):
             config_change_collection.target_lag = SnowflakeDynamicTableTargetLagConfigChange(
@@ -145,8 +145,8 @@ class SnowflakeRelation(BaseRelation):
             )
 
         if (
-            new_dynamic_table.snowflake_initialization_warehouse
-            != existing_dynamic_table.snowflake_initialization_warehouse
+            new_dynamic_table.snowflake_initialization_warehouse_normalized
+            != existing_dynamic_table.snowflake_initialization_warehouse_normalized
         ):
             config_change_collection.snowflake_initialization_warehouse = (
                 SnowflakeDynamicTableInitializationWarehouseConfigChange(
@@ -178,7 +178,7 @@ class SnowflakeRelation(BaseRelation):
                 )
             )
 
-        if new_dynamic_table.cluster_by != existing_dynamic_table.cluster_by:
+        if new_dynamic_table.cluster_by_normalized != existing_dynamic_table.cluster_by_normalized:
             config_change_collection.cluster_by = SnowflakeDynamicTableClusterByConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.cluster_by,
