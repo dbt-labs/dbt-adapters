@@ -2,10 +2,12 @@
 
     {% set query %}
         with tables as (
-            {{ snowflake__catalog_tables_by_schemas_sql(information_schema, schemas) }}
+            {{ snowflake__get_catalog_tables_sql(information_schema) }}
+            {{ snowflake__get_catalog_schemas_where_clause_sql(schemas) }}
         ),
         columns as (
-            {{ snowflake__catalog_columns_by_schemas_sql(information_schema, schemas) }}
+            {{ snowflake__get_catalog_columns_sql(information_schema) }}
+            {{ snowflake__get_catalog_schemas_where_clause_sql(schemas) }}
         )
         {{ snowflake__get_catalog_results_sql() }}
     {%- endset -%}
@@ -19,10 +21,12 @@
 
     {% set query %}
         with tables as (
-            {{ snowflake__catalog_tables_by_relations_sql(information_schema, relations) }}
+            {{ snowflake__get_catalog_tables_sql(information_schema) }}
+            {{ snowflake__get_catalog_relations_where_clause_sql(relations) }}
         ),
         columns as (
-            {{ snowflake__catalog_columns_by_relations_sql(information_schema, relations) }}
+            {{ snowflake__get_catalog_columns_sql(information_schema) }}
+            {{ snowflake__get_catalog_relations_where_clause_sql(relations) }}
         )
         {{ snowflake__get_catalog_results_sql() }}
     {%- endset -%}
@@ -32,7 +36,7 @@
 {%- endmacro %}
 
 
-{% macro snowflake__get_catalog_tables_sql(information_schema, source_sql=none) -%}
+{% macro snowflake__get_catalog_tables_sql(information_schema) -%}
     select
         table_catalog as "table_database",
         table_schema as "table_schema",
@@ -65,11 +69,11 @@
         to_varchar(convert_timezone('UTC', last_altered), 'yyyy-mm-dd HH24:MI'||'UTC') as "stats:last_modified:value",
         'The timestamp for last update/change' as "stats:last_modified:description",
         (last_altered is not null and table_type='BASE TABLE') as "stats:last_modified:include"
-    from {{ source_sql if source_sql is not none else information_schema ~ '.tables' }}
+    from {{ information_schema }}.tables
 {%- endmacro %}
 
 
-{% macro snowflake__get_catalog_columns_sql(information_schema, source_sql=none) -%}
+{% macro snowflake__get_catalog_columns_sql(information_schema) -%}
     select
         table_catalog as "table_database",
         table_schema as "table_schema",
@@ -79,7 +83,7 @@
         ordinal_position as "column_index",
         data_type as "column_type",
         comment as "column_comment"
-    from {{ source_sql if source_sql is not none else information_schema ~ '.columns' }}
+    from {{ information_schema }}.columns
 {%- endmacro %}
 
 
@@ -91,152 +95,14 @@
 {%- endmacro %}
 
 
-{#
-    `quote` picks which spelling of `field` the predicate refers to.
-
-    Quoted is correct on the outer select, where the projection has aliased the column to a
-    quoted lowercase name (`table_schema as "table_schema"`) that Snowflake lets a where clause
-    reference. It is *not* correct directly against an information_schema view, whose real
-    columns are uppercase -- `"table_schema"` raises `invalid identifier` there. Pass
-    `quote=false` whenever the predicate sits on the view rather than on the projection.
-#}
-{% macro snowflake__catalog_equals(field, value, quote=true) %}
-    {%- set column = '"' ~ field ~ '"' if quote else field -%}
-    {{ column }} ilike '{{ value }}' and upper({{ column }}) = upper('{{ value }}')
+{% macro snowflake__catalog_equals(field, value) %}
+    "{{ field }}" ilike '{{ value }}' and upper("{{ field }}") = upper('{{ value }}')
 {% endmacro %}
 
 
-{% macro snowflake__catalog_tables_by_schemas_sql(information_schema, schemas) -%}
-    {%- if adapter.behavior.snowflake_catalog_scan_per_schema.no_warn -%}
-        {{ snowflake__get_catalog_tables_sql(
-            information_schema,
-            snowflake__pruned_catalog_scan_by_schemas_sql(information_schema, 'tables', schemas)) }}
-    {%- else %}
-        {{ snowflake__get_catalog_tables_sql(information_schema) }}
-        {{ snowflake__get_catalog_schemas_where_clause_sql(schemas) }}
-    {%- endif -%}
-{%- endmacro %}
-
-
-{% macro snowflake__catalog_columns_by_schemas_sql(information_schema, schemas) -%}
-    {%- if adapter.behavior.snowflake_catalog_scan_per_schema.no_warn -%}
-        {{ snowflake__get_catalog_columns_sql(
-            information_schema,
-            snowflake__pruned_catalog_scan_by_schemas_sql(information_schema, 'columns', schemas)) }}
-    {%- else %}
-        {{ snowflake__get_catalog_columns_sql(information_schema) }}
-        {{ snowflake__get_catalog_schemas_where_clause_sql(schemas) }}
-    {%- endif -%}
-{%- endmacro %}
-
-
-{% macro snowflake__catalog_tables_by_relations_sql(information_schema, relations) -%}
-    {%- if adapter.behavior.snowflake_catalog_scan_per_schema.no_warn -%}
-        {{ snowflake__get_catalog_tables_sql(
-            information_schema,
-            snowflake__pruned_catalog_scan_by_relations_sql(information_schema, 'tables', relations)) }}
-    {%- else %}
-        {{ snowflake__get_catalog_tables_sql(information_schema) }}
-        {{ snowflake__get_catalog_relations_where_clause_sql(relations) }}
-    {%- endif -%}
-{%- endmacro %}
-
-
-{% macro snowflake__catalog_columns_by_relations_sql(information_schema, relations) -%}
-    {%- if adapter.behavior.snowflake_catalog_scan_per_schema.no_warn -%}
-        {{ snowflake__get_catalog_columns_sql(
-            information_schema,
-            snowflake__pruned_catalog_scan_by_relations_sql(information_schema, 'columns', relations)) }}
-    {%- else %}
-        {{ snowflake__get_catalog_columns_sql(information_schema) }}
-        {{ snowflake__get_catalog_relations_where_clause_sql(relations) }}
-    {%- endif -%}
-{%- endmacro %}
-
-
-{#
-    Snowflake only takes the fast per-schema metadata path when the schema filter is a
-    single equality. An `or` across schemas drops it back to materializing the whole
-    database's metadata, so scan one schema at a time and union the results instead.
-
-    Only the scan is repeated per schema, never the surrounding projection: the projection
-    for `tables` is ~1.5kB and Snowflake caps a statement at 1MB, so inlining it per schema
-    would fail outright on a database with a few hundred schemas -- exactly the case this
-    flag exists to speed up. The projection is applied once, over the union.
-#}
-{% macro snowflake__pruned_catalog_scan_by_schemas_sql(information_schema, view_name, schemas) -%}
-    (
-        {%- for schema in schemas | map('upper') | unique | sort %}
-        select * from {{ information_schema }}.{{ view_name }}
-        {{ snowflake__get_catalog_schemas_where_clause_sql([schema], quote=false) }}
-        {%- if not loop.last %}
-        union all
-        {%- endif %}
-        {%- endfor %}
-    ) as pruned_{{ view_name }}
-{%- endmacro %}
-
-
-{#
-    As above, but grouping the requested relations by schema so that each scan is still
-    filtered to a single schema.
-#}
-{% macro snowflake__pruned_catalog_scan_by_relations_sql(information_schema, view_name, relations) -%}
-    {%- set schema_groups = {} -%}
-    {%- for relation in relations -%}
-        {%- set schema = (relation.schema or '') | upper -%}
-        {%- if schema not in schema_groups -%}
-            {%- do schema_groups.update({schema: []}) -%}
-        {%- endif -%}
-        {%- do schema_groups[schema].append(relation) -%}
-    {%- endfor -%}
-
-    (
-        {%- for schema, schema_relations in schema_groups | dictsort %}
-        select * from {{ information_schema }}.{{ view_name }}
-        {{ snowflake__pruned_catalog_relations_where_clause_sql(schema_relations) }}
-        {%- if not loop.last %}
-        union all
-        {%- endif %}
-        {%- endfor %}
-    ) as pruned_{{ view_name }}
-{%- endmacro %}
-
-
-{#
-    `relations` must all belong to the same schema -- mixed schemas raise rather than silently
-    reporting on only the first one. The schema match is hoisted out of the identifier
-    disjunction so that it stays a single equality conjunct.
-#}
-{% macro snowflake__pruned_catalog_relations_where_clause_sql(relations) -%}
-    {%- if relations | rejectattr('schema') | list %}
-        {%- do exceptions.raise_compiler_error(
-            '`get_catalog_relations` requires a list of relations, each with a schema'
-        ) %}
-    {%- endif %}
-
-    {%- set schemas = relations | map(attribute='schema') | map('upper') | unique | sort -%}
-    {%- if schemas | length > 1 %}
-        {%- do exceptions.raise_compiler_error(
-            '`snowflake__pruned_catalog_relations_where_clause_sql` requires relations from a'
-            ~ ' single schema, got: ' ~ (schemas | join(', '))
-        ) %}
-    {%- endif %}
-
-    {%- set whole_schema = relations | rejectattr('identifier') | list | length > 0 -%}
-
-    where {{ snowflake__catalog_equals('table_schema', relations[0].schema, quote=false) }}
-    {%- if not whole_schema %}
-        and ({%- for identifier in relations | map(attribute='identifier') | unique | sort -%}
-            ({{ snowflake__catalog_equals('table_name', identifier, quote=false) }}){%- if not loop.last %} or {% endif -%}
-        {%- endfor -%})
-    {%- endif %}
-{%- endmacro %}
-
-
-{% macro snowflake__get_catalog_schemas_where_clause_sql(schemas, quote=true) -%}
+{% macro snowflake__get_catalog_schemas_where_clause_sql(schemas) -%}
     where ({%- for schema in schemas -%}
-        ({{ snowflake__catalog_equals('table_schema', schema, quote) }}){%- if not loop.last %} or {% endif -%}
+        ({{ snowflake__catalog_equals('table_schema', schema) }}){%- if not loop.last %} or {% endif -%}
     {%- endfor -%})
 {%- endmacro %}
 
