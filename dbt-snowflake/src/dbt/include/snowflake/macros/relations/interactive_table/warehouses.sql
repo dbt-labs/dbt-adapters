@@ -11,22 +11,13 @@
 
         Warehouse identifiers are compared case-insensitively: Snowflake folds unquoted
         identifiers to upper case and echoes `SHOW WAREHOUSES`'s `tables` column back that
-        way regardless of how the identifier was originally cased, so a desired `my_wh`
-        must match a currently attached `MY_WH` without producing a spurious
-        detach-then-reattach. Comparisons are also trimmed, since a stray leading or
-        trailing space in the config wouldn't match a clean identifier from `current`.
+        way regardless of the original casing, so a desired `my_wh` must match a currently
+        attached `MY_WH` without producing a spurious detach-then-reattach.
 
-        Attach is unconditional: every desired warehouse gets an `ADD TABLES` on every
-        run, even ones already attached. `describe_interactive_table_warehouses` does a
-        lossy comparison (comma-split, unescaped, case-folded FQN matching against `SHOW
-        WAREHOUSES`'s `tables` column) that can produce false positives, e.g. two
-        relations differing only by quoted-identifier case can collapse to the same
-        uppercased FQN. If attach were conditioned on that diff, a false positive would
-        mean a table silently never gets attached. Unconditional attach makes that
-        harmless instead: the redundant `ADD TABLES` on an already-attached table
-        succeeds silently as a no-op. Detach stays conditional on the diff, since a
-        false-positive detach is itself idempotent/harmless (dropping a table that's
-        already not attached) and a false-negative just delays cleanup by one run.
+        Attach is unconditional: `describe_interactive_table_warehouses` matches FQNs
+        lossily and can false-positive, so gating attach on the diff risks a table never
+        being attached; a redundant `ADD TABLES` is a silent no-op. Detach stays
+        conditional -- a false-positive detach is harmless.
     -#}
     {%- set desired = config.get('snowflake_interactive_warehouses') -%}
     {%- set desired = ([desired] if desired is string else (desired or [])) -%}

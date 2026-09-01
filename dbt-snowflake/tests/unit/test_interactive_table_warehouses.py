@@ -19,13 +19,8 @@ MACROS_DIR = os.path.normpath(
 
 
 def _show_warehouses_result(rows):
-    """Build an agate.Table mimicking a `SHOW WAREHOUSES` result set.
-
-    Column types are forced to Text, matching the pattern in
-    test_describe_interactive_table.py: agate's default type inference misreads
-    small tables of string-ish values in ways production never hits, since real
-    SHOW results are always normalized to Text before any comparison happens.
-    """
+    """Force Text typing: production always normalizes SHOW results to Text, which agate's
+    default type inference on a small table would not reproduce."""
     keys = list(rows[0].keys())
     column_types = [agate.Text()] * len(keys)
     data = [[row.get(k) for k in keys] for row in rows]
@@ -59,8 +54,7 @@ def test_show_warehouses_is_queried_unscoped():
 
 
 def test_matches_only_interactive_type_and_this_table():
-    """Mirrors v2's `interactive_warehouses_attached_to_matches_only_interactive_type_and_this_table`:
-    IW2 is INTERACTIVE but doesn't list this table; STD_WH lists it but isn't INTERACTIVE."""
+    """A warehouse must be both INTERACTIVE and list this table to match."""
     show_table = _show_warehouses_result(
         [
             {
@@ -223,11 +217,8 @@ class TestSyncInteractiveWarehouses:
         ]
 
     def test_partial_attach_reattaches_existing_and_attaches_new(self):
-        """Desired has one warehouse already attached and one new one; current has
-        one no-longer-desired warehouse. All three cases fire in a single run:
-        the already-attached warehouse still gets an (idempotent) attach statement,
-        proving attach is unconditional, while only the no-longer-desired warehouse
-        gets detached."""
+        """The already-attached warehouse still gets an attach statement, proving attach is
+        unconditional."""
         self.config_value = ["IW1", "IW2"]
         self.current_value = ["IW1", "IW3"]
 

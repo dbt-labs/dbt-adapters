@@ -51,6 +51,6 @@ def test_interactive_table_type_predicates_do_not_overlap_dynamic_table():
     )
     assert relation.is_interactive_table is True
     assert relation.is_dynamic_table is False
-    # Must NOT reuse the dynamic-table dispatch property (Global Constraint 9).
+    # is_materialized_view is dynamic_table's dispatch alias; interactive_table must not reuse it.
     assert relation.is_materialized_view is False
     assert relation.is_table is False

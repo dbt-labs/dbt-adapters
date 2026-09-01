@@ -104,10 +104,7 @@ class SnowflakeRelation(BaseRelation):
         relation_type: str = config.config.materialized  # type:ignore
 
         if relation_config := cls.relation_configs.get(relation_type):
-            # A second, differently-typed `relation_configs` entry (interactive
-            # table) makes mypy widen the dict's value type to plain `type`,
-            # which has no `from_relation_config`. Both entries share that
-            # classmethod via `SnowflakeRelationConfigBase`.
+            # mypy widens relation_configs' value type to plain `type`; both entries get `from_relation_config` from SnowflakeRelationConfigBase.
             return relation_config.from_relation_config(config)  # type:ignore
 
         raise DbtRuntimeError(
@@ -210,8 +207,6 @@ class SnowflakeRelation(BaseRelation):
 
         changeset = SnowflakeInteractiveTableConfigChangeset()
 
-        # target_lag: the ACTION distinguishes the three transitions, which have
-        # different full-refresh consequences.
         if new.target_lag_normalized != existing.target_lag_normalized:
             if existing.target_lag_normalized is None:
                 action = RelationConfigChangeAction.create  # static -> dynamic
@@ -230,11 +225,7 @@ class SnowflakeRelation(BaseRelation):
                 context=new.cluster_by,
             )
 
-        # `warehouse_parameter` resolves unconditionally, but Snowflake only
-        # accepts (and only reports back) a refresh warehouse when the table is
-        # dynamic -- a static desired config has no real refresh warehouse to
-        # compare, no matter what `snowflake_warehouse` is set to. Gate it here
-        # rather than on `existing`, which must stay whatever Snowflake reported.
+        # Snowflake rejects a refresh warehouse on a static table, so a static desired config has none to compare. Gate on `new`; `existing` must stay as Snowflake reported it.
         if new.target_lag_normalized is not None:
             desired_refresh_warehouse = new.warehouse_parameter
             desired_refresh_warehouse_normalized = new.warehouse_parameter_normalized
@@ -248,12 +239,7 @@ class SnowflakeRelation(BaseRelation):
                 context=desired_refresh_warehouse,
             )
 
-        # Snowflake only accepts (and only reports back) an initialization
-        # warehouse when the table is dynamic -- confirmed live: a static
-        # table rejects INITIALIZATION_WAREHOUSE outright (001420, "invalid
-        # property 'INITIALIZATION_WAREHOUSE' for 'TABLE'"), the same
-        # rejection shape as `refresh_warehouse` above. Gate on the desired
-        # side, not `existing`, which must stay whatever Snowflake reported.
+        # Same static-table rejection as refresh_warehouse above (001420).
         if new.target_lag_normalized is not None:
             desired_init_warehouse = new.snowflake_initialization_warehouse
             desired_init_warehouse_normalized = new.snowflake_initialization_warehouse_normalized

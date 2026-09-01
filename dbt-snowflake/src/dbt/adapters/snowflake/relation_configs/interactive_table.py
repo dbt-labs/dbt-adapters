@@ -20,15 +20,7 @@ from dbt.adapters.snowflake.relation_configs._normalize import (
     absent_to_none as _absent_to_none,
 )
 
-# The exact `SHOW INTERACTIVE TABLES` select list, in order. Settled by the v2
-# track (commit d7d9437c60) -- do NOT rename `refresh_warehouse` to `warehouse`
-# to match the dynamic-table code; they are different SHOW commands.
-#
-# ONE source of truth on purpose: the Phase 2 describe method MUST select exactly
-# these columns by referencing this constant, and the test fixtures MUST build
-# their rows from it. Column reads are tolerant (a missing column yields None),
-# so a fixture that drifts from the production select list fails SILENTLY --
-# the value reads as unset and nothing raises.
+# The exact `SHOW INTERACTIVE TABLES` select list, in order. `refresh_warehouse` is not the dynamic-table `warehouse` column -- different SHOW command, don't unify.
 INTERACTIVE_TABLE_COLUMNS = (
     "name",
     "schema_name",
@@ -49,12 +41,6 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
     `refresh_warehouse`, and `initialization_warehouse` -- note `refresh_warehouse`,
     NOT the `warehouse` column that `SHOW DYNAMIC TABLES` returns. The rewritten
     `text` column is unusable for diffing and is deliberately not read.
-
-    An interactive table is "dynamic" when `target_lag` is set and "static" when it
-    is not; a static one reads back NULL for the lag and warehouse columns.
-
-    Every optional field defaults to None on purpose: `from_dict` filters out None
-    values, so any other default would silently mask a NULL readback.
     """
 
     name: Optional[str] = None
@@ -84,23 +70,11 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
 
     @property
     def warehouse_parameter(self) -> Optional[str]:
-        """The value that would be the interactive table's refresh warehouse,
-        if this config is dynamic.
+        """The refresh warehouse this config would use, if dynamic.
 
-        This property is unconditional -- it always resolves a preferred
-        warehouse when either field is set, regardless of `target_lag` -- since
-        that's just "which of the two warehouse fields wins". When
-        `refresh_warehouse` is set it takes precedence, as it is the explicit
-        override for the table's self-refresh warehouse; otherwise
-        `snowflake_warehouse` serves both roles, the way it does for dynamic
-        tables.
-
-        Snowflake requires WAREHOUSE whenever TARGET_LAG is set, and REJECTS it
-        otherwise, so this value is only meaningful for the interactive table's
-        actual refresh warehouse when the config is dynamic (`is_dynamic`). A
-        static table has no refresh warehouse regardless of what this property
-        returns; callers comparing against a readback's `refresh_warehouse` must
-        gate on `is_dynamic` (or `target_lag_normalized`) themselves.
+        `refresh_warehouse` wins when set; otherwise `snowflake_warehouse` serves
+        both roles, as for dynamic tables. Only meaningful when `is_dynamic` --
+        Snowflake rejects a warehouse on a static table.
         """
         return self.refresh_warehouse or self.snowflake_warehouse
 
@@ -114,13 +88,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
 
     @property
     def is_dynamic(self) -> bool:
-        """A target_lag makes an interactive table auto-refreshing.
-
-        Must use `target_lag_normalized`, not `target_lag`: the literal string
-        `'none'` (and other absence spellings) means "no lag" and must read as
-        static here too, matching how the changeset builder classifies
-        transitions -- see `test_builder_classifies_literal_none_string_target_lag_as_drop`.
-        """
+        """Must use the normalized lag: the literal string 'none' means no lag and must read as static."""
         return self.target_lag_normalized is not None
 
     @classmethod
@@ -171,10 +139,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         row = cls._get_first_row(relation_results["interactive_table"])
 
         def get(column: str) -> Optional[str]:
-            # VERIFIED: agate's MappedSequence.get returns None for a missing
-            # column, and _get_first_row yields a keyless Row for empty results
-            # whose .get also returns None -- absent column, NULL, and
-            # no-such-relation all degrade identically.
+            # Absent column, NULL cell, and no-such-relation all read as None here.
             value = row.get(column)
             if value is None:
                 return None
@@ -188,12 +153,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             "cluster_by": get("cluster_by"),
             "target_lag": get("target_lag"),
             "refresh_warehouse": get("refresh_warehouse"),
-            # Collapsed at LOAD time, not comparison time: '' / 'NONE' are the
-            # readback spelling of absence, and the alter macro's `unset` branch
-            # keys on this being falsy. Casefolding is a comparison concern
-            # (see `_normalize_warehouse` / `*_normalized`), so it stays out of
-            # this load-time step -- the stored value stays raw, like the
-            # other two warehouse fields.
+            # Collapsed at load time: the alter macro's `unset` branch keys on falsiness.
             "snowflake_initialization_warehouse": _absent_to_none(get("initialization_warehouse")),
         }
 
@@ -209,9 +169,7 @@ class SnowflakeInteractiveTableTargetLagConfigChange(RelationConfigChange):
         # (dynamic -> static) is rejected with "invalid value 'null' for
         # property 'TARGET_LAG'" (001422); setting one on an already-static
         # table (static -> dynamic) is rejected with "invalid property
-        # 'TARGET_LAG' for 'TABLE'" (001420). Both confirmed live against a
-        # real Snowflake account with the interactive-table feature enabled,
-        # 2026-08-25.
+        # 'TARGET_LAG' for 'TABLE'" (001420).
         return self.action != RelationConfigChangeAction.alter
 
 

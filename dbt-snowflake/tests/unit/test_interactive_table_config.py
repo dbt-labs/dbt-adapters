@@ -4,9 +4,15 @@ import agate
 import pytest
 from dbt_common.exceptions import CompilationError
 
+from dbt.adapters.relation_configs import RelationConfigChangeAction
+from dbt.adapters.snowflake.relation import SnowflakeRelation
 from dbt.adapters.snowflake.relation_configs.interactive_table import (
     INTERACTIVE_TABLE_COLUMNS,
+    SnowflakeInteractiveTableClusterByConfigChange,
     SnowflakeInteractiveTableConfig,
+    SnowflakeInteractiveTableConfigChangeset,
+    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
+    SnowflakeInteractiveTableTargetLagConfigChange,
     _absent_to_none,
     _normalize_cluster_by,
     _normalize_target_lag,
@@ -49,11 +55,9 @@ def readback(**overrides):
     assert not unknown, f"not real readback columns: {sorted(unknown)}"
     row.update(overrides)
     keys = list(INTERACTIVE_TABLE_COLUMNS)
-    # column_types is MANDATORY -- see the note in Task 2's fixture. Here it matters
-    # even more: most default values are None, so agate would infer a DIFFERENT type
-    # per column depending on which fields a given test overrides, making behavior
-    # vary between tests in the same file. Production forces Text on all of these
-    # (normalize_show_objects_result defaults every unlisted column to agate.Text()).
+    # Force Text typing: agate's default type inference varies per column with whichever
+    # fields a test overrides, which production never hits because
+    # normalize_show_objects_result always forces these columns to Text first.
     table = agate.Table([[row[k] for k in keys]], keys, [agate.Text()] * len(keys))
     return {"interactive_table": table}
 
@@ -122,14 +126,8 @@ def test_cluster_by_stored_value_keeps_exact_text_for_ddl():
 
 
 def test_a_real_cluster_by_change_is_still_detected():
-    """Non-vacuous: both sides are meaningfully transformed by normalization
-    (the readback side has its outer parens stripped, and both sides are
-    casefolded from upper to lower) yet the underlying key lists genuinely
-    differ ('name' vs 'other') and must still compare unequal afterward. This
-    proves normalization doesn't over-collapse a real difference -- comparing
-    raw, untransformed strings (e.g. 'id, name' vs '(id)') would pass even if
-    `_normalize_cluster_by` were replaced by the identity function, so it
-    wouldn't prove anything about normalization itself."""
+    """Both sides are transformed by normalization (parens stripped, casefolded) yet the
+    key lists genuinely differ -- normalization must not over-collapse."""
     desired = SnowflakeInteractiveTableConfig.from_relation_config(
         model_config(cluster_by=["ID", "NAME"])
     )
@@ -157,8 +155,7 @@ def test_single_balanced_outer_pair_still_strips():
     assert _normalize_cluster_by("(id)") == "id"
 
 
-# --- LINEAR prefix tolerance (UNVERIFIED against a live warehouse -- see the
-# docstring on `_normalize_cluster_by`) -----------------------------------------
+# --- LINEAR prefix tolerance ---
 
 
 def test_linear_prefixed_bare_and_parenthesized_cluster_by_normalize_the_same():
@@ -215,8 +212,8 @@ def test_warehouse_case_difference_is_not_a_change():
 
 @pytest.mark.parametrize("sentinel", ["", "NONE", "None", None])
 def test_initialization_warehouse_absence_spellings_parse_to_none(sentinel):
-    """These are readback spellings of ABSENCE -- normalize at LOAD time so the
-    Phase 2 alter macro's falsy-keyed `unset` branch works."""
+    """These are readback spellings of ABSENCE -- normalize at LOAD time so the alter
+    macro's falsy-keyed `unset` branch works."""
     existing = SnowflakeInteractiveTableConfig.from_relation_results(
         readback(initialization_warehouse=sentinel)
     )
@@ -230,10 +227,8 @@ def test_static_interactive_table_has_no_target_lag_or_warehouse():
 
 
 def test_absent_to_none_collapses_sentinels_without_casefolding():
-    """`_absent_to_none` is the LOAD-TIME helper: it only collapses the wire
-    spellings of absence to None. Casefolding is a comparison concern owned
-    by `_normalize_warehouse` and must NOT happen here, or the stored value
-    would silently diverge from what Snowflake actually reported."""
+    """Casefolding is owned by `_normalize_warehouse`; doing it here would diverge the
+    stored value from what Snowflake reported."""
     assert _absent_to_none("") is None
     assert _absent_to_none("none") is None
     assert _absent_to_none("NONE") is None
@@ -246,15 +241,6 @@ def test_target_lag_fallback_collapses_internal_whitespace():
     returned as-is; double internal whitespace must not create a phantom
     diff between two spellings of the same lag."""
     assert _normalize_target_lag("2 weeks") == _normalize_target_lag("2  weeks")
-
-
-from dbt.adapters.relation_configs import RelationConfigChangeAction
-from dbt.adapters.snowflake.relation_configs.interactive_table import (
-    SnowflakeInteractiveTableClusterByConfigChange,
-    SnowflakeInteractiveTableConfigChangeset,
-    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
-    SnowflakeInteractiveTableTargetLagConfigChange,
-)
 
 
 def test_cluster_by_change_requires_full_refresh():
@@ -314,14 +300,9 @@ def test_empty_changeset_has_no_changes():
     assert SnowflakeInteractiveTableConfigChangeset().has_changes is False
 
 
-# --- the builder: identical config must produce NO changes -------------------
-
-
 def test_identical_config_produces_no_changes():
     """The phantom-diff guard, end to end: readback formatting differs from the
     configured text in every field, yet nothing changed."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(
             cluster_by="(id)",
@@ -338,8 +319,6 @@ def test_identical_config_produces_no_changes():
 
 
 def test_builder_marks_target_lag_removal_as_drop():
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(target_lag="1 hour", refresh_warehouse="WH"),
         model_config(target_lag=None),
@@ -349,17 +328,12 @@ def test_builder_marks_target_lag_removal_as_drop():
 
 
 def test_builder_marks_target_lag_addition_as_create():
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(target_lag=None),
         model_config(target_lag="1 hour", refresh_warehouse="WH"),
     )
     assert changeset.target_lag.action == RelationConfigChangeAction.create
     assert changeset.requires_full_refresh is True
-
-
-# --- warehouse fallback (Item 1) ----------------------------------------------
 
 
 def test_warehouse_parameter_falls_back_to_snowflake_warehouse():
@@ -377,15 +351,9 @@ def test_refresh_warehouse_takes_precedence_over_snowflake_warehouse():
 
 
 def test_snowflake_warehouse_only_produces_no_phantom_diff():
-    """Configuring only `snowflake_warehouse` -- the ordinary dbt-snowflake way
-    to say which warehouse a model uses -- must not diff against the
-    readback's refresh_warehouse when Snowflake reports that same warehouse
-    back. Snowflake requires WAREHOUSE whenever TARGET_LAG is set, so an
-    interactive table with only snowflake_warehouse configured still reads
-    back a real refresh_warehouse; comparing that against a None desired
-    refresh_warehouse would be a phantom diff on every run."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
+    """Snowflake requires WAREHOUSE whenever TARGET_LAG is set, so a table configured
+    with only `snowflake_warehouse` still reads back a real refresh_warehouse --
+    comparing that against a None desired value would be a phantom diff every run."""
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(target_lag="1 hour", refresh_warehouse="ANALYTICS_WH"),
         model_config(target_lag="1 hour", snowflake_warehouse="analytics_wh"),
@@ -396,8 +364,6 @@ def test_snowflake_warehouse_only_produces_no_phantom_diff():
 def test_builder_detects_genuine_warehouse_change_with_raw_context():
     """A real change is still caught, and `context` carries the raw effective
     value (not normalized/casefolded) with its original casing."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(target_lag="1 hour", refresh_warehouse="OLD_WH"),
         model_config(target_lag="1 hour", snowflake_warehouse="New_Wh"),
@@ -406,16 +372,8 @@ def test_builder_detects_genuine_warehouse_change_with_raw_context():
 
 
 def test_static_snowflake_initialization_warehouse_only_produces_no_phantom_diff():
-    """A STATIC interactive table (no target_lag) has no initialization warehouse
-    concept in Snowflake -- INITIALIZATION_WAREHOUSE is only accepted (and only
-    reported back) when TARGET_LAG is set, so a static table always reads back
-    `initialization_warehouse = NULL`. A project-wide
-    `snowflake_initialization_warehouse` (e.g. via `models: +snowflake_initialization_warehouse:`)
-    must not diff against that None readback -- mirrors
-    `test_static_snowflake_warehouse_only_produces_no_phantom_diff` for
-    `refresh_warehouse`."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
+    """INITIALIZATION_WAREHOUSE is only accepted when TARGET_LAG is set, so a static
+    table always reads back NULL -- a project-wide config must not diff against it."""
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(),
         model_config(snowflake_initialization_warehouse="analytics_wh"),
@@ -424,14 +382,8 @@ def test_static_snowflake_initialization_warehouse_only_produces_no_phantom_diff
 
 
 def test_static_snowflake_warehouse_only_produces_no_phantom_diff():
-    """A STATIC interactive table (no target_lag) has no refresh warehouse in
-    Snowflake -- WAREHOUSE is only accepted when TARGET_LAG is set, so a
-    static table always reads back `refresh_warehouse = NULL`. A project-wide
-    `snowflake_warehouse` (e.g. via `models: +snowflake_warehouse:`) must not
-    diff against that None readback just because `warehouse_parameter` falls
-    back to it -- that fallback is only meaningful for a dynamic table."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
+    """WAREHOUSE is only accepted when TARGET_LAG is set, so a static table always reads
+    back NULL -- `warehouse_parameter`'s fallback must not diff against it."""
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(),
         model_config(snowflake_warehouse="analytics_wh"),
@@ -439,24 +391,11 @@ def test_static_snowflake_warehouse_only_produces_no_phantom_diff():
     assert changeset is None
 
 
-# --- target_lag action/normalization consistency (Item 2) --------------------
-
-
 def test_builder_classifies_literal_none_string_target_lag_as_drop():
-    """The readback side can NEVER carry the literal string "NONE" --
-    `agate.Text()`'s default `null_values` (`'', 'na', 'n/a', 'none', 'null',
-    '.'`, case-insensitive) coerce it to a true `None` at Table-construction
-    time, before any of our code runs. But `new.target_lag` comes from the
-    model config's `extra.get("target_lag")` entirely raw -- no agate
-    coercion applies on that side. A user writing `target_lag: 'none'` to
-    make an existing dynamic table static puts the literal string "none"
-    into `new.target_lag`, not a true `None`. The action-selection branch
-    must test `target_lag_normalized` (which treats "none" as absent) on
-    both sides, matching the gating condition, or this dynamic->static
-    transition is misclassified as `alter` -- which Snowflake rejects
-    (001422) instead of the `drop`-and-rebuild this requires."""
-    from dbt.adapters.snowflake.relation import SnowflakeRelation
-
+    """A user writing `target_lag: 'none'` puts the literal string into the config side
+    raw, while agate coerces the readback side to a true None. The action-selection
+    branch must therefore test `target_lag_normalized`, or this dynamic->static
+    transition is misclassified as `alter` and Snowflake rejects it (001422)."""
     changeset = SnowflakeRelation.interactive_table_config_changeset(
         readback(target_lag="1 hour", refresh_warehouse="WH"),
         model_config(target_lag="none"),
@@ -465,16 +404,10 @@ def test_builder_classifies_literal_none_string_target_lag_as_drop():
     assert changeset.requires_full_refresh is True
 
 
-# --- aggregation coverage across mixed changes (Item 3) -----------------------
-
-
 def test_is_dynamic_is_false_for_literal_none_string_target_lag():
-    """Item 2: `is_dynamic` must agree with `target_lag_normalized`, the same
-    signal the changeset builder uses to classify transitions. `target_lag='none'`
-    is the readback/config spelling of absence (see
-    `test_builder_classifies_literal_none_string_target_lag_as_drop`), so
-    `is_dynamic` must be False here even though `target_lag` itself is the
-    non-None string `'none'`."""
+    """`is_dynamic` must agree with `target_lag_normalized`, the same signal the
+    changeset builder uses to classify transitions -- `'none'` is a spelling of
+    absence, so `is_dynamic` is False despite `target_lag` being a non-None string."""
     config = SnowflakeInteractiveTableConfig.from_relation_config(model_config(target_lag="none"))
     assert config.is_dynamic is False
 
@@ -484,9 +417,6 @@ def test_is_dynamic_is_true_for_a_real_target_lag():
         model_config(target_lag="1 hour", snowflake_warehouse="wh")
     )
     assert config.is_dynamic is True
-
-
-# --- compile-time validations (Task 2) ----------------------------------------
 
 
 def test_missing_cluster_by_raises():

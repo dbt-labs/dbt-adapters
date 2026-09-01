@@ -13,7 +13,7 @@ MACROS_DIR = os.path.normpath(
 class TestSnowflakeGetRenameSqlDispatch(unittest.TestCase):
     """
     Covers `snowflake__get_rename_sql` (src/dbt/include/snowflake/macros/relations/rename.sql),
-    the dispatcher added for interactive tables. `default__get_rename_sql` lives in
+    the dispatcher for interactive tables. `default__get_rename_sql` lives in
     dbt-adapters' global_project package and isn't resolvable via a FileSystemLoader scoped to
     dbt-snowflake's macros dir, so it's stubbed as a context global for the else-branch check.
     """
@@ -35,10 +35,8 @@ class TestSnowflakeGetRenameSqlDispatch(unittest.TestCase):
             "return": lambda r: r,
         }
 
-        # `snowflake__get_rename_sql` calls this by bare name (not via adapter.dispatch),
-        # relying on dbt-core's compiled macro namespace to make it resolvable at runtime.
-        # Load the real macro here and inject it as a context global so the dispatcher
-        # exercises the actual interactive-table rename implementation, not a stand-in.
+        # Called by bare name from the dispatcher, which relies on dbt-core's compiled
+        # macro namespace; inject the real macro rather than a stand-in.
         interactive_table_template = self.jinja_env.get_template(
             "relations/interactive_table/rename.sql", globals=self.default_context
         )
@@ -64,7 +62,6 @@ class TestSnowflakeGetRenameSqlDispatch(unittest.TestCase):
         return mock_relation
 
     def test_macros_load(self):
-        """Test that relations/rename.sql loads without errors"""
         self.jinja_env.get_template("relations/rename.sql")
 
     def test_get_rename_sql_interactive_table(self):
@@ -86,8 +83,7 @@ class TestSnowflakeGetRenameSqlDispatch(unittest.TestCase):
         self.assertNotIn("default dispatch", sql)
 
     def test_get_rename_sql_non_interactive_table_falls_back_to_default(self):
-        """is_interactive_table=False falls through to default__get_rename_sql, the
-        pre-existing dispatcher this task did not change"""
+        """is_interactive_table=False falls through to default__get_rename_sql"""
         self.default_context["default__get_rename_sql"] = (
             lambda relation, new_name: f"-- default dispatch for {relation} -> {new_name}"
         )

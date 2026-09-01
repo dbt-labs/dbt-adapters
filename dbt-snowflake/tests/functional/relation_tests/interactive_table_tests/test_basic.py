@@ -15,34 +15,20 @@ from tests.functional.utils import (
 # Get the alternate warehouse from environment, default to DBT_TESTING if not set.
 ALT_WAREHOUSE = os.getenv("SNOWFLAKE_TEST_ALT_WAREHOUSE", "DBT_TESTING")
 
-# Some ALTER-vs-value-change tests compare a "before" state against an "after"
-# state that also resolves to ALT_WAREHOUSE. When SNOWFLAKE_TEST_ALT_WAREHOUSE
-# isn't set, both states collapse to the same default warehouse ("DBT_TESTING"),
-# so there's no real diff for Snowflake to ALTER -- the assertion that an ALTER
-# fired would be false, not a signal about the product code. Skip cleanly
-# instead of asserting something that can't be true without a second warehouse.
 _alt_warehouse_configured = pytest.mark.skipif(
     ALT_WAREHOUSE.strip().upper() == "DBT_TESTING",
     reason="SNOWFLAKE_TEST_ALT_WAREHOUSE not set to a distinct warehouse; "
     "this test needs two real, different warehouses to observe an ALTER.",
 )
 
-# An interactive-type warehouse, needed only for the attach/detach tests below.
-# Set up via `CREATE WAREHOUSE ... WAREHOUSE_TYPE = INTERACTIVE, AUTO_SUSPEND >= 86400`
-# (Snowflake requires that minimum suspend time for interactive warehouses). It is
-# NOT auto-created by the test suite -- it must already exist in the target account,
-# since these tests attach/detach the target table against a real interactive
-# warehouse. See SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE in test.env.example.
+# Not auto-created by the test suite -- it must already exist in the target account.
+# See SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE in test.env.example.
 INTERACTIVE_WAREHOUSE = os.getenv(
     "SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE", "DBT_TESTING_INTERACTIVE"
 )
 
-# Unlike ALT_WAREHOUSE (whose default, "DBT_TESTING", is a real warehouse guaranteed
-# to exist), the default above is just a made-up name with no guarantee it exists
-# anywhere. The only way to know these tests are safe to run is if someone
-# deliberately set the env var, so skip on "unset" rather than "equals the default" --
-# otherwise a `dbt run` against an account without this warehouse would hard-fail with
-# an opaque "warehouse does not exist" error instead of skipping cleanly.
+# Skip on "unset" rather than "equals the default": unlike ALT_WAREHOUSE's default,
+# the default above is a made-up name with no guarantee it exists anywhere.
 _interactive_warehouse_configured = pytest.mark.skipif(
     os.getenv("SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE") is None,
     reason="SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE not set; this test needs a real "
@@ -76,16 +62,7 @@ class TestBasic:
 
 
 class TestCompileValidation:
-    """Task 2's four compile-time validations must raise a CompilationError at
-    `dbt run`, before any SQL reaches Snowflake.
-
-    Each model is run individually via `--select` so one validation failure
-    doesn't prevent the others in this class from being exercised. Following
-    the precedent at `tests/functional/relation_tests/test_relation_type_change.py`
-    and `tests/functional/warehouse_test/test_warehouses.py::TestInvalidConfigWarehouse`
-    (both in this repo): `run_dbt([...], expect_pass=False)` returns the RunResults
-    list, and the failed node's `.message` carries the raised exception's text.
-    """
+    """Each model runs via `--select` so one failure doesn't mask the others."""
 
     @pytest.fixture(scope="class", autouse=True)
     def models(self):
@@ -205,9 +182,7 @@ class TestRefreshWarehouseChange(AlterOrReplaceTestBase):
 
 
 class TestInitializationWarehouseChanges(AlterOrReplaceTestBase):
-    """snowflake_initialization_warehouse changes, mirroring
-    dynamic_table_tests.test_configuration_changes.TestInitializationWarehouseChanges.
-    """
+    """snowflake_initialization_warehouse changes."""
 
     RESET_MODELS = {
         "interactive_table_init_wh": models.INTERACTIVE_TABLE_DYNAMIC_WITH_INIT_WAREHOUSE
@@ -290,7 +265,7 @@ class TestClusterByChange(AlterOrReplaceTestBase):
 
 class TestTargetLagTransitions(AlterOrReplaceTestBase):
     """Snowflake rejects ALTER for both a dynamic->static and a static->dynamic
-    target_lag transition (001422 / 001420, confirmed live 2026-08-25), so both
+    target_lag transition (001422 / 001420), so both
     directions must force a full CREATE OR REPLACE.
     """
 
@@ -322,7 +297,7 @@ class TestTargetLagTransitions(AlterOrReplaceTestBase):
 
 
 class TestStaticTableNoDiffRegression:
-    """Task 1 regression: a project-wide snowflake_initialization_warehouse config
+    """A project-wide snowflake_initialization_warehouse config
     must not force a phantom diff on a static (non-dynamic) interactive table --
     the `is_dynamic` gate in `interactive_table_config_changeset` must suppress it.
     """
@@ -363,7 +338,7 @@ class TestStaticTableNoDiffRegression:
 
 @_interactive_warehouse_configured
 class TestWarehouseAttachDetach:
-    """Task 6: snowflake_interactive_warehouses attach/detach via
+    """snowflake_interactive_warehouses attach/detach via
     `alter warehouse ... add/drop tables`, driven by the warehouse-sync macro
     that runs on every materialization pass regardless of whether the table
     itself changed.
@@ -417,7 +392,7 @@ class TestWarehouseAttachDetach:
 
 
 class TestStaticNoOpIdempotency:
-    """Task 5: a static interactive table with nothing changed must no-op on a
+    """A static interactive table with nothing changed must no-op on a
     second run rather than unconditionally rebuilding it. No
     snowflake_interactive_warehouses config means no warehouse-sync statements
     fire either, so no statement at all is expected on the second run.
@@ -444,10 +419,9 @@ class TestStaticNoOpIdempotency:
 
 
 class Changes:
-    """Shared on_configuration_change apply/continue/fail scaffolding, mirroring
-    dynamic_table_tests.test_configuration_changes.Changes. `interactive_table_alter`
-    exercises an alterable change (target_lag); `interactive_table_replace` exercises
-    a full-refresh-only change (cluster_by).
+    """Shared on_configuration_change apply/continue/fail scaffolding.
+    `interactive_table_alter` exercises an alterable change (target_lag);
+    `interactive_table_replace` exercises a full-refresh-only change (cluster_by).
     """
 
     @pytest.fixture(scope="class", autouse=True)

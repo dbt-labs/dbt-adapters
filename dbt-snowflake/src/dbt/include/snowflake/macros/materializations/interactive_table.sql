@@ -46,10 +46,9 @@
 
         {% elif on_configuration_change == 'apply' %}
             {% if configuration_changes.requires_full_refresh %}
-                {# cluster_by change, or a dynamic<->static transition -- both confirmed to reject ALTER live, see Global Constraints #}
+                {# cluster_by and dynamic<->static target_lag transitions reject ALTER (001422/001420) #}
                 {% set build_sql = get_replace_sql(existing_relation, target_relation, sql) %}
             {% else %}
-                {# target_lag/refresh_warehouse/snowflake_initialization_warehouse value-to-value change -- confirmed ALTERable live #}
                 {% set build_sql = snowflake__get_alter_interactive_table_as_sql(existing_relation, configuration_changes, target_relation, sql) %}
             {% endif %}
         {% elif on_configuration_change == 'continue' %}

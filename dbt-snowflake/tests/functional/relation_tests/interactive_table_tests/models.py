@@ -8,7 +8,7 @@ id,value
 
 # A static interactive table: no target_lag, no warehouse -- Snowflake never
 # auto-refreshes it and never accepts a warehouse for it. `cluster_by` is
-# required on every interactive table (Task 2 validation), static or dynamic.
+# required on every interactive table, static or dynamic.
 INTERACTIVE_TABLE_STATIC = """
 {{ config(
     materialized='interactive_table',
@@ -70,8 +70,7 @@ select id, value from {{ ref('my_seed') }}
 """
 
 
-# snowflake_initialization_warehouse fixtures, mirroring dynamic_table_tests'
-# DYNAMIC_TABLE_WITH_INIT_WAREHOUSE / _ALTER / (unset) trio.
+# snowflake_initialization_warehouse fixtures.
 INTERACTIVE_TABLE_DYNAMIC_WITH_INIT_WAREHOUSE = """
 {{ config(
     materialized='interactive_table',
@@ -101,7 +100,7 @@ select id, value from {{ ref('my_seed') }}
 INTERACTIVE_TABLE_DYNAMIC_WITHOUT_INIT_WAREHOUSE = INTERACTIVE_TABLE_DYNAMIC
 
 
-# snowflake_interactive_warehouses attach/detach fixtures (Task 6).
+# snowflake_interactive_warehouses attach/detach fixtures.
 INTERACTIVE_TABLE_WITH_INTERACTIVE_WAREHOUSES = """
 {{ config(
     materialized='interactive_table',
@@ -121,7 +120,7 @@ select id, value from {{ ref('my_seed') }}
 INTERACTIVE_TABLE_WITHOUT_INTERACTIVE_WAREHOUSES = INTERACTIVE_TABLE_DYNAMIC
 
 
-# --- Compile-time validation fixtures (Task 2) ------------------------------
+# --- Compile-time validation fixtures ---
 # Each of these must fail at `dbt run` with a CompilationError before any SQL
 # reaches Snowflake -- see SnowflakeInteractiveTableConfig.parse_relation_config.
 

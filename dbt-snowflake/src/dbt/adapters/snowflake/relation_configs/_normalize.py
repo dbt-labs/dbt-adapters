@@ -5,15 +5,9 @@ ABSENT = {"", "none"}
 
 
 def absent_to_none(value: Optional[str]) -> Optional[str]:
-    """Collapse the wire spellings of "not set" to None, at LOAD time.
-
-    Deliberately does NOT casefold: that's a comparison concern owned by
-    `normalize_warehouse`. This is only for values that are the wire
-    spelling of ABSENCE -- Snowflake reads back `''` for an unset
-    initialization warehouse, and that must become `None` at load so
-    absence detection works. Anything else is stored byte-faithful to what
-    Snowflake reported.
-    """
+    """Snowflake reads back '' for an unset initialization warehouse; collapse
+    that to None so absence detection works. No casefolding -- that's a
+    comparison concern (normalize_warehouse)."""
     if value is None:
         return None
     stripped = value.strip()
@@ -34,13 +28,8 @@ def normalize_warehouse(value: Optional[str]) -> Optional[str]:
 
 
 def has_balanced_outer_parens(text: str) -> bool:
-    """True when the `(` at index 0 is the one closed by the `)` at the final
-    index -- i.e. nesting depth first returns to 0 exactly at the last character.
-
-    A mere `startswith("(") and endswith(")")` check is NOT a balance check: the
-    leading and trailing parens can belong to unrelated groups, e.g.
-    `(a), to_date(ts)`.
-    """
+    """Not the same as startswith('(') and endswith(')') -- those parens can
+    belong to unrelated groups, e.g. `(a), to_date(ts)`."""
     if not (text.startswith("(") and text.endswith(")")):
         return False
     depth = 0
@@ -55,31 +44,12 @@ def has_balanced_outer_parens(text: str) -> bool:
 
 
 def normalize_cluster_by(value: Optional[str]) -> Optional[str]:
-    """`SHOW` returns clustering keys parenthesized -- `(id, name)` -- while the
-    model config yields a bare `id, name`. Strip ONE balanced outer paren pair so
-    the two compare equal, and collapse whitespace after commas.
-
-    Deliberately NOT a strip-to-first-paren: that would corrupt an expression
-    like `to_date(ts)`, which legitimately contains parens.
-
-    `SHOW DYNAMIC TABLES` also prefixes that parenthesized list with `LINEAR` --
-    `LINEAR(ID, VAL)` -- on readback; `SHOW INTERACTIVE TABLES` does not (bare
-    parens, no `LINEAR`). Both confirmed live against a real warehouse (account
-    `ktb38830`, 2026-08-27/31) -- see the fs (dbt-fusion) wiki page
-    `pr-12664-review-followups` for the probe detail. Shared here so both object
-    types tolerate the `LINEAR` spelling: it's real and necessary for dynamic
-    tables, and an inert no-op for interactive tables, which never emit it.
-
-    A leading, case-insensitive `LINEAR` is stripped ONLY when the remainder
-    (after skipping whitespace) is itself a balanced parenthesized group
-    closing at the end of the string -- reusing `has_balanced_outer_parens`
-    on that remainder. This leaves a column or expression literally named
-    `linear` alone: bare `linear` has no following paren group to satisfy that
-    check, and `linear(a), b` is a multi-key list whose leading group closes
-    before the final character, not at it. The single-key case `LINEAR(ts)`
-    is genuinely ambiguous -- it could be Snowflake's wrapper around key `ts`,
-    or a call to a function named `linear` -- and is deliberately treated as
-    the wrapper, consistent with how a bare `(ts)` is already unwrapped.
+    """`SHOW` parenthesizes clustering keys -- `(id, name)` -- while the model
+    config yields a bare `id, name`; `SHOW DYNAMIC TABLES` additionally prefixes
+    `LINEAR`. Strip one balanced outer pair (and a `LINEAR` wrapper) so the two
+    compare equal. Not a strip-to-first-paren: that corrupts `to_date(ts)`.
+    `LINEAR` is only stripped when followed by a group closing at end-of-string,
+    so a key literally named `linear` survives.
     """
     if value is None:
         return None
@@ -99,9 +69,7 @@ def normalize_cluster_by(value: Optional[str]) -> Optional[str]:
 def normalize_target_lag(value: Optional[str]) -> Optional[str]:
     """Snowflake canonicalizes lag units on readback (`60 seconds` -> `1 minute`).
     Convert both sides to a comparable count of seconds where possible; fall back
-    to a casefolded string so unrecognized forms still compare sanely. The
-    fallback also collapses internal whitespace runs to a single space, so
-    e.g. `2 weeks` and `2  weeks` still compare equal.
+    to a casefolded string so unrecognized forms still compare sanely.
 
     `DOWNSTREAM` is a legal value and is not a duration.
     """

@@ -425,9 +425,8 @@ class SnowflakeAdapter(SQLAdapter):
         schema_functions = schema_functions.rename(
             column_names=[col.lower() for col in schema_functions.column_names]
         )
-        # Accounts without the interactive-table feature omit this column entirely.
-        # agate's .select() raises on a missing column, which would break
-        # list_relations for an ENTIRE SCHEMA -- so only ask for it when present.
+        # Accounts without the interactive-table feature omit this column, and agate's
+        # .select() raises on a missing one -- which would break list_relations for the whole schema.
         if "is_interactive" in schema_objects.column_names:
             tabular_columns.append("is_interactive")
         tabular_relations = [
@@ -443,11 +442,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     @staticmethod
     def _interactive_flag_is_set(result: "agate.Row") -> bool:
-        """Absent column, NULL, and empty string all mean "not interactive".
-
-        agate's Row.get returns None both for a column that is absent from the
-        row and for a NULL cell, so one call covers every degradation path.
-        """
+        """Absent column, NULL, and empty string all mean "not interactive"."""
         value = result.get("is_interactive")
         if value is None:
             return False
@@ -738,12 +733,8 @@ CALL {proc_name}();
 
     @available
     def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
-        """Get all relevant metadata about an interactive table.
-
-        SHOW INTERACTIVE TABLES LIKE uses pattern matching, so results are
-        filtered to an exact name match after fetching, respecting quote policy
-        (unquoted identifiers are stored upper-case in Snowflake metadata).
-        """
+        """Get all relevant metadata about an interactive table. `SHOW ... LIKE`
+        pattern-matches, so results are filtered to an exact name match."""
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
@@ -776,17 +767,9 @@ CALL {proc_name}();
 
     @available
     def describe_interactive_table_warehouses(self, relation: SnowflakeRelation) -> List[str]:
-        """Discover which interactive warehouses currently have `relation` attached.
-
-        The association between an interactive table and an interactive warehouse
-        (via `ALTER WAREHOUSE ... ADD TABLES`) is readable only from the warehouse
-        side -- `SHOW INTERACTIVE TABLES` has no column for it. This runs a single
-        `SHOW WAREHOUSES`, keeps rows where `type = 'INTERACTIVE'`, and checks each
-        row's comma-separated `tables` column for this relation's fully-qualified
-        name. The comparison is case-insensitive and uses the raw (unquoted)
-        database/schema/identifier, because `SHOW WAREHOUSES` always echoes back
-        `tables` unquoted and upper-cased, regardless of this relation's own quote
-        policy.
+        """Interactive warehouse membership is readable only from the warehouse side
+        -- `SHOW INTERACTIVE TABLES` has no column for it. `SHOW WAREHOUSES` echoes
+        `tables` unquoted and upper-cased regardless of this relation's quote policy.
         """
         show_sql = "show warehouses"
         res, warehouses_table = self.execute(show_sql, fetch=True)

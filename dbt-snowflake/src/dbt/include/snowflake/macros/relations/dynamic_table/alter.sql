@@ -11,9 +11,6 @@
 
     {% else %}
 
-        {#- target_lag/snowflake_warehouse/snowflake_initialization_warehouse/scheduler share
-            identical SET/UNSET semantics with interactive_table's changeset -- factored into
-            relations/target_lag_warehouse_alter.sql so the two can't drift independently. -#}
         {%- set target_lag = configuration_changes.target_lag -%}
         {%- set snowflake_warehouse = configuration_changes.snowflake_warehouse -%}
         {%- set snowflake_initialization_warehouse = configuration_changes.snowflake_initialization_warehouse -%}

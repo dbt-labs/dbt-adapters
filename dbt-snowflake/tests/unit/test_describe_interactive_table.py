@@ -11,14 +11,8 @@ from dbt_common.exceptions import DbtRuntimeError
 
 
 def _show_result(rows):
-    """Build an agate.Table mimicking a `SHOW INTERACTIVE TABLES` result set.
-
-    Column types are forced to Text, matching the pattern in
-    test_interactive_table_listing.py: agate's default type inference misreads
-    small tables of string-ish values (e.g. as Number/Boolean) in ways
-    production never hits, since real SHOW results are always normalized to
-    Text before any comparison happens.
-    """
+    """Force Text typing: production always normalizes SHOW results to Text, which agate's
+    default type inference on a small table would not reproduce."""
     keys = list(rows[0].keys())
     column_types = [agate.Text()] * len(keys)
     data = [[row.get(k) for k in keys] for row in rows]

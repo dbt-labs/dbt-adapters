@@ -15,17 +15,9 @@ MACROS_DIR = os.path.normpath(
 
 
 class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
-    """
-    Renders the actual DDL emitted by `create.sql` / `replace.sql`
-    (src/dbt/include/snowflake/macros/relations/interactive_table/) end to end,
-    using the real `optional()` macro and the real `SnowflakeInteractiveTableConfig`.
-
-    This closes the gap that let a89a9a29's bug reach live testing: nothing
-    previously rendered these two DDL macro files, so an `initialization_warehouse`
-    clause emitted unconditionally (outside the `is_dynamic` gate that already
-    protects `target_lag`/`warehouse`) was invisible to the unit suite even though
-    Snowflake genuinely rejects it on a static table (001420).
-    """
+    """Renders the real DDL from create.sql/replace.sql through the real optional() and
+    config. Snowflake rejects initialization_warehouse on a static interactive table
+    (001420), so the is_dynamic gate must cover it."""
 
     def setUp(self):
         self.jinja_env = Environment(
@@ -53,10 +45,6 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         )
         self.default_context["optional"] = optional_template.module.optional
 
-        # `snowflake__interactive_table_ddl_body_sql()` is likewise called by bare
-        # name from `create.sql`/`replace.sql`, relying on dbt-core's compiled
-        # macro namespace. Load the real shared macro and inject it the same way
-        # `optional` is injected above.
         ddl_body_template = self.jinja_env.get_template(
             "relations/interactive_table/ddl_body.sql", globals=self.default_context
         )
@@ -86,8 +74,6 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         relation = self.__create_mock_relation(interactive_table_config)
         rendered = getattr(template.module, macro_name)(relation, sql)
         return re.sub(r"\s+", " ", rendered.strip())
-
-    # --- case 1: static + snowflake_initialization_warehouse set (the bug) ------
 
     def test_create_static_with_initialization_warehouse_omits_all_dynamic_clauses(self):
         """The exact bug scenario: a project-wide `snowflake_initialization_warehouse`
@@ -132,11 +118,8 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
 
-    # --- case 2: static + snowflake_warehouse set, no target_lag (companion) ----
-
     def test_create_static_with_snowflake_warehouse_omits_target_lag_and_warehouse(self):
-        """Companion regression test for the target_lag/warehouse gate fixed
-        earlier (2a01378b) -- confirms it's still correct."""
+        """Companion: the target_lag/warehouse gate."""
         config = SnowflakeInteractiveTableConfig(
             cluster_by="id",
             target_lag=None,
@@ -174,8 +157,6 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         self.assertNotIn("target_lag", ddl)
         self.assertNotRegex(ddl, r"\bwarehouse\s*=")
 
-    # --- case 3: dynamic, no init warehouse (normal dynamic path) ---------------
-
     def test_create_dynamic_without_initialization_warehouse_emits_target_lag_and_warehouse(self):
         config = SnowflakeInteractiveTableConfig(
             cluster_by="id",
@@ -211,8 +192,6 @@ class TestSnowflakeInteractiveTableCreateReplaceMacros(unittest.TestCase):
         self.assertIn("target_lag = '1 hour'", ddl)
         self.assertIn("warehouse = ANALYTICS_WH", ddl)
         self.assertNotIn("initialization_warehouse", ddl)
-
-    # --- case 4: dynamic with all three fields set -------------------------------
 
     def test_create_dynamic_with_all_fields_emits_all_three_clauses(self):
         config = SnowflakeInteractiveTableConfig(

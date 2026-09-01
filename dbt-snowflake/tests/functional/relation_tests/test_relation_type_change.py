@@ -68,14 +68,9 @@ def requires_full_refresh(scenario) -> bool:
             and scenario.initial.table_format != scenario.final.table_format,
             # we can't swap from a dynamic table to incremental because the materialization does not handle this case
             scenario.initial.relation_type == "dynamic_table" and scenario.final.is_incremental,
-            # same underlying gap as above: the incremental materialization's plain-run path
-            # (incremental.sql) only special-cases an existing view (drop + recreate) or a
-            # table_format mismatch (raises) -- any other existing relation type, interactive_table
-            # included, falls through to running the incremental strategy's DML directly against the
-            # existing relation with no rename/drop/recreate. That leaves the object an
-            # interactive_table at assert time regardless of whether Snowflake accepts the DML, so the
-            # relation-type assertion fails either way; this applies to interactive_table regardless
-            # of whether it is static or dynamic (target_lag-bearing)
+            # the incremental materialization only special-cases an existing view or a
+            # table_format mismatch; anything else runs DML against the existing relation,
+            # so it's still an interactive_table at assert time
             scenario.initial.relation_type == "interactive_table"
             and scenario.final.is_incremental,
         ]

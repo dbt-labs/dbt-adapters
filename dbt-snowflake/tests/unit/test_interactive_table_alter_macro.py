@@ -45,11 +45,8 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
             "return": lambda r: r,
         }
 
-        # `snowflake__get_target_lag_warehouse_alter_sql()` is called by bare name from
-        # `alter.sql`, relying on dbt-core's compiled macro namespace -- same pattern used for
-        # `snowflake__interactive_table_ddl_body_sql` in
-        # test_interactive_table_create_replace_macros.py. Load the real shared macro and
-        # inject it as a context global so this test exercises the same code the runtime does.
+        # Called by bare name from `alter.sql`, which relies on dbt-core's compiled macro
+        # namespace; inject the real macro so this exercises runtime behavior.
         shared_alter_template = self.jinja_env.get_template(
             "relations/target_lag_warehouse_alter.sql", globals=self.default_context
         )
@@ -70,8 +67,6 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
         )
         return re.sub(r"\s+", " ", rendered.strip())
 
-    # --- case 1: target_lag-only change ------------------------------------
-
     def test_target_lag_only_change_renders_single_set_statement(self):
         changes = SnowflakeInteractiveTableConfigChangeset(
             target_lag=SnowflakeInteractiveTableTargetLagConfigChange(
@@ -86,8 +81,6 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
         self.assertIn("target_lag = '2 hours'", ddl)
         self.assertNotIn(";", ddl)
         self.assertNotIn("unset", ddl)
-
-    # --- case 2: initialization_warehouse cleared alone ---------------------
 
     def test_initialization_warehouse_cleared_alone_renders_bare_unset(self):
         changes = SnowflakeInteractiveTableConfigChangeset(
@@ -107,8 +100,6 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
             ddl,
         )
         self.assertNotIn(";", ddl)
-
-    # --- case 3: target_lag changed AND initialization_warehouse cleared ----
 
     def test_target_lag_change_and_initialization_warehouse_clear_join_two_statements(self):
         changes = SnowflakeInteractiveTableConfigChangeset(
@@ -136,8 +127,6 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
         self.assertIn("target_lag = '2 hours'", ddl)
         self.assertTrue(set_index < semicolon_index < unset_index)
         self.assertEqual(1, ddl.count(";"))
-
-    # --- case 4: all three fields changed ------------------------------------
 
     def test_all_three_fields_changed_render_single_set_statement(self):
         changes = SnowflakeInteractiveTableConfigChangeset(

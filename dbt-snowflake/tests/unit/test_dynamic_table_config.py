@@ -482,12 +482,8 @@ class TestTransientChangeDetectionLogic:
 
 
 class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
-    """
-    Tests for SnowflakeRelation.dynamic_table_config_changeset() normalizing cluster_by,
-    target_lag, and snowflake_initialization_warehouse before comparing -- mirroring the
-    already-correct normalization on the interactive_table side (`_normalize_cluster_by`,
-    `_normalize_target_lag`, `_normalize_warehouse`), which dynamic_table never had.
-    """
+    """cluster_by/target_lag/snowflake_initialization_warehouse must be normalized before
+    comparison."""
 
     @staticmethod
     def _make_relation_results(cluster_by=None, target_lag="1 hour", init_warehouse=None):
@@ -535,7 +531,7 @@ class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
         )
         return relation_config
 
-    # --- cluster_by: LINEAR prefix (live-probe-confirmed SHOW DYNAMIC TABLES format) ---
+    # --- cluster_by: LINEAR prefix ---
 
     def test_linear_wrapped_readback_is_not_a_change(self):
         from dbt.adapters.snowflake.relation import SnowflakeRelation
@@ -577,8 +573,6 @@ class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
         assert changeset.cluster_by is not None
         assert changeset.requires_full_refresh is False
 
-    # --- target_lag: unit normalization ---
-
     def test_normalized_target_lag_readback_is_not_a_change(self):
         from dbt.adapters.snowflake.relation import SnowflakeRelation
 
@@ -604,8 +598,6 @@ class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
 
         assert changeset is not None
         assert changeset.target_lag is not None
-
-    # --- snowflake_initialization_warehouse: case-insensitivity ---
 
     def test_case_differing_init_warehouse_is_not_a_change(self):
         from dbt.adapters.snowflake.relation import SnowflakeRelation
