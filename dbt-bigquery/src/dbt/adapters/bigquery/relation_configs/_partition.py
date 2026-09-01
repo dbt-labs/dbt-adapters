@@ -113,9 +113,16 @@ class PartitionConfig(dbtClassMixin):
         boundary using: value - MOD(value - range_start, range_interval).
         This prevents generating excessively large arrays of distinct values
         when computing partitions for replacement in insert_overwrite.
+
+        An interval of 1 normalizes to a no-op, so the raw column is returned
+        unwrapped to preserve partition elimination.
         """
         # int64 range partitions: normalize to partition start boundary
-        if self.data_type == "int64" and self.range is not None:
+        if (
+            self.data_type == "int64"
+            and self.range is not None
+            and self.range["interval"] not in (1, "1")
+        ):
             column = self.render(alias)
             start = self.range["start"]
             interval = self.range["interval"]

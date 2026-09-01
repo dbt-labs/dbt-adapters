@@ -18,6 +18,7 @@ from unittest import mock
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
+from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.redshift.impl import (
     TYPE_OID_TO_DATA_TYPE,
     TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE,
@@ -138,6 +139,51 @@ class _StubAdapter:
         return f'"{identifier}"'
 
     _temp_relation_data_type = RedshiftAdapter._temp_relation_data_type
+
+
+class TestGetColumnsInRelationFallback:
+    """When the catalog result falls back to the driver, and when it must not."""
+
+    def _adapter(self):
+        # Bypass __init__: the override needs only a real RedshiftAdapter for zero-arg super().
+        adapter = RedshiftAdapter.__new__(RedshiftAdapter)
+        adapter.get_columns_in_temp_relation = mock.Mock(return_value=["from_driver"])
+        return adapter
+
+    def test_catalog_result_is_returned_without_touching_the_driver(self):
+        adapter = self._adapter()
+        relation = mock.Mock(database=None, schema=None, identifier="model__dbt_tmp123")
+
+        with mock.patch.object(
+            SQLAdapter, "get_columns_in_relation", return_value=["from_catalog"]
+        ):
+            assert RedshiftAdapter.get_columns_in_relation(adapter, relation) == ["from_catalog"]
+
+        adapter.get_columns_in_temp_relation.assert_not_called()
+
+    def test_invisible_temp_relation_falls_back_to_the_driver(self):
+        adapter = self._adapter()
+        relation = mock.Mock(database=None, schema=None, identifier="model__dbt_tmp123")
+
+        with mock.patch.object(SQLAdapter, "get_columns_in_relation", return_value=[]):
+            assert RedshiftAdapter.get_columns_in_relation(adapter, relation) == ["from_driver"]
+
+        adapter.get_columns_in_temp_relation.assert_called_once_with(relation)
+
+    def test_qualified_relation_with_no_columns_does_not_fall_back(self):
+        # The driver query is unqualified, so it would resolve to the wrong relation.
+        adapter = self._adapter()
+        relation = mock.Mock(database="db", schema="sch", identifier="my_model")
+
+        with mock.patch.object(SQLAdapter, "get_columns_in_relation", return_value=[]):
+            assert RedshiftAdapter.get_columns_in_relation(adapter, relation) == []
+
+        adapter.get_columns_in_temp_relation.assert_not_called()
+
+    def test_driver_fallback_is_not_exposed_to_jinja(self):
+        # @available here would put a method with no record type back in the Jinja context.
+        assert "get_columns_in_temp_relation" not in RedshiftAdapter._available_
+        assert "get_columns_in_relation" in RedshiftAdapter._available_
 
 
 class TestGetColumnsInTempRelation:
