@@ -45,6 +45,18 @@ class TestSnowflakeInteractiveTableAlterMacro(unittest.TestCase):
             "return": lambda r: r,
         }
 
+        # `snowflake__get_target_lag_warehouse_alter_sql()` is called by bare name from
+        # `alter.sql`, relying on dbt-core's compiled macro namespace -- same pattern used for
+        # `snowflake__interactive_table_ddl_body_sql` in
+        # test_interactive_table_create_replace_macros.py. Load the real shared macro and
+        # inject it as a context global so this test exercises the same code the runtime does.
+        shared_alter_template = self.jinja_env.get_template(
+            "relations/target_lag_warehouse_alter.sql", globals=self.default_context
+        )
+        self.default_context["snowflake__get_target_lag_warehouse_alter_sql"] = (
+            shared_alter_template.module.snowflake__get_target_lag_warehouse_alter_sql
+        )
+
     def __get_template(self, template_filename):
         return self.jinja_env.get_template(template_filename, globals=self.default_context)
 
