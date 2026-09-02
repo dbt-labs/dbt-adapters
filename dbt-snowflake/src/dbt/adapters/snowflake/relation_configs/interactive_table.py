@@ -96,7 +96,13 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         extra = relation_config.config.extra if relation_config.config else {}
 
         cluster_by = parse_model.cluster_by(relation_config)
-        if not cluster_by or not str(cluster_by).strip():
+        # Checked per element, not on the joined string: `["id", "  "]` joins to
+        # `"id,   "`, which is truthy but renders `cluster by (id,   )` (001003).
+        raw_cluster_by = (
+            relation_config.config.get("cluster_by") if relation_config.config else None
+        )
+        keys = [raw_cluster_by] if isinstance(raw_cluster_by, str) else list(raw_cluster_by or [])
+        if not keys or any(not str(key).strip() for key in keys):
             raise CompilationError(
                 f"Interactive tables require a non-empty `cluster_by` config: "
                 f"{relation_config.identifier}"

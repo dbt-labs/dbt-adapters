@@ -464,6 +464,22 @@ def test_missing_cluster_by_raises():
         SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
 
 
+@pytest.mark.parametrize("cluster_by", [[], "", "   ", ["  "], ["", ""]])
+def test_wholly_blank_cluster_by_raises(cluster_by):
+    relation_config = model_config(cluster_by=cluster_by)
+    with pytest.raises(CompilationError, match="cluster_by"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+@pytest.mark.parametrize("cluster_by", [["id", "  "], ["  ", "id"], ["id", "", "val"]])
+def test_cluster_by_list_with_a_blank_entry_raises(cluster_by):
+    """The joined string is truthy, so a blank ELEMENT slipped through and
+    rendered invalid DDL (`cluster by (id,   )`, Snowflake 001003)."""
+    relation_config = model_config(cluster_by=cluster_by)
+    with pytest.raises(CompilationError, match="cluster_by"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
 def test_iceberg_table_format_raises():
     relation_config = model_config(table_format="iceberg")
     with pytest.raises(CompilationError, match="iceberg"):
