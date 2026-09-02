@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import agate
 import pytest
@@ -516,6 +517,65 @@ def test_clearing_init_warehouse_by_literal_is_stored_as_none(cleared):
 def test_target_lag_with_warehouse_does_not_raise():
     relation_config = model_config(target_lag="1 hour", snowflake_warehouse="wh")
     SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)  # should not raise
+
+
+# --- inert snowflake_initialization_warehouse warning ---
+
+
+@pytest.mark.parametrize("target_lag", [None, "none", "NONE", "", "   "])
+def test_init_warehouse_without_target_lag_warns(target_lag):
+    """A static interactive table can't hold a warehouse, so the value is dropped
+    before any DDL. Inert rather than fatal, so warn instead of erroring."""
+    relation_config = model_config(
+        target_lag=target_lag, snowflake_initialization_warehouse="INIT_WH"
+    )
+
+    with patch(
+        "dbt.adapters.snowflake.relation_configs.interactive_table.warn_or_error"
+    ) as mock_warn:
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+    assert mock_warn.call_count == 1
+    assert "snowflake_initialization_warehouse is ignored" in mock_warn.call_args.args[0].base_msg
+
+
+def test_init_warehouse_with_target_lag_does_not_warn():
+    relation_config = model_config(
+        target_lag="1 hour",
+        snowflake_warehouse="wh",
+        snowflake_initialization_warehouse="INIT_WH",
+    )
+
+    with patch(
+        "dbt.adapters.snowflake.relation_configs.interactive_table.warn_or_error"
+    ) as mock_warn:
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+    mock_warn.assert_not_called()
+
+
+def test_no_init_warehouse_without_target_lag_does_not_warn():
+    relation_config = model_config(target_lag=None)
+
+    with patch(
+        "dbt.adapters.snowflake.relation_configs.interactive_table.warn_or_error"
+    ) as mock_warn:
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+    mock_warn.assert_not_called()
+
+
+def test_snowflake_warehouse_without_target_lag_does_not_warn():
+    """DIVERGES from the init-warehouse case on purpose: `snowflake_warehouse`
+    still selects the warehouse the build runs on, so it isn't inert."""
+    relation_config = model_config(target_lag=None, snowflake_warehouse="wh")
+
+    with patch(
+        "dbt.adapters.snowflake.relation_configs.interactive_table.warn_or_error"
+    ) as mock_warn:
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+    mock_warn.assert_not_called()
 
 
 def test_changeset_aggregates_full_refresh_across_mixed_changes():

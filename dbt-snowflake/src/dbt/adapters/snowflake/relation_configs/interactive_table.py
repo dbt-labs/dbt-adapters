@@ -2,8 +2,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 from dbt_common.exceptions import CompilationError
+from dbt_common.events.functions import warn_or_error
 
 from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.events.types import AdapterEventWarning
 from dbt.adapters.relation_configs import (
     RelationConfigChange,
     RelationConfigChangeAction,
@@ -128,6 +130,24 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
                 f"(`refresh_warehouse` or `snowflake_warehouse`): {relation_config.identifier}"
             )
 
+        # Collapsed on the config side too: a clear written as the `NONE` literal
+        # must reach the alter macro as absent, or it emits `set ... = NONE`.
+        initialization_warehouse = _absent_to_none(extra.get("snowflake_initialization_warehouse"))
+        is_dynamic = bool(target_lag) and str(target_lag).strip().casefold() not in _ABSENT
+        # Inert rather than fatal: `ddl_body.sql` drops the value before any DDL when the
+        # table is static. No matching warning for `snowflake_warehouse` -- that one still
+        # selects the warehouse the build runs on, so it isn't inert.
+        if not is_dynamic and initialization_warehouse:
+            warn_or_error(
+                AdapterEventWarning(
+                    base_msg=(
+                        "snowflake_initialization_warehouse is ignored on an interactive "
+                        "table without target_lag; it only applies when the table "
+                        "self-refreshes."
+                    )
+                )
+            )
+
         return {
             "name": relation_config.identifier,
             "schema_name": relation_config.schema,
@@ -137,11 +157,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             "target_lag": target_lag,
             "snowflake_warehouse": extra.get("snowflake_warehouse"),
             "refresh_warehouse": extra.get("refresh_warehouse"),
-            # Collapsed on the config side too: a clear written as the `NONE` literal
-            # must reach the alter macro as absent, or it emits `set ... = NONE`.
-            "snowflake_initialization_warehouse": _absent_to_none(
-                extra.get("snowflake_initialization_warehouse")
-            ),
+            "snowflake_initialization_warehouse": initialization_warehouse,
         }
 
     @classmethod
