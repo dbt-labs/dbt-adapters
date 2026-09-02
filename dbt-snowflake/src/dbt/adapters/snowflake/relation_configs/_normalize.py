@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 # Readback spellings that mean "this is not set".
 ABSENT = {"", "none"}
@@ -29,18 +29,66 @@ def normalize_warehouse(value: Optional[str]) -> Optional[str]:
 
 def has_balanced_outer_parens(text: str) -> bool:
     """Not the same as startswith('(') and endswith(')') -- those parens can
-    belong to unrelated groups, e.g. `(a), to_date(ts)`."""
+    belong to unrelated groups, e.g. `(a), to_date(ts)`. Parens inside a quoted
+    identifier are not structural and don't count."""
     if not (text.startswith("(") and text.endswith(")")):
         return False
     depth = 0
-    for index, char in enumerate(text):
-        if char == "(":
-            depth += 1
-        elif char == ")":
-            depth -= 1
-            if depth == 0:
-                return index == len(text) - 1
+    in_quotes = False
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            if in_quotes and text[index + 1 : index + 2] == '"':
+                index += 1  # doubled `""` escape for a literal quote
+            else:
+                in_quotes = not in_quotes
+        elif not in_quotes:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0:
+                    return index == len(text) - 1
+        index += 1
     return False
+
+
+def split_keys(text: str) -> List[str]:
+    """Split on commas outside both parentheses and quoted identifiers, so a
+    clustering expression like `coalesce(a, b)` stays one key and a quoted
+    identifier like `"a,b"` isn't split on its embedded comma."""
+    keys = []
+    depth = 0
+    in_quotes = False
+    start = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        if char == '"':
+            if in_quotes and text[index + 1 : index + 2] == '"':
+                index += 1  # doubled `""` escape for a literal quote
+            else:
+                in_quotes = not in_quotes
+        elif not in_quotes:
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth = max(depth - 1, 0)
+            elif char == "," and depth == 0:
+                keys.append(text[start:index])
+                start = index + 1
+        index += 1
+    keys.append(text[start:])
+    return keys
+
+
+def normalize_key(key: str) -> str:
+    """A quoted identifier is case-SENSITIVE in Snowflake and kept exactly as
+    written; anything unquoted is folded, matching how Snowflake folds it."""
+    if len(key) >= 2 and key.startswith('"') and key.endswith('"'):
+        return key
+    return key.casefold()
 
 
 def normalize_cluster_by(value: Optional[str]) -> Optional[str]:
@@ -62,8 +110,8 @@ def normalize_cluster_by(value: Optional[str]) -> Optional[str]:
             text = remainder
     if has_balanced_outer_parens(text):
         text = text[1:-1].strip()
-    parts = [part.strip() for part in text.split(",")]
-    return ", ".join(part for part in parts if part).casefold()
+    parts = [part.strip() for part in split_keys(text)]
+    return ", ".join(normalize_key(part) for part in parts if part)
 
 
 def normalize_target_lag(value: Optional[str]) -> Optional[str]:

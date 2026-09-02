@@ -188,6 +188,45 @@ def test_linear_function_call_as_one_of_several_keys_is_untouched():
     assert _normalize_cluster_by("linear(a), b") == "linear(a), b"
 
 
+# --- Quote-awareness: quoted identifiers are case-SENSITIVE in Snowflake ---
+
+
+def test_case_is_preserved_inside_double_quotes():
+    assert _normalize_cluster_by('("MixedCase")') == '"MixedCase"'
+
+
+def test_case_is_folded_outside_double_quotes():
+    assert _normalize_cluster_by("(ID, VAL)") == _normalize_cluster_by("id, val")
+
+
+def test_quoted_mixed_case_readback_is_a_genuine_change():
+    """`"MixedCase"` and `"mixedcase"` are different columns, so a config of
+    one against a readback of the other must not compare equal."""
+    assert _normalize_cluster_by('"mixedcase"') != _normalize_cluster_by('("MixedCase")')
+
+
+def test_quoted_same_case_readback_is_not_a_change():
+    assert _normalize_cluster_by('"MixedCase"') == _normalize_cluster_by('("MixedCase")')
+
+
+def test_quoted_comma_is_not_a_key_separator():
+    assert _normalize_cluster_by('("a,b")') == '"a,b"'
+
+
+def test_quoted_paren_does_not_confuse_outer_paren_balance():
+    assert _normalize_cluster_by('("c(d)")') == '"c(d)"'
+
+
+def test_quoted_multi_key_list():
+    assert _normalize_cluster_by('("MixedCase", id)') == '"MixedCase", id'
+
+
+def test_doubled_quote_escape_stays_inside_the_identifier():
+    """`""` inside a quoted identifier is an escaped literal quote, not the end
+    of the identifier -- the embedded comma must not split the key."""
+    assert _normalize_cluster_by('("a""b,c")') == '"a""b,c"'
+
+
 @pytest.mark.parametrize(
     "configured,returned",
     [("60 seconds", "1 minute"), ("120 seconds", "2 minutes"), ("1 hour", "1 hour")],
