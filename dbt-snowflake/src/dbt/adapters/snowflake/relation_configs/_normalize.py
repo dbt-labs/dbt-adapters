@@ -45,65 +45,91 @@ def normalize_warehouse(value: Optional[str]) -> Optional[str]:
 def has_balanced_outer_parens(text: str) -> bool:
     """Not the same as startswith('(') and endswith(')') -- those parens can
     belong to unrelated groups, e.g. `(a), to_date(ts)`. Parens inside a quoted
-    identifier are not structural and don't count."""
+    identifier or a single-quoted string literal (e.g. the `)` in
+    `to_char(ts, 'A)B')`) are not structural and don't count."""
     if not (text.startswith("(") and text.endswith(")")):
         return False
     depth = 0
-    in_quotes = False
+    quote_char = None
     index = 0
     while index < len(text):
         char = text[index]
-        if char == '"':
-            if in_quotes and text[index + 1 : index + 2] == '"':
-                index += 1  # doubled `""` escape for a literal quote
-            else:
-                in_quotes = not in_quotes
-        elif not in_quotes:
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                depth -= 1
-                if depth == 0:
-                    return index == len(text) - 1
+        if quote_char is not None:
+            if char == quote_char:
+                if text[index + 1 : index + 2] == quote_char:
+                    index += 1  # doubled escape for a literal quote
+                else:
+                    quote_char = None
+        elif char in ('"', "'"):
+            quote_char = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return index == len(text) - 1
         index += 1
     return False
 
 
 def split_keys(text: str) -> List[str]:
-    """Split on commas outside both parentheses and quoted identifiers, so a
-    clustering expression like `coalesce(a, b)` stays one key and a quoted
-    identifier like `"a,b"` isn't split on its embedded comma."""
+    """Split on commas outside parentheses and quoted spans, so a clustering
+    expression like `coalesce(a, b)` stays one key, a quoted identifier like
+    `"a,b"` isn't split on its embedded comma, and neither is a string
+    literal like `to_char(ts, 'A,B')`."""
     keys = []
     depth = 0
-    in_quotes = False
+    quote_char = None
     start = 0
     index = 0
     while index < len(text):
         char = text[index]
-        if char == '"':
-            if in_quotes and text[index + 1 : index + 2] == '"':
-                index += 1  # doubled `""` escape for a literal quote
-            else:
-                in_quotes = not in_quotes
-        elif not in_quotes:
-            if char == "(":
-                depth += 1
-            elif char == ")":
-                depth = max(depth - 1, 0)
-            elif char == "," and depth == 0:
-                keys.append(text[start:index])
-                start = index + 1
+        if quote_char is not None:
+            if char == quote_char:
+                if text[index + 1 : index + 2] == quote_char:
+                    index += 1  # doubled escape for a literal quote
+                else:
+                    quote_char = None
+        elif char in ('"', "'"):
+            quote_char = char
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth = max(depth - 1, 0)
+        elif char == "," and depth == 0:
+            keys.append(text[start:index])
+            start = index + 1
         index += 1
     keys.append(text[start:])
     return keys
 
 
 def normalize_key(key: str) -> str:
-    """A quoted identifier is case-SENSITIVE in Snowflake and kept exactly as
-    written; anything unquoted is folded, matching how Snowflake folds it."""
-    if len(key) >= 2 and key.startswith('"') and key.endswith('"'):
-        return key
-    return key.casefold()
+    """Fold everything outside a quoted span. A double-quoted identifier or a
+    single-quoted string literal (e.g. the date-format argument in
+    `to_char(ts, 'MON')`) is case-SENSITIVE data in Snowflake and is kept
+    exactly as written, delimiters included; everything else is folded,
+    matching how Snowflake folds an unquoted identifier."""
+    result = []
+    quote_char = None
+    index = 0
+    while index < len(key):
+        char = key[index]
+        if quote_char is not None:
+            result.append(char)
+            if char == quote_char:
+                if key[index + 1 : index + 2] == quote_char:
+                    result.append(key[index + 1])
+                    index += 1  # doubled escape, stay inside the quoted span
+                else:
+                    quote_char = None
+        elif char in ('"', "'"):
+            quote_char = char
+            result.append(char)
+        else:
+            result.append(char.casefold())
+        index += 1
+    return "".join(result)
 
 
 def normalize_cluster_by(value: Optional[str]) -> Optional[str]:

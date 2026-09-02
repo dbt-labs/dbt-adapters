@@ -229,6 +229,54 @@ def test_doubled_quote_escape_stays_inside_the_identifier():
     assert _normalize_cluster_by('("a""b,c")') == '"a""b,c"'
 
 
+# --- Quote-awareness: single-quoted string literals inside expressions ----
+# A clustering expression like `to_char(ts, 'MON')` can carry a single-quoted
+# string literal as a function argument. Live-verified against Snowflake
+# (account ktb38830, 2026-09-02): `SHOW` echoes such a literal back verbatim,
+# including exact case, so it must be treated as case-SENSITIVE data, not
+# folded like the surrounding unquoted expression text.
+
+
+def test_case_is_preserved_inside_single_quotes():
+    assert _normalize_cluster_by("TO_CHAR(TS, 'MON')") == "to_char(ts, 'MON')"
+
+
+def test_quoted_literal_case_change_is_a_genuine_change():
+    assert _normalize_cluster_by("to_char(ts, 'MON')") != _normalize_cluster_by(
+        "to_char(ts, 'mon')"
+    )
+
+
+def test_quoted_literal_same_case_readback_is_not_a_change():
+    assert _normalize_cluster_by("to_char(ts, 'MON')") == _normalize_cluster_by(
+        "(to_char(ts, 'MON'))"
+    )
+
+
+def test_comma_inside_single_quoted_literal_is_not_a_key_separator():
+    assert _normalize_cluster_by("(to_char(ts, 'A,B'))") == "to_char(ts, 'A,B')"
+
+
+def test_paren_and_comma_inside_single_quoted_literal_do_not_corrupt_parsing():
+    """Live-verified against Snowflake (ktb38830, 2026-09-02): `to_char(ts, 'A)B,C')`
+    is valid DDL, and a dynamic table's `SHOW` echoes it back verbatim inside a
+    LINEAR wrapper -- the embedded `)` and `,` must not desync paren depth or
+    split a key that was never meant to split."""
+    config = "a, to_char(ts, 'A)B,C')"
+    readback = "LINEAR(a, to_char(ts, 'A)B,C'))"
+    assert _normalize_cluster_by(config) == _normalize_cluster_by(readback)
+
+
+def test_doubled_single_quote_escape_stays_inside_the_literal():
+    """`''` inside a string literal is an escaped literal quote, not the end
+    of the literal -- live-verified against Snowflake (ktb38830, 2026-09-02)."""
+    assert _normalize_cluster_by("to_char(ts, 'YYYY''MON')") == "to_char(ts, 'YYYY''MON')"
+
+
+def test_quoted_identifier_and_quoted_literal_can_coexist_in_one_key():
+    assert _normalize_cluster_by("to_char(\"Col\", 'MON')") == "to_char(\"Col\", 'MON')"
+
+
 # --- Quote-awareness: warehouse identifiers -------------------------------
 # Unlike cluster_by, `SHOW` never echoes back the quote delimiters for a
 # warehouse name -- only the resolved name -- so a quoted config value must
