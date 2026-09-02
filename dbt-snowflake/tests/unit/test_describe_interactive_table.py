@@ -245,3 +245,71 @@ def test_missing_column_is_omitted_not_a_keyerror():
     table = result["interactive_table"]
     assert "initialization_warehouse" not in table.column_names
     assert set(table.column_names) == set(INTERACTIVE_TABLE_COLUMNS) - {"initialization_warehouse"}
+
+
+# --- SHOW ... LIKE literal escaping -----------------------------------------
+
+
+def test_single_quote_in_identifier_is_escaped_in_interactive_show_sql():
+    """An unescaped `'` terminates the LIKE literal early and turns the rest of
+    the identifier into stray SQL."""
+    show_table = _show_result(
+        [
+            {
+                "name": "o'rders",
+                "schema_name": "MY_SCHEMA",
+                "database_name": "MY_DB",
+                "text": "t1",
+                "target_lag": None,
+                "refresh_warehouse": None,
+                "initialization_warehouse": None,
+                "cluster_by": "(ID)",
+            }
+        ]
+    )
+    relation = _relation(identifier="o'rders", quote_identifier=True)
+    fake_adapter = _fake_adapter(show_table)
+
+    _describe(fake_adapter, relation)
+
+    fake_adapter.execute.assert_called_once_with(
+        "show interactive tables like 'o''rders' in schema my_db.my_schema", fetch=True
+    )
+
+
+def test_single_quote_in_identifier_is_escaped_in_dynamic_show_sql():
+    show_table = _show_result(
+        [
+            {
+                "name": "o'rders",
+                "schema_name": "MY_SCHEMA",
+                "database_name": "MY_DB",
+                "text": "t1",
+                "target_lag": None,
+                "warehouse": "WH1",
+                "refresh_mode": "AUTO",
+                "immutable_where": None,
+                "cluster_by": "(ID)",
+            }
+        ]
+    )
+    relation = _relation(identifier="o'rders", quote_identifier=True)
+    fake_adapter = _fake_adapter(show_table)
+
+    SnowflakeAdapter.describe_dynamic_table(fake_adapter, relation)
+
+    fake_adapter.execute.assert_called_once_with(
+        "show dynamic tables like 'o''rders' in schema my_db.my_schema", fetch=True
+    )
+
+
+def test_single_quote_in_identifier_is_escaped_in_transient_status_show_sql():
+    show_table = _show_result([{"name": "o'rders", "kind": "TRANSIENT"}])
+    relation = _relation(identifier="o'rders", quote_identifier=True)
+    fake_adapter = _fake_adapter(show_table)
+
+    SnowflakeAdapter._query_dynamic_table_transient_status(fake_adapter, relation)
+
+    fake_adapter.execute.assert_called_once_with(
+        "show tables like 'o''rders' in schema my_db.my_schema", fetch=True
+    )

@@ -64,6 +64,13 @@ import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
+
+def _sql_literal(value: Optional[str]) -> str:
+    """Escape a value for interpolation into a single-quoted SQL literal. An
+    unescaped `'` terminates the literal early and leaves the rest as stray SQL."""
+    return (value or "").replace("'", "''")
+
+
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
     default=False,
@@ -693,7 +700,8 @@ CALL {proc_name}();
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
         show_sql = (
-            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
+            f"show dynamic tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
         )
         res, dt_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
@@ -739,7 +747,8 @@ CALL {proc_name}();
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
         show_sql = (
-            f"show interactive tables like '{relation.identifier}' in schema {database}.{schema}"
+            f"show interactive tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
         )
         res, tables_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
@@ -775,7 +784,10 @@ CALL {proc_name}();
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
-        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        show_tables_sql = (
+            f"show tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
+        )
         _, tables_table = self.execute(show_tables_sql, fetch=True)
         if len(tables_table.rows) > 0:
             tables_table = tables_table.rename(
