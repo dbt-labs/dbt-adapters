@@ -27,12 +27,18 @@ def non_blank(value: Optional[str]) -> Optional[str]:
 
 def normalize_warehouse(value: Optional[str]) -> Optional[str]:
     """Snowflake folds unquoted identifiers to upper case, so warehouse names
-    must compare case-insensitively."""
+    must compare case-insensitively. Unlike cluster_by, `SHOW` never echoes
+    the double-quote delimiters a config value can carry -- only the resolved
+    name -- so a quoted value has its delimiters stripped (unescaping a
+    doubled `""`) before folding, or it never compares equal to its own
+    readback."""
     if value is None:
         return None
     stripped = value.strip()
     if stripped.casefold() in ABSENT:
         return None
+    if len(stripped) >= 2 and stripped.startswith('"') and stripped.endswith('"'):
+        stripped = stripped[1:-1].replace('""', '"')
     return stripped.casefold()
 
 

@@ -17,6 +17,7 @@ from dbt.adapters.snowflake.relation_configs.interactive_table import (
     _absent_to_none,
     _normalize_cluster_by,
     _normalize_target_lag,
+    _normalize_warehouse,
 )
 
 
@@ -226,6 +227,29 @@ def test_doubled_quote_escape_stays_inside_the_identifier():
     """`""` inside a quoted identifier is an escaped literal quote, not the end
     of the identifier -- the embedded comma must not split the key."""
     assert _normalize_cluster_by('("a""b,c")') == '"a""b,c"'
+
+
+# --- Quote-awareness: warehouse identifiers -------------------------------
+# Unlike cluster_by, `SHOW` never echoes back the quote delimiters for a
+# warehouse name -- only the resolved name -- so a quoted config value must
+# have its delimiters stripped before folding, or it never compares equal to
+# its own readback.
+
+
+def test_unquoted_warehouse_is_folded():
+    assert _normalize_warehouse("MY_WH") == _normalize_warehouse("my_wh")
+
+
+def test_quoted_warehouse_strips_delimiters_before_folding():
+    assert _normalize_warehouse('"Init_WH"') == "init_wh"
+
+
+def test_quoted_warehouse_matches_its_own_unquoted_readback():
+    assert _normalize_warehouse('"Init_WH"') == _normalize_warehouse("Init_WH")
+
+
+def test_doubled_quote_escape_stays_inside_the_warehouse_name():
+    assert _normalize_warehouse('"a""b"') == 'a"b'
 
 
 @pytest.mark.parametrize(
