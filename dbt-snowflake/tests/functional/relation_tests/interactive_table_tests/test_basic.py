@@ -62,11 +62,11 @@ class TestCompileValidation:
 
     def test_missing_cluster_by_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_missing_cluster_by"], expect_pass=False)
-        assert "require a non-empty `cluster_by` config" in results[0].message
+        assert "require `cluster_by` to name at least one non-blank column" in results[0].message
 
     def test_blank_cluster_by_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_blank_cluster_by"], expect_pass=False)
-        assert "require a non-empty `cluster_by` config" in results[0].message
+        assert "require `cluster_by` to name at least one non-blank column" in results[0].message
 
     def test_iceberg_table_format_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_iceberg_format"], expect_pass=False)
@@ -74,11 +74,11 @@ class TestCompileValidation:
 
     def test_transient_true_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_transient_true"], expect_pass=False)
-        assert "do not support `transient: true`" in results[0].message
+        assert "transient=true is not supported for interactive_table models" in results[0].message
 
     def test_target_lag_without_warehouse_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_target_lag_no_warehouse"], expect_pass=False)
-        assert "require a warehouse" in results[0].message
+        assert "target_lag requires refresh_warehouse or snowflake_warehouse" in results[0].message
 
 
 class AlterOrReplaceTestBase:

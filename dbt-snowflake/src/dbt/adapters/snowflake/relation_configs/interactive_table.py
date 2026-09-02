@@ -107,7 +107,9 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         keys = [raw_cluster_by] if isinstance(raw_cluster_by, str) else list(raw_cluster_by or [])
         if not keys or any(not str(key).strip() for key in keys):
             raise CompilationError(
-                f"Interactive tables require a non-empty `cluster_by` config: "
+                f"interactive_table models require `cluster_by` to name at least one "
+                f"non-blank column; `CREATE INTERACTIVE TABLE` without `CLUSTER BY`, or "
+                f"with only blank entries, is rejected by Snowflake (010405): "
                 f"{relation_config.identifier}"
             )
 
@@ -119,7 +121,9 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
 
         if extra.get("transient"):
             raise CompilationError(
-                f"Interactive tables do not support `transient: true`: "
+                f"transient=true is not supported for interactive_table models; "
+                f"`TRANSIENT INTERACTIVE TABLE` is a Snowflake syntax error (001003). "
+                f"Set `transient: false` on this model to override an inherited value: "
                 f"{relation_config.identifier}"
             )
 
@@ -129,8 +133,8 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         )
         if target_lag and str(target_lag).strip().casefold() not in _ABSENT and not warehouse:
             raise CompilationError(
-                f"Interactive tables with `target_lag` set require a warehouse "
-                f"(`refresh_warehouse` or `snowflake_warehouse`): {relation_config.identifier}"
+                f"target_lag requires refresh_warehouse or snowflake_warehouse to be set "
+                f"for interactive_table models (010412): {relation_config.identifier}"
             )
 
         # Collapsed on the config side too: a clear written as the `NONE` literal
