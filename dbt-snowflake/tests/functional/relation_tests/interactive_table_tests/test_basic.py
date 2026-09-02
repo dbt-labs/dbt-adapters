@@ -21,20 +21,6 @@ _alt_warehouse_configured = pytest.mark.skipif(
     "this test needs two real, different warehouses to observe an ALTER.",
 )
 
-# Not auto-created by the test suite -- it must already exist in the target account.
-# See SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE in test.env.example.
-INTERACTIVE_WAREHOUSE = os.getenv(
-    "SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE", "DBT_TESTING_INTERACTIVE"
-)
-
-# Skip on "unset" rather than "equals the default": unlike ALT_WAREHOUSE's default,
-# the default above is a made-up name with no guarantee it exists anywhere.
-_interactive_warehouse_configured = pytest.mark.skipif(
-    os.getenv("SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE") is None,
-    reason="SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE not set; this test needs a real "
-    "WAREHOUSE_TYPE = INTERACTIVE warehouse to exist in the target account.",
-)
-
 
 def assert_message_not_in_logs(message: str, logs: str):
     assert_message_in_logs(message, logs, expected_pass=False)
@@ -336,66 +322,9 @@ class TestStaticTableNoDiffRegression:
         assert_message_not_in_logs("alter interactive table", logs)
 
 
-@_interactive_warehouse_configured
-class TestWarehouseAttachDetach:
-    """snowflake_interactive_warehouses attach/detach via
-    `alter warehouse ... add/drop tables`, driven by the warehouse-sync macro
-    that runs on every materialization pass regardless of whether the table
-    itself changed.
-    """
-
-    @pytest.fixture(scope="class", autouse=True)
-    def seeds(self):
-        yield {"my_seed.csv": models.SEED}
-
-    @pytest.fixture(scope="class", autouse=True)
-    def models(self):
-        yield {"interactive_table_wh_sync.sql": models.INTERACTIVE_TABLE_DYNAMIC}
-
-    @pytest.fixture(scope="class")
-    def project_config_update(self):
-        return {"models": {"on_configuration_change": "apply"}}
-
-    @pytest.fixture(scope="function", autouse=True)
-    def setup_class(self, project):
-        run_dbt(["seed"])
-        run_dbt(["run", "--full-refresh"])
-        yield
-        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
-
-    def test_adding_warehouse_attaches(self, project, setup_class):
-        update_model(
-            project,
-            "interactive_table_wh_sync",
-            models.INTERACTIVE_TABLE_WITH_INTERACTIVE_WAREHOUSES,
-        )
-        _, logs = run_dbt_and_capture(["--debug", "run"])
-
-        assert_message_in_logs(f"alter warehouse {INTERACTIVE_WAREHOUSE} add tables", logs)
-
-    def test_removing_warehouse_detaches(self, project, setup_class):
-        update_model(
-            project,
-            "interactive_table_wh_sync",
-            models.INTERACTIVE_TABLE_WITH_INTERACTIVE_WAREHOUSES,
-        )
-        run_dbt(["run"])
-
-        update_model(
-            project,
-            "interactive_table_wh_sync",
-            models.INTERACTIVE_TABLE_WITHOUT_INTERACTIVE_WAREHOUSES,
-        )
-        _, logs = run_dbt_and_capture(["--debug", "run"])
-
-        assert_message_in_logs(f"alter warehouse {INTERACTIVE_WAREHOUSE} drop tables", logs)
-
-
 class TestStaticNoOpIdempotency:
     """A static interactive table with nothing changed must no-op on a
-    second run rather than unconditionally rebuilding it. No
-    snowflake_interactive_warehouses config means no warehouse-sync statements
-    fire either, so no statement at all is expected on the second run.
+    second run rather than unconditionally rebuilding it.
     """
 
     @pytest.fixture(scope="class", autouse=True)
@@ -415,7 +344,6 @@ class TestStaticNoOpIdempotency:
         assert_message_in_logs("No configuration changes were identified on:", logs)
         assert_message_not_in_logs("create or replace interactive table", logs)
         assert_message_not_in_logs("alter interactive table", logs)
-        assert_message_not_in_logs("alter warehouse", logs)
 
 
 class Changes:

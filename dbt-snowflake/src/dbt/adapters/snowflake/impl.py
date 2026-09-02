@@ -765,34 +765,6 @@ CALL {proc_name}();
 
         return {"interactive_table": selected}
 
-    @available
-    def describe_interactive_table_warehouses(self, relation: SnowflakeRelation) -> List[str]:
-        """Interactive warehouse membership is readable only from the warehouse side
-        -- `SHOW INTERACTIVE TABLES` has no column for it. `SHOW WAREHOUSES` echoes
-        `tables` unquoted and upper-cased regardless of this relation's quote policy.
-        """
-        show_sql = "show warehouses"
-        res, warehouses_table = self.execute(show_sql, fetch=True)
-        if res.code != "SUCCESS":
-            raise DbtRuntimeError(f"Could not get warehouse metadata: {show_sql} failed")
-
-        warehouses_table = warehouses_table.rename(
-            column_names=[name.lower() for name in warehouses_table.column_names]
-        )
-
-        fqn = f"{relation.database}.{relation.schema}.{relation.identifier}".upper()
-
-        attached = []
-        for row in warehouses_table.rows:
-            if row.get("type") != "INTERACTIVE":
-                continue
-            tables = (row.get("tables") or "").upper()
-            attached_tables = {t.strip() for t in tables.split(",")}
-            if fqn in attached_tables:
-                attached.append(row.get("name"))
-
-        return attached
-
     def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
         Query SHOW TABLES to determine if a dynamic table is transient.

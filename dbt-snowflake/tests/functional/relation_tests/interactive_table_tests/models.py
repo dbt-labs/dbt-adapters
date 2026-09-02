@@ -100,26 +100,6 @@ select id, value from {{ ref('my_seed') }}
 INTERACTIVE_TABLE_DYNAMIC_WITHOUT_INIT_WAREHOUSE = INTERACTIVE_TABLE_DYNAMIC
 
 
-# snowflake_interactive_warehouses attach/detach fixtures.
-INTERACTIVE_TABLE_WITH_INTERACTIVE_WAREHOUSES = """
-{{ config(
-    materialized='interactive_table',
-    snowflake_warehouse='DBT_TESTING',
-    target_lag='1 hour',
-    cluster_by='id',
-    snowflake_interactive_warehouses=[
-        env_var('SNOWFLAKE_TEST_INTERACTIVE_WAREHOUSE', 'DBT_TESTING_INTERACTIVE')
-    ],
-) }}
-select id, value from {{ ref('my_seed') }}
-"""
-
-
-# Same shape as INTERACTIVE_TABLE_DYNAMIC -- no snowflake_interactive_warehouses
-# key at all -- used as the "detach everything" target.
-INTERACTIVE_TABLE_WITHOUT_INTERACTIVE_WAREHOUSES = INTERACTIVE_TABLE_DYNAMIC
-
-
 # --- Compile-time validation fixtures ---
 # Each of these must fail at `dbt run` with a CompilationError before any SQL
 # reaches Snowflake -- see SnowflakeInteractiveTableConfig.parse_relation_config.
