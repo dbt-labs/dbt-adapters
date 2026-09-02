@@ -625,6 +625,24 @@ class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
         assert changeset is not None
         assert changeset.snowflake_initialization_warehouse is not None
 
+    @pytest.mark.parametrize("blank", ["", "   ", "\t"])
+    def test_blank_refresh_warehouse_falls_back_to_snowflake_warehouse(self, blank):
+        """Python truthiness treats `"  "` as a real name, so a whitespace-only
+        refresh_warehouse won the fallback and rendered `warehouse =   `."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "refresh_warehouse": blank,
+                "snowflake_warehouse": "REAL_WH",
+            }
+        )
+
+        assert config.warehouse_parameter == "REAL_WH"
+
     @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
     def test_clearing_init_warehouse_by_literal_is_stored_as_none(self, cleared):
         """A config-side clear must collapse to None so the alter macro emits

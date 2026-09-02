@@ -499,6 +499,44 @@ def test_target_lag_without_warehouse_raises():
         SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
 
 
+# --- blank/whitespace-only warehouse values are unset, not valid names ---
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+@pytest.mark.parametrize("field", ["snowflake_warehouse", "refresh_warehouse"])
+def test_target_lag_with_a_blank_warehouse_raises(field, blank):
+    """Python truthiness treats `"  "` as a real name, so a whitespace-only value
+    slipped past validation and rendered `warehouse =   `."""
+    relation_config = model_config(target_lag="1 hour", **{field: blank})
+    with pytest.raises(CompilationError, match="warehouse"):
+        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_blank_refresh_warehouse_falls_back_to_snowflake_warehouse(blank):
+    config = SnowflakeInteractiveTableConfig.from_relation_config(
+        model_config(target_lag="1 hour", refresh_warehouse=blank, snowflake_warehouse="REAL_WH")
+    )
+
+    assert config.warehouse_parameter == "REAL_WH"
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_wholly_blank_warehouses_yield_no_warehouse_parameter(blank):
+    config = SnowflakeInteractiveTableConfig.from_dict(
+        {
+            "name": "tbl",
+            "schema_name": "sch",
+            "database_name": "db",
+            "cluster_by": "id",
+            "refresh_warehouse": blank,
+            "snowflake_warehouse": blank,
+        }
+    )
+
+    assert config.warehouse_parameter is None
+
+
 @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
 def test_clearing_init_warehouse_by_literal_is_stored_as_none(cleared):
     """A config-side clear must collapse to None so the alter macro emits

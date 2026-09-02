@@ -12,6 +12,7 @@ from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 from dbt.adapters.snowflake.relation_configs._normalize import (
     absent_to_none as _absent_to_none,
+    non_blank as _non_blank,
     normalize_cluster_by as _normalize_cluster_by,
     normalize_target_lag as _normalize_target_lag,
     normalize_warehouse as _normalize_warehouse,
@@ -93,8 +94,16 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         When refresh_warehouse is set it is used here, so the dynamic table's self-refresh
         runs on a different warehouse than the one executing the DDL (snowflake_warehouse).
         When only snowflake_warehouse is set it serves both roles, preserving existing behaviour.
+
+        A blank refresh_warehouse must not win this fallback. snowflake_warehouse is
+        required for a dynamic table, so it is returned as-is when it too is blank
+        rather than dropping the clause.
         """
-        return self.refresh_warehouse or self.snowflake_warehouse
+        return (
+            _non_blank(self.refresh_warehouse)
+            or _non_blank(self.snowflake_warehouse)
+            or self.snowflake_warehouse
+        )
 
     # --- normalized views, for COMPARISON ONLY -------------------------------
     # These never replace the stored values: DDL needs the user's exact text.

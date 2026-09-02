@@ -16,6 +16,15 @@ def absent_to_none(value: Optional[str]) -> Optional[str]:
     return stripped
 
 
+def non_blank(value: Optional[str]) -> Optional[str]:
+    """Treats a blank or whitespace-only warehouse name as unset, so an env var
+    resolving to `""` neither wins the `refresh_warehouse -> snowflake_warehouse`
+    fallback nor slips past validation into a bogus `warehouse =   ` clause."""
+    if value is None or not str(value).strip():
+        return None
+    return value
+
+
 def normalize_warehouse(value: Optional[str]) -> Optional[str]:
     """Snowflake folds unquoted identifiers to upper case, so warehouse names
     must compare case-insensitively."""

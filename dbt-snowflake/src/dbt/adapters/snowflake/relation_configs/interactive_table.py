@@ -20,6 +20,7 @@ from dbt.adapters.snowflake.relation_configs._normalize import (
     normalize_target_lag as _normalize_target_lag,
     normalize_warehouse as _normalize_warehouse,
     absent_to_none as _absent_to_none,
+    non_blank as _non_blank,
 )
 
 # The exact `SHOW INTERACTIVE TABLES` select list, in order. `refresh_warehouse` is not the dynamic-table `warehouse` column -- different SHOW command, don't unify.
@@ -78,7 +79,7 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         both roles, as for dynamic tables. Only meaningful when `is_dynamic` --
         Snowflake rejects a warehouse on a static table.
         """
-        return self.refresh_warehouse or self.snowflake_warehouse
+        return _non_blank(self.refresh_warehouse) or _non_blank(self.snowflake_warehouse)
 
     @property
     def warehouse_parameter_normalized(self) -> Optional[str]:
@@ -123,7 +124,9 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             )
 
         target_lag = extra.get("target_lag")
-        warehouse = extra.get("refresh_warehouse") or extra.get("snowflake_warehouse")
+        warehouse = _non_blank(extra.get("refresh_warehouse")) or _non_blank(
+            extra.get("snowflake_warehouse")
+        )
         if target_lag and str(target_lag).strip().casefold() not in _ABSENT and not warehouse:
             raise CompilationError(
                 f"Interactive tables with `target_lag` set require a warehouse "
