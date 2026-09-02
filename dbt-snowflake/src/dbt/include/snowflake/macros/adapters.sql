@@ -212,10 +212,20 @@
 
 {% macro snowflake__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
-    {% if relation.is_dynamic_table -%}
+    {#- Interactive tables ALTER as plain TABLEs; only dynamic tables use ALTER DYNAMIC TABLE. -#}
+    {% if relation.is_interactive_table -%}
+        {% set relation_type = "table" %}
+    {% elif relation.is_dynamic_table -%}
         {% set relation_type = "dynamic table" %}
     {% else -%}
         {% set relation_type = relation.type %}
+    {% endif %}
+
+    {#- Snowflake's ALTER TABLE reference doesn't list ADD/DROP COLUMN as supported for interactive
+        tables. Live-verified: ADD COLUMN works anyway (undocumented); DROP COLUMN is rejected with
+        `010406: Altering interactive tables is not supported.` -#}
+    {% if relation.is_interactive_table and remove_columns %}
+        {% do exceptions.raise_compiler_error("Columns cannot be removed from an interactive table: `" ~ relation ~ "`.") %}
     {% endif %}
 
     {% if add_columns %}
