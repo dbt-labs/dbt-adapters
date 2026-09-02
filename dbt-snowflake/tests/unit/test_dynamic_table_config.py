@@ -1197,3 +1197,18 @@ class TestRefreshWarehouseChangeset:
 
         if changeset is not None:
             assert changeset.snowflake_warehouse is None
+
+    def test_case_differing_warehouse_is_not_a_change(self):
+        """Snowflake folds unquoted warehouse names to upper case on readback, so a
+        desired `my_wh` must match a reported `MY_WH` without a spurious ALTER."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(warehouse="MY_WH")
+        relation_config = self._make_relation_config(snowflake_warehouse="my_wh")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_warehouse is None

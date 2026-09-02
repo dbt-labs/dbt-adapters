@@ -113,6 +113,10 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
         return _normalize_cluster_by(self.cluster_by)  # type: ignore[arg-type]
 
     @property
+    def warehouse_parameter_normalized(self) -> Optional[str]:
+        return _normalize_warehouse(self.warehouse_parameter)
+
+    @property
     def target_lag_normalized(self) -> Optional[str]:
         return _normalize_target_lag(self.target_lag)
 
