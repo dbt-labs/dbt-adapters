@@ -11,6 +11,7 @@ from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import (
@@ -41,6 +42,46 @@ for package in packages:
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
 SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
+
+# Redshift type OID -> SQL data type name, as reported by both the legacy path's
+# information_schema.columns.data_type and SHOW COLUMNS. Used to describe temp relations
+# from the driver's cursor description (see get_columns_in_temp_relation); the names have
+# to match whichever of those two paths described the target relation, or schema comparison
+# reports a type change on every run. Verified against SHOW COLUMNS on Redshift 1.0.358853
+# -- note bpchar reports as "character", and varbyte as "binary varying".
+TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
+    16: "boolean",  # bool
+    20: "bigint",  # int8
+    21: "smallint",  # int2
+    23: "integer",  # int4
+    25: "character varying",  # text
+    700: "real",  # float4
+    701: "double precision",  # float8
+    1042: "character",  # bpchar
+    1043: "character varying",  # varchar
+    1082: "date",  # date
+    1083: "time without time zone",  # time
+    1114: "timestamp without time zone",  # timestamp
+    1184: "timestamp with time zone",  # timestamptz
+    1188: "interval year to month",  # intervaly2m
+    1190: "interval day to second",  # intervald2s
+    1266: "time with time zone",  # timetz
+    1700: "numeric",  # numeric
+    2935: "hllsketch",  # hllsketch
+    3000: "geometry",  # geometry
+    3001: "geography",  # geography
+    4000: "super",  # super
+    6551: "binary varying",  # varbyte
+}
+
+# information_schema reports its internal type name where SHOW COLUMNS reports the SQL name,
+# so a fallback column only compares equal if it follows whichever path described the target.
+# Everything else in the map above agrees across both; these are the exceptions, verified in
+# tests/functional/test_type_oid_mapping.py.
+TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE: Dict[int, str] = {
+    1188: "intervaly2m",  # SHOW COLUMNS: interval year to month
+    1190: "intervald2s",  # SHOW COLUMNS: interval day to second
+}
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
@@ -198,6 +239,129 @@ class RedshiftAdapter(SQLAdapter):
         Returns True when the ``datasharing`` profile config is enabled.
         """
         return bool(self.config.credentials.datasharing)
+
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a relation, falling back to the driver when the catalog cannot see it.
+
+        On a datashare consumer database, temp relations stay queryable but are absent from
+        ``information_schema.columns``, ``pg_attribute`` and ``svv_columns``; the empty
+        result makes ``on_schema_change='sync_all_columns'`` drop every column in the
+        target. Only unqualified relations can take the fallback, since the driver query
+        has no database or schema to qualify itself with.
+
+        In an override rather than in the macro so that ``@supports_replay`` records the
+        fallback under the existing ``AdapterGetColumnsInRelationRecord``.
+        """
+        columns = super().get_columns_in_relation(relation)
+
+        if not columns and not relation.database and not relation.schema:
+            return self.get_columns_in_temp_relation(relation)
+
+        return columns
+
+    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a temporary relation from the driver instead of the catalog.
+
+        Needed when the connection's database is a datashare consumer database: temp
+        relations stay queryable but are invisible to ``information_schema.columns``,
+        ``pg_attribute`` and ``svv_columns`` alike, and ``SHOW COLUMNS`` cannot address
+        them because they carry no database or schema.
+
+        Sizes come from ``cursor.ps["row_desc"]``'s ``type_modifier``, not from
+        ``cursor.description``: ``redshift_connector`` hardcodes the PEP 249
+        size/precision/scale fields to ``None`` (see its ``Cursor._getDescription``).
+        Without real sizes, every sized column looks changed against the target on the
+        next run and gets needlessly rewritten.
+        """
+        sql = f"select * from {self.quote(relation.identifier)} limit 0"
+        _, cursor = self.connections.add_select_query(sql)
+
+        # `cursor.ps["row_desc"]` is an internal, undocumented structure of
+        # `redshift_connector`, not a public API -- there is no supported alternative for
+        # reaching `type_modifier`. `_getDescription` builds `cursor.description` from this
+        # same list, in the same order, so index-aligned lookup here is safe.
+        try:
+            row_descriptions = cursor.ps["row_desc"]
+        except (AttributeError, KeyError, TypeError):
+            row_descriptions = []
+
+        columns = []
+        for i, description in enumerate(cursor.description or []):
+            # PEP 249: (name, type_code, display_size, internal_size, precision, scale, null_ok)
+            column_name = description[0]
+            type_code = description[1]
+
+            type_modifier = None
+            if i < len(row_descriptions):
+                type_modifier = row_descriptions[i].get("type_modifier")
+
+            data_type = self._temp_relation_data_type(type_code)
+
+            # Only string and exact-numeric types feed size into Column.data_type, which is
+            # what schema comparison comes down to. For every other type the size fields are
+            # ignored, so leave them unset.
+            char_size = None
+            numeric_precision = None
+            numeric_scale = None
+            if type_modifier is not None and type_modifier >= 0:
+                # Postgres wire-protocol convention: VARHDRSZ (4 bytes) is added to both a
+                # string's declared length and a numeric's packed (precision, scale) pair.
+                # -1 means "no modifier" (unconstrained/default size) and is left unset.
+                raw_modifier = type_modifier - 4
+                if data_type in ("character varying", "character"):
+                    char_size = raw_modifier if raw_modifier > 0 else None
+                elif data_type == "numeric":
+                    numeric_precision = raw_modifier >> 16
+                    numeric_scale = raw_modifier & 0xFFFF
+
+            columns.append(
+                self.Column(
+                    column=column_name,
+                    dtype=data_type,
+                    char_size=char_size,
+                    numeric_precision=numeric_precision,
+                    numeric_scale=numeric_scale,
+                )
+            )
+
+        return columns
+
+    def _temp_relation_data_type(self, type_code: Any) -> str:
+        """Map a driver type code onto the name the target relation's describer reports.
+
+        The target goes through SHOW COLUMNS when ``datasharing`` is on and through
+        information_schema when it is off, and the two disagree on a few type names.
+        """
+        if not self.use_show_apis():
+            data_type = TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE.get(type_code)
+            if data_type is not None:
+                return data_type
+
+        data_type = TYPE_OID_TO_DATA_TYPE.get(type_code)
+        if data_type is not None:
+            return data_type
+
+        # Unmapped OID. The driver's own label is closer than nothing, but its lookup is an
+        # IntEnum call that raises for codes it doesn't recognise either -- and a column
+        # whose type cannot be named at all is better reported than described with an
+        # invented name, which would only fail later as invalid DDL.
+        try:
+            fallback = str(self.connections.data_type_code_to_name(type_code)).lower()
+        except Exception as exc:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Cannot describe temporary relation column: Redshift returned type code "
+                f"{type_code}, which neither dbt-redshift nor redshift_connector "
+                f"recognises. Please report this at "
+                f"https://github.com/dbt-labs/dbt-adapters/issues"
+            ) from exc
+
+        logger.debug(
+            f"No known Redshift data type for type code {type_code}; "
+            f"falling back to {fallback!r}. Schema comparison for this column may be "
+            f"inaccurate -- please report this at "
+            f"https://github.com/dbt-labs/dbt-adapters/issues"
+        )
+        return fallback
 
     @available
     def drop_without_cascade(self) -> bool:
