@@ -137,7 +137,11 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
             "target_lag": target_lag,
             "snowflake_warehouse": extra.get("snowflake_warehouse"),
             "refresh_warehouse": extra.get("refresh_warehouse"),
-            "snowflake_initialization_warehouse": extra.get("snowflake_initialization_warehouse"),
+            # Collapsed on the config side too: a clear written as the `NONE` literal
+            # must reach the alter macro as absent, or it emits `set ... = NONE`.
+            "snowflake_initialization_warehouse": _absent_to_none(
+                extra.get("snowflake_initialization_warehouse")
+            ),
         }
 
     @classmethod

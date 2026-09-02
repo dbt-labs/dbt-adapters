@@ -11,6 +11,7 @@ from typing_extensions import Self
 from dbt.adapters.snowflake.parse_model import cluster_by
 from dbt.adapters.snowflake.relation_configs.base import SnowflakeRelationConfigBase
 from dbt.adapters.snowflake.relation_configs._normalize import (
+    absent_to_none as _absent_to_none,
     normalize_cluster_by as _normalize_cluster_by,
     normalize_target_lag as _normalize_target_lag,
     normalize_warehouse as _normalize_warehouse,
@@ -153,8 +154,12 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
             "snowflake_warehouse": relation_config.config.extra.get(  # type:ignore
                 "snowflake_warehouse"
             ),
-            "snowflake_initialization_warehouse": relation_config.config.extra.get(  # type:ignore
-                "snowflake_initialization_warehouse"
+            # Collapsed on the config side too: a clear written as the `NONE` literal
+            # must reach the alter macro as absent, or it emits `set ... = NONE`.
+            "snowflake_initialization_warehouse": _absent_to_none(
+                relation_config.config.extra.get(  # type:ignore
+                    "snowflake_initialization_warehouse"
+                )
             ),
             "refresh_warehouse": relation_config.config.extra.get(  # type:ignore
                 "refresh_warehouse"
@@ -209,14 +214,9 @@ class SnowflakeDynamicTableConfig(SnowflakeRelationConfigBase):
     def parse_relation_results(cls, relation_results: RelationResults) -> Dict[str, Any]:
         dynamic_table: "agate.Row" = relation_results["dynamic_table"].rows[0]
 
-        # Snowflake returns "NONE" as a string for unset optional warehouse values
-        # Some Snowflake environments may also return empty strings
-        # We need to convert these to Python None to avoid rendering invalid SQL
         init_warehouse = dynamic_table.get("initialization_warehouse")
-        if init_warehouse is not None and (
-            str(init_warehouse).upper() == "NONE" or str(init_warehouse).strip() == ""
-        ):
-            init_warehouse = None
+        if init_warehouse is not None:
+            init_warehouse = _absent_to_none(str(init_warehouse))
 
         # Snowflake returns immutable_where as "IMMUTABLE WHERE (expression)"
         # We need to extract just the expression to match what users configure

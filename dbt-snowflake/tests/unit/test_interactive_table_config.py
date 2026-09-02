@@ -498,6 +498,21 @@ def test_target_lag_without_warehouse_raises():
         SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
 
 
+@pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
+def test_clearing_init_warehouse_by_literal_is_stored_as_none(cleared):
+    """A config-side clear must collapse to None so the alter macro emits
+    `unset initialization_warehouse` instead of `set ... = NONE`."""
+    config = SnowflakeInteractiveTableConfig.from_relation_config(
+        model_config(
+            target_lag="1 hour",
+            snowflake_warehouse="wh",
+            snowflake_initialization_warehouse=cleared,
+        )
+    )
+
+    assert config.snowflake_initialization_warehouse is None
+
+
 def test_target_lag_with_warehouse_does_not_raise():
     relation_config = model_config(target_lag="1 hour", snowflake_warehouse="wh")
     SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)  # should not raise

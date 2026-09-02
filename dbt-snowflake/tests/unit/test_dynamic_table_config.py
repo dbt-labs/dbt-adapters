@@ -625,6 +625,30 @@ class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
         assert changeset is not None
         assert changeset.snowflake_initialization_warehouse is not None
 
+    @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
+    def test_clearing_init_warehouse_by_literal_is_stored_as_none(self, cleared):
+        """A config-side clear must collapse to None so the alter macro emits
+        `unset initialization_warehouse` instead of `set ... = NONE`."""
+        config = SnowflakeDynamicTableConfig.from_relation_config(
+            self._make_relation_config(init_warehouse=cleared)
+        )
+
+        assert config.snowflake_initialization_warehouse is None
+
+    @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
+    def test_clearing_init_warehouse_against_an_unset_remote_is_not_a_change(self, cleared):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse=None)
+        relation_config = self._make_relation_config(init_warehouse=cleared)
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_initialization_warehouse is None
+
 
 class TestSchedulerOptional:
     """Tests to verify scheduler is an optional parameter for dynamic tables."""
