@@ -1,0 +1,9 @@
+kind: Fixes
+body: 'Escape single quotes in identifiers interpolated into `SHOW ... LIKE` metadata
+    queries for dynamic and interactive tables: a model whose name contained a quote
+    terminated the SQL string literal early, so describing the relation failed or
+    ran unintended SQL'
+time: 2026-09-02T12:40:21.000000+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""

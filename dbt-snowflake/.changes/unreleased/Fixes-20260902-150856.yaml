@@ -1,0 +1,10 @@
+kind: Fixes
+body: 'Strip double-quote delimiters from a warehouse name before comparing it
+    case-insensitively during configuration-change detection: `SHOW` never echoes
+    the quotes back, so a quoted `snowflake_warehouse`/`refresh_warehouse`/
+    `snowflake_initialization_warehouse` value never compared equal to its own
+    readback and fired a spurious ALTER on every run'
+time: 2026-09-02T15:08:56.929200+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""
