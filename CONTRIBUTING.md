@@ -168,7 +168,7 @@ This will vary by package; please refer to the package's `CONTRIBUTING.md` for m
 ### Configure environment variables
 
 Each adapter requires certain environment variables to connect to its platform.
-The template is contained in the respective `test.env.exmaple` file.
+The template is contained in the respective `test.env.example` file.
 If you already ran `hatch run setup` you should have a `test.env` file in the package root.
 Update the environment variables in this file with your instance's connection credentials.
 

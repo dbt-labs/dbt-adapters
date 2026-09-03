@@ -54,6 +54,7 @@ from dbt.adapters.snowflake.catalogs import (
     IcebergRestCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
+from dbt.adapters.snowflake.relation_configs.interactive_table import INTERACTIVE_TABLE_COLUMNS
 
 from dbt.adapters.snowflake import SnowflakeColumn
 from dbt.adapters.snowflake import SnowflakeConnectionManager
@@ -62,6 +63,13 @@ from dbt.adapters.snowflake import SnowflakeRelation
 import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
+
+
+def _sql_literal(value: Optional[str]) -> str:
+    """Escape a value for interpolation into a single-quoted SQL literal. An
+    unescaped `'` terminates the literal early and leaves the rest as stray SQL."""
+    return (value or "").replace("'", "''")
+
 
 SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES = BehaviorFlag(
     name="snowflake_default_transient_dynamic_tables",
@@ -314,10 +322,13 @@ class SnowflakeAdapter(SQLAdapter):
 
         row = object_metadata[0]
 
+        is_interactive = self._interactive_flag_is_set(row)
         is_dynamic = row.get("is_dynamic") in ("Y", "YES")
         kind = row.get("kind")
 
-        if is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
+        if is_interactive and kind == str(SnowflakeRelationType.Table).upper():
+            table_type = str(SnowflakeRelationType.InteractiveTable).upper()
+        elif is_dynamic and kind == str(SnowflakeRelationType.Table).upper():
             table_type = str(SnowflakeRelationType.DynamicTable).upper()
         else:
             table_type = kind
@@ -432,6 +443,10 @@ class SnowflakeAdapter(SQLAdapter):
         schema_functions = schema_functions.rename(
             column_names=[col.lower() for col in schema_functions.column_names]
         )
+        # Accounts without the interactive-table feature omit this column, and agate's
+        # .select() raises on a missing one -- which would break list_relations for the whole schema.
+        if "is_interactive" in schema_objects.column_names:
+            tabular_columns.append("is_interactive")
         tabular_relations = [
             self._parse_list_relations_result(obj)
             for obj in schema_objects.select(tabular_columns)
@@ -443,16 +458,39 @@ class SnowflakeAdapter(SQLAdapter):
         ]
         return tabular_relations + function_relations
 
-    def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
-        database, schema, identifier, relation_type, is_dynamic, is_iceberg = result
+    @staticmethod
+    def _interactive_flag_is_set(result: "agate.Row") -> bool:
+        """Absent column, NULL, and empty string all mean "not interactive"."""
+        value = result.get("is_interactive")
+        if value is None:
+            return False
+        return str(value).strip().upper() in ("Y", "YES")
 
+    @classmethod
+    def _tabular_relation_type(cls, kind: str, result: "agate.Row"):
         try:
-            relation_type = self.Relation.get_relation_type(relation_type.lower())
+            relation_type = cls.Relation.get_relation_type(kind.lower())
         except ValueError:
-            relation_type = self.Relation.External
+            return cls.Relation.External
 
-        if relation_type == self.Relation.Table and is_dynamic == "Y":
-            relation_type = self.Relation.DynamicTable
+        if relation_type == cls.Relation.Table:
+            # Interactive tables report kind=TABLE. A *dynamic* interactive table
+            # sets BOTH is_interactive and is_dynamic, so interactive must be
+            # checked first or it is misclassified as a plain dynamic table.
+            if cls._interactive_flag_is_set(result):
+                return cls.Relation.InteractiveTable
+            if result["is_dynamic"] == "Y":
+                return cls.Relation.DynamicTable
+
+        return relation_type
+
+    def _parse_list_relations_result(self, result: "agate.Row") -> SnowflakeRelation:
+        database = result["database_name"]
+        schema = result["schema_name"]
+        identifier = result["name"]
+        is_iceberg = result["is_iceberg"]
+
+        relation_type = self._tabular_relation_type(result["kind"], result)
 
         table_format = (
             constants.ICEBERG_TABLE_FORMAT
@@ -677,7 +715,8 @@ CALL {proc_name}();
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
         show_sql = (
-            f"show dynamic tables like '{relation.identifier}' in schema {database}.{schema}"
+            f"show dynamic tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
         )
         res, dt_table = self.execute(show_sql, fetch=True)
         if res.code != "SUCCESS":
@@ -715,6 +754,41 @@ CALL {proc_name}();
 
         return {"dynamic_table": selected}
 
+    @available
+    def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """Get all relevant metadata about an interactive table. `SHOW ... LIKE`
+        pattern-matches, so results are filtered to an exact name match."""
+        quoting = relation.quote_policy
+        schema = f'"{relation.schema}"' if quoting.schema else relation.schema
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        show_sql = (
+            f"show interactive tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
+        )
+        res, tables_table = self.execute(show_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(f"Could not get interactive table metadata: {show_sql} failed")
+
+        tables_table = tables_table.rename(
+            column_names=[name.lower() for name in tables_table.column_names]
+        )
+
+        if quoting.identifier:
+            exact_match = tables_table.where(lambda row: row.get("name") == relation.identifier)
+        else:
+            identifier_upper = (relation.identifier or "").upper()
+            exact_match = tables_table.where(
+                lambda row: (row.get("name") or "").upper() == identifier_upper
+            )
+        if len(exact_match.rows) == 0:
+            raise DbtRuntimeError(f"Could not find interactive table: {relation.identifier}")
+
+        available_columns = [c.lower() for c in exact_match.column_names]
+        select_columns = [c for c in INTERACTIVE_TABLE_COLUMNS if c in available_columns]
+        selected = exact_match.select(select_columns)
+
+        return {"interactive_table": selected}
+
     def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
         Query SHOW TABLES to determine if a dynamic table is transient.
@@ -725,7 +799,10 @@ CALL {proc_name}();
         quoting = relation.quote_policy
         schema = f'"{relation.schema}"' if quoting.schema else relation.schema
         database = f'"{relation.database}"' if quoting.database else relation.database
-        show_tables_sql = f"show tables like '{relation.identifier}' in schema {database}.{schema}"
+        show_tables_sql = (
+            f"show tables like '{_sql_literal(relation.identifier)}' "
+            f"in schema {database}.{schema}"
+        )
         _, tables_table = self.execute(show_tables_sql, fetch=True)
         if len(tables_table.rows) > 0:
             tables_table = tables_table.rename(

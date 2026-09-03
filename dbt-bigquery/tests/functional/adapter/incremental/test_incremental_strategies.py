@@ -26,6 +26,7 @@ from tests.functional.adapter.incremental.incremental_strategy_fixtures import (
     overwrite_copy_partitions_with_partitions_sql,
     overwrite_range_sql,
     overwrite_range_with_interval_sql,
+    overwrite_range_with_require_partition_sql,
     overwrite_time_sql,
     overwrite_day_with_time_ingestion_sql,
     overwrite_day_with_time_partition_datetime_sql,
@@ -52,6 +53,7 @@ class TestBigQueryScripting(SeedConfigBase):
             "incremental_overwrite_copy_partitions_with_partitions.sql": overwrite_copy_partitions_with_partitions_sql,
             "incremental_overwrite_range.sql": overwrite_range_sql,
             "incremental_overwrite_range_with_interval.sql": overwrite_range_with_interval_sql,
+            "incremental_overwrite_range_with_require_partition.sql": overwrite_range_with_require_partition_sql,
             "incremental_overwrite_time.sql": overwrite_time_sql,
             "incremental_overwrite_day_with_time_partition.sql": overwrite_day_with_time_ingestion_sql,
             "incremental_overwrite_day_with_time_partition_datetime.sql": overwrite_day_with_time_partition_datetime_sql,
@@ -74,10 +76,10 @@ class TestBigQueryScripting(SeedConfigBase):
     def test__bigquery_assert_incremental_configurations_apply_the_right_strategy(self, project):
         run_dbt(["seed"])
         results = run_dbt()
-        assert len(results) == 14
+        assert len(results) == 15
 
         results = run_dbt()
-        assert len(results) == 14
+        assert len(results) == 15
 
         incremental_strategies = [
             ("incremental_merge_range", "merge_expected"),
@@ -95,6 +97,10 @@ class TestBigQueryScripting(SeedConfigBase):
             (
                 "incremental_overwrite_range_with_interval",
                 "incremental_overwrite_range_with_interval_expected",
+            ),
+            (
+                "incremental_overwrite_range_with_require_partition_view",
+                "incremental_overwrite_range_expected",
             ),
             (
                 "incremental_overwrite_day_with_time_partition_datetime",
