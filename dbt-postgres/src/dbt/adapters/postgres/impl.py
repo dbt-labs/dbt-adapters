@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from multiprocessing.context import SpawnContext
-from typing import Any, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from dbt.adapters.base import AdapterConfig, ConstraintSupport, available
 from dbt.adapters.capability import (
@@ -25,6 +25,10 @@ from dbt_common.utils import encoding as dbt_encoding
 
 from dbt.adapters.postgres.column import PostgresColumn
 from dbt.adapters.postgres.connections import PostgresConnectionManager
+from dbt.adapters.postgres.partitioning import (
+    PostgresPartitionConfig,
+    compute_partition_bounds,
+)
 from dbt.adapters.postgres.relation import PostgresRelation
 
 
@@ -75,6 +79,7 @@ class PostgresIndexConfig(dbtClassMixin):
 class PostgresConfig(AdapterConfig):
     unlogged: Optional[bool] = None
     indexes: Optional[List[PostgresIndexConfig]] = None
+    partition_by: Optional[PostgresPartitionConfig] = None
 
 
 class PostgresAdapter(SQLAdapter):
@@ -127,6 +132,21 @@ class PostgresAdapter(SQLAdapter):
     @available
     def parse_index(self, raw_index: Any) -> Optional[PostgresIndexConfig]:
         return PostgresIndexConfig.parse(raw_index)
+
+    @available
+    def parse_partition_by(self, raw_partition_by: Any) -> Optional[PostgresPartitionConfig]:
+        return PostgresPartitionConfig.parse(raw_partition_by)
+
+    @available
+    def get_partition_bounds(
+        self, minimum: Any, maximum: Any, granularity: str
+    ) -> List[Dict[str, str]]:
+        """
+        Compute the range partitions needed to cover [minimum, maximum] at the given
+        granularity. Returns a list of dicts: {"name": suffix, "from": literal, "to": literal},
+        where the literals are quoted SQL timestamps for a `FOR VALUES FROM (..) TO (..)` clause.
+        """
+        return compute_partition_bounds(minimum, maximum, granularity)
 
     def _link_cached_database_relations(self, schemas: Set[str]):
         """
