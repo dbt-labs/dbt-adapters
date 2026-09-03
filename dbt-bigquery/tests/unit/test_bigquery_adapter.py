@@ -1261,10 +1261,22 @@ def test_sanitize_label_length(label_length):
 class TestPartitionConfigRenderWrappedInt64Range:
     """Tests for render_wrapped() with int64 range partitions.
 
-    For int64 range partitions, render_wrapped normalizes field values
-    to their partition start value, preventing excessively large arrays when
-    computing partitions for replacement in insert_overwrite.
+    For int64 range partitions with an interval greater than 1, render_wrapped
+    normalizes field values to their partition start value, preventing excessively
+    large arrays when computing partitions for replacement in insert_overwrite.
     """
+
+    @pytest.mark.parametrize("interval", [1, "1"])
+    def test_int64_range_with_interval_one_returns_raw_field(self, interval):
+        config = PartitionConfig.parse(
+            {
+                "field": "period",
+                "data_type": "int64",
+                "range": {"start": 201000, "end": 204999, "interval": interval},
+            }
+        )
+        assert config.render_wrapped() == "period"
+        assert config.render_wrapped(alias="DBT_INTERNAL_DEST") == "DBT_INTERNAL_DEST.period"
 
     def test_int64_range_normalizes_to_partition_start(self):
         """Values should be normalized using: value - MOD(value - start, interval)."""

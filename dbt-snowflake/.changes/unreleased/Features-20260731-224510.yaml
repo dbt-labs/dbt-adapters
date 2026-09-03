@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add beta support for the Snowflake `interactive_table` materialization, covering static and dynamic (auto-refreshing) interactive tables with `target_lag`, `cluster_by`, refresh/initialization warehouses, and in-place configuration changes via ALTER where Snowflake supports it'
+time: 2026-07-31T22:45:10.242695+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: "1780"
