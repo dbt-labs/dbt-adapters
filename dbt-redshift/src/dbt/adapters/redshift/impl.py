@@ -249,9 +249,34 @@ class RedshiftAdapter(SQLAdapter):
         target. Only unqualified relations can take the fallback, since the driver query
         has no database or schema to qualify itself with.
 
+        With ``datasharing`` enabled, a relation dbt minted as a temporary table
+        (``is_temporary``, set by ``redshift__make_temp_relation``) skips the catalog
+        entirely. The catalog queries cost ~90s per temp relation on a datashare consumer
+        and cannot return rows there: neither ``information_schema.columns`` nor
+        ``pg_get_late_binding_view_cols()`` -- which the legacy path calls, expanding every
+        late-binding view in the session -- can see a temp table, and a temp table is never
+        a late-binding view anyway. The driver answers the same question in ~50ms.
+
+        The marker is deliberately gated on ``datasharing`` rather than applied to every
+        connection. Without it the catalog can see temp relations, so the first query
+        returns and the expensive late-binding lookup is never reached -- there is little to
+        win, and the driver path would be describing columns the catalog already describes
+        correctly. Its type names are ground truth for the OIDs it maps, but an unmapped OID
+        falls back to the driver's own label (see ``_temp_relation_data_type``), which is
+        worth risking only where the alternative is no columns at all.
+
+        Relations that are merely unqualified keep the existing behavior on both kinds of
+        connection: describe from the catalog, fall back to the driver only if that comes
+        back empty. That is what still covers a consumer database reached without
+        ``datasharing`` set.
+
         In an override rather than in the macro so that ``@supports_replay`` records the
-        fallback under the existing ``AdapterGetColumnsInRelationRecord``.
+        fallback under the existing ``AdapterGetColumnsInRelationRecord``, and because
+        ``get_columns_in_temp_relation`` is not ``@available`` to Jinja.
         """
+        if getattr(relation, "is_temporary", False) and self.use_show_apis():
+            return self.get_columns_in_temp_relation(relation)
+
         columns = super().get_columns_in_relation(relation)
 
         if not columns and not relation.database and not relation.schema:
