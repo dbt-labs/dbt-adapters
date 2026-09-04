@@ -270,19 +270,42 @@ class RedshiftAdapter(SQLAdapter):
         back empty. That is what still covers a consumer database reached without
         ``datasharing`` set.
 
+        Both routes require the relation to be unqualified, marker or not -- see
+        ``_is_addressable_unqualified``. Every producer of a marked relation strips schema
+        and database today, so the check never fires; it is here because the driver query
+        cannot express a qualification, so a marked-but-qualified relation would silently
+        describe whatever ``search_path`` resolved the identifier to.
+
         In an override rather than in the macro so that ``@supports_replay`` records the
         fallback under the existing ``AdapterGetColumnsInRelationRecord``, and because
         ``get_columns_in_temp_relation`` is not ``@available`` to Jinja.
         """
-        if getattr(relation, "is_temporary", False) and self.use_show_apis():
+        if (
+            getattr(relation, "is_temporary", False)
+            and self.use_show_apis()
+            and self._is_addressable_unqualified(relation)
+        ):
             return self.get_columns_in_temp_relation(relation)
 
         columns = super().get_columns_in_relation(relation)
 
-        if not columns and not relation.database and not relation.schema:
+        if not columns and self._is_addressable_unqualified(relation):
             return self.get_columns_in_temp_relation(relation)
 
         return columns
+
+    @staticmethod
+    def _is_addressable_unqualified(relation: BaseRelation) -> bool:
+        """Whether ``get_columns_in_temp_relation`` can address this relation at all.
+
+        It queries ``select * from <identifier>`` with no database or schema, so a
+        qualified relation would resolve through ``search_path`` to whatever object
+        happens to share the identifier -- describing the wrong thing rather than
+        failing. Both routes to the driver check this: ``is_temporary`` records that dbt
+        minted the relation, which is not the same claim as it still being addressable
+        unqualified.
+        """
+        return not relation.database and not relation.schema
 
     def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Describe a temporary relation from the driver instead of the catalog.

@@ -167,6 +167,25 @@ class TestGetColumnsInRelationFallback:
         from_catalog.assert_not_called()
         adapter.get_columns_in_temp_relation.assert_called_once_with(relation)
 
+    def test_marked_relation_that_is_qualified_does_not_take_the_driver_path(self):
+        # get_columns_in_temp_relation queries `select * from <identifier>` with no database
+        # or schema, so a qualified relation would resolve through search_path and describe
+        # whatever else answers to that identifier -- quietly, since it would return columns.
+        # No producer of a marked relation qualifies it today; this pins the precondition so
+        # that stays true, and matches the check the empty-result fallback already makes.
+        adapter = self._adapter(datasharing=True)
+        relation = mock.Mock(
+            database="db", schema="sch", identifier="model__dbt_tmp123", is_temporary=True
+        )
+
+        with mock.patch.object(
+            SQLAdapter, "get_columns_in_relation", return_value=["from_catalog"]
+        ) as from_catalog:
+            assert RedshiftAdapter.get_columns_in_relation(adapter, relation) == ["from_catalog"]
+
+        from_catalog.assert_called_once()
+        adapter.get_columns_in_temp_relation.assert_not_called()
+
     def test_marked_temp_relation_still_uses_the_catalog_when_datasharing_is_off(self):
         # Without datasharing the catalog can see temp relations, so the first query returns
         # and the expensive late-binding lookup is never reached -- there is nothing to win,

@@ -52,6 +52,22 @@ where id not in (select id from {{ this }})
 
 _TEMP_IDENTIFIER = re.compile(r"create temporary table\s+\"?(\w*__dbt_tmp\d+)\"?", re.IGNORECASE)
 
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_ENTRY_START = re.compile(r"^\d{2}:\d{2}:\d{2}  ", re.MULTILINE)
+
+
+def _log_entries(logs):
+    """Split debug logs into entries, each starting with a timestamp.
+
+    A SQL statement is logged as a single entry spanning several physical lines, so
+    filtering the logs line by line cannot work here: the table a query reads and the
+    identifier it filters on land on different lines. Asserting that no line contains
+    both would pass no matter what dbt ran.
+    """
+    plain = _ANSI.sub("", logs)
+    starts = [match.start() for match in _ENTRY_START.finditer(plain)]
+    return [plain[start:end] for start, end in zip(starts, starts[1:] + [len(plain)])]
+
 
 class _TempRelationIntrospection:
     @pytest.fixture(scope="class")
@@ -76,8 +92,8 @@ class _TempRelationIntrospection:
         assert match, "expected the incremental run to create a temp relation"
         return logs, match.group(1)
 
-    def _lines_mentioning(self, logs, temp_identifier):
-        return [line for line in logs.splitlines() if temp_identifier in line]
+    def _entries_mentioning(self, logs, temp_identifier):
+        return [entry for entry in _log_entries(logs) if temp_identifier in entry]
 
     def test_column_types_agree_with_the_target_across_runs(self, project):
         """Whatever describes the source, it has to name types the way the target's describer does.
@@ -85,6 +101,11 @@ class _TempRelationIntrospection:
         Otherwise a disagreement reads as a type change and dbt rewrites the column on every
         run. varchar and numeric are here specifically because their reported type carries a
         size. This has to hold in both modes, so it lives on the shared base.
+
+        Asserted on check_for_schema_changes' message, which every run logs. The one from
+        sync_column_schemas ("Data types changed: ...") is not usable here: it is only
+        reached when schema_changed is true, so on a healthy run it is absent -- an
+        assertion that it reads `[]` fails exactly when the code is behaving.
         """
         run_dbt(["run", "--select", "incremental_temp_introspection"])
 
@@ -92,7 +113,8 @@ class _TempRelationIntrospection:
             _, logs = run_dbt_and_capture(
                 ["--debug", "run", "--select", "incremental_temp_introspection"]
             )
-            assert "Data types changed: []" in logs
+            assert "Schema changed: False" in logs
+            assert "New column types: []" in logs
 
 
 class TestTempRelationIntrospectionWithDatasharing(_TempRelationIntrospection):
@@ -117,11 +139,11 @@ class TestTempRelationIntrospectionWithDatasharing(_TempRelationIntrospection):
         assert f'select * from "{temp_identifier}" limit 0' in logs
 
         # The queries the marker exists to skip.
-        for line in self._lines_mentioning(logs, temp_identifier):
-            assert "pg_get_late_binding_view_cols" not in line
-            assert 'from information_schema."columns"' not in line
-            assert "svv_columns" not in line
-            assert "SHOW COLUMNS" not in line
+        for entry in self._entries_mentioning(logs, temp_identifier):
+            assert "pg_get_late_binding_view_cols" not in entry
+            assert 'from information_schema."columns"' not in entry
+            assert "svv_columns" not in entry
+            assert "SHOW COLUMNS" not in entry
 
 
 class TestTempRelationIntrospectionWithoutDatasharing(_TempRelationIntrospection):
@@ -130,10 +152,10 @@ class TestTempRelationIntrospectionWithoutDatasharing(_TempRelationIntrospection
     def test_temp_relation_is_described_from_information_schema(self, project):
         logs, temp_identifier = self._incremental_run(project)
 
-        lines = self._lines_mentioning(logs, temp_identifier)
-        assert any('from information_schema."columns"' in line for line in lines)
+        entries = self._entries_mentioning(logs, temp_identifier)
+        assert any('from information_schema."columns"' in entry for entry in entries)
 
         # information_schema answers on the first query, so the expensive lookup that
         # motivated this change is still never reached here either.
-        for line in lines:
-            assert "pg_get_late_binding_view_cols" not in line
+        for entry in entries:
+            assert "pg_get_late_binding_view_cols" not in entry

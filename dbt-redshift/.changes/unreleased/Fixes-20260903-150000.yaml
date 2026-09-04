@@ -3,7 +3,7 @@ body: With `datasharing` enabled, describe an incremental model's temporary rela
     the driver directly instead of trying the catalog first. The catalog lookups cannot see
     a temporary relation on a datashare consumer database, so they cost roughly 90 seconds
     per temporary relation to return nothing -- one of them expands every late-binding view
-    in the session
+    in the session.
 time: 2026-09-03T15:00:00.000000-05:00
 custom:
     Author: trouze
