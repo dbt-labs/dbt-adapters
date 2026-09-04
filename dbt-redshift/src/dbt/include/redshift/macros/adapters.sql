@@ -462,13 +462,13 @@
 {% macro redshift__alter_column_type(relation, column_name, new_column_type) -%}
   {#
     Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
-    For those, use native ALTER; for any other type change, fall back to
-    default add/copy/drop/rename.
+    For those, use native ALTER; for any other type change, migrate the column
+    with add/copy/drop/rename.
 
     The native ALTER TABLE ALTER COLUMN cannot run inside a transaction block.
     It is only safe to use when `redshift_skip_autocommit_transaction_statements`
     is enabled (i.e. we are not wrapping statements in BEGIN/COMMIT).
-    When the flag is off, always use the default migration path.
+    When the flag is off, always use the migration path.
   #}
   {% set type_lower = (new_column_type | lower) | trim %}
   {% set skip_txn = adapter.behavior.redshift_skip_autocommit_transaction_statements.no_warn %}
@@ -477,7 +477,28 @@
       alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
     {% endcall %}
   {% else %}
-    {{ default__alter_column_type(relation, column_name, new_column_type) }}
+    {#
+      1. Create a new column (w/ temp name and correct type)
+      2. Copy data over to it, casting explicitly
+      3. Drop the existing column (cascade!)
+      4. Rename the new column to existing column
+
+      This mirrors `default__alter_column_type`, except the copy step casts
+      instead of relying on an implicit assignment cast. Redshift only has
+      implicit assignment casts within a type category, so an uncasted copy
+      fails outright for pairs like varchar -> bigint even when every value
+      would convert cleanly. The explicit cast lets the warehouse's own cast
+      rules decide, so the migration succeeds whenever the data is actually
+      convertible and otherwise fails with the offending value in the error.
+    #}
+    {%- set tmp_column = column_name + "__dbt_alter" -%}
+
+    {% call statement('alter_column_type') %}
+      alter table {{ relation.render() }} add column {{ adapter.quote(tmp_column) }} {{ new_column_type }};
+      update {{ relation.render() }} set {{ adapter.quote(tmp_column) }} = cast({{ adapter.quote(column_name) }} as {{ new_column_type }});
+      alter table {{ relation.render() }} drop column {{ adapter.quote(column_name) }} cascade;
+      alter table {{ relation.render() }} rename column {{ adapter.quote(tmp_column) }} to {{ adapter.quote(column_name) }}
+    {% endcall %}
   {% endif %}
 {% endmacro %}
 
