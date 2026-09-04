@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Add typed view and snapshot lifecycle planning with compatibility fallback for custom snapshot control flow.
+time: 2026-08-24T15:32:57.530796-04:00
+custom:
+    Author: dataders
+    Issue: ""

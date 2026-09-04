@@ -1,8 +1,11 @@
-{% macro alter_column_comment(relation, column_dict) -%}
-  {{ return(adapter.dispatch('alter_column_comment', 'dbt')(relation, column_dict)) }}
+{% macro alter_column_comment(relation, column_dict, renderer_variant=none) -%}
+  {% if renderer_variant is none %}
+    {{ return(adapter.dispatch('alter_column_comment', 'dbt')(relation, column_dict)) }}
+  {% endif %}
+  {{ return(adapter.dispatch('alter_column_comment', 'dbt')(relation, column_dict, renderer_variant)) }}
 {% endmacro %}
 
-{% macro default__alter_column_comment(relation, column_dict) -%}
+{% macro default__alter_column_comment(relation, column_dict, renderer_variant=none) -%}
   {{ exceptions.raise_not_implemented(
     'alter_column_comment macro not implemented for adapter '+adapter.type()) }}
 {% endmacro %}
@@ -18,8 +21,13 @@
 {% endmacro %}
 
 
-{% macro persist_docs(relation, model, for_relation=true, for_columns=true) -%}
-  {{ return(adapter.dispatch('persist_docs', 'dbt')(relation, model, for_relation, for_columns)) }}
+{% macro persist_docs(relation, model, for_relation=true, for_columns=true, column_comment_renderer_variant=none) -%}
+  {% if column_comment_renderer_variant is none %}
+    {{ return(adapter.dispatch('persist_docs', 'dbt')(relation, model, for_relation, for_columns)) }}
+  {% endif %}
+  {{ return(adapter.dispatch('persist_docs', 'dbt')(
+    relation, model, for_relation, for_columns, column_comment_renderer_variant
+  )) }}
 {% endmacro %}
 
 {#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names. Returns a filtered column_dict containing only columns that exist. --#}

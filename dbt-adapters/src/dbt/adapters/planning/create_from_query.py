@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class CreateFromQueryStrategy(str, Enum):
@@ -166,15 +167,18 @@ class FormatFacts:
 
     table_format: Optional[str] = None
     file_format: Optional[str] = None
+    table_provider: Optional[str] = None
 
     def __post_init__(self) -> None:
         _validate_optional_string(self.table_format, "Table format")
         _validate_optional_string(self.file_format, "File format")
+        _validate_optional_string(self.table_provider, "Table provider")
 
     def to_dict(self) -> Dict[str, Optional[str]]:
         return {
             "table_format": self.table_format,
             "file_format": self.file_format,
+            "table_provider": self.table_provider,
         }
 
 
@@ -231,7 +235,6 @@ class CreateFromQueryStrategyOffer:
     strategy: CreateFromQueryStrategy
     status: StrategyOfferStatus
     atomicity: DdlAtomicity
-    renderer_macro: Optional[str]
     provenance: Tuple[PlanProvenance, ...]
     reason: Optional[str] = None
 
@@ -244,7 +247,6 @@ class CreateFromQueryStrategyOffer:
             raise TypeError("Strategy offer status must be a StrategyOfferStatus")
         if not isinstance(self.atomicity, DdlAtomicity):
             raise TypeError("Strategy offer atomicity must be a DdlAtomicity")
-        _validate_optional_string(self.renderer_macro, "Strategy offer renderer macro")
         if not isinstance(self.provenance, tuple):
             raise TypeError("Strategy offer provenance must be an immutable tuple")
         if not self.provenance:
@@ -254,15 +256,11 @@ class CreateFromQueryStrategyOffer:
         _validate_optional_string(self.reason, "Strategy offer rejection reason")
 
         if self.status == StrategyOfferStatus.AVAILABLE:
-            if self.renderer_macro is None:
-                raise ValueError("Available strategy offer must select a renderer macro")
             if self.atomicity == DdlAtomicity.NONE:
                 raise ValueError("Available strategy offer must promise non-none atomicity")
             if self.reason is not None:
                 raise ValueError("Available strategy offer cannot include a rejection reason")
         else:
-            if self.renderer_macro is not None:
-                raise ValueError("Rejected strategy offer cannot select a renderer macro")
             if self.atomicity != DdlAtomicity.NONE:
                 raise ValueError("Rejected strategy offer cannot promise atomicity")
             if self.reason is None:
@@ -274,14 +272,12 @@ class CreateFromQueryStrategyOffer:
         *,
         strategy: CreateFromQueryStrategy,
         atomicity: DdlAtomicity,
-        renderer_macro: str,
         provenance: Tuple[PlanProvenance, ...],
     ) -> "CreateFromQueryStrategyOffer":
         return cls(
             strategy=strategy,
             status=StrategyOfferStatus.AVAILABLE,
             atomicity=atomicity,
-            renderer_macro=renderer_macro,
             provenance=provenance,
         )
 
@@ -297,7 +293,6 @@ class CreateFromQueryStrategyOffer:
             strategy=strategy,
             status=StrategyOfferStatus.REJECTED,
             atomicity=DdlAtomicity.NONE,
-            renderer_macro=None,
             provenance=provenance,
             reason=reason,
         )
@@ -307,7 +302,6 @@ class CreateFromQueryStrategyOffer:
             "strategy": self.strategy.value,
             "status": self.status.value,
             "atomicity": self.atomicity.value,
-            "renderer_macro": self.renderer_macro,
             "provenance": [item.to_dict() for item in self.provenance],
             "reason": self.reason,
         }
@@ -326,7 +320,6 @@ class CreateFromQueryPlan:
     atomicity: DdlAtomicity
     temporary: bool
     facts: CreateFromQueryFacts
-    renderer_macro: Optional[str]
     provenance: Tuple[PlanProvenance, ...]
     reason: Optional[str] = None
 
@@ -339,7 +332,6 @@ class CreateFromQueryPlan:
             raise TypeError("Create-from-query plan 'temporary' must be a bool")
         if not isinstance(self.facts, CreateFromQueryFacts):
             raise TypeError("Create-from-query plan facts must be CreateFromQueryFacts")
-        _validate_optional_string(self.renderer_macro, "Create-from-query renderer macro")
         if not isinstance(self.provenance, tuple):
             raise TypeError("Create-from-query plan provenance must be an immutable tuple")
         if not self.provenance:
@@ -350,15 +342,11 @@ class CreateFromQueryPlan:
             raise TypeError("Create-from-query plan reason must be a string")
 
         if self.strategy == CreateFromQueryStrategy.UNSUPPORTED:
-            if self.renderer_macro is not None:
-                raise ValueError("Unsupported create-from-query plan cannot select a renderer")
             if not self.reason or not self.reason.strip():
                 raise ValueError("Unsupported create-from-query plan must include a reason")
             if self.atomicity != DdlAtomicity.NONE:
                 raise ValueError("Unsupported create-from-query plan cannot promise atomicity")
         else:
-            if self.renderer_macro is None:
-                raise ValueError("Supported create-from-query plan must select a renderer")
             if self.reason is not None:
                 raise ValueError(
                     "Supported create-from-query plan cannot include an unsupported reason"
@@ -371,7 +359,6 @@ class CreateFromQueryPlan:
         temporary: bool,
         atomicity: DdlAtomicity,
         facts: CreateFromQueryFacts,
-        renderer_macro: str = "render_create_from_query_ctas",
         provenance: Tuple[PlanProvenance, ...],
     ) -> "CreateFromQueryPlan":
         return cls(
@@ -379,7 +366,6 @@ class CreateFromQueryPlan:
             atomicity=atomicity,
             temporary=temporary,
             facts=facts,
-            renderer_macro=renderer_macro,
             provenance=provenance,
         )
 
@@ -390,7 +376,6 @@ class CreateFromQueryPlan:
         temporary: bool,
         atomicity: DdlAtomicity,
         facts: CreateFromQueryFacts,
-        renderer_macro: str,
         provenance: Tuple[PlanProvenance, ...],
     ) -> "CreateFromQueryPlan":
         return cls(
@@ -398,7 +383,6 @@ class CreateFromQueryPlan:
             atomicity=atomicity,
             temporary=temporary,
             facts=facts,
-            renderer_macro=renderer_macro,
             provenance=provenance,
         )
 
@@ -416,7 +400,6 @@ class CreateFromQueryPlan:
             atomicity=DdlAtomicity.NONE,
             temporary=temporary,
             facts=facts,
-            renderer_macro=None,
             provenance=provenance,
             reason=reason,
         )
@@ -429,7 +412,6 @@ class CreateFromQueryPlan:
             "atomicity": self.atomicity.value,
             "temporary": self.temporary,
             "facts": self.facts.to_dict(),
-            "renderer_macro": self.renderer_macro,
             "provenance": [item.to_dict() for item in self.provenance],
             "reason": self.reason,
         }
@@ -566,7 +548,6 @@ def resolve_create_from_query_offers(
                 atomicity=offer.atomicity,
                 temporary=temporary,
                 facts=facts,
-                renderer_macro=offer.renderer_macro,
                 provenance=tuple(rejected_provenance) + offer.provenance,
             )
         rejected_provenance.extend(offer.provenance)

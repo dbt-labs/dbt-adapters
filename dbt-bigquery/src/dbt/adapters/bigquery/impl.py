@@ -1,46 +1,31 @@
 import copy
-from dataclasses import dataclass
+import threading
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime
 from multiprocessing.context import SpawnContext
-import threading
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
     Dict,
     FrozenSet,
-    Iterable,
     List,
-    Mapping,
     Optional,
     Set,
     Tuple,
-    TYPE_CHECKING,
     Type,
     Union,
 )
 
-import google.api_core
-import google.auth
-import google.oauth2
-import google.cloud.bigquery
-from google.cloud.bigquery import AccessEntry, Client, SchemaField, Table as BigQueryTable
-from google.cloud.bigquery.routine import RoutineType
-import google.cloud.exceptions
-import pytz
-
-from dbt_common.behavior_flags import BehaviorFlag
-from dbt_common.contracts.constraints import (
-    ColumnLevelConstraint,
-    ConstraintType,
-    ModelLevelConstraint,
-)
-from dbt_common.dataclass_schema import dbtClassMixin
-from dbt_common.events.functions import fire_event
 import dbt_common.exceptions
 import dbt_common.exceptions.base
-from dbt_common.exceptions import DbtInternalError
-from dbt_common.record import auto_record_function, record_function
-from dbt_common.utils import filter_null_values
+import google.api_core
+import google.auth
+import google.cloud.bigquery
+import google.cloud.exceptions
+import google.oauth2
+import pytz
 from dbt.adapters.base import (
     AdapterConfig,
     BaseAdapter,
@@ -52,43 +37,43 @@ from dbt.adapters.base import (
     SchemaSearchMap,
     available,
 )
-from dbt.adapters.base.impl import FreshnessResponse, GET_RELATION_LAST_MODIFIED_MACRO_NAME
+from dbt.adapters.base.impl import (
+    GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+    FreshnessResponse,
+)
 from dbt.adapters.base.relation import ComponentName
-from dbt.adapters.cache import _make_ref_key_dict
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
-from dbt.adapters.catalogs import CatalogRelation
-from dbt.adapters.contracts.connection import AdapterResponse
-from dbt.adapters.contracts.macros import MacroResolverProtocol
-from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.events.logging import AdapterLogger
-from dbt.adapters.events.types import SchemaCreation, SchemaDrop
-
 from dbt.adapters.bigquery import constants, parse_model
 from dbt.adapters.bigquery.catalogs import (
     BigLakeCatalogIntegration,
-    BigQueryInfoSchemaCatalogIntegration,
     BigQueryCatalogRelation,
+    BigQueryInfoSchemaCatalogIntegration,
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
-from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
-from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
+from dbt.adapters.bigquery.connections import (
+    BigQueryAdapterResponse,
+    BigQueryConnectionManager,
+)
+from dbt.adapters.bigquery.dataset import (
+    add_access_entry_to_dataset,
+    is_access_entry_in_dataset,
+)
 from dbt.adapters.bigquery.python_submissions import (
+    BigFramesHelper,
     ClusterDataprocHelper,
     ServerlessDataProcHelper,
-    BigFramesHelper,
 )
 from dbt.adapters.bigquery.record.record_types import (
-    BigQueryAdapterDescribeRelationRecord,
-    BigQueryAdapterIsReplaceableRecord,
+    BigQueryAdapterAlterTableAddColumnsRecord,
+    BigQueryAdapterAlterTableAddRemoveColumnsRecord,
     BigQueryAdapterCopyTableRecord,
+    BigQueryAdapterDescribeRelationRecord,
+    BigQueryAdapterGetColumnsInSelectSqlRecord,
     BigQueryAdapterGetDatasetLocationRecord,
     BigQueryAdapterGrantAccessToRecord,
-    BigQueryAdapterGetColumnsInSelectSqlRecord,
-    BigQueryAdapterAlterTableAddColumnsRecord,
-    BigQueryAdapterUpdateColumnsRecord,
+    BigQueryAdapterIsReplaceableRecord,
     BigQueryAdapterLoadDataframeRecord,
-    BigQueryAdapterAlterTableAddRemoveColumnsRecord,
     BigQueryAdapterSyncStructColumnsRecord,
+    BigQueryAdapterUpdateColumnsRecord,
 )
 from dbt.adapters.bigquery.relation import BigQueryRelation
 from dbt.adapters.bigquery.relation_configs import (
@@ -96,13 +81,74 @@ from dbt.adapters.bigquery.relation_configs import (
     BigQueryMaterializedViewConfig,
     PartitionConfig,
 )
-from dbt.adapters.bigquery.utility import sql_escape
-
 from dbt.adapters.bigquery.struct_utils import (
     build_nested_additions,
     find_missing_fields,
     merge_nested_fields,
 )
+from dbt.adapters.bigquery.utility import sql_escape
+from dbt.adapters.cache import _make_ref_key_dict
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
+from dbt.adapters.catalogs import CatalogRelation
+from dbt.adapters.contracts.connection import AdapterResponse
+from dbt.adapters.contracts.macros import MacroResolverProtocol
+from dbt.adapters.contracts.relation import RelationConfig
+from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import SchemaCreation, SchemaDrop
+from dbt.adapters.planning import (
+    DdlAtomicity,
+    DirectCreateInitial,
+    DirectFullRefresh,
+    DirectMutateExisting,
+    DirectReplaceTable,
+    DirectReplaceView,
+    IncrementalLifecycleFacts,
+    IncrementalMaterializationPlan,
+    IncrementalMaterializationStrategy,
+    IncrementalMutationArguments,
+    IncrementalMutationFacts,
+    IncrementalMutationPlan,
+    IncrementalMutationStrategy,
+    IncrementalMutationStrategyOffer,
+    IncrementalPartitionFacts,
+    IncrementalSourceConsistency,
+    IncrementalStrategyRequirements,
+    IncrementalTempRelationType,
+    IncrementalUniqueKeyRequirement,
+    IncompatibleRelationStrategy,
+    MaterializationExecutionFacts,
+    MaterializationStatementStrategy,
+    MaterializationTransactionMode,
+    PlanProvenance,
+    TableMaterializationFacts,
+    TableMaterializationStrategy,
+    ViewMaterializationStrategy,
+)
+from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.contracts.constraints import (
+    ColumnLevelConstraint,
+    ConstraintType,
+    ModelLevelConstraint,
+)
+from dbt_common.dataclass_schema import dbtClassMixin
+from dbt_common.events.functions import fire_event
+from dbt_common.exceptions import DbtInternalError
+from dbt_common.record import auto_record_function, record_function
+from dbt_common.utils import filter_null_values
+from google.cloud.bigquery import (
+    AccessEntry,
+    Client,
+    SchemaField,
+)
+from google.cloud.bigquery import (
+    Table as BigQueryTable,
+)
+from google.cloud.bigquery.routine import RoutineType
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -194,6 +240,81 @@ class BigqueryConfig(AdapterConfig):
     reservation: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class BigQueryIncrementalLifecycleFacts(IncrementalLifecycleFacts):
+    """BigQuery partition facts needed to choose one incremental lifecycle."""
+
+    batch_size: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class BigQueryIncrementalMaterializationPlan(IncrementalMaterializationPlan):
+    """Pure resolver for BigQuery's statement-atomic incremental lifecycle."""
+
+    def resolve(
+        self,
+        mutation: IncrementalMutationPlan,
+        facts: IncrementalLifecycleFacts,
+    ) -> IncrementalMaterializationStrategy:
+        if not isinstance(facts, BigQueryIncrementalLifecycleFacts):
+            raise TypeError("BigQuery incremental planning requires BigQuery lifecycle facts")
+
+        partition = facts.partition
+        strategy = mutation.strategy
+        if strategy in {
+            IncrementalMutationStrategy.INSERT_OVERWRITE,
+            IncrementalMutationStrategy.MICROBATCH,
+        } and partition is None:
+            raise dbt_common.exceptions.CompilationError(
+                f"The '{mutation.requested_strategy}' strategy requires partition_by"
+            )
+        if (
+            partition is not None
+            and partition.copy_partitions
+            and strategy
+            not in {
+                IncrementalMutationStrategy.INSERT_OVERWRITE,
+                IncrementalMutationStrategy.MICROBATCH,
+            }
+        ):
+            raise dbt_common.exceptions.CompilationError(
+                "copy_partitions requires insert_overwrite or microbatch"
+            )
+        if strategy == IncrementalMutationStrategy.MICROBATCH and (
+            partition is None or partition.granularity != facts.batch_size
+        ):
+            raise dbt_common.exceptions.CompilationError(
+                "microbatch requires partition_by.granularity to match batch_size"
+            )
+
+        provenance = self.provenance + (
+            PlanProvenance(
+                rule="incremental.bigquery.runtime_facts",
+                detail="BigQuery lifecycle resolved from relation and partition facts",
+            ),
+        )
+        if facts.table.existing is None:
+            return DirectCreateInitial(
+                mutation=mutation,
+                partition=partition,
+                provenance=provenance,
+            )
+        if facts.full_refresh:
+            return DirectFullRefresh(
+                mutation=mutation,
+                partition=partition,
+                requires_drop=facts.table.existing.requires_drop_before_replace,
+                provenance=provenance,
+            )
+        return DirectMutateExisting(
+            mutation=mutation,
+            schema_change=facts.schema_change,
+            partition=partition,
+            copy_partitions=bool(partition is not None and partition.copy_partitions),
+            provenance=provenance,
+        )
+
+
 class BigQueryAdapter(BaseAdapter):
     RELATION_TYPES = {
         "TABLE": RelationType.Table,
@@ -208,7 +329,10 @@ class BigQueryAdapter(BaseAdapter):
 
     AdapterSpecificConfigs = BigqueryConfig
 
-    CATALOG_INTEGRATIONS = [BigLakeCatalogIntegration, BigQueryInfoSchemaCatalogIntegration]
+    CATALOG_INTEGRATIONS = [
+        BigLakeCatalogIntegration,
+        BigQueryInfoSchemaCatalogIntegration,
+    ]
     CONSTRAINT_SUPPORT = {
         ConstraintType.check: ConstraintSupport.NOT_SUPPORTED,
         ConstraintType.not_null: ConstraintSupport.ENFORCED,
@@ -244,6 +368,377 @@ class BigQueryAdapter(BaseAdapter):
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
 
+    @available.parse_none
+    def plan_table_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[TableMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt_bigquery.materialization_table_bigquery"
+        ):
+            return super().plan_table_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return DirectReplaceTable(
+            statement=MaterializationStatementStrategy.NO_AUTO_BEGIN,
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.table.bigquery",
+                    detail=(
+                        "BigQuery table materialization uses statement-atomic direct "
+                        "replacement without transaction control"
+                    ),
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_view_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[ViewMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_bigquery.materialization_view_bigquery"
+        ):
+            return super().plan_view_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return DirectReplaceView(
+            statement=MaterializationStatementStrategy.NO_AUTO_BEGIN,
+            incompatible_relation=IncompatibleRelationStrategy.DROP_ON_FULL_REFRESH,
+            grant_access=True,
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.view.bigquery",
+                    detail=(
+                        "BigQuery view materialization uses statement-atomic "
+                        "create-or-replace with typed incompatible-relation handling"
+                    ),
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_incremental_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[IncrementalMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_bigquery.materialization_incremental_bigquery"
+        ):
+            return super().plan_incremental_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return BigQueryIncrementalMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            provenance=(
+                PlanProvenance(
+                    rule="incremental.materialization.bigquery",
+                    detail=(
+                        "BigQuery SQL incremental materialization uses a typed partition-aware "
+                        "semantic resolver"
+                    ),
+                ),
+            ),
+        )
+
+    def valid_incremental_strategies(self) -> List[str]:
+        return ["merge", "insert_overwrite", "microbatch"]
+
+    def get_incremental_mutation_strategy_offers(
+        self, facts: IncrementalMutationFacts
+    ) -> Tuple[IncrementalMutationStrategyOffer, ...]:
+        requested = "merge" if facts.requested_strategy == "default" else facts.requested_strategy
+        strategy = {
+            "merge": IncrementalMutationStrategy.MERGE,
+            "insert_overwrite": IncrementalMutationStrategy.INSERT_OVERWRITE,
+            "microbatch": IncrementalMutationStrategy.MICROBATCH,
+        }.get(requested)
+        if strategy is None:
+            requirements = IncrementalStrategyRequirements(
+                unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+                source_consistency=IncrementalSourceConsistency.STABLE_REUSE,
+                supported_languages=("sql",),
+            )
+            reason = (
+                f"Invalid incremental strategy provided: {facts.requested_strategy}. "
+                "Expected one of: 'merge', 'insert_overwrite', 'microbatch'"
+            )
+            return (
+                IncrementalMutationStrategyOffer.rejected(
+                    strategy=IncrementalMutationStrategy.CUSTOM,
+                    reason=reason,
+                    requirements=requirements,
+                    provenance=(
+                        PlanProvenance(
+                            rule="incremental.bigquery.unsupported",
+                            detail=reason,
+                        ),
+                    ),
+                ),
+            )
+        requirements = IncrementalStrategyRequirements(
+            unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+            source_consistency=IncrementalSourceConsistency.STABLE_REUSE,
+            allowed_temp_relation_types=(IncrementalTempRelationType.TABLE,),
+            default_temp_relation_type=IncrementalTempRelationType.TABLE,
+            supported_languages=("sql",),
+        )
+        return (
+            self._bigquery_incremental_offer(
+                strategy=strategy,
+                renderer_macro=f"get_incremental_{requested}_sql",
+                requirements=requirements,
+            ),
+        )
+
+    @staticmethod
+    def _bigquery_incremental_offer(
+        *,
+        strategy: IncrementalMutationStrategy,
+        renderer_macro: str,
+        requirements: IncrementalStrategyRequirements,
+    ) -> IncrementalMutationStrategyOffer:
+        return IncrementalMutationStrategyOffer.available(
+            strategy=strategy,
+            renderer_macro=renderer_macro,
+            atomicity=DdlAtomicity.STATEMENT,
+            requirements=requirements,
+            provenance=(
+                PlanProvenance(
+                    rule=f"incremental.bigquery.{strategy.value}",
+                    detail=f"BigQuery strategy resolves to {renderer_macro}",
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _incremental_partition_facts(
+        model: RelationConfig,
+    ) -> Optional[IncrementalPartitionFacts]:
+        raw_partition = model.config.get("partition_by")
+        partition = PartitionConfig.parse(raw_partition)
+        if partition is None:
+            return None
+        range_config = partition.range or {}
+        configured_partitions = model.config.get("partitions") or ()
+        return IncrementalPartitionFacts(
+            field=partition.field,
+            data_type=partition.data_type,
+            granularity=partition.granularity,
+            range_start=range_config.get("start"),
+            range_end=range_config.get("end"),
+            range_interval=range_config.get("interval"),
+            time_ingestion_partitioning=partition.time_ingestion_partitioning,
+            copy_partitions=partition.copy_partitions,
+            require_partition_filter=bool(model.config.get("require_partition_filter")),
+            static_partitions=tuple(str(value) for value in configured_partitions),
+        )
+
+    @available
+    def build_incremental_lifecycle_facts(
+        self,
+        mutation_plan: IncrementalMutationPlan,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        existing_relation: Optional[BaseRelation],
+        *,
+        full_refresh: bool,
+        on_schema_change: Optional[str],
+        contract_enforced: bool,
+    ) -> BigQueryIncrementalLifecycleFacts:
+        base = super().build_incremental_lifecycle_facts(
+            mutation_plan,
+            model,
+            target_relation,
+            existing_relation,
+            full_refresh=full_refresh,
+            on_schema_change=on_schema_change,
+            contract_enforced=contract_enforced,
+        )
+        return BigQueryIncrementalLifecycleFacts(
+            table=base.table,
+            schema_change=base.schema_change,
+            full_refresh=base.full_refresh,
+            contract_enforced=base.contract_enforced,
+            partition=self._incremental_partition_facts(model),
+            batch_size=model.config.get("batch_size"),
+        )
+
+    @available.parse_none
+    def plan_incremental_arguments(
+        self,
+        *,
+        target_relation: Any,
+        temp_relation: Any,
+        unique_key: Optional[Union[str, Sequence[str]]],
+        dest_columns: Iterable[Any],
+        incremental_predicates: Optional[Sequence[str]],
+        adapter_arguments: Optional[Mapping[str, Any]] = None,
+    ) -> IncrementalMutationArguments:
+        arguments = dict(adapter_arguments or {})
+        partition_plan = arguments.get("partition_plan")
+        if partition_plan is not None:
+            raw_partition = dict(partition_plan)
+            static_partitions = raw_partition.pop("static_partitions", None)
+            require_partition_filter = raw_partition.pop("require_partition_filter", False)
+            arguments["partition_plan"] = raw_partition
+            arguments["partitions"] = static_partitions or None
+            arguments["require_partition_filter"] = require_partition_filter
+            partition = self.parse_partition_by(raw_partition)
+            if partition is not None and partition.time_ingestion_partitioning:
+                dest_columns = self.add_time_ingestion_partition_column(
+                    partition, list(dest_columns)
+                )
+        return super().plan_incremental_arguments(
+            target_relation=target_relation,
+            temp_relation=temp_relation,
+            unique_key=unique_key,
+            dest_columns=dest_columns,
+            incremental_predicates=incremental_predicates,
+            adapter_arguments=arguments,
+        )
+
+    def render_incremental_insert_from_query(
+        self,
+        relation: BaseRelation,
+        query: str,
+        partition: IncrementalPartitionFacts,
+        sql_header: Optional[str],
+    ) -> str:
+        if not partition.time_ingestion_partitioning:
+            raise dbt_common.exceptions.CompilationError(
+                "Insert-from-query execution requires ingestion-time partition facts"
+            )
+        columns = self.get_columns_in_relation(relation)
+        destination_columns = ", ".join(self.quote(column.name) for column in columns)
+        partition_field = self.quote(partition.field)
+        header = f"{sql_header}\n" if sql_header else ""
+        return (
+            f"{header}insert into {relation} (_PARTITIONTIME, {destination_columns})\n"
+            f"select TIMESTAMP({partition_field}) as _PARTITIONTIME, "
+            f"* EXCEPT({partition_field}) from (\n{query}\n);"
+        )
+
+    def execute_incremental_partition_copy(
+        self,
+        source_relation: BaseRelation,
+        target_relation: BaseRelation,
+        partition: IncrementalPartitionFacts,
+    ) -> None:
+        raw_partition = partition.to_dict()
+        raw_partition.pop("static_partitions")
+        raw_partition.pop("require_partition_filter")
+        partition_config = self.parse_partition_by(raw_partition)
+        if partition_config is None:
+            raise dbt_common.exceptions.CompilationError(
+                "Partition-copy execution requires partition facts"
+            )
+
+        if partition.static_partitions:
+            partition_sql = (
+                "select partition_literal from unnest(["
+                + ", ".join(partition.static_partitions)
+                + "]) as partition_literal"
+            )
+        else:
+            partition_sql = (
+                f"select distinct {partition_config.render_wrapped()} from {source_relation}"
+            )
+        _, table = self.execute(partition_sql, fetch=True)
+        for value in table.columns[0].values():
+            if partition.data_type == "int64":
+                suffix = str(value)
+            else:
+                formats = {
+                    "hour": "%Y%m%d%H",
+                    "day": "%Y%m%d",
+                    "month": "%Y%m",
+                    "year": "%Y",
+                }
+                suffix = value.strftime(formats[partition.granularity or "day"])
+            source_partition = source_relation.incorporate(
+                path={"identifier": f"{source_relation.identifier}${suffix}"}
+            )
+            target_partition = target_relation.incorporate(
+                path={"identifier": f"{target_relation.identifier}${suffix}"}
+            )
+            self.copy_table(source_partition, target_partition, "table")
+
+    def get_create_from_query_catalog_provider(
+        self,
+        catalog_relation: CatalogRelation,
+        model: Optional[RelationConfig],
+    ) -> Optional[str]:
+        if catalog_relation.catalog_type == constants.BIGLAKE_CATALOG_TYPE:
+            return "biglake"
+        return None
+
+    def get_table_materialization_execution_facts(
+        self,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+    ) -> MaterializationExecutionFacts:
+        capabilities = ["create_or_replace", "copy_table", "partition_copy"]
+        catalog_relation = self.build_catalog_relation(model)
+        if (
+            catalog_relation is not None
+            and catalog_relation.table_format == constants.ICEBERG_TABLE_FORMAT
+        ):
+            capabilities.append("biglake_iceberg")
+        return MaterializationExecutionFacts(
+            transaction_mode=MaterializationTransactionMode.NONE,
+            capabilities=tuple(capabilities),
+        )
+
+    def build_table_materialization_facts(
+        self,
+        model: RelationConfig,
+        target_relation: BaseRelation,
+        existing_relation: Optional[BaseRelation],
+    ) -> TableMaterializationFacts:
+        facts = super().build_table_materialization_facts(
+            model,
+            target_relation,
+            existing_relation,
+        )
+        if existing_relation is None or facts.existing is None:
+            return facts
+
+        config = model.config
+        raw_partition_by = config.get("partition_by") if config is not None else None
+        cluster_by = config.get("cluster_by") if config is not None else None
+        partition_by = self.parse_partition_by(raw_partition_by)
+        requires_drop = not existing_relation.is_table or not self.is_replaceable(
+            existing_relation,
+            partition_by,
+            cluster_by,
+        )
+        return replace(
+            facts,
+            existing=replace(
+                facts.existing,
+                requires_drop_before_replace=requires_drop,
+            ),
+        )
+
     ###
     # Implementations of abstract methods
     ###
@@ -272,7 +767,7 @@ class BigQueryAdapter(BaseAdapter):
         return True
 
     def drop_relation(self, relation: BigQueryRelation) -> None:
-        is_cached = self._schema_is_cached(relation.database, relation.schema)  # type:ignore
+        is_cached = self._schema_is_cached(relation.database, relation.schema)  # type: ignore
         if is_cached:
             self.cache_dropped(relation)
 
@@ -364,12 +859,14 @@ class BigQueryAdapter(BaseAdapter):
     def get_columns_in_relation(self, relation: BigQueryRelation) -> List[BigQueryColumn]:
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
             return self._get_dbt_columns_from_bq_table(table)
 
         except (ValueError, google.cloud.exceptions.NotFound) as e:
-            logger.debug("get_columns_in_relation error: {}".format(e))
+            logger.debug(f"get_columns_in_relation error: {e}")
             return []
 
     @available.parse_list
@@ -379,14 +876,16 @@ class BigQueryAdapter(BaseAdapter):
         """Return all columns (regular + pseudocolumns) for a relation in a single API call."""
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
             columns = self._get_dbt_columns_from_bq_table(table)
             if table.table_type == "EXTERNAL":
                 columns.append(BigQueryColumn("_FILE_NAME", "STRING"))
             return columns
         except (ValueError, google.cloud.exceptions.NotFound) as e:
-            logger.debug("get_columns_and_pseudocolumns_for_relation error: {}".format(e))
+            logger.debug(f"get_columns_and_pseudocolumns_for_relation error: {e}")
             return []
 
     @available.parse(lambda *a, **k: [])
@@ -450,7 +949,7 @@ class BigQueryAdapter(BaseAdapter):
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
-            logger.debug("list_relations_without_caching error: {}".format(str(exc)))
+            logger.debug(f"list_relations_without_caching error: {exc!s}")
             return []
 
     def get_relation(
@@ -510,7 +1009,7 @@ class BigQueryAdapter(BaseAdapter):
 
     @classmethod
     def quote(cls, identifier: str) -> str:
-        return "`{}`".format(identifier)
+        return f"`{identifier}`"
 
     @classmethod
     def convert_text_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
@@ -599,7 +1098,7 @@ class BigQueryAdapter(BaseAdapter):
 
         self.connections.copy_bq_table(source, destination, write_disposition)
 
-        return "COPY TABLE with materialization: {}".format(materialization)
+        return f"COPY TABLE with materialization: {materialization}"
 
     @available.parse(lambda *a, **k: [])
     def get_column_schema_from_query(self, sql: str) -> List[BigQueryColumn]:
@@ -631,7 +1130,7 @@ class BigQueryAdapter(BaseAdapter):
             return self._get_dbt_columns_from_bq_table(query_table)
 
         except (ValueError, google.cloud.exceptions.NotFound) as e:
-            logger.debug("get_columns_in_select_sql error: {}".format(e))
+            logger.debug(f"get_columns_in_select_sql error: {e}")
             return []
 
     def _bq_table_to_relation(self, bq_table) -> Union[BigQueryRelation, None]:
@@ -643,9 +1142,7 @@ class BigQueryAdapter(BaseAdapter):
             schema=bq_table.dataset_id,
             identifier=bq_table.table_id,
             quote_policy={"schema": True, "identifier": True},
-            type=self.RELATION_TYPES.get(
-                bq_table.table_type, RelationType.External
-            ),  # type:ignore
+            type=self.RELATION_TYPES.get(bq_table.table_type, RelationType.External),  # type: ignore
         )
 
     def _bq_routine_to_relation(self, bq_routine) -> Union[BigQueryRelation, None]:
@@ -753,7 +1250,9 @@ class BigQueryAdapter(BaseAdapter):
 
         try:
             table = self.connections.get_bq_table(
-                database=relation.database, schema=relation.schema, identifier=relation.identifier
+                database=relation.database,
+                schema=relation.schema,
+                identifier=relation.identifier,
             )
         except google.cloud.exceptions.NotFound:
             return True
@@ -852,7 +1351,7 @@ class BigQueryAdapter(BaseAdapter):
         id_field_name="thread_id",
     )
     def alter_table_add_columns(self, relation, columns):
-        logger.debug('Adding columns ({}) to table "{}".'.format(columns, relation))
+        logger.debug(f'Adding columns ({columns}) to table "{relation}".')
         self.alter_table_add_remove_columns(relation, columns, None)
 
     @available.parse_none
@@ -886,8 +1385,8 @@ class BigQueryAdapter(BaseAdapter):
         if nested_removals:
             logger.warning(
                 "BigQuery limitation: Cannot remove nested fields via schema update. "
-                "Attempted to remove: {}. Consider using 'append_new_columns' mode "
-                "or recreating the table with full_refresh.".format(nested_removals)
+                f"Attempted to remove: {nested_removals}. Consider using 'append_new_columns' mode "
+                "or recreating the table with full_refresh."
             )
 
         if drop_candidates:
@@ -896,9 +1395,7 @@ class BigQueryAdapter(BaseAdapter):
             drop_sql = f"alter table {relation_name} {', '.join(drop_clauses)}"
 
             column_names = [column.name for column in drop_candidates]
-            logger.debug(
-                'Dropping columns `{}` from table "{}".'.format(column_names, relation_name)
-            )
+            logger.debug(f'Dropping columns `{column_names}` from table "{relation_name}".')
             self.execute(drop_sql, fetch=False)
 
             # Refresh schema after drops so additions operate on the latest definition
@@ -961,9 +1458,7 @@ class BigQueryAdapter(BaseAdapter):
             if "STRUCT<" in new_type.upper() or "RECORD" in new_type.upper():
                 struct_type_changes.add(column_name.split(".", 1)[0])
 
-        struct_columns_to_update: Set[str] = {
-            path.split(".", 1)[0] for path in nested_additions.keys()
-        }
+        struct_columns_to_update: Set[str] = {path.split(".", 1)[0] for path in nested_additions}
         struct_columns_to_update.update(struct_type_changes)
 
         logger.debug(
@@ -1121,14 +1616,12 @@ class BigQueryAdapter(BaseAdapter):
         for candidate, schemas in candidates.items():
             database = candidate.database
             if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
-            if candidate.schema in db_schemas[database]:  # type:ignore
+                db_schemas[database] = set(self.list_schemas(database))  # type: ignore
+            if candidate.schema in db_schemas[database]:  # type: ignore
                 result[candidate] = schemas
             else:
                 logger.debug(
-                    "Skipping catalog for {}.{} - schema does not exist".format(
-                        database, candidate.schema
-                    )
+                    f"Skipping catalog for {database}.{candidate.schema} - schema does not exist"
                 )
         return result
 
@@ -1148,9 +1641,7 @@ class BigQueryAdapter(BaseAdapter):
                 result[info_schema] = rels
             else:
                 logger.debug(
-                    "Skipping catalog for {}.{} - schema does not exist".format(
-                        database, info_schema.schema
-                    )
+                    f"Skipping catalog for {database}.{info_schema.schema} - schema does not exist"
                 )
         return result
 
@@ -1270,12 +1761,12 @@ class BigQueryAdapter(BaseAdapter):
         opts = {}
 
         if (config.get("hours_to_expiration") is not None) and (not temporary):
-            expiration = f'TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {config.get("hours_to_expiration")} hour)'
+            expiration = f"TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL {config.get('hours_to_expiration')} hour)"
             opts["expiration_timestamp"] = expiration
 
         if config.persist_relation_docs() and "description" in node:  # type: ignore[attr-defined]
             description = sql_escape(node["description"])
-            opts["description"] = '"""{}"""'.format(description)
+            opts["description"] = f'"""{description}"""'
 
         labels = config.get("labels") or {}
 
@@ -1383,7 +1874,7 @@ class BigQueryAdapter(BaseAdapter):
         Given an entity, grants it access to a dataset.
         """
         conn: BigQueryConnectionManager = self.connections.get_thread_connection()
-        client = conn.handle  # type:ignore
+        client = conn.handle  # type: ignore
         GrantTarget.validate(grant_target_dict)
         grant_target = GrantTarget.from_dict(grant_target_dict)
         if entity_type == "view":
@@ -1394,7 +1885,7 @@ class BigQueryAdapter(BaseAdapter):
             access_entry = AccessEntry(role, entity_type, entity)
             # only perform update if access entry not in dataset
             if is_access_entry_in_dataset(dataset, access_entry):
-                logger.warning(f"Access entry {access_entry} " f"already exists in dataset")
+                logger.warning(f"Access entry {access_entry} already exists in dataset")
             else:
                 dataset = add_access_entry_to_dataset(dataset, access_entry)
                 client.update_dataset(dataset, ["access_entries"])

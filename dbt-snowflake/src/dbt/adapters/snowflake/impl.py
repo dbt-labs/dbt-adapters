@@ -1,65 +1,80 @@
+from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
-    ClassVar,
-    Mapping,
     Any,
-    Optional,
-    List,
-    Union,
+    ClassVar,
     Dict,
     FrozenSet,
+    List,
+    Optional,
     Tuple,
+    Union,
 )
 
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
-from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
+from dbt.adapters.cache import _make_ref_key_dict
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
 from dbt.adapters.catalogs import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogRelation,
 )
-
 from dbt.adapters.contracts.relation import RelationConfig
-from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
-from dbt.adapters.cache import _make_ref_key_dict
-from dbt.adapters.sql.impl import (
-    LIST_SCHEMAS_MACRO_NAME,
-    LIST_RELATIONS_MACRO_NAME,
-    LIST_FUNCTION_RELATIONS_MACRO_NAME,
+from dbt.adapters.planning import (
+    DirectReplaceTable,
+    DirectReplaceView,
+    IncompatibleRelationStrategy,
+    MaterializationExecutionFacts,
+    MaterializationStatementStrategy,
+    MaterializationTransactionMode,
+    PlanProvenance,
+    SnapshotMaterializationPlan,
+    TableMaterializationStrategy,
+    ViewMaterializationStrategy,
 )
-from dbt_common.contracts.constraints import ConstraintType
-from dbt_common.contracts.metadata import (
-    TableMetadata,
-    StatsDict,
-    StatsItem,
-    CatalogTable,
-    ColumnMetadata,
+from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.sql import SQLAdapter
+from dbt.adapters.sql.impl import (
+    LIST_FUNCTION_RELATIONS_MACRO_NAME,
+    LIST_RELATIONS_MACRO_NAME,
+    LIST_SCHEMAS_MACRO_NAME,
 )
 from dbt_common.behavior_flags import BehaviorFlag
+from dbt_common.contracts.constraints import ConstraintType
+from dbt_common.contracts.metadata import (
+    CatalogTable,
+    ColumnMetadata,
+    StatsDict,
+    StatsItem,
+    TableMetadata,
+)
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
 from dbt_common.utils import filter_null_values
 
-from dbt.adapters.snowflake import constants, parse_model
-
 if TYPE_CHECKING:
     from dbt.adapters.catalogs import CatalogV2
+import agate
+from dbt.adapters.snowflake import (
+    SnowflakeColumn,
+    SnowflakeConnectionManager,
+    SnowflakeRelation,
+)
 from dbt.adapters.snowflake.catalogs import (
     BuiltInCatalogIntegration,
-    InfoSchemaCatalogIntegration,
     IcebergRestCatalogIntegration,
+    InfoSchemaCatalogIntegration,
 )
 from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
-
-from dbt.adapters.snowflake import SnowflakeColumn
-from dbt.adapters.snowflake import SnowflakeConnectionManager
-from dbt.adapters.snowflake import SnowflakeRelation
-
-import agate
 
 SHOW_OBJECT_METADATA_MACRO_NAME = "snowflake__show_object_metadata"
 
@@ -152,6 +167,108 @@ class SnowflakeAdapter(SQLAdapter):
         }
     )
 
+    @available.parse_none
+    def plan_table_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[TableMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id != "macro.dbt_snowflake.materialization_table_snowflake"
+        ):
+            return super().plan_table_materialization(materialization_macro_id, language, model)
+        return DirectReplaceTable(
+            statement=MaterializationStatementStrategy.AUTO_BEGIN,
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.table.direct_replace",
+                    detail="Snowflake table materialization replaces the target relation directly",
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_view_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[ViewMaterializationStrategy]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_snowflake.materialization_view_snowflake"
+        ):
+            return super().plan_view_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return DirectReplaceView(
+            statement=MaterializationStatementStrategy.AUTO_BEGIN,
+            incompatible_relation=IncompatibleRelationStrategy.DROP,
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            persist_column_docs=False,
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.view.snowflake",
+                    detail=(
+                        "Snowflake view materialization uses create-or-replace under "
+                        "the adapter query-tag envelope"
+                    ),
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def plan_snapshot_materialization(
+        self,
+        materialization_macro_id: str,
+        language: str,
+        model: Optional[RelationConfig] = None,
+    ) -> Optional[SnapshotMaterializationPlan]:
+        if (
+            language != "sql"
+            or materialization_macro_id
+            != "macro.dbt_snowflake.materialization_snapshot_snowflake"
+        ):
+            return super().plan_snapshot_materialization(
+                materialization_macro_id,
+                language,
+                model,
+            )
+        return SnapshotMaterializationPlan(
+            materialization_macro_id=materialization_macro_id,
+            setup_macro="set_query_tag",
+            teardown_macro="unset_query_tag",
+            provenance=(
+                PlanProvenance(
+                    rule="materialization.snapshot.snowflake",
+                    detail=(
+                        "Snowflake snapshot uses the shared typed lifecycle under "
+                        "the adapter query-tag envelope"
+                    ),
+                ),
+            ),
+        )
+
+    @available
+    def resolve_table_materialization_relation(
+        self, model: RelationConfig, relation: SnowflakeRelation
+    ) -> SnowflakeRelation:
+        catalog_relation = self.build_catalog_relation(model)
+        table_format = (
+            catalog_relation.table_format
+            if catalog_relation is not None
+            else constants.INFO_SCHEMA_TABLE_FORMAT
+        )
+        return relation.incorporate(type="table", table_format=table_format)
+
     _V2_TO_V1_TYPE: ClassVar[Dict[str, str]] = {
         "horizon": "BUILT_IN",
         "glue": "ICEBERG_REST",
@@ -168,7 +285,10 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -188,6 +308,35 @@ class SnowflakeAdapter(SQLAdapter):
             if catalog_type in self._LINKED_DB_TYPE:
                 props["catalog_linked_database_type"] = self._LINKED_DB_TYPE[catalog_type]
         return props
+
+    def get_create_from_query_catalog_provider(
+        self,
+        catalog_relation: CatalogRelation,
+        model: Optional[RelationConfig],
+    ) -> Optional[str]:
+        provider = getattr(catalog_relation, "catalog_linked_database_type", None)
+        return str(provider).casefold() if provider is not None else None
+
+    def get_table_materialization_execution_facts(
+        self,
+        model: RelationConfig,
+        target_relation: SnowflakeRelation,
+    ) -> MaterializationExecutionFacts:
+        capabilities = ["create_or_replace", "query_tag_envelope"]
+        catalog_relation = self.build_catalog_relation(model)
+        if catalog_relation is not None and catalog_relation.table_format == "ICEBERG":
+            capabilities.append("iceberg")
+        provider = (
+            self.get_create_from_query_catalog_provider(catalog_relation, model)
+            if catalog_relation is not None
+            else None
+        )
+        if provider is not None:
+            capabilities.append(f"{provider}_linked_catalog")
+        return MaterializationExecutionFacts(
+            transaction_mode=MaterializationTransactionMode.NONE,
+            capabilities=tuple(capabilities),
+        )
 
     def add_catalog_integration(
         self, catalog_integration: CatalogIntegrationConfig
@@ -257,7 +406,7 @@ class SnowflakeAdapter(SQLAdapter):
 
     def _use_warehouse(self, warehouse: str):
         """Use the given warehouse. Quotes are never applied."""
-        self.execute("use warehouse {}".format(warehouse))
+        self.execute(f"use warehouse {warehouse}")
 
     def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
         default_warehouse = self.config.credentials.warehouse
@@ -276,7 +425,7 @@ class SnowflakeAdapter(SQLAdapter):
         try:
             results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
         except DbtDatabaseError as exc:
-            msg = f"Database error while listing schemas in database " f'"{database}"\n{exc}'
+            msg = f'Database error while listing schemas in database "{database}"\n{exc}'
             raise DbtRuntimeError(msg)
         # this uses 'show terse schemas in database', and the column name we
         # want is 'name'
@@ -508,8 +657,11 @@ class SnowflakeAdapter(SQLAdapter):
             grantee = row["grantee_name"]
             granted_to = row["granted_to"]
             privilege = row["privilege"]
-            if privilege != "OWNERSHIP" and granted_to not in ["SHARE", "DATABASE_ROLE"]:
-                if privilege in grants_dict.keys():
+            if privilege != "OWNERSHIP" and granted_to not in [
+                "SHARE",
+                "DATABASE_ROLE",
+            ]:
+                if privilege in grants_dict:
                     grants_dict[privilege].append(grantee)
                 else:
                     grants_dict.update({privilege: [grantee]})
@@ -619,18 +771,17 @@ CALL {proc_name}();
         }
 
         if config and hasattr(config, "_extra"):
-
             catalog = config._extra.get("catalog")
 
-            if _table_format := config._extra.get("table_format"):  # type:ignore
+            if _table_format := config._extra.get("table_format"):  # type: ignore
                 run_info["table_format"] = _table_format
             elif not catalog:
                 # no table_format and no catalog definitely means info schema table
                 run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
-            elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type:ignore
+            elif catalog == constants.DEFAULT_INFO_SCHEMA_CATALOG.name:  # type: ignore
                 # if the user happens to set the catalog to the info schema catalog, catch that
                 run_info["table_format"] = constants.INFO_SCHEMA_TABLE_FORMAT
-            elif catalog == constants.DEFAULT_ICEBERG_REST_CATALOG.name:  # type:ignore
+            elif catalog == constants.DEFAULT_ICEBERG_REST_CATALOG.name:  # type: ignore
                 # if the user happens to set the catalog to the iceberg rest catalog, catch that
                 run_info["table_format"] = constants.ICEBERG_TABLE_FORMAT
             else:  # catalog is set, and it's not the info schema catalog
@@ -710,7 +861,12 @@ CALL {proc_name}();
             is_transient = self._query_dynamic_table_transient_status(relation)
             # choosing a future proof column name
             selected = selected.compute(
-                [("transient", agate.Formula(agate.Boolean(), lambda row: is_transient))]
+                [
+                    (
+                        "transient",
+                        agate.Formula(agate.Boolean(), lambda row: is_transient),
+                    )
+                ]
             )
 
         return {"dynamic_table": selected}

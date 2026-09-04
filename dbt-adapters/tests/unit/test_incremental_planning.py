@@ -10,6 +10,7 @@ from dbt.adapters.planning import (
     IncrementalMutationFacts,
     IncrementalMutationStrategyOffer,
     IncrementalMutationStrategy,
+    IncrementalPartitionFacts,
     IncrementalSourceConsistency,
     IncrementalStrategyRequirements,
     IncrementalTempRelationType,
@@ -29,6 +30,29 @@ BUILTIN_STRATEGIES = [
     "insert_overwrite",
     "microbatch",
 ]
+
+
+def test_incremental_partition_facts_are_validated_and_serializable():
+    facts = IncrementalPartitionFacts(
+        field="event_id",
+        data_type="int64",
+        range_start=0,
+        range_end=100,
+        range_interval=10,
+        copy_partitions=True,
+        static_partitions=("0", "10"),
+    )
+
+    assert facts.to_dict() == {
+        "field": "event_id",
+        "data_type": "int64",
+        "granularity": None,
+        "range": {"start": 0, "end": 100, "interval": 10},
+        "time_ingestion_partitioning": False,
+        "copy_partitions": True,
+        "require_partition_filter": False,
+        "static_partitions": ["0", "10"],
+    }
 
 
 @pytest.mark.parametrize(
@@ -83,7 +107,32 @@ def test_unsupported_builtin_strategy_is_an_explicit_plan():
         builtin_strategies=BUILTIN_STRATEGIES,
     )
 
-    assert plan.to_dict() == {
+    serialized = plan.to_dict()
+    facts = serialized.pop("facts")
+    assert facts == {
+        "requested_strategy": "merge",
+        "language": "sql",
+        "unique_key_present": False,
+        "requested_temp_relation_type": None,
+        "catalog_staging": "standard",
+        "catalog": {
+            "state": "unbound",
+            "integration_name": None,
+            "catalog_type": None,
+            "catalog_name": None,
+            "catalog_database": None,
+            "catalog_provider": None,
+            "external_volume": None,
+        },
+        "format": {
+            "table_format": None,
+            "file_format": None,
+            "table_provider": None,
+        },
+        "runtime": {"engine": "unknown", "version": None},
+        "capabilities": [],
+    }
+    assert serialized == {
         "requested_strategy": "merge",
         "strategy": "unsupported",
         "renderer_macro": None,
@@ -94,6 +143,7 @@ def test_unsupported_builtin_strategy_is_an_explicit_plan():
                 "detail": "The incremental strategy 'merge' is not valid for this adapter",
             }
         ],
+        "renderer_variant": None,
         "requirements": {
             "unique_key": "optional",
             "source_consistency": "single_evaluation",
@@ -154,6 +204,9 @@ def test_base_adapter_resolver_passes_actual_mutation_facts_to_offers():
             adapter, **kwargs
         ),
         get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
+        get_create_from_query_catalog_provider=lambda catalog_relation, model: (
+            BaseAdapter.get_create_from_query_catalog_provider(adapter, catalog_relation, model)
+        ),
         get_incremental_mutation_strategy_offers=offers,
     )
     catalog_relation = object()
@@ -167,15 +220,18 @@ def test_base_adapter_resolver_passes_actual_mutation_facts_to_offers():
         catalog_relation=catalog_relation,
     )
 
-    assert captured_facts == [
-        IncrementalMutationFacts(
-            requested_strategy="merge",
-            language="python",
-            unique_key_present=True,
-            requested_temp_relation_type="table",
-            catalog_staging=IncrementalCatalogStaging.PERMANENT_TABLE_ONLY,
-        )
-    ]
+    assert len(captured_facts) == 1
+    facts = captured_facts[0]
+    assert facts.requested_strategy == "merge"
+    assert facts.language == "python"
+    assert facts.unique_key_present is True
+    assert facts.requested_temp_relation_type == "table"
+    assert facts.catalog_staging == IncrementalCatalogStaging.PERMANENT_TABLE_ONLY
+    assert facts.catalog.state.value == "resolved"
+    assert facts.catalog.catalog_type == "default"
+    assert facts.format.table_provider is None
+    assert facts.runtime.engine == "unknown"
+    assert plan.facts is facts
     assert plan.temp_relation_type == IncrementalTempRelationType.TABLE
     assert plan.catalog_staging == IncrementalCatalogStaging.PERMANENT_TABLE_ONLY
 
@@ -422,6 +478,42 @@ def test_incremental_facts_reject_invalid_unique_key_columns():
             requested_temp_relation_type=None,
             catalog_relation=None,
         )
+
+
+def test_incremental_facts_retain_explicit_catalog_provider():
+    adapter = SimpleNamespace(
+        get_incremental_catalog_staging=lambda catalog_relation: IncrementalCatalogStaging.STANDARD,
+        get_create_from_query_catalog_provider=lambda catalog_relation, model: (
+            BaseAdapter.get_create_from_query_catalog_provider(
+                adapter,
+                catalog_relation,
+                model,
+            )
+        ),
+    )
+    catalog_relation = SimpleNamespace(
+        catalog_type="iceberg_rest",
+        catalog_name="shared_catalog",
+        catalog_database="analytics",
+        catalog_provider="glue",
+        table_format="iceberg",
+        file_format="parquet",
+        external_volume=None,
+    )
+
+    facts = BaseAdapter.build_incremental_mutation_facts(
+        adapter,
+        requested_strategy="merge",
+        language="sql",
+        unique_key="id",
+        requested_temp_relation_type=None,
+        catalog_relation=catalog_relation,
+    )
+
+    assert facts.catalog.integration_name == "shared_catalog"
+    assert facts.catalog.catalog_provider == "glue"
+    assert facts.format.table_format == "iceberg"
+    assert facts.format.table_provider == "parquet"
 
 
 def test_incremental_plan_carries_resolved_catalog_staging_to_renderer():

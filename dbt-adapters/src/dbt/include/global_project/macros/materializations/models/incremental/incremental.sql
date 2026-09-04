@@ -4,29 +4,13 @@
   -- relations
   {%- set existing_relation = load_cached_relation(this) -%}
   {%- set target_relation = this.incorporate(type='table') -%}
+  {%- set temp_relation = make_temp_relation(target_relation)-%}
   {%- set intermediate_relation = make_intermediate_relation(target_relation)-%}
   {%- set backup_relation_type = 'table' if existing_relation is none else existing_relation.type -%}
   {%- set backup_relation = make_backup_relation(target_relation, backup_relation_type) -%}
 
   -- configs
   {%- set unique_key = config.get('unique_key') -%}
-  {%- set language = model['language'] -%}
-  {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
-  {%- set incremental_strategy = config.get('incremental_strategy') or 'default' -%}
-  {%- set incremental_plan = adapter.plan_incremental_mutation(
-      incremental_strategy,
-      language=language,
-      unique_key=unique_key,
-      requested_temp_relation_type=config.get('tmp_relation_type'),
-      catalog_relation=catalog_relation
-  ) -%}
-  {%- set strategy_sql_macro_func = adapter.get_incremental_plan_macro(context, incremental_plan) -%}
-  {%- set temp_relation = make_temp_relation(target_relation) -%}
-  {%- if incremental_plan.temp_relation_type is not none -%}
-    {%- set temp_relation_object_type = 'table' if incremental_plan.temp_relation_type.value == 'transient' else incremental_plan.temp_relation_type.value -%}
-    {%- set temp_relation = temp_relation.incorporate(type=temp_relation_object_type) -%}
-  {%- endif -%}
-  {%- set staging_is_temporary = incremental_plan.catalog_staging.value != 'permanent_table_only' -%}
   {%- set full_refresh_mode = (should_full_refresh()  or existing_relation.is_view) -%}
   {%- set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') -%}
 
@@ -48,6 +32,9 @@
 
   {% set to_drop = [] %}
 
+  {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
+  {% set strategy_sql_macro_func = adapter.get_incremental_strategy_macro(context, incremental_strategy) %}
+
   {% if existing_relation is none %}
       {% set build_sql = get_create_table_as_sql(False, target_relation, sql) %}
       {% set relation_for_indexes = target_relation %}
@@ -56,7 +43,7 @@
       {% set relation_for_indexes = intermediate_relation %}
       {% set need_swap = true %}
   {% else %}
-    {% do run_query(get_create_table_as_sql(staging_is_temporary, temp_relation, sql)) %}
+    {% do run_query(get_create_table_as_sql(True, temp_relation, sql)) %}
     {% set relation_for_indexes = temp_relation %}
     {% set contract_config = config.get('contract') %}
     {% if not contract_config or not contract_config.enforced %}
@@ -72,15 +59,8 @@
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
     {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
-    {% set strategy_args = adapter.plan_incremental_arguments(
-        target_relation=target_relation,
-        temp_relation=temp_relation,
-        unique_key=unique_key,
-        dest_columns=dest_columns,
-        incremental_predicates=incremental_predicates,
-        adapter_arguments={'catalog_relation': catalog_relation, 'incremental_plan': incremental_plan}
-    ) %}
-    {% set build_sql = strategy_sql_macro_func(strategy_args.to_macro_dict()) %}
+    {% set strategy_arg_dict = ({'target_relation': target_relation, 'temp_relation': temp_relation, 'unique_key': unique_key, 'dest_columns': dest_columns, 'incremental_predicates': incremental_predicates }) %}
+    {% set build_sql = strategy_sql_macro_func(strategy_arg_dict) %}
 
   {% endif %}
 

@@ -1,13 +1,79 @@
+from dbt.adapters.planning import (
+    MaterializationStatementStrategy,
+    MaterializationTransactionMode,
+    MaterializationTransactionStrategy,
+    StageAndSwapView,
+    TableIndexStrategy,
+)
 from dbt.adapters.redshift import RedshiftAdapter
 
 
-def _make_adapter(mocker, default_query_group=None, default_database="dev", use_show_apis=False):
+def _make_adapter(
+    mocker,
+    default_query_group=None,
+    default_database="dev",
+    use_show_apis=False,
+    autocommit=False,
+    flags=None,
+):
     mock_config = mocker.MagicMock()
     mock_config.credentials.query_group = default_query_group
     mock_config.credentials.database = default_database
+    mock_config.credentials.autocommit = autocommit
+    mock_config.flags = flags or {}
     adapter = RedshiftAdapter(mock_config, mocker.MagicMock())
     mocker.patch.object(adapter, "use_show_apis", return_value=use_show_apis)
     return adapter
+
+
+class TestTableMaterializationPlanning:
+    def test_view_uses_typed_stage_and_swap(self, mocker):
+        adapter = _make_adapter(mocker)
+
+        plan = adapter.plan_view_materialization(
+            "macro.dbt_redshift.materialization_view_redshift",
+            "sql",
+        )
+
+        assert isinstance(plan, StageAndSwapView)
+
+    def test_transactional_connection_uses_explicit_stage_and_swap(self, mocker):
+        adapter = _make_adapter(mocker, autocommit=False)
+
+        plan = adapter.plan_table_materialization(
+            "macro.dbt_redshift.materialization_table_redshift",
+            "sql",
+        )
+
+        assert plan.indexes == TableIndexStrategy.AFTER_SWAP
+        assert plan.transaction == MaterializationTransactionStrategy.EXPLICIT_COMMIT
+        assert plan.statement == MaterializationStatementStrategy.AUTO_BEGIN
+        facts = adapter.get_table_materialization_execution_facts(
+            mocker.MagicMock(),
+            mocker.MagicMock(),
+        )
+        assert facts.transaction_mode == MaterializationTransactionMode.TRANSACTIONAL
+
+    def test_autocommit_connection_records_no_transaction_capability(self, mocker):
+        adapter = _make_adapter(
+            mocker,
+            autocommit=True,
+            flags={"redshift_skip_autocommit_transaction_statements": True},
+        )
+
+        plan = adapter.plan_table_materialization(
+            "macro.dbt_redshift.materialization_table_redshift",
+            "sql",
+        )
+
+        assert plan.transaction == MaterializationTransactionStrategy.ADAPTER_MANAGED
+        assert plan.statement == MaterializationStatementStrategy.NO_AUTO_BEGIN
+        facts = adapter.get_table_materialization_execution_facts(
+            mocker.MagicMock(),
+            mocker.MagicMock(),
+        )
+        assert facts.transaction_mode == MaterializationTransactionMode.AUTOCOMMIT
+        assert facts.capabilities == ("skip_autocommit_transaction_statements",)
 
 
 class TestNeedsQueryGroupChange:

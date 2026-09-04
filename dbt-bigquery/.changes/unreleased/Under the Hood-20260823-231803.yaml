@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Route BigQuery SQL incremental merge, insert-overwrite, ingestion-time staging, and partition-copy execution through typed lifecycle plans.
+time: 2026-08-23T23:18:03.850055-04:00
+custom:
+    Author: dataders
+    Issue: "2139"
