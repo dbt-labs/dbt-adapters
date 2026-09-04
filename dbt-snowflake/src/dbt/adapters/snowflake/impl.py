@@ -91,6 +91,28 @@ SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER = BehaviorFlag(
+    name="snowflake_dynamic_table_create_or_alter",
+    default=False,
+    description=(
+        "When enabled, native (info schema) dynamic tables are synced with CREATE OR ALTER "
+        "DYNAMIC TABLE on every run, so edits to the model's SQL are deployed without "
+        "--full-refresh (matching CTAS ergonomics). WARNING: for INCREMENTAL and AUTO refresh "
+        "modes, a definition edit reinitializes the dynamic table (full recompute, incremental "
+        "state discarded) -- this diverges from dbt incremental models, where a logic change "
+        "requires --full-refresh. CREATE OR ALTER does not support every schema change (e.g. "
+        "column reorder, mid-list insert); incompatible edits still require --full-refresh. "
+        "If `transient` is not set explicitly and the effective transient default diverges from "
+        "the live table (the default flag changed, or an explicit `transient` was removed), dbt "
+        "does not detect it and CREATE OR ALTER attempts a transient flip that Snowflake rejects "
+        "-- recover with --full-refresh. "
+        "With on_configuration_change='continue', a run carrying both a config change and a SQL "
+        "edit skips both. Iceberg dynamic tables are unaffected: this adapter does not apply "
+        "CREATE OR ALTER to them yet (they keep create-or-replace behavior). When disabled "
+        "(default), behavior is unchanged."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -176,7 +198,11 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
@@ -700,6 +726,36 @@ CALL {proc_name}();
                 )
             return catalog_integration.build_relation(model)
         return None
+
+    @available
+    def dynamic_table_create_or_alter_enabled(self, model: RelationConfig) -> bool:
+        """Whether the opt-in query-evolution (CREATE OR ALTER) path applies to this model.
+
+        True when the behavior flag is on and the model is a native (info schema) dynamic table.
+        Note: for INCREMENTAL/AUTO dynamic tables a definition edit reinitializes the table (full
+        recompute, incremental state discarded), which diverges from dbt incremental models (where
+        a logic change requires --full-refresh).
+
+        The only exclusion is Iceberg (built_in catalog). Snowflake DOES support
+        `CREATE OR ALTER DYNAMIC ICEBERG TABLE` (added 2026-08-13), but this adapter does not
+        implement that path yet -- it is a deliberate scoping decision, not a platform limit -- so
+        Iceberg dynamic tables keep the standard create-or-replace behavior. Supporting them needs a
+        separate Iceberg COA DDL (external_volume/catalog/base_location) and CI coverage; tracked as
+        follow-up. See https://docs.snowflake.com/en/user-guide/dynamic-tables/modify.
+
+        Args:
+            model (RelationConfig): `config.model` from the jinja context
+        """
+        if not self.behavior.snowflake_dynamic_table_create_or_alter.no_warn:
+            return False
+        catalog_relation = self.build_catalog_relation(model)
+        # Native dynamic tables are INFO_SCHEMA. Iceberg (BUILT_IN) and ICEBERG_REST are excluded by
+        # this positive match: Snowflake supports CREATE OR ALTER DYNAMIC ICEBERG TABLE (2026-08-13),
+        # but this adapter has not implemented that DDL path yet (see follow-up).
+        return (
+            getattr(catalog_relation, "catalog_type", None)
+            == constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type
+        )
 
     @available
     def describe_dynamic_table(
