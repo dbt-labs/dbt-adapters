@@ -5,7 +5,7 @@
     sql
 ) -%}
 
-    {% if configuration_changes.requires_full_refresh %}
+    {% if configuration_changes is not none and configuration_changes.requires_full_refresh %}
         {{- log('Applying full refresh (CREATE OR REPLACE) to: ' ~ existing_relation ~ ' due to changes that require table recreation') -}}
         {{- get_replace_sql(existing_relation, target_relation, sql) -}}
 
@@ -18,7 +18,10 @@
             {{- log('Applying CREATE OR ALTER to: ' ~ existing_relation) -}}
             {{ snowflake__create_or_alter_dynamic_table_info_schema_sql(dynamic_table, target_relation, sql) }}
         {%- elif catalog_relation.catalog_type == 'BUILT_IN' -%}
-            {%- if configuration_changes.refresh_mode -%}
+            {%- if configuration_changes is none -%}
+                {#- Snowflake does not support CREATE OR ALTER for Iceberg dynamic tables. -#}
+                {%- do return('') -%}
+            {%- elif configuration_changes.refresh_mode -%}
                 {#- Snowflake's ALTER DYNAMIC TABLE ... SET does not support refresh_mode -#}
                 {{- log('Applying full refresh (CREATE OR REPLACE) to: ' ~ existing_relation ~ ' because refresh_mode cannot be altered on Iceberg tables') -}}
                 {{- get_replace_sql(existing_relation, target_relation, sql) -}}

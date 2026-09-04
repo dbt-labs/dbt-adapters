@@ -75,11 +75,8 @@ class TestAutoConfigDoesntFullRefresh:
 
         assert_message_not_in_logs(f"create dynamic table {model_qualified_name}", logs)
         assert_message_not_in_logs(f"create or replace dynamic table {model_qualified_name}", logs)
-        assert_message_not_in_logs("refresh_mode = AUTO", logs)
-        assert_message_in_logs(
-            f"No configuration changes were identified on: `{model_qualified_name}`. Continuing.",
-            logs,
-        )
+        assert_message_in_logs(f"create or alter dynamic table {model_qualified_name}", logs)
+        assert_message_in_logs("refresh_mode = AUTO", logs)
 
 
 class TestSchedulerDisabled:
@@ -274,7 +271,7 @@ class _SchedulerNoOpBase:
         insert_record(project, "my_seed", {"id": 4, "value": 400})
 
         _, logs = run_dbt_and_capture(["--debug", "run"])
-        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_in_logs("Applying REFRESH to:", logs, expect_refresh)
 
         refreshed_count = query_row_count(project, relation_name)
@@ -340,7 +337,7 @@ class TestSchedulerEnabledNoOpNoRefresh:
         insert_record(project, "my_seed", {"id": 4, "value": 400})
 
         _, logs = run_dbt_and_capture(["--debug", "run"])
-        assert_message_in_logs("No configuration changes were identified on:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_not_in_logs("Applying REFRESH to:", logs)
 
 

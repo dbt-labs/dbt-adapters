@@ -761,9 +761,8 @@ class TestNoTransientConfigDoesNotRecreateNonTransientTable:
         assert query_transient_status(project, "dynamic_table_default") is False
 
 
-class TestSqlOnlyChangeIsNoop:
-    """Changing only the SQL body (query) must NOT trigger CREATE OR ALTER
-    because configuration change detection does not compare the SQL definition."""
+class TestSqlOnlyChangeUsesCreateOrAlter:
+    """Changing only the SQL body updates a native dynamic table definition."""
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -783,7 +782,7 @@ class TestSqlOnlyChangeIsNoop:
         yield
         project.run_sql(f"drop schema if exists {project.test_schema} cascade")
 
-    def test_sql_only_change_is_noop(self, project):
+    def test_sql_only_change_uses_create_or_alter(self, project):
         fqn = f"{project.database}.{project.test_schema}.dt_sql_only_change"
         run_dbt(["run", "--full-refresh"])
 
@@ -791,13 +790,22 @@ class TestSqlOnlyChangeIsNoop:
         update_model(project, "dt_sql_only_change", models.DYNAMIC_TABLE_EXTRA_COLUMN)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("No configuration changes were identified on:", logs)
-        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs(f"create or alter dynamic table {fqn}", logs)
         assert_message_in_logs(f"create or replace dynamic table {fqn}", logs, expected_pass=False)
 
+        columns = project.run_sql(
+            f"select column_name from information_schema.columns "
+            f"where table_schema = upper('{project.test_schema}') "
+            f"and table_name = upper('dt_sql_only_change')",
+            fetch="all",
+        )
+        column_names = {row[0].upper() for row in columns}
+        assert "EXTRA_COL" in column_names
 
-class _NoChangeIsNoopBase:
-    """Re-running with identical config must NOT trigger CREATE OR ALTER.
+
+class _NoChangeUsesCreateOrAlterBase:
+    """Re-running a native dynamic table uses declarative CREATE OR ALTER.
 
     Subclasses set MODEL_SQL to exercise different cluster_by shapes and catch
     format mismatches between dbt config and SHOW DYNAMIC TABLES output
@@ -828,29 +836,30 @@ class _NoChangeIsNoopBase:
         run_dbt(["run", "--full-refresh"])
         _, logs = run_dbt_and_capture(["--debug"] + dbt_command)
 
-        assert_message_in_logs("No configuration changes were identified on:", logs)
-        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("create or replace dynamic table", logs, expected_pass=False)
 
-    def test_no_change_run_is_noop(self, project):
+    def test_no_change_run_uses_create_or_alter(self, project):
         self._assert_no_change(["run"])
 
-    def test_no_change_build_is_noop(self, project):
+    def test_no_change_build_uses_create_or_alter(self, project):
         self._assert_no_change(["build"])
 
 
-class TestNoChangeFullConfig(_NoChangeIsNoopBase):
+class TestNoChangeFullConfig(_NoChangeUsesCreateOrAlterBase):
     """Full config with cluster_by=["HASH(id)", "id"], initialization_warehouse, scheduler."""
 
     MODEL_SQL = models.DYNAMIC_TABLE_FULL_CONFIG
 
 
-class TestNoChangeClusterBySingleColumn(_NoChangeIsNoopBase):
+class TestNoChangeClusterBySingleColumn(_NoChangeUsesCreateOrAlterBase):
     """Single plain column cluster_by — Snowflake wraps it with LINEAR(...)."""
 
     MODEL_SQL = models.DYNAMIC_TABLE_CLUSTER_BY_SINGLE
 
 
-class TestNoChangeClusterByTwoColumns(_NoChangeIsNoopBase):
+class TestNoChangeClusterByTwoColumns(_NoChangeUsesCreateOrAlterBase):
     """Two plain columns cluster_by — Snowflake wraps them with LINEAR(...)."""
 
     MODEL_SQL = models.DYNAMIC_TABLE_CLUSTER_BY_TWO_COLUMNS
@@ -983,7 +992,7 @@ class TestRowAccessPolicyWithCreateOrAlter:
     Validates that:
     - A config change (target_lag) on a DT with row_access_policy triggers CREATE OR ALTER
     - The CREATE OR ALTER DDL omits the policy (Snowflake error 001506) and succeeds
-    - A policy-only change (no other config change) is a no-op (known limitation)
+    - A policy-only change remains unapplied because CREATE OR ALTER omits policies
     """
 
     @pytest.fixture(scope="class", autouse=True)
@@ -1036,8 +1045,8 @@ class TestRowAccessPolicyWithCreateOrAlter:
         dt_after = describe_dynamic_table(project, "dt_with_policy")
         assert dt_after.target_lag == "5 minutes"
 
-    def test_policy_only_change_is_noop(self, project):
-        """Removing row_access_policy (with no other config change) does NOT trigger a rebuild.
+    def test_policy_only_change_is_not_applied(self, project):
+        """Removing row_access_policy is not applied by CREATE OR ALTER.
 
         TODO: row_access_policy is not tracked by SnowflakeDynamicTableConfigChangeset and
         SHOW DYNAMIC TABLES does not return policy information, so dbt cannot detect
@@ -1047,8 +1056,9 @@ class TestRowAccessPolicyWithCreateOrAlter:
         update_model(project, "dt_with_policy", models.DYNAMIC_TABLE_WITHOUT_ROW_ACCESS_POLICY)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("No configuration changes were identified on:", logs)
-        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("with row access policy", logs, expected_pass=False)
 
 
 class TestTableTagWithCreateOrAlter:
@@ -1104,8 +1114,8 @@ class TestTableTagWithCreateOrAlter:
         dt_after = describe_dynamic_table(project, "dt_with_tag")
         assert dt_after.target_lag == "5 minutes"
 
-    def test_tag_only_change_is_noop(self, project):
-        """Removing table_tag (with no other config change) does NOT trigger a rebuild.
+    def test_tag_only_change_is_not_applied(self, project):
+        """Removing table_tag is not applied by CREATE OR ALTER.
 
         TODO: table_tag is not tracked by SnowflakeDynamicTableConfigChangeset and
         SHOW DYNAMIC TABLES does not return tag information, so dbt cannot detect
@@ -1115,8 +1125,9 @@ class TestTableTagWithCreateOrAlter:
         update_model(project, "dt_with_tag", models.DYNAMIC_TABLE_WITHOUT_TAG)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("No configuration changes were identified on:", logs)
-        assert_message_in_logs("Applying CREATE OR ALTER to:", logs, expected_pass=False)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
+        assert_message_in_logs("create or alter dynamic table", logs)
+        assert_message_in_logs("with tag", logs, expected_pass=False)
 
 
 class TestIcebergClusterByChanges:
