@@ -127,6 +127,7 @@ class SnowflakeCredentials(Credentials):
     retry_on_database_errors: bool = False
     retry_all: bool = False
     insecure_mode: Optional[bool] = False
+    disable_ocsp_checks: Optional[bool] = None
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
@@ -177,6 +178,9 @@ class SnowflakeCredentials(Credentials):
                 "Replaced underscores (_) with hyphens (-) in Snowflake account name to form a valid account URL."
             )
 
+        if self.disable_ocsp_checks is None:
+            self.disable_ocsp_checks = self.insecure_mode
+
         # only default `reuse_connections` to `True` if the user has not turned on `client_session_keep_alive`
         # having both of these set to `True` could lead to hanging open connections, so it should be opt-in behavior
         if self.client_session_keep_alive is False and self.reuse_connections is None:
@@ -214,6 +218,7 @@ class SnowflakeCredentials(Credentials):
             "retry_on_database_errors",
             "retry_all",
             "insecure_mode",
+            "disable_ocsp_checks",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
@@ -465,7 +470,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     autocommit=True,
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
-                    insecure_mode=creds.insecure_mode,
+                    disable_ocsp_checks=creds.disable_ocsp_checks,
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
                     ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
