@@ -229,7 +229,27 @@ class BaseRelation(FakeAPIObject, Hashable):
         )
 
         new_include_policy = self.include_policy.replace_dict(policy)
-        return self.replace(include_policy=new_include_policy)
+        new_relation = self.replace(include_policy=new_include_policy)
+
+        # Clear path components that we're now excluding from rendering, so
+        # that `__eq__` (`to_dict`-based) stays consistent with `__hash__`
+        # (`render`-based). Without this, two relations built from different
+        # originals via `include(..., schema=False, identifier=False)` render
+        # to the same string but compare unequal, defeating `Set` dedup -- see
+        # `RunTask.create_schemas` in dbt-core, which then issues N identical
+        # `list_schemas` queries instead of one per unique database.
+        path_clears = {
+            name: None
+            for name, included in (
+                ("database", database),
+                ("schema", schema),
+                ("identifier", identifier),
+            )
+            if included is False
+        }
+        if path_clears:
+            new_relation = new_relation.replace_path(**path_clears)
+        return new_relation
 
     def information_schema(self, view_name=None) -> "InformationSchema":
         # some of our data comes from jinja, where things can be `Undefined`.
