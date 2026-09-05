@@ -77,6 +77,7 @@
     update_condition,
     insert_condition,
     force_batch,
+    source_sql=none,
     statement_name="main"
   )
 %}
@@ -143,9 +144,17 @@
     {%- if force_batch -%}
       {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
     {%- else -%}
-      {%- set src_part -%}
-          merge into {{ target_relation }} as target using {{ tmp_relation }} as src
-      {%- endset -%}
+      {%- if source_sql is not none -%}
+        {%- set src_part -%}
+            merge into {{ target_relation }} as target using (
+              {{ source_sql }}
+            ) as src
+        {%- endset -%}
+      {%- else -%}
+        {%- set src_part -%}
+            merge into {{ target_relation }} as target using {{ tmp_relation }} as src
+        {%- endset -%}
+      {%- endif -%}
       {%- set merge_full -%}
           {{ src_part }}
           {{ merge_part }}
@@ -154,7 +163,11 @@
       {%- set query_result =  adapter.run_query_with_partitions_limit_catching(merge_full) -%}
       {%- do log('QUERY RESULT: ' ~ query_result) -%}
       {%- if query_result == 'TOO_MANY_OPEN_PARTITIONS' -%}
-        {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
+        {%- if source_sql is not none -%}
+          {% do exceptions.raise_compiler_error("Runtime error: TOO_MANY_OPEN_PARTITIONS encountered with build_strategy='subquery'. Switch to build_strategy='tmp_table' to enable automatic batching.") %}
+        {%- else -%}
+          {% do batch_iceberg_merge(tmp_relation, target_relation, merge_part, dest_cols_csv) %}
+        {%- endif -%}
       {%- endif -%}
     {%- endif -%}
 

@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from dbt.adapters.athena.config import AthenaSparkSessionConfig, get_boto3_config
+from dbt.adapters.athena.impl import AthenaConfig
 
 
 class TestConfig:
@@ -14,6 +15,16 @@ class TestConfig:
         config = get_boto3_config(num_retries=num_boto3_retries)
         assert config._user_provided_options["user_agent_extra"] == "dbt-athena/2.4.6"
         assert config.retries == {"max_attempts": num_boto3_retries, "mode": "standard"}
+
+
+class TestAthenaConfig:
+    def test_build_strategy_default_tmp_table(self):
+        config = AthenaConfig()
+        assert config.build_strategy == "tmp_table"
+
+    def test_build_strategy_set_subquery(self):
+        config = AthenaConfig(build_strategy="subquery")
+        assert config.build_strategy == "subquery"
 
 
 class TestAthenaSparkSessionConfig:
