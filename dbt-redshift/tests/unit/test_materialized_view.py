@@ -108,3 +108,98 @@ def test_redshift_materialized_view_parse_relation_results_handles_multiples_sor
     assert isinstance(config_dict["sort"], dict)
     assert config_dict["sort"]["sortkey"][0] == "my_column"
     assert config_dict["sort"]["sortkey"][1] == "my_column2"
+
+
+def test_redshift_materialized_view_parse_relation_results_dist_config_key_column():
+    """Test that Redshift internal dist columns are handled correctly."""
+
+    materialized_view = agate.Table.from_object(
+        [
+            {
+                "database": "test_db",
+                "schema": "test_schema",
+                "table": "test_view",
+                "diststyle": "KEY(grvar_1)",
+            }
+        ],
+        ["database", "schema", "table", "diststyle"],
+    )
+
+    column_descriptor = agate.Table.from_object(
+        [
+            {
+                "column": "id",
+                "is_dist_key": True,
+                "sort_key_position": 1,
+            },
+            {
+                "column": "other_column",
+                "is_dist_key": False,
+                "sort_key_position": 0,
+            },
+        ],
+        ["column", "is_dist_key", "sort_key_position"],
+    )
+
+    query = agate.Table.from_object(
+        [
+            {
+                "definition": "create materialized view test_view as (select id, other_column from users)"
+            }
+        ],
+        ["definition"],
+    )
+
+    relation_results = {
+        "materialized_view": materialized_view,
+        "columns": column_descriptor,
+        "query": query,
+    }
+
+    config_dict = RedshiftMaterializedViewConfig.parse_relation_results(relation_results)
+    assert isinstance(config_dict["dist"], dict)
+    assert config_dict["dist"]["diststyle"] == "key"
+    assert config_dict["dist"]["distkey"] == "id"
+
+
+def test_redshift_materialized_view_parse_relation_results_dist_config_no_key_column():
+    """Test the distribution style parsing logic in RedshiftMaterializedViewConfig."""
+
+    materialized_view = agate.Table.from_object(
+        [
+            {
+                "database": "test_db",
+                "schema": "test_schema",
+                "table": "test_view",
+                "diststyle": "EVEN",
+            }
+        ],
+        ["database", "schema", "table", "diststyle"],
+    )
+
+    column_descriptor = agate.Table.from_object(
+        [
+            {
+                "column": "id",
+                "is_dist_key": False,
+                "sort_key_position": 1,
+            }
+        ],
+        ["column", "is_dist_key", "sort_key_position"],
+    )
+
+    query = agate.Table.from_object(
+        [{"definition": "create materialized view test_view as (select id from users)"}],
+        ["definition"],
+    )
+
+    relation_results = {
+        "materialized_view": materialized_view,
+        "columns": column_descriptor,
+        "query": query,
+    }
+
+    config_dict = RedshiftMaterializedViewConfig.parse_relation_results(relation_results)
+    assert isinstance(config_dict["dist"], dict)
+    assert config_dict["dist"]["diststyle"] == "even"
+    assert config_dict["dist"].get("distkey") is None
