@@ -1,3 +1,35 @@
+{% macro snowflake__create_csv_table(model, agate_table) %}
+    {#-- Sources is_transient from the same catalog relation the table create path
+         (snowflake__create_table_info_schema_sql) uses, so seeds and tables can't drift. --#}
+    {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+    {%- if catalog_relation.is_transient -%}
+        {%- set transient = 'transient ' -%}
+    {%- else -%}
+        {%- set transient = '' -%}
+    {%- endif -%}
+
+    {%- set column_override = model['config'].get('column_types', {}) -%}
+    {%- set quote_seed_column = model['config'].get('quote_columns', None) -%}
+
+    {% set sql %}
+        create {{ transient }}table {{ this.render() }} (
+            {%- for col_name in agate_table.column_names -%}
+                {%- set inferred_type = adapter.convert_type(agate_table, loop.index0) -%}
+                {%- set type = column_override.get(col_name, inferred_type) -%}
+                {%- set column_name = (col_name | string) -%}
+                {{ adapter.quote_seed_column(column_name, quote_seed_column) }} {{ type }} {%- if not loop.last -%}, {%- endif -%}
+            {%- endfor -%}
+        )
+    {% endset %}
+
+    {% call statement('_') -%}
+        {{ sql }}
+    {%- endcall %}
+
+    {{ return(sql) }}
+{% endmacro %}
+
+
 {% macro snowflake__reset_csv_table(model, full_refresh, old_relation, agate_table) %}
     {#--
         On non-full-refresh seeds, skip the explicit TRUNCATE. INSERT OVERWRITE in
