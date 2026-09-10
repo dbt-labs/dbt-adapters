@@ -103,6 +103,8 @@ INTERACTIVE_TABLE_DYNAMIC_WITHOUT_INIT_WAREHOUSE = INTERACTIVE_TABLE_DYNAMIC
 # --- Compile-time validation fixtures ---
 # Each of these must fail at `dbt run` with a CompilationError before any SQL
 # reaches Snowflake -- see SnowflakeInteractiveTableConfig.parse_relation_config.
+# Exception: INTERACTIVE_TABLE_TRANSIENT_TRUE, below -- `transient` is inert for
+# interactive tables rather than rejected, so it builds successfully.
 
 INTERACTIVE_TABLE_MISSING_CLUSTER_BY = """
 {{ config(

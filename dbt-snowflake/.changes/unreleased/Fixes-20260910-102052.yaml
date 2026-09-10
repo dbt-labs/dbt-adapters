@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop rejecting transient=true for interactive_table -- it is a no-op for this materialization (like change_tracking), so a project-wide +transient default no longer breaks every interactive_table model
+time: 2026-09-10T10:20:52.440362+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: "0"
