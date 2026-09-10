@@ -3,7 +3,7 @@ Functional tests for the CREATE OR ALTER dynamic table path (query evolution).
 
 Behavior flag `snowflake_dynamic_table_create_or_alter` makes any native (info schema) dynamic
 table sync its definition in place on every run, so a SQL edit deploys without --full-refresh
-(matching CTAS ergonomics). For INCREMENTAL/AUTO refresh modes a definition edit reinitializes the
+(matching CTAS expirience). For INCREMENTAL/AUTO refresh modes a definition edit reinitializes the
 table (incremental state discarded). Iceberg dynamic tables are excluded (this adapter does not
 apply CREATE OR ALTER to them yet). These require a live Snowflake connection.
 
