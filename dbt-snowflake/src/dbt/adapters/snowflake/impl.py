@@ -115,7 +115,7 @@ SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER = BehaviorFlag(
     description=(
         "When enabled, native (info schema) dynamic tables are synced with CREATE OR ALTER "
         "DYNAMIC TABLE on every run, so edits to the model's SQL are deployed without "
-        "--full-refresh (matching CTAS ergonomics). WARNING: for INCREMENTAL and AUTO refresh "
+        "--full-refresh (matching CTAS expirience). WARNING: for INCREMENTAL and AUTO refresh "
         "modes, a definition edit reinitializes the dynamic table (full recompute, incremental "
         "state discarded) -- this diverges from dbt incremental models, where a logic change "
         "requires --full-refresh. CREATE OR ALTER does not support every schema change (e.g. "
