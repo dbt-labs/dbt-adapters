@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'Correct the interactive_table cluster_by compilation-error message: every entry must be non-blank, not just one'
+time: 2026-09-10T10:19:41.735075+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: "0"
