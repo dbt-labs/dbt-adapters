@@ -72,9 +72,12 @@ class TestCompileValidation:
         results = run_dbt(["run", "--select", "it_iceberg_format"], expect_pass=False)
         assert "do not support `table_format: iceberg`" in results[0].message
 
-    def test_transient_true_raises_compilation_error(self, project):
-        results = run_dbt(["run", "--select", "it_transient_true"], expect_pass=False)
-        assert "transient=true is not supported for interactive_table models" in results[0].message
+    def test_transient_true_is_inert(self, project):
+        """`transient` has no valid DDL for interactive tables and is never emitted, so
+        it no longer raises -- including when it's inherited from a project-wide
+        `+transient` default rather than set on the model itself."""
+        run_dbt(["run", "--select", "it_transient_true"])
+        assert query_relation_type(project, "it_transient_true") == "interactive_table"
 
     def test_target_lag_without_warehouse_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_target_lag_no_warehouse"], expect_pass=False)

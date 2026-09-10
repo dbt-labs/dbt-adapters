@@ -119,13 +119,14 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
                 f"{relation_config.identifier}"
             )
 
-        if extra.get("transient"):
-            raise CompilationError(
-                f"transient=true is not supported for interactive_table models; "
-                f"`TRANSIENT INTERACTIVE TABLE` is a Snowflake syntax error (001003). "
-                f"Set `transient: false` on this model to override an inherited value: "
-                f"{relation_config.identifier}"
-            )
+        # `transient` has no valid DDL for interactive tables (`TRANSIENT INTERACTIVE
+        # TABLE` is a Snowflake syntax error, 001003), so it's treated like
+        # `change_tracking`: accepted but inert, since it's never emitted for this
+        # materialization either way. Not rejected here on purpose -- there's no way to
+        # tell an explicit per-model `transient: true` from one inherited via a
+        # project-wide `+transient` default post config-merge, so erroring would also
+        # reject the common case of a default reaching a model that never mentions
+        # `transient` at all.
 
         target_lag = extra.get("target_lag")
         warehouse = _non_blank(extra.get("refresh_warehouse")) or _non_blank(

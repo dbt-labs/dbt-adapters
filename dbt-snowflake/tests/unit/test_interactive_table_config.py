@@ -559,10 +559,12 @@ def test_iceberg_table_format_raises():
         SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
 
 
-def test_transient_raises():
+def test_transient_true_does_not_raise():
+    """`transient` has no valid DDL for interactive tables and is never emitted, so it's
+    inert (like `change_tracking`) rather than rejected -- including when it's inherited
+    from a project-wide `+transient` default rather than set on the model itself."""
     relation_config = model_config(transient=True)
-    with pytest.raises(CompilationError, match="transient"):
-        SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
+    SnowflakeInteractiveTableConfig.parse_relation_config(relation_config)
 
 
 def test_target_lag_without_warehouse_raises():
