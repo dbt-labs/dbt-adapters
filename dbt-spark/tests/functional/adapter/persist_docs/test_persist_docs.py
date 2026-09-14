@@ -59,6 +59,15 @@ class TestPersistDocsDeltaTable:
             },
         }
 
+    @pytest.mark.flaky(
+        reruns=3,
+        reruns_delay=5,
+        reason=(
+            "Databricks CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND "
+            "right after a create/seed it just completed (read-after-write lag), "
+            "surfacing at different statements across runs."
+        ),
+    )
     def test_delta_comments(self, project):
         run_dbt(["seed"])
         run_dbt(["run"])
@@ -107,6 +116,15 @@ class TestPersistDocsDeltaView:
             },
         }
 
+    @pytest.mark.flaky(
+        reruns=3,
+        reruns_delay=5,
+        reason=(
+            "Databricks CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND "
+            "right after a create/seed it just completed (read-after-write lag), "
+            "surfacing at different statements across runs."
+        ),
+    )
     def test_delta_comments(self, project):
         run_dbt(["run"])
 
