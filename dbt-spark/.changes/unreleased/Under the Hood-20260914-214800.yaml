@@ -1,6 +1,0 @@
-kind: Under the Hood
-body: Retry the describe extended read-back in TestPersistDocsDeltaTable/TestPersistDocsDeltaView::test_delta_comments on TABLE_OR_VIEW_NOT_FOUND, caused by intermittent read-after-write lag on the Databricks CI warehouse rather than a client bug
-time: 2026-09-14T21:48:00.000000-00:00
-custom:
-    Author: itsnamangoyal
-    Issue: "N/A"
