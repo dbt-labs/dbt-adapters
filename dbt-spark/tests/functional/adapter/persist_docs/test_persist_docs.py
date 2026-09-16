@@ -1,4 +1,5 @@
 import pytest
+from tenacity import retry, retry_if_exception_message, stop_after_attempt, wait_fixed
 
 from dbt.tests.adapter.persist_docs.test_persist_docs import (
     BasePersistDocsAllColumnsMissing,
@@ -19,6 +20,22 @@ from fixtures import (
     _MODELS__VIEW_DELTA_MODEL,
     _VIEW_PROPERTIES_MODELS,
 )
+
+
+# Databricks' CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND on a
+# `describe extended` issued right after the create/seed that produced the
+# relation (read-after-write lag), so only this read-back gets retried.
+@retry(
+    retry=retry_if_exception_message(match=".*TABLE_OR_VIEW_NOT_FOUND.*"),
+    stop=stop_after_attempt(4),
+    wait=wait_fixed(5),
+    reraise=True,
+)
+def _describe_extended(project, relation):
+    return project.run_sql(
+        "describe extended {schema}.{table}".format(schema=project.test_schema, table=relation),
+        fetch="all",
+    )
 
 
 @pytest.mark.skip_profile("apache_spark", "spark_session")
@@ -59,15 +76,6 @@ class TestPersistDocsDeltaTable:
             },
         }
 
-    @pytest.mark.flaky(
-        reruns=3,
-        reruns_delay=5,
-        reason=(
-            "Databricks CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND "
-            "right after a create/seed it just completed (read-after-write lag), "
-            "surfacing at different statements across runs."
-        ),
-    )
     def test_delta_comments(self, project):
         run_dbt(["seed"])
         run_dbt(["run"])
@@ -77,12 +85,7 @@ class TestPersistDocsDeltaTable:
             ("seed", "Seed"),
             ("incremental_delta_model", "Incremental"),
         ]:
-            results = project.run_sql(
-                "describe extended {schema}.{table}".format(
-                    schema=project.test_schema, table=table
-                ),
-                fetch="all",
-            )
+            results = _describe_extended(project, table)
 
             for result in results:
                 if result[0] == "Comment":
@@ -116,24 +119,10 @@ class TestPersistDocsDeltaView:
             },
         }
 
-    @pytest.mark.flaky(
-        reruns=3,
-        reruns_delay=5,
-        reason=(
-            "Databricks CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND "
-            "right after a create/seed it just completed (read-after-write lag), "
-            "surfacing at different statements across runs."
-        ),
-    )
     def test_delta_comments(self, project):
         run_dbt(["run"])
 
-        results = project.run_sql(
-            "describe extended {schema}.{table}".format(
-                schema=project.test_schema, table="view_delta_model"
-            ),
-            fetch="all",
-        )
+        results = _describe_extended(project, "view_delta_model")
 
         for result in results:
             if result[0] == "Comment":

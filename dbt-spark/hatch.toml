@@ -21,8 +21,8 @@ dependencies = [
     "pytest-csv~=3.0",
     "pytest-dotenv",
     "pytest-mock",
-    "pytest-rerunfailures",
     "pytest-xdist",
+    "tenacity",
 ]
 features=["all"]
 
@@ -74,8 +74,8 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-mock",
-    "pytest-rerunfailures",
     "pytest-xdist",
+    "tenacity",
 ]
 features=["all"]
 
@@ -94,8 +94,8 @@ dependencies = [
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "pytest-mock",
-    "pytest-rerunfailures",
     "pytest-xdist",
+    "tenacity",
 ]
 features=["all"]
 
