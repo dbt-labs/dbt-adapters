@@ -1,0 +1,6 @@
+kind: Fixes
+body: Prevent snapshot helper columns from being persisted for list-valued unique keys
+time: 2026-07-31T14:43:31.078436+02:00
+custom:
+    Author: giacus
+    Issue: "2101"
