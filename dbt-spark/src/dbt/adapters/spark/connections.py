@@ -51,6 +51,7 @@ import time
 logger = AdapterLogger("Spark")
 
 NUMBERS = DECIMALS + (int, float)
+CATALOG_ALIAS_MARKER = "__dbt_spark_catalog_provided"
 
 # Exception types that indicate a lost connection during query polling
 # Built once at module load time to avoid reconstructing on every poll
@@ -108,11 +109,28 @@ class SparkCredentials(Credentials):
     query_timeout: Optional[int] = None
     poll_interval: int = 5  # Polling interval in seconds for async queries
     query_retries: int = 1  # Number of times to retry on connection loss during query execution
+    _ALIASES = {"catalog": "database"}
+
+    @classmethod
+    def translate_aliases(cls, kwargs: Dict[str, Any], recurse: bool = False) -> Dict[str, Any]:
+        # Profiles translate aliases before Credentials.from_dict runs. Preserve
+        # whether catalog was explicit so the legacy database == schema shape
+        # can remain a two-part identifier.
+        catalog_provided = kwargs.get(CATALOG_ALIAS_MARKER, False) or "catalog" in kwargs
+        translated = super().translate_aliases(kwargs, recurse)
+        if catalog_provided:
+            translated[CATALOG_ALIAS_MARKER] = True
+        return translated
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
         data = super().__pre_deserialize__(data)
+        catalog_provided = data.pop(CATALOG_ALIAS_MARKER, False)
         if "database" not in data:
+            data["database"] = None
+        elif not catalog_provided and data["database"] == data.get("schema"):
+            # Before three-part support, this was the only accepted value for
+            # database and SparkCredentials always discarded it.
             data["database"] = None
         return data
 
@@ -128,15 +146,10 @@ class SparkCredentials(Credentials):
         if self.schema is None:
             raise DbtRuntimeError("Must specify `schema` in profile")
 
-        # spark classifies database and schema as the same thing
-        if self.database is not None and self.database != self.schema:
-            raise DbtRuntimeError(
-                f"    schema: {self.schema} \n"
-                f"    database: {self.database} \n"
-                f"On Spark, database must be omitted or have the same value as"
-                f" schema."
-            )
-        self.database = None
+        if self.database is not None:
+            self.database = self.database.strip()
+            if not self.database:
+                raise DbtConfigError("Catalog cannot be empty")
 
         if self.method == SparkConnectionMethod.ODBC:
             try:
@@ -199,7 +212,7 @@ class SparkCredentials(Credentials):
         return self.host  # type: ignore
 
     def _connection_keys(self) -> Tuple[str, ...]:
-        return "host", "port", "cluster", "endpoint", "schema", "organization"
+        return "host", "port", "cluster", "endpoint", "database", "schema", "organization"
 
 
 class SparkConnectionWrapper(ABC):
