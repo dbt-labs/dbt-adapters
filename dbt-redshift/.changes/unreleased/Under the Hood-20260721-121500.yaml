@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Remove dead transaction_open restoration code in fresh_transaction()/fresh_transaction_without_lock(), superseded by the generic fix in execute()'s retry handler
+time: 2026-07-21T12:15:00.000000+05:30
+custom:
+    Author: namangoyal
+    Issue: "626"
