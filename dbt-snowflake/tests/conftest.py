@@ -24,6 +24,8 @@ def dbt_profile_target():
         profile["authenticator"] = authenticator
         if os.getenv("SNOWFLAKE_TEST_TOKEN"):
             profile["token"] = os.getenv("SNOWFLAKE_TEST_TOKEN")
+    if os.getenv("SNOWFLAKE_TEST_ROLE"):
+        profile["role"] = os.getenv("SNOWFLAKE_TEST_ROLE")
     if os.getenv("SNOWFLAKE_TEST_USER"):
         profile["user"] = os.getenv("SNOWFLAKE_TEST_USER")
     if os.getenv("SNOWFLAKE_TEST_PASSWORD"):
