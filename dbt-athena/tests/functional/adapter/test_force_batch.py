@@ -42,6 +42,42 @@ from (
 cross join unnest(date_array) as t2(date_column)
 """
 
+models_unpartitioned_force_batch_sql = """
+{{ config(
+        materialized='table',
+        force_batch=true
+    )
+}}
+
+select
+    random() as rnd,
+    id
+from (
+    values (sequence(1, 10))
+) as t1(id_array)
+cross join unnest(id_array) as t2(id)
+"""
+
+models_unpartitioned_merge_force_batch_sql = """
+{{ config(
+        table_type='iceberg',
+        materialized='incremental',
+        incremental_strategy='merge',
+        unique_key=['id'],
+        force_batch=true
+    )
+}}
+{% if is_incremental() %}
+    select 1 as rnd, id
+    from (values (sequence(1, 10))) as t1(id_array)
+    cross join unnest(id_array) as t2(id)
+{% else %}
+    select 2 as rnd, id
+    from (values (sequence(1, 10))) as t1(id_array)
+    cross join unnest(id_array) as t2(id)
+{% endif %}
+"""
+
 models_merge_force_batch_sql = """
 {{ config(
         table_type='iceberg',
@@ -113,6 +149,58 @@ class TestAppendForceBatch:
 
         models_records_count = project.run_sql(model_run_result_row_count_query, fetch="all")[0][0]
         assert models_records_count == 212
+
+
+class TestUnpartitionedForceBatch:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"models_unpartitioned_force_batch.sql": models_unpartitioned_force_batch_sql}
+
+    def test__unpartitioned_force_batch(self, project):
+        relation_name = "models_unpartitioned_force_batch"
+        model_run_result_row_count_query = (
+            f"select count(*) as records from {project.test_schema}.{relation_name}"
+        )
+
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        models_records_count = project.run_sql(model_run_result_row_count_query, fetch="all")[0][0]
+        assert models_records_count == 10
+
+
+class TestUnpartitionedMergeForceBatch:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "models_unpartitioned_merge_force_batch.sql": models_unpartitioned_merge_force_batch_sql
+        }
+
+    def test__unpartitioned_merge_force_batch(self, project):
+        relation_name = "models_unpartitioned_merge_force_batch"
+        model_run_result_row_count_query = (
+            f"select count(*) as records from {project.test_schema}.{relation_name}"
+        )
+        model_run_result_distinct_query = (
+            f"select distinct rnd from {project.test_schema}.{relation_name}"
+        )
+
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        model_update = run_dbt(["run", "--select", relation_name])
+        model_update_result = model_update.results[0]
+        assert model_update_result.status == RunStatus.Success
+
+        models_records_count = project.run_sql(model_run_result_row_count_query, fetch="all")[0][0]
+        assert models_records_count == 10
+
+        models_distinct_records = project.run_sql(model_run_result_distinct_query, fetch="all")[0][
+            0
+        ]
+        assert models_distinct_records == 1
 
 
 class TestMergeForceBatch:
