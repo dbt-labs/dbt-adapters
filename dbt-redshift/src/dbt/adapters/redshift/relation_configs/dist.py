@@ -110,7 +110,9 @@ class RedshiftDistConfig(RedshiftRelationConfigBase, RelationConfigValidationMix
         return config
 
     @classmethod
-    def parse_relation_results(cls, relation_results_entry: "agate.Row") -> Dict:
+    def parse_relation_results(
+        cls, relation_results_entry: "agate.Row", dist_column: Optional["agate.Row"] = None
+    ) -> Dict:
         """
         Translate agate objects from the database into a standard dictionary.
 
@@ -119,6 +121,13 @@ class RedshiftDistConfig(RedshiftRelationConfigBase, RelationConfigValidationMix
 
                 agate.Row({
                     "diststyle": "<diststyle/distkey>",  # e.g. EVEN | KEY(column1) | AUTO(ALL) | AUTO(KEY(id))
+                })
+            dist_column: the description of the distkey from the database in this format:
+
+                agate.Row({
+                    "column": "<column_name>",
+                    "is_dist_key": True,
+                    "sort_key_position": 1,
                 })
 
         Returns: a standard dictionary describing this `RedshiftDistConfig` instance
@@ -135,10 +144,8 @@ class RedshiftDistConfig(RedshiftRelationConfigBase, RelationConfigValidationMix
         if dist == "":
             config = {}
 
-        elif diststyle == RedshiftDistStyle.key:
-            open_paren = len("KEY(")
-            close_paren = -len(")")
-            distkey = dist[open_paren:close_paren]  # e.g. KEY(column1)
+        elif diststyle == RedshiftDistStyle.key and dist_column:
+            distkey = dist_column.get("column")
             config = {"diststyle": diststyle, "distkey": distkey}
 
         else:
