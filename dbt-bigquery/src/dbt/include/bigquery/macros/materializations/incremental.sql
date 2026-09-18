@@ -75,9 +75,10 @@
   {%- set full_refresh_mode = (should_full_refresh()) -%}
   {%- set language = model['language'] %}
 
+  {#-- Validate before pre-hooks, scratch creation, or any type/full-refresh drop. --#}
+  {% do adapter.validate_lakehouse_target(config, model, language) %}
   {%- set target_relation = this %}
   {%- set existing_relation = load_relation(this) %}
-  {%- set tmp_relation = make_temp_relation(this) %}
 
   {#-- Validate early so we don't run SQL if the strategy is invalid --#}
   {% set strategy = dbt_bigquery_validate_get_incremental_strategy(config) -%}
@@ -114,8 +115,10 @@
       {%- endcall -%}
 
   {% elif full_refresh_mode %}
-      {#-- If the partition/cluster config has changed, then we must drop and recreate --#}
-      {% if not adapter.is_replaceable(existing_relation, partition_by, cluster_by) %}
+      {#-- If the partition/cluster config has changed, then we must drop and recreate.
+           Lakehouse tables always report replaceable but reject a changed partition
+           spec server-side, so full refresh must pre-drop to be a real recovery path --#}
+      {% if not adapter.is_replaceable(existing_relation, partition_by, cluster_by) or existing_relation.is_lakehouse %}
           {% do log("Hard refreshing " ~ existing_relation ~ " because it is not replaceable") %}
           {{ adapter.drop_relation(existing_relation) }}
       {% endif %}
@@ -131,6 +134,14 @@
       {%- endset %}
       {% do exceptions.raise_compiler_error(python_unsupported_msg) %}
     {%- endif -%}
+
+    {#-- Construct a scratch relation only for paths that materialize one. --#}
+    {% set needs_tmp_relation = on_schema_change != 'ignore' or language == 'python' %}
+    {% if strategy in ['insert_overwrite', 'microbatch'] and
+          (partition_by.copy_partitions or partitions is none or partitions == []) %}
+      {% set needs_tmp_relation = true %}
+    {% endif %}
+    {% set tmp_relation = make_temp_relation(this) if needs_tmp_relation else none %}
 
     {% set tmp_relation_exists = false %}
     {% if on_schema_change != 'ignore' or language == 'python' %}
