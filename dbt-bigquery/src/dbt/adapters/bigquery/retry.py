@@ -98,6 +98,17 @@ class RetryFactory:
             .with_delay(initial=5.0, maximum=60.0, multiplier=2.0)
         )
 
+    def create_copy_job_retry(self) -> Retry:
+        """
+        Job-level retry for copy jobs.
+        Callers are expected to mint the job_id inside the retried closure.
+        """
+        return (
+            DEFAULT_JOB_RETRY.with_predicate(_DeferredException(self._retries))
+            .with_deadline(self._job_deadline or _DEFAULT_POLLING_RETRY_DEADLINE)
+            .with_delay(initial=2.0, maximum=60.0, multiplier=2.0)
+        )
+
 
 class _DeferredException:
     """

@@ -24,6 +24,7 @@ from tests.functional.adapter.incremental.incremental_strategy_fixtures import (
     overwrite_day_with_copy_partitions_sql,
     overwrite_partitions_sql,
     overwrite_copy_partitions_with_partitions_sql,
+    overwrite_copy_partitions_concurrent_sql,
     overwrite_range_sql,
     overwrite_range_with_interval_sql,
     overwrite_range_with_require_partition_sql,
@@ -50,6 +51,7 @@ class TestBigQueryScripting(SeedConfigBase):
             "incremental_overwrite_day_with_copy_partitions.sql": overwrite_day_with_copy_partitions_sql,
             "incremental_overwrite_partitions.sql": overwrite_partitions_sql,
             "incremental_overwrite_copy_partitions_with_partitions.sql": overwrite_copy_partitions_with_partitions_sql,
+            "incremental_overwrite_copy_partitions_concurrent.sql": overwrite_copy_partitions_concurrent_sql,
             "incremental_overwrite_range.sql": overwrite_range_sql,
             "incremental_overwrite_range_with_interval.sql": overwrite_range_with_interval_sql,
             "incremental_overwrite_range_with_require_partition.sql": overwrite_range_with_require_partition_sql,
@@ -89,6 +91,10 @@ class TestBigQueryScripting(SeedConfigBase):
             ("incremental_overwrite_partitions", "incremental_overwrite_date_expected"),
             (
                 "incremental_overwrite_copy_partitions_with_partitions",
+                "incremental_overwrite_date_expected",
+            ),
+            (
+                "incremental_overwrite_copy_partitions_concurrent",
                 "incremental_overwrite_date_expected",
             ),
             ("incremental_overwrite_day", "incremental_overwrite_day_expected"),
