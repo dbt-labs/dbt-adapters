@@ -208,3 +208,21 @@ class TestSparkMacros(unittest.TestCase):
             sql,
             "create table my_table using hudi partitioned by (partition_1,partition_2) clustered by (cluster_1,cluster_2) into 1 buckets location '/mnt/root/my_table' comment 'Description Test' as select 1",
         )
+
+    def test_list_relations_without_caching_uses_relation_not_schema_attr(self):
+        """Regression for dbt-labs/dbt-adapters#480.
+
+        Callers (and spark-utils) may pass a schema/database name string. Using
+        relation.schema then yields an empty namespace and invalid Spark SQL.
+        """
+        with open("src/dbt/include/spark/macros/adapters.sql") as handle:
+            adapters_src = handle.read()
+
+        self.assertIn("show table extended in {{ relation }} like '*'", adapters_src)
+        self.assertNotIn(
+            "show table extended in {{ relation.schema }} like '*'", adapters_src
+        )
+        self.assertIn("show tables in {{ schema_relation }} like '*'", adapters_src)
+        self.assertNotIn(
+            "show tables in {{ schema_relation.schema }} like '*'", adapters_src
+        )
