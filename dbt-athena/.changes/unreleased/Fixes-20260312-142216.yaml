@@ -1,0 +1,6 @@
+kind: Fixes
+body: Create empty target table when no partition batches found
+time: 2026-03-12T14:22:16.621531+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1748"
