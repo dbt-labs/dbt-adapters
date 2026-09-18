@@ -1,0 +1,8 @@
+kind: Fixes
+body: A nested `null` inside a dict or list column in a unit test fixture was rendered
+  as Python's `None` instead of `null`, producing invalid syntax in Snowflake's
+  object/array constructor literals
+time: 2026-08-29T12:10:00.000000-05:00
+custom:
+  Author: afonsojanu
+  Issue: "15530"
