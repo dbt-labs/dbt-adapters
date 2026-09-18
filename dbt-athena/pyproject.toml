@@ -38,6 +38,11 @@ dependencies=[
     "pydantic>=1.10,<3.0",
     "tenacity>=8.2,<10.0",
 ]
+[project.optional-dependencies]
+# setuptools provides the distutils shim that pyspark 3.5 still imports
+# (removed from stdlib in Python 3.12, PEP 632).
+spark_connect = ["pyspark[connect]>=3.5.6,<3.6", "setuptools"]
+
 [project.urls]
 Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-athena"
 Documentation = "https://docs.getdbt.com"

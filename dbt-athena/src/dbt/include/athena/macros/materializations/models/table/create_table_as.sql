@@ -105,7 +105,8 @@
           'write_compression': write_compression,
           'bucket_count': bucket_count,
           'field_delimiter': field_delimiter,
-          'spark_ctas': spark_ctas
+          'spark_ctas': spark_ctas,
+          'spark_engine_version': config.get('spark_engine_version'),
         }
       )
     }}

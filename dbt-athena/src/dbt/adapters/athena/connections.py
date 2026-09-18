@@ -73,9 +73,17 @@ Row: TypeAlias = Tuple[Cell, ...]
 ColumnMetadata: TypeAlias = Tuple[str, str, None, None, None, None, None]
 
 
+def _is_int_at_least(value: Any, minimum: int) -> bool:
+    try:
+        return int(value) >= minimum
+    except (TypeError, ValueError):
+        return False
+
+
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
+    spark_session_id: Optional[str] = None
 
 
 @dataclass
@@ -104,12 +112,40 @@ class AthenaCredentials(Credentials):
     s3_data_dir: Optional[str] = None
     s3_data_naming: str = "schema_table_unique"
     spark_work_group: Optional[str] = None
+    spark_connect_max_sessions: Optional[int] = None
+    spark_connect_session_concurrency: Optional[int] = None
+    spark_connect_dpu_budget: Optional[int] = None
+    spark_connect_pool_acquire_timeout: Optional[int] = None
+    spark_connect_max_retries: Optional[int] = None
     s3_tmp_table_dir: Optional[str] = None
     # Unfortunately we can not just use dict, must be Dict because we'll get the following error:
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
     connection_manager: str = "api"
+
+    def __post_init__(self) -> None:
+        # Validate Spark Connect integer fields at profile load so a typo
+        # cannot wait until a python model is submitted to surface.
+        # max_retries allows 0 (= no retries, single attempt); other knobs
+        # are counts/sizes/timeouts where 0 has no meaning.
+        for field_name, minimum in (
+            ("spark_connect_max_sessions", 1),
+            ("spark_connect_session_concurrency", 1),
+            ("spark_connect_dpu_budget", 1),
+            ("spark_connect_pool_acquire_timeout", 1),
+            ("spark_connect_max_retries", 0),
+        ):
+            raw = getattr(self, field_name)
+            if raw is None:
+                continue
+            if not _is_int_at_least(raw, minimum):
+                bound = "non-negative" if minimum == 0 else "positive"
+                raise DbtRuntimeError(
+                    f"{field_name} must be a {bound} integer (got {raw!r}). "
+                    "Omit the field to use the default."
+                )
+            setattr(self, field_name, int(raw))
 
     @property
     def type(self) -> str:
@@ -158,6 +194,11 @@ class AthenaCredentials(Credentials):
             "schema",
             "seed_s3_upload_args",
             "skip_workgroup_check",
+            "spark_connect_dpu_budget",
+            "spark_connect_max_retries",
+            "spark_connect_max_sessions",
+            "spark_connect_pool_acquire_timeout",
+            "spark_connect_session_concurrency",
             "spark_work_group",
             "work_group",
         )
@@ -778,6 +819,21 @@ class AthenaConnectionManager(SQLConnectionManager):
                 LOGGER.debug(f"There was an error parsing query stats {err}")
                 return -1, 0
         return cursor.rowcount, cursor.data_scanned_in_bytes
+
+    def cleanup_all(self) -> None:
+        # Release DPUs immediately instead of waiting for the 10-min idle timeout.
+        from dbt_common.invocation import get_invocation_id
+
+        from dbt.adapters.athena.spark_connect.session import (
+            SparkConnectSessionPool,
+        )
+
+        # Scope to this invocation; the singleton is shared across invocations
+        # in dbt Cloud workers and test harnesses.
+        try:
+            SparkConnectSessionPool().terminate_by_invocation(get_invocation_id())
+        finally:
+            super().cleanup_all()
 
     def cancel(self, connection: Connection) -> None:
         if connection.handle:
