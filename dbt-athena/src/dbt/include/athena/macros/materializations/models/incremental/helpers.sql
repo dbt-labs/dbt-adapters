@@ -29,6 +29,82 @@
 {% endmacro %}
 
 
+{% macro validate_get_tmp_relation_type(strategy, table_type, force_batch, language) %}
+  {%- set tmp_relation_type = config.get('tmp_relation_type') -%}
+  {%- if tmp_relation_type is not none -%}
+    {%- set tmp_relation_type = tmp_relation_type | lower -%}
+  {%- endif -%}
+  /* {#
+       Staging the model query as a view avoids writing the data twice
+       (once into a temporary table, then again by the merge/insert into the
+       target). A view is only safe when the staged data is read by a single
+       statement; strategies or options that read it multiple times
+       (insert_overwrite, force_batch) require a physical table so every read
+       sees identical data.
+
+       The default is 'table' to preserve backward-compatible behavior; set
+       tmp_relation_type to 'view' to opt in for merge and append models.
+       The config name mirrors dbt-trino and dbt-snowflake. Note that Athena
+       views cannot hold some types, such as 'timestamp(6)' or
+       'timestamp with time zone' — cast those columns (e.g. to
+       'timestamp(3)') or keep 'table'.
+  #} */
+
+  {% if tmp_relation_type is not none and tmp_relation_type not in ['table', 'view'] %}
+    {% do exceptions.raise_compiler_error(
+      "Invalid tmp_relation_type provided: " ~ tmp_relation_type ~ ". Expected one of: 'table', 'view'"
+    ) %}
+  {% endif %}
+
+  {% if tmp_relation_type == 'view' %}
+    {% if language != 'sql' %}
+      {% do exceptions.raise_compiler_error(
+        "Python models only support 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+    {% if strategy == 'insert_overwrite' %}
+      {% do exceptions.raise_compiler_error(
+        "The 'insert_overwrite' strategy runs multiple statements against the staged data
+        and only supports 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+    {% if force_batch %}
+      {% do exceptions.raise_compiler_error(
+        "force_batch processes the staged data in multiple statements
+        and only supports 'table' for tmp_relation_type, but 'view' was specified."
+      ) %}
+    {% endif %}
+  {% endif %}
+
+  {% if tmp_relation_type == 'view' %}
+    {% do return('view') %}
+  {% else %}
+    {% do return('table') %}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro stage_incremental_tmp_relation(tmp_relation, tmp_relation_type, compiled_code, model_language, force_batch) %}
+  /* {#
+       Creates the staging relation for an incremental run and returns it.
+  #} */
+  {% if tmp_relation_type == 'view' %}
+    {%- call statement('create_tmp_relation') -%}
+      {{ create_view_as(tmp_relation, compiled_code) }}
+    {%- endcall -%}
+    {% do return(tmp_relation) %}
+  {% endif %}
+
+  {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) %}
+  {%- if model_language == 'python' -%}
+    {% call statement('create_table', language=model_language) %}
+      {{ query_result }}
+    {% endcall %}
+  {%- endif -%}
+  {% do return(tmp_relation) %}
+{% endmacro %}
+
+
 {% macro batch_incremental_insert(tmp_relation, target_relation, dest_cols_csv) %}
     {% set partitions_batches = get_partition_batches(tmp_relation) %}
     {% do log('BATCHES TO PROCESS: ' ~ partitions_batches | length) %}

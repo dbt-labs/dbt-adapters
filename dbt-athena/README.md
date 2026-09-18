@@ -241,6 +241,17 @@ athena:
     - For incremental models, it allows to define a schema to hold temporary create statements
       used in incremental model runs
     - Schema will be created in the model target database if does not exist
+- `tmp_relation_type` (`default='table'`)
+    - For incremental models, controls whether the model query is staged as a `table` or a `view`
+      before being inserted/merged into the target table
+    - `view` avoids writing the data twice (once into a temporary table, then again by the
+      merge/insert into the target), reducing both run time and Athena scan costs; the config name
+      mirrors dbt-trino and dbt-snowflake
+    - Athena views cannot hold some column types, e.g. `timestamp(6)` (the native Iceberg timestamp
+      precision) or `timestamp with time zone`; with `view`, models projecting such columns fail at
+      staging time — cast them (e.g. to `timestamp(3)`) or keep `table`
+    - `view` cannot be combined with Python models, the `insert_overwrite` strategy or
+      `force_batch`, since those read the staged data more than once and require a stable snapshot
 - `lf_tags_config` (`default=none`)
     - [AWS Lake Formation](#aws-lake-formation-integration) tags to associate with the table and columns
     - `enabled` (`default=False`) whether LF tags management is enabled for a model
@@ -426,6 +437,12 @@ It is possible to use Iceberg in an incremental fashion, specifically two strate
         - `incremental_predicates`, `delete_condition`, `update_condition` and `insert_condition` can include any column of
           the incremental table (`src`) or the final table (`target`).
           Column names must be prefixed by either `src` or `target` to prevent a `Column is ambiguous` error.
+
+By default the `merge` strategy stages the model query in a temporary table before merging it into the
+target. Setting `tmp_relation_type='view'` stages it as a view instead, so the data is only written once —
+by the merge itself — reducing both run time and Athena scan costs. Note that Athena views cannot hold some
+column types (e.g. `timestamp(6)` or `timestamp with time zone`); cast such columns or keep the default
+(see [Table configuration](#table-configuration)).
 
 `delete_condition` example:
 

@@ -46,6 +46,13 @@
     {% endif %}
   {% endif %}
 
+  -- Staging the model query as a view avoids writing the data twice, but is only
+  -- safe when a single statement reads it (merge or append insert)
+  {% set tmp_relation_type = validate_get_tmp_relation_type(strategy, table_type, force_batch, model_language) %}
+  {% if tmp_relation_type == 'view' %}
+    {% set tmp_relation = tmp_relation.incorporate(type='view') %}
+  {% endif %}
+
   {{ run_hooks(pre_hooks, inside_transaction=False) }}
 
   -- `BEGIN` happens here:
@@ -149,12 +156,10 @@
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
-    {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
+    {% set tmp_relation = stage_incremental_tmp_relation(
+        tmp_relation, tmp_relation_type, compiled_code, model_language, force_batch
+      )
+    %}
     {% set build_sql = incremental_insert(
         on_schema_change, tmp_relation, target_relation, existing_relation, force_batch
       )
@@ -189,12 +194,10 @@
     {% if old_tmp_relation is not none %}
       {% do drop_relation(old_tmp_relation) %}
     {% endif %}
-    {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
-    {%- if model_language == 'python' -%}
-      {% call statement('create_table', language=model_language) %}
-        {{ query_result }}
-      {% endcall %}
-    {%- endif -%}
+    {% set tmp_relation = stage_incremental_tmp_relation(
+        tmp_relation, tmp_relation_type, compiled_code, model_language, force_batch
+      )
+    %}
     {% set build_sql = iceberg_merge(
         on_schema_change=on_schema_change,
         tmp_relation=tmp_relation,
