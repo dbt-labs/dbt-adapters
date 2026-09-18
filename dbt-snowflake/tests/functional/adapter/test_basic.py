@@ -59,7 +59,7 @@ class TestGetCatalogForSingleRelationSnowflake(BaseGetCatalogForSingleRelation):
                 owner=current_role,
             ),
             columns={
-                "ID": ColumnMetadata(type="NUMBER", index=1, name="ID", comment=None),
+                "ID": ColumnMetadata(type="NUMBER(38,0)", index=1, name="ID", comment=None),
                 "FIRST_NAME": ColumnMetadata(
                     type="VARCHAR", index=2, name="FIRST_NAME", comment=None
                 ),
@@ -109,7 +109,7 @@ class TestGetCatalogForSingleRelationSnowflake(BaseGetCatalogForSingleRelation):
                 owner=current_role,
             ),
             columns={
-                "ID": ColumnMetadata(type="NUMBER", index=1, name="ID", comment=None),
+                "ID": ColumnMetadata(type="NUMBER(38,0)", index=1, name="ID", comment=None),
                 "FIRST_NAME": ColumnMetadata(
                     type="VARCHAR", index=2, name="FIRST_NAME", comment=None
                 ),
@@ -159,7 +159,7 @@ class TestGetCatalogForSingleRelationSnowflake(BaseGetCatalogForSingleRelation):
                 owner=current_role,
             ),
             columns={
-                "ID": ColumnMetadata(type="NUMBER", index=1, name="ID", comment=None),
+                "ID": ColumnMetadata(type="NUMBER(38,0)", index=1, name="ID", comment=None),
                 "FIRST_NAME": ColumnMetadata(
                     type="VARCHAR", index=2, name="FIRST_NAME", comment=None
                 ),
@@ -242,7 +242,7 @@ class TestDocsGenerateSnowflake(BaseDocsGenerate):
         return base_expected_catalog(
             project,
             role=get_role,
-            id_type="NUMBER",
+            id_type="NUMBER(38,0)",
             text_type="TEXT",
             time_type="TIMESTAMP_NTZ",
             view_type="VIEW",
