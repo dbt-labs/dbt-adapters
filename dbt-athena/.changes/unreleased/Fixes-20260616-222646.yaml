@@ -1,0 +1,9 @@
+kind: Fixes
+body: Support boolean partition columns on Iceberg tables in the partition-batching
+    fallback path (force_batch or TOO_MANY_OPEN_PARTITIONS), which previously raised
+    "Unsupported column type: boolean". Hive tables still raise, since Hive does not
+    support boolean partition columns (HIVE-6590).
+time: 2026-06-16T22:26:46-07:00
+custom:
+    Author: bxm156
+    Issue: "2025"
