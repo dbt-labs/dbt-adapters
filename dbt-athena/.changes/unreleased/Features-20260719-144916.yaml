@@ -1,0 +1,6 @@
+kind: Features
+body: Support explicit insert_overwrite for unpartitioned Hive incremental models using a staged table and Glue catalog swap.
+time: 2026-07-19T14:49:16.104549-03:00
+custom:
+    Author: AlejandroMorgante
+    Issue: "2081"
