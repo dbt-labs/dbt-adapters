@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for Data Catalog Views (Multi Dialect Views) via `is_data_catalog_view` config on the view materialization
+time: 2026-04-13T00:00:00.000000-07:00
+custom:
+  Author: adavoudi
+  Issue: "1844"
