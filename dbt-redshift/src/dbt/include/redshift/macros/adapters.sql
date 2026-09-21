@@ -123,9 +123,29 @@
 {% endmacro %}
 
 
+{% macro redshift__make_temp_relation(base_relation, suffix) %}
+  {#
+    Same relation postgres__make_temp_relation builds -- fully unqualified, with both
+    schema and database stripped to none -- but flagged as one dbt minted itself, so
+    RedshiftAdapter.get_columns_in_relation can describe it from the driver directly when
+    `datasharing` is enabled. Without the flag we could only infer "temporary" from the
+    absence of a database and schema, which is a negative signal shared with any other
+    unqualified caller.
+
+    The flag is set unconditionally; whether it is acted on is decided in Python, so the
+    marker stays a plain statement of what the relation is.
+  #}
+  {% set temp_relation = postgres__make_temp_relation(base_relation, suffix) %}
+  {{ return(temp_relation.incorporate(is_temporary=True)) }}
+{% endmacro %}
+
+
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {# relation from temp tables does not have a database or schema. #}
-  {# use legacy pattern until SHOW COLUMNS supports temp tables #}
+  {# With `datasharing` enabled, relations dbt minted as temp tables do not reach here: #}
+  {# RedshiftAdapter.get_columns_in_relation recognises their is_temporary marker and #}
+  {# describes them from the driver instead, because no catalog view on a datashare consumer #}
+  {# can see them. Everything else -- including temp relations on an ordinary connection, #}
+  {# where information_schema can see them -- comes through the branches below. #}
 
   {% if not relation.database and not relation.schema %}
     {{ return(redshift__get_columns_in_relation_unqualified(relation)) }}
@@ -138,9 +158,9 @@
 
 
 {% macro redshift__get_columns_in_relation_unqualified(relation) -%}
-  {# An unqualified relation is a temp table, which can never be a late-binding or #}
-  {# external view, so skip pg_get_late_binding_view_cols() -- it expands every #}
-  {# late-binding view in the session and dominates the legacy query's runtime. #}
+  {# An unqualified relation is most likely a temp table, which can never be a late-binding #}
+  {# or external view, so try without pg_get_late_binding_view_cols() first -- it expands #}
+  {# every late-binding view in the session and dominates the legacy query's runtime. #}
   {# Fall back to the legacy query if nothing matches, for any other caller. #}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
       select
