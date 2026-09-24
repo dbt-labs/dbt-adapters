@@ -1,0 +1,8 @@
+kind: Fixes
+body: Cast explicitly when migrating a column type in `redshift__alter_column_type`, so
+    `on_schema_change='sync_all_columns'` can apply type changes across type categories
+    (e.g. varchar to bigint) instead of failing on an uncasted copy
+time: 2026-09-04T12:00:00.000000-07:00
+custom:
+    Author: trouze
+    Issue: "2159"
