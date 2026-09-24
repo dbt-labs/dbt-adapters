@@ -1,0 +1,10 @@
+kind: Fixes
+body: Alias the source relation in `bigquery__test_unique` and add a `bigquery__test_not_null`
+  override so that columns sharing a name with their model resolve to the column
+  value instead of BigQuery's row STRUCT. The relation is wrapped in a subquery
+  before aliasing so `where:`-filtered tests, where `get_where_subquery` already
+  emits a `dbt_subquery` alias, still produce valid SQL. Fixes dbt-core#11067.
+time: 2026-04-27T08:38:10.000000+00:00
+custom:
+  Author: "1fanwang"
+  Issue: "11067"
