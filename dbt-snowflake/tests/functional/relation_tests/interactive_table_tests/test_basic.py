@@ -62,11 +62,11 @@ class TestCompileValidation:
 
     def test_missing_cluster_by_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_missing_cluster_by"], expect_pass=False)
-        assert "require `cluster_by` to name at least one non-blank column" in results[0].message
+        assert "require every `cluster_by` entry to be non-blank" in results[0].message
 
     def test_blank_cluster_by_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_blank_cluster_by"], expect_pass=False)
-        assert "require `cluster_by` to name at least one non-blank column" in results[0].message
+        assert "require every `cluster_by` entry to be non-blank" in results[0].message
 
     def test_iceberg_table_format_raises_compilation_error(self, project):
         results = run_dbt(["run", "--select", "it_iceberg_format"], expect_pass=False)
