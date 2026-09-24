@@ -27,6 +27,7 @@ class TestBasic:
             "my_dynamic_table.sql": models.DYNAMIC_TABLE,
             "my_dynamic_table_downstream.sql": models.DYNAMIC_TABLE_DOWNSTREAM,
             "my_dynamic_iceberg_table.sql": models.DYNAMIC_ICEBERG_TABLE,
+            "my_dynamic_table_full_config.sql": models.DYNAMIC_TABLE_FULL_CONFIG,
         }
 
     @pytest.fixture(scope="class", autouse=True)
@@ -39,6 +40,7 @@ class TestBasic:
         assert query_relation_type(project, "my_dynamic_table") == "dynamic_table"
         assert query_relation_type(project, "my_dynamic_table_downstream") == "dynamic_table"
         assert query_relation_type(project, "my_dynamic_iceberg_table") == "dynamic_table"
+        assert query_relation_type(project, "my_dynamic_table_full_config") == "dynamic_table"
 
 
 class TestAutoConfigDoesntFullRefresh:
@@ -206,7 +208,7 @@ class TestSchedulerConfigChange:
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_in_logs("scheduler = 'DISABLE'", logs)
         assert_message_in_logs("alter dynamic table", logs)
         assert_message_in_logs("Applying REFRESH to:", logs)
@@ -219,7 +221,7 @@ class TestSchedulerConfigChange:
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_TARGET_LAG_ONLY)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
         assert_message_not_in_logs("Applying REFRESH to:", logs)
@@ -234,7 +236,7 @@ class TestSchedulerConfigChange:
         )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
         assert_message_not_in_logs("Applying REFRESH to:", logs)
@@ -249,7 +251,7 @@ class TestSchedulerConfigChange:
         update_model(project, "dynamic_table_scheduler", models.DYNAMIC_TABLE_SCHEDULER_DISABLED)
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying CREATE OR ALTER to:", logs)
         assert_message_in_logs("scheduler = 'DISABLE'", logs)
         assert_message_in_logs("alter dynamic table", logs)
         assert_message_in_logs("Applying REFRESH to:", logs)
@@ -427,7 +429,7 @@ class TestIcebergSchedulerConfigChange:
         )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying ALTER to:", logs)
         assert_message_in_logs("scheduler = 'DISABLE'", logs)
         assert_message_in_logs("alter dynamic table", logs)
         assert_message_in_logs("Applying REFRESH to:", logs)
@@ -444,7 +446,7 @@ class TestIcebergSchedulerConfigChange:
         )
         _, logs = run_dbt_and_capture(["--debug", "run"])
 
-        assert_message_in_logs("Applying UPDATE SCHEDULER to:", logs)
+        assert_message_in_logs("Applying ALTER to:", logs)
         assert_message_in_logs("scheduler = 'ENABLE'", logs)
         assert_message_in_logs("target_lag = '2 minutes'", logs)
         assert_message_not_in_logs("Applying REFRESH to:", logs)
