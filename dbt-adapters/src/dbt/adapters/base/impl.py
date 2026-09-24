@@ -438,7 +438,8 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @behavior.setter  # type: ignore
     def behavior(self, flags: List[BehaviorFlag]) -> None:
-        flags.extend(self._behavior_flags)
+        # a new list: __init__ passes the module-level DEFAULT_BASE_BEHAVIOR_FLAGS
+        flags = [*flags, *self._behavior_flags]
 
         # we don't always get project flags, for example, the project file is not loaded during `dbt debug`
         # in that case, load the default values for behavior flags to avoid compilation errors
