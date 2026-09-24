@@ -789,6 +789,37 @@ CALL {proc_name}();
 
         return {"interactive_table": selected}
 
+    @available
+    def describe_data_metric_functions(self, relation: SnowflakeRelation) -> Dict[str, Any]:
+        """Get the data metric functions currently attached to a relation.
+
+        INFORMATION_SCHEMA.DATA_METRIC_FUNCTION_REFERENCES is queried rather than
+        ACCOUNT_USAGE because it reflects real-time state; the converge is only
+        idempotent if the current associations are read without latency (adding an
+        already-attached DMF raises an error).
+
+        Returns a RelationResults dict keyed on ``data_metric_function_references``.
+        The table is empty when no DMFs are attached (or the schedule is unset).
+        """
+        quoting = relation.quote_policy
+        database = f'"{relation.database}"' if quoting.database else relation.database
+        references_sql = (
+            "select metric_database_name, metric_schema_name, metric_name, "
+            "ref_arguments, schedule, schedule_status "
+            f"from table({database}.information_schema.data_metric_function_references("
+            f"ref_entity_name => '{relation.render()}', ref_entity_domain => 'table'))"
+        )
+        res, references = self.execute(references_sql, fetch=True)
+        if res.code != "SUCCESS":
+            raise DbtRuntimeError(
+                f"Could not get data metric function metadata: {references_sql} failed"
+            )
+        # normalize column names to lower case, this still preserves column order
+        references = references.rename(
+            column_names=[name.lower() for name in references.column_names]
+        )
+        return {"data_metric_function_references": references}
+
     def _query_dynamic_table_transient_status(self, relation: SnowflakeRelation) -> bool:
         """
         Query SHOW TABLES to determine if a dynamic table is transient.
