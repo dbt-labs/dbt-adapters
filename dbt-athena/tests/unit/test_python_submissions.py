@@ -333,7 +333,10 @@ class TestSessionStateErrorHandling:
                 first_session_id
             )
             # Verify we got a result (meaning retry worked)
-            assert result == {"ResultS3Uri": "test_results_s3_uri"}
+            assert result == {
+                "ResultS3Uri": "test_results_s3_uri",
+                "SparkSessionId": second_session_id,
+            }
             # Verify we made two attempts
             assert start_calc_calls[0] == 2
 
@@ -413,6 +416,9 @@ class TestSessionStateErrorHandling:
             result = helper.submit("print('hello')")
 
             # Verify we got a result
-            assert result == {"ResultS3Uri": "test_results_s3_uri"}
+            assert result == {
+                "ResultS3Uri": "test_results_s3_uri",
+                "SparkSessionId": str(session_id),
+            }
             # Verify we made two attempts (once failed with BUSY, then succeeded)
             assert call_count[0] == 2
