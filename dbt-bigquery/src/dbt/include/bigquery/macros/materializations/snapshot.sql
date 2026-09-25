@@ -13,3 +13,29 @@
   -- Clean up the snapshot temp table
   {% do drop_relation(staging_relation) %}
 {% endmacro %}
+
+{% macro bigquery__snapshot_check_row_changed(check_cols, snapshotted_rel, current_rel, node) %}
+    {#-- Detect REPEATED (ARRAY) and JSON columns that need TO_JSON_STRING wrapping
+         since BigQuery does not support != on ARRAY or JSON types. --#}
+    {% set json_string_cols = [] %}
+    {% for col in adapter.get_columns_in_select_sql(get_empty_subquery_sql(node['compiled_code'])) %}
+        {% if col.mode == 'REPEATED' or col.dtype | upper == 'JSON' %}
+            {% do json_string_cols.append(adapter.quote(col.column)) %}
+        {% endif %}
+    {% endfor %}
+
+    {%- for col in check_cols -%}
+        {%- if col in json_string_cols -%}
+        TO_JSON_STRING({{ snapshotted_rel }}.{{ col }}) != TO_JSON_STRING({{ current_rel }}.{{ col }})
+        {%- else -%}
+        {{ snapshotted_rel }}.{{ col }} != {{ current_rel }}.{{ col }}
+        {%- endif %}
+        or
+        (
+            (({{ snapshotted_rel }}.{{ col }} is null) and not ({{ current_rel }}.{{ col }} is null))
+            or
+            ((not {{ snapshotted_rel }}.{{ col }} is null) and ({{ current_rel }}.{{ col }} is null))
+        )
+        {%- if not loop.last %} or {% endif -%}
+    {%- endfor -%}
+{% endmacro %}

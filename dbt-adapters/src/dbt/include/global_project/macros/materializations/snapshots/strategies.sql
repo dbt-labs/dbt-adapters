@@ -139,6 +139,24 @@
 {%- endmacro %}
 
 
+{% macro snapshot_check_row_changed(check_cols, snapshotted_rel, current_rel, node) %}
+    {{ adapter.dispatch('snapshot_check_row_changed', 'dbt')(check_cols, snapshotted_rel, current_rel, node) }}
+{% endmacro %}
+
+{% macro default__snapshot_check_row_changed(check_cols, snapshotted_rel, current_rel, node) %}
+    {%- for col in check_cols -%}
+        {{ snapshotted_rel }}.{{ col }} != {{ current_rel }}.{{ col }}
+        or
+        (
+            (({{ snapshotted_rel }}.{{ col }} is null) and not ({{ current_rel }}.{{ col }} is null))
+            or
+            ((not {{ snapshotted_rel }}.{{ col }} is null) and ({{ current_rel }}.{{ col }} is null))
+        )
+        {%- if not loop.last %} or {% endif -%}
+    {%- endfor -%}
+{% endmacro %}
+
+
 {% macro snapshot_check_strategy(node, snapshotted_rel, current_rel, model_config, target_exists) %}
     {# The model_config parameter is no longer used, but is passed in anyway for compatibility. #}
     {% set check_cols_config = config.get('check_cols') %}
@@ -156,16 +174,7 @@
     {%- if column_added -%}
         {{ get_true_sql() }}
     {%- else -%}
-    {%- for col in check_cols -%}
-        {{ snapshotted_rel }}.{{ col }} != {{ current_rel }}.{{ col }}
-        or
-        (
-            (({{ snapshotted_rel }}.{{ col }} is null) and not ({{ current_rel }}.{{ col }} is null))
-            or
-            ((not {{ snapshotted_rel }}.{{ col }} is null) and ({{ current_rel }}.{{ col }} is null))
-        )
-        {%- if not loop.last %} or {% endif -%}
-    {%- endfor -%}
+        {{ snapshot_check_row_changed(check_cols, snapshotted_rel, current_rel, node) }}
     {%- endif -%}
     )
     {%- endset %}
