@@ -30,3 +30,14 @@ MY_DYNAMIC_TABLE = """
 ) }}
 select * from {{ ref('my_seed') }}
 """
+
+
+MY_NUMERIC_TABLE = """
+{{ config(
+    materialized='table',
+) }}
+select
+    cast(901.75 as number(12,2)) as retail_price,
+    cast(42 as number(38,0)) as whole_number,
+    cast('hello' as varchar(16)) as label
+"""
