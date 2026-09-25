@@ -2,6 +2,7 @@ from multiprocessing import get_context
 from unittest import mock
 
 import agate
+import datetime
 import decimal
 import string
 import random
@@ -643,6 +644,140 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
             "source", "destination", dbt.adapters.bigquery.impl.WRITE_APPEND
         )
 
+    def _copy_partitions(self, adapter, partition_by_dict, partitions, default_concurrency=None):
+        adapter.connections = MagicMock()
+        partition_by = adapter.parse_partition_by(partition_by_dict)
+        adapter.copy_partitions(
+            "source", "destination", partitions, partition_by, default_concurrency
+        )
+        return adapter.connections.copy_partitioned_tables
+
+    def test_copy_partitions_defaults_to_serial(self):
+        adapter = self.get_adapter("oauth")
+        mock_copy = self._copy_partitions(
+            adapter,
+            {"field": "ts", "data_type": "date", "copy_partitions": True},
+            [datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)],
+        )
+        mock_copy.assert_called_once_with(
+            "source",
+            "destination",
+            ["20260101", "20260102"],
+            dbt.adapters.bigquery.impl.WRITE_TRUNCATE,
+            1,
+        )
+
+    def test_copy_partitions_partition_by_concurrency_wins_over_model_config(self):
+        adapter = self.get_adapter("oauth")
+        partitions = [datetime.date(2026, 1, d) for d in range(1, 9)]
+        mock_copy = self._copy_partitions(
+            adapter,
+            {
+                "field": "ts",
+                "data_type": "date",
+                "copy_partitions": True,
+                "copy_partitions_concurrency": 4,
+            },
+            partitions,
+            default_concurrency=8,
+        )
+        self.assertEqual(mock_copy.call_args.args[4], 4)
+
+    def test_copy_partitions_uses_model_config_concurrency(self):
+        adapter = self.get_adapter("oauth")
+        partitions = [datetime.date(2026, 1, d) for d in range(1, 9)]
+        mock_copy = self._copy_partitions(
+            adapter,
+            {"field": "ts", "data_type": "date", "copy_partitions": True},
+            partitions,
+            default_concurrency=3,
+        )
+        self.assertEqual(mock_copy.call_args.args[4], 3)
+
+    def test_copy_partitions_clamps_concurrency_to_partition_count(self):
+        adapter = self.get_adapter("oauth")
+        mock_copy = self._copy_partitions(
+            adapter,
+            {
+                "field": "ts",
+                "data_type": "date",
+                "copy_partitions": True,
+                "copy_partitions_concurrency": 8,
+            },
+            [datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)],
+        )
+        self.assertEqual(mock_copy.call_args.args[4], 2)
+
+    def test_copy_partitions_single_threaded_forces_serial(self):
+        adapter = self.get_adapter("oauth")
+        partitions = [datetime.date(2026, 1, d) for d in range(1, 9)]
+        original = adapter.config.args.single_threaded
+        adapter.config.args.single_threaded = True
+        try:
+            mock_copy = self._copy_partitions(
+                adapter,
+                {
+                    "field": "ts",
+                    "data_type": "date",
+                    "copy_partitions": True,
+                    "copy_partitions_concurrency": 8,
+                },
+                partitions,
+            )
+        finally:
+            adapter.config.args.single_threaded = original
+        self.assertEqual(mock_copy.call_args.args[4], 1)
+
+    def test_copy_partitions_rejects_invalid_model_config_concurrency(self):
+        adapter = self.get_adapter("oauth")
+        adapter.connections = MagicMock()
+        partition_by = adapter.parse_partition_by(
+            {"field": "ts", "data_type": "date", "copy_partitions": True}
+        )
+        for invalid in (0, 33, "four", True):
+            with self.assertRaises(dbt_common.exceptions.base.DbtValidationError):
+                adapter.copy_partitions(
+                    "source", "destination", [datetime.date(2026, 1, 1)], partition_by, invalid
+                )
+        adapter.connections.copy_partitioned_tables.assert_not_called()
+
+    def test_copy_partitions_with_no_partitions_submits_nothing(self):
+        adapter = self.get_adapter("oauth")
+        mock_copy = self._copy_partitions(
+            adapter,
+            {"field": "ts", "data_type": "date", "copy_partitions": True},
+            [],
+        )
+        mock_copy.assert_not_called()
+
+    def test_render_partition_id(self):
+        """Parity with the formatting previously inlined in the
+        bq_copy_partitions macro."""
+        adapter = self.get_adapter("oauth")
+        ts = datetime.datetime(2026, 1, 2, 3, 4, 5)
+
+        def partition_by(**kwargs):
+            return adapter.parse_partition_by({"field": "ts", **kwargs})
+
+        self.assertEqual(
+            partition_by(data_type="timestamp", granularity="hour").render_partition_id(ts),
+            "2026010203",
+        )
+        self.assertEqual(partition_by(data_type="date").render_partition_id(ts), "20260102")
+        self.assertEqual(
+            partition_by(data_type="date", granularity="month").render_partition_id(ts),
+            "202601",
+        )
+        self.assertEqual(
+            partition_by(data_type="date", granularity="year").render_partition_id(ts),
+            "2026",
+        )
+        int64_partition_by = partition_by(
+            data_type="int64", range={"start": 0, "end": 100, "interval": 10}
+        )
+        self.assertEqual(int64_partition_by.render_partition_id(40), "40")
+        self.assertEqual(int64_partition_by.render_partition_id(decimal.Decimal("40")), "40")
+
     def test_parse_partition_by(self):
         adapter = self.get_adapter("oauth")
 
@@ -822,6 +957,31 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
                 "copy_partitions": False,
             },
         )
+
+        # copy_partitions_concurrency rides inside partition_by
+        self.assertEqual(
+            adapter.parse_partition_by(
+                {
+                    "field": "ts",
+                    "data_type": "date",
+                    "copy_partitions": True,
+                    "copy_partitions_concurrency": 8,
+                }
+            ).to_dict(omit_none=True),
+            {
+                "field": "ts",
+                "data_type": "date",
+                "granularity": "day",
+                "time_ingestion_partitioning": False,
+                "copy_partitions": True,
+                "copy_partitions_concurrency": 8,
+            },
+        )
+
+        # out-of-range or non-integer concurrency is rejected at parse time
+        for invalid in (0, 33, "four", True):
+            with self.assertRaises(dbt_common.exceptions.base.DbtValidationError):
+                adapter.parse_partition_by({"field": "ts", "copy_partitions_concurrency": invalid})
 
     def test_hours_to_expiration(self):
         adapter = self.get_adapter("oauth")
