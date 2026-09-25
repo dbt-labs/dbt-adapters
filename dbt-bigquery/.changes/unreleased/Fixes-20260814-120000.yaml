@@ -1,0 +1,11 @@
+kind: Fixes
+body: Only declare `_dbt_max_partition` when the compiled model actually references
+  it in executable SQL, not when the token merely appears in comments or string
+  literals, and only when the target table already exists. Previously a mention in
+  a comment made incremental (insert_overwrite) models emit the declare block on
+  their first-ever build, which failed with "Table ... was not found" because it
+  selects `max()` from the not-yet-created target.
+time: 2026-08-14T12:00:00.000000+02:00
+custom:
+    Author: vittorfp ElhadiCherifi95
+    Issue: "580 1907"
