@@ -1148,7 +1148,7 @@ class AthenaAdapter(SQLAdapter):
             for partition_batch in get_chunks(
                 target_table_partitions, AthenaAdapter.BATCH_DELETE_PARTITION_API_LIMIT
             ):
-                glue_client.batch_delete_partition(
+                response = glue_client.batch_delete_partition(
                     CatalogId=target_catalog_id,
                     DatabaseName=target_relation.schema,
                     TableName=target_relation.identifier,
@@ -1156,12 +1156,24 @@ class AthenaAdapter(SQLAdapter):
                         {"Values": partition["Values"]} for partition in partition_batch
                     ],
                 )
+                if errors := response.get("Errors"):
+                    for err in errors:
+                        LOGGER.error(
+                            f"Failed to delete Glue partition during swap: "
+                            f"Values='{err['PartitionValues']}', "
+                            f"Code='{err['ErrorDetail']['ErrorCode']}', "
+                            f"Message='{err['ErrorDetail']['ErrorMessage']}'"
+                        )
+                    raise DbtRuntimeError(
+                        f"Failed to delete {len(errors)} partition(s) during swap of Glue table "
+                        f"'{target_relation.schema}.{target_relation.identifier}'"
+                    )
 
         if src_table_partitions:
             for partition_batch in get_chunks(
                 src_table_partitions, AthenaAdapter.BATCH_CREATE_PARTITION_API_LIMIT
             ):
-                glue_client.batch_create_partition(
+                response = glue_client.batch_create_partition(
                     CatalogId=target_catalog_id,
                     DatabaseName=target_relation.schema,
                     TableName=target_relation.identifier,
@@ -1174,6 +1186,18 @@ class AthenaAdapter(SQLAdapter):
                         for partition in partition_batch
                     ],
                 )
+                if errors := response.get("Errors"):
+                    for err in errors:
+                        LOGGER.error(
+                            f"Failed to create Glue partition during swap: "
+                            f"Values='{err['PartitionValues']}', "
+                            f"Code='{err['ErrorDetail']['ErrorCode']}', "
+                            f"Message='{err['ErrorDetail']['ErrorMessage']}'"
+                        )
+                    raise DbtRuntimeError(
+                        f"Failed to create {len(errors)} partition(s) during swap of Glue table "
+                        f"'{target_relation.schema}.{target_relation.identifier}'"
+                    )
 
     def _get_glue_table_versions_to_expire(
         self, relation: AthenaRelation, to_keep: int
