@@ -1077,6 +1077,29 @@ class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
             schema="real_dataset",
             identifier="my_table",
         )
+        nonexistent_relation = BigQueryRelation.create(
+            database="test-project",
+            schema="missing_dataset",
+            identifier="missing_table",
+        )
+
+        result = adapter._get_catalog_relations_by_info_schema(
+            [normal_relation, nonexistent_relation]
+        )
+
+        schemas_in_result = {info.schema for info in result.keys()}
+        assert "real_dataset" in schemas_in_result
+        assert "missing_dataset" not in schemas_in_result
+
+    def test_filters_out_region_information_schema_without_existence_check(self):
+        adapter = self.get_adapter("oauth")
+        adapter.check_schema_exists = MagicMock(return_value=True)
+
+        normal_relation = BigQueryRelation.create(
+            database="test-project",
+            schema="real_dataset",
+            identifier="my_table",
+        )
         info_schema_source = BigQueryRelation.create(
             database="test-project",
             schema="region-us.INFORMATION_SCHEMA",
@@ -1090,6 +1113,7 @@ class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
         schemas_in_result = {info.schema for info in result.keys()}
         assert "real_dataset" in schemas_in_result
         assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
+        adapter.check_schema_exists.assert_called_once_with("test-project", "real_dataset")
 
 
 class TestBigQueryAdapterConversions(TestAdapterConversions):
