@@ -18,7 +18,7 @@ def dbt_profile_target():
         "warehouse": os.getenv("SNOWFLAKE_TEST_WAREHOUSE"),
     }
 
-    # Support PAT or password authentication
+    # Use the configured authenticator, or prefer key pair over password.
     authenticator = os.getenv("SNOWFLAKE_TEST_AUTHENTICATOR")
     if authenticator:
         profile["authenticator"] = authenticator
@@ -28,7 +28,12 @@ def dbt_profile_target():
         profile["role"] = os.getenv("SNOWFLAKE_TEST_ROLE")
     if os.getenv("SNOWFLAKE_TEST_USER"):
         profile["user"] = os.getenv("SNOWFLAKE_TEST_USER")
-    if os.getenv("SNOWFLAKE_TEST_PASSWORD"):
+    private_key = os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY")
+    if not authenticator and private_key:
+        profile["private_key"] = private_key
+        if os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE"):
+            profile["private_key_passphrase"] = os.getenv("SNOWFLAKE_TEST_PRIVATE_KEY_PASSPHRASE")
+    elif not authenticator and os.getenv("SNOWFLAKE_TEST_PASSWORD"):
         profile["password"] = os.getenv("SNOWFLAKE_TEST_PASSWORD")
 
     # Optional parameters allow testing against local DEV Snowflake instances.
