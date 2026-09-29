@@ -102,7 +102,7 @@
         {% do exceptions.raise_compiler_error(wrong_strategy_msg) %}
 
   {% elif existing_relation is none %}
-      {#-- The relation cache says the target does not exist, still emit `create table`, so that a inconsistent
+      {#-- The relation cache says the target does not exist, still emit `create table`, so that an inconsistent
            cache causes errors instead of replacing a live table silently --#}
       {%- call statement('main', language=language) -%}
         {{ bq_create_table_as(partition_by, False, target_relation, compiled_code, language, replace=false) }}
