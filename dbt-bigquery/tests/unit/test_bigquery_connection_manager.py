@@ -1,6 +1,6 @@
 import json
 import unittest
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, Timeout
 from unittest.mock import patch, MagicMock, Mock, ANY
 
 import dbt.adapters
@@ -155,6 +155,48 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # We wait on the attached job, not a resubmitted one.
         existing_job.result.assert_called_once()
 
+    def test_copy_bq_table_resubmits_fresh_job_id_when_prior_job_failed(self):
+        """Terminal-failure resubmission applies to copy jobs too."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "copy_job_dead"
+        job_ids_used = []
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id == dead_job_id:
+                raise exceptions.Conflict(f"Already Exists: Job project:{dead_job_id}")
+            return Mock(job_id=submitted_id)
+
+        self.connections.generate_job_id = Mock(side_effect=[dead_job_id, "copy_job_fresh"])
+        self.mock_client.copy_table.side_effect = submit
+        self.mock_client.get_job.return_value = Mock(
+            spec=google.cloud.bigquery.CopyJob,
+            job_id=dead_job_id,
+            state="DONE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+
+        self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
+
+        self.assertEqual(job_ids_used, [dead_job_id, "copy_job_fresh"])
+
+    def test_job_is_terminally_failed(self):
+        from dbt.adapters.bigquery.retry import job_is_terminally_failed
+
+        error = {"reason": "backendError", "message": "boom"}
+        self.assertTrue(job_is_terminally_failed(Mock(state="DONE", error_result=error)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="RUNNING", error_result=error)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="PENDING", error_result=None)))
+        self.assertFalse(job_is_terminally_failed(Mock(state="DONE", error_result=None)))
+
+    def test_job_may_have_partially_committed(self):
+        from dbt.adapters.bigquery.retry import job_may_have_partially_committed
+
+        self.assertTrue(job_may_have_partially_committed(Mock(statement_type="SCRIPT")))
+        self.assertFalse(job_may_have_partially_committed(Mock(statement_type="MERGE")))
+        self.assertFalse(job_may_have_partially_committed(Mock(spec=[])))
+
     def test_job_labels_valid_json(self):
         expected = {"key": "value"}
         labels = self.connections._labels_from_query_comment(json.dumps(expected))
@@ -231,6 +273,297 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         self.assertIs(query_job, existing_job)
         # The DML must not be resubmitted.
         self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_when_existing_job_succeeded(self, MockQueryJobConfig):
+        """A 409 on a succeeded job attaches; resubmitting would duplicate DML."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_id = "job_done_ok"
+        self.mock_client.query.side_effect = exceptions.Conflict(
+            f"Already Exists: Job project:{job_id}"
+        )
+        existing_job = Mock(
+            job_id=job_id, location="US", project="project", state="DONE", error_result=None
+        )
+        existing_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = existing_job
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=job_id,
+        )
+
+        self.assertIs(query_job, existing_job)
+        self.assertEqual(self.mock_client.query.call_count, 1)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_resubmits_fresh_job_id_when_prior_job_failed(
+        self, MockQueryJobConfig
+    ):
+        """A 409 on a terminally failed job resubmits under a new job_id."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "job_dead"
+        job_ids_used = []
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id == dead_job_id:
+                raise exceptions.Conflict(f"Already Exists: Job project:{dead_job_id}")
+            fresh_job = Mock(job_id=submitted_id, location="US", project="project")
+            fresh_job.result.return_value = iter([])
+            return fresh_job
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.return_value = Mock(
+            job_id=dead_job_id,
+            location="US",
+            project="project",
+            state="DONE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=dead_job_id,
+        )
+
+        self.assertEqual(job_ids_used[0], dead_job_id)
+        self.assertNotEqual(job_ids_used[1], dead_job_id)
+        self.assertEqual(query_job.job_id, job_ids_used[1])
+        self.mock_client.get_job.assert_called_once_with(dead_job_id)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_when_terminally_failed_script_job(
+        self, MockQueryJobConfig
+    ):
+        """A 409 on a failed SCRIPT job attaches: earlier statements may have committed."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "script_job_dead"
+        job_ids_used = []
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            raise exceptions.Conflict(f"Already Exists: Job project:{dead_job_id}")
+
+        self.mock_client.query.side_effect = submit
+        existing_job = Mock(
+            job_id=dead_job_id,
+            location="US",
+            project="project",
+            state="DONE",
+            statement_type="SCRIPT",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+        existing_job.result.return_value = iter([])
+        self.mock_client.get_job.return_value = existing_job
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "DECLARE partitions ARRAY<DATE>; ... MERGE ...; DROP TABLE ...;",
+            {"dry_run": False},
+            job_id=dead_job_id,
+        )
+
+        self.assertEqual(job_ids_used, [dead_job_id])
+        self.assertIs(query_job, existing_job)
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_resubmits_after_terminal_backend_error(self, MockQueryJobConfig):
+        """A terminal backendError is retried under a fresh job_id, not reattached."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+        first_job_id = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            job = Mock(job_id=submitted_id, location="US", project="project")
+
+            if not first_job_id:
+                first_job_id["id"] = submitted_id
+                job.state = "DONE"
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+                job.result.side_effect = exceptions.InternalServerError(
+                    "Error encountered during execution. Retrying may solve the problem.; "
+                    "reason: backendError"
+                )
+                return job
+
+            if submitted_id == first_job_id["id"]:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = lambda job_id, *args, **kwargs: Mock(
+            job_id=job_id,
+            location="US",
+            project="project",
+            state="DONE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+
+        self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> fails, submit(A) -> 409, submit(B) -> succeeds
+        self.assertEqual(len(job_ids_used), 3)
+        self.assertEqual(job_ids_used[0], job_ids_used[1])
+        self.assertNotEqual(job_ids_used[2], job_ids_used[0])
+
+    @patch("google.api_core.retry.retry_unary.time.sleep")
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_attaches_to_resubmitted_job_on_later_retry(
+        self, MockQueryJobConfig, _mock_sleep
+    ):
+        """After resubmitting dead job A as B, later retries attach to B, not a new job."""
+        self.credentials.job_retries = 2
+        self.credentials.job_retry_deadline_seconds = 600
+        self.connections._retry = RetryFactory(self.credentials)
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        retryable_error = exceptions.InternalServerError(
+            "Error encountered during execution. Retrying may solve the problem.; "
+            "reason: backendError"
+        )
+        job_ids_used = []
+        jobs = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id in jobs:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.statement_type = "MERGE"
+            if not jobs:
+                job.state = "DONE"
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+            else:
+                job.state = "DONE"
+                job.error_result = None
+            job.result.side_effect = retryable_error
+            jobs[submitted_id] = job
+            return job
+
+        def get_job(job_id, *args, **kwargs):
+            job = jobs[job_id]
+            if job.error_result is None:
+                job.result.side_effect = None
+                job.result.return_value = iter([])
+            return job
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = get_job
+
+        self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> dies, submit(A) -> 409 -> submit(B) -> polling fails,
+        # submit(B) -> 409 -> attach to B. Never a third job.
+        job_a, job_b = list(jobs)
+        self.assertEqual(job_ids_used, [job_a, job_a, job_b, job_b])
+
+    @patch("google.api_core.retry.retry_unary.time.sleep")
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_raw_execute_attaches_to_resubmitted_job_after_lost_insert_response(
+        self, MockQueryJobConfig, _mock_sleep
+    ):
+        """If B's insert lands but its response is lost, the retry attaches to B.
+
+        The resubmitted id must be tracked before submission; otherwise the retry
+        re-enters with dead job A and mints a third job alongside the live B.
+        """
+        self.credentials.job_retries = 2
+        self.credentials.job_retry_deadline_seconds = 600
+        self.connections._retry = RetryFactory(self.credentials)
+
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        job_ids_used = []
+        jobs = {}
+
+        def submit(*args, **kwargs):
+            submitted_id = kwargs.get("job_id")
+            job_ids_used.append(submitted_id)
+            if submitted_id in jobs:
+                raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
+
+            job = Mock(job_id=submitted_id, location="US", project="project")
+            job.statement_type = "MERGE"
+            job.state = "DONE"
+            jobs[submitted_id] = job
+            if len(jobs) == 1:
+                job.error_result = {"reason": "backendError", "message": "Error encountered"}
+                job.result.side_effect = exceptions.InternalServerError(
+                    "Error encountered during execution. Retrying may solve the problem.; "
+                    "reason: backendError"
+                )
+                return job
+
+            # B is created server-side, but the insert response never arrives.
+            job.error_result = None
+            job.result.return_value = iter([])
+            raise Timeout("insert response lost")
+
+        self.mock_client.query.side_effect = submit
+        self.mock_client.get_job.side_effect = lambda job_id, *args, **kwargs: jobs[job_id]
+
+        query_job, _ = self.connections.raw_execute("MERGE INTO t USING s ON ...")
+
+        # submit(A) -> dies, submit(A) -> 409 -> submit(B) -> lost response,
+        # submit(B) -> 409 -> attach to B. Never a third job.
+        job_a, job_b = list(jobs)
+        self.assertEqual(job_ids_used, [job_a, job_a, job_b, job_b])
+        self.assertIs(query_job, jobs[job_b])
+
+    @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
+    def test_query_and_results_attaches_when_resubmission_conflicts(self, MockQueryJobConfig):
+        """A 409 on the resubmitted id (transport retry landed it) attaches to that job."""
+        exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
+        dead_job_id = "job_dead"
+        fresh_job_id = "job_fresh"
+        self.connections.generate_job_id = Mock(return_value=fresh_job_id)
+
+        def submit(*args, **kwargs):
+            raise exceptions.Conflict(f"Already Exists: Job project:{kwargs['job_id']}")
+
+        self.mock_client.query.side_effect = submit
+
+        dead_job = Mock(
+            job_id=dead_job_id,
+            state="DONE",
+            statement_type="MERGE",
+            error_result={"reason": "backendError", "message": "Error encountered"},
+        )
+        fresh_job = Mock(job_id=fresh_job_id, location="US", project="project", state="RUNNING")
+        fresh_job.result.return_value = iter([])
+        self.mock_client.get_job.side_effect = lambda job_id, *args, **kwargs: {
+            dead_job_id: dead_job,
+            fresh_job_id: fresh_job,
+        }[job_id]
+        resubmitted = []
+
+        query_job, _ = self.connections._query_and_results(
+            self.mock_connection,
+            "MERGE INTO t USING s ON ...",
+            {"dry_run": False},
+            job_id=dead_job_id,
+            on_resubmit=resubmitted.append,
+        )
+
+        self.assertIs(query_job, fresh_job)
+        self.assertEqual(resubmitted, [fresh_job_id])
+        self.assertEqual(self.mock_client.query.call_count, 2)
+        self.assertEqual(
+            [c.args[0] for c in self.mock_client.get_job.call_args_list],
+            [dead_job_id, fresh_job_id],
+        )
 
     @patch("dbt.adapters.bigquery.connections.QueryJobConfig")
     def test_raw_execute_no_retry_on_non_retryable_error(self, MockQueryJobConfig):

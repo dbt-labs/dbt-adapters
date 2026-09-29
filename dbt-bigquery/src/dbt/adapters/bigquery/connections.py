@@ -6,7 +6,7 @@ import json
 from multiprocessing.context import SpawnContext
 import re
 import time
-from typing import Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
 from google.auth.exceptions import RefreshError
@@ -40,7 +40,11 @@ from dbt.adapters.events.types import SQLQuery, SQLQueryStatus
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.bigquery.clients import create_bigquery_client
 from dbt.adapters.bigquery.credentials import Priority
-from dbt.adapters.bigquery.retry import RetryFactory
+from dbt.adapters.bigquery.retry import (
+    job_is_terminally_failed,
+    job_may_have_partially_committed,
+    RetryFactory,
+)
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -234,21 +238,57 @@ class BigQueryConnectionManager(BaseConnectionManager):
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
 
-    def _submit_or_attach(self, client: Client, job_id: str, submit: Callable):
-        """Submit a job, or attach to the existing one via get_job on 409 Conflict.
+    def _submit_or_attach(
+        self,
+        client: Client,
+        job_id: str,
+        submit: Callable[[str], Any],
+        on_resubmit: Optional[Callable[[str], None]] = None,
+    ) -> Any:
+        """Submit a job; on 409 Conflict, attach to the existing job.
 
-        A stable job_id makes jobs.insert idempotent: a resubmission (dbt's retry
-        or the client library's transport retry after a lost response) attaches to
-        the in-flight job instead of spawning a second one that re-runs work.
+        A terminally failed single-statement job committed nothing, so it is
+        resubmitted under a fresh job_id. SCRIPT jobs may have partially
+        committed, so they are attached to instead.
+
+        on_resubmit gets the fresh job_id before submission, so retries attach to it.
         """
         try:
-            return submit()
+            return submit(job_id)
         except Conflict:
+            existing_job = client.get_job(job_id)
+
+        if not job_is_terminally_failed(existing_job):
             logger.debug(
                 f"Job {job_id} already exists; attaching to the in-flight job "
                 "instead of resubmitting to avoid duplicate execution."
             )
-            return client.get_job(job_id)
+            return existing_job
+
+        if job_may_have_partially_committed(existing_job):
+            logger.debug(
+                f"Job {job_id} failed, but is a multi-statement script that may "
+                "have already committed some of its statements; replaying its "
+                "error rather than resubmitting and re-running them."
+            )
+            return existing_job
+
+        resubmit_job_id = self.generate_job_id()
+        logger.debug(
+            f"Job {job_id} already exists but has terminally failed; "
+            f"resubmitting as {resubmit_job_id} rather than attaching, which "
+            "would only replay the same error."
+        )
+        if on_resubmit:
+            on_resubmit(resubmit_job_id)
+        try:
+            return submit(resubmit_job_id)
+        except Conflict:
+            # A transport retry landed the insert; further resubmits are the caller's.
+            logger.debug(
+                f"Job {resubmit_job_id} already exists after resubmission; attaching to it."
+            )
+            return client.get_job(resubmit_job_id)
 
     def raw_execute(
         self,
@@ -295,8 +335,13 @@ class BigQueryConnectionManager(BaseConnectionManager):
 
         with self.exception_handler(sql):
             # Mint the job_id once, outside the retry closure, so a re-entry
-            # resubmits the same job instead of spawning a duplicate.
+            # attaches to the same job instead of spawning a duplicate. Track
+            # resubmitted ids so re-entries attach to the latest job.
             job_id = self.generate_job_id()
+
+            def _track_resubmitted_job_id(resubmitted_job_id: str) -> None:
+                nonlocal job_id
+                job_id = resubmitted_job_id
 
             def _execute_with_retry():
                 return self._query_and_results(
@@ -305,6 +350,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                     job_params,
                     job_id,
                     limit=limit,
+                    on_resubmit=_track_resubmitted_job_id,
                 )
 
             retry = self._retry.create_reopen_with_deadline(conn)
@@ -508,11 +554,11 @@ class BigQueryConnectionManager(BaseConnectionManager):
             copy_job = self._submit_or_attach(
                 client,
                 job_id,
-                lambda: client.copy_table(
+                lambda submit_job_id: client.copy_table(
                     source_ref_array,
                     destination_ref,
                     job_config=CopyJobConfig(write_disposition=write_disposition),
-                    job_id=job_id,
+                    job_id=submit_job_id,
                     retry=self._retry.create_reopen_with_deadline(conn),
                 ),
             )
@@ -641,6 +687,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         job_params,
         job_id,
         limit: Optional[int] = None,
+        on_resubmit: Optional[Callable[[str], None]] = None,
     ):
         """Query the client and wait for results."""
         client: Client = conn.handle
@@ -651,22 +698,21 @@ class BigQueryConnectionManager(BaseConnectionManager):
             timeout = self._retry.create_job_execution_timeout()
             if timeout:
                 job_params["job_timeout_ms"] = int(timeout * 1000)
-        query_job_config = QueryJobConfig(**job_params)
         polling_timeout = (
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
         # Cannot reuse job_config if destination is set and ddl is used.
-        # job_id is stable across retries (see raw_execute).
         query_job = self._submit_or_attach(
             client,
             job_id,
-            lambda: client.query(
+            lambda submit_job_id: client.query(
                 query=sql,
-                job_config=query_job_config,
-                job_id=job_id,
+                job_config=QueryJobConfig(**job_params),
+                job_id=submit_job_id,
                 job_retry=None,
                 timeout=self._retry.create_job_creation_timeout(),
             ),
+            on_resubmit=on_resubmit,
         )
         if (
             query_job.location is not None
