@@ -60,6 +60,11 @@ class _StubSparkConnectClient:
         self._builder = None
 
 
+class _StubRetrying:
+    def __iter__(self):
+        yield "attempt"
+
+
 @pytest.fixture
 def fake_pyspark(monkeypatch):
     """Inject fake pyspark modules so the channel module can import them."""
@@ -70,7 +75,9 @@ def fake_pyspark(monkeypatch):
     fake_core = types.ModuleType("pyspark.sql.connect.client.core")
     fake_core.ChannelBuilder = _StubChannelBuilder
     fake_core.SparkConnectClient = _StubSparkConnectClient
+    fake_core.Retrying = _StubRetrying
     fake_reattach = types.ModuleType("pyspark.sql.connect.client.reattach")
+    fake_reattach.RetryException = type("RetryException", (Exception,), {})
     fake_reattach.ExecutePlanResponseReattachableIterator = _StubReattachIterator
 
     monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)

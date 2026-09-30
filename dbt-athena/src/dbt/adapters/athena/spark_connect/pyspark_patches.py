@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import threading
-import weakref
-from typing import Any
+import time
+from typing import Any, List, Optional
 
 from dbt.adapters.events.logging import AdapterLogger
 
@@ -28,10 +28,9 @@ def apply_pyspark_workarounds() -> None:
         #   1. Stash the ChannelBuilder on the gRPC stub.
         #   2. Refresh metadata via the builder before each RPC (ReattachExecute,
         #      ReleaseExecute, retry ExecutePlan).
-        #   3. One PERMISSION_DENIED retry per consecutive failure; budget
-        #      replenishes after every successful response.
         _stash_channel_builder_on_stub()
         _refresh_reattach_iterator_metadata()
+        _track_retry_blocks()
         _retry_permission_denied_in_spark_client()
         _patches_applied = True
 
@@ -76,10 +75,16 @@ def _silence_release_all_warning() -> None:
     )
 
 
-# weakref so a reused worker thread does not pin a stale iterator.
-# Assumes one in-flight iterator per thread (pyspark consumes synchronously);
-# concurrent iterators would need a stack here.
-_CURRENT_ITERATOR_THREAD_LOCAL = threading.local()
+_PERMISSION_DENIED_RETRY_WINDOW_SECONDS = 600
+
+_RETRY_BLOCK_THREAD_LOCAL = threading.local()
+
+
+class _RetryBlock:
+    __slots__ = ("permission_denied_since",)
+
+    def __init__(self) -> None:
+        self.permission_denied_since: Optional[float] = None
 
 
 def _stash_channel_builder_on_stub() -> None:
@@ -112,12 +117,12 @@ def _refresh_reattach_iterator_metadata() -> None:
     list forever, which keeps Athena's 30-min ``x-aws-proxy-auth`` token
     pinned to its initial value. Upstream alignment follows SPARK-57425
     (apache/spark#56497): refresh before initial ExecutePlan retry / reattach
-    / ReleaseExecute, and replenish the PERMISSION_DENIED retry budget on
-    every successful ``_call_iter`` so a query outlasting multiple TTLs can
-    rotate the token more than once.
+    / ReleaseExecute.
     """
+    import grpc
     from pyspark.sql.connect.client.reattach import (
         ExecutePlanResponseReattachableIterator,
+        RetryException,
     )
 
     original_init = ExecutePlanResponseReattachableIterator.__init__
@@ -142,15 +147,26 @@ def _refresh_reattach_iterator_metadata() -> None:
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
         self._dbt_athena_channel_builder = getattr(self._stub, "_dbt_athena_builder", None)
-        self._dbt_athena_pd_retried = False
-        _CURRENT_ITERATOR_THREAD_LOCAL.iterator_ref = weakref.ref(self)
 
     def _patched_call_iter(self: Any, iter_fun: Any) -> Any:
         if self._iterator is None:
             _refresh(self)
-        result = original_call_iter(self, iter_fun)
-        self._dbt_athena_pd_retried = False
-        return result
+        try:
+            return original_call_iter(self, iter_fun)
+        except grpc.RpcError as e:
+            # A request rejected by the Athena proxy never reaches the server, so a
+            # ReattachExecute for a client whose first ExecutePlan was rejected finds no
+            # server-side session.
+            if (
+                self._last_returned_response_id is not None
+                or "INVALID_HANDLE.SESSION_NOT_FOUND" not in str(e)
+            ):
+                raise
+            _refresh(self)
+            self._iterator = iter(
+                self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
+            )
+            raise RetryException() from e
 
     def _patched_release_until(self: Any, until_response_id: str) -> Any:
         _refresh(self)
@@ -166,16 +182,36 @@ def _refresh_reattach_iterator_metadata() -> None:
     ExecutePlanResponseReattachableIterator._release_all = _patched_release_all
 
 
-def _retry_permission_denied_in_spark_client() -> None:
-    """Treat PERMISSION_DENIED as retryable so a 403 from token expiry can recover.
+def _track_retry_blocks() -> None:
+    from pyspark.sql.connect.client.core import Retrying
 
-    pyspark's default ``retry_exception`` only retries UNAVAILABLE (and one
-    ``INTERNAL`` cursor case), so a 403 propagates out before the reattach
-    iterator can re-issue ``ReattachExecute``. We allow one retry per
-    consecutive failure: ``_refresh_reattach_iterator_metadata`` resets the
-    budget on every successful response (matching upstream SPARK-57425), so
-    a query that survives one rotation can survive subsequent ones. Two
-    PERMISSION_DENIED in a row without an intervening success propagate.
+    original_iter = Retrying.__iter__
+
+    def _patched_iter(self: Any) -> Any:
+        stack: Optional[List[_RetryBlock]] = getattr(_RETRY_BLOCK_THREAD_LOCAL, "stack", None)
+        if stack is None:
+            stack = []
+            _RETRY_BLOCK_THREAD_LOCAL.stack = stack
+        block = _RetryBlock()
+        stack.append(block)
+        try:
+            yield from original_iter(self)
+        finally:
+            for index in range(len(stack) - 1, -1, -1):
+                if stack[index] is block:
+                    del stack[index]
+                    break
+
+    Retrying.__iter__ = _patched_iter
+
+
+def _retry_permission_denied_in_spark_client() -> None:
+    """Retry PERMISSION_DENIED with pyspark's backoff for a bounded window.
+
+    Athena's Spark Connect proxy answers PERMISSION_DENIED both when the
+    AuthToken expires and when request volume exceeds a limit shared across
+    sessions. The latter rejects every session, including newly started
+    ones, for minutes, so an immediate single retry cannot recover.
     """
     import grpc
     from pyspark.sql.connect.client.core import SparkConnectClient
@@ -187,13 +223,24 @@ def _retry_permission_denied_in_spark_client() -> None:
             return True
         if not (isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.PERMISSION_DENIED):
             return False
-        iterator_ref = getattr(_CURRENT_ITERATOR_THREAD_LOCAL, "iterator_ref", None)
-        iterator = iterator_ref() if iterator_ref is not None else None
-        if iterator is None or getattr(iterator, "_dbt_athena_pd_retried", False):
-            LOGGER.warning("PERMISSION_DENIED retry budget exhausted; propagating.")
+        stack = getattr(_RETRY_BLOCK_THREAD_LOCAL, "stack", None)
+        if not stack:
+            LOGGER.warning("PERMISSION_DENIED outside a pyspark retry loop; propagating.")
             return False
-        iterator._dbt_athena_pd_retried = True
-        LOGGER.debug("PERMISSION_DENIED detected; allowing one reattach with refreshed metadata.")
-        return True
+        block = stack[-1]
+        now = time.monotonic()
+        if block.permission_denied_since is None:
+            block.permission_denied_since = now
+            LOGGER.warning(
+                "PERMISSION_DENIED from Athena Spark Connect; retrying with backoff "
+                f"for up to {_PERMISSION_DENIED_RETRY_WINDOW_SECONDS}s."
+            )
+            return True
+        if now - block.permission_denied_since <= _PERMISSION_DENIED_RETRY_WINDOW_SECONDS:
+            return True
+        LOGGER.warning(
+            f"PERMISSION_DENIED persisted for {_PERMISSION_DENIED_RETRY_WINDOW_SECONDS}s; propagating."
+        )
+        return False
 
     SparkConnectClient.retry_exception = classmethod(_patched)

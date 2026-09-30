@@ -29,6 +29,8 @@ def fake_pyspark_modules(monkeypatch):
             self._stub = kwargs.get("stub")
             self._iterator = kwargs.get("iterator")
             self._metadata = kwargs.get("metadata")
+            self._initial_request = kwargs.get("initial_request")
+            self._last_returned_response_id = kwargs.get("last_returned_response_id")
 
         @classmethod
         def shutdown(cls):
@@ -45,6 +47,9 @@ def fake_pyspark_modules(monkeypatch):
         def _release_all(self):
             self._released_all = True
 
+    class FakeRetryException(Exception):
+        pass
+
     class FakeSparkConnectClient:
         def __init__(self, stub=None, builder=None):
             self._stub = stub
@@ -56,6 +61,13 @@ def fake_pyspark_modules(monkeypatch):
 
             return isinstance(e, _grpc.RpcError) and e.code() == _grpc.StatusCode.UNAVAILABLE
 
+    class FakeRetrying:
+        def __init__(self, **kwargs):
+            pass
+
+        def __iter__(self):
+            yield "attempt"
+
     fake_pyspark = types.ModuleType("pyspark")
     fake_sql = types.ModuleType("pyspark.sql")
     fake_connect = types.ModuleType("pyspark.sql.connect")
@@ -65,8 +77,10 @@ def fake_pyspark_modules(monkeypatch):
     fake_client.__path__ = []  # type: ignore[attr-defined]
     fake_reattach = types.ModuleType("pyspark.sql.connect.client.reattach")
     fake_reattach.ExecutePlanResponseReattachableIterator = FakeIterator
+    fake_reattach.RetryException = FakeRetryException
     fake_core = types.ModuleType("pyspark.sql.connect.client.core")
     fake_core.SparkConnectClient = FakeSparkConnectClient
+    fake_core.Retrying = FakeRetrying
 
     monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)
     monkeypatch.setitem(sys.modules, "pyspark.sql", fake_sql)
@@ -74,7 +88,12 @@ def fake_pyspark_modules(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client", fake_client)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.reattach", fake_reattach)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.core", fake_core)
-    return types.SimpleNamespace(iterator=FakeIterator, client=FakeSparkConnectClient)
+    return types.SimpleNamespace(
+        iterator=FakeIterator,
+        client=FakeSparkConnectClient,
+        retrying=FakeRetrying,
+        retry_exception=FakeRetryException,
+    )
 
 
 @pytest.fixture
@@ -85,6 +104,21 @@ def fake_reattach_module(fake_pyspark_modules):
 @pytest.fixture
 def fake_spark_client_module(fake_pyspark_modules):
     return fake_pyspark_modules.client
+
+
+@pytest.fixture
+def fake_retrying(fake_pyspark_modules):
+    return fake_pyspark_modules.retrying
+
+
+def _permission_denied():
+    import grpc
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.PERMISSION_DENIED
+
+    return _Err()
 
 
 @pytest.fixture(autouse=True)
@@ -217,59 +251,6 @@ def test_call_iter_tolerates_builder_metadata_exception(
     assert iterator._metadata == [("k", "v")]
 
 
-def test_retry_exception_allows_first_permission_denied(
-    fake_reattach_module, fake_spark_client_module
-):
-    import grpc
-
-    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
-
-    apply_pyspark_workarounds()
-
-    stub, _ = _make_stub_with_builder("t")
-    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-    assert iterator._dbt_athena_pd_retried is False
-
-    class _Err(grpc.RpcError):
-        def code(self):
-            return grpc.StatusCode.PERMISSION_DENIED
-
-    assert fake_spark_client_module.retry_exception(_Err()) is True
-    assert iterator._dbt_athena_pd_retried is True
-
-
-def test_call_iter_resets_pd_budget_on_success(fake_reattach_module, fake_spark_client_module):
-    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
-
-    apply_pyspark_workarounds()
-
-    stub, _ = _make_stub_with_builder("t")
-    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-    iterator._dbt_athena_pd_retried = True
-    iterator._call_iter(lambda: "ok")
-
-    assert iterator._dbt_athena_pd_retried is False
-
-
-def test_call_iter_does_not_reset_pd_budget_on_exception(
-    fake_reattach_module, fake_spark_client_module
-):
-    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
-
-    apply_pyspark_workarounds()
-
-    stub, _ = _make_stub_with_builder("t")
-    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-    iterator._dbt_athena_pd_retried = True
-
-    def _boom():
-        raise RuntimeError("boom")
-
-    with pytest.raises(RuntimeError):
-        iterator._call_iter(_boom)
-    assert iterator._dbt_athena_pd_retried is True
-
-
 def test_release_until_refreshes_metadata(fake_reattach_module, fake_spark_client_module):
     from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
 
@@ -316,49 +297,6 @@ def test_release_tolerates_missing_channel_builder(fake_reattach_module, fake_sp
     assert iterator._released_all is True
 
 
-def test_retry_exception_rejects_second_permission_denied(
-    fake_reattach_module, fake_spark_client_module
-):
-    import grpc
-
-    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
-
-    apply_pyspark_workarounds()
-
-    stub, _ = _make_stub_with_builder("t")
-    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-
-    class _Err(grpc.RpcError):
-        def code(self):
-            return grpc.StatusCode.PERMISSION_DENIED
-
-    assert fake_spark_client_module.retry_exception(_Err()) is True
-    assert fake_spark_client_module.retry_exception(_Err()) is False
-    assert iterator._dbt_athena_pd_retried is True
-
-
-def test_retry_exception_rejects_after_iterator_garbage_collected(
-    fake_reattach_module, fake_spark_client_module
-):
-    import gc
-
-    import grpc
-
-    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
-
-    apply_pyspark_workarounds()
-
-    stub, _ = _make_stub_with_builder("t")
-    fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-    gc.collect()  # weakref iterator can be reclaimed once nothing holds a strong ref.
-
-    class _Err(grpc.RpcError):
-        def code(self):
-            return grpc.StatusCode.PERMISSION_DENIED
-
-    assert fake_spark_client_module.retry_exception(_Err()) is False
-
-
 def test_retry_exception_still_retries_unavailable(fake_reattach_module, fake_spark_client_module):
     import grpc
 
@@ -387,3 +325,146 @@ def test_retry_exception_does_not_retry_unrelated_codes(
             return grpc.StatusCode.INVALID_ARGUMENT
 
     assert fake_spark_client_module.retry_exception(_Err()) is False
+
+
+def test_permission_denied_retried_repeatedly_within_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+
+
+def test_permission_denied_propagates_after_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def test_permission_denied_window_restarts_per_retry_loop(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+    clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+
+
+def test_nested_retry_loop_keeps_outer_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+        for _ in fake_retrying():
+            assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def test_permission_denied_outside_retry_loop_propagates(fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def _session_not_found():
+    import grpc
+
+    class _Err(grpc.RpcError):
+        def __str__(self):
+            return "[INVALID_HANDLE.SESSION_NOT_FOUND] The handle is invalid."
+
+    return _Err()
+
+
+def _raise(error):
+    def _fn():
+        raise error
+
+    return _fn
+
+
+def test_session_not_found_before_first_response_resends_execute_plan(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    stub.ExecutePlan.return_value = ["first-response"]
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub, iterator=None, metadata=[("k", "v")], initial_request="initial"
+    )
+
+    with pytest.raises(fake_pyspark_modules.retry_exception):
+        iterator._call_iter(_raise(_session_not_found()))
+
+    stub.ExecutePlan.assert_called_once()
+    assert stub.ExecutePlan.call_args.args == ("initial",)
+    assert next(iterator._iterator) == "first-response"
+
+
+def test_session_not_found_after_a_response_propagates(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub,
+        iterator=None,
+        metadata=[("k", "v")],
+        initial_request="initial",
+        last_returned_response_id="r1",
+    )
+    error = _session_not_found()
+
+    with pytest.raises(type(error)):
+        iterator._call_iter(_raise(error))
+    stub.ExecutePlan.assert_not_called()
+
+
+def test_other_rpc_error_before_first_response_propagates(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub, iterator=None, metadata=[("k", "v")], initial_request="initial"
+    )
+    error = _permission_denied()
+
+    with pytest.raises(type(error)):
+        iterator._call_iter(_raise(error))
+    stub.ExecutePlan.assert_not_called()
