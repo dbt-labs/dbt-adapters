@@ -1,6 +1,5 @@
 {% macro snowflake__create_csv_table(model, agate_table) %}
-    {#-- Sources is_transient from the same catalog relation the table create path
-         (snowflake__create_table_info_schema_sql) uses, so seeds and tables can't drift. --#}
+    {# FIXME: Resolve DDL prefixes before Jinja, including Iceberg variants. #}
     {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
     {%- if catalog_relation.is_transient -%}
         {%- set transient = 'transient ' -%}
