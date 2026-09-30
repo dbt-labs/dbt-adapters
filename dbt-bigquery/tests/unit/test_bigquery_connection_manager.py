@@ -554,7 +554,7 @@ class TestBigQueryConnectionManager(unittest.TestCase):
             "MERGE INTO t USING s ON ...",
             {"dry_run": False},
             job_id=dead_job_id,
-            on_resubmit=resubmitted.append,
+            on_job_id_change=resubmitted.append,
         )
 
         self.assertIs(query_job, fresh_job)

@@ -243,7 +243,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         client: Client,
         job_id: str,
         submit: Callable[[str], Any],
-        on_resubmit: Optional[Callable[[str], None]] = None,
+        on_job_id_change: Optional[Callable[[str], None]] = None,
     ) -> Any:
         """Submit a job; on 409 Conflict, attach to the existing job.
 
@@ -251,7 +251,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         resubmitted under a fresh job_id. SCRIPT jobs may have partially
         committed, so they are attached to instead.
 
-        on_resubmit gets the fresh job_id before submission, so retries attach to it.
+        on_job_id_change gets the fresh job_id before resubmission, so retries attach to it.
         """
         try:
             return submit(job_id)
@@ -279,8 +279,8 @@ class BigQueryConnectionManager(BaseConnectionManager):
             f"resubmitting as {resubmit_job_id} rather than attaching, which "
             "would only replay the same error."
         )
-        if on_resubmit:
-            on_resubmit(resubmit_job_id)
+        if on_job_id_change:
+            on_job_id_change(resubmit_job_id)
         try:
             return submit(resubmit_job_id)
         except Conflict:
@@ -339,9 +339,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
             # resubmitted ids so re-entries attach to the latest job.
             job_id = self.generate_job_id()
 
-            def _track_resubmitted_job_id(resubmitted_job_id: str) -> None:
+            def _update_job_id(new_job_id: str) -> None:
                 nonlocal job_id
-                job_id = resubmitted_job_id
+                job_id = new_job_id
 
             def _execute_with_retry():
                 return self._query_and_results(
@@ -350,7 +350,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
                     job_params,
                     job_id,
                     limit=limit,
-                    on_resubmit=_track_resubmitted_job_id,
+                    on_job_id_change=_update_job_id,
                 )
 
             retry = self._retry.create_reopen_with_deadline(conn)
@@ -687,7 +687,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         job_params,
         job_id,
         limit: Optional[int] = None,
-        on_resubmit: Optional[Callable[[str], None]] = None,
+        on_job_id_change: Optional[Callable[[str], None]] = None,
     ):
         """Query the client and wait for results."""
         client: Client = conn.handle
@@ -698,6 +698,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
             timeout = self._retry.create_job_execution_timeout()
             if timeout:
                 job_params["job_timeout_ms"] = int(timeout * 1000)
+        query_job_config = QueryJobConfig(**job_params)
         polling_timeout = (
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
@@ -707,12 +708,12 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_id,
             lambda submit_job_id: client.query(
                 query=sql,
-                job_config=QueryJobConfig(**job_params),
+                job_config=query_job_config,
                 job_id=submit_job_id,
                 job_retry=None,
                 timeout=self._retry.create_job_creation_timeout(),
             ),
-            on_resubmit=on_resubmit,
+            on_job_id_change=on_job_id_change,
         )
         if (
             query_job.location is not None
