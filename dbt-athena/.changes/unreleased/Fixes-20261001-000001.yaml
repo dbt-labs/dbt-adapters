@@ -1,0 +1,6 @@
+kind: Fixes
+body: Report data_scanned_in_bytes as the sum of all Athena queries run by a dbt node instead of only the last query.
+time: 2026-10-01T00:00:01.000000+00:00
+custom:
+    Author: NGQ-Hiro
+    Issue: "431"
