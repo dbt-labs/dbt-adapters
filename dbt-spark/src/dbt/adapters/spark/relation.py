@@ -1,14 +1,9 @@
-from typing import Optional, TypeVar
+from typing import Optional
 from dataclasses import dataclass, field
 
 from dbt.adapters.base.relation import BaseRelation, Policy
-from dbt.adapters.events.logging import AdapterLogger
-
+from dbt.adapters.contracts.relation import ComponentName
 from dbt_common.exceptions import DbtRuntimeError
-
-logger = AdapterLogger("Spark")
-
-Self = TypeVar("Self", bound="BaseRelation")
 
 
 @dataclass
@@ -20,7 +15,7 @@ class SparkQuotePolicy(Policy):
 
 @dataclass
 class SparkIncludePolicy(Policy):
-    database: bool = False
+    database: bool = True
     schema: bool = True
     identifier: bool = True
 
@@ -38,13 +33,10 @@ class SparkRelation(BaseRelation):
     require_alias: bool = False
 
     def __post_init__(self) -> None:
-        if self.database != self.schema and self.database:
-            raise DbtRuntimeError("Cannot set database in spark!")
+        if self.database is not None and not self.database.strip():
+            raise DbtRuntimeError("Catalog cannot be empty")
 
-    def render(self) -> str:
-        if self.include_policy.database and self.include_policy.schema:
-            raise DbtRuntimeError(
-                "Got a spark relation with schema and database set to "
-                "include, but only one can be set"
-            )
-        return super().render()
+    def _is_exactish_match(self, field: ComponentName, value: str) -> bool:
+        if self.quote_policy.get_part(field) is False:
+            return self.path.get_lowered_part(field) == value.lower()
+        return super()._is_exactish_match(field, value)
