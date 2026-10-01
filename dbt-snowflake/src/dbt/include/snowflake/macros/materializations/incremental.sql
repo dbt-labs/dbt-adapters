@@ -222,6 +222,8 @@
 
   {% do persist_docs(target_relation, model) %}
 
+  {% do snowflake__apply_data_metric_functions(target_relation) %}
+
   {% do unset_query_tag(original_query_tag) %}
 
   {{ return({'relations': [target_relation]}) }}
