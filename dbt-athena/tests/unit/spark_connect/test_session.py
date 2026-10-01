@@ -47,6 +47,7 @@ def _register(pool, session_id, key, athena_client, dpu=1, load=1):
         "load": load,
         "dpu": dpu,
         "draining": False,
+        "spark": None,
     }
 
 
@@ -698,3 +699,138 @@ class TestReuseLivenessCheck:
         assert "sid-dead" not in snapshot
         assert "sid-alive" in snapshot
         assert sid in {"sid-alive", "sid-fresh"}
+
+
+class TestSparkClientBinding:
+    """One Spark Connect client per Athena session, owned by the pool.
+
+    On pyspark 3.5 ``SparkSession.stop()`` does not release the server-side
+    Spark Connect session, so the pool binds a single client to each Athena
+    session and stops it only when that session leaves the pool.
+    """
+
+    def test_get_spark_is_none_for_unknown_or_unbound_session(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-1", ("inv", "fp"), MagicMock())
+
+        assert pool.get_spark("sid-missing") is None
+        assert pool.get_spark("sid-1") is None
+
+    def test_set_spark_binds_first_client_and_returns_it(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-1", ("inv", "fp"), MagicMock())
+        spark = MagicMock()
+
+        assert pool.set_spark("sid-1", spark) is spark
+        assert pool.get_spark("sid-1") is spark
+
+    def test_set_spark_keeps_existing_client_when_already_bound(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-1", ("inv", "fp"), MagicMock())
+        first = MagicMock()
+        second = MagicMock()
+        pool.set_spark("sid-1", first)
+
+        assert pool.set_spark("sid-1", second) is first
+        assert pool.get_spark("sid-1") is first
+        # The pool never stops the loser; that is the caller's job.
+        second.stop.assert_not_called()
+
+    def test_set_spark_on_unregistered_session_returns_client_unbound(self):
+        pool = SparkConnectSessionPool()
+        spark = MagicMock()
+
+        assert pool.set_spark("sid-gone", spark) is spark
+        assert pool.get_spark("sid-gone") is None
+
+    def test_client_survives_release_and_is_reused_on_next_acquire(self):
+        pool = SparkConnectSessionPool()
+        client = _make_client(["sid-1"])
+        spark = MagicMock()
+
+        first = _acquire(pool, client)
+        pool.set_spark(first, spark)
+        pool.release(first)
+        second = _acquire(pool, client)
+
+        assert second == first
+        assert pool.get_spark(second) is spark
+        spark.stop.assert_not_called()
+
+    def test_terminate_stops_client_before_terminating_session(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client)
+        spark = MagicMock()
+        pool.set_spark("sid-1", spark)
+        order: list[str] = []
+        spark.stop.side_effect = lambda: order.append("stop")
+        client.terminate_session.side_effect = lambda **_: order.append("terminate")
+
+        pool.terminate("sid-1")
+
+        assert order == ["stop", "terminate"]
+        assert "sid-1" not in pool._snapshot()
+
+    def test_terminate_of_shared_session_keeps_client_until_drained(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client, load=2)
+        spark = MagicMock()
+        pool.set_spark("sid-1", spark)
+
+        pool.terminate("sid-1")  # co-tenant still attached -> drains
+        spark.stop.assert_not_called()
+        assert pool.get_spark("sid-1") is spark
+
+        pool.release("sid-1")  # last caller leaves
+        spark.stop.assert_called_once()
+        client.terminate_session.assert_called_once_with(SessionId="sid-1")
+
+    def test_unregister_stops_client(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client)
+        spark = MagicMock()
+        pool.set_spark("sid-1", spark)
+
+        pool.unregister("sid-1")
+
+        spark.stop.assert_called_once()
+        client.terminate_session.assert_not_called()
+
+    def test_evict_dead_sessions_stops_client(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
+        _register(pool, "sid-dead", ("inv", "fp"), client)
+        spark = MagicMock()
+        pool.set_spark("sid-dead", spark)
+
+        assert pool._evict_dead_sessions(client) == 1
+        spark.stop.assert_called_once()
+
+    def test_stale_invocation_cleanup_stops_client(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-stale", ("old-inv", "fp"), old_client)
+        spark = MagicMock()
+        pool.set_spark("sid-stale", spark)
+
+        _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        spark.stop.assert_called_once()
+        old_client.terminate_session.assert_called_once_with(SessionId="sid-stale")
+
+    def test_client_stop_errors_are_ignored(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp"), client)
+        spark = MagicMock()
+        spark.stop.side_effect = RuntimeError("channel already closed")
+        pool.set_spark("sid-1", spark)
+
+        pool.terminate("sid-1")  # Must not raise.
+
+        client.terminate_session.assert_called_once_with(SessionId="sid-1")
+        assert "sid-1" not in pool._snapshot()

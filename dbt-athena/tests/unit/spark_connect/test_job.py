@@ -102,6 +102,19 @@ class TestSparkConnectSubmission:
         helper.__dict__["athena_client"] = Mock()
         return helper
 
+    @staticmethod
+    def _mock_pool():
+        """Pool mock with no Spark client bound yet.
+
+        ``get_spark`` returns None so the submitter creates a client, and
+        ``set_spark`` hands back the client it was given, as the real pool
+        does when no other caller bound one first.
+        """
+        pool = Mock()
+        pool.get_spark.return_value = None
+        pool.set_spark.side_effect = lambda _sid, spark: spark
+        return pool
+
     def _make_submitter(self, parsed_model, credentials, mock_pool):
         from dbt.adapters.athena.config import AthenaSparkSessionConfig
 
@@ -169,7 +182,7 @@ class TestSparkConnectSubmission:
     def test_empty_code_returns_marker_without_acquiring_session(
         self, mock_credentials, spark_connect_parsed_model
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
 
         result = submitter.submit("   ")
@@ -180,10 +193,13 @@ class TestSparkConnectSubmission:
     def test_successful_submission_releases_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        fake_spark = MagicMock()
+        self._set_spark_create(return_value=fake_spark)
 
         result = submitter.submit("x = 1")
 
@@ -191,12 +207,17 @@ class TestSparkConnectSubmission:
         mock_pool.acquire.assert_called_once()
         mock_pool.release.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_not_called()
+        # The client is bound to the Athena session and kept for the next
+        # model; stopping it here would leak a server-side Spark Connect
+        # session on pyspark 3.5.
+        mock_pool.set_spark.assert_called_once_with("sid-1", fake_spark)
+        fake_spark.stop.assert_not_called()
 
     def test_assume_role_installs_assumed_default_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
         mock_credentials.assume_role_arn = "arn:aws:iam::123456789012:role/dbt"
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -228,7 +249,7 @@ class TestSparkConnectSubmission:
         # registers boto3's s3 client-class handler, so boto3.client("s3")
         # raises a duplicate upload_file injection.
         mock_credentials.assume_role_arn = "arn:aws:iam::123456789012:role/dbt"
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -256,7 +277,7 @@ class TestSparkConnectSubmission:
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
         mock_credentials.assume_role_arn = None
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -284,7 +305,7 @@ class TestSparkConnectSubmission:
     def test_transient_error_retries_with_new_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -307,7 +328,7 @@ class TestSparkConnectSubmission:
     def test_non_transient_error_raises_without_retry(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -337,7 +358,7 @@ class TestSparkConnectSubmission:
             def code(self):
                 return _FakeCode()
 
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         mock_pool.is_session_alive.return_value = False
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
@@ -378,7 +399,7 @@ class TestSparkConnectSubmission:
             def code(self):
                 return _FakeCode()
 
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
         mock_pool.is_session_alive.return_value = True
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
@@ -407,7 +428,7 @@ class TestSparkConnectSubmission:
         long_budget_model["config"] = dict(spark_connect_parsed_model["config"])
         long_budget_model["config"]["timeout"] = 60
 
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2", "sid-3", "sid-4"]
         submitter = self._make_submitter(long_budget_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -432,7 +453,7 @@ class TestSparkConnectSubmission:
         self, mock_credentials, spark_connect_parsed_model
     ):
         # Same engine config -> identical fingerprint; different -> different.
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         submitter_a = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
 
         other_model = dict(spark_connect_parsed_model)
@@ -450,7 +471,7 @@ class TestSparkConnectSubmission:
     def test_session_fingerprint_is_stable_for_identical_config(
         self, mock_credentials, spark_connect_parsed_model
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         submitter_a = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         submitter_b = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
 
@@ -468,7 +489,7 @@ class TestSparkConnectSubmission:
         long_budget_model["config"]["timeout"] = 60
 
         mock_credentials.spark_connect_max_retries = 5
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = [f"sid-{i}" for i in range(1, 7)]
         submitter = self._make_submitter(long_budget_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -489,7 +510,7 @@ class TestSparkConnectSubmission:
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
         mock_credentials.spark_connect_max_retries = 0
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -509,7 +530,7 @@ class TestSparkConnectSubmission:
     def test_watchdog_interrupts_and_raises_when_timer_fires(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -542,12 +563,16 @@ class TestSparkConnectSubmission:
         with pytest.raises(DbtRuntimeError, match="timed out after"):
             submitter.submit("spark.run()")
 
-        fake_spark.interruptAll.assert_called()
+        fake_spark.interruptTag.assert_called_once()
+        (tag,) = fake_spark.interruptTag.call_args.args
+        fake_spark.addTag.assert_called_once_with(tag)
+        fake_spark.removeTag.assert_called_once_with(tag)
+        fake_spark.interruptAll.assert_not_called()
 
     def test_watchdog_does_not_interrupt_on_successful_execution(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -557,6 +582,7 @@ class TestSparkConnectSubmission:
 
         submitter.submit("x = 1")
 
+        fake_spark.interruptTag.assert_not_called()
         fake_spark.interruptAll.assert_not_called()
 
     def test_retry_loop_aborts_when_backoff_exceeds_per_attempt_budget(
@@ -569,7 +595,7 @@ class TestSparkConnectSubmission:
         short_budget_model["config"] = dict(spark_connect_parsed_model["config"])
         short_budget_model["config"]["timeout"] = 1
 
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         submitter = self._make_submitter(short_budget_model, mock_credentials, mock_pool)
         self._stub_endpoint_and_channel(submitter, monkeypatch)
@@ -595,7 +621,7 @@ class TestSparkConnectSubmission:
         retry for the lost attempt's elapsed time would shrink its budget
         below what it needs to complete, defeating the point of retrying.
         """
-        mock_pool = Mock()
+        mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
         monkeypatch.setattr(time, "sleep", lambda *_: None)
@@ -623,6 +649,70 @@ class TestSparkConnectSubmission:
         # attempt's elapsed time did not eat into the second's.
         timeout = spark_connect_parsed_model["config"]["timeout"]
         assert endpoint_calls == [timeout, timeout]
+
+    def test_reuses_client_bound_to_session_without_new_endpoint_call(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.return_value = "sid-1"
+        bound_spark = MagicMock()
+        mock_pool.get_spark.return_value = bound_spark
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        create_mock = MagicMock()
+        self._set_spark_create(return_value=create_mock)
+
+        result = submitter.submit("spark.run()")
+
+        assert result == {"SparkConnect": True, "SparkSessionId": "sid-1"}
+        bound_spark.run.assert_called_once()
+        submitter._wait_for_endpoint.assert_not_called()
+        mock_pool.set_spark.assert_not_called()
+        sys.modules[
+            "pyspark.sql.connect.session"
+        ].SparkSession.builder.channelBuilder.return_value.create.assert_not_called()
+        bound_spark.stop.assert_not_called()
+        mock_pool.release.assert_called_once_with("sid-1")
+
+    def test_losing_bind_race_stops_own_client_and_uses_shared_one(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.return_value = "sid-1"
+        shared_spark = MagicMock()
+        mock_pool.set_spark.side_effect = lambda _sid, _spark: shared_spark
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        created_spark = MagicMock()
+        self._set_spark_create(return_value=created_spark)
+
+        submitter.submit("spark.run()")
+
+        created_spark.stop.assert_called_once()
+        created_spark.run.assert_not_called()
+        shared_spark.run.assert_called_once()
+        shared_spark.stop.assert_not_called()
+
+    def test_transient_failure_leaves_client_stop_to_pool_terminate(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_credentials.spark_connect_max_retries = 0
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception("Session not active")
+        self._set_spark_create(return_value=fake_spark)
+
+        with pytest.raises(DbtRuntimeError):
+            submitter.submit("spark.run()")
+
+        # The pool owns the client now: terminate() stops it together with
+        # the Athena session, so the submitter must not stop it itself.
+        mock_pool.terminate.assert_called_once_with("sid-1")
+        fake_spark.stop.assert_not_called()
+        fake_spark.removeTag.assert_called_once()
 
 
 class TestDpuRequestComputation:

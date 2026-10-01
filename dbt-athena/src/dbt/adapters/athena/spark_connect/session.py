@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import threading
 import time
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, TypedDict
 
 from dbt_common.exceptions import DbtRuntimeError
 from mypy_boto3_athena.client import AthenaClient
@@ -13,15 +13,21 @@ from mypy_boto3_athena.type_defs import EngineConfigurationTypeDef
 
 from dbt.adapters.athena.constants import LOGGER, SESSION_IDLE_TIMEOUT_MIN
 
+if TYPE_CHECKING:
+    from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
 SessionKey = Tuple[str, str]
 
 
-class _SessionInfo(TypedDict):
+class _SessionInfo(TypedDict, total=False):
     key: SessionKey
     client: AthenaClient
     load: int
     dpu: int
     draining: bool
+    # Spark Connect client bound to this Athena session, shared by every
+    # model that attaches to it. ``None`` until the first model creates it.
+    spark: Optional[ConnectSparkSession]
 
 
 class _GlobalSessionLimitReached(Exception):
@@ -296,8 +302,42 @@ class SparkConnectSessionPool:
             "load": 1,
             "dpu": dpu,
             "draining": False,
+            "spark": None,
         }
         return session_id
+
+    def get_spark(self, session_id: str) -> Optional[ConnectSparkSession]:
+        """Return the Spark Connect client bound to ``session_id``, if any."""
+        with self._lock:
+            info = self._sessions.get(session_id)
+            if info is None:
+                return None
+            return info.get("spark")
+
+    def set_spark(self, session_id: str, spark: ConnectSparkSession) -> ConnectSparkSession:
+        """Bind ``spark`` to ``session_id`` unless another client already is.
+
+        Returns the client that is bound after the call. When another caller
+        bound a client first, that client is returned and the caller must
+        stop its own. When the session is no longer registered, the passed
+        client is returned unbound so the caller can still finish its work.
+
+        One client per Athena session is deliberate: the Athena Spark
+        Connect server caps the number of Spark Connect sessions it will
+        accept per Athena session, and a Spark 3.5 client cannot release its
+        server-side session on ``stop()``. Creating a client per model
+        therefore exhausts that cap after a fixed number of models; reusing
+        one client per Athena session keeps the count at one.
+        """
+        with self._lock:
+            info = self._sessions.get(session_id)
+            if info is None:
+                return spark
+            existing = info.get("spark")
+            if existing is not None:
+                return existing
+            info["spark"] = spark
+            return spark
 
     def _get_session_state(self, athena_client: AthenaClient, session_id: str) -> str:
         """Return the Athena session state, or empty string on lookup failure."""
@@ -334,7 +374,9 @@ class SparkConnectSessionPool:
     def unregister(self, session_id: str) -> None:
         """Drop a session from the pool without terminating it on Athena."""
         with self._lock:
-            self._sessions.pop(session_id, None)
+            info = self._sessions.pop(session_id, None)
+        if info is not None:
+            self._stop_spark(session_id, info)
 
     def terminate(self, session_id: str) -> None:
         """Detach the calling model after a transient failure.
@@ -376,6 +418,7 @@ class SparkConnectSessionPool:
 
     def _terminate_entries(self, entries: List[Tuple[str, _SessionInfo]]) -> None:
         for session_id, info in entries:
+            self._stop_spark(session_id, info)
             try:
                 info["client"].terminate_session(SessionId=session_id)
                 LOGGER.debug(f"Terminated Spark Connect session {session_id}")
@@ -392,13 +435,30 @@ class SparkConnectSessionPool:
             state = self._get_session_state(athena_client, session_id)
             if not state or state in self._DEAD_SESSION_STATES:
                 with self._lock:
-                    if session_id in self._sessions:
-                        LOGGER.debug(
-                            f"Evicting dead Spark Connect session {session_id} (state={state})"
-                        )
-                        self._sessions.pop(session_id, None)
-                        evicted += 1
+                    info = self._sessions.pop(session_id, None)
+                if info is not None:
+                    LOGGER.debug(
+                        f"Evicting dead Spark Connect session {session_id} (state={state})"
+                    )
+                    self._stop_spark(session_id, info)
+                    evicted += 1
         return evicted
+
+    @staticmethod
+    def _stop_spark(session_id: str, info: _SessionInfo) -> None:
+        """Best-effort ``stop()`` of the client bound to a session being dropped.
+
+        Called outside ``self._lock``: on pyspark 3.5 ``stop()`` only closes
+        the local gRPC channel, but the call is still kept off the lock so a
+        slow or raising client never blocks other workers.
+        """
+        spark = info.get("spark")
+        if spark is None:
+            return
+        try:
+            spark.stop()
+        except Exception as e:  # noqa: BLE001 - best-effort cleanup
+            LOGGER.debug(f"Ignoring error while stopping Spark client for {session_id}: {e}")
 
     # -- test helpers -----------------------------------------------------
 

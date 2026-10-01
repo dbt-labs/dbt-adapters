@@ -8,9 +8,10 @@ import random
 import threading
 import time
 import traceback
+import uuid
 from functools import cached_property
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Tuple, TypedDict
 
 import boto3
 import botocore
@@ -47,6 +48,9 @@ from dbt.adapters.athena.spark_connect.errors import (
     is_transient_spark_error,
 )
 from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
+
+if TYPE_CHECKING:
+    from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
 
 class SparkConnectResult(TypedDict):
@@ -336,6 +340,52 @@ class SparkConnectSubmitter:
             f"{deadline_seconds}s (endpoint-wait deadline, not execution timeout)"
         )
 
+    def _get_or_create_spark(self, session_id: str) -> ConnectSparkSession:
+        """Return the Spark Connect client shared by all models on ``session_id``.
+
+        The client is created once per Athena session and kept in the pool
+        until the session is terminated or evicted. This keeps exactly one
+        Spark Connect session alive per Athena session: with pyspark 3.5,
+        ``SparkSession.stop()`` only closes the local gRPC channel and does
+        not release the server-side Spark Connect session, so creating one
+        client per model accumulates sessions on the server until Athena
+        rejects new ones. Athena's Spark Connect endpoint is 3.5, so the
+        ``ReleaseSession`` RPC added in Spark 4 is not available.
+
+        Because the client is shared, models attached to the same Athena
+        session also share Spark session state (temp views, session-level
+        configuration), matching the calculations-based submission path
+        where all models run in one interpreter.
+        """
+        spark = self._pool.get_spark(session_id)
+        if spark is not None:
+            LOGGER.debug(f"Reusing Spark Connect client for session {session_id}")
+            return spark
+
+        response = self._wait_for_endpoint(session_id, self.timeout)
+        channel_builder = create_athena_channel_builder(
+            self.athena_client,
+            session_id,
+            response["EndpointUrl"],
+            initial_auth_token=response.get("AuthToken"),
+            initial_token_expiry=response.get("AuthTokenExpirationTime"),
+        )
+
+        from pyspark.sql.connect.session import (
+            SparkSession as ConnectSparkSession,
+        )
+
+        created = ConnectSparkSession.builder.channelBuilder(channel_builder).create()
+        shared = self._pool.set_spark(session_id, created)
+        if shared is not created:
+            # Another model bound a client first (session_concurrency > 1);
+            # drop ours and share the bound one.
+            try:
+                created.stop()
+            except Exception as e:  # noqa: BLE001 - best-effort cleanup
+                LOGGER.debug(f"Ignoring error while stopping duplicate Spark client: {e}")
+        return shared
+
     def _attempt(
         self,
         compiled_code: str,
@@ -356,25 +406,16 @@ class SparkConnectSubmitter:
         timer: Optional[threading.Timer] = None
         timeout_event = threading.Event()
         terminate_session = False
+        # Tags are thread-local in the Spark Connect client, so the watchdog
+        # can cancel only this model's operations on the shared client.
+        model_tag = f"dbt-model-{uuid.uuid4().hex}"
+        tagged = False
 
         def _elapsed() -> float:
             return time.monotonic() - attempt_start
 
         try:
-            response = self._wait_for_endpoint(session_id, self.timeout)
-            channel_builder = create_athena_channel_builder(
-                self.athena_client,
-                session_id,
-                response["EndpointUrl"],
-                initial_auth_token=response.get("AuthToken"),
-                initial_token_expiry=response.get("AuthTokenExpirationTime"),
-            )
-
-            from pyspark.sql.connect.session import (
-                SparkSession as ConnectSparkSession,
-            )
-
-            spark = ConnectSparkSession.builder.channelBuilder(channel_builder).create()
+            spark = self._get_or_create_spark(session_id)
 
             exec_remaining = self.timeout - _elapsed()
             if exec_remaining <= 0:
@@ -389,8 +430,10 @@ class SparkConnectSubmitter:
                     f"Execution timed out after {self.timeout}s"
                 )
                 if spark is not None:
-                    spark.interruptAll()
+                    spark.interruptTag(model_tag)
 
+            spark.addTag(model_tag)
+            tagged = True
             timer = threading.Timer(exec_remaining, _on_timeout)
             timer.start()
 
@@ -450,16 +493,18 @@ class SparkConnectSubmitter:
             )
         finally:
             # Cancel the watchdog timer first and wait for any already-fired
-            # callback to finish.  Otherwise spark.interruptAll() running in
-            # the timer thread can race with spark.stop() below.
+            # callback to finish, so interruptTag() cannot race with the
+            # tag removal below.
             if timer is not None:
                 timer.cancel()
                 timer.join(timeout=5)
-            if spark is not None:
+            if spark is not None and tagged:
                 try:
-                    spark.stop()
+                    spark.removeTag(model_tag)
                 except Exception as e:  # noqa: BLE001 - best-effort cleanup
-                    LOGGER.debug(f"Ignoring error while stopping Spark session: {e}")
+                    LOGGER.debug(f"Ignoring error while removing Spark tag: {e}")
+            # The client stays bound to the Athena session; the pool stops it
+            # when the session is terminated or evicted.
             if terminate_session:
                 self._pool.terminate(session_id)
             else:
