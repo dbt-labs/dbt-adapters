@@ -35,10 +35,12 @@ class LfTagsManager:
         lf_client: LakeFormationClient,
         relation: AthenaRelation,
         lf_tags_config: LfTagsConfig,
+        catalog_id: Optional[str] = None,
     ):
         self.lf_client = lf_client
         self.database = relation.schema
         self.table = relation.identifier
+        self.catalog_id = catalog_id
         self.lf_tags = lf_tags_config.tags
         self.lf_tags_columns = lf_tags_config.tags_columns
         self.lf_inherited_tags = (
@@ -47,7 +49,10 @@ class LfTagsManager:
 
     def process_lf_tags_database(self) -> None:
         if self.lf_tags:
-            database_resource = {"Database": {"Name": self.database}}
+            db_dict: Dict[str, str] = {"Name": self.database}
+            if self.catalog_id:
+                db_dict["CatalogId"] = self.catalog_id
+            database_resource = {"Database": db_dict}
             response = self.lf_client.add_lf_tags_to_resource(
                 Resource=database_resource,
                 LFTags=[{"TagKey": k, "TagValues": [v]} for k, v in self.lf_tags.items()],
@@ -55,7 +60,10 @@ class LfTagsManager:
             self._parse_and_log_lf_response(response, None, self.lf_tags)
 
     def process_lf_tags(self) -> None:
-        table_resource = {"Table": {"DatabaseName": self.database, "Name": self.table}}
+        table_dict: Dict[str, str] = {"DatabaseName": self.database, "Name": self.table}
+        if self.catalog_id:
+            table_dict["CatalogId"] = self.catalog_id
+        table_resource = {"Table": table_dict}
         existing_lf_tags = self.lf_client.get_resource_lf_tags(Resource=table_resource)
         self._remove_lf_tags_columns(existing_lf_tags)
         self._apply_lf_tags_table(table_resource, existing_lf_tags)
@@ -93,13 +101,14 @@ class LfTagsManager:
             logger.debug(f"TO REMOVE: {to_remove}")
             for tag_key, tag_config in to_remove.items():
                 for tag_value, columns in tag_config.items():
-                    resource = {
-                        "TableWithColumns": {
-                            "DatabaseName": self.database,
-                            "Name": self.table,
-                            "ColumnNames": columns,
-                        }
+                    twc_dict: Dict[str, Union[str, List[str]]] = {
+                        "DatabaseName": self.database,
+                        "Name": self.table,
+                        "ColumnNames": columns,
                     }
+                    if self.catalog_id:
+                        twc_dict["CatalogId"] = self.catalog_id
+                    resource = {"TableWithColumns": twc_dict}
                     response = self.lf_client.remove_lf_tags_from_resource(
                         Resource=resource, LFTags=[{"TagKey": tag_key, "TagValues": [tag_value]}]
                     )
@@ -150,13 +159,14 @@ class LfTagsManager:
         if self.lf_tags_columns:
             for tag_key, tag_config in self.lf_tags_columns.items():
                 for tag_value, columns in tag_config.items():
-                    resource = {
-                        "TableWithColumns": {
-                            "DatabaseName": self.database,
-                            "Name": self.table,
-                            "ColumnNames": columns,
-                        }
+                    twc_dict: Dict[str, Union[str, List[str]]] = {
+                        "DatabaseName": self.database,
+                        "Name": self.table,
+                        "ColumnNames": columns,
                     }
+                    if self.catalog_id:
+                        twc_dict["CatalogId"] = self.catalog_id
+                    resource = {"TableWithColumns": twc_dict}
                     response = self.lf_client.add_lf_tags_to_resource(
                         Resource=resource,
                         LFTags=[{"TagKey": tag_key, "TagValues": [tag_value]}],
