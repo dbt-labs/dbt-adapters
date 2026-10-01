@@ -1,0 +1,6 @@
+kind: Features
+body: Force Hive table type for tmp staging table in create_table_as_with_partitions
+time: 2026-03-05T20:13:00.796892+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1717"
