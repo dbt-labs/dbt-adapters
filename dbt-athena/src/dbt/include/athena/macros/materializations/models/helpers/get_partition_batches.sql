@@ -1,6 +1,7 @@
 {% macro get_partition_batches(sql, as_subquery=True) -%}
     {# Retrieve partition configuration and set default partition limit #}
     {%- set partitioned_by = config.get('partitioned_by') -%}
+    {%- set table_type = config.get('table_type', default='hive') | lower -%}
     {%- set athena_partitions_limit = [1, config.get('partitions_limit', 100) | int] | max -%}
     {%- set partitioned_keys = adapter.format_partition_keys(partitioned_by) -%}
     {% do log('PARTITIONED KEYS: ' ~ partitioned_keys) %}
@@ -27,14 +28,14 @@
         {# Loop through each column in the row #}
         {%- for col, partition_key in zip(row, partitioned_by) -%}
             {# Process bucketed columns using the new macro with the index #}
-            {%- do process_bucket_column(col, partition_key, table, ns, counter.value) -%}
+            {%- do process_bucket_column(col, partition_key, table, ns, counter.value, table_type) -%}
 
             {# Logic for non-bucketed columns #}
             {%- set bucket_match = modules.re.search('bucket\((.+?),\s*(\d+)\)', partition_key) -%}
             {%- if not bucket_match -%}
                 {# For non-bucketed columns, format partition key and value #}
                 {%- set column_type = adapter.convert_type(table, counter.value) -%}
-                {%- set value, comp_func = adapter.format_value_for_partition(col, column_type) -%}
+                {%- set value, comp_func = adapter.format_value_for_partition(col, column_type, table_type) -%}
                 {%- set partition_key_formatted = adapter.format_one_partition_key(partitioned_by[counter.value]) -%}
                 {%- do single_partition.append(partition_key_formatted + comp_func + value) -%}
             {%- endif -%}
