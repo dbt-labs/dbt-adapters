@@ -1140,6 +1140,18 @@ class BigQueryAdapter(BaseAdapter):
         for info_schema, rels in candidates.items():
             database = info_schema.database
             schema = info_schema.schema
+            region, separator, suffix = schema.partition(".")
+            if (
+                separator
+                and region.lower().startswith("region-")
+                and len(region) > len("region-")
+                and suffix.lower() == "information_schema"
+            ):
+                logger.debug(
+                    "Skipping catalog for {}.{} - region-scoped INFORMATION_SCHEMA "
+                    "is not a physical schema".format(database, schema)
+                )
+                continue
             if database not in schema_exists:
                 schema_exists[database] = {}
             if schema not in schema_exists[database]:
