@@ -30,16 +30,19 @@
         on this table to get the distribution and sort key configuration.
     -#}
     {%- set _column_descriptor_sql -%}
-        SELECT
-            a.attname as column,
+              select
+            r.column_name as column,
             a.attisdistkey as is_dist_key,
             a.attsortkeyord as sort_key_position
-        FROM pg_class c
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        WHERE
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        join pg_attribute a on a.attrelid = c.oid
+        join svv_redshift_columns r on r.ordinal_position = a.attnum
+        where
             n.nspname ilike '{{ relation.schema }}'
-            AND c.relname LIKE 'mv_tbl__{{ relation.identifier }}__%'
+            and c.relname like 'mv_tbl__{{ relation.identifier }}__%'
+            and r.schema_name = '{{ relation.schema }}'
+            and r.table_name = '{{ relation.identifier }}'
     {%- endset %}
     {% set _column_descriptor = run_query(_column_descriptor_sql) %}
 
