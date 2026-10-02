@@ -3,4 +3,4 @@ body: Support legacy PBES1-encrypted private keys when `cryptography>=45` is ins
 time: 2026-10-02T13:00:00.000000-06:00
 custom:
     Author: fivetran-dharma
-    Issue: GA-1040246
+    Issue: "2197"

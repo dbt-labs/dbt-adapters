@@ -78,8 +78,10 @@ def _load_private_key(
     from Crypto.PublicKey import RSA
 
     try:
-        passphrase = password.decode() if password else None
-        legacy_key = RSA.import_key(data, passphrase=passphrase)
+        # pycryptodome uses a bytes passphrase as-is at runtime; its annotation
+        # only declares str, which raises UnicodeEncodeError for non-ASCII
+        # passphrases, so pass through the exact bytes cryptography received
+        legacy_key = RSA.import_key(data, passphrase=password)  # type: ignore[arg-type]
     except (ValueError, IndexError, TypeError):
         # keep cryptography's error, e.g. for a wrong passphrase
         raise original_error

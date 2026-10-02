@@ -21,6 +21,10 @@ from dbt.adapters.snowflake.auth import private_key_from_file, private_key_from_
 
 PASSPHRASE = "password1234"
 
+# non-ASCII passphrase: must be passed to the fallback byte-for-byte (UTF-8),
+# exactly as cryptography receives it, not as a str
+NON_ASCII_PASSPHRASE = "pässwörd-密码🔑"
+
 
 def serialize(private_key: rsa.RSAPrivateKey) -> bytes:
     return private_key.private_bytes(
@@ -201,6 +205,26 @@ def test_pbes1_private_key_wrong_passphrase(private_key, scheme):
     key_string = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
     with pytest.raises(ValueError):
         private_key_from_string(key_string, "wrong-passphrase")
+
+
+@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
+def test_pbes1_non_ascii_passphrase(private_key, scheme):
+    key_string = to_pem(pbes1_encrypt(private_key, scheme, NON_ASCII_PASSPHRASE))
+    calculated_private_key = private_key_from_string(key_string, NON_ASCII_PASSPHRASE)
+    assert serialize(calculated_private_key) == serialize(private_key)
+
+
+def test_pbes1_non_ascii_passphrase_uses_fallback(private_key):
+    # force the fallback regardless of the installed cryptography version
+    key_string = to_pem(pbes1_encrypt(private_key, "pbeWithSHA1AndDES-CBC", NON_ASCII_PASSPHRASE))
+    unsupported = ValueError("Unknown key encryption algorithm: 1.2.840.113549.1.5.10")
+    with (
+        mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=unsupported),
+        mock.patch.object(auth.logger, "warning") as warning,
+    ):
+        calculated_private_key = private_key_from_string(key_string, NON_ASCII_PASSPHRASE)
+    assert serialize(calculated_private_key) == serialize(private_key)
+    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
 
 
 def test_unencrypted_private_key_from_string(private_key):
