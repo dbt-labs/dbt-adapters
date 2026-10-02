@@ -6,7 +6,7 @@ from typing import Generator
 from unittest import mock
 
 from Crypto.Cipher import ARC2, DES
-from Crypto.Hash import MD5, SHA1
+from Crypto.Hash import MD2, MD5, SHA1
 from Crypto.IO import PEM
 from Crypto.Protocol.KDF import PBKDF1
 from Crypto.Util.asn1 import DerObjectId, DerOctetString, DerSequence
@@ -81,10 +81,19 @@ PBES1_SCHEMES = {
     "pbeWithSHA1AndRC2-CBC": ("1.2.840.113549.1.5.11", SHA1, ARC2),
 }
 
+# MD2-based PBES1 schemes: neither cryptography (any version) nor pycryptodome
+# can decrypt them, so they are not declared supported and must never take the
+# fallback path.
+UNSUPPORTED_PBES1_SCHEMES = {
+    "pbeWithMD2AndDES-CBC": ("1.2.840.113549.1.5.1", MD2, DES),
+}
+
+ALL_PBES1_SCHEMES = {**PBES1_SCHEMES, **UNSUPPORTED_PBES1_SCHEMES}
+
 
 def pbes1_encrypt(private_key: rsa.RSAPrivateKey, scheme: str, passphrase: str) -> bytes:
     """Return a DER EncryptedPrivateKeyInfo encrypted with the given PBES1 scheme."""
-    oid, hash_module, cipher_module = PBES1_SCHEMES[scheme]
+    oid, hash_module, cipher_module = ALL_PBES1_SCHEMES[scheme]
     salt, iterations = os.urandom(8), 2048
     derived = PBKDF1(passphrase.encode(), salt, 16, iterations, hash_module)
     cipher_kwargs = {"effective_keylen": 64} if cipher_module is ARC2 else {}
@@ -138,6 +147,30 @@ def test_is_pbes1_encrypted_false_for_other_data(private_key, private_key_string
     # not a key at all
     assert not auth._is_pbes1_encrypted(b"-----BEGIN PRIVATE KEY-----", is_pem=True)
     assert not auth._is_pbes1_encrypted(b"not a key", is_pem=False)
+
+
+def test_pbes1_oids_match_supported_schemes():
+    # every OID declared as fallback-supported must be exercised by the
+    # round-trip tests above, and vice versa
+    assert auth._PBES1_OIDS == {oid for oid, _, _ in PBES1_SCHEMES.values()}
+
+
+@pytest.mark.parametrize("scheme", UNSUPPORTED_PBES1_SCHEMES)
+def test_unsupported_pbes1_scheme_does_not_use_fallback(private_key, scheme):
+    # MD2-based PBES1 keys cannot be decrypted by the fallback (or by any
+    # cryptography version), so they must not be detected as eligible and
+    # must fail with cryptography's original error
+    key_string = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
+    unsupported = ValueError(f"Unknown key encryption algorithm: {ALL_PBES1_SCHEMES[scheme][0]}")
+    with (
+        mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=unsupported),
+        mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
+    ):
+        with pytest.raises(ValueError) as excinfo:
+            private_key_from_string(key_string, PASSPHRASE)
+    assert excinfo.value is unsupported
+    assert not auth._is_pbes1_encrypted(key_string.encode(), is_pem=True)
+    import_key.assert_not_called()
 
 
 @pytest.mark.parametrize("scheme", PBES1_SCHEMES)

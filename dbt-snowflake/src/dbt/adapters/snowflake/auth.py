@@ -23,13 +23,15 @@ PBES1_DEPRECATION_MESSAGE = (
     "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
 )
 
-# PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3.
-# cryptography>=45 can no longer decrypt any of them (pyca/cryptography#12949).
+# PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3, limited
+# to the four schemes the pycryptodome fallback can decrypt. cryptography>=45
+# can no longer decrypt any of them (pyca/cryptography#12949). The MD2-based
+# PBES1 schemes are excluded on purpose: no cryptography version ever decrypted
+# them, and pycryptodome cannot either, so such keys fail with cryptography's
+# original error regardless of this set.
 _PBES1_OIDS = frozenset(
     {
-        "1.2.840.113549.1.5.1",  # pbeWithMD2AndDES-CBC
         "1.2.840.113549.1.5.3",  # pbeWithMD5AndDES-CBC
-        "1.2.840.113549.1.5.4",  # pbeWithMD2AndRC2-CBC
         "1.2.840.113549.1.5.6",  # pbeWithMD5AndRC2-CBC
         "1.2.840.113549.1.5.10",  # pbeWithSHA1AndDES-CBC
         "1.2.840.113549.1.5.11",  # pbeWithSHA1AndRC2-CBC
@@ -38,7 +40,8 @@ _PBES1_OIDS = frozenset(
 
 
 def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
-    """Return True when data is an EncryptedPrivateKeyInfo using a PBES1 scheme.
+    """Return True when data is an EncryptedPrivateKeyInfo encrypted with one
+    of the PBES1 schemes the pycryptodome fallback can decrypt.
 
     The scheme is detected by parsing the encryption algorithm OID out of the
     key itself, rather than by matching cryptography's error message, so this
