@@ -20,7 +20,9 @@ PBES1_DEPRECATION_MESSAGE = (
     "The Snowflake private key is encrypted with a legacy PBES1 (PKCS#5 v1.5) scheme, "
     "which is insecure and no longer supported by the `cryptography` library. "
     "Support for it will be removed in a future release. Re-encrypt the key with a modern "
-    "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
+    "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem` "
+    "(on OpenSSL 3, also pass `-provider default -provider legacy`, because PBKDF1 and DES "
+    "are only available in the legacy provider)"
 )
 
 # PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3, limited

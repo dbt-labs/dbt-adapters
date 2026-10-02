@@ -77,7 +77,8 @@ def test_private_key_from_file(private_key_file, private_key):
 
 
 # Legacy PBES1 (PKCS#5 v1.5) keys, which cryptography>=45 can no longer decrypt.
-# pycryptodome can only decrypt PBES1, so build them by hand.
+# cryptography can only serialize keys with PBES2 (BestAvailableEncryption), so
+# PBES1-encrypted fixtures are assembled by hand.
 PBES1_SCHEMES = {
     "pbeWithMD5AndDES-CBC": ("1.2.840.113549.1.5.3", MD5, DES),
     "pbeWithMD5AndRC2-CBC": ("1.2.840.113549.1.5.6", MD5, ARC2),
