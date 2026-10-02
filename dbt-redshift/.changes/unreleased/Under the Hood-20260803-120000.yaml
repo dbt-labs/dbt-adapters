@@ -1,0 +1,8 @@
+kind: Under the Hood
+body: Skip the late-binding view and external table lookups when reading columns for
+    temporary tables, which can never be views, falling back to the full lookup if
+    nothing matches
+time: 2026-08-03T12:00:00.000000-03:00
+custom:
+    Author: tauhidanjum
+    Issue: "2096"

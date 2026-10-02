@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'Fix cluster_by, target_lag, and snowflake_initialization_warehouse change detection for dynamic tables: none of the three were normalized before comparing, causing spurious no-op ALTER statements every run (LINEAR-prefix and case for cluster_by, unit for target_lag, case for the warehouse) -- interactive tables already had this fixed'
+time: 2026-08-31T08:04:48.418285+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""

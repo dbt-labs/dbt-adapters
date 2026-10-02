@@ -1218,6 +1218,10 @@ class BigQueryAdapter(BaseAdapter):
         adapter_responses: List[Optional[AdapterResponse]] = []
         freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
 
+        # get_relation_last_modified cannot render with an empty relation list
+        if not sources:
+            return adapter_responses, freshness_responses
+
         for source in sources:
             self._check_for_wildcard_identifier(source)
 

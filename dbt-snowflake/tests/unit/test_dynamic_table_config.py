@@ -481,6 +481,193 @@ class TestTransientChangeDetectionLogic:
             assert changeset.transient is None
 
 
+class TestClusterByTargetLagInitWarehouseChangeDetectionLogic:
+    """cluster_by/target_lag/snowflake_initialization_warehouse must be normalized before
+    comparison."""
+
+    @staticmethod
+    def _make_relation_results(cluster_by=None, target_lag="1 hour", init_warehouse=None):
+        import agate
+
+        dt_row_data = {
+            "name": "test_table",
+            "schema_name": "test_schema",
+            "database_name": "test_db",
+            "text": "SELECT 1",
+            "target_lag": target_lag,
+            "warehouse": "MY_WH",
+            "refresh_mode": "AUTO",
+            "immutable_where": None,
+            "cluster_by": cluster_by,
+            "initialization_warehouse": init_warehouse,
+        }
+        column_types = [agate.Text()] * len(dt_row_data)
+
+        return {
+            "dynamic_table": agate.Table(
+                [list(dt_row_data.values())],
+                list(dt_row_data.keys()),
+                column_types,
+            )
+        }
+
+    @staticmethod
+    def _make_relation_config(cluster_by=None, target_lag="1 hour", init_warehouse=None):
+        from unittest.mock import MagicMock
+
+        relation_config = MagicMock()
+        relation_config.identifier = "test_table"
+        relation_config.schema = "test_schema"
+        relation_config.database = "test_db"
+        relation_config.compiled_code = "SELECT 1"
+        relation_config.config.extra = {
+            "target_lag": target_lag,
+            "snowflake_warehouse": "MY_WH",
+            "snowflake_initialization_warehouse": init_warehouse,
+            "cluster_by": cluster_by,
+        }
+        relation_config.config.get = lambda key, default=None: relation_config.config.extra.get(
+            key, default
+        )
+        return relation_config
+
+    # --- cluster_by: LINEAR prefix ---
+
+    def test_linear_wrapped_readback_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(id, val)")
+        relation_config = self._make_relation_config(cluster_by=["id", "val"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.cluster_by is None
+
+    def test_case_differing_cluster_by_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(ID, VAL)")
+        relation_config = self._make_relation_config(cluster_by=["id", "val"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.cluster_by is None
+
+    def test_genuine_cluster_by_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(cluster_by="LINEAR(id, val)")
+        relation_config = self._make_relation_config(cluster_by=["id", "other"])
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.cluster_by is not None
+        assert changeset.requires_full_refresh is False
+
+    def test_normalized_target_lag_readback_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(target_lag="1 minute")
+        relation_config = self._make_relation_config(target_lag="60 seconds")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.target_lag is None
+
+    def test_genuine_target_lag_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(target_lag="1 minute")
+        relation_config = self._make_relation_config(target_lag="2 minutes")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.target_lag is not None
+
+    def test_case_differing_init_warehouse_is_not_a_change(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse="MY_INIT_WH")
+        relation_config = self._make_relation_config(init_warehouse="my_init_wh")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_initialization_warehouse is None
+
+    def test_genuine_init_warehouse_change_is_still_detected(self):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse="MY_INIT_WH")
+        relation_config = self._make_relation_config(init_warehouse="OTHER_WH")
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        assert changeset is not None
+        assert changeset.snowflake_initialization_warehouse is not None
+
+    @pytest.mark.parametrize("blank", ["", "   ", "\t"])
+    def test_blank_refresh_warehouse_falls_back_to_snowflake_warehouse(self, blank):
+        """Python truthiness treats `"  "` as a real name, so a whitespace-only
+        refresh_warehouse won the fallback and rendered `warehouse =   `."""
+        config = SnowflakeDynamicTableConfig.from_dict(
+            {
+                "name": "test_table",
+                "schema_name": "test_schema",
+                "database_name": "test_db",
+                "query": "SELECT 1",
+                "target_lag": "1 hour",
+                "refresh_warehouse": blank,
+                "snowflake_warehouse": "REAL_WH",
+            }
+        )
+
+        assert config.warehouse_parameter == "REAL_WH"
+
+    @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
+    def test_clearing_init_warehouse_by_literal_is_stored_as_none(self, cleared):
+        """A config-side clear must collapse to None so the alter macro emits
+        `unset initialization_warehouse` instead of `set ... = NONE`."""
+        config = SnowflakeDynamicTableConfig.from_relation_config(
+            self._make_relation_config(init_warehouse=cleared)
+        )
+
+        assert config.snowflake_initialization_warehouse is None
+
+    @pytest.mark.parametrize("cleared", ["NONE", "none", "", "  "])
+    def test_clearing_init_warehouse_against_an_unset_remote_is_not_a_change(self, cleared):
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(init_warehouse=None)
+        relation_config = self._make_relation_config(init_warehouse=cleared)
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_initialization_warehouse is None
+
+
 class TestSchedulerOptional:
     """Tests to verify scheduler is an optional parameter for dynamic tables."""
 
@@ -1003,6 +1190,21 @@ class TestRefreshWarehouseChangeset:
             snowflake_warehouse="MY_LARGE_WH",
             refresh_warehouse="MY_SMALL_WH",
         )
+
+        changeset = SnowflakeRelation.dynamic_table_config_changeset(
+            relation_results, relation_config
+        )
+
+        if changeset is not None:
+            assert changeset.snowflake_warehouse is None
+
+    def test_case_differing_warehouse_is_not_a_change(self):
+        """Snowflake folds unquoted warehouse names to upper case on readback, so a
+        desired `my_wh` must match a reported `MY_WH` without a spurious ALTER."""
+        from dbt.adapters.snowflake.relation import SnowflakeRelation
+
+        relation_results = self._make_relation_results(warehouse="MY_WH")
+        relation_config = self._make_relation_config(snowflake_warehouse="my_wh")
 
         changeset = SnowflakeRelation.dynamic_table_config_changeset(
             relation_results, relation_config

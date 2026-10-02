@@ -25,24 +25,39 @@ def make_model(config: Dict[str, Optional[str]]) -> RelationConfig:
 @pytest.mark.parametrize(
     "config,expected",
     [
-        (
-            {"fake_attr": "fake_value"},  # we check if not model.config
-            "_dbt/fake_schema/fake_table",
-        ),
+        # No external_volume in model config → path generated; _built_in.py decides
+        # whether to use it based on the fully-resolved external_volume
+        ({"fake_attr": "fake_value"}, "_dbt/fake_schema/fake_table"),
         (
             {"base_location_root": None, "base_location_subpath": None},
             "_dbt/fake_schema/fake_table",
         ),
+        # SNOWFLAKE_MANAGED explicitly in model config → suppressed here
+        ({"external_volume": "SNOWFLAKE_MANAGED"}, None),
+        ({"external_volume": "snowflake_managed"}, None),
+        # external_volume present → user-defined storage → base_location generated
         (
-            {"base_location_root": "root_path", "base_location_subpath": "subpath"},
+            {
+                "external_volume": "s3_vol",
+                "base_location_root": None,
+                "base_location_subpath": None,
+            },
+            "_dbt/fake_schema/fake_table",
+        ),
+        (
+            {
+                "external_volume": "s3_vol",
+                "base_location_root": "root_path",
+                "base_location_subpath": "subpath",
+            },
             "root_path/fake_schema/fake_table/subpath",
         ),
         (
-            {"base_location_subpath": "subpath"},
+            {"external_volume": "s3_vol", "base_location_subpath": "subpath"},
             "_dbt/fake_schema/fake_table/subpath",
         ),
         (
-            {"base_location_root": "root_path"},
+            {"external_volume": "s3_vol", "base_location_root": "root_path"},
             "root_path/fake_schema/fake_table",
         ),
     ],

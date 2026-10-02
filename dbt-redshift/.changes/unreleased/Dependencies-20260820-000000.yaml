@@ -1,0 +1,8 @@
+kind: Dependencies
+body: Relax the `sqlparse` upper bound from `<0.6.0` to `<0.7.0` so dbt-redshift can
+  co-install with dbt-core, which now allows `sqlparse` 0.6.0. The floor stays at `0.5.0`
+  so no upgrade is forced.
+time: 2026-08-20T00:00:00.000000+05:30
+custom:
+  Author: ash2shukla
+  PR: "2130"
