@@ -883,13 +883,21 @@ class AthenaAdapter(SQLAdapter):
                 if catalog_id:
                     kwargs["CatalogId"] = catalog_id
 
-                for page in paginator.paginate(**kwargs):
-                    for table in page["TableList"]:
-                        catalog.extend(
-                            self._get_one_table_for_catalog(
-                                table, information_schema.database  # type:ignore
+                try:
+                    for page in paginator.paginate(**kwargs):
+                        for table in page["TableList"]:
+                            catalog.extend(
+                                self._get_one_table_for_catalog(
+                                    table, information_schema.database  # type:ignore
+                                )
                             )
-                        )
+                except ClientError as e:
+                    # a schema of the manifest may not exist yet, e.g. the store_failures
+                    # schema when no test has run: skip it rather than fail the catalog
+                    if e.response["Error"]["Code"] == "EntityNotFoundException":
+                        LOGGER.debug(f"Schema '{schema}' does not exist - Ignoring: {e}")
+                        continue
+                    raise e
             table = agate.Table.from_object(catalog)
         else:
             with boto3_client_lock:
