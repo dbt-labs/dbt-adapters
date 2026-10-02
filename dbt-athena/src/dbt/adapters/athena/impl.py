@@ -51,7 +51,7 @@ from dbt.adapters.athena.catalogs import (
 )
 from dbt.adapters.athena.column import AthenaColumn
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.connections import AthenaCursor, AthenaError
+from dbt.adapters.athena.connections import AthenaAdapterResponse, AthenaCursor, AthenaError
 from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
     DEFAULT_INFO_SCHEMA_CATALOG,
@@ -100,7 +100,6 @@ from dbt.adapters.capability import (
     CapabilitySupport,
     Support,
 )
-from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 
@@ -1400,10 +1399,15 @@ class AthenaAdapter(SQLAdapter):
                 SkipArchive=skip_archive_table_version,
             )
 
-    def generate_python_submission_response(self, submission_result: Any) -> AdapterResponse:
+    def generate_python_submission_response(self, submission_result: Any) -> AthenaAdapterResponse:
         if not submission_result:
-            return AdapterResponse(_message="ERROR")
-        return AdapterResponse(_message="OK")
+            return AthenaAdapterResponse(_message="ERROR")
+        result = submission_result if isinstance(submission_result, dict) else {}
+        spark_session_id = result.get("SparkSessionId")
+        return AthenaAdapterResponse(
+            _message="OK",
+            spark_session_id=spark_session_id,
+        )
 
     @property
     def default_python_submission_method(self) -> str:

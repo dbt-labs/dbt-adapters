@@ -123,5 +123,80 @@ class TestAthenaSparkSessionConfig:
             "DefaultExecutorDpuSize",
             "SparkProperties",
             "AdditionalConfigs",
+            "Classifications",
         }
         assert len(diff) == 0
+
+
+class TestAthenaSparkSessionConfigSpark35:
+    """Spark 3.5 drops DPU/Properties fields and requires Classifications."""
+
+    def _config(self, **overrides):
+        base = {
+            "timeout": 7200,
+            "polling_interval": 5,
+            "spark_engine_version": "3.5",
+        }
+        base.update(overrides)
+        return AthenaSparkSessionConfig(base)
+
+    def test_spark_35_omits_coordinator_and_executor_dpu_defaults(self):
+        engine_config = self._config().set_engine_config()
+        assert "CoordinatorDpuSize" not in engine_config
+        assert "DefaultExecutorDpuSize" not in engine_config
+        assert "SparkProperties" not in engine_config
+        assert engine_config["MaxConcurrentDpus"] >= 2
+
+    def test_spark_35_strips_user_provided_dpu_keys(self):
+        engine_config = self._config(
+            engine_config={
+                "CoordinatorDpuSize": 4,
+                "MaxConcurrentDpus": 2,
+                "DefaultExecutorDpuSize": 4,
+            }
+        ).set_engine_config()
+        assert "CoordinatorDpuSize" not in engine_config
+        assert "DefaultExecutorDpuSize" not in engine_config
+        assert engine_config["MaxConcurrentDpus"] == 2
+
+    def test_spark_35_converts_table_type_spark_properties_to_classifications(self):
+        engine_config = self._config(table_type="iceberg").set_engine_config()
+        assert "SparkProperties" not in engine_config
+        assert "Classifications" in engine_config
+        spark_defaults = next(
+            c for c in engine_config["Classifications"] if c["Name"] == "spark-defaults"
+        )
+        # Iceberg catalog property must have been merged into Classifications.
+        assert (
+            spark_defaults["Properties"]["spark.sql.catalog.spark_catalog"]
+            == "org.apache.iceberg.spark.SparkSessionCatalog"
+        )
+
+    def test_spark_35_merges_user_spark_properties_into_classifications(self):
+        engine_config = self._config(
+            table_type="iceberg",
+            engine_config={
+                "MaxConcurrentDpus": 2,
+                "SparkProperties": {"spark.executor.memory": "4g"},
+            },
+        ).set_engine_config()
+        spark_defaults = next(
+            c for c in engine_config["Classifications"] if c["Name"] == "spark-defaults"
+        )
+        assert spark_defaults["Properties"]["spark.executor.memory"] == "4g"
+        # Existing iceberg property still present.
+        assert "spark.sql.catalog.spark_catalog" in spark_defaults["Properties"]
+
+    def test_spark_3_x_still_uses_spark_properties(self):
+        cfg = AthenaSparkSessionConfig(
+            {
+                "timeout": 7200,
+                "polling_interval": 5,
+                "spark_engine_version": "3.3",
+                "table_type": "iceberg",
+            }
+        )
+        engine_config = cfg.set_engine_config()
+        assert "SparkProperties" in engine_config
+        assert "Classifications" not in engine_config
+        assert "CoordinatorDpuSize" in engine_config
