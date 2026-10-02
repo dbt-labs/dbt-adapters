@@ -1,0 +1,9 @@
+kind: Features
+body: Support bounded-parallel partition copies for the insert_overwrite incremental
+  strategy with copy_partitions via a new opt-in `copy_partitions_concurrency` config
+  (inside `partition_by`, or model-level for project-wide rollout). Default behavior
+  is unchanged (serial).
+time: 2026-07-30T12:15:00.000000-07:00
+custom:
+    Author: bordway-shop AxelThevenot leohoare
+    Issue: "559"

@@ -1,0 +1,8 @@
+kind: Fixes
+body: Retry BigQuery copy jobs on transient errors (e.g. rateLimitExceeded, backendError)
+  with exponential backoff and a fresh job_id per attempt, honoring the profile's
+  job_retries setting. Daily-quota errors (quotaExceeded) still fail fast.
+time: 2026-07-30T12:07:10.000000-07:00
+custom:
+    Author: bordway-shop
+    Issue: "559"
