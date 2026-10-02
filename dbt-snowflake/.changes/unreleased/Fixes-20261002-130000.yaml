@@ -1,0 +1,6 @@
+kind: Fixes
+body: Support legacy PBES1-encrypted private keys when `cryptography>=45` is installed, and warn that they are deprecated
+time: 2026-10-02T13:00:00.000000-06:00
+custom:
+    Author: fivetran-dharma
+    Issue: "2197"
