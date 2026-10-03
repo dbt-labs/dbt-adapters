@@ -254,7 +254,43 @@ having count(*) > 1
 
 {% endmacro %}
 
+{% macro bigquery__validate_lakehouse_temp_schema(base_relation) %}
+    {% if base_relation.is_lakehouse %}
+        {#-- lakehouse namespaces don't support expiring helper tables, and temp churn
+             would trigger Iceberg snapshot/management jobs; spill to a regular dataset.
+             `temp_schema` must be a plain dataset colocated with the catalog data. --#}
+        {% set configured_temp_schema = config.get('temp_schema') %}
+        {% set spill_schema = target.schema if configured_temp_schema is none else configured_temp_schema %}
+        {% if spill_schema is not string
+              or not spill_schema | trim
+              or spill_schema != spill_schema | trim
+              or '.' in spill_schema %}
+            {% do exceptions.raise_compiler_error(
+                "Temp relations for lakehouse models must spill to a regular dataset, but `"
+                ~ spill_schema ~ "` is a lakehouse namespace. Set `temp_schema` to a plain "
+                ~ "BigQuery dataset in the same location as the catalog."
+            ) %}
+        {% endif %}
+    {% endif %}
+{% endmacro %}
+
 {% macro bigquery__make_temp_relation(base_relation, suffix) %}
+    {% if base_relation.is_lakehouse %}
+        {% do bigquery__validate_lakehouse_temp_schema(base_relation) %}
+        {% set configured_temp_schema = config.get('temp_schema') %}
+        {% set spill_schema = target.schema if configured_temp_schema is none else configured_temp_schema %}
+        {% set spill_identifier = base_relation.schema | replace('.', '__') ~ '__' ~ base_relation.identifier %}
+        {#-- keep the model's own project: a cross-project lakehouse model must not
+             spill temps into the profile's project --#}
+        {% set base_relation = base_relation.incorporate(path={
+            "database": base_relation.database,
+            "schema": spill_schema,
+            "identifier": spill_identifier
+        }) %}
+        {#-- the spill dataset is not a model schema, so dbt's start-of-run schema
+             creation never covers it; ensure it exists (idempotent) --#}
+        {% do adapter.create_schema(base_relation) %}
+    {% endif %}
     {% set temp_relation = bigquery__make_relation_with_suffix(base_relation, suffix, dstring=True) %}
     {{ return(temp_relation) }}
 {% endmacro %}
