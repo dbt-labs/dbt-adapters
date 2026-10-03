@@ -65,6 +65,22 @@ class TestIncrementalCrossDatabaseColumnType(CrossDatabaseMixin, _BaseColumnType
             project.adapter, project.test_schema, "incremental_int_to_bigint"
         )
 
+    def test_incremental_varchar_to_bigint_succeeds_and_matches_target(self, project):
+        select = "incremental_varchar_to_bigint incremental_varchar_to_bigint_target"
+        run_dbt(["run", "--select", select])
+        run_dbt(["run", "--select", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_varchar_to_bigint"
+        )
+
+    def test_incremental_varchar_to_timestamp_succeeds_and_matches_target(self, project):
+        select = "incremental_varchar_to_timestamp incremental_varchar_to_timestamp_target"
+        run_dbt(["run", "--select", select])
+        run_dbt(["run", "--select", select])
+        assert_cross_db_relation_exists(
+            project.adapter, project.test_schema, "incremental_varchar_to_timestamp"
+        )
+
 
 class TestIncrementalCrossDatabaseSpecialChars(CrossDatabaseMixin, _BaseSpecialCharsTest):
     """Test incremental append/sync with special character column names
