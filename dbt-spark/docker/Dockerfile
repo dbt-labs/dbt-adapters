@@ -10,7 +10,7 @@ RUN apt-get update \
     ca-certificates=20210119 \
     gcc=4:10.2.1-1 \
     git=1:2.30.2-1+deb11u2 \
-    libpq-dev=13.18-0+deb11u1 \
+    libpq-dev=13.21-0+deb11u1 \
     libsasl2-dev=2.1.27+dfsg-2.1+deb11u1 \
     make=4.3-4.1 \
     openssh-client=1:8.4p1-5+deb11u3 \
@@ -39,4 +39,4 @@ HEALTHCHECK CMD dbt --version || exit 1
 WORKDIR /usr/app/dbt/
 ENTRYPOINT ["dbt"]
 
-RUN python -m pip install --no-cache-dir "dbt-spark[${extras}] @ git+https://github.com/dbt-labs/dbt-spark@${commit_ref}"
+RUN python -m pip install --no-cache-dir "dbt-spark[${extras}] @ git+https://github.com/dbt-labs/dbt-adapters/dbt-spark@${commit_ref}"

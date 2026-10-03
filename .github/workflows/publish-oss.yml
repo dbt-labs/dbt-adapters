@@ -139,6 +139,8 @@ jobs:
             # this permission is required for trusted publishing
             # see https://github.com/marketplace/actions/pypi-publish
             id-token: write
+        outputs:
+            version: ${{ steps.version.outputs.version }}
         steps:
             - name: "[PROD] Merge work branch to target branch"
               # merge changes before publishing to prod because we lock trusted publishing to main
@@ -215,6 +217,18 @@ jobs:
                   retry_wait_seconds: 10
                   max_attempts: 15 # 5 minutes: (10s timeout + 10s delay) * 15 attempts
                   command: wget ${{ vars.PYPI_PROJECT_URL }}/dbt-athena-community/${{ steps.version.outputs.version }}
+
+    publish-docker:
+        if: ${{ inputs.package != 'dbt-athena' && inputs.package != 'dbt-tests-adapter' && inputs.package != 'dbt-adapters' }}
+        needs:
+            -   publish
+        permissions:
+            packages: write
+        uses: ./.github/workflows/_publish-docker.yml
+        with:
+            package: ${{ inputs.package }}
+            version: ${{ needs.publish.outputs.version }}
+            dry-run: ${{ inputs.deploy-to == 'test' && true || false }}
 
     clean-up:
         if: ${{ !cancelled() }}
