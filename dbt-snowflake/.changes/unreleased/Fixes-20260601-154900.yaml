@@ -1,0 +1,6 @@
+kind: Fixes
+body: Use the Snowflake connector's disable_ocsp_checks parameter instead of the deprecated insecure_mode parameter while retaining insecure_mode as a compatibility alias
+time: 2026-06-01T15:49:00.000000+01:00
+custom:
+    Author: RoyalTS
+    Issue: "1529"
