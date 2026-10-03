@@ -23,13 +23,13 @@ docker build --tag <your_image_name> \
 ```
 
 ### Examples:
-To build an image named "my-dbt" that supports Snowflake using the latest releases:
+To build an image named "my-dbt" that supports Spark using the latest releases:
 ```shell
 cd dbt-core/docker
 docker build --tag my-dbt --target dbt-spark .
 ```
 
-To build an image named "my-other-dbt" that supports Snowflake using the adapter version 1.0.0b1:
+To build an image named "my-other-dbt" that supports Spark using the adapter version 1.0.0b1:
 ```shell
 cd dbt-core/docker
 docker build \
