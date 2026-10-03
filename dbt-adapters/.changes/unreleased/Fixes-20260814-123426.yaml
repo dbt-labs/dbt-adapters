@@ -1,0 +1,6 @@
+kind: Fixes
+body: Respect an explicitly empty `cache_schemas` set in `_relations_cache_for_schemas` instead of treating it the same as `None`, so `--cache-selected-only` is honored for `dbt test`
+time: 2026-08-14T12:34:26.793794-04:00
+custom:
+    Author: dataders claude
+    Issue: "2126"
