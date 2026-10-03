@@ -1,0 +1,8 @@
+kind: Fixes
+body: Make BaseRelation.include() clear excluded path components so Set[BaseRelation]
+    deduplicates relations that render identically, eliminating N redundant list_schemas
+    queries per dbt run.
+time: 2026-05-14T11:06:25.349822+00:00
+custom:
+    Author: 0xRobin
+    Issue: "1929"
