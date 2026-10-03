@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix the extra '`' symbol in the log
+time: 2025-02-18T08:01:04.66106-05:00
+custom:
+    Author: haojiongwang
+    Issue: "196"
