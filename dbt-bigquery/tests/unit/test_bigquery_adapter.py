@@ -24,6 +24,7 @@ from dbt.context.query_header import generate_query_header_context
 from dbt.contracts.files import FileHash
 from dbt.contracts.graph.manifest import ManifestStateCheck
 from dbt.context.providers import RuntimeConfigObject, generate_runtime_macro_context
+from dbt_common.invocation import get_invocation_id
 
 from google.cloud.bigquery import AccessEntry
 
@@ -471,7 +472,9 @@ class TestBigQueryAdapterAcquire(BaseTestBigQueryAdapter):
 
 
 class HasUserAgent:
-    PAT = re.compile(r"dbt-bigquery-\d+\.\d+\.\d+((a|b|rc)\d+)?")
+    PAT = re.compile(
+        r"dbt-bigquery-\d+\.\d+\.\d+((a|b|rc)\d+)? dbt-invocation-id/" + get_invocation_id()
+    )
 
     def __eq__(self, other):
         compare = getattr(other, "user_agent", "")
