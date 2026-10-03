@@ -123,6 +123,18 @@
 
   {% set existing_relation = load_relation(this) %}
 
+  {#-- An external catalog stores identifiers in its own case. dbt renders the target unquoted, so
+       Snowflake folds it, and the resulting name may not be the one the catalog actually holds --
+       giving 002003 even though the relation was found. Write to the case that exists, quoted so it
+       resolves exactly. Only for catalog-linked databases, and only once the relation exists: first
+       runs still create at dbt's own folded name, so nothing about creation changes. --#}
+  {%- if is_catalog_linked_db and existing_relation is not none -%}
+    {%- set target_relation = target_relation.incorporate(path={
+          "schema": existing_relation.schema,
+          "identifier": existing_relation.identifier,
+        }).quote(schema=True, identifier=True) -%}
+  {%- endif -%}
+
   {#-- The temp relation will be a view (faster) or temp table, depending on upsert/merge strategy --#}
   {%- set unique_key = config.get('unique_key') -%}
   {% set incremental_strategy = config.get('incremental_strategy') or 'default' %}
