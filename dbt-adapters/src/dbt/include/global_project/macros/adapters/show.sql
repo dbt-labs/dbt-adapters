@@ -7,7 +7,7 @@
   {%- if sql_header is not none -%}
   {{ sql_header }}
   {%- endif %}
-  {{ get_limit_subquery_sql(compiled_code, limit) }}
+  {{ get_limit_sql(compiled_code, limit) }}
 {% endmacro %}
 
 {#
@@ -15,6 +15,13 @@
     to the calling macro.
 #}
 {%- macro get_limit_subquery_sql(sql, limit) -%}
+  {{ adapter.dispatch('get_limit_sql', 'dbt')(sql, limit) }}
+{%- endmacro -%}
+
+{#
+    Renamed from `get_limit_subquery_sql`.
+#}
+{%- macro get_limit_sql(sql, limit) -%}
   {{ adapter.dispatch('get_limit_sql', 'dbt')(sql, limit) }}
 {%- endmacro -%}
 
