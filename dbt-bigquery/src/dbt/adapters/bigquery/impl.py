@@ -1235,31 +1235,45 @@ class BigQueryAdapter(BaseAdapter):
                 freshness_responses[source] = freshness_response
             return adapter_responses, freshness_responses
 
-        # Track schema, identifiers of sources for lookup from batch query
-        schema_identifier_to_source = {
-            (
-                source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
-                source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
-            ): source
-            for source in sources
-        }
+        # The batch query's information_schema is derived from relations[0], so
+        # one call can only ever reach a single project's TABLE_STORAGE. Batching
+        # sources from different projects together in one call, as before, sent
+        # every one of them at whichever project relations[0] happened to name,
+        # and matched rows back by (schema, identifier) alone, so a source in
+        # one project could silently be answered by a same-named table in
+        # another project's dataset. Grouping by database first keeps every
+        # batch scoped to the one project its own query actually reaches.
+        sources_by_database: Dict[Optional[str], List[BaseRelation]] = {}
+        for source in sources:
+            database = source.path.get_lowered_part(ComponentName.Database)  # type: ignore
+            sources_by_database.setdefault(database, []).append(source)
 
-        result = self.execute_macro(
-            GET_RELATION_LAST_MODIFIED_MACRO_NAME,
-            kwargs={
-                "information_schema": None,
-                "relations": sources,
-            },
-            macro_resolver=macro_resolver,
-            needs_conn=True,
-        )
-        adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
-        adapter_responses.append(adapter_response)
+        for database_sources in sources_by_database.values():
+            # Track schema, identifiers of sources for lookup from batch query
+            schema_identifier_to_source = {
+                (
+                    source.path.get_lowered_part(ComponentName.Schema),  # type: ignore
+                    source.path.get_lowered_part(ComponentName.Identifier),  # type: ignore
+                ): source
+                for source in database_sources
+            }
 
-        for row in table:
-            raw_relation, freshness_response = self._parse_freshness_row(row, table)
-            source_relation_for_result = schema_identifier_to_source[raw_relation]
-            freshness_responses[source_relation_for_result] = freshness_response
+            result = self.execute_macro(
+                GET_RELATION_LAST_MODIFIED_MACRO_NAME,
+                kwargs={
+                    "information_schema": None,
+                    "relations": database_sources,
+                },
+                macro_resolver=macro_resolver,
+                needs_conn=True,
+            )
+            adapter_response, table = result.response, result.table  # type: ignore[attr-defined]
+            adapter_responses.append(adapter_response)
+
+            for row in table:
+                raw_relation, freshness_response = self._parse_freshness_row(row, table)
+                source_relation_for_result = schema_identifier_to_source[raw_relation]
+                freshness_responses[source_relation_for_result] = freshness_response
 
         return adapter_responses, freshness_responses
 
