@@ -17,6 +17,7 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Type,
@@ -112,6 +113,36 @@ from dbt.adapters.exceptions import (
 )
 from dbt.adapters.protocol import AdapterConfig, MacroContextGeneratorCallable
 from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.planning import (
+    CatalogBindingState,
+    CatalogFacts,
+    CreateFromQueryPlan,
+    CreateFromQueryRenderArguments,
+    CreateFromQueryRenderResult,
+    CreateFromQueryFacts,
+    CreateFromQueryStrategy,
+    CreateFromQueryStrategyOffer,
+    DdlAtomicity,
+    FormatFacts,
+    IncrementalCatalogStaging,
+    IncrementalMutationArguments,
+    IncrementalMutationFacts,
+    IncrementalMutationPlan,
+    IncrementalMutationStrategy,
+    IncrementalMutationStrategyOffer,
+    IncrementalSchemaChangePlan,
+    IncrementalSourceConsistency,
+    IncrementalStrategyRequirements,
+    IncrementalUniqueKeyRequirement,
+    PlanProvenance,
+    RelationFacts,
+    RuntimeFacts,
+    resolve_create_from_query_offers,
+    incremental_renderer_macro,
+    incremental_strategy,
+    resolve_incremental_mutation_offers,
+    resolve_incremental_schema_change_plan,
+)
 
 logger = AdapterLogger(__name__)
 if TYPE_CHECKING:
@@ -158,7 +189,7 @@ def _expect_row_value(key: str, row: "agate.Row"):
 
 
 def _catalog_filter_schemas(
-    used_schemas: FrozenSet[Tuple[str, str]]
+    used_schemas: FrozenSet[Tuple[str, str]],
 ) -> Callable[["agate.Row"], bool]:
     """Return a function that takes a row and decides if the row should be
     included in the catalog output.
@@ -381,9 +412,9 @@ class BaseAdapter(metaclass=AdapterMeta):
             catalog_type=self._v2_to_v1_type(ct),
             catalog_name=catalog.name,
             table_format=self._v2_table_format(catalog),
-            external_volume=str(external_volume) if external_volume is not None else None,
+            external_volume=(str(external_volume) if external_volume is not None else None),
             file_format=str(file_format) if file_format is not None else None,
-            catalog_database=str(catalog_database) if catalog_database is not None else None,
+            catalog_database=(str(catalog_database) if catalog_database is not None else None),
             adapter_properties=self._translate_v2_properties(ct, props),
         )
 
@@ -412,6 +443,223 @@ class BaseAdapter(metaclass=AdapterMeta):
             return catalog.build_relation(config)
 
         return None
+
+    @available
+    def plan_create_from_query(
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig] = None,
+    ) -> CreateFromQueryPlan:
+        """Resolve how to create ``relation`` from a query before rendering SQL.
+
+        Adapters may override the fact-building or strategy-resolution hooks.
+        The renderer consumes the returned plan rather than inferring relation,
+        catalog, format, or runtime state in Jinja.
+        """
+
+        facts = self.build_create_from_query_facts(temporary, relation, model)
+        return self.resolve_create_from_query_plan(temporary, facts)
+
+    @staticmethod
+    def _create_from_query_fact_value(value: Any, *, canonical: bool = False) -> Optional[str]:
+        if value is None:
+            return None
+        raw_value = getattr(value, "value", value)
+        result = str(raw_value)
+        return result.casefold() if canonical else result
+
+    def get_create_from_query_runtime_facts(
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig],
+    ) -> RuntimeFacts:
+        """Return execution-runtime facts; adapters may add a resolved version."""
+
+        return RuntimeFacts(engine=self.type())
+
+    def build_create_from_query_facts(
+        self,
+        temporary: bool,
+        relation: BaseRelation,
+        model: Optional[RelationConfig] = None,
+    ) -> CreateFromQueryFacts:
+        """Build immutable resolver inputs from authoritative adapter objects."""
+
+        model_config = getattr(model, "config", None)
+        integration_name = self._create_from_query_fact_value(
+            _config_get(model_config, CATALOG_INTEGRATION_MODEL_CONFIG_NAME)
+            or _config_get(model_config, "catalog")
+            or getattr(relation, "catalog", None)
+        )
+        catalog_relation = self.build_catalog_relation(model) if model is not None else None
+
+        if catalog_relation is not None:
+            catalog_type = self._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_type", None), canonical=True
+            )
+            catalog_name = self._create_from_query_fact_value(
+                getattr(catalog_relation, "catalog_name", None)
+            )
+            catalog_facts = CatalogFacts(
+                state=CatalogBindingState.RESOLVED,
+                integration_name=integration_name or catalog_name or catalog_type,
+                catalog_type=catalog_type,
+                catalog_name=catalog_name,
+                catalog_database=self._create_from_query_fact_value(
+                    getattr(catalog_relation, "catalog_database", None)
+                ),
+                catalog_provider=self.get_create_from_query_catalog_provider(
+                    catalog_relation, model
+                ),
+                external_volume=self._create_from_query_fact_value(
+                    getattr(catalog_relation, "external_volume", None)
+                ),
+            )
+        elif integration_name is not None:
+            catalog_facts = CatalogFacts(
+                state=CatalogBindingState.NAMED,
+                integration_name=integration_name,
+            )
+        else:
+            catalog_facts = CatalogFacts(state=CatalogBindingState.UNBOUND)
+
+        format_source = catalog_relation if catalog_relation is not None else relation
+        return CreateFromQueryFacts(
+            relation=RelationFacts(
+                database=self._create_from_query_fact_value(getattr(relation, "database", None)),
+                schema=self._create_from_query_fact_value(getattr(relation, "schema", None)),
+                identifier=self._create_from_query_fact_value(
+                    getattr(relation, "identifier", None)
+                ),
+                relation_type=self._create_from_query_fact_value(
+                    getattr(relation, "type", None), canonical=True
+                ),
+            ),
+            catalog=catalog_facts,
+            format=FormatFacts(
+                table_format=self._create_from_query_fact_value(
+                    getattr(format_source, "table_format", None), canonical=True
+                ),
+                file_format=self._create_from_query_fact_value(
+                    getattr(format_source, "file_format", None), canonical=True
+                ),
+            ),
+            runtime=self.get_create_from_query_runtime_facts(temporary, relation, model),
+        )
+
+    def get_create_from_query_catalog_provider(
+        self,
+        catalog_relation: CatalogRelation,
+        model: Optional[RelationConfig],
+    ) -> Optional[str]:
+        """Return a canonical catalog provider when the adapter resolves one."""
+
+        return None
+
+    def resolve_create_from_query_plan(
+        self, temporary: bool, facts: CreateFromQueryFacts
+    ) -> CreateFromQueryPlan:
+        """Select a physical strategy from typed, already-resolved facts."""
+
+        return resolve_create_from_query_offers(
+            temporary=temporary,
+            facts=facts,
+            offers=self.get_create_from_query_strategy_offers(temporary, facts),
+        )
+
+    def get_create_from_query_strategy_offers(
+        self, temporary: bool, facts: CreateFromQueryFacts
+    ) -> Tuple[CreateFromQueryStrategyOffer, ...]:
+        """Return physical strategies in adapter preference order."""
+
+        return (
+            CreateFromQueryStrategyOffer.available(
+                strategy=CreateFromQueryStrategy.CTAS,
+                atomicity=DdlAtomicity.UNKNOWN,
+                renderer_macro="render_create_from_query_ctas",
+                provenance=(
+                    PlanProvenance(
+                        rule="base.create_from_query.ctas",
+                        detail="Base adapter create-from-query behavior uses create table as select",
+                    ),
+                ),
+            ),
+        )
+
+    @available
+    def resolve_create_from_query_render(
+        self,
+        plan: CreateFromQueryPlan,
+        arguments: CreateFromQueryRenderArguments,
+    ) -> CreateFromQueryRenderResult:
+        """Render portable CTAS or select an explicit compatibility boundary."""
+
+        if plan.strategy == CreateFromQueryStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Create from query is unsupported")
+
+        fallback_reason: Optional[str] = None
+        if arguments.legacy_renderer_override is not None:
+            fallback_reason = (
+                "A project or adapter overrides the legacy create-from-query renderer "
+                f"({arguments.legacy_renderer_override})"
+            )
+        elif plan.strategy != CreateFromQueryStrategy.CTAS:
+            fallback_reason = (
+                f"Strategy '{plan.strategy.value}' does not have a portable Python renderer"
+            )
+        elif arguments.contract_enforced and not plan.temporary:
+            fallback_reason = "Enforced table contracts still require the compatibility renderer"
+
+        if fallback_reason is not None:
+            return CreateFromQueryRenderResult.legacy_macro(
+                renderer_macro="get_create_table_as_sql",
+                reason=fallback_reason,
+                provenance=plan.provenance
+                + (
+                    PlanProvenance(
+                        rule="base.create_from_query.render.legacy_macro",
+                        detail=fallback_reason,
+                    ),
+                ),
+            )
+
+        header = f"{arguments.sql_header}\n\n" if arguments.sql_header is not None else ""
+        temporary = "temporary " if plan.temporary else ""
+        rendered_sql = (
+            f"{header}create {temporary}table\n"
+            f"  {arguments.relation_sql}\n"
+            "as (\n"
+            f"{arguments.query}\n"
+            ");"
+        )
+        return CreateFromQueryRenderResult.rendered_sql(
+            rendered_sql,
+            provenance=plan.provenance
+            + (
+                PlanProvenance(
+                    rule="base.create_from_query.render.python_ctas",
+                    detail="Portable CTAS rendered from validated plan and execution arguments",
+                ),
+            ),
+        )
+
+    @available.parse_none
+    def get_create_from_query_plan_macro(
+        self, model_context: Dict[str, Any], plan: CreateFromQueryPlan
+    ):
+        if plan.strategy == CreateFromQueryStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Create from query is unsupported")
+
+        macro_name = plan.renderer_macro
+        if macro_name not in model_context:
+            raise DbtRuntimeError(
+                'dbt could not find a create-from-query renderer macro with the name "{}" in {}'.format(
+                    macro_name, self.config.project_name
+                )
+            )
+        return model_context[macro_name]
 
     ###
     # Methods to set / access a macro resolver
@@ -485,7 +733,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @contextmanager
     def connection_named(
-        self, name: str, query_header_context: Any = None, should_release_connection=True
+        self,
+        name: str,
+        query_header_context: Any = None,
+        should_release_connection=True,
     ) -> Iterator[None]:
         try:
             if self.connections.query_header is not None:
@@ -501,7 +752,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available.parse(_parse_callback_empty_table)
     @record_function(
-        AdapterExecuteRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+        AdapterExecuteRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
     )
     def execute(
         self,
@@ -999,7 +1253,10 @@ class BaseAdapter(metaclass=AdapterMeta):
     @auto_record_function("AdapterAssertValidSnapshotTargetGivenStrategy", group="Available")
     @available.parse_none
     def assert_valid_snapshot_target_given_strategy(
-        self, relation: BaseRelation, column_names: Dict[str, str], strategy: SnapshotStrategy
+        self,
+        relation: BaseRelation,
+        column_names: Dict[str, str],
+        strategy: SnapshotStrategy,
     ) -> None:
 
         # Assert everything we can with the legacy function.
@@ -1300,7 +1557,10 @@ class BaseAdapter(metaclass=AdapterMeta):
     @available
     @classmethod
     @record_function(
-        AdapterConvertTypeRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+        AdapterConvertTypeRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
     )
     def convert_type(cls, agate_table: "agate.Table", col_idx: int) -> Optional[str]:
 
@@ -1796,7 +2056,10 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @log_code_execution
     @record_function(
-        SubmitPythonJobRecord, method=True, index_on_thread_id=True, id_field_name="thread_id"
+        SubmitPythonJobRecord,
+        method=True,
+        index_on_thread_id=True,
+        id_field_name="thread_id",
     )
     def submit_python_job(self, parsed_model: dict, compiled_code: str) -> AdapterResponse:
         submission_method = parsed_model["config"].get(
@@ -1839,6 +2102,161 @@ class BaseAdapter(metaclass=AdapterMeta):
 
         return builtin_strategies
 
+    @available
+    def plan_incremental_mutation(
+        self,
+        requested_strategy: Optional[str],
+        *,
+        language: str = "sql",
+        unique_key: Optional[Union[str, Sequence[str]]] = None,
+        requested_temp_relation_type: Optional[str] = None,
+        catalog_relation: Optional[CatalogRelation] = None,
+    ) -> IncrementalMutationPlan:
+        facts = self.build_incremental_mutation_facts(
+            requested_strategy=requested_strategy,
+            language=language,
+            unique_key=unique_key,
+            requested_temp_relation_type=requested_temp_relation_type,
+            catalog_relation=catalog_relation,
+        )
+        return resolve_incremental_mutation_offers(
+            facts=facts,
+            offers=self.get_incremental_mutation_strategy_offers(facts),
+        )
+
+    def build_incremental_mutation_facts(
+        self,
+        *,
+        requested_strategy: Optional[str],
+        language: str,
+        unique_key: Optional[Union[str, Sequence[str]]],
+        requested_temp_relation_type: Optional[str],
+        catalog_relation: Optional[CatalogRelation],
+    ) -> IncrementalMutationFacts:
+        return IncrementalMutationFacts(
+            requested_strategy=requested_strategy or "default",
+            language=language,
+            unique_key_present=BaseAdapter._incremental_unique_key_present(unique_key),
+            requested_temp_relation_type=requested_temp_relation_type,
+            catalog_staging=self.get_incremental_catalog_staging(catalog_relation),
+        )
+
+    @staticmethod
+    def _incremental_unique_key_present(
+        unique_key: Optional[Union[str, Sequence[str]]],
+    ) -> bool:
+        if unique_key is None:
+            return False
+        if isinstance(unique_key, str):
+            return bool(unique_key.strip())
+
+        keys = tuple(unique_key)
+        if not keys:
+            return False
+        if not all(isinstance(key, str) and key.strip() for key in keys):
+            raise ValueError("Incremental unique key columns must be non-empty strings")
+        return True
+
+    def get_incremental_catalog_staging(
+        self, catalog_relation: Optional[CatalogRelation]
+    ) -> IncrementalCatalogStaging:
+        return IncrementalCatalogStaging.STANDARD
+
+    def get_incremental_mutation_strategy_offers(
+        self, facts: IncrementalMutationFacts
+    ) -> Tuple[IncrementalMutationStrategyOffer, ...]:
+        requested = facts.requested_strategy
+        strategy = incremental_strategy(requested)
+        requirements = IncrementalStrategyRequirements(
+            unique_key=IncrementalUniqueKeyRequirement.OPTIONAL,
+            source_consistency=IncrementalSourceConsistency.SINGLE_EVALUATION,
+        )
+        if requested in self.builtin_incremental_strategies() and requested not in set(
+            self.valid_incremental_strategies()
+        ) | {"default"}:
+            reason = f"The incremental strategy '{requested}' is not valid for this adapter"
+            return (
+                IncrementalMutationStrategyOffer.rejected(
+                    strategy=strategy,
+                    requirements=requirements,
+                    reason=reason,
+                    provenance=(
+                        PlanProvenance(
+                            rule="incremental.requested_strategy.unsupported",
+                            detail=reason,
+                        ),
+                    ),
+                ),
+            )
+
+        renderer_macro = incremental_renderer_macro(requested)
+        return (
+            IncrementalMutationStrategyOffer.available(
+                strategy=strategy,
+                renderer_macro=renderer_macro,
+                atomicity=DdlAtomicity.UNKNOWN,
+                requirements=requirements,
+                provenance=(
+                    PlanProvenance(
+                        rule=f"incremental.requested_strategy.{strategy.value}",
+                        detail=f"Requested strategy '{requested}' resolved to '{renderer_macro}'",
+                    ),
+                ),
+            ),
+        )
+
+    @available
+    def plan_incremental_schema_change(
+        self, requested_strategy: Optional[str], default: str = "ignore"
+    ) -> IncrementalSchemaChangePlan:
+        return resolve_incremental_schema_change_plan(requested_strategy, default=default)
+
+    @available.parse_none
+    def plan_incremental_arguments(
+        self,
+        *,
+        target_relation: Any,
+        temp_relation: Any,
+        unique_key: Optional[Union[str, Sequence[str]]],
+        dest_columns: Iterable[Any],
+        incremental_predicates: Optional[Sequence[str]],
+        adapter_arguments: Optional[Mapping[str, Any]] = None,
+    ) -> IncrementalMutationArguments:
+        return IncrementalMutationArguments.from_values(
+            target_relation=target_relation,
+            temp_relation=temp_relation,
+            unique_key=unique_key,
+            dest_columns=dest_columns,
+            incremental_predicates=incremental_predicates,
+            adapter_arguments=adapter_arguments,
+        )
+
+    @available.parse_none
+    def get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
+        if (
+            getattr(type(self), "get_incremental_strategy_macro", None)
+            is not BaseAdapter.get_incremental_strategy_macro
+        ):
+            # Preserve adapter overrides of the established public selector. The
+            # override may support strategies unknown to the base planner.
+            return self.get_incremental_strategy_macro(model_context, plan.requested_strategy)
+
+        if plan.strategy == IncrementalMutationStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Incremental mutation is unsupported")
+
+        return self._get_incremental_plan_macro(model_context, plan)
+
+    def _get_incremental_plan_macro(self, model_context, plan: IncrementalMutationPlan):
+        macro_name = plan.renderer_macro
+        if macro_name not in model_context:
+            raise DbtRuntimeError(
+                'dbt could not find an incremental strategy macro with the name "{}" in {}'.format(
+                    macro_name, self.config.project_name
+                )
+            )
+
+        return model_context[macro_name]
+
     @available.parse_none
     def get_incremental_strategy_macro(self, model_context, strategy: str):
         """Gets the macro for the given incremental strategy.
@@ -1852,31 +2270,10 @@ class BaseAdapter(metaclass=AdapterMeta):
         a "builtin", and nothing will break (and that is desirable).
         """
 
-        # Construct macro_name from strategy name
-        if strategy is None:
-            strategy = "default"
-
-        # validate strategies for this adapter
-        valid_strategies = self.valid_incremental_strategies()
-        valid_strategies.append("default")
-        builtin_strategies = self.builtin_incremental_strategies()
-        if strategy in builtin_strategies and strategy not in valid_strategies:
-            raise DbtRuntimeError(
-                f"The incremental strategy '{strategy}' is not valid for this adapter"
-            )
-
-        strategy = strategy.replace("+", "_")
-        macro_name = f"get_incremental_{strategy}_sql"
-        # The model_context should have callable objects for all macros
-        if macro_name not in model_context:
-            raise DbtRuntimeError(
-                'dbt could not find an incremental strategy macro with the name "{}" in {}'.format(
-                    macro_name, self.config.project_name
-                )
-            )
-
-        # This returns a callable macro
-        return model_context[macro_name]
+        plan = self.plan_incremental_mutation(strategy)
+        if plan.strategy == IncrementalMutationStrategy.UNSUPPORTED:
+            raise DbtRuntimeError(plan.reason or "Incremental mutation is unsupported")
+        return self._get_incremental_plan_macro(model_context, plan)
 
     @classmethod
     def _parse_column_constraint(cls, raw_constraint: Dict[str, Any]) -> ColumnLevelConstraint:
