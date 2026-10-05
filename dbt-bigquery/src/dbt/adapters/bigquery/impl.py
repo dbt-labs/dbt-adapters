@@ -456,7 +456,7 @@ class BigQueryAdapter(BaseAdapter):
                 if (relation := self._bq_routine_to_relation(routine)) is not None
             ]  # type: ignore[misc]
         except google.api_core.exceptions.NotFound:
-            return table_relations  # type: ignore[return-value]
+            return []
         except google.api_core.exceptions.Forbidden as exc:
             self._warn_list_relations_forbidden(dataset_ref, "routines", exc)
             return table_relations  # type: ignore[return-value]
