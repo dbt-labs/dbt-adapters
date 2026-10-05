@@ -228,6 +228,52 @@ def test_pbes1_non_ascii_passphrase_uses_fallback(private_key):
     warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
 
 
+@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
+def test_pbes1_trailing_text_from_string(private_key, scheme):
+    # cryptography ignores text after the PEM block, so such keys load today;
+    # once cryptography>=45 drops PBES1, the fallback must load them too.
+    # (Text before the block is different: it never reaches the PEM path,
+    # because private_key_from_string only routes strings that start with
+    # "-" to the PEM loader.)
+    clean = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
+    key_string = f"{clean}\ntrailing text"
+    calculated_private_key = private_key_from_string(key_string, PASSPHRASE)
+    assert serialize(calculated_private_key) == serialize(private_key)
+
+
+def test_pbes1_trailing_text_uses_fallback(private_key):
+    # force the fallback regardless of the installed cryptography version
+    clean = to_pem(pbes1_encrypt(private_key, "pbeWithSHA1AndDES-CBC", PASSPHRASE))
+    key_string = f"{clean}\ntrailing text"
+    unsupported = ValueError("Unknown key encryption algorithm: 1.2.840.113549.1.5.10")
+    with (
+        mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=unsupported),
+        mock.patch.object(auth.logger, "warning") as warning,
+    ):
+        calculated_private_key = private_key_from_string(key_string, PASSPHRASE)
+    assert serialize(calculated_private_key) == serialize(private_key)
+    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permission issues on Windows")
+@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
+def test_pbes1_surrounding_text_from_file(private_key, scheme, tmp_path):
+    # files go straight to the PEM loader, which scans for the PEM block
+    # inside surrounding text, so the fallback must strip that text too
+    clean = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
+    key_file = tmp_path / "key.pem"
+    key_file.write_text(f"leading text\n{clean}\ntrailing text")
+    calculated_private_key = private_key_from_file(str(key_file), PASSPHRASE)
+    assert serialize(calculated_private_key) == serialize(private_key)
+
+
+@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
+def test_is_pbes1_encrypted_with_surrounding_text(private_key, scheme):
+    clean = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
+    messy = f"leading text\n{clean}\ntrailing text".encode()
+    assert auth._is_pbes1_encrypted(messy, is_pem=True)
+
+
 def test_unencrypted_private_key_from_string(private_key):
     key_string = private_key.private_bytes(
         serialization.Encoding.PEM,

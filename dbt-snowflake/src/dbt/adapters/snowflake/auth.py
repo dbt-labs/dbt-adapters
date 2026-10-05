@@ -1,4 +1,5 @@
 import base64
+import re
 import sys
 from typing import Any, Callable, Optional, cast
 
@@ -40,6 +41,24 @@ _PBES1_OIDS = frozenset(
     }
 )
 
+_PEM_BLOCK_PATTERN = re.compile(
+    rb"-----BEGIN (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE) KEY-----.+?"
+    rb"-----END (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE) KEY-----",
+    re.DOTALL,
+)
+
+
+def _extract_pem_block(data: bytes) -> bytes:
+    """Return just the private-key PEM block, without any surrounding text.
+
+    cryptography scans for the PEM block inside surrounding text, but
+    pycryptodome requires the PEM block to be the entire input, so the same
+    text must be stripped before any pycryptodome-based parsing. Returns data
+    unchanged when no PEM block is present.
+    """
+    match = _PEM_BLOCK_PATTERN.search(data)
+    return match.group(0) if match else data
+
 
 def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     """Return True when data is an EncryptedPrivateKeyInfo encrypted with one
@@ -53,7 +72,11 @@ def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     from Crypto.Util.asn1 import DerObjectId, DerSequence
 
     try:
-        der = PEM.decode(data.decode())[0] if is_pem else data
+        if is_pem:
+            data = _extract_pem_block(data)
+            der = PEM.decode(data.decode())[0]
+        else:
+            der = data
         encrypted_key_info = DerSequence().decode(der)
         encryption_algorithm = cast(bytes, encrypted_key_info[0])
         algorithm_id = DerSequence().decode(encryption_algorithm)
@@ -80,10 +103,11 @@ def _load_private_key(
     from Crypto.PublicKey import RSA
 
     try:
+        key_bytes = _extract_pem_block(data) if is_pem else data
         # pycryptodome uses a bytes passphrase as-is at runtime; its annotation
         # only declares str, which raises UnicodeEncodeError for non-ASCII
         # passphrases, so pass through the exact bytes cryptography received
-        legacy_key = RSA.import_key(data, passphrase=password)  # type: ignore[arg-type]
+        legacy_key = RSA.import_key(key_bytes, passphrase=password)  # type: ignore[arg-type]
     except (ValueError, IndexError, TypeError):
         # keep cryptography's error, e.g. for a wrong passphrase
         raise original_error
