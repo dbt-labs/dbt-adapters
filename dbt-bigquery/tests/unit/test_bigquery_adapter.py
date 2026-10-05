@@ -659,7 +659,20 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
     def test_list_relations_without_caching_not_found_returns_empty(self):
         adapter = self.get_adapter("oauth")
         err = google.api_core.exceptions.NotFound("no such dataset")
-        assert self._list_relations(adapter, MagicMock(__iter__=MagicMock(side_effect=err)), []) == []
+        assert (
+            self._list_relations(adapter, MagicMock(__iter__=MagicMock(side_effect=err)), []) == []
+        )
+
+    def test_list_relations_without_caching_routines_not_found_returns_empty(self):
+        adapter = self.get_adapter("oauth")
+        err = google.api_core.exceptions.NotFound("no such dataset")
+        table = MagicMock()
+        table.table_id = "my_table"
+        table.table_type = "TABLE"
+        table.project = "proj"
+        table.dataset_id = "dataset"
+        routines = MagicMock(__iter__=MagicMock(side_effect=err))
+        assert self._list_relations(adapter, [table], routines) == []
 
     def test_list_relations_without_caching_warns_when_tables_forbidden(self):
         adapter = self.get_adapter("oauth")
