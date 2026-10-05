@@ -2,6 +2,7 @@ from multiprocessing import get_context
 from unittest import mock
 
 import agate
+import google.api_core.exceptions
 import decimal
 import string
 import random
@@ -642,6 +643,50 @@ class TestBigQueryAdapter(BaseTestBigQueryAdapter):
         adapter.connections.copy_bq_table.assert_called_once_with(
             "source", "destination", dbt.adapters.bigquery.impl.WRITE_APPEND
         )
+
+    def _list_relations(self, adapter, list_tables, list_routines):
+        client = MagicMock()
+        client.list_tables.return_value = list_tables
+        client.list_routines.return_value = list_routines
+        adapter.connections = MagicMock()
+        adapter.connections.get_thread_connection.return_value.handle = client
+        adapter.connections.dataset_ref.return_value = MagicMock(
+            project="proj", dataset_id="dataset"
+        )
+        schema_relation = BigQueryRelation.create(database="proj", schema="dataset")
+        return adapter.list_relations_without_caching(schema_relation)
+
+    def test_list_relations_without_caching_not_found_returns_empty(self):
+        adapter = self.get_adapter("oauth")
+        err = google.api_core.exceptions.NotFound("no such dataset")
+        assert self._list_relations(adapter, MagicMock(__iter__=MagicMock(side_effect=err)), []) == []
+
+    def test_list_relations_without_caching_warns_when_tables_forbidden(self):
+        adapter = self.get_adapter("oauth")
+        err = google.api_core.exceptions.Forbidden("bigquery.tables.list denied")
+        with patch("dbt.adapters.bigquery.impl.logger") as mock_logger:
+            result = self._list_relations(
+                adapter, MagicMock(__iter__=MagicMock(side_effect=err)), []
+            )
+        assert result == []
+        mock_logger.warning.assert_called_once()
+        assert "Permission denied listing tables" in mock_logger.warning.call_args[0][0]
+
+    def test_list_relations_without_caching_keeps_tables_when_routines_forbidden(self):
+        adapter = self.get_adapter("oauth")
+        err = google.api_core.exceptions.Forbidden("bigquery.routines.list denied")
+        table = MagicMock()
+        table.table_id = "my_table"
+        table.table_type = "TABLE"
+        table.project = "proj"
+        table.dataset_id = "dataset"
+        with patch("dbt.adapters.bigquery.impl.logger") as mock_logger:
+            result = self._list_relations(
+                adapter, [table], MagicMock(__iter__=MagicMock(side_effect=err))
+            )
+        assert [r.identifier for r in result] == ["my_table"]
+        mock_logger.warning.assert_called_once()
+        assert "Permission denied listing routines" in mock_logger.warning.call_args[0][0]
 
     def test_parse_partition_by(self):
         adapter = self.get_adapter("oauth")
