@@ -338,6 +338,71 @@ class TestIcebergMergeExcludeAllColumns(BaseMergeExcludeColumns):
         }
 
 
+models__merge_exclude_source_columns_sql = """
+{{ config(
+    materialized = 'incremental',
+    unique_key = 'id',
+    incremental_strategy='merge',
+    table_type='iceberg',
+    merge_exclude_source_columns=['_is_deleted'],
+    on_schema_change='fail',
+    delete_condition='src._is_deleted = true'
+) }}
+
+{% if not is_incremental() %}
+
+select 1 as id, 'hello' as msg
+union all
+select 2 as id, 'goodbye' as msg
+
+{% else %}
+
+select 1 as id, 'hey' as msg, false as _is_deleted
+union all
+select 2 as id, 'yo' as msg, true as _is_deleted
+union all
+select 3 as id, 'new' as msg, false as _is_deleted
+
+{% endif %}
+"""
+
+seeds__expected_merge_exclude_source_columns_csv = """id,msg
+1,hey
+3,new
+"""
+
+
+class TestIcebergMergeSelectExcludeColumns:
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "merge_exclude_source_columns.sql": models__merge_exclude_source_columns_sql,
+        }
+
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        return {
+            "expected_merge_exclude_source_columns.csv": seeds__expected_merge_exclude_source_columns_csv,
+        }
+
+    def test__merge_exclude_source_columns(self, project):
+        """merge_exclude_source_columns should be excluded from schema change detection"""
+
+        expected_seed_name = "expected_merge_exclude_source_columns"
+        run_dbt(["seed", "--select", expected_seed_name, "--full-refresh"])
+
+        relation_name = "merge_exclude_source_columns"
+        model_run = run_dbt(["run", "--select", relation_name])
+        model_run_result = model_run.results[0]
+        assert model_run_result.status == RunStatus.Success
+
+        model_update = run_dbt(["run", "--select", relation_name])
+        model_update_result = model_update.results[0]
+        assert model_update_result.status == RunStatus.Success
+
+        check_relations_equal(project.adapter, [relation_name, expected_seed_name])
+
+
 class TestIcebergUpdateCondition:
     @pytest.fixture(scope="class")
     def models(self):
