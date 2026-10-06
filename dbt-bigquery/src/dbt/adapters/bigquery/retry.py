@@ -35,6 +35,16 @@ def _is_rate_limit_error(error: Exception) -> bool:
     return errors[0].get("reason") in _RATE_LIMIT_REASONS
 
 
+def job_is_terminally_failed(job: Any) -> bool:
+    """True when a job is DONE with an error_result."""
+    return job.state == "DONE" and bool(job.error_result)
+
+
+def job_may_have_partially_committed(job: Any) -> bool:
+    """True for SCRIPT jobs, whose earlier statements can commit even if the job fails."""
+    return getattr(job, "statement_type", None) == "SCRIPT"
+
+
 class RetryFactory:
 
     def __init__(self, credentials: BigQueryCredentials) -> None:
@@ -168,7 +178,7 @@ class _TerminalJobAwarePredicate:
             # are logged (expected vs unexpected) and fall through to retry.
             try:
                 self._query_job.reload()
-                if self._query_job.state == "DONE" and self._query_job.error_result:
+                if job_is_terminally_failed(self._query_job):
                     _logger.debug(
                         f"Job {self._query_job.job_id} is in a terminal failed state; "
                         "stopping getQueryResults polling."

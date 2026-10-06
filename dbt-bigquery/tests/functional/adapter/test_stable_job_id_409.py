@@ -3,6 +3,7 @@ import uuid
 import pytest
 
 from dbt.tests.util import run_dbt
+from dbt_common.exceptions import DbtDatabaseError
 
 
 _SEED = "select 1 as id"
@@ -83,3 +84,75 @@ class TestStableJobIdAttachesOnConflict:
             count = list(iterator)[0][0]
 
         assert count == 1, f"expected 1 row in copy destination, got {count}"
+
+    def test_resubmits_terminally_failed_job_under_fresh_id(self, project):
+        """A 409 on a job that failed must resubmit under a fresh job_id;
+        attaching would only replay the stored error."""
+        run_dbt(["run"])
+
+        conns = project.adapter.connections
+        table = f"`{project.database}`.`{project.test_schema}`.`failed_probe`"
+        query = f"select 1 / (select count(*) from {table}) as n"
+
+        with project.adapter.connection_named("__test_409_failed"):
+            conns.raw_execute(f"create or replace table {table} (id int64)")
+
+            fixed_id = f"dbt-conflict-failed-{uuid.uuid4()}"
+            original = conns.generate_job_id
+            try:
+                conns.generate_job_id = lambda: fixed_id
+                with pytest.raises(DbtDatabaseError):
+                    conns.raw_execute(query)  # 1st: division by zero, job fails
+
+                conns.generate_job_id = original
+                conns.raw_execute(f"insert into {table} (id) values (1)")
+
+                # 2nd: same job_id -> 409 on the failed job -> resubmit under a fresh id
+                ids = iter([fixed_id])
+                conns.generate_job_id = lambda: next(ids, None) or original()
+                query_job, iterator = conns.raw_execute(query)
+            finally:
+                conns.generate_job_id = original
+
+        assert query_job.job_id != fixed_id
+        assert list(iterator)[0][0] == 1
+
+    def test_copy_job_resubmits_after_terminal_failure(self, project):
+        """Copy jobs have no statement_type; a failed one is still resubmitted."""
+        run_dbt(["run"])
+
+        conns = project.adapter.connections
+        src = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema, identifier="failed_copy_src"
+        )
+        dst = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema, identifier="failed_copy_dst"
+        )
+        src_table = f"`{src.database}`.`{src.schema}`.`{src.identifier}`"
+        dst_table = f"`{dst.database}`.`{dst.schema}`.`{dst.identifier}`"
+
+        with project.adapter.connection_named("__test_409_copy_failed"):
+            conns.raw_execute(f"create or replace table {src_table} as select 1 as id")
+            conns.raw_execute(f"create or replace table {dst_table} as select 2 as id")
+
+            fixed_id = f"dbt-conflict-copy-failed-{uuid.uuid4()}"
+            original = conns.generate_job_id
+            try:
+                conns.generate_job_id = lambda: fixed_id
+                with pytest.raises(DbtDatabaseError):
+                    conns.copy_bq_table(src, dst, "WRITE_EMPTY")  # 1st: destination not empty
+
+                conns.generate_job_id = original
+                conns.raw_execute(f"drop table {dst_table}")
+
+                # 2nd: same job_id -> 409 on the failed job -> resubmit under a fresh id
+                ids = iter([fixed_id])
+                conns.generate_job_id = lambda: next(ids, None) or original()
+                conns.copy_bq_table(src, dst, "WRITE_EMPTY")
+            finally:
+                conns.generate_job_id = original
+
+            _, iterator = conns.raw_execute(f"select id from {dst_table}")
+            rows = [row[0] for row in iterator]
+
+        assert rows == [1], f"expected the copied row, got {rows}"
