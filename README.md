@@ -66,9 +66,10 @@ The following milestones track features that we're planning for the next minor v
 - Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
 - Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
 
-## Suggest a feature or report a bug
+## Report a bug or suggest a feature
 
-- Submit a bug or a feature as a GitHub [issue](https://github.com/dbt-labs/dbt-adapters/issues/new/choose)
+- Report a bug in a dbt v1.x adapter as a GitHub [issue](https://github.com/dbt-labs/dbt-adapters/issues/new/choose)
+- dbt v1.x adapters are no longer accepting new features. New adapter features are only being added to dbt v2.x; propose them, or report dbt v2.x bugs, in [dbt-labs/dbt](https://github.com/dbt-labs/dbt/issues/new/choose)
 
 ## Contribute
 
