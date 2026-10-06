@@ -1,5 +1,5 @@
-name: ✨ Feature
-description: Propose a straightforward extension of dbt functionality
+name: ✨ Feature (dbt v1.x adapters)
+description: Propose a straightforward extension of dbt v1.x adapter functionality
 title: "[Feature] <title>"
 labels: ["type:enhancement", "triage:product"]
 body:
