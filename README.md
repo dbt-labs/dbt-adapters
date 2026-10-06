@@ -10,7 +10,7 @@
 # dbt
 
 > [!NOTE]
-> This repository hosts the **v1** generation of dbt adapters. The **v2** adapters are developed in the [dbt-core](https://github.com/dbt-labs/dbt-core) repository.
+> This repository hosts the **v1** generation of dbt adapters. The **v2** adapters are developed in the [dbt](https://github.com/dbt-labs/dbt) repository.
 
 **[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
