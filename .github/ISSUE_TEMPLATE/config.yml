@@ -3,9 +3,9 @@ contact_links:
 -   name: 🐞 Bug (dbt v2.x adapters)
     url: https://github.com/dbt-labs/dbt/issues/new?template=bug-report-v2.yml
     about: Report a bug or issue you've found in a dbt v2.x adapter (Core or Fusion distributions)
--   name: ✨ Feature (dbt v2.x adapters)
+-   name: ✨ Feature request
     url: https://github.com/dbt-labs/dbt/issues/new?template=feature-request.yml
-    about: Propose a straightforward extension of dbt v2.x adapter functionality
+    about: New adapter features are only being added to dbt v2.x. Requests go to dbt-labs/dbt.
 -   name: Other dbt issues
     url: https://github.com/dbt-labs/dbt/issues/new/choose
     about: dbt Core v1.x bugs, VS Code extension, SQL understanding, docs, and anything else that isn't adapter-specific
