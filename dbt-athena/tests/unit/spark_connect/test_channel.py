@@ -79,6 +79,8 @@ def fake_pyspark(monkeypatch):
     fake_reattach = types.ModuleType("pyspark.sql.connect.client.reattach")
     fake_reattach.RetryException = type("RetryException", (Exception,), {})
     fake_reattach.ExecutePlanResponseReattachableIterator = _StubReattachIterator
+    fake_artifact = types.ModuleType("pyspark.sql.connect.client.artifact")
+    fake_artifact.ArtifactManager = type("ArtifactManager", (), {})
 
     monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)
     monkeypatch.setitem(sys.modules, "pyspark.sql", fake_sql)
@@ -86,6 +88,7 @@ def fake_pyspark(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client", fake_client)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.core", fake_core)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.reattach", fake_reattach)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.artifact", fake_artifact)
     return fake_core
 
 

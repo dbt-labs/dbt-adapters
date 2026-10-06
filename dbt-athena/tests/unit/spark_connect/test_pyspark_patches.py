@@ -81,6 +81,13 @@ def fake_pyspark_modules(monkeypatch):
     fake_core = types.ModuleType("pyspark.sql.connect.client.core")
     fake_core.SparkConnectClient = FakeSparkConnectClient
     fake_core.Retrying = FakeRetrying
+    fake_artifact = types.ModuleType("pyspark.sql.connect.client.artifact")
+
+    class FakeArtifactManager:
+        def add_artifacts(self, *path, pyfile, archive, file):
+            pass
+
+    fake_artifact.ArtifactManager = FakeArtifactManager
 
     monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)
     monkeypatch.setitem(sys.modules, "pyspark.sql", fake_sql)
@@ -88,11 +95,13 @@ def fake_pyspark_modules(monkeypatch):
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client", fake_client)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.reattach", fake_reattach)
     monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.core", fake_core)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.artifact", fake_artifact)
     return types.SimpleNamespace(
         iterator=FakeIterator,
         client=FakeSparkConnectClient,
         retrying=FakeRetrying,
         retry_exception=FakeRetryException,
+        artifact_manager=FakeArtifactManager,
     )
 
 
@@ -468,3 +477,127 @@ def test_other_rpc_error_before_first_response_propagates(fake_pyspark_modules):
     with pytest.raises(type(error)):
         iterator._call_iter(_raise(error))
     stub.ExecutePlan.assert_not_called()
+
+
+class _FakeArtifactServer:
+    def __init__(self):
+        self.uploaded = []
+        self.payloads = []
+        self.fail_next = False
+        self.hold_uploads = None
+
+    def retrieve(self, requests):
+        if self.hold_uploads is not None:
+            self.hold_uploads.wait(timeout=5)
+        received = []
+        for request in requests:
+            if request.HasField("batch"):
+                received.extend((a.name, a.data.data) for a in request.batch.artifacts)
+            elif request.HasField("begin_chunk"):
+                received.append((request.begin_chunk.name, request.begin_chunk.initial_chunk.data))
+            elif request.HasField("chunk"):
+                name, data = received[-1]
+                received[-1] = (name, data + request.chunk.data)
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("upload failed")
+        self.uploaded.extend(name for name, _ in received)
+        self.payloads.extend(data for _, data in received)
+        return MagicMock(artifacts=[])
+
+
+@pytest.fixture
+def artifact_server():
+    grpc = pytest.importorskip("grpc")
+    artifact = pytest.importorskip("pyspark.sql.connect.client.artifact")
+    from dbt.adapters.athena.spark_connect.pyspark_patches import _add_artifacts_once
+
+    channel = grpc.insecure_channel("localhost:1")
+    manager = artifact.ArtifactManager(
+        user_id=None,
+        session_id="sid-1",
+        channel=channel,
+        metadata=[],
+    )
+    server = _FakeArtifactServer()
+    manager._retrieve_responses = lambda requests: server.retrieve(requests)
+    server.add = lambda path: _add_artifacts_once(
+        manager, path, pyfile=True, archive=False, file=False
+    )
+    yield server
+    channel.close()
+
+
+def _write_file(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return str(path)
+
+
+def test_same_artifact_from_another_path_is_added_once(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "a" / "utils.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "b" / "utils.zip", b"v1"))
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_artifact_with_changed_content_is_sent_again(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "a" / "utils.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "b" / "utils.zip", b"v2"))
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip", "pyfiles/utils.zip"]
+    assert artifact_server.payloads == [b"v1", b"v2"]
+
+
+def test_uploaded_payload_is_the_full_file_content(artifact_server, tmp_path):
+    large = bytes(range(256)) * 1024
+    artifact_server.add(_write_file(tmp_path / "small.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "large.zip", large))
+
+    assert artifact_server.payloads == [b"v1", large]
+
+
+def test_artifacts_with_different_names_are_each_added(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "one.zip", b"x"))
+    artifact_server.add(_write_file(tmp_path / "two.zip", b"x"))
+
+    assert artifact_server.uploaded == ["pyfiles/one.zip", "pyfiles/two.zip"]
+
+
+def test_failed_upload_is_retried_on_next_add(artifact_server, tmp_path):
+    path = _write_file(tmp_path / "utils.zip", b"v1")
+    artifact_server.fail_next = True
+    with pytest.raises(RuntimeError):
+        artifact_server.add(path)
+
+    artifact_server.add(path)
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_concurrent_adds_of_same_artifact_upload_once(artifact_server, tmp_path):
+    import threading
+
+    first = _write_file(tmp_path / "a" / "utils.zip", b"v1")
+    second = _write_file(tmp_path / "b" / "utils.zip", b"v1")
+    artifact_server.hold_uploads = threading.Event()
+    threads = [threading.Thread(target=artifact_server.add, args=(p,)) for p in (first, second)]
+    for thread in threads:
+        thread.start()
+    threads[0].join(timeout=0.5)
+    artifact_server.hold_uploads.set()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_apply_installs_artifact_dedupe(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import (
+        _add_artifacts_once,
+        apply_pyspark_workarounds,
+    )
+
+    apply_pyspark_workarounds()
+
+    assert fake_pyspark_modules.artifact_manager.add_artifacts is _add_artifacts_once
