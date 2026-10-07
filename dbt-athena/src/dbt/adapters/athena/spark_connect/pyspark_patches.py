@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
-from typing import Any, List, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, List, Optional
 
 from dbt.adapters.events.logging import AdapterLogger
 
@@ -87,6 +88,16 @@ class _RetryBlock:
 
     def __init__(self) -> None:
         self.permission_denied_since: Optional[float] = None
+
+
+@contextmanager
+def client_retries_disabled() -> Iterator[None]:
+    """Make Spark Connect RPCs issued by the current thread fail without client-side retries."""
+    _RETRY_BLOCK_THREAD_LOCAL.disabled = True
+    try:
+        yield
+    finally:
+        _RETRY_BLOCK_THREAD_LOCAL.disabled = False
 
 
 def _stash_channel_builder_on_stub() -> None:
@@ -221,6 +232,8 @@ def _retry_permission_denied_in_spark_client() -> None:
     original = SparkConnectClient.retry_exception.__func__
 
     def _patched(cls: Any, e: BaseException) -> bool:
+        if getattr(_RETRY_BLOCK_THREAD_LOCAL, "disabled", False):
+            return False
         if original(cls, e):
             return True
         if not (isinstance(e, grpc.RpcError) and e.code() == grpc.StatusCode.PERMISSION_DENIED):

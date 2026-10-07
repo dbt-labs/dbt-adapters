@@ -18,6 +18,7 @@ DEFAULT_SPARK_MAX_CONCURRENT_DPUS = 2
 DEFAULT_SPARK_EXECUTOR_DPU_SIZE = 1
 DEFAULT_CALCULATION_TIMEOUT = 43200  # seconds = 12 hours
 SESSION_IDLE_TIMEOUT_MIN = 10  # minutes
+DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL = SESSION_IDLE_TIMEOUT_MIN * 60 // 2  # seconds
 
 DEFAULT_SPARK_PROPERTIES = {
     # https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-table-formats.html

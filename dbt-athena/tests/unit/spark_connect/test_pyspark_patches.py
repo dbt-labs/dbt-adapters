@@ -601,3 +601,24 @@ def test_apply_installs_artifact_dedupe(fake_pyspark_modules):
     apply_pyspark_workarounds()
 
     assert fake_pyspark_modules.artifact_manager.add_artifacts is _add_artifacts_once
+
+
+def test_retry_exception_is_disabled_inside_client_retries_disabled(
+    fake_reattach_module, fake_spark_client_module
+):
+    import grpc
+
+    from dbt.adapters.athena.spark_connect.pyspark_patches import (
+        apply_pyspark_workarounds,
+        client_retries_disabled,
+    )
+
+    apply_pyspark_workarounds()
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.UNAVAILABLE
+
+    with client_retries_disabled():
+        assert fake_spark_client_module.retry_exception(_Err()) is False
+    assert fake_spark_client_module.retry_exception(_Err()) is True

@@ -52,6 +52,7 @@ class TestSparkConnectSubmission:
         credentials.spark_connect_dpu_budget = None
         credentials.spark_connect_pool_acquire_timeout = None
         credentials.spark_connect_max_retries = None
+        credentials.spark_connect_keepalive_interval = None
         credentials.poll_interval = 0.01
         credentials.num_retries = 3
         credentials.effective_num_retries = 3
@@ -324,6 +325,31 @@ class TestSparkConnectSubmission:
         mock_pool.terminate.assert_called_once_with("sid-1")
         # Second session succeeded, so it should be released.
         mock_pool.release.assert_called_once_with("sid-2")
+
+    @pytest.mark.parametrize("interval, expect_keepalive", [(0.02, True), (0, False)])
+    def test_keepalive_runs_only_while_model_executes(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch, interval, expect_keepalive
+    ):
+        mock_credentials.spark_connect_keepalive_interval = interval
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.return_value = "sid-1"
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        fake_spark = MagicMock()
+        self._set_spark_create(return_value=fake_spark)
+
+        submitter.submit(
+            "import time\n"
+            "for _ in range(50):\n"
+            "    if spark.sql.call_count:\n"
+            "        break\n"
+            "    time.sleep(0.01)\n"
+        )
+
+        keepalive_calls = fake_spark.sql.call_count
+        assert (keepalive_calls > 0) is expect_keepalive
+        time.sleep(0.1)
+        assert fake_spark.sql.call_count == keepalive_calls
 
     def test_non_transient_error_raises_without_retry(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
@@ -922,6 +948,7 @@ class TestDpuRequestComputation:
         c.spark_connect_session_concurrency = None
         c.spark_connect_pool_acquire_timeout = None
         c.spark_connect_max_retries = None
+        c.spark_connect_keepalive_interval = None
         return c
 
     def test_dpu_request_uses_min_of_dpus_and_executors_plus_driver(self, mock_credentials):
@@ -986,6 +1013,19 @@ class TestDpuRequestComputation:
             {"MaxConcurrentDpus": 2}, mock_credentials
         )
         assert submitter._pool_acquire_timeout == 1800
+
+    def test_keepalive_interval_defaults_to_half_the_session_idle_timeout(self, mock_credentials):
+        submitter = self._make_submitter_with_engine_config(
+            {"MaxConcurrentDpus": 2}, mock_credentials
+        )
+        assert submitter._keepalive_interval == 300
+
+    def test_keepalive_interval_uses_credential_override(self, mock_credentials):
+        mock_credentials.spark_connect_keepalive_interval = 0
+        submitter = self._make_submitter_with_engine_config(
+            {"MaxConcurrentDpus": 2}, mock_credentials
+        )
+        assert submitter._keepalive_interval == 0
 
 
 class TestWaitForEndpoint:
