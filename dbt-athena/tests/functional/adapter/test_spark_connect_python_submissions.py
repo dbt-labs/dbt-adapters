@@ -85,9 +85,7 @@ def model(dbt, session):
 
 @requires_spark_workgroup
 class TestSparkConnectPythonIncremental(BasePythonIncrementalTests):
-    """Spark Connect must round-trip dbt.is_incremental and the merge
-    strategy (Iceberg required, since Hive external tables don't support
-    MERGE on Athena)."""
+    """Iceberg is required: Hive external tables do not support MERGE on Athena."""
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -111,9 +109,7 @@ def model(dbt, _):
 
 @requires_spark_workgroup
 class TestSparkConnectPythonMultiModel:
-    """End-to-end smoke test: two python models with matching fingerprints
-    both succeed via the Spark Connect path (session reuse semantics are
-    covered by the unit tests in ``tests/unit/spark_connect/test_session.py``)."""
+    """End-to-end smoke test: two python models with matching fingerprints both succeed."""
 
     @pytest.fixture(scope="class")
     def project_config_update(self):

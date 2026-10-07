@@ -1,10 +1,3 @@
-"""Tests for the Athena Spark Connect channel builder.
-
-The real ``ChannelBuilder`` lives in pyspark, which is an optional
-dependency. We stub the parts we need so the production module can be
-imported and exercised without pyspark installed.
-"""
-
 import sys
 import threading
 import time
@@ -17,14 +10,11 @@ from dbt_common.exceptions import DbtRuntimeError
 
 
 class _StubChannelBuilder:
-    """Minimal stand-in for pyspark's ChannelBuilder."""
 
     def __init__(self, url: str) -> None:
         self.url = url
 
     def metadata(self):
-        # Include a non-auth header to verify filtering preserves it,
-        # and an existing auth header to verify it gets replaced.
         return [("user-agent", "dbt-athena"), ("x-aws-proxy-auth", "stale")]
 
 
@@ -75,7 +65,6 @@ class _StubRetrying:
 
 @pytest.fixture
 def fake_pyspark(monkeypatch):
-    """Inject fake pyspark modules so the channel module can import them."""
     fake_pyspark = types.ModuleType("pyspark")
     fake_sql = types.ModuleType("pyspark.sql")
     fake_connect = types.ModuleType("pyspark.sql.connect")
@@ -145,7 +134,6 @@ def test_metadata_appends_current_auth_token_and_drops_stale(fake_pyspark):
 
     auth_headers = [v for k, v in md if k == "x-aws-proxy-auth"]
     assert auth_headers == ["fresh-token"]
-    # Non-auth headers from the parent are preserved.
     assert ("user-agent", "dbt-athena") in md
 
 
@@ -234,7 +222,6 @@ def test_refresh_raises_when_endpoint_returns_no_token(fake_pyspark):
 
 
 def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
-    """Two simultaneous metadata() calls trigger exactly one refresh."""
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     barrier = threading.Barrier(2)
@@ -280,7 +267,6 @@ def test_concurrent_metadata_only_refreshes_once(fake_pyspark):
 
 
 def test_class_is_cached_across_calls(fake_pyspark):
-    """Two builds against the same fake pyspark produce the same class object."""
     from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     first = create_athena_channel_builder(

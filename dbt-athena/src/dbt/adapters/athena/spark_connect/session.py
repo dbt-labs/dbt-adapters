@@ -1,5 +1,3 @@
-"""Thread-safe pool for Athena Spark Connect sessions, keyed by ``(invocation_id, fingerprint)``."""
-
 from __future__ import annotations
 
 import random
@@ -30,8 +28,6 @@ class _RequiredSessionInfo(TypedDict):
 
 
 class _SessionInfo(_RequiredSessionInfo, total=False):
-    # Spark Connect client bound to this Athena session, shared by every
-    # model that attaches to it. ``None`` until the first model creates it.
     spark: Optional[ConnectSparkSession]
 
 
@@ -41,7 +37,6 @@ _SESSION_LIMIT: PushbackCategory = "session_limit"
 _CAPACITY: PushbackCategory = "capacity"
 _THROTTLING: PushbackCategory = "throttling"
 
-# Checked in order; the first category with a matching substring wins.
 _PUSHBACK_PATTERNS: Tuple[Tuple[PushbackCategory, Tuple[str, ...]], ...] = (
     (_SESSION_LIMIT, ("Maximum allowed sessions",)),
     (_CAPACITY, ("required capacity not being available",)),
@@ -74,13 +69,7 @@ def _classify_pushback(message: str) -> Optional[PushbackCategory]:
 
 
 class _StartSessionPushback(Exception):
-    """Raised when AWS rejects StartSession for a transient, account-level reason.
-
-    ``category`` is one of ``session_limit`` (account session quota),
-    ``capacity`` (region capacity shortage) or ``throttling`` (StartSession
-    call-rate quota). None of them is predictable from the DPU budget, so the
-    pool backs off and retries rather than failing the model.
-    """
+    """AWS rejected StartSession for a transient reason the DPU budget cannot predict."""
 
     def __init__(self, category: PushbackCategory) -> None:
         super().__init__(category)
@@ -104,7 +93,6 @@ class _AcquireRequest:
 
 @dataclass
 class _Decision:
-    """Outcome of the in-lock part of one acquire attempt."""
 
     stale_entries: List[Tuple[str, _SessionInfo]] = field(default_factory=list)
     reuse_candidate: Optional[str] = None
@@ -116,7 +104,7 @@ class _Decision:
 
 
 class _Retry:
-    """Marker: try again immediately, without sleeping."""
+    pass
 
 
 _RETRY = _Retry()
@@ -128,17 +116,11 @@ class _Wait:
     budget_used: int
 
 
-# A session id, an immediate retry, or a wait before the next attempt.
 _Attempt = Union[str, _Retry, _Wait]
 
 
 class SparkConnectSessionPool:
-    """Singleton pool of Athena Spark Connect sessions.
-
-    Singleton so dbt Cloud's long-lived process can share sessions across
-    invocations; ``(invocation_id, fingerprint)`` keying keeps each
-    invocation logically isolated within the shared registry.
-    """
+    """Process-wide singleton so sessions are shared across invocations in long-lived processes."""
 
     _instance: Optional["SparkConnectSessionPool"] = None
     _singleton_lock = threading.Lock()
@@ -146,9 +128,6 @@ class SparkConnectSessionPool:
     _DEAD_SESSION_STATES = frozenset({"FAILED", "TERMINATED", "TERMINATING", "DEGRADED"})
     _EVICTION_INTERVAL = 30.0
 
-    # Full-jitter exponential backoff bounds for AWS StartSession pushbacks
-    # (session limit, region capacity, throttling), so concurrent workers hit
-    # by the same event disperse their retries instead of colliding in lockstep.
     _PUSHBACK_BASE_BACKOFF_SECONDS = 1.0
     _PUSHBACK_MAX_BACKOFF_SECONDS = 30.0
 
@@ -180,15 +159,6 @@ class SparkConnectSessionPool:
         dpu_request: int,
         dpu_budget: int,
     ) -> str:
-        """Acquire a session for ``key``, reusing or starting one.
-
-        Reuses when load < ``session_concurrency``; starts new when
-        per-key count < ``max_sessions`` AND
-        ``used_dpu + dpu_request <= dpu_budget``; waits up to ``timeout``.
-
-        Raises immediately when ``dpu_request > dpu_budget`` — no future
-        release could ever satisfy the request, so waiting would deadlock.
-        """
         if dpu_request > dpu_budget:
             raise DbtRuntimeError(
                 f"Spark Connect session for key {key} requests {dpu_request} DPUs but "
@@ -227,7 +197,6 @@ class SparkConnectSessionPool:
             if isinstance(attempt, _Retry):
                 continue
 
-            # Periodically evict dead sessions so stuck slots don't block.
             if time_since_eviction >= self._EVICTION_INTERVAL:
                 evicted = self._evict_dead_sessions()
                 time_since_eviction = 0
@@ -252,7 +221,6 @@ class SparkConnectSessionPool:
             time_since_eviction += sleep_for
 
     def _try_once(self, req: _AcquireRequest, skip: Set[str]) -> _Attempt:
-        """Run one acquire attempt: decide under the lock, then clean up and probe outside it."""
         decision = self._decide(req, skip)
 
         # Stale cleanup runs even on start_session failure to avoid
@@ -280,7 +248,6 @@ class SparkConnectSessionPool:
         return _Wait(pushback=decision.pushback, budget_used=decision.budget_used)
 
     def _decide(self, req: _AcquireRequest, skip: Set[str]) -> _Decision:
-        """Pick this attempt's action under ``self._lock``: attach, reclaim, or start."""
         key = req.key
         decision = _Decision()
         with self._lock:
@@ -326,7 +293,6 @@ class SparkConnectSessionPool:
         )
 
     def _confirm_reuse(self, key: SessionKey, candidate: str, skip: Set[str]) -> bool:
-        """Probe the attached ``candidate``; undo or discard it and return False if unusable."""
         # Athena may have killed the session while it sat in the pool.
         state = self._session_state(candidate)
         if state is not None and state not in self._DEAD_SESSION_STATES:
@@ -349,7 +315,6 @@ class SparkConnectSessionPool:
         return False
 
     def _pushback_backoff(self, attempts: int) -> float:
-        """Full-jitter exponential backoff for consecutive StartSession pushbacks."""
         ceiling = min(
             self._PUSHBACK_MAX_BACKOFF_SECONDS,
             self._PUSHBACK_BASE_BACKOFF_SECONDS * (2 ** (attempts - 1)),
@@ -357,12 +322,7 @@ class SparkConnectSessionPool:
         return random.uniform(0, ceiling)
 
     def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
-        """Pop idle sessions from prior invocations and drain busy ones.
-
-        Caller must hold ``self._lock``. Prevents cruft across dbt runs in
-        long-lived processes (e.g. dbt Cloud). A session another invocation is
-        still using is only marked draining; its last ``release`` terminates it.
-        """
+        """Caller must hold ``self._lock``."""
         idle: List[Tuple[str, _SessionInfo]] = []
         newly_draining = 0
         for sid, info in list(self._sessions.items()):
@@ -386,11 +346,7 @@ class SparkConnectSessionPool:
     def _reclaim_idle_for_budget(
         self, key: SessionKey, dpu_request: int, dpu_budget: int, used_dpu: int
     ) -> List[Tuple[str, _SessionInfo]]:
-        """Pop the oldest idle sessions of other keys that free enough DPUs for ``key``.
-
-        Caller must hold ``self._lock`` and terminate the returned entries
-        outside it. Pops nothing unless the idle sessions can free enough.
-        """
+        """Caller must hold ``self._lock`` and terminate the returned entries outside it."""
         shortfall = used_dpu + dpu_request - dpu_budget
         chosen: List[str] = []
         freed = 0
@@ -412,10 +368,8 @@ class SparkConnectSessionPool:
     def _attach(
         self, key: SessionKey, session_concurrency: int, skip: Optional[Set[str]] = None
     ) -> Optional[str]:
-        """Attach to a reusable session by incrementing its load.
-
-        Caller must hold ``self._lock``. Increments load before the
-        out-of-lock liveness check to prevent oversubscription.
+        """Caller must hold ``self._lock``. The load is raised before the out-of-lock liveness check
+        to prevent oversubscription.
         """
         skip = skip or set()
         for sid, info in self._sessions.items():
@@ -437,12 +391,10 @@ class SparkConnectSessionPool:
             return sum(1 for info in self._sessions.values() if info["draining"])
 
     def _has_room(self, key: SessionKey, max_sessions: int) -> bool:
-        """Return True if per-key count < ``max_sessions``. Caller must hold ``self._lock``."""
         count = sum(1 for info in self._sessions.values() if info["key"] == key)
         return count < max_sessions
 
     def _used_dpu(self) -> int:
-        """Sum of DPUs reserved by registered sessions. Caller must hold ``self._lock``."""
         return sum(info["dpu"] for info in self._sessions.values())
 
     def _start(
@@ -454,12 +406,6 @@ class SparkConnectSessionPool:
         session_description: str,
         dpu: int,
     ) -> str:
-        """Start a session and register it. Caller must hold ``self._lock``.
-
-        Translates transient AWS rejections (account session limit, region
-        capacity, throttling) into ``_StartSessionPushback`` for the caller's
-        backoff loop. Other errors propagate.
-        """
         try:
             response = athena_client.start_session(
                 Description=session_description,
@@ -486,7 +432,6 @@ class SparkConnectSessionPool:
         return session_id
 
     def get_spark(self, session_id: str) -> Optional[ConnectSparkSession]:
-        """Return the Spark Connect client bound to ``session_id``, if any."""
         with self._lock:
             info = self._sessions.get(session_id)
             if info is None:
@@ -494,19 +439,8 @@ class SparkConnectSessionPool:
             return info.get("spark")
 
     def set_spark(self, session_id: str, spark: ConnectSparkSession) -> ConnectSparkSession:
-        """Bind ``spark`` to ``session_id`` unless another client already is.
-
-        Returns the client that is bound after the call. When another caller
-        bound a client first, that client is returned and the caller must
-        stop its own. When the session is no longer registered, the passed
-        client is returned unbound so the caller can still finish its work.
-
-        One client per Athena session is deliberate: the Athena Spark
-        Connect server caps the number of Spark Connect sessions it will
-        accept per Athena session, and a Spark 3.5 client cannot release its
-        server-side session on ``stop()``. Creating a client per model
-        therefore exhausts that cap after a fixed number of models; reusing
-        one client per Athena session keeps the count at one.
+        """Return the client bound after the call: the existing one if another caller bound first
+        (the caller must stop its own), or ``spark`` unbound if the session is gone.
         """
         with self._lock:
             info = self._sessions.get(session_id)
@@ -519,7 +453,6 @@ class SparkConnectSessionPool:
             return spark
 
     def _get_session_state(self, athena_client: AthenaClient, session_id: str) -> Optional[str]:
-        """Return the Athena session state, or ``None`` when it cannot be determined."""
         try:
             state = athena_client.get_session_status(SessionId=session_id)["Status"].get("State")
         except Exception as e:  # noqa: BLE001 - unknown state is not evidence of death
@@ -528,7 +461,6 @@ class SparkConnectSessionPool:
         return state or None
 
     def _session_state(self, session_id: str) -> Optional[str]:
-        """Look up the state with the client that started the session."""
         with self._lock:
             info = self._sessions.get(session_id)
             client = info["client"] if info is not None else None
@@ -537,17 +469,11 @@ class SparkConnectSessionPool:
         return self._get_session_state(client, session_id)
 
     def is_session_alive(self, session_id: str) -> bool:
-        """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
         state = self._session_state(session_id)
         return state is not None and state not in self._DEAD_SESSION_STATES
 
     def release(self, session_id: str) -> None:
-        """Mark the session as idle so it can be reused.
-
-        When the last caller leaves a draining session (one abandoned by a
-        transient failure while co-tenants were still attached), terminate
-        it on Athena instead of leaving it to leak until idle timeout.
-        """
+        """The last caller to leave a draining session terminates it on Athena."""
         with self._lock:
             info = self._sessions.get(session_id)
             if info is None:
@@ -561,22 +487,14 @@ class SparkConnectSessionPool:
         self._terminate_entries([(session_id, info)])
 
     def unregister(self, session_id: str) -> None:
-        """Drop a session from the pool without terminating it on Athena."""
         with self._lock:
             info = self._sessions.pop(session_id, None)
         if info is not None:
             self._stop_spark(session_id, info)
 
     def terminate(self, session_id: str) -> None:
-        """Detach the calling model after a transient failure.
-
-        Terminates the Athena session only when this was its last caller.
-        When other models are still attached (``session_concurrency`` > 1),
-        the session is marked draining instead: co-tenants keep running,
-        no new caller attaches, and it is terminated once the last caller
-        releases it (see ``release``). This prevents one model's transient
-        failure from tearing the shared session out from under its
-        co-tenants.
+        """Detach after a transient failure. If other callers are still attached the session is only
+        marked draining, and the last one to release terminates it.
         """
         with self._lock:
             info = self._sessions.get(session_id)
@@ -590,11 +508,7 @@ class SparkConnectSessionPool:
         self._terminate_entries([(session_id, info)])
 
     def terminate_by_invocation(self, invocation_id: str) -> None:
-        """Terminate only sessions for the given dbt invocation.
-
-        Safe in multi-invocation processes (dbt Cloud, test harnesses)
-        where other invocations may share the singleton.
-        """
+        """Touch only sessions of ``invocation_id``; the singleton is shared across invocations."""
         with self._lock:
             entries = [
                 (sid, info)
@@ -615,10 +529,7 @@ class SparkConnectSessionPool:
                 LOGGER.warning(f"Failed to terminate Spark Connect session {session_id}: {e}")
 
     def _evict_dead_sessions(self) -> int:
-        """Remove sessions that Athena reports as terminated or degraded.
-
-        Sessions whose state cannot be determined are kept.
-        """
+        """Sessions with an unknown state are kept until idle past the session idle timeout."""
         with self._lock:
             session_ids = list(self._sessions)
 
@@ -659,12 +570,7 @@ class SparkConnectSessionPool:
 
     @staticmethod
     def _stop_spark(session_id: str, info: _SessionInfo) -> None:
-        """Best-effort ``stop()`` of the client bound to a session being dropped.
-
-        Called outside ``self._lock``: on pyspark 3.5 ``stop()`` only closes
-        the local gRPC channel, but the call is still kept off the lock so a
-        slow or raising client never blocks other workers.
-        """
+        """Called outside ``self._lock`` so a slow or raising client cannot block other workers."""
         spark = info.get("spark")
         if spark is None:
             return
@@ -673,14 +579,11 @@ class SparkConnectSessionPool:
         except Exception as e:  # noqa: BLE001 - best-effort cleanup
             LOGGER.debug(f"Ignoring error while stopping Spark client for {session_id}: {e}")
 
-    # -- test helpers -----------------------------------------------------
-
     def _snapshot(self) -> Dict[str, _SessionInfo]:
         with self._lock:
             return {sid: _SessionInfo(**info) for sid, info in self._sessions.items()}
 
     @classmethod
     def _reset_for_tests(cls) -> None:
-        """Reset the singleton instance.  Test-only utility."""
         with cls._singleton_lock:
             cls._instance = None

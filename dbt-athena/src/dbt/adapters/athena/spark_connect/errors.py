@@ -1,5 +1,3 @@
-"""Transient-error classification for Spark Connect retries."""
-
 from __future__ import annotations
 
 from typing import Dict, FrozenSet, Iterator, List, Optional
@@ -73,7 +71,6 @@ def _iter_grpc_status_codes(e: BaseException) -> Iterator[str]:
 
 
 def classify_transient_spark_error(e: BaseException) -> Optional[SparkConnectRetryCategory]:
-    """Return the transient category of ``e``, or None if it is not transient."""
     error_str = f"{type(e).__name__}: {e}"
     for category, patterns in TRANSIENT_SPARK_PATTERNS_BY_CATEGORY.items():
         if any(p in error_str for p in patterns):

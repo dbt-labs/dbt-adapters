@@ -129,7 +129,6 @@ class TestAthenaSparkSessionConfig:
 
 
 class TestAthenaSparkSessionConfigSpark35:
-    """Spark 3.5 drops DPU/Properties fields and requires Classifications."""
 
     def _config(self, **overrides):
         base = {
@@ -166,7 +165,6 @@ class TestAthenaSparkSessionConfigSpark35:
         spark_defaults = next(
             c for c in engine_config["Classifications"] if c["Name"] == "spark-defaults"
         )
-        # Iceberg catalog property must have been merged into Classifications.
         assert (
             spark_defaults["Properties"]["spark.sql.catalog.spark_catalog"]
             == "org.apache.iceberg.spark.SparkSessionCatalog"
@@ -184,7 +182,6 @@ class TestAthenaSparkSessionConfigSpark35:
             c for c in engine_config["Classifications"] if c["Name"] == "spark-defaults"
         )
         assert spark_defaults["Properties"]["spark.executor.memory"] == "4g"
-        # Existing iceberg property still present.
         assert "spark.sql.catalog.spark_catalog" in spark_defaults["Properties"]
 
     def test_spark_3_x_still_uses_spark_properties(self):

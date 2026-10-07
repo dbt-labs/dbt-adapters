@@ -1,5 +1,3 @@
-"""Keep an Athena Spark session active while a model is running on it."""
-
 from __future__ import annotations
 
 import threading
@@ -15,12 +13,8 @@ _STOP_JOIN_TIMEOUT_SECONDS = 5
 
 
 class SessionKeepalive:
-    """Send a trivial Spark operation every ``interval`` seconds until stopped.
-
-    Athena counts idle time from the last Spark Connect operation, not from
-    the client process, so a model that spends longer than the session idle
-    timeout in driver-side code (planning, commits, plain Python) loses its
-    session mid-run.
+    """Athena counts idle time from the last Spark Connect operation, so driver-side work
+    longer than the idle timeout would lose the session.
     """
 
     def __init__(self, spark: ConnectSparkSession, session_id: str, interval: float) -> None:

@@ -1,5 +1,3 @@
-"""Unit tests for SparkConnectSessionPool."""
-
 from __future__ import annotations
 
 import threading
@@ -25,14 +23,12 @@ def _spy_logger_warnings(monkeypatch) -> list[str]:
 
 @pytest.fixture(autouse=True)
 def _reset_pool_singleton():
-    """Isolate each test from singleton state."""
     SparkConnectSessionPool._reset_for_tests()
     yield
     SparkConnectSessionPool._reset_for_tests()
 
 
 def _make_client(session_ids, state="IDLE"):
-    """Build a mock athena client that returns given session ids in order."""
     client = MagicMock()
     client.start_session.side_effect = [{"SessionId": sid, "State": "IDLE"} for sid in session_ids]
     client.get_session_status.return_value = {"Status": {"State": state}}
@@ -40,7 +36,6 @@ def _make_client(session_ids, state="IDLE"):
 
 
 def _register(pool, session_id, key, athena_client, dpu=1, load=1, idle_since=None):
-    """Inject a session into the pool for tests, bypassing acquire()."""
     pool._sessions[session_id] = {
         "key": key,
         "client": athena_client,
@@ -53,7 +48,6 @@ def _register(pool, session_id, key, athena_client, dpu=1, load=1, idle_since=No
 
 
 def _acquire(pool: SparkConnectSessionPool, athena_client: Any, **overrides: Any) -> str:
-    """Call ``pool.acquire`` with sensible defaults; override per-test as needed."""
     kwargs = dict(
         key=("inv", "fp"),
         athena_client=athena_client,
@@ -119,13 +113,10 @@ class TestAcquire:
         assert client.start_session.call_count == 1
 
     def test_starts_new_session_when_concurrency_is_saturated(self):
-        """When the only session is at ``session_concurrency``, acquire must
-        spill to a new session rather than oversubscribing."""
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1", "sid-2"])
 
         first = _acquire(pool, client, max_sessions=2)
-        # First session still loaded (no release); concurrency=1 forces spill.
         second = _acquire(pool, client, max_sessions=2)
 
         assert first != second
@@ -149,8 +140,6 @@ class TestAcquire:
 
         first = _acquire(pool, client, max_sessions=2, session_concurrency=2)
         second = _acquire(pool, client, max_sessions=2, session_concurrency=2)
-        # First session is at concurrency limit (2); next acquire must spill
-        # to a new session rather than overloading the first.
         third = _acquire(pool, client, max_sessions=2, session_concurrency=2)
 
         assert first == second
@@ -362,13 +351,11 @@ class TestTerminate:
         client.terminate_session.side_effect = Exception("boom")
         _register(pool, "sid-1", ("inv", "fp"), client)
 
-        pool.terminate("sid-1")  # Must not raise.
+        pool.terminate("sid-1")
 
         assert "sid-1" not in pool._snapshot()
 
     def test_terminate_drains_shared_session_instead_of_killing_it(self):
-        """A transient failure on one caller must not tear a shared session
-        out from under its co-tenants (session_concurrency > 1)."""
         pool = SparkConnectSessionPool()
         client = MagicMock()
         _register(pool, "sid-1", ("inv", "fp"), client, load=2)
@@ -385,8 +372,8 @@ class TestTerminate:
         client = MagicMock()
         _register(pool, "sid-1", ("inv", "fp"), client, load=2)
 
-        pool.terminate("sid-1")  # co-tenant still attached -> drains
-        pool.release("sid-1")  # last caller leaves
+        pool.terminate("sid-1")
+        pool.release("sid-1")
 
         client.terminate_session.assert_called_once_with(SessionId="sid-1")
         assert "sid-1" not in pool._snapshot()
@@ -395,14 +382,11 @@ class TestTerminate:
         pool = SparkConnectSessionPool()
         client = MagicMock()
         _register(pool, "sid-1", ("inv", "fp"), client, load=2)
-        pool.terminate("sid-1")  # -> load 1, draining
+        pool.terminate("sid-1")
 
         assert pool._attach(("inv", "fp"), session_concurrency=5) is None
 
     def test_terminate_by_invocation_preserves_other_invocations(self):
-        """The singleton is shared across invocations on multi-invocation hosts
-        (dbt Cloud workers, test harnesses).  Cleanup must not kill sessions
-        owned by other live invocations."""
         pool = SparkConnectSessionPool()
         mine = MagicMock()
         theirs = MagicMock()
@@ -462,19 +446,10 @@ class TestConcurrency:
             t.join()
 
         assert errors == []
-        # Each thread should receive a unique session (max_sessions=3, 3 threads).
         assert len(set(results)) == 3
         assert len(issued) == 3
 
     def test_concurrent_acquires_reserve_slots_during_start(self):
-        """5 threads race against an in-flight ``start_session``; the pool lock
-        must serialize creation so exactly ``max_sessions`` threads succeed and
-        the remainder time out.
-
-        This is deterministic, not a "best-effort" check: the 2 success / 3
-        timeout split is exact because acquire holds ``self._lock`` across
-        ``start_session`` and timeout=2 is well below the 5s test budget.
-        """
         pool = SparkConnectSessionPool()
         start_gate = threading.Event()
         all_workers_queued = threading.Barrier(parties=6)  # 5 workers + main
@@ -482,7 +457,6 @@ class TestConcurrency:
         counter_lock = threading.Lock()
 
         def slow_start_session(**_):
-            # Block until main signals; concurrent acquires race in the meantime.
             start_gate.wait(timeout=5.0)
             with counter_lock:
                 counter["n"] += 1
@@ -534,7 +508,6 @@ class TestCrossInvocationCleanup:
         assert "sid-new" in snapshot
 
     def test_stale_sessions_are_terminated_even_when_start_session_fails(self):
-        """Non-transient start_session failures must not leak prior-invocation sessions."""
         pool = SparkConnectSessionPool()
         stale_client = MagicMock()
         _register(pool, "sid-stale", ("old-inv", "fp"), stale_client, load=0)
@@ -635,11 +608,9 @@ class TestDpuBudget:
         assert pool._snapshot()["sid-1"]["dpu"] == 4
 
     def test_starts_after_release_frees_budget(self):
-        """Budget-blocked acquire must succeed once a registered session frees its DPUs."""
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-existing", "sid-new"])
 
-        # Saturate the budget with one existing session worth 8 DPU.
         first = _acquire(
             pool,
             client,
@@ -670,7 +641,6 @@ class TestDpuBudget:
 
         t = threading.Thread(target=worker)
         t.start()
-        # Wait briefly so the worker is in the polling loop, then free budget.
         time.sleep(0.1)
         pool.unregister(first)
         t.join(timeout=5)
@@ -703,7 +673,6 @@ class TestDpuBudget:
             )
 
     def test_fail_fast_when_request_exceeds_budget(self):
-        """Single session larger than the budget can never start; raise immediately."""
         pool = SparkConnectSessionPool()
         client = _make_client(["sid-1"])
 
@@ -721,9 +690,6 @@ class TestDpuBudget:
         assert any("consumes the full DPU budget" in w for w in warnings)
 
     def test_drift_warning_when_aws_rejects_despite_local_budget_ok(self, monkeypatch):
-        """When AWS rejects with the session limit even though client-side
-        accounting said there was room, log a drift warning so the user can
-        spot multi-process contention on the shared account quota."""
         pool = SparkConnectSessionPool()
         client = MagicMock()
         client.start_session.side_effect = [
@@ -1039,7 +1005,6 @@ class TestStartSessionThrottling:
         assert any("throttled StartSession" in w for w in warnings)
 
     def test_backoff_grows_and_caps(self, monkeypatch):
-        """Ceiling doubles per consecutive pushback until _PUSHBACK_MAX."""
         pool = SparkConnectSessionPool()
         monkeypatch.setattr(session_module.random, "uniform", lambda _lo, hi: hi)
 
@@ -1185,13 +1150,6 @@ class TestStartSessionPushback:
 
 class TestReuseLivenessCheck:
     def test_dead_session_is_discarded_during_reuse(self):
-        """When a stale session is reserved for reuse but the liveness check
-        reports it dead, the pool must discard it and start a replacement.
-
-        ``acquire()`` uses the caller-supplied client for both the liveness
-        probe (FAILED) and the replacement ``start_session`` call, so a single
-        mock fields both roles.
-        """
         pool = SparkConnectSessionPool()
 
         client = _make_client(["sid-replacement"])
@@ -1273,7 +1231,6 @@ class TestReuseLivenessCheck:
         client.start_session.assert_not_called()
 
     def test_liveness_failure_does_not_affect_other_sessions_with_same_key(self):
-        """Discarding a dead session must not touch sibling sessions for the same key."""
         pool = SparkConnectSessionPool()
 
         client = _make_client(["sid-fresh"])
@@ -1289,8 +1246,6 @@ class TestReuseLivenessCheck:
 
         sid = _acquire(pool, client, max_sessions=3)
 
-        # Whichever of the two reuse candidates was checked first, the alive
-        # one must still be present in the pool afterwards.
         snapshot = pool._snapshot()
         assert "sid-dead" not in snapshot
         assert "sid-alive" in snapshot
@@ -1338,12 +1293,6 @@ class TestSessionState:
 
 
 class TestSparkClientBinding:
-    """One Spark Connect client per Athena session, owned by the pool.
-
-    On pyspark 3.5 ``SparkSession.stop()`` does not release the server-side
-    Spark Connect session, so the pool binds a single client to each Athena
-    session and stops it only when that session leaves the pool.
-    """
 
     def test_get_spark_is_none_for_unknown_or_unbound_session(self):
         pool = SparkConnectSessionPool()
@@ -1369,7 +1318,6 @@ class TestSparkClientBinding:
 
         assert pool.set_spark("sid-1", second) is first
         assert pool.get_spark("sid-1") is first
-        # The pool never stops the loser; that is the caller's job.
         second.stop.assert_not_called()
 
     def test_set_spark_on_unregistered_session_returns_client_unbound(self):
@@ -1415,11 +1363,11 @@ class TestSparkClientBinding:
         spark = MagicMock()
         pool.set_spark("sid-1", spark)
 
-        pool.terminate("sid-1")  # co-tenant still attached -> drains
+        pool.terminate("sid-1")
         spark.stop.assert_not_called()
         assert pool.get_spark("sid-1") is spark
 
-        pool.release("sid-1")  # last caller leaves
+        pool.release("sid-1")
         spark.stop.assert_called_once()
         client.terminate_session.assert_called_once_with(SessionId="sid-1")
 
@@ -1466,7 +1414,7 @@ class TestSparkClientBinding:
         spark.stop.side_effect = RuntimeError("channel already closed")
         pool.set_spark("sid-1", spark)
 
-        pool.terminate("sid-1")  # Must not raise.
+        pool.terminate("sid-1")
 
         client.terminate_session.assert_called_once_with(SessionId="sid-1")
         assert "sid-1" not in pool._snapshot()

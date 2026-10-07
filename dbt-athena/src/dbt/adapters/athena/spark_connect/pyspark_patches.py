@@ -1,5 +1,3 @@
-"""Runtime patches for pyspark Spark Connect bugs (pyspark imported lazily)."""
-
 from __future__ import annotations
 
 import hashlib
@@ -25,11 +23,8 @@ def apply_pyspark_workarounds() -> None:
             return
         _neutralize_release_thread_pool_shutdown()
         _silence_release_all_warning()
-        # Athena AuthToken refresh across pyspark's reattach cycle.
-        # Mirrors SPARK-57425 (apache/spark#56497) until upstream lands:
-        #   1. Stash the ChannelBuilder on the gRPC stub.
-        #   2. Refresh metadata via the builder before each RPC (ReattachExecute,
-        #      ReleaseExecute, retry ExecutePlan, AddArtifacts, ArtifactStatus).
+        # Athena AuthToken refresh across the reattach cycle; mirrors SPARK-57425
+        # (apache/spark#56497).
         _stash_channel_builder_on_stub()
         _refresh_reattach_iterator_metadata()
         _refresh_artifact_manager_metadata()
@@ -40,17 +35,9 @@ def apply_pyspark_workarounds() -> None:
 
 
 def _neutralize_release_thread_pool_shutdown() -> None:
-    """Make ``ExecutePlanResponseReattachableIterator.shutdown`` a no-op.
-
-    pyspark 3.5 races on a class-level ThreadPool shared across sessions:
-    one session's ``stop()`` shuts the pool down while another session's
-    in-flight iterator hits ``ValueError("Pool not running")``.  Apache
-    Spark fixed this in SPARK-55406 (master / 4.x only; not backported to
-    branch-3.5).  Athena's Spark Connect endpoint is 3.5 server-side, so
-    we cannot upgrade pyspark either; we patch ``shutdown`` locally and
-    let the pool leak — the daemon threads are reclaimed at process exit.
-
-    https://issues.apache.org/jira/browse/SPARK-55406
+    """pyspark 3.5 shares a class-level ThreadPool across sessions; one session's ``stop()``
+    closes it and other sessions' in-flight iterators fail with "Pool not running"
+    (SPARK-55406, not backported to 3.5). The pool stays open until process exit.
     """
     from pyspark.sql.connect.client.reattach import (
         ExecutePlanResponseReattachableIterator,
@@ -63,13 +50,8 @@ def _neutralize_release_thread_pool_shutdown() -> None:
 
 
 def _silence_release_all_warning() -> None:
-    """Silence pyspark's ``_release_all`` ReleaseExecute warning.
-
-    pyspark fires ``warnings.warn(...)`` from a fire-and-forget RPC its own
-    docstring says the server is "equipped to deal with abandoned executions"
-    for.  dbt-athena ends each python model with ``spark.stop()``, which
-    closes the channel before the async release thread runs, so this warning
-    fires dozens of times per build with no diagnostic value.
+    """pyspark's ``_release_all`` is a fire-and-forget RPC that warns on any ReleaseExecute
+    failure; the server copes with abandoned executions, so the warning carries no information.
     """
     import warnings
 
@@ -93,7 +75,6 @@ class _RetryBlock:
 
 @contextmanager
 def client_retries_disabled() -> Iterator[None]:
-    """Make Spark Connect RPCs issued by the current thread fail without client-side retries."""
     _RETRY_BLOCK_THREAD_LOCAL.disabled = True
     try:
         yield
@@ -102,7 +83,6 @@ def client_retries_disabled() -> Iterator[None]:
 
 
 def _stash_channel_builder_on_stub() -> None:
-    """Cache the ChannelBuilder on the gRPC stub and artifact manager so they can refresh metadata."""
     from pyspark.sql.connect.client.core import SparkConnectClient
 
     original_init = SparkConnectClient.__init__
@@ -143,7 +123,6 @@ def _refresh_metadata(obj: Any) -> None:
 
 
 def _refresh_artifact_manager_metadata() -> None:
-    """Refresh metadata before AddArtifacts and ArtifactStatus; pyspark's ArtifactManager captures it once."""
     from pyspark.sql.connect.client.artifact import ArtifactManager
 
     original_retrieve_responses = ArtifactManager._retrieve_responses
@@ -162,13 +141,8 @@ def _refresh_artifact_manager_metadata() -> None:
 
 
 def _refresh_reattach_iterator_metadata() -> None:
-    """Refresh metadata before every RPC so the AuthToken can rotate mid-stream.
-
-    pyspark captures ``metadata`` once at ``__init__`` and reuses the same
-    list forever, which keeps Athena's 30-min ``x-aws-proxy-auth`` token
-    pinned to its initial value. Upstream alignment follows SPARK-57425
-    (apache/spark#56497): refresh before initial ExecutePlan retry / reattach
-    / ReleaseExecute.
+    """pyspark captures ``metadata`` once at ``__init__``, which pins Athena's 30-min
+    ``x-aws-proxy-auth`` token to its initial value.
     """
     import grpc
     from pyspark.sql.connect.client.reattach import (

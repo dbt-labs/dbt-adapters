@@ -47,4 +47,4 @@ class CancelledQueryException(AthenaQueryCancelledError):
 
 
 class SparkSessionTerminatedError(DbtRuntimeError):
-    """Athena ended the Spark Connect session (idle / DPU / manual stop)."""
+    pass

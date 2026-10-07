@@ -1,5 +1,3 @@
-"""Import-order guarantees of the Spark Connect package, checked in fresh interpreters."""
-
 import ast
 import os
 import subprocess

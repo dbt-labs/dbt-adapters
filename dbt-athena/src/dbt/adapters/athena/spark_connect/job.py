@@ -1,5 +1,3 @@
-"""Spark Connect submitter for Athena Apache Spark 3.5+ python models."""
-
 from __future__ import annotations
 
 import json
@@ -63,24 +61,16 @@ class SparkConnectResult(TypedDict):
     SparkSessionId: Optional[str]
 
 
-# Cap GetSessionEndpoint wait so it cannot consume the whole execution budget.
 _ENDPOINT_READY_TIMEOUT_SECONDS = 180
 
-# Cap the per-poll backoff so a long throttle storm cannot stretch any single
-# wait past 30s; the deadline still bounds total wait.
 _ENDPOINT_POLL_MAX_WAIT_SECONDS = 30
 
 
 class _EndpointNotReady(Exception):
-    """Internal sentinel: GetSessionEndpoint should be polled again."""
+    pass
 
 
 def _spark_max_executors(engine_config: EngineConfigurationTypeDef) -> Optional[int]:
-    """Return ``spark.dynamicAllocation.maxExecutors`` from Spark Connect engine_config.
-
-    Spark Connect uses Classifications (not SparkProperties) to carry
-    spark-defaults; the value is a string and must be parsed.
-    """
     classifications = engine_config.get("Classifications") or []
     for entry in classifications:
         if entry.get("Name") != "spark-defaults":
@@ -113,7 +103,6 @@ class _TransientAttemptFailure(Exception):
 
 
 class _ExecutionGuard:
-    """Tags the model's operations, keeps the session alive and enforces the execution timeout."""
 
     def __init__(
         self,
@@ -189,7 +178,6 @@ class _ExecutionGuard:
 
 
 class SparkConnectSubmitter:
-    """Submits compiled python code to Athena via Spark Connect."""
 
     def __init__(
         self,
@@ -216,12 +204,6 @@ class SparkConnectSubmitter:
 
     @property
     def _session_fingerprint(self) -> str:
-        """md5 of engine config + workgroup + engine version.
-
-        Sessions with matching fingerprint may be reused across models.
-        Workgroup and engine version are included so two models that differ
-        only in those attributes never accidentally share a session.
-        """
         payload = {
             "engine_config": self.engine_config,
             "spark_work_group": self.credentials.spark_work_group,
@@ -240,12 +222,7 @@ class SparkConnectSubmitter:
 
     @property
     def _dpu_request(self) -> int:
-        """DPUs reserved against the budget when starting a session.
-
-        ``MaxConcurrentDpus`` is the AWS-side hard cap; with dynamic
-        allocation, Spark scales up to ``maxExecutors + 1`` (executors +
-        driver). The true peak is the smaller of the two.
-        """
+        """The peak is min(MaxConcurrentDpus, maxExecutors + 1); the +1 is the driver."""
         max_concurrent = int(self.engine_config["MaxConcurrentDpus"])
         max_executors = _spark_max_executors(self.engine_config)
         if max_executors is None:
@@ -257,15 +234,7 @@ class SparkConnectSubmitter:
         return f"dbt: {get_invocation_id()} - {self._session_fingerprint}"
 
     def submit(self, compiled_code: str) -> SparkConnectResult:
-        """Submit code, retrying transient errors with a fresh session.
-
-        Pool-acquire wait and Spark execution use independent budgets.
-        ``spark_connect_pool_acquire_timeout`` bounds the cumulative waiting
-        in the session pool (free, no DPU spend). ``self.timeout`` bounds
-        each attempt's Spark execution time individually; transient
-        failures discard their session's work, so charging the next retry
-        for time it cannot reuse would deny it a real chance to complete.
-        """
+        """``spark_connect_pool_acquire_timeout`` bounds the cumulative pool wait; ``self.timeout`` applies to each attempt."""
         if not compiled_code.strip():
             return SparkConnectResult(SparkConnect=True, SparkSessionId=None)
 
@@ -335,7 +304,6 @@ class SparkConnectSubmitter:
         boto3.DEFAULT_SESSION = assumed
 
     def _acquire_session(self, pool_timeout: float) -> str:
-        """Acquire a Spark Connect session from the pool."""
         spark_work_group = self.credentials.spark_work_group
         if not spark_work_group:
             raise DbtRuntimeError(
@@ -359,13 +327,6 @@ class SparkConnectSubmitter:
     def _wait_for_endpoint(
         self, session_id: str, remaining_budget: float
     ) -> GetSessionEndpointResponseTypeDef:
-        """Poll GetSessionEndpoint until the endpoint is ready.
-
-        Bounded by ``min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)``
-        so endpoint-wait stays within the caller's remaining attempt budget
-        and never exceeds the per-endpoint cap, regardless of time already
-        spent on session acquisition or prior retries.
-        """
         deadline_seconds = min(remaining_budget, _ENDPOINT_READY_TIMEOUT_SECONDS)
 
         def _poll() -> GetSessionEndpointResponseTypeDef:
@@ -409,21 +370,10 @@ class SparkConnectSubmitter:
         )
 
     def _get_or_create_spark(self, session_id: str) -> ConnectSparkSession:
-        """Return the Spark Connect client shared by all models on ``session_id``.
-
-        The client is created once per Athena session and kept in the pool
-        until the session is terminated or evicted. This keeps exactly one
-        Spark Connect session alive per Athena session: with pyspark 3.5,
-        ``SparkSession.stop()`` only closes the local gRPC channel and does
-        not release the server-side Spark Connect session, so creating one
-        client per model accumulates sessions on the server until Athena
-        rejects new ones. Athena's Spark Connect endpoint is 3.5, so the
-        ``ReleaseSession`` RPC added in Spark 4 is not available.
-
-        Because the client is shared, models attached to the same Athena
-        session also share Spark session state (temp views, session-level
-        configuration), matching the calculations-based submission path
-        where all models run in one interpreter.
+        """pyspark 3.5's ``SparkSession.stop()`` does not release the server-side session
+        (``ReleaseSession`` is Spark 4 only), and Athena rejects new Spark Connect sessions
+        once too many pile up, so one client is shared per Athena session instead of one per
+        model. Models on the same Athena session therefore share temp views and session conf.
         """
         spark = self._pool.get_spark(session_id)
         if spark is not None:
@@ -446,8 +396,6 @@ class SparkConnectSubmitter:
         created = ConnectSparkSession.builder.channelBuilder(channel_builder).create()
         shared = self._pool.set_spark(session_id, created)
         if shared is not created:
-            # Another model bound a client first (session_concurrency > 1);
-            # drop ours and share the bound one.
             try:
                 created.stop()
             except Exception as e:  # noqa: BLE001 - best-effort cleanup

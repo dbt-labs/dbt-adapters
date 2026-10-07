@@ -143,10 +143,6 @@ class AthenaCredentials(Credentials):
     connection_manager: str = "api"
 
     def __post_init__(self) -> None:
-        # Validate Spark Connect integer fields at profile load so a typo
-        # cannot wait until a python model is submitted to surface.
-        # max_retries allows 0 (= no retries, single attempt); other knobs
-        # are counts/sizes/timeouts where 0 has no meaning.
         for field_name, minimum in (
             ("spark_connect_max_sessions", 1),
             ("spark_connect_session_concurrency", 1),
@@ -898,9 +894,9 @@ class AthenaConnectionManager(SQLConnectionManager):
         return cursor.rowcount, cursor.data_scanned_in_bytes
 
     def cleanup_all(self) -> None:
-        # Release DPUs immediately instead of waiting for the 10-min idle timeout.
         from dbt_common.invocation import get_invocation_id
 
+        # Releases DPUs now instead of after the session idle timeout.
         # Scope to this invocation; the singleton is shared across invocations
         # in dbt Cloud workers and test harnesses.
         try:

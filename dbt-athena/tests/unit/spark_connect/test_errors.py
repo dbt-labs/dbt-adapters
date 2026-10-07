@@ -1,5 +1,3 @@
-"""Tests for Spark Connect transient-error classification."""
-
 import pytest
 
 from dbt.adapters.athena.spark_connect.errors import (
@@ -26,7 +24,6 @@ class _FakeGrpcError(Exception):
 
 
 class _FakeGrpcCallableErrorRaises(Exception):
-    """A non-gRPC class that exposes a code() callable which raises."""
 
     def code(self):
         raise RuntimeError("not actually a gRPC error")
@@ -97,8 +94,6 @@ def test_deep_cause_chain_walked():
 
 
 def test_code_callable_that_raises_does_not_break_classification():
-    # The class lies about being a gRPC error; classifier should fall back
-    # to string matching and still return False (no transient pattern).
     assert is_transient_spark_error(_FakeGrpcCallableErrorRaises("nope")) is False
 
 

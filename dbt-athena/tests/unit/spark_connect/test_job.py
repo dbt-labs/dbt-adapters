@@ -1,5 +1,3 @@
-"""Tests for the Spark Connect submission path (Apache Spark 3.5+)."""
-
 import os
 import re
 import sys
@@ -25,7 +23,6 @@ from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 
 
 class TestSparkConnectSubmission:
-    """Tests for the Apache Spark 3.5 Spark Connect submission path."""
 
     @pytest.fixture(autouse=True)
     def _reset_pool_singleton(self):
@@ -78,7 +75,6 @@ class TestSparkConnectSubmission:
 
     @pytest.fixture
     def calculations_parsed_model(self):
-        # Same shape but without spark_engine_version, so is_spark_connect is False.
         return {
             "alias": "test_model",
             "relation_name": "test_relation",
@@ -105,12 +101,7 @@ class TestSparkConnectSubmission:
 
     @staticmethod
     def _mock_pool():
-        """Pool mock with no Spark client bound yet.
-
-        ``get_spark`` returns None so the submitter creates a client, and
-        ``set_spark`` hands back the client it was given, as the real pool
-        does when no other caller bound one first.
-        """
+        """``get_spark`` returns None; ``set_spark`` returns the client it was given."""
         pool = Mock()
         pool.get_spark.return_value = None
         pool.set_spark.side_effect = lambda _sid, spark: spark
@@ -137,7 +128,6 @@ class TestSparkConnectSubmission:
         return submitter
 
     def _stub_endpoint_and_channel(self, submitter, monkeypatch):
-        """Stub the endpoint wait and channel builder so submit() reaches the pyspark layer."""
         monkeypatch.setattr(
             submitter,
             "_wait_for_endpoint",
@@ -149,7 +139,6 @@ class TestSparkConnectSubmission:
         )
 
     def _set_spark_create(self, *, return_value=None, side_effect=None):
-        """Wire the fake ``SparkSession.builder.channelBuilder(...).create()`` chain."""
         create_mock = sys.modules[
             "pyspark.sql.connect.session"
         ].SparkSession.builder.channelBuilder.return_value.create
@@ -207,9 +196,7 @@ class TestSparkConnectSubmission:
         mock_pool.acquire.assert_called_once()
         mock_pool.release.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_not_called()
-        # The client is bound to the Athena session and kept for the next
-        # model; stopping it here would leak a server-side Spark Connect
-        # session on pyspark 3.5.
+        # The shared client is reused by the next model, so it is not stopped here.
         mock_pool.set_spark.assert_called_once_with("sid-1", fake_spark)
         fake_spark.stop.assert_not_called()
 
@@ -320,9 +307,7 @@ class TestSparkConnectSubmission:
 
         assert result == {"SparkConnect": True, "SparkSessionId": "sid-2"}
         assert mock_pool.acquire.call_count == 2
-        # First session was transient-failed, so it should be terminated.
         mock_pool.terminate.assert_called_once_with("sid-1")
-        # Second session succeeded, so it should be released.
         mock_pool.release.assert_called_once_with("sid-2")
 
     @pytest.mark.parametrize("interval, expect_keepalive", [(0.02, True), (0, False)])
@@ -366,7 +351,6 @@ class TestSparkConnectSubmission:
             submitter.submit("spark.run()")
 
         assert mock_pool.acquire.call_count == 1
-        # Non-transient failures release the session instead of terminating it.
         mock_pool.release.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_not_called()
 
@@ -433,7 +417,6 @@ class TestSparkConnectSubmission:
         ) as excinfo:
             submitter.submit("spark.run()")
 
-        # Original 403 must remain reachable via ``raise ... from e``.
         assert excinfo.value.__cause__ is not None
         assert excinfo.value.__cause__.code().name == "PERMISSION_DENIED"
 
@@ -652,7 +635,6 @@ class TestSparkConnectSubmission:
     def test_permission_denied_with_live_session_still_retries(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        """403 + healthy session = transient throttling → retry as before."""
 
         class _FakeCode:
             name = "PERMISSION_DENIED"
@@ -708,8 +690,6 @@ class TestSparkConnectSubmission:
         ):
             submitter.submit("spark.run()")
 
-        # Every transient failure — including the final one — terminates the
-        # broken session so later models don't pick it up from the pool.
         assert mock_pool.acquire.call_count == 4
         assert mock_pool.terminate.call_count == 4
         mock_pool.release.assert_not_called()
@@ -717,7 +697,6 @@ class TestSparkConnectSubmission:
     def test_session_key_varies_with_engine_config(
         self, mock_credentials, spark_connect_parsed_model
     ):
-        # Same engine config -> identical fingerprint; different -> different.
         mock_pool = self._mock_pool()
         submitter_a = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
 
@@ -746,9 +725,6 @@ class TestSparkConnectSubmission:
     def test_max_retries_is_configurable_via_credentials(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        # Per-attempt budget must comfortably exceed the largest backoff so
-        # the backoff guard doesn't short-circuit the loop before all retries
-        # actually run.
         long_budget_model = dict(spark_connect_parsed_model)
         long_budget_model["config"] = dict(spark_connect_parsed_model["config"])
         long_budget_model["config"]["timeout"] = 60
@@ -804,9 +780,7 @@ class TestSparkConnectSubmission:
         fake_spark.run.side_effect = Exception("interrupted by watchdog")
         self._set_spark_create(return_value=fake_spark)
 
-        # Force the watchdog to fire synchronously so timeout_event is set
-        # before exec() raises; the except branch then turns this into a
-        # timeout error rather than a transient retry.
+        # Fire the watchdog synchronously so the failure is classified as a timeout, not transient.
         class _ImmediateTimer:
             def __init__(self, interval, function):
                 self._fn = function
@@ -853,9 +827,7 @@ class TestSparkConnectSubmission:
     def test_retry_loop_aborts_when_backoff_exceeds_per_attempt_budget(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        # timeout=1s ensures the 2s backoff after attempt 1 is at least the
-        # per-attempt execution budget, so a retry could not make meaningful
-        # progress and the loop gives up before attempt 2.
+        # timeout=1s: the 2s backoff exceeds the attempt budget, so attempt 2 is skipped.
         short_budget_model = dict(spark_connect_parsed_model)
         short_budget_model["config"] = dict(spark_connect_parsed_model["config"])
         short_budget_model["config"]["timeout"] = 1
@@ -873,19 +845,13 @@ class TestSparkConnectSubmission:
         with pytest.raises(DbtRuntimeError, match="failed after 1 attempts"):
             submitter.submit("spark.run()")
 
-        # Only the first attempt actually ran; backoff guard skipped attempts 2-4.
         assert mock_pool.acquire.call_count == 1
         mock_pool.terminate.assert_called_once_with("sid-1")
 
     def test_retry_attempt_receives_full_timeout_budget(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
-        """Each retry attempt must receive the full per-attempt timeout.
-
-        Transient failures discard their session's work. Charging the next
-        retry for the lost attempt's elapsed time would shrink its budget
-        below what it needs to complete, defeating the point of retrying.
-        """
+        """Each retry attempt must receive the full per-attempt timeout."""
         mock_pool = self._mock_pool()
         mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
         submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
@@ -910,8 +876,6 @@ class TestSparkConnectSubmission:
 
         submitter.submit("spark.run()")
 
-        # Both attempts received the full per-attempt budget; the first
-        # attempt's elapsed time did not eat into the second's.
         timeout = spark_connect_parsed_model["config"]["timeout"]
         assert endpoint_calls == [timeout, timeout]
 
@@ -1257,10 +1221,6 @@ class TestExecutionGuard:
 
 
 class TestDpuRequestComputation:
-    """The submitter must reserve the tightest correct upper bound against
-    the DPU budget: ``min(MaxConcurrentDpus, maxExecutors + 1)``.
-
-    Independent of the pool — covers only ``_dpu_request`` derivation."""
 
     def test_spark_max_executors_helper_reads_from_classifications(self):
         ec = {
@@ -1390,7 +1350,6 @@ class TestDpuRequestComputation:
 
 
 class TestWaitForEndpoint:
-    """Direct tests for ``SparkConnectSubmitter._wait_for_endpoint``."""
 
     @pytest.fixture(autouse=True)
     def _no_real_sleep(self, monkeypatch):
@@ -1446,8 +1405,6 @@ class TestWaitForEndpoint:
             submitter._wait_for_endpoint("sid", remaining_budget=0.1)
 
     def test_endpoint_cap_applies_when_budget_is_larger(self, monkeypatch):
-        # Force the cap to a small value so the test runs quickly while still
-        # asserting that _ENDPOINT_READY_TIMEOUT_SECONDS bounds the wait.
         monkeypatch.setattr(
             "dbt.adapters.athena.spark_connect.job._ENDPOINT_READY_TIMEOUT_SECONDS",
             0.1,

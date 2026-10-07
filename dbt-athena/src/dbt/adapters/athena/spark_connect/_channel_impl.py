@@ -25,7 +25,6 @@ apply_pyspark_workarounds()
 
 
 class AthenaChannelBuilder(ChannelBuilder):
-    """ChannelBuilder that refreshes the Athena AuthToken before expiry."""
 
     def __init__(
         self,

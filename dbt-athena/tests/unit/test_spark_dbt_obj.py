@@ -1,11 +1,4 @@
-"""
-Renders the ``athena__py_get_spark_dbt_object`` macro and execs the
-resulting Python so we can drive the SparkdbtObj wrappers directly.
-
-Guards against regressing the kwargs shim: dbt-core's source() / ref()
-accept ``v=`` and ``version=``, and the wrappers must forward them
-rather than dropping them on the floor.
-"""
+"""Regression test: source() / ref() must forward ``v=`` / ``version=`` instead of dropping them."""
 
 import os
 from unittest.mock import MagicMock

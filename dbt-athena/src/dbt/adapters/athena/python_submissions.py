@@ -106,7 +106,6 @@ class AthenaPythonJobHelper(PythonJobHelper):
         return self.spark_connection.get_session_status(self.session_id)
 
     def submit(self, compiled_code: str) -> Any:
-        """Submit ``compiled_code`` via Spark Connect (Apache Spark 3.5) or the Calculations API."""
         if self.config.is_spark_connect:
             return SparkConnectSubmitter(
                 athena_client=self.athena_client,
@@ -180,9 +179,6 @@ class AthenaPythonJobHelper(PythonJobHelper):
                     result = {"SparkSessionId": self.session_id}
             return result
         else:
-            # dbt submits an empty "ghost" calculation alongside every python
-            # model to keep the adapter response shape consistent.  This
-            # branch returns placeholder data without hitting Athena.
             return {
                 "ResultS3Uri": "string",
                 "ResultType": "string",

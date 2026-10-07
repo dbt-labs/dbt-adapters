@@ -1,5 +1,3 @@
-"""Public API for the Athena Spark Connect channel builder."""
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -18,7 +16,6 @@ def create_athena_channel_builder(
     initial_auth_token: Optional[str] = None,
     initial_token_expiry: Optional[datetime] = None,
 ) -> "AthenaChannelBuilder":
-    """Build a ChannelBuilder that auto-refreshes the Athena AuthToken."""
     from dbt.adapters.athena.spark_connect._channel_impl import AthenaChannelBuilder
 
     return AthenaChannelBuilder(

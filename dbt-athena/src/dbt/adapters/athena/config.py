@@ -43,7 +43,6 @@ class AthenaSparkSessionConfig:
 
     @property
     def is_spark_connect(self) -> bool:
-        """True when the model requests Apache Spark 3.5, which runs via Spark Connect."""
         return is_spark_connect_engine_version(self.spark_engine_version)
 
     def set_timeout(self) -> int:
@@ -143,9 +142,8 @@ class AthenaSparkSessionConfig:
             ),
         )
 
-        # Apache Spark 3.5+ does not accept CoordinatorDpuSize,
-        # DefaultExecutorDpuSize, or SparkProperties in EngineConfiguration.
-        # Spark properties must be supplied via Classifications instead.
+        # Athena Spark 3.5+ rejects CoordinatorDpuSize, DefaultExecutorDpuSize and
+        # SparkProperties in EngineConfiguration; properties go in Classifications.
         # https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-getting-started.html
         user_engine_config = self.config.get("engine_config", None) or {}
         provided_spark_properties = user_engine_config.pop("SparkProperties", None)
@@ -188,7 +186,6 @@ class AthenaSparkSessionConfig:
         spark_properties: Dict[str, str],
         user_engine_config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Engine configuration for Spark 3.x (Calculations API)."""
         engine_config: Dict[str, Any] = {
             "CoordinatorDpuSize": DEFAULT_SPARK_COORDINATOR_DPU_SIZE,
             "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
@@ -196,9 +193,6 @@ class AthenaSparkSessionConfig:
             "SparkProperties": spark_properties,
         }
         engine_config.update(user_engine_config)
-        # Defaults + user overrides are both stored in SparkProperties;
-        # ensure the merged view wins over any SparkProperties pre-merged
-        # into user_engine_config upstream.
         engine_config["SparkProperties"] = spark_properties
         return engine_config
 
@@ -207,11 +201,6 @@ class AthenaSparkSessionConfig:
         spark_properties: Dict[str, str],
         user_engine_config: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Engine configuration for Apache Spark 3.5 (Spark Connect).
-
-        Spark properties move from ``SparkProperties`` to a
-        ``Classifications`` entry with name ``spark-defaults``.
-        """
         engine_config: Dict[str, Any] = {
             "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
         }

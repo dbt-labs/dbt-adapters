@@ -1722,12 +1722,6 @@ class TestAthenaAdapterConversions(TestAdapterConversions):
 
 
 class TestGeneratePythonSubmissionResponse:
-    """generate_python_submission_response surfaces Spark metrics to run_results.json.
-
-    The method is pure (does not read adapter state), so we invoke it as an
-    unbound function via a minimal mock instance rather than spinning up a
-    full AthenaAdapter with credentials.
-    """
 
     @pytest.fixture
     def adapter(self):

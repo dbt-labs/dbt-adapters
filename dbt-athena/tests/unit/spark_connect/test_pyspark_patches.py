@@ -1,5 +1,3 @@
-"""Tests for the pyspark Spark Connect runtime workarounds."""
-
 import sys
 import types
 import warnings
@@ -10,7 +8,6 @@ import pytest
 
 @pytest.fixture
 def fake_pyspark_modules(monkeypatch):
-    """Inject fake pyspark.sql.connect.client.{reattach,core} modules."""
 
     class FakePool:
         def __init__(self):
@@ -354,7 +351,7 @@ def test_call_iter_tolerates_missing_channel_builder(
 
     apply_pyspark_workarounds()
 
-    stub = MagicMock(spec=[])  # no _dbt_athena_builder attribute
+    stub = MagicMock(spec=[])
     iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
 
     iterator._call_iter(lambda: "ok")
@@ -371,7 +368,7 @@ def test_call_iter_tolerates_builder_metadata_exception(
     stub, builder = _make_stub_with_builder("t")
     builder.metadata.side_effect = RuntimeError("transient")
     iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
-    iterator._call_iter(lambda: "ok")  # must not raise
+    iterator._call_iter(lambda: "ok")
 
     assert iterator._metadata == [("k", "v")]
 
@@ -416,7 +413,7 @@ def test_release_tolerates_missing_channel_builder(fake_reattach_module, fake_sp
     stub = MagicMock(spec=[])
     iterator = fake_reattach_module(stub=stub, iterator="active", metadata=[("k", "v")])
     iterator._release_until("r")
-    iterator._release_all()  # must not raise
+    iterator._release_all()
 
     assert iterator._released_until == "r"
     assert iterator._released_all is True
