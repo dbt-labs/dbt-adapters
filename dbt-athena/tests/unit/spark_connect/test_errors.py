@@ -3,6 +3,7 @@
 import pytest
 
 from dbt.adapters.athena.spark_connect.errors import (
+    classify_transient_spark_error,
     TRANSIENT_GRPC_STATUS_CODES,
     TRANSIENT_SPARK_PATTERNS,
     is_grpc_permission_denied,
@@ -130,3 +131,34 @@ def test_permission_denied_false_for_other_grpc_codes():
 
 def test_permission_denied_false_for_non_grpc_error():
     assert is_grpc_permission_denied(Exception("plain")) is False
+
+
+@pytest.mark.parametrize(
+    "err, category",
+    [
+        (Exception("Session not active (state: TERMINATED)"), "session_ended"),
+        (Exception("[NO_ACTIVE_SESSION] No active Spark session found."), "session_ended"),
+        (
+            Exception("Can not generate Session endpoint URL for Session in STOPPED state"),
+            "session_ended",
+        ),
+        (Exception("Maximum allowed sessions reached"), "capacity"),
+        (_FakeGrpcError("quota", "RESOURCE_EXHAUSTED"), "capacity"),
+        (Exception("Unable to load credentials from any provider"), "executor_environment"),
+        (Exception("Unable to load region"), "executor_environment"),
+        (Exception("Pool not running"), "connection"),
+        (_FakeGrpcError("down", "UNAVAILABLE"), "connection"),
+        (_FakeGrpcError("slow", "DEADLINE_EXCEEDED"), "connection"),
+        (_FakeGrpcError("aborted", "ABORTED"), "connection"),
+        (_FakeGrpcError("403", "PERMISSION_DENIED"), "connection"),
+        (Exception("some unrelated failure"), None),
+    ],
+)
+def test_classify_transient_spark_error(err, category):
+    assert classify_transient_spark_error(err) == category
+
+
+@pytest.mark.parametrize("code_name", ["FAILED_PRECONDITION", "UNAVAILABLE"])
+def test_session_ended_message_wins_over_grpc_code(code_name):
+    err = _FakeGrpcError("Session not active (state: TERMINATED)", code_name)
+    assert classify_transient_spark_error(err) == "session_ended"

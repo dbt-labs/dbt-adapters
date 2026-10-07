@@ -52,6 +52,7 @@ class TestSparkConnectSubmission:
         credentials.spark_connect_dpu_budget = None
         credentials.spark_connect_pool_acquire_timeout = None
         credentials.spark_connect_max_retries = None
+        credentials.spark_connect_retry_on = None
         credentials.spark_connect_keepalive_interval = None
         credentials.poll_interval = 0.01
         credentials.num_retries = 3
@@ -559,6 +560,97 @@ class TestSparkConnectSubmission:
         mock_pool.terminate.assert_called_once_with("sid-1")
         mock_pool.release.assert_called_once_with("sid-2")
 
+    @pytest.mark.parametrize(
+        "retry_on, message, retried",
+        [
+            (["session_ended"], "Session not active", True),
+            (["session_ended"], "Maximum allowed sessions", False),
+            (["capacity"], "Maximum allowed sessions", True),
+            (["capacity"], "Unable to load credentials", False),
+            (["executor_environment"], "Unable to load credentials", True),
+            (["executor_environment"], "Pool not running", False),
+            (["connection"], "Pool not running", True),
+            (["connection"], "Session not active", False),
+            ([], "Session not active", False),
+        ],
+    )
+    def test_retry_on_limits_retried_categories(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch, retry_on, message, retried
+    ):
+        mock_credentials.spark_connect_retry_on = retry_on
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        mock_pool.is_session_alive.return_value = True
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        first_spark = MagicMock()
+        first_spark.run.side_effect = Exception(message)
+        self._set_spark_create(side_effect=[first_spark, MagicMock()])
+
+        if retried:
+            assert submitter.submit("spark.run()")["SparkSessionId"] == "sid-2"
+            assert mock_pool.acquire.call_count == 2
+        else:
+            with pytest.raises(DbtRuntimeError, match="not in spark_connect_retry_on"):
+                submitter.submit("spark.run()")
+            assert mock_pool.acquire.call_count == 1
+        mock_pool.terminate.assert_called_once_with("sid-1")
+
+    @pytest.mark.parametrize("session_alive, retried", [(False, True), (True, False)])
+    def test_retry_on_session_ended_uses_session_state_for_permission_denied(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch, session_alive, retried
+    ):
+        class _FakeCode:
+            name = "PERMISSION_DENIED"
+
+        class _FakeRpcError(Exception):
+            def code(self):
+                return _FakeCode()
+
+        mock_credentials.spark_connect_retry_on = ["session_ended"]
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        mock_pool.is_session_alive.return_value = session_alive
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        first_spark = MagicMock()
+        first_spark.run.side_effect = _FakeRpcError("Received http2 header with status: 403")
+        self._set_spark_create(side_effect=[first_spark, MagicMock()])
+
+        if retried:
+            assert submitter.submit("spark.run()")["SparkSessionId"] == "sid-2"
+        else:
+            with pytest.raises(
+                DbtRuntimeError, match="category 'connection' is not in spark_connect_retry_on"
+            ):
+                submitter.submit("spark.run()")
+        assert mock_pool.acquire.call_count == (2 if retried else 1)
+
+    def test_excluded_session_end_raises_terminated_without_retry(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        mock_credentials.spark_connect_retry_on = []
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        mock_pool.is_session_alive.return_value = False
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception("Session not active")
+        self._set_spark_create(return_value=fake_spark)
+
+        from dbt.adapters.athena.exceptions import SparkSessionTerminatedError
+
+        with pytest.raises(SparkSessionTerminatedError, match="sid-1"):
+            submitter.submit("spark.run()")
+        assert mock_pool.acquire.call_count == 1
+
     def test_permission_denied_with_live_session_still_retries(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
@@ -780,7 +872,7 @@ class TestSparkConnectSubmission:
         fake_spark.run.side_effect = Exception("Session not active")
         self._set_spark_create(return_value=fake_spark)
 
-        with pytest.raises(DbtRuntimeError, match="failed after 4 attempts"):
+        with pytest.raises(DbtRuntimeError, match="failed after 1 attempts"):
             submitter.submit("spark.run()")
 
         # Only the first attempt actually ran; backoff guard skipped attempts 2-4.
@@ -948,6 +1040,7 @@ class TestDpuRequestComputation:
         c.spark_connect_session_concurrency = None
         c.spark_connect_pool_acquire_timeout = None
         c.spark_connect_max_retries = None
+        c.spark_connect_retry_on = None
         c.spark_connect_keepalive_interval = None
         return c
 

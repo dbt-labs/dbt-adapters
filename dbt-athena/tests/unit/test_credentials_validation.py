@@ -71,6 +71,26 @@ class TestSparkConnectIntegerValidation:
         assert c.spark_connect_dpu_budget is None
 
 
+class TestSparkConnectRetryOnValidation:
+    def test_known_categories_are_accepted(self):
+        c = _make(spark_connect_retry_on=["session_ended", "connection"])
+        assert c.spark_connect_retry_on == ["session_ended", "connection"]
+
+    def test_empty_list_is_accepted(self):
+        c = _make(spark_connect_retry_on=[])
+        assert c.spark_connect_retry_on == []
+
+    def test_omitted_is_none(self):
+        assert _make().spark_connect_retry_on is None
+
+    @pytest.mark.parametrize(
+        "value", [["session_ended", "typo"], "session_ended", {"session_ended": True}]
+    )
+    def test_unknown_or_non_list_is_rejected(self, value):
+        with pytest.raises(DbtRuntimeError, match="spark_connect_retry_on must be a list of"):
+            _make(spark_connect_retry_on=value)
+
+
 class TestSparkConnectKeepaliveIntervalValidation:
     def test_zero_disables(self):
         assert _make(spark_connect_keepalive_interval=0).spark_connect_keepalive_interval == 0

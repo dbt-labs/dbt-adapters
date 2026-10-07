@@ -11,6 +11,12 @@ DEFAULT_SPARK_CONNECT_DPU_BUDGET = 60
 # Safety net only; firing this means DPU exhaustion or a stuck pool.
 DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT = 21600  # 6h
 DEFAULT_SPARK_CONNECT_MAX_RETRIES = 3
+SPARK_CONNECT_RETRY_CATEGORIES = (
+    "session_ended",
+    "capacity",
+    "executor_environment",
+    "connection",
+)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_POLLING_INTERVAL = 5
 DEFAULT_SPARK_COORDINATOR_DPU_SIZE = 1

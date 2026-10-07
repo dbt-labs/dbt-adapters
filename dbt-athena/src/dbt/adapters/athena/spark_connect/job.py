@@ -11,7 +11,16 @@ import traceback
 import uuid
 from functools import cached_property
 from hashlib import md5
-from typing import TYPE_CHECKING, Any, Dict, NamedTuple, Optional, Tuple, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    FrozenSet,
+    NamedTuple,
+    Optional,
+    Tuple,
+    TypedDict,
+)
 
 import boto3
 import botocore
@@ -40,14 +49,16 @@ from dbt.adapters.athena.constants import (
     DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT,
     DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY,
     LOGGER,
+    SPARK_CONNECT_RETRY_CATEGORIES,
 )
 from dbt.adapters.athena.exceptions import SparkSessionTerminatedError
 from dbt.adapters.athena.session import get_boto3_session_from_credentials
 from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 from dbt.adapters.athena.spark_connect.errors import (
+    SESSION_ENDED,
+    classify_transient_spark_error,
     is_grpc_permission_denied,
     is_session_ended_error,
-    is_transient_spark_error,
 )
 from dbt.adapters.athena.spark_connect.keepalive import SessionKeepalive
 from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
@@ -99,6 +110,8 @@ class _AttemptResult(NamedTuple):
     done: bool
     session_id: Optional[str] = None
     session_ended: bool = False
+    retryable: bool = True
+    category: Optional[str] = None
 
 
 class SparkConnectSubmitter:
@@ -180,6 +193,13 @@ class SparkConnectSubmitter:
         return value
 
     @cached_property
+    def _retry_on(self) -> FrozenSet[str]:
+        value = self.credentials.spark_connect_retry_on
+        if value is None:
+            return frozenset(SPARK_CONNECT_RETRY_CATEGORIES)
+        return frozenset(value)
+
+    @cached_property
     def _keepalive_interval(self) -> int:
         value = self.credentials.spark_connect_keepalive_interval
         if value is None:
@@ -223,6 +243,8 @@ class SparkConnectSubmitter:
         last_error: Optional[BaseException] = None
         last_session_id: Optional[str] = None
         last_session_ended = False
+        last_outcome: Optional[_AttemptResult] = None
+        attempts_made = 0
         total_attempts = self._max_retries + 1
 
         for attempt in range(1, total_attempts + 1):
@@ -234,9 +256,11 @@ class SparkConnectSubmitter:
             last_error = outcome.error
             last_session_id = outcome.session_id
             last_session_ended = outcome.session_ended
+            last_outcome = outcome
+            attempts_made = attempt
 
             is_last_attempt = attempt >= total_attempts
-            if is_last_attempt:
+            if is_last_attempt or not outcome.retryable:
                 break
 
             backoff = min(2**attempt, 30) + random.uniform(0, 1)
@@ -264,8 +288,14 @@ class SparkConnectSubmitter:
                 f"check session state and workgroup DPU/quota. "
                 f"Underlying error: {type(last_error).__name__}: {last_error}"
             ) from last_error
+        if last_outcome is not None and not last_outcome.retryable:
+            raise DbtRuntimeError(
+                f"Spark Connect execution failed (session {last_session_id}); not retried "
+                f"because transient category '{last_outcome.category}' is not in "
+                f"spark_connect_retry_on: {type(last_error).__name__}: {last_error}"
+            ) from last_error
         raise DbtRuntimeError(
-            f"Spark Connect execution failed after {total_attempts} "
+            f"Spark Connect execution failed after {attempts_made} "
             f"attempts (last session {last_session_id}): "
             f"{type(last_error).__name__}: {last_error}"
         ) from last_error
@@ -281,9 +311,6 @@ class SparkConnectSubmitter:
         # re-registers the creating-client-class.s3 handler and breaks the model's
         # first boto3.client("s3") with a duplicate upload_file injection error.
         boto3.DEFAULT_SESSION = assumed
-
-    def _is_transient_failure(self, e: BaseException) -> bool:
-        return is_transient_spark_error(e)
 
     def _acquire_session(self, pool_timeout: float) -> str:
         """Acquire a Spark Connect session from the pool."""
@@ -477,23 +504,28 @@ class SparkConnectSubmitter:
                     f"Spark Connect execution timed out after {self.timeout} seconds."
                 ) from e
 
-            transient = self._is_transient_failure(e)
-            terminate_session = transient
+            category = classify_transient_spark_error(e)
             total_attempts = self._max_retries + 1
             is_last_attempt = attempt >= total_attempts
 
             session_ended = (
                 is_grpc_permission_denied(e) or is_session_ended_error(e)
             ) and not self._pool.is_session_alive(self.athena_client, session_id)
+            if session_ended:
+                category = SESSION_ENDED
+            terminate_session = category is not None
+            retryable = category in self._retry_on
 
-            if not transient or is_last_attempt:
+            if not retryable or is_last_attempt:
                 LOGGER.error(
                     f"Model {self.relation_name} (session {session_id}) - "
                     f"Spark Connect execution failed "
-                    f"(attempt {attempt}/{total_attempts}): "
+                    f"(attempt {attempt}/{total_attempts}, "
+                    f"transient category: {category}"
+                    f"{'' if retryable or category is None else ', excluded by spark_connect_retry_on'}): "
                     f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
                 )
-                if not transient:
+                if category is None:
                     raise DbtRuntimeError(
                         f"Spark Connect execution failed (session {session_id}): "
                         f"{type(e).__name__}: {e}"
@@ -505,6 +537,8 @@ class SparkConnectSubmitter:
                 done=False,
                 session_id=session_id,
                 session_ended=session_ended,
+                retryable=retryable,
+                category=category,
             )
         finally:
             if keepalive is not None:

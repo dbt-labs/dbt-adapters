@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Iterator, Optional
+from typing import Dict, FrozenSet, Iterator, List, Optional
+
+from dbt.adapters.athena.constants import SPARK_CONNECT_RETRY_CATEGORIES
+
+SESSION_ENDED, CAPACITY, EXECUTOR_ENVIRONMENT, CONNECTION = SPARK_CONNECT_RETRY_CATEGORIES
 
 SESSION_ENDED_PATTERNS = [
     # Athena terminated the Spark session (idle timeout / DPU / quota).
@@ -13,23 +17,38 @@ SESSION_ENDED_PATTERNS = [
     "Session endpoint URL for Session in STOPPED state",
 ]
 
+TRANSIENT_SPARK_PATTERNS_BY_CATEGORY: Dict[str, List[str]] = {
+    SESSION_ENDED: SESSION_ENDED_PATTERNS,
+    CAPACITY: [
+        # Account/workgroup session quota exhausted; retry after others finish.
+        "Maximum allowed sessions",
+    ],
+    EXECUTOR_ENVIRONMENT: [
+        # Spark executor failed to obtain credentials from the provider chain.
+        "Unable to load credentials",
+        # Spark executor failed to resolve the AWS region (IMDS not yet ready).
+        "Unable to load region",
+    ],
+    CONNECTION: [
+        # gRPC connection pool was shut down; a new session creates a fresh one.
+        "Pool not running",
+    ],
+}
+
 TRANSIENT_SPARK_PATTERNS = [
-    # Spark executor failed to obtain credentials from the provider chain.
-    "Unable to load credentials",
-    # Spark executor failed to resolve the AWS region (IMDS not yet ready).
-    "Unable to load region",
-    # gRPC connection pool was shut down; a new session creates a fresh one.
-    "Pool not running",
-    *SESSION_ENDED_PATTERNS,
-    # Account/workgroup session quota exhausted; retry after others finish.
-    "Maximum allowed sessions",
+    p for patterns in TRANSIENT_SPARK_PATTERNS_BY_CATEGORY.values() for p in patterns
 ]
 
-TRANSIENT_GRPC_STATUS_CODES = frozenset(
+TRANSIENT_GRPC_STATUS_CODES_BY_CATEGORY: Dict[str, FrozenSet[str]] = {
+    CAPACITY: frozenset({"RESOURCE_EXHAUSTED"}),
     # PERMISSION_DENIED reaches the job level only when pyspark_patches'
     # in-stream reattach has already given up, so a fresh session is the
     # only recovery path left.
-    {"UNAVAILABLE", "DEADLINE_EXCEEDED", "ABORTED", "RESOURCE_EXHAUSTED", "PERMISSION_DENIED"}
+    CONNECTION: frozenset({"UNAVAILABLE", "DEADLINE_EXCEEDED", "ABORTED", "PERMISSION_DENIED"}),
+}
+
+TRANSIENT_GRPC_STATUS_CODES = frozenset(
+    code for codes in TRANSIENT_GRPC_STATUS_CODES_BY_CATEGORY.values() for code in codes
 )
 
 
@@ -50,11 +69,21 @@ def _iter_grpc_status_codes(e: BaseException) -> Iterator[str]:
         current = current.__cause__ or current.__context__
 
 
-def is_transient_spark_error(e: BaseException) -> bool:
-    if any(name in TRANSIENT_GRPC_STATUS_CODES for name in _iter_grpc_status_codes(e)):
-        return True
+def classify_transient_spark_error(e: BaseException) -> Optional[str]:
+    """Return the transient category of ``e``, or None if it is not transient."""
     error_str = f"{type(e).__name__}: {e}"
-    return any(p in error_str for p in TRANSIENT_SPARK_PATTERNS)
+    for category, patterns in TRANSIENT_SPARK_PATTERNS_BY_CATEGORY.items():
+        if any(p in error_str for p in patterns):
+            return category
+    codes = set(_iter_grpc_status_codes(e))
+    for category, category_codes in TRANSIENT_GRPC_STATUS_CODES_BY_CATEGORY.items():
+        if codes & category_codes:
+            return category
+    return None
+
+
+def is_transient_spark_error(e: BaseException) -> bool:
+    return classify_transient_spark_error(e) is not None
 
 
 def is_session_ended_error(e: BaseException) -> bool:

@@ -46,7 +46,11 @@ from tenacity import (
 )
 
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.constants import LOGGER, SESSION_IDLE_TIMEOUT_MIN
+from dbt.adapters.athena.constants import (
+    LOGGER,
+    SESSION_IDLE_TIMEOUT_MIN,
+    SPARK_CONNECT_RETRY_CATEGORIES,
+)
 from dbt.adapters.athena.exceptions import (
     AthenaError,
     AthenaQueryCancelledError,
@@ -117,6 +121,7 @@ class AthenaCredentials(Credentials):
     spark_connect_dpu_budget: Optional[int] = None
     spark_connect_pool_acquire_timeout: Optional[int] = None
     spark_connect_max_retries: Optional[int] = None
+    spark_connect_retry_on: Optional[List[str]] = None
     spark_connect_keepalive_interval: Optional[int] = None
     s3_tmp_table_dir: Optional[str] = None
     # Unfortunately we can not just use dict, must be Dict because we'll get the following error:
@@ -148,6 +153,16 @@ class AthenaCredentials(Credentials):
                     "Omit the field to use the default."
                 )
             setattr(self, field_name, int(raw))
+
+        retry_on = self.spark_connect_retry_on
+        if retry_on is not None and (
+            not isinstance(retry_on, list)
+            or any(c not in SPARK_CONNECT_RETRY_CATEGORIES for c in retry_on)
+        ):
+            raise DbtRuntimeError(
+                f"spark_connect_retry_on must be a list of {list(SPARK_CONNECT_RETRY_CATEGORIES)} "
+                f"(got {retry_on!r}). Omit the field to retry all of them."
+            )
 
         idle_timeout_seconds = SESSION_IDLE_TIMEOUT_MIN * 60
         keepalive_interval = self.spark_connect_keepalive_interval
@@ -209,6 +224,7 @@ class AthenaCredentials(Credentials):
             "spark_connect_max_retries",
             "spark_connect_max_sessions",
             "spark_connect_pool_acquire_timeout",
+            "spark_connect_retry_on",
             "spark_connect_session_concurrency",
             "spark_work_group",
             "work_group",
