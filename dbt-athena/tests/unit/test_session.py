@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timedelta, timezone
 from unittest.mock import ANY, Mock, patch, MagicMock
 from uuid import UUID
@@ -8,15 +9,27 @@ from botocore.exceptions import ClientError
 from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.athena import AthenaCredentials
+from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.session import (
     AthenaSparkSessionManager,
     _EXPIRY_BUFFER_SECONDS,
+    _BASE_SESSION_TTL_SECONDS,
+    _SHARED_CLIENT_POOL_SIZE,
+    _ClientCachingSession,
+    _cached_base_session,
     _get_assume_role_session,
     _assume_role_session,
     get_boto3_session,
     get_boto3_session_from_credentials,
 )
 from dbt.adapters.contracts.connection import Connection
+
+
+@pytest.fixture(autouse=True)
+def clear_base_session_cache():
+    _cached_base_session.cache_clear()
+    yield
+    _cached_base_session.cache_clear()
 
 
 class TestSession:
@@ -99,7 +112,7 @@ class TestAssumeRoleSession:
         get_boto3_session_from_credentials(credentials)
         mock_assume.assert_not_called()
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_assume_role_arn_calls_sts(self, mock_session_cls):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -124,7 +137,7 @@ class TestAssumeRoleSession:
             region_name="ap-northeast-1",
         )
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_assume_role_with_external_id(self, mock_session_cls):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -144,7 +157,7 @@ class TestAssumeRoleSession:
             DurationSeconds=3600,
         )
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_assume_role_with_custom_session_name(self, mock_session_cls):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -163,7 +176,7 @@ class TestAssumeRoleSession:
             DurationSeconds=3600,
         )
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     @patch("dbt.adapters.athena.session._assume_role_session")
     def test_get_boto3_session_calls_assume_role(self, mock_assume, mock_session_cls):
         mock_base = MagicMock()
@@ -184,7 +197,7 @@ class TestAssumeRoleSession:
         mock_assume.assert_called_once_with(mock_base, credentials)
         assert result is mock_assumed
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     @patch("dbt.adapters.athena.session._assume_role_session")
     def test_get_boto3_session_from_credentials_calls_assume_role(
         self, mock_assume, mock_session_cls
@@ -224,7 +237,7 @@ class TestAssumeRoleSession:
             pytest.param(43200, id="maximum"),
         ],
     )
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_assume_role_valid_duration_does_not_raise(self, mock_session_cls, duration):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -256,7 +269,7 @@ class TestAssumeRoleSession:
         with pytest.raises(DbtRuntimeError, match="assume_role_duration_seconds must be between"):
             _assume_role_session(base_session, credentials)
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_assume_role_with_all_options(self, mock_session_cls):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -279,7 +292,7 @@ class TestAssumeRoleSession:
         )
 
     @patch("dbt.adapters.athena.session.time")
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_cached_session_is_reused(self, mock_session_cls, mock_time):
         mock_time.time.return_value = 0.0
         credentials = self._make_credentials(
@@ -297,7 +310,7 @@ class TestAssumeRoleSession:
         mock_sts.assume_role.assert_called_once()
 
     @patch("dbt.adapters.athena.session.time")
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_expired_session_is_refreshed(self, mock_session_cls, mock_time):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -322,7 +335,7 @@ class TestAssumeRoleSession:
         assert session2 is session_new
         assert mock_sts.assume_role.call_count == 2
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_different_role_arns_use_separate_cache_entries(self, mock_session_cls):
         creds_a = self._make_credentials(
             assume_role_arn="arn:aws:iam::111111111111:role/RoleA",
@@ -346,7 +359,7 @@ class TestAssumeRoleSession:
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_different_base_sessions_use_separate_cache_entries(self, mock_session_cls):
         credentials = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -369,7 +382,7 @@ class TestAssumeRoleSession:
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_different_regions_use_separate_cache_entries(self, mock_session_cls):
         creds_a = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -395,7 +408,7 @@ class TestAssumeRoleSession:
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
 
-    @patch("dbt.adapters.athena.session.boto3.session.Session")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
     def test_different_external_ids_use_separate_cache_entries(self, mock_session_cls):
         creds_a = self._make_credentials(
             assume_role_arn="arn:aws:iam::123456789012:role/TestRole",
@@ -420,6 +433,84 @@ class TestAssumeRoleSession:
         assert session_a is session_a_mock
         assert session_b is session_b_mock
         assert mock_sts.assume_role.call_count == 2
+
+
+class TestBaseSessionCache:
+    def _make_credentials(self, **overrides):
+        defaults = dict(
+            database="db",
+            schema="schema",
+            s3_staging_dir="s3://bucket/staging/",
+            region_name="ap-northeast-1",
+        )
+        defaults.update(overrides)
+        return AthenaCredentials(**defaults)
+
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
+    def test_same_credentials_reuse_the_cached_session(self, mock_session_cls):
+        credentials = self._make_credentials()
+
+        session1 = get_boto3_session_from_credentials(credentials)
+        session2 = get_boto3_session_from_credentials(credentials)
+
+        assert session1 is session2
+        mock_session_cls.assert_called_once_with(
+            aws_access_key_id=None,
+            aws_secret_access_key=None,
+            aws_session_token=None,
+            region_name="ap-northeast-1",
+            profile_name=None,
+        )
+
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
+    def test_connection_and_credentials_share_the_cached_session(self, mock_session_cls):
+        credentials = self._make_credentials()
+        connection = Connection(
+            type="test",
+            name="test_session",
+            credentials=credentials,
+        )
+
+        session1 = get_boto3_session(connection)
+        session2 = get_boto3_session_from_credentials(credentials)
+
+        assert session1 is session2
+        mock_session_cls.assert_called_once()
+
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
+    def test_different_credentials_use_separate_cache_entries(self, mock_session_cls):
+        session_a_mock = MagicMock(name="session_a")
+        session_b_mock = MagicMock(name="session_b")
+        mock_session_cls.side_effect = [session_a_mock, session_b_mock]
+        creds_a = self._make_credentials(region_name="ap-northeast-1")
+        creds_b = self._make_credentials(region_name="us-east-1")
+
+        session_a = get_boto3_session_from_credentials(creds_a)
+        session_b = get_boto3_session_from_credentials(creds_b)
+
+        assert session_a is session_a_mock
+        assert session_b is session_b_mock
+        assert mock_session_cls.call_count == 2
+
+    @patch("dbt.adapters.athena.session.time")
+    @patch("dbt.adapters.athena.session._ClientCachingSession")
+    def test_session_is_rebuilt_once_the_ttl_has_elapsed(self, mock_session_cls, mock_time):
+        old_session = MagicMock(name="old_session")
+        new_session = MagicMock(name="new_session")
+        mock_session_cls.side_effect = [old_session, new_session]
+        credentials = self._make_credentials()
+
+        mock_time.time.return_value = 0.0
+        first = get_boto3_session_from_credentials(credentials)
+        mock_time.time.return_value = _BASE_SESSION_TTL_SECONDS - 1
+        still_cached = get_boto3_session_from_credentials(credentials)
+        mock_time.time.return_value = float(_BASE_SESSION_TTL_SECONDS)
+        rebuilt = get_boto3_session_from_credentials(credentials)
+
+        assert first is old_session
+        assert still_cached is old_session
+        assert rebuilt is new_session
+        assert mock_session_cls.call_count == 2
 
 
 @pytest.mark.usefixtures("athena_credentials", "athena_client")
@@ -566,3 +657,70 @@ class TestAthenaSparkSessionManager:
 
     def test_get_session_id(self):
         pass
+
+
+class TestClientCachingSession:
+    @staticmethod
+    def _session():
+        return _ClientCachingSession(
+            aws_access_key_id="key",
+            aws_secret_access_key="secret",
+            region_name="eu-west-1",
+        )
+
+    def test_same_service_region_and_config_share_one_client(self):
+        session = self._session()
+        config = get_boto3_config(num_retries=0)
+
+        assert session.client("glue", "eu-west-1", config=config) is session.client(
+            "glue", region_name="eu-west-1", config=config
+        )
+
+    def test_different_services_regions_or_configs_get_distinct_clients(self):
+        session = self._session()
+        config = get_boto3_config(num_retries=0)
+        glue = session.client("glue", "eu-west-1", config=config)
+
+        assert session.client("s3", "eu-west-1", config=config) is not glue
+        assert session.client("glue", "eu-west-3", config=config) is not glue
+        assert (
+            session.client("glue", "eu-west-1", config=get_boto3_config(num_retries=3)) is not glue
+        )
+
+    def test_shared_clients_get_a_larger_connection_pool(self):
+        session = self._session()
+
+        client = session.client("glue", "eu-west-1", config=get_boto3_config(num_retries=0))
+
+        assert client.meta.config.max_pool_connections == _SHARED_CLIENT_POOL_SIZE
+        assert client.meta.config.retries["total_max_attempts"] == 1
+
+    def test_client_without_config_is_cached_too(self):
+        session = self._session()
+
+        assert session.client("athena") is session.client("athena")
+
+    def test_calls_with_extra_arguments_bypass_the_cache(self):
+        session = self._session()
+
+        first = session.client("s3", endpoint_url="http://localhost:9000")
+        second = session.client("s3", endpoint_url="http://localhost:9000")
+
+        assert first is not second
+
+    def test_concurrent_requests_create_a_single_client(self):
+        session = self._session()
+        config = get_boto3_config(num_retries=0)
+        clients = []
+
+        def get_client():
+            clients.append(session.client("glue", "eu-west-1", config=config))
+
+        threads = [threading.Thread(target=get_client) for _ in range(16)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert len(clients) == 16
+        assert all(client is clients[0] for client in clients)
