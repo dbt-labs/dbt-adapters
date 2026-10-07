@@ -29,9 +29,10 @@ def apply_pyspark_workarounds() -> None:
         # Mirrors SPARK-57425 (apache/spark#56497) until upstream lands:
         #   1. Stash the ChannelBuilder on the gRPC stub.
         #   2. Refresh metadata via the builder before each RPC (ReattachExecute,
-        #      ReleaseExecute, retry ExecutePlan).
+        #      ReleaseExecute, retry ExecutePlan, AddArtifacts, ArtifactStatus).
         _stash_channel_builder_on_stub()
         _refresh_reattach_iterator_metadata()
+        _refresh_artifact_manager_metadata()
         _track_retry_blocks()
         _retry_permission_denied_in_spark_client()
         _skip_artifacts_already_added()
@@ -101,7 +102,7 @@ def client_retries_disabled() -> Iterator[None]:
 
 
 def _stash_channel_builder_on_stub() -> None:
-    """Cache the ChannelBuilder on the gRPC stub so the reattach iterator can find it."""
+    """Cache the ChannelBuilder on the gRPC stub and artifact manager so they can refresh metadata."""
     from pyspark.sql.connect.client.core import SparkConnectClient
 
     original_init = SparkConnectClient.__init__
@@ -116,11 +117,48 @@ def _stash_channel_builder_on_stub() -> None:
             and callable(getattr(builder, "metadata", None))
         ):
             stub._dbt_athena_builder = builder
+            artifact_manager = getattr(self, "_artifact_manager", None)
+            if artifact_manager is not None:
+                artifact_manager._dbt_athena_builder = builder
             LOGGER.debug(
                 "Stashed AthenaChannelBuilder on Spark Connect stub for metadata refresh."
             )
 
     SparkConnectClient.__init__ = _patched_init
+
+
+def _refresh_metadata(obj: Any) -> None:
+    builder = getattr(obj, "_dbt_athena_builder", None)
+    if builder is None:
+        return
+    old_token = getattr(builder, "_auth_token", None)
+    try:
+        obj._metadata = builder.metadata()
+    except Exception as e:  # noqa: BLE001 - refresh is best-effort
+        LOGGER.warning(f"Metadata refresh failed: {e}")
+        return
+    new_token = getattr(builder, "_auth_token", None)
+    if new_token is not None and new_token != old_token:
+        LOGGER.debug("Metadata refreshed: AuthToken rotated.")
+
+
+def _refresh_artifact_manager_metadata() -> None:
+    """Refresh metadata before AddArtifacts and ArtifactStatus; pyspark's ArtifactManager captures it once."""
+    from pyspark.sql.connect.client.artifact import ArtifactManager
+
+    original_retrieve_responses = ArtifactManager._retrieve_responses
+    original_is_cached_artifact = ArtifactManager.is_cached_artifact
+
+    def _patched_retrieve_responses(self: Any, *args: Any, **kwargs: Any) -> Any:
+        _refresh_metadata(self)
+        return original_retrieve_responses(self, *args, **kwargs)
+
+    def _patched_is_cached_artifact(self: Any, *args: Any, **kwargs: Any) -> Any:
+        _refresh_metadata(self)
+        return original_is_cached_artifact(self, *args, **kwargs)
+
+    ArtifactManager._retrieve_responses = _patched_retrieve_responses
+    ArtifactManager.is_cached_artifact = _patched_is_cached_artifact
 
 
 def _refresh_reattach_iterator_metadata() -> None:
@@ -143,23 +181,11 @@ def _refresh_reattach_iterator_metadata() -> None:
     original_release_until = ExecutePlanResponseReattachableIterator._release_until
     original_release_all = ExecutePlanResponseReattachableIterator._release_all
 
-    def _refresh(self: Any) -> None:
-        builder = getattr(self, "_dbt_athena_channel_builder", None)
-        if builder is None:
-            return
-        old_token = getattr(builder, "_auth_token", None)
-        try:
-            self._metadata = builder.metadata()
-        except Exception as e:  # noqa: BLE001 - refresh is best-effort
-            LOGGER.warning(f"Metadata refresh failed: {e}")
-            return
-        new_token = getattr(builder, "_auth_token", None)
-        if new_token is not None and new_token != old_token:
-            LOGGER.debug("Metadata refreshed: AuthToken rotated.")
+    _refresh = _refresh_metadata
 
     def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
-        self._dbt_athena_channel_builder = getattr(self._stub, "_dbt_athena_builder", None)
+        self._dbt_athena_builder = getattr(self._stub, "_dbt_athena_builder", None)
 
     def _patched_call_iter(self: Any, iter_fun: Any) -> Any:
         if self._iterator is None:

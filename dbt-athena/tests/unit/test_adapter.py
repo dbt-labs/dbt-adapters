@@ -1754,6 +1754,11 @@ class TestGeneratePythonSubmissionResponse:
         assert response._message == "OK"
         assert response.spark_session_id == "spark-connect-session"
 
+    def test_session_id_is_none_when_key_is_missing(self, adapter):
+        response = self._call(adapter, {"ResultS3Uri": "string"})
+        assert response._message == "OK"
+        assert response.spark_session_id is None
+
     def test_handles_non_dict_submission_result(self, adapter):
         response = self._call(adapter, "truthy")
         assert response._message == "OK"

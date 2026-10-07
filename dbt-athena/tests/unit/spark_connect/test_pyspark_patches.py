@@ -51,9 +51,10 @@ def fake_pyspark_modules(monkeypatch):
         pass
 
     class FakeSparkConnectClient:
-        def __init__(self, stub=None, builder=None):
+        def __init__(self, stub=None, builder=None, artifact_manager=None):
             self._stub = stub
             self._builder = builder
+            self._artifact_manager = artifact_manager
 
         @classmethod
         def retry_exception(cls, e):
@@ -84,8 +85,20 @@ def fake_pyspark_modules(monkeypatch):
     fake_artifact = types.ModuleType("pyspark.sql.connect.client.artifact")
 
     class FakeArtifactManager:
+        def __init__(self, metadata=None):
+            self._metadata = metadata
+            self.sent_metadata = []
+
         def add_artifacts(self, *path, pyfile, archive, file):
             pass
+
+        def _retrieve_responses(self, requests):
+            self.sent_metadata.append(("AddArtifacts", self._metadata))
+            return "responses"
+
+        def is_cached_artifact(self, hash):
+            self.sent_metadata.append(("ArtifactStatus", self._metadata))
+            return False
 
     fake_artifact.ArtifactManager = FakeArtifactManager
 
@@ -198,6 +211,109 @@ def test_client_init_stashes_builder_on_stub(fake_pyspark_modules):
     fake_pyspark_modules.client(stub=stub, builder=builder)
 
     assert stub._dbt_athena_builder is builder
+
+
+def _rotating_builder():
+    builder = MagicMock()
+    tokens = iter(f"token-{i}" for i in range(1, 100))
+
+    def _metadata():
+        token = next(tokens)
+        builder._auth_token = token
+        return [("x-aws-proxy-auth", token)]
+
+    builder.metadata.side_effect = _metadata
+    return builder
+
+
+def _artifact_manager_with_builder(fake_pyspark_modules, builder):
+    manager = fake_pyspark_modules.artifact_manager(metadata=[("x-aws-proxy-auth", "stale")])
+    fake_pyspark_modules.client(stub=MagicMock(), builder=builder, artifact_manager=manager)
+    return manager
+
+
+def test_client_init_stashes_builder_on_artifact_manager(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    builder = _rotating_builder()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    assert manager._dbt_athena_builder is builder
+
+
+def test_add_artifacts_rpc_uses_a_fresh_token_each_time(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, _rotating_builder())
+
+    assert manager._retrieve_responses([]) == "responses"
+    manager._retrieve_responses([])
+
+    assert manager.sent_metadata == [
+        ("AddArtifacts", [("x-aws-proxy-auth", "token-1")]),
+        ("AddArtifacts", [("x-aws-proxy-auth", "token-2")]),
+    ]
+
+
+def test_artifact_status_rpc_uses_a_fresh_token_each_time(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, _rotating_builder())
+
+    assert manager.is_cached_artifact("h") is False
+    manager.is_cached_artifact("h")
+
+    assert manager.sent_metadata == [
+        ("ArtifactStatus", [("x-aws-proxy-auth", "token-1")]),
+        ("ArtifactStatus", [("x-aws-proxy-auth", "token-2")]),
+    ]
+
+
+def test_artifact_rpcs_keep_metadata_without_a_builder(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = fake_pyspark_modules.artifact_manager(metadata=[("k", "v")])
+
+    manager._retrieve_responses([])
+    manager.is_cached_artifact("h")
+
+    assert manager.sent_metadata == [
+        ("AddArtifacts", [("k", "v")]),
+        ("ArtifactStatus", [("k", "v")]),
+    ]
+
+
+def test_artifact_rpcs_continue_when_metadata_refresh_fails(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    builder = _rotating_builder()
+    builder.metadata.side_effect = RuntimeError("transient")
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    assert manager._retrieve_responses([]) == "responses"
+    assert manager.is_cached_artifact("h") is False
+
+    stale = [("x-aws-proxy-auth", "stale")]
+    assert manager.sent_metadata == [("AddArtifacts", stale), ("ArtifactStatus", stale)]
+
+
+def test_applying_twice_refreshes_once_per_artifact_rpc(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    apply_pyspark_workarounds()
+    builder = _rotating_builder()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    manager._retrieve_responses([])
+
+    assert builder.metadata.call_count == 1
 
 
 def test_call_iter_refreshes_metadata_on_reattach(fake_reattach_module, fake_spark_client_module):

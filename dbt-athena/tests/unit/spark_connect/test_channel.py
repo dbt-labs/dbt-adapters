@@ -60,6 +60,14 @@ class _StubSparkConnectClient:
         self._builder = None
 
 
+class _StubArtifactManager:
+    def _retrieve_responses(self, requests):
+        pass
+
+    def is_cached_artifact(self, hash):
+        return False
+
+
 class _StubRetrying:
     def __iter__(self):
         yield "attempt"
@@ -80,7 +88,7 @@ def fake_pyspark(monkeypatch):
     fake_reattach.RetryException = type("RetryException", (Exception,), {})
     fake_reattach.ExecutePlanResponseReattachableIterator = _StubReattachIterator
     fake_artifact = types.ModuleType("pyspark.sql.connect.client.artifact")
-    fake_artifact.ArtifactManager = type("ArtifactManager", (), {})
+    fake_artifact.ArtifactManager = _StubArtifactManager
 
     monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)
     monkeypatch.setitem(sys.modules, "pyspark.sql", fake_sql)

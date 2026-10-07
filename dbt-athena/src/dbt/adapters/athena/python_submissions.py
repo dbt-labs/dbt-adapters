@@ -188,7 +188,6 @@ class AthenaPythonJobHelper(PythonJobHelper):
                 "ResultType": "string",
                 "StdErrorS3Uri": "string",
                 "StdOutS3Uri": "string",
-                "SparkSessionId": self.session_id,
             }
 
     def poll_until_session_idle(self) -> None:
