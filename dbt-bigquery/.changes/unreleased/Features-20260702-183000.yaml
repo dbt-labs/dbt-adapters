@@ -1,0 +1,15 @@
+kind: Features
+body: Support BigQuery Lakehouse runtime catalog (Iceberg REST) tables addressed as
+    `project.catalog.namespace.table` by mapping `catalog.namespace` into the schema
+    slot. Models and sources use a literal dotted schema (`catalog.namespace`), with
+    model schemas passed through without the normal target-schema prefix. BigQuery
+    remains authoritative for unsupported materializations and table-option limitations,
+    while incompatible adapter transports such as rename, copy, and python model targets
+    are rejected at their operation boundaries.
+    Schema evolution routes through DDL; incremental strategies spill required temporary
+    relations to a configurable `temp_schema`; and lakehouse source freshness is computed
+    per source with error isolation
+time: 2026-07-02T18:30:00.000000+01:00
+custom:
+    Author: borjavb
+    Issue: "2066"
