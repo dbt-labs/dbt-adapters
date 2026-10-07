@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -10,7 +11,10 @@ from dbt.adapters.bigquery.token_suppliers import EntraTokenSupplier
 
 
 class _ScriptedIdp:
-    """A local identity provider that replies with a scripted sequence of status codes."""
+    """A local identity provider that replies with a scripted sequence of status codes.
+
+    "drop" closes the connection without a response; "hang" stalls before replying 200.
+    """
 
     def __init__(self, statuses):
         self.statuses = list(statuses)
@@ -23,13 +27,23 @@ class _ScriptedIdp:
                 self.rfile.read(int(self.headers.get("Content-Length", 0)))
                 idp.request_count += 1
                 status = idp.statuses.pop(0) if len(idp.statuses) > 1 else idp.statuses[0]
+                if status == "drop":
+                    self.close_connection = True
+                    return
+                if status == "hang":
+                    time.sleep(1)
+                    status = 200
                 body = {"access_token": "token", "expires_in": 3600} if status == 200 else {}
                 payload = json.dumps(body).encode("utf-8")
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                except OSError:
+                    # the client already gave up on a hung request
+                    self.close_connection = True
 
             def log_message(self, *args):
                 pass
@@ -91,3 +105,18 @@ def test_client_errors_are_not_retried(scripted_idp):
     with pytest.raises(requests.HTTPError):
         idp.supplier().get_subject_token(None, None)
     assert idp.request_count == 1
+
+
+def test_dropped_connections_are_retried(scripted_idp):
+    idp = scripted_idp(["drop", 200])
+
+    assert idp.supplier().get_subject_token(None, None) == "token"
+    assert idp.request_count == 2
+
+
+def test_hung_request_times_out_and_is_retried(scripted_idp, mocker):
+    mocker.patch("dbt.adapters.bigquery.token_suppliers._IDP_REQUEST_TIMEOUT_SECONDS", 0.2)
+    idp = scripted_idp(["hang", 200])
+
+    assert idp.supplier().get_subject_token(None, None) == "token"
+    assert idp.request_count == 2
