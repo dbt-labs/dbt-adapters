@@ -94,3 +94,15 @@ def test_stop_reports_an_operation_still_running():
         keepalive.stop()
         assert any("still finishing" in c.args[0] for c in logger.debug.call_args_list)
     release.set()
+
+
+def test_stop_after_failed_thread_start_does_not_raise():
+    keepalive = SessionKeepalive(MagicMock(), "sid-1", interval=10)
+
+    with patch.object(threading.Thread, "start", side_effect=RuntimeError("no thread")):
+        try:
+            keepalive.start()
+        except RuntimeError:
+            pass
+
+    keepalive.stop()

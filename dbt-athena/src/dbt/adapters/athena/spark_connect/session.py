@@ -5,7 +5,8 @@ from __future__ import annotations
 import random
 import threading
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, TypedDict
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional, Set, Tuple, TypedDict, Union
 
 from dbt_common.exceptions import DbtRuntimeError
 from mypy_boto3_athena.client import AthenaClient
@@ -19,38 +20,116 @@ if TYPE_CHECKING:
 SessionKey = Tuple[str, str]
 
 
-class _SessionInfo(TypedDict, total=False):
+class _RequiredSessionInfo(TypedDict):
     key: SessionKey
     client: AthenaClient
     load: int
     dpu: int
     draining: bool
     idle_since: Optional[float]
+
+
+class _SessionInfo(_RequiredSessionInfo, total=False):
     # Spark Connect client bound to this Athena session, shared by every
     # model that attaches to it. ``None`` until the first model creates it.
     spark: Optional[ConnectSparkSession]
 
 
-class _GlobalSessionLimitReached(Exception):
-    """Raised when Athena returns ``Maximum allowed sessions reached``."""
+PushbackCategory = Literal["session_limit", "capacity", "throttling"]
+
+_SESSION_LIMIT: PushbackCategory = "session_limit"
+_CAPACITY: PushbackCategory = "capacity"
+_THROTTLING: PushbackCategory = "throttling"
+
+# Checked in order; the first category with a matching substring wins.
+_PUSHBACK_PATTERNS: Tuple[Tuple[PushbackCategory, Tuple[str, ...]], ...] = (
+    (_SESSION_LIMIT, ("Maximum allowed sessions",)),
+    (_CAPACITY, ("required capacity not being available",)),
+    (_THROTTLING, ("ThrottlingException", "Rate exceeded")),
+)
 
 
-class _AccountCapacityUnavailable(Exception):
-    """Raised when Athena returns ``required capacity not being available``.
+_PUSHBACK_WARNINGS: Dict[PushbackCategory, str] = {
+    _SESSION_LIMIT: (
+        "Athena rejected StartSession (account session limit) for key {key}; "
+        "client-side accounting saw used={used} + request={request} "
+        "<= budget={budget}. Another process may share the account quota."
+    ),
+    _CAPACITY: (
+        "Athena rejected StartSession for key {key}: AWS region capacity "
+        "unavailable. Backing off; this is transient and budget cannot predict it."
+    ),
+    _THROTTLING: (
+        "Athena throttled StartSession (Rate exceeded) for key {key}; "
+        "backing off. Lower dbt threads or spark_connect_max_sessions if persistent."
+    ),
+}
 
-    Distinct from the account session-limit signal: this is a transient
-    region-level capacity shortage that the DPU budget cannot predict.
+
+def _classify_pushback(message: str) -> Optional[PushbackCategory]:
+    for category, patterns in _PUSHBACK_PATTERNS:
+        if any(pattern in message for pattern in patterns):
+            return category
+    return None
+
+
+class _StartSessionPushback(Exception):
+    """Raised when AWS rejects StartSession for a transient, account-level reason.
+
+    ``category`` is one of ``session_limit`` (account session quota),
+    ``capacity`` (region capacity shortage) or ``throttling`` (StartSession
+    call-rate quota). None of them is predictable from the DPU budget, so the
+    pool backs off and retries rather than failing the model.
     """
 
+    def __init__(self, category: PushbackCategory) -> None:
+        super().__init__(category)
+        self.category = category
 
-class _StartSessionThrottled(Exception):
-    """Raised when Athena throttles StartSession (``ThrottlingException`` /
-    ``Rate exceeded``).
 
-    The StartSession call-rate quota is account-wide and independent of the DPU
-    budget: many small sessions fit the budget yet still burst past the rate
-    limit, so the pool backs off and retries rather than failing the model.
-    """
+@dataclass(frozen=True)
+class _AcquireRequest:
+    key: SessionKey
+    athena_client: AthenaClient
+    spark_work_group: str
+    engine_config: EngineConfigurationTypeDef
+    session_description: str
+    max_sessions: int
+    timeout: float
+    polling_interval: float
+    session_concurrency: int
+    dpu_request: int
+    dpu_budget: int
+
+
+@dataclass
+class _Decision:
+    """Outcome of the in-lock part of one acquire attempt."""
+
+    stale_entries: List[Tuple[str, _SessionInfo]] = field(default_factory=list)
+    reuse_candidate: Optional[str] = None
+    new_session_id: Optional[str] = None
+    pushback: Optional[PushbackCategory] = None
+    start_error: Optional[BaseException] = None
+    budget_used: int = 0
+    reclaimed_any: bool = False
+
+
+class _Retry:
+    """Marker: try again immediately, without sleeping."""
+
+
+_RETRY = _Retry()
+
+
+@dataclass(frozen=True)
+class _Wait:
+    pushback: Optional[PushbackCategory]
+    budget_used: int
+
+
+# A session id, an immediate retry, or a wait before the next attempt.
+_Attempt = Union[str, _Retry, _Wait]
 
 
 class SparkConnectSessionPool:
@@ -123,105 +202,30 @@ class SparkConnectSessionPool:
                 f"({dpu_request}/{dpu_budget}); other sessions will block until it releases."
             )
 
-        invocation_id = key[0]
+        req = _AcquireRequest(
+            key=key,
+            athena_client=athena_client,
+            spark_work_group=spark_work_group,
+            engine_config=engine_config,
+            session_description=session_description,
+            max_sessions=max_sessions,
+            timeout=timeout,
+            polling_interval=polling_interval,
+            session_concurrency=session_concurrency,
+            dpu_request=dpu_request,
+            dpu_budget=dpu_budget,
+        )
         deadline = time.monotonic() + timeout
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
         pushback_attempts = 0
         skip: Set[str] = set()
 
         while True:
-            new_session_id: Optional[str] = None
-            pushback: Optional[str] = None
-            start_error: Optional[BaseException] = None
-            budget_used = 0
-            budget_ok = False
-            reclaimed_any = False
-            with self._lock:
-                stale_entries = self._collect_stale_invocations(invocation_id)
-                reuse_candidate = self._attach(key, session_concurrency, skip)
-                if reuse_candidate is None:
-                    budget_used = self._used_dpu()
-                    has_room = self._has_room(key, max_sessions)
-                    if has_room and budget_used + dpu_request > dpu_budget:
-                        reclaimed = self._reclaim_idle_for_budget(
-                            key, dpu_request, dpu_budget, budget_used
-                        )
-                        if reclaimed:
-                            stale_entries.extend(reclaimed)
-                            reclaimed_any = True
-                    budget_ok = budget_used + dpu_request <= dpu_budget
-                    if budget_ok and has_room:
-                        try:
-                            new_session_id = self._start(
-                                key,
-                                athena_client,
-                                spark_work_group,
-                                engine_config,
-                                session_description,
-                                dpu_request,
-                            )
-                        except _GlobalSessionLimitReached:
-                            pushback = "session_limit"
-                        except _AccountCapacityUnavailable:
-                            pushback = "capacity"
-                        except _StartSessionThrottled:
-                            pushback = "throttling"
-                        except Exception as e:  # noqa: BLE001 - re-raised after cleanup
-                            start_error = e
-
-            # Stale cleanup runs even on start_session failure to avoid
-            # leaking prior sessions.
-            if stale_entries:
-                self._terminate_entries(stale_entries)
-            if start_error is not None:
-                raise start_error
-            # Athena counts a session against its limits until TerminateSession returns.
-            if reclaimed_any:
+            attempt = self._try_once(req, skip)
+            if isinstance(attempt, str):
+                return attempt
+            if isinstance(attempt, _Retry):
                 continue
-
-            if pushback == "session_limit":
-                LOGGER.warning(
-                    f"Athena rejected StartSession (account session limit) for key {key}; "
-                    f"client-side accounting saw used={budget_used} + request={dpu_request} "
-                    f"<= budget={dpu_budget}. Another process may share the account quota."
-                )
-            elif pushback == "capacity":
-                LOGGER.warning(
-                    f"Athena rejected StartSession for key {key}: AWS region capacity "
-                    f"unavailable. Backing off; this is transient and budget cannot predict it."
-                )
-            elif pushback == "throttling":
-                LOGGER.warning(
-                    f"Athena throttled StartSession (Rate exceeded) for key {key}; "
-                    f"backing off. Lower dbt threads or spark_connect_max_sessions if persistent."
-                )
-
-            if reuse_candidate is not None:
-                # Athena may have killed the session while it sat in the pool.
-                state = self._session_state(reuse_candidate)
-                if state is not None and state not in self._DEAD_SESSION_STATES:
-                    with self._lock:
-                        info = self._sessions.get(reuse_candidate)
-                        if info is not None:
-                            info["idle_since"] = None
-                    LOGGER.debug(f"Reusing Spark Connect session {reuse_candidate} for key {key}")
-                    return reuse_candidate
-                if state is None:
-                    LOGGER.debug(
-                        f"Spark Connect session {reuse_candidate} state is unknown; "
-                        f"skipping it for this acquire"
-                    )
-                    self._undo_attach(reuse_candidate)
-                    skip.add(reuse_candidate)
-                else:
-                    LOGGER.debug(
-                        f"Discarding stale Spark Connect session {reuse_candidate} during reuse"
-                    )
-                    self.unregister(reuse_candidate)
-                continue
-
-            if new_session_id is not None:
-                return new_session_id
 
             # Periodically evict dead sessions so stuck slots don't block.
             if time_since_eviction >= self._EVICTION_INTERVAL:
@@ -234,11 +238,11 @@ class SparkConnectSessionPool:
                 raise DbtRuntimeError(
                     f"No Spark Connect session available for key {key} within {timeout}s "
                     f"(max_sessions={max_sessions}, dpu_request={dpu_request}, "
-                    f"dpu_budget={dpu_budget}, last used_dpu={budget_used}, "
+                    f"dpu_budget={dpu_budget}, last used_dpu={attempt.budget_used}, "
                     f"draining={self._draining_count()}, unknown_state_skipped={len(skip)})"
                 )
 
-            if pushback is not None:
+            if attempt.pushback is not None:
                 pushback_attempts += 1
                 sleep_for = self._pushback_backoff(pushback_attempts)
             else:
@@ -246,6 +250,103 @@ class SparkConnectSessionPool:
                 sleep_for = polling_interval
             time.sleep(sleep_for)
             time_since_eviction += sleep_for
+
+    def _try_once(self, req: _AcquireRequest, skip: Set[str]) -> _Attempt:
+        """Run one acquire attempt: decide under the lock, then clean up and probe outside it."""
+        decision = self._decide(req, skip)
+
+        # Stale cleanup runs even on start_session failure to avoid
+        # leaking prior sessions.
+        if decision.stale_entries:
+            self._terminate_entries(decision.stale_entries)
+        if decision.start_error is not None:
+            raise decision.start_error
+        # Athena counts a session against its limits until TerminateSession returns.
+        if decision.reclaimed_any:
+            return _RETRY
+
+        if decision.pushback is not None:
+            LOGGER.warning(self._pushback_warning(req, decision.pushback, decision.budget_used))
+
+        candidate = decision.reuse_candidate
+        if candidate is not None:
+            if self._confirm_reuse(req.key, candidate, skip):
+                return candidate
+            return _RETRY
+
+        if decision.new_session_id is not None:
+            return decision.new_session_id
+
+        return _Wait(pushback=decision.pushback, budget_used=decision.budget_used)
+
+    def _decide(self, req: _AcquireRequest, skip: Set[str]) -> _Decision:
+        """Pick this attempt's action under ``self._lock``: attach, reclaim, or start."""
+        key = req.key
+        decision = _Decision()
+        with self._lock:
+            decision.stale_entries = self._collect_stale_invocations(key[0])
+            decision.reuse_candidate = self._attach(key, req.session_concurrency, skip)
+            if decision.reuse_candidate is not None:
+                return decision
+            decision.budget_used = self._used_dpu()
+            has_room = self._has_room(key, req.max_sessions)
+            if has_room and decision.budget_used + req.dpu_request > req.dpu_budget:
+                reclaimed = self._reclaim_idle_for_budget(
+                    key, req.dpu_request, req.dpu_budget, decision.budget_used
+                )
+                if reclaimed:
+                    decision.stale_entries.extend(reclaimed)
+                    decision.reclaimed_any = True
+            budget_ok = decision.budget_used + req.dpu_request <= req.dpu_budget
+            if budget_ok and has_room:
+                try:
+                    decision.new_session_id = self._start(
+                        key,
+                        req.athena_client,
+                        req.spark_work_group,
+                        req.engine_config,
+                        req.session_description,
+                        req.dpu_request,
+                    )
+                except _StartSessionPushback as e:
+                    decision.pushback = e.category
+                except Exception as e:  # noqa: BLE001 - re-raised after cleanup
+                    decision.start_error = e
+        return decision
+
+    @staticmethod
+    def _pushback_warning(
+        req: _AcquireRequest, category: PushbackCategory, budget_used: int
+    ) -> str:
+        return _PUSHBACK_WARNINGS[category].format(
+            key=req.key,
+            used=budget_used,
+            request=req.dpu_request,
+            budget=req.dpu_budget,
+        )
+
+    def _confirm_reuse(self, key: SessionKey, candidate: str, skip: Set[str]) -> bool:
+        """Probe the attached ``candidate``; undo or discard it and return False if unusable."""
+        # Athena may have killed the session while it sat in the pool.
+        state = self._session_state(candidate)
+        if state is not None and state not in self._DEAD_SESSION_STATES:
+            with self._lock:
+                info = self._sessions.get(candidate)
+                if info is not None:
+                    info["idle_since"] = None
+            LOGGER.debug(f"Reusing Spark Connect session {candidate} for key {key}")
+            return True
+        if state is None:
+            LOGGER.debug(
+                f"Spark Connect session {candidate} state is unknown; "
+                f"skipping it for this acquire"
+            )
+            self._undo_attach(candidate)
+            skip.add(candidate)
+        else:
+            LOGGER.debug(f"Discarding stale Spark Connect session {candidate} during reuse")
+            self.unregister(candidate)
+        return False
 
     def _pushback_backoff(self, attempts: int) -> float:
         """Full-jitter exponential backoff for consecutive StartSession pushbacks."""
@@ -355,9 +456,9 @@ class SparkConnectSessionPool:
     ) -> str:
         """Start a session and register it. Caller must hold ``self._lock``.
 
-        Translates two transient AWS rejections into typed exceptions for the
-        caller's backoff loop: account session limit and region capacity
-        unavailable. Other errors propagate.
+        Translates transient AWS rejections (account session limit, region
+        capacity, throttling) into ``_StartSessionPushback`` for the caller's
+        backoff loop. Other errors propagate.
         """
         try:
             response = athena_client.start_session(
@@ -367,13 +468,9 @@ class SparkConnectSessionPool:
                 SessionIdleTimeoutInMinutes=SESSION_IDLE_TIMEOUT_MIN,
             )
         except Exception as e:  # noqa: BLE001 - transient errors handled below
-            message = str(e)
-            if "Maximum allowed sessions" in message:
-                raise _GlobalSessionLimitReached() from e
-            if "required capacity not being available" in message:
-                raise _AccountCapacityUnavailable() from e
-            if "ThrottlingException" in message or "Rate exceeded" in message:
-                raise _StartSessionThrottled() from e
+            category = _classify_pushback(str(e))
+            if category is not None:
+                raise _StartSessionPushback(category) from e
             raise
 
         session_id = str(response["SessionId"])

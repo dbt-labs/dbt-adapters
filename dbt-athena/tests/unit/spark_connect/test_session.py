@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any
+from typing import Any, get_args
 from unittest.mock import MagicMock
 
 import pytest
@@ -179,7 +179,15 @@ class TestAcquire:
     def test_timeout_reports_draining_and_unknown_state_sessions(self):
         pool = SparkConnectSessionPool()
         unknown = MagicMock()
-        unknown.get_session_status.side_effect = Exception("boom")
+        probes = {"n": 0}
+
+        def failing_status(SessionId):
+            probes["n"] += 1
+            if probes["n"] > 3:
+                raise _Livelock()
+            raise Exception("boom")
+
+        unknown.get_session_status.side_effect = failing_status
         _register(pool, "sid-unknown", ("inv", "fp"), unknown, load=0)
         _register(pool, "sid-draining", ("inv", "fp-other"), MagicMock(), load=1)
         pool._sessions["sid-draining"]["draining"] = True
@@ -1045,6 +1053,134 @@ class TestStartSessionThrottling:
         for attempts in range(1, 8):
             value = pool._pushback_backoff(attempts)
             assert 0.0 <= value <= pool._PUSHBACK_MAX_BACKOFF_SECONDS
+
+
+class TestStartSessionPushback:
+    KEY = ("inv", "fp")
+    CASES = [
+        pytest.param(
+            "Maximum allowed sessions reached",
+            "Athena rejected StartSession (account session limit) for key ('inv', 'fp'); "
+            "client-side accounting saw used=0 + request=4 <= budget=160. "
+            "Another process may share the account quota.",
+            id="session_limit",
+        ),
+        pytest.param(
+            "Failed to Provision session due to required capacity not being available",
+            "Athena rejected StartSession for key ('inv', 'fp'): AWS region capacity "
+            "unavailable. Backing off; this is transient and budget cannot predict it.",
+            id="capacity",
+        ),
+        pytest.param(
+            "An error occurred (ThrottlingException) when calling StartSession",
+            "Athena throttled StartSession (Rate exceeded) for key ('inv', 'fp'); "
+            "backing off. Lower dbt threads or spark_connect_max_sessions if persistent.",
+            id="throttling_exception",
+        ),
+        pytest.param(
+            "Rate exceeded",
+            "Athena throttled StartSession (Rate exceeded) for key ('inv', 'fp'); "
+            "backing off. Lower dbt threads or spark_connect_max_sessions if persistent.",
+            id="rate_exceeded",
+        ),
+    ]
+
+    @staticmethod
+    def _fail_then_start(errors, session_id="sid-ok"):
+        client = MagicMock()
+        client.start_session.side_effect = [Exception(e) for e in errors] + [
+            {"SessionId": session_id, "State": "IDLE"}
+        ]
+        return client
+
+    def test_every_pushback_category_has_a_warning(self):
+        assert set(session_module._PUSHBACK_WARNINGS) == set(
+            get_args(session_module.PushbackCategory)
+        )
+
+    def test_unknown_category_has_no_warning(self):
+        req = MagicMock(key=self.KEY, dpu_request=4, dpu_budget=160)
+
+        with pytest.raises(KeyError):
+            SparkConnectSessionPool._pushback_warning(req, "bogus", 0)
+
+    @pytest.mark.parametrize("error, expected", CASES)
+    def test_each_category_emits_its_own_warning_text(self, monkeypatch, error, expected):
+        pool = SparkConnectSessionPool()
+        client = self._fail_then_start([error])
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+        warnings = _spy_logger_warnings(monkeypatch)
+
+        sid = _acquire(pool, client, key=self.KEY, dpu_request=4, max_sessions=1)
+
+        assert sid == "sid-ok"
+        assert warnings == [expected]
+
+    @pytest.mark.parametrize("error, expected", CASES)
+    def test_each_category_backs_off_with_growing_jitter_ceiling(
+        self, monkeypatch, error, expected
+    ):
+        pool = SparkConnectSessionPool()
+        client = self._fail_then_start([error, error, error])
+        sleeps: list[float] = []
+        monkeypatch.setattr(time, "sleep", sleeps.append)
+        monkeypatch.setattr(session_module.random, "uniform", lambda _lo, hi: hi)
+
+        _acquire(pool, client, polling_interval=0.01, max_sessions=1)
+
+        assert sleeps == [1.0, 2.0, 4.0]
+
+    def test_backoff_attempts_reset_after_a_wait_without_pushback(self, monkeypatch):
+        pool = SparkConnectSessionPool()
+        client = self._fail_then_start(["Rate exceeded", "Rate exceeded"])
+        sleeps: list[float] = []
+        monkeypatch.setattr(session_module.random, "uniform", lambda _lo, hi: hi)
+
+        def fake_sleep(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) == 1:
+                _register(pool, "sid-busy", self.KEY, MagicMock(), load=1)
+            elif len(sleeps) == 2:
+                pool._sessions.pop("sid-busy")
+
+        monkeypatch.setattr(time, "sleep", fake_sleep)
+
+        _acquire(pool, client, polling_interval=0.01, max_sessions=1)
+
+        assert sleeps == [1.0, 0.01, 1.0]
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            "AccessDeniedException: nope",
+            "InvalidRequestException: something else",
+            "Maximum allowed sessions".lower(),
+        ],
+    )
+    def test_unknown_start_errors_propagate_unchanged_without_retry(self, monkeypatch, error):
+        pool = SparkConnectSessionPool()
+        original = Exception(error)
+        client = MagicMock()
+        client.start_session.side_effect = original
+        monkeypatch.setattr(time, "sleep", lambda *_: pytest.fail("must not wait"))
+        warnings = _spy_logger_warnings(monkeypatch)
+
+        with pytest.raises(Exception) as excinfo:
+            _acquire(pool, client, max_sessions=1)
+
+        assert excinfo.value is original
+        assert client.start_session.call_count == 1
+        assert warnings == []
+
+    def test_unknown_start_error_does_not_leave_a_session_registered(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.start_session.side_effect = Exception("AccessDeniedException: nope")
+
+        with pytest.raises(Exception, match="AccessDeniedException"):
+            _acquire(pool, client, max_sessions=1)
+
+        assert pool._snapshot() == {}
 
 
 class TestReuseLivenessCheck:

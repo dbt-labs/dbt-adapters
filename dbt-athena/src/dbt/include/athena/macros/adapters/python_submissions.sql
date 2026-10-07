@@ -18,7 +18,7 @@ import pyspark
 {{ compiled_code }}
 def materialize(spark_session, df, target_relation):
     import pandas
-{% if spark_engine_version|string == "3.5" %}
+{% if adapter.is_spark_connect_engine(spark_engine_version) %}
     if isinstance(df, pyspark.sql.connect.dataframe.DataFrame):
         pass
 {% else %}

@@ -12,7 +12,12 @@ from dbt.adapters.athena.constants import (
     DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
     DEFAULT_SPARK_PROPERTIES,
     LOGGER,
+    SPARK_CONNECT_ENGINE_VERSION,
 )
+
+
+def is_spark_connect_engine_version(value: Any) -> bool:
+    return str(value) == SPARK_CONNECT_ENGINE_VERSION
 
 
 @lru_cache()
@@ -39,7 +44,7 @@ class AthenaSparkSessionConfig:
     @property
     def is_spark_connect(self) -> bool:
         """True when the model requests Apache Spark 3.5, which runs via Spark Connect."""
-        return self.spark_engine_version == "3.5"
+        return is_spark_connect_engine_version(self.spark_engine_version)
 
     def set_timeout(self) -> int:
         """

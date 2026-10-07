@@ -150,10 +150,8 @@ def test_metadata_appends_current_auth_token_and_drops_stale(fake_pyspark):
 
 
 def test_token_within_refresh_margin_triggers_refresh(fake_pyspark):
-    from dbt.adapters.athena.spark_connect.channel import (
-        _TOKEN_REFRESH_MARGIN_SECONDS,
-        create_athena_channel_builder,
-    )
+    from dbt.adapters.athena.constants import TOKEN_REFRESH_MARGIN_SECONDS
+    from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     athena_client = Mock()
     athena_client.get_session_endpoint.return_value = {
@@ -166,7 +164,7 @@ def test_token_within_refresh_margin_triggers_refresh(fake_pyspark):
         session_id="sid",
         endpoint_url="https://x",
         initial_auth_token="stale-token",
-        initial_token_expiry=_future(_TOKEN_REFRESH_MARGIN_SECONDS - 1),
+        initial_token_expiry=_future(TOKEN_REFRESH_MARGIN_SECONDS - 1),
     )
 
     md = builder.metadata()
@@ -176,10 +174,8 @@ def test_token_within_refresh_margin_triggers_refresh(fake_pyspark):
 
 
 def test_token_outside_refresh_margin_does_not_refresh(fake_pyspark):
-    from dbt.adapters.athena.spark_connect.channel import (
-        _TOKEN_REFRESH_MARGIN_SECONDS,
-        create_athena_channel_builder,
-    )
+    from dbt.adapters.athena.constants import TOKEN_REFRESH_MARGIN_SECONDS
+    from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 
     athena_client = Mock()
 
@@ -188,7 +184,7 @@ def test_token_outside_refresh_margin_does_not_refresh(fake_pyspark):
         session_id="sid",
         endpoint_url="https://x",
         initial_auth_token="fresh-token",
-        initial_token_expiry=_future(_TOKEN_REFRESH_MARGIN_SECONDS + 60),
+        initial_token_expiry=_future(TOKEN_REFRESH_MARGIN_SECONDS + 60),
     )
 
     builder.metadata()

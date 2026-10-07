@@ -16,6 +16,7 @@ from typing import (
     cast,
     Deque,
     Dict,
+    FrozenSet,
     List,
     Optional,
     Tuple,
@@ -47,6 +48,12 @@ from tenacity import (
 
 from dbt.adapters.athena.config import get_boto3_config
 from dbt.adapters.athena.constants import (
+    DEFAULT_SPARK_CONNECT_DPU_BUDGET,
+    DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL,
+    DEFAULT_SPARK_CONNECT_MAX_RETRIES,
+    DEFAULT_SPARK_CONNECT_MAX_SESSIONS,
+    DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT,
+    DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY,
     LOGGER,
     SESSION_IDLE_TIMEOUT_MIN,
     SPARK_CONNECT_RETRY_CATEGORIES,
@@ -58,6 +65,7 @@ from dbt.adapters.athena.exceptions import (
 )
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
+from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 from dbt.adapters.athena.connections_legacy import (
     AthenaConnectionManager as PyAthenaConnectionManager,
 )
@@ -82,6 +90,10 @@ def _is_int_at_least(value: Any, minimum: int) -> bool:
         return int(value) >= minimum
     except (TypeError, ValueError):
         return False
+
+
+def _default_if_none(value: Optional[int], default: int) -> int:
+    return default if value is None else value
 
 
 @dataclass
@@ -191,6 +203,44 @@ class AthenaCredentials(Credentials):
     @property
     def effective_num_retries(self) -> int:
         return self.num_boto3_retries or self.num_retries
+
+    @property
+    def effective_spark_connect_max_sessions(self) -> int:
+        return _default_if_none(
+            self.spark_connect_max_sessions, DEFAULT_SPARK_CONNECT_MAX_SESSIONS
+        )
+
+    @property
+    def effective_spark_connect_session_concurrency(self) -> int:
+        return _default_if_none(
+            self.spark_connect_session_concurrency, DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY
+        )
+
+    @property
+    def effective_spark_connect_dpu_budget(self) -> int:
+        return _default_if_none(self.spark_connect_dpu_budget, DEFAULT_SPARK_CONNECT_DPU_BUDGET)
+
+    @property
+    def effective_spark_connect_pool_acquire_timeout(self) -> int:
+        return _default_if_none(
+            self.spark_connect_pool_acquire_timeout, DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT
+        )
+
+    @property
+    def effective_spark_connect_max_retries(self) -> int:
+        return _default_if_none(self.spark_connect_max_retries, DEFAULT_SPARK_CONNECT_MAX_RETRIES)
+
+    @property
+    def effective_spark_connect_retry_on(self) -> FrozenSet[str]:
+        if self.spark_connect_retry_on is None:
+            return frozenset(SPARK_CONNECT_RETRY_CATEGORIES)
+        return frozenset(self.spark_connect_retry_on)
+
+    @property
+    def effective_spark_connect_keepalive_interval(self) -> int:
+        return _default_if_none(
+            self.spark_connect_keepalive_interval, DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL
+        )
 
     def _connection_keys(self) -> Tuple[str, ...]:
         return (
@@ -850,10 +900,6 @@ class AthenaConnectionManager(SQLConnectionManager):
     def cleanup_all(self) -> None:
         # Release DPUs immediately instead of waiting for the 10-min idle timeout.
         from dbt_common.invocation import get_invocation_id
-
-        from dbt.adapters.athena.spark_connect.session import (
-            SparkConnectSessionPool,
-        )
 
         # Scope to this invocation; the singleton is shared across invocations
         # in dbt Cloud workers and test harnesses.

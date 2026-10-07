@@ -40,7 +40,9 @@ class SessionKeepalive:
 
     def stop(self) -> None:
         self._stop.set()
-        if self._thread is None:
+        # A thread whose start() failed cannot be joined, and the join error
+        # would replace the exception that is being propagated.
+        if self._thread is None or self._thread.ident is None:
             return
         self._thread.join(timeout=_STOP_JOIN_TIMEOUT_SECONDS)
         if self._thread.is_alive():

@@ -1,6 +1,9 @@
 """Tests for the Spark Connect submission path (Apache Spark 3.5+)."""
 
+import os
+import re
 import sys
+import threading
 import time
 from unittest.mock import MagicMock, Mock, patch
 
@@ -10,8 +13,14 @@ import botocore.session
 import pytest
 from dbt_common.exceptions import DbtRuntimeError
 
+from dbt.adapters.athena.connections import AthenaCredentials
 from dbt.adapters.athena.python_submissions import AthenaPythonJobHelper
-from dbt.adapters.athena.spark_connect.job import SparkConnectSubmitter, _spark_max_executors
+from dbt.adapters.athena.spark_connect.job import (
+    SparkConnectSubmitter,
+    _ExecutionGuard,
+    _spark_max_executors,
+    _TransientAttemptFailure,
+)
 from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 
 
@@ -39,25 +48,15 @@ class TestSparkConnectSubmission:
 
     @pytest.fixture
     def mock_credentials(self):
-        credentials = Mock()
-        credentials.aws_access_key_id = None
-        credentials.aws_secret_access_key = None
-        credentials.aws_session_token = None
-        credentials.region_name = "us-east-1"
-        credentials.aws_profile_name = None
-        credentials.assume_role_arn = None
-        credentials.spark_work_group = "test-workgroup"
-        credentials.spark_connect_max_sessions = 2
-        credentials.spark_connect_session_concurrency = None
-        credentials.spark_connect_dpu_budget = None
-        credentials.spark_connect_pool_acquire_timeout = None
-        credentials.spark_connect_max_retries = None
-        credentials.spark_connect_retry_on = None
-        credentials.spark_connect_keepalive_interval = None
-        credentials.poll_interval = 0.01
-        credentials.num_retries = 3
-        credentials.effective_num_retries = 3
-        return credentials
+        return AthenaCredentials(
+            database="db",
+            schema="schema",
+            region_name="us-east-1",
+            spark_work_group="test-workgroup",
+            spark_connect_max_sessions=2,
+            poll_interval=0.01,
+            num_retries=3,
+        )
 
     @pytest.fixture
     def spark_connect_parsed_model(self):
@@ -134,8 +133,7 @@ class TestSparkConnectSubmission:
             polling_interval=parsed_model["config"]["polling_interval"],
             relation_name=parsed_model.get("relation_name"),
         )
-        # Bypass the cached_property so the pool is fully mockable.
-        submitter.__dict__["_pool"] = mock_pool
+        submitter._pool = mock_pool
         return submitter
 
     def _stub_endpoint_and_channel(self, submitter, monkeypatch):
@@ -982,6 +980,282 @@ class TestSparkConnectSubmission:
         fake_spark.removeTag.assert_called_once()
 
 
+class _FakeRpcCode:
+    def __init__(self, name):
+        self.name = name
+
+
+class _FakeRpcError(Exception):
+    def __init__(self, message, code_name):
+        super().__init__(message)
+        self._code = _FakeRpcCode(code_name)
+
+    def code(self):
+        return self._code
+
+
+class TestTransientAttemptFailure:
+    @pytest.fixture
+    def submitter(self):
+        credentials = AthenaCredentials(
+            database="db", schema="schema", region_name="us-east-1", spark_work_group="wg"
+        )
+        submitter = SparkConnectSubmitter(
+            athena_client=Mock(),
+            credentials=credentials,
+            config=Mock(spark_engine_version="3.5"),
+            engine_config={"MaxConcurrentDpus": 2},
+            timeout=5,
+            polling_interval=0.01,
+            relation_name="rel",
+        )
+        submitter._pool = Mock()
+        return submitter
+
+    def _classify(self, submitter, error, attempt=1):
+        try:
+            raise error
+        except Exception as e:
+            return submitter._classify_failure(e, "sid-1", attempt)
+
+    def test_transient_error_carries_its_classification(self, submitter):
+        error = Exception("Pool not running")
+
+        failure = self._classify(submitter, error)
+
+        assert failure.error is error
+        assert failure.session_id == "sid-1"
+        assert failure.category == "connection"
+        assert failure.retryable is True
+        assert failure.session_ended is False
+
+    def test_category_outside_retry_on_is_not_retryable(self, submitter):
+        submitter.credentials.spark_connect_retry_on = ["capacity"]
+
+        failure = self._classify(submitter, Exception("Pool not running"))
+
+        assert (failure.category, failure.retryable) == ("connection", False)
+
+    def test_dead_session_after_permission_denied_is_session_ended(self, submitter):
+        submitter._pool.is_session_alive.return_value = False
+
+        failure = self._classify(submitter, _FakeRpcError("403", "PERMISSION_DENIED"))
+
+        assert (failure.category, failure.session_ended) == ("session_ended", True)
+        submitter._pool.is_session_alive.assert_called_once_with("sid-1")
+
+    def test_live_session_after_permission_denied_stays_connection(self, submitter):
+        submitter._pool.is_session_alive.return_value = True
+
+        failure = self._classify(submitter, _FakeRpcError("403", "PERMISSION_DENIED"))
+
+        assert (failure.category, failure.session_ended) == ("connection", False)
+
+    def test_unclassified_error_is_not_transient(self, submitter):
+        error = self._classify(submitter, ValueError("boom"))
+
+        assert isinstance(error, DbtRuntimeError)
+        assert re.search(r"failed \(session sid-1\): ValueError: boom", str(error))
+
+    def test_attempt_raises_failure_and_terminates_session(self, submitter, monkeypatch):
+        submitter._pool.acquire.return_value = "sid-1"
+        monkeypatch.setattr(submitter, "_get_or_create_spark", Mock(return_value=MagicMock()))
+
+        with pytest.raises(_TransientAttemptFailure) as excinfo:
+            submitter._attempt("raise Exception('Pool not running')", 1, time.monotonic())
+
+        assert excinfo.value.session_id == "sid-1"
+        assert excinfo.value.category == "connection"
+        submitter._pool.terminate.assert_called_once_with("sid-1")
+        submitter._pool.release.assert_not_called()
+
+    def test_attempt_classifies_before_guard_cleanup(self, submitter, monkeypatch):
+        submitter._pool.acquire.return_value = "sid-1"
+        spark = MagicMock()
+        monkeypatch.setattr(submitter, "_get_or_create_spark", Mock(return_value=spark))
+        calls = []
+        spark.removeTag.side_effect = lambda *_: calls.append("removeTag")
+        original_failure_for = submitter._failure_for
+
+        def failure_for(*args, **kwargs):
+            calls.append("classify")
+            return original_failure_for(*args, **kwargs)
+
+        monkeypatch.setattr(submitter, "_failure_for", failure_for)
+
+        with pytest.raises(_TransientAttemptFailure):
+            submitter._attempt("raise Exception('Pool not running')", 1, time.monotonic())
+
+        assert calls == ["classify", "removeTag"]
+
+    def test_watchdog_firing_during_cleanup_does_not_turn_failure_into_timeout(
+        self, submitter, monkeypatch
+    ):
+        submitter._pool.acquire.return_value = "sid-1"
+        monkeypatch.setattr(submitter, "_get_or_create_spark", Mock(return_value=MagicMock()))
+        original_release = _ExecutionGuard._release
+
+        def release_then_fire(guard):
+            guard._timeout_event.set()
+            original_release(guard)
+
+        monkeypatch.setattr(_ExecutionGuard, "_release", release_then_fire)
+
+        with pytest.raises(_TransientAttemptFailure):
+            submitter._attempt("raise Exception('Pool not running')", 1, time.monotonic())
+
+    def test_attempt_releases_session_for_unclassified_error(self, submitter, monkeypatch):
+        submitter._pool.acquire.return_value = "sid-1"
+        monkeypatch.setattr(submitter, "_get_or_create_spark", Mock(return_value=MagicMock()))
+
+        with pytest.raises(DbtRuntimeError):
+            submitter._attempt("raise ValueError('boom')", 1, time.monotonic())
+
+        submitter._pool.release.assert_called_once_with("sid-1")
+        submitter._pool.terminate.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "session_ended, retryable, expected",
+        [
+            (True, True, "Athena terminated Spark session sid-1"),
+            (True, False, "Athena terminated Spark session sid-1"),
+            (False, False, "category 'capacity' is not in spark_connect_retry_on"),
+            (False, True, r"failed after 3 attempts \(last session sid-1\)"),
+        ],
+    )
+    def test_final_error_message_follows_failure_attributes(
+        self, submitter, session_ended, retryable, expected
+    ):
+        failure = _TransientAttemptFailure(
+            Exception("oops"), "sid-1", session_ended, retryable, "capacity"
+        )
+
+        error = submitter._final_error(failure, 3)
+
+        assert re.search(expected, str(error))
+        assert type(error).__name__ == (
+            "SparkSessionTerminatedError" if session_ended else "DbtRuntimeError"
+        )
+        assert "oops" in str(error)
+
+
+class TestExecutionGuard:
+    @pytest.fixture
+    def keepalive_cls(self, monkeypatch):
+        cls = Mock()
+        monkeypatch.setattr("dbt.adapters.athena.spark_connect.job.SessionKeepalive", cls)
+        return cls
+
+    def _guard(self, spark, *, budget=60.0, keepalive_interval=300, event=None):
+        return _ExecutionGuard(
+            spark=spark,
+            session_id="sid-1",
+            relation_name="rel",
+            timeout=budget,
+            budget=budget,
+            keepalive_interval=keepalive_interval,
+            timeout_event=event or threading.Event(),
+        )
+
+    def test_tags_during_body_and_cleans_up_after(self, keepalive_cls):
+        spark = MagicMock()
+        guard = self._guard(spark)
+
+        with guard:
+            tag = spark.addTag.call_args.args[0]
+            keepalive_cls.return_value.start.assert_called_once()
+            spark.removeTag.assert_not_called()
+
+        keepalive_cls.return_value.stop.assert_called_once()
+        spark.removeTag.assert_called_once_with(tag)
+        assert guard._timer is not None and not guard._timer.is_alive()
+
+    def test_cleans_up_when_body_raises(self, keepalive_cls):
+        spark = MagicMock()
+        guard = self._guard(spark)
+
+        with pytest.raises(RuntimeError, match="body failed"):
+            with guard:
+                raise RuntimeError("body failed")
+
+        keepalive_cls.return_value.stop.assert_called_once()
+        spark.removeTag.assert_called_once()
+        assert not guard._timer.is_alive()
+
+    def test_zero_interval_starts_no_keepalive(self, keepalive_cls):
+        with self._guard(MagicMock(), keepalive_interval=0):
+            pass
+
+        keepalive_cls.assert_not_called()
+
+    def test_failed_start_still_cleans_up(self, keepalive_cls):
+        spark = MagicMock()
+        keepalive_cls.return_value.start.side_effect = RuntimeError("cannot start")
+        guard = self._guard(spark)
+
+        with pytest.raises(RuntimeError, match="cannot start"):
+            guard.__enter__()
+
+        keepalive_cls.return_value.stop.assert_called_once()
+        spark.removeTag.assert_called_once()
+
+    def test_failed_timer_start_propagates_original_error_and_removes_tag(
+        self, keepalive_cls, monkeypatch
+    ):
+        spark = MagicMock()
+
+        def failing_start(_timer):
+            raise RuntimeError("can't start new thread")
+
+        monkeypatch.setattr(threading.Timer, "start", failing_start)
+
+        with pytest.raises(RuntimeError, match="can't start new thread"):
+            self._guard(spark).__enter__()
+
+        keepalive_cls.return_value.stop.assert_called_once()
+        spark.removeTag.assert_called_once()
+
+    def test_failed_keepalive_thread_start_propagates_original_error_and_removes_tag(
+        self, monkeypatch
+    ):
+        spark = MagicMock()
+
+        def failing_start(_thread):
+            raise RuntimeError("can't start new thread")
+
+        monkeypatch.setattr(threading.Thread, "start", failing_start)
+
+        with pytest.raises(RuntimeError, match="can't start new thread"):
+            self._guard(spark).__enter__()
+
+        spark.removeTag.assert_called_once()
+
+    def test_failed_add_tag_removes_no_tag(self, keepalive_cls):
+        spark = MagicMock()
+        spark.addTag.side_effect = RuntimeError("no tag")
+
+        with pytest.raises(RuntimeError, match="no tag"):
+            self._guard(spark).__enter__()
+
+        spark.removeTag.assert_not_called()
+
+    def test_remove_tag_failure_is_ignored(self, keepalive_cls):
+        spark = MagicMock()
+        spark.removeTag.side_effect = RuntimeError("gone")
+
+        with self._guard(spark):
+            pass
+
+    def test_watchdog_interrupts_tag_and_sets_event(self, keepalive_cls):
+        spark = MagicMock()
+        event = threading.Event()
+
+        with self._guard(spark, budget=0.01, event=event):
+            assert event.wait(5)
+
+        spark.interruptTag.assert_called_once_with(spark.addTag.call_args.args[0])
+
+
 class TestDpuRequestComputation:
     """The submitter must reserve the tightest correct upper bound against
     the DPU budget: ``min(MaxConcurrentDpus, maxExecutors + 1)``.
@@ -1033,16 +1307,53 @@ class TestDpuRequestComputation:
 
     @pytest.fixture
     def mock_credentials(self):
-        c = Mock()
-        c.spark_work_group = "wg"
-        c.spark_connect_dpu_budget = None
-        c.spark_connect_max_sessions = None
-        c.spark_connect_session_concurrency = None
-        c.spark_connect_pool_acquire_timeout = None
-        c.spark_connect_max_retries = None
-        c.spark_connect_retry_on = None
-        c.spark_connect_keepalive_interval = None
-        return c
+        return AthenaCredentials(
+            database="db", schema="schema", region_name="us-east-1", spark_work_group="wg"
+        )
+
+    def test_acquire_session_leaves_connect_mode_env_alone(self, mock_credentials, monkeypatch):
+        monkeypatch.delenv("SPARK_CONNECT_MODE_ENABLED", raising=False)
+        submitter = self._make_submitter_with_engine_config(
+            {"MaxConcurrentDpus": 4}, mock_credentials
+        )
+        submitter._pool = Mock()
+
+        submitter._acquire_session(1.0)
+
+        assert "SPARK_CONNECT_MODE_ENABLED" not in os.environ
+
+    def test_credentials_values_reach_pool_acquire(self, mock_credentials):
+        mock_credentials.spark_connect_max_sessions = 5
+        mock_credentials.spark_connect_session_concurrency = 3
+        mock_credentials.spark_connect_dpu_budget = 40
+        submitter = self._make_submitter_with_engine_config(
+            {"MaxConcurrentDpus": 4}, mock_credentials
+        )
+        submitter._pool = Mock()
+        submitter._pool.acquire.return_value = "sid"
+
+        assert submitter._acquire_session(12.5) == "sid"
+
+        kwargs = submitter._pool.acquire.call_args.kwargs
+        assert kwargs["max_sessions"] == 5
+        assert kwargs["session_concurrency"] == 3
+        assert kwargs["dpu_budget"] == 40
+        assert kwargs["dpu_request"] == 4
+        assert kwargs["timeout"] == 12.5
+
+    def test_empty_code_does_not_evaluate_engine_config(self, mock_credentials):
+        submitter = self._make_submitter_with_engine_config({}, mock_credentials)
+
+        assert submitter.submit("  \n") == {"SparkConnect": True, "SparkSessionId": None}
+
+    def test_derived_values_follow_current_inputs(self, mock_credentials):
+        submitter = self._make_submitter_with_engine_config(
+            {"MaxConcurrentDpus": 4}, mock_credentials
+        )
+        before = submitter._dpu_request
+        submitter.engine_config = {"MaxConcurrentDpus": 2}
+
+        assert (before, submitter._dpu_request) == (4, 2)
 
     def test_dpu_request_uses_min_of_dpus_and_executors_plus_driver(self, mock_credentials):
         ec = {
@@ -1076,49 +1387,6 @@ class TestDpuRequestComputation:
         ec = {"MaxConcurrentDpus": 4}
         submitter = self._make_submitter_with_engine_config(ec, mock_credentials)
         assert submitter._dpu_request == 4
-
-    def test_dpu_budget_defaults_when_credential_missing(self, mock_credentials):
-        from dbt.adapters.athena.constants import DEFAULT_SPARK_CONNECT_DPU_BUDGET
-
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._dpu_budget == DEFAULT_SPARK_CONNECT_DPU_BUDGET
-
-    def test_dpu_budget_uses_credential_override(self, mock_credentials):
-        mock_credentials.spark_connect_dpu_budget = 80
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._dpu_budget == 80
-
-    def test_pool_acquire_timeout_defaults_when_credential_missing(self, mock_credentials):
-        from dbt.adapters.athena.constants import DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT
-
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._pool_acquire_timeout == DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT
-
-    def test_pool_acquire_timeout_uses_credential_override(self, mock_credentials):
-        mock_credentials.spark_connect_pool_acquire_timeout = 1800
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._pool_acquire_timeout == 1800
-
-    def test_keepalive_interval_defaults_to_half_the_session_idle_timeout(self, mock_credentials):
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._keepalive_interval == 300
-
-    def test_keepalive_interval_uses_credential_override(self, mock_credentials):
-        mock_credentials.spark_connect_keepalive_interval = 0
-        submitter = self._make_submitter_with_engine_config(
-            {"MaxConcurrentDpus": 2}, mock_credentials
-        )
-        assert submitter._keepalive_interval == 0
 
 
 class TestWaitForEndpoint:

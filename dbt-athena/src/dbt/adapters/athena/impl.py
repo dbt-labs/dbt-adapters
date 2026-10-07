@@ -50,7 +50,7 @@ from dbt.adapters.athena.catalogs import (
     S3TablesCatalogIntegration,
 )
 from dbt.adapters.athena.column import AthenaColumn
-from dbt.adapters.athena.config import get_boto3_config
+from dbt.adapters.athena.config import get_boto3_config, is_spark_connect_engine_version
 from dbt.adapters.athena.connections import AthenaAdapterResponse, AthenaCursor, AthenaError
 from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
@@ -1704,6 +1704,10 @@ class AthenaAdapter(SQLAdapter):
                 return "TOO_MANY_OPEN_PARTITIONS"
             raise e
         return f'{{"rowcount":{cursor.rowcount},"data_scanned_in_bytes":{cursor.data_scanned_in_bytes}}}'
+
+    @available
+    def is_spark_connect_engine(self, spark_engine_version: Any) -> bool:
+        return is_spark_connect_engine_version(spark_engine_version)
 
     @available
     def format_partition_keys(self, partition_keys: List[str]) -> str:

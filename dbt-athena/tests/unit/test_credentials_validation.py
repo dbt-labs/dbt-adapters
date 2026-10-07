@@ -1,5 +1,6 @@
 import pytest
 
+from dbt.adapters.athena import constants as constants_module
 from dbt.adapters.athena.connections import AthenaCredentials
 from dbt_common.exceptions import DbtRuntimeError
 
@@ -112,3 +113,42 @@ class TestSparkConnectKeepaliveIntervalValidation:
 
     def test_interval_just_below_idle_timeout_is_accepted(self):
         assert _make(spark_connect_keepalive_interval=599).spark_connect_keepalive_interval == 599
+
+
+class TestEffectiveSparkConnectValues:
+    _DEFAULTS = {
+        "max_sessions": constants_module.DEFAULT_SPARK_CONNECT_MAX_SESSIONS,
+        "session_concurrency": constants_module.DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY,
+        "dpu_budget": constants_module.DEFAULT_SPARK_CONNECT_DPU_BUDGET,
+        "pool_acquire_timeout": constants_module.DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT,
+        "max_retries": constants_module.DEFAULT_SPARK_CONNECT_MAX_RETRIES,
+        "keepalive_interval": constants_module.DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL,
+    }
+
+    @pytest.mark.parametrize("name", sorted(_DEFAULTS))
+    def test_unset_resolves_to_default(self, name):
+        assert getattr(_make(), f"effective_spark_connect_{name}") == self._DEFAULTS[name]
+
+    @pytest.mark.parametrize("name", sorted(_DEFAULTS))
+    def test_explicit_value_wins(self, name):
+        c = _make(**{f"spark_connect_{name}": 7})
+        assert getattr(c, f"effective_spark_connect_{name}") == 7
+
+    @pytest.mark.parametrize("name", sorted(_DEFAULTS))
+    def test_zero_is_kept(self, name):
+        c = _make()
+        setattr(c, f"spark_connect_{name}", 0)
+        assert getattr(c, f"effective_spark_connect_{name}") == 0
+
+    def test_retry_on_unset_means_every_category(self):
+        assert _make().effective_spark_connect_retry_on == frozenset(
+            constants_module.SPARK_CONNECT_RETRY_CATEGORIES
+        )
+
+    def test_retry_on_explicit_list(self):
+        c = _make(spark_connect_retry_on=["capacity"])
+        assert c.effective_spark_connect_retry_on == frozenset({"capacity"})
+
+    def test_retry_on_empty_list_means_no_category(self):
+        c = _make(spark_connect_retry_on=[])
+        assert c.effective_spark_connect_retry_on == frozenset()

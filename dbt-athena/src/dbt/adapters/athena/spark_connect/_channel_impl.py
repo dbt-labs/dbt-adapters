@@ -12,10 +12,14 @@ from typing import List, Optional, Tuple
 
 from dbt_common.exceptions import DbtRuntimeError
 from mypy_boto3_athena.client import AthenaClient
-from pyspark.sql.connect.client.core import ChannelBuilder
 
-from dbt.adapters.athena.spark_connect.channel import _TOKEN_REFRESH_MARGIN_SECONDS
+from dbt.adapters.athena.constants import TOKEN_REFRESH_MARGIN_SECONDS
+from dbt.adapters.athena.spark_connect._env import ensure_connect_mode_env
 from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+ensure_connect_mode_env()
+
+from pyspark.sql.connect.client.core import ChannelBuilder  # noqa: E402
 
 apply_pyspark_workarounds()
 
@@ -60,7 +64,7 @@ class AthenaChannelBuilder(ChannelBuilder):
         if not (self._auth_token and self._token_expiry):
             return False
         remaining = (self._token_expiry - datetime.now(timezone.utc)).total_seconds()
-        return remaining > _TOKEN_REFRESH_MARGIN_SECONDS
+        return remaining > TOKEN_REFRESH_MARGIN_SECONDS
 
     def metadata(self) -> List[Tuple[str, str]]:
         self._refresh_token()

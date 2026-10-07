@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Dict, FrozenSet, Iterator, List, Optional
 
-from dbt.adapters.athena.constants import SPARK_CONNECT_RETRY_CATEGORIES
+from dbt.adapters.athena.constants import (
+    SPARK_CONNECT_RETRY_CATEGORIES,
+    SparkConnectRetryCategory,
+)
 
 SESSION_ENDED, CAPACITY, EXECUTOR_ENVIRONMENT, CONNECTION = SPARK_CONNECT_RETRY_CATEGORIES
 
@@ -17,7 +20,7 @@ SESSION_ENDED_PATTERNS = [
     "Session endpoint URL for Session in STOPPED state",
 ]
 
-TRANSIENT_SPARK_PATTERNS_BY_CATEGORY: Dict[str, List[str]] = {
+TRANSIENT_SPARK_PATTERNS_BY_CATEGORY: Dict[SparkConnectRetryCategory, List[str]] = {
     SESSION_ENDED: SESSION_ENDED_PATTERNS,
     CAPACITY: [
         # Account/workgroup session quota exhausted; retry after others finish.
@@ -39,7 +42,7 @@ TRANSIENT_SPARK_PATTERNS = [
     p for patterns in TRANSIENT_SPARK_PATTERNS_BY_CATEGORY.values() for p in patterns
 ]
 
-TRANSIENT_GRPC_STATUS_CODES_BY_CATEGORY: Dict[str, FrozenSet[str]] = {
+TRANSIENT_GRPC_STATUS_CODES_BY_CATEGORY: Dict[SparkConnectRetryCategory, FrozenSet[str]] = {
     CAPACITY: frozenset({"RESOURCE_EXHAUSTED"}),
     # PERMISSION_DENIED reaches the job level only when pyspark_patches'
     # in-stream reattach has already given up, so a fresh session is the
@@ -69,7 +72,7 @@ def _iter_grpc_status_codes(e: BaseException) -> Iterator[str]:
         current = current.__cause__ or current.__context__
 
 
-def classify_transient_spark_error(e: BaseException) -> Optional[str]:
+def classify_transient_spark_error(e: BaseException) -> Optional[SparkConnectRetryCategory]:
     """Return the transient category of ``e``, or None if it is not transient."""
     error_str = f"{type(e).__name__}: {e}"
     for category, patterns in TRANSIENT_SPARK_PATTERNS_BY_CATEGORY.items():
