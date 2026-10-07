@@ -345,7 +345,7 @@ class TestSparkConnectSubmission:
         mock_pool.release.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_not_called()
 
-    def test_permission_denied_with_dead_session_fails_fast(
+    def test_permission_denied_with_dead_session_retries_with_new_session(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
     ):
         class _FakeCode:
@@ -358,6 +358,39 @@ class TestSparkConnectSubmission:
             def code(self):
                 return _FakeCode()
 
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        mock_pool.is_session_alive.return_value = False
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        first_spark = MagicMock()
+        first_spark.run.side_effect = _FakeRpcError()
+        second_spark = MagicMock()
+        self._set_spark_create(side_effect=[first_spark, second_spark])
+
+        result = submitter.submit("spark.run()")
+
+        assert result == {"SparkConnect": True, "SparkSessionId": "sid-2"}
+        assert mock_pool.acquire.call_count == 2
+        mock_pool.terminate.assert_called_once_with("sid-1")
+        mock_pool.release.assert_called_once_with("sid-2")
+
+    def test_permission_denied_with_dead_session_on_last_attempt_raises_terminated(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        class _FakeCode:
+            name = "PERMISSION_DENIED"
+
+        class _FakeRpcError(Exception):
+            def __init__(self):
+                super().__init__("Received http2 header with status: 403")
+
+            def code(self):
+                return _FakeCode()
+
+        mock_credentials.spark_connect_max_retries = 0
         mock_pool = self._mock_pool()
         mock_pool.acquire.return_value = "sid-1"
         mock_pool.is_session_alive.return_value = False
@@ -381,8 +414,124 @@ class TestSparkConnectSubmission:
 
         assert mock_pool.acquire.call_count == 1
         mock_pool.is_session_alive.assert_called_once_with(submitter.athena_client, "sid-1")
-        mock_pool.release.assert_called_once_with("sid-1")
-        mock_pool.terminate.assert_not_called()
+        mock_pool.terminate.assert_called_once_with("sid-1")
+        mock_pool.release.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "[NO_ACTIVE_SESSION] No active Spark session found. "
+            "Please create a new Spark session before running the code.",
+            "An error occurred (InvalidRequestException) when calling the "
+            "GetSessionEndpoint operation: Can not generate Session endpoint URL "
+            "for Session in STOPPED state",
+        ],
+    )
+    def test_session_ended_by_athena_retries_with_new_session(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch, message
+    ):
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        first_spark = MagicMock()
+        first_spark.run.side_effect = Exception(message)
+        second_spark = MagicMock()
+        self._set_spark_create(side_effect=[first_spark, second_spark])
+
+        result = submitter.submit("spark.run()")
+
+        assert result == {"SparkConnect": True, "SparkSessionId": "sid-2"}
+        mock_pool.terminate.assert_called_once_with("sid-1")
+        mock_pool.release.assert_called_once_with("sid-2")
+
+    @pytest.mark.parametrize("session_alive", [False, True])
+    def test_session_ended_message_on_last_attempt_raises_by_session_state(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch, session_alive
+    ):
+        mock_credentials.spark_connect_max_retries = 0
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.return_value = "sid-1"
+        mock_pool.is_session_alive.return_value = session_alive
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception(
+            "[NO_ACTIVE_SESSION] No active Spark session found."
+        )
+        self._set_spark_create(return_value=fake_spark)
+
+        from dbt.adapters.athena.exceptions import SparkSessionTerminatedError
+
+        with pytest.raises(DbtRuntimeError) as excinfo:
+            submitter.submit("spark.run()")
+
+        assert isinstance(excinfo.value, SparkSessionTerminatedError) is (not session_alive)
+        mock_pool.is_session_alive.assert_called_once_with(submitter.athena_client, "sid-1")
+        mock_pool.terminate.assert_called_once_with("sid-1")
+
+    def test_session_ended_when_backoff_exceeds_timeout_raises_terminated(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        short_budget_model = dict(spark_connect_parsed_model)
+        short_budget_model["config"] = dict(spark_connect_parsed_model["config"])
+        short_budget_model["config"]["timeout"] = 1
+
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        mock_pool.is_session_alive.return_value = False
+        submitter = self._make_submitter(short_budget_model, mock_credentials, mock_pool)
+        self._stub_endpoint_and_channel(submitter, monkeypatch)
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+
+        fake_spark = MagicMock()
+        fake_spark.run.side_effect = Exception("Session not active")
+        self._set_spark_create(return_value=fake_spark)
+
+        from dbt.adapters.athena.exceptions import SparkSessionTerminatedError
+
+        with pytest.raises(
+            SparkSessionTerminatedError, match="Athena terminated Spark session sid-1"
+        ):
+            submitter.submit("spark.run()")
+
+        assert mock_pool.acquire.call_count == 1
+
+    def test_session_ended_on_endpoint_lookup_retries_with_new_session(
+        self, mock_credentials, spark_connect_parsed_model, monkeypatch
+    ):
+        stopped = botocore.exceptions.ClientError(
+            error_response={
+                "Error": {
+                    "Code": "InvalidRequestException",
+                    "Message": "Can not generate Session endpoint URL for Session in STOPPED state",
+                }
+            },
+            operation_name="GetSessionEndpoint",
+        )
+        mock_pool = self._mock_pool()
+        mock_pool.acquire.side_effect = ["sid-1", "sid-2"]
+        submitter = self._make_submitter(spark_connect_parsed_model, mock_credentials, mock_pool)
+        submitter.athena_client.get_session_endpoint.side_effect = [
+            stopped,
+            {"EndpointUrl": "https://x", "AuthToken": "tok"},
+        ]
+        monkeypatch.setattr(
+            "dbt.adapters.athena.spark_connect.job.create_athena_channel_builder",
+            Mock(return_value=Mock()),
+        )
+        monkeypatch.setattr(time, "sleep", lambda *_: None)
+        monkeypatch.setattr("tenacity.nap.time.sleep", lambda *_: None)
+        self._set_spark_create(return_value=MagicMock())
+
+        result = submitter.submit("spark.run()")
+
+        assert result == {"SparkConnect": True, "SparkSessionId": "sid-2"}
+        mock_pool.terminate.assert_called_once_with("sid-1")
+        mock_pool.release.assert_called_once_with("sid-2")
 
     def test_permission_denied_with_live_session_still_retries(
         self, mock_credentials, spark_connect_parsed_model, monkeypatch
@@ -934,3 +1083,26 @@ class TestWaitForEndpoint:
 
         assert response["AuthToken"] == "tok"
         assert client.get_session_endpoint.call_count == 2
+
+    def test_session_ended_client_error_is_raised_without_polling(self):
+        stopped = botocore.exceptions.ClientError(
+            error_response={
+                "Error": {
+                    "Code": "InvalidRequestException",
+                    "Message": "Can not generate Session endpoint URL for Session in STOPPED state",
+                }
+            },
+            operation_name="GetSessionEndpoint",
+        )
+        client = Mock()
+        client.get_session_endpoint.side_effect = [
+            stopped,
+            {"EndpointUrl": "https://x", "AuthToken": "tok"},
+        ]
+        submitter = self._make_submitter(client)
+
+        with pytest.raises(botocore.exceptions.ClientError) as excinfo:
+            submitter._wait_for_endpoint("sid", remaining_budget=10)
+
+        assert excinfo.value is stopped
+        assert client.get_session_endpoint.call_count == 1

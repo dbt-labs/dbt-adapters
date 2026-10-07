@@ -45,6 +45,7 @@ from dbt.adapters.athena.session import get_boto3_session_from_credentials
 from dbt.adapters.athena.spark_connect.channel import create_athena_channel_builder
 from dbt.adapters.athena.spark_connect.errors import (
     is_grpc_permission_denied,
+    is_session_ended_error,
     is_transient_spark_error,
 )
 from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
@@ -95,6 +96,7 @@ class _AttemptResult(NamedTuple):
     error: Optional[BaseException]
     done: bool
     session_id: Optional[str] = None
+    session_ended: bool = False
 
 
 class SparkConnectSubmitter:
@@ -211,6 +213,7 @@ class SparkConnectSubmitter:
         pool_start = time.monotonic()
         last_error: Optional[BaseException] = None
         last_session_id: Optional[str] = None
+        last_session_ended = False
         total_attempts = self._max_retries + 1
 
         for attempt in range(1, total_attempts + 1):
@@ -221,6 +224,7 @@ class SparkConnectSubmitter:
             assert outcome.error is not None
             last_error = outcome.error
             last_session_id = outcome.session_id
+            last_session_ended = outcome.session_ended
 
             is_last_attempt = attempt >= total_attempts
             if is_last_attempt:
@@ -245,6 +249,12 @@ class SparkConnectSubmitter:
             )
             time.sleep(backoff)
 
+        if last_session_ended:
+            raise SparkSessionTerminatedError(
+                f"Athena terminated Spark session {last_session_id}; "
+                f"check session state and workgroup DPU/quota. "
+                f"Underlying error: {type(last_error).__name__}: {last_error}"
+            ) from last_error
         raise DbtRuntimeError(
             f"Spark Connect execution failed after {total_attempts} "
             f"attempts (last session {last_session_id}): "
@@ -306,6 +316,8 @@ class SparkConnectSubmitter:
             try:
                 response = self.athena_client.get_session_endpoint(SessionId=session_id)
             except botocore.exceptions.ClientError as e:
+                if is_session_ended_error(e):
+                    raise
                 error_code = e.response.get("Error", {}).get("Code", "")
                 if error_code == "ThrottlingException":
                     LOGGER.debug(f"Session {session_id} endpoint throttled, backing off")
@@ -452,25 +464,14 @@ class SparkConnectSubmitter:
                     f"Spark Connect execution timed out after {self.timeout} seconds."
                 ) from e
 
-            # 403 with a dead session means Athena ended the session itself,
-            # so a fresh session cannot resume the work.
-            if is_grpc_permission_denied(e) and not self._pool.is_session_alive(
-                self.athena_client, session_id
-            ):
-                LOGGER.error(
-                    f"Model {self.relation_name} (session {session_id}) - "
-                    f"Athena terminated the Spark session\n{traceback.format_exc()}"
-                )
-                raise SparkSessionTerminatedError(
-                    f"Athena terminated Spark session {session_id}; "
-                    f"check session state and workgroup DPU/quota. "
-                    f"Underlying error: {type(e).__name__}: {e}"
-                ) from e
-
             transient = self._is_transient_failure(e)
             terminate_session = transient
             total_attempts = self._max_retries + 1
             is_last_attempt = attempt >= total_attempts
+
+            session_ended = (
+                is_grpc_permission_denied(e) or is_session_ended_error(e)
+            ) and not self._pool.is_session_alive(self.athena_client, session_id)
 
             if not transient or is_last_attempt:
                 LOGGER.error(
@@ -490,6 +491,7 @@ class SparkConnectSubmitter:
                 error=e,
                 done=False,
                 session_id=session_id,
+                session_ended=session_ended,
             )
         finally:
             # Cancel the watchdog timer first and wait for any already-fired

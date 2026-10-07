@@ -37,6 +37,24 @@ def test_pattern_match_is_transient(pattern):
     assert is_transient_spark_error(err) is True
 
 
+@pytest.mark.parametrize(
+    "err",
+    [
+        Exception(
+            "SparkConnectException: [NO_ACTIVE_SESSION] No active Spark session found. "
+            "Please create a new Spark session before running the code."
+        ),
+        Exception(
+            "An error occurred (InvalidRequestException) when calling the "
+            "GetSessionEndpoint operation: Can not generate Session endpoint URL "
+            "for Session in STOPPED state"
+        ),
+    ],
+)
+def test_session_ended_by_athena_is_transient(err):
+    assert is_transient_spark_error(err) is True
+
+
 def test_unknown_message_is_not_transient():
     assert is_transient_spark_error(Exception("some unrelated failure")) is False
 

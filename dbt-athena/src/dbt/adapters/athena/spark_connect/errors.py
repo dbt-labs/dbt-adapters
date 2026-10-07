@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from typing import Iterator, Optional
 
+SESSION_ENDED_PATTERNS = [
+    # Athena terminated the Spark session (idle timeout / DPU / quota).
+    "Session not active",
+    # pyspark raises this for an RPC on a closed gRPC channel.
+    "NO_ACTIVE_SESSION",
+    # GetSessionEndpoint for a session Athena already stopped.
+    "Session endpoint URL for Session in STOPPED state",
+]
+
 TRANSIENT_SPARK_PATTERNS = [
     # Spark executor failed to obtain credentials from the provider chain.
     "Unable to load credentials",
@@ -11,8 +20,7 @@ TRANSIENT_SPARK_PATTERNS = [
     "Unable to load region",
     # gRPC connection pool was shut down; a new session creates a fresh one.
     "Pool not running",
-    # Athena terminated the Spark session (idle timeout / DPU / quota).
-    "Session not active",
+    *SESSION_ENDED_PATTERNS,
     # Account/workgroup session quota exhausted; retry after others finish.
     "Maximum allowed sessions",
 ]
@@ -47,6 +55,11 @@ def is_transient_spark_error(e: BaseException) -> bool:
         return True
     error_str = f"{type(e).__name__}: {e}"
     return any(p in error_str for p in TRANSIENT_SPARK_PATTERNS)
+
+
+def is_session_ended_error(e: BaseException) -> bool:
+    error_str = f"{type(e).__name__}: {e}"
+    return any(p in error_str for p in SESSION_ENDED_PATTERNS)
 
 
 def is_grpc_permission_denied(e: BaseException) -> bool:
