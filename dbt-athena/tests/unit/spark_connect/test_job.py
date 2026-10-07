@@ -440,7 +440,7 @@ class TestSparkConnectSubmission:
         assert excinfo.value.__cause__.code().name == "PERMISSION_DENIED"
 
         assert mock_pool.acquire.call_count == 1
-        mock_pool.is_session_alive.assert_called_once_with(submitter.athena_client, "sid-1")
+        mock_pool.is_session_alive.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_called_once_with("sid-1")
         mock_pool.release.assert_not_called()
 
@@ -497,7 +497,7 @@ class TestSparkConnectSubmission:
             submitter.submit("spark.run()")
 
         assert isinstance(excinfo.value, SparkSessionTerminatedError) is (not session_alive)
-        mock_pool.is_session_alive.assert_called_once_with(submitter.athena_client, "sid-1")
+        mock_pool.is_session_alive.assert_called_once_with("sid-1")
         mock_pool.terminate.assert_called_once_with("sid-1")
 
     def test_session_ended_when_backoff_exceeds_timeout_raises_terminated(

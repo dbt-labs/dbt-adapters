@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import threading
 import time
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, TypedDict
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, TypedDict
 
 from dbt_common.exceptions import DbtRuntimeError
 from mypy_boto3_athena.client import AthenaClient
@@ -25,6 +25,7 @@ class _SessionInfo(TypedDict, total=False):
     load: int
     dpu: int
     draining: bool
+    idle_since: Optional[float]
     # Spark Connect client bound to this Athena session, shared by every
     # model that attaches to it. ``None`` until the first model creates it.
     spark: Optional[ConnectSparkSession]
@@ -126,6 +127,7 @@ class SparkConnectSessionPool:
         deadline = time.monotonic() + timeout
         time_since_eviction = self._EVICTION_INTERVAL  # evict on first pass
         pushback_attempts = 0
+        skip: Set[str] = set()
 
         while True:
             new_session_id: Optional[str] = None
@@ -133,13 +135,22 @@ class SparkConnectSessionPool:
             start_error: Optional[BaseException] = None
             budget_used = 0
             budget_ok = False
+            reclaimed_any = False
             with self._lock:
                 stale_entries = self._collect_stale_invocations(invocation_id)
-                reuse_candidate = self._attach(key, session_concurrency)
+                reuse_candidate = self._attach(key, session_concurrency, skip)
                 if reuse_candidate is None:
                     budget_used = self._used_dpu()
+                    has_room = self._has_room(key, max_sessions)
+                    if has_room and budget_used + dpu_request > dpu_budget:
+                        reclaimed = self._reclaim_idle_for_budget(
+                            key, dpu_request, dpu_budget, budget_used
+                        )
+                        if reclaimed:
+                            stale_entries.extend(reclaimed)
+                            reclaimed_any = True
                     budget_ok = budget_used + dpu_request <= dpu_budget
-                    if budget_ok and self._has_room(key, max_sessions):
+                    if budget_ok and has_room:
                         try:
                             new_session_id = self._start(
                                 key,
@@ -164,6 +175,9 @@ class SparkConnectSessionPool:
                 self._terminate_entries(stale_entries)
             if start_error is not None:
                 raise start_error
+            # Athena counts a session against its limits until TerminateSession returns.
+            if reclaimed_any:
+                continue
 
             if pushback == "session_limit":
                 LOGGER.warning(
@@ -184,13 +198,26 @@ class SparkConnectSessionPool:
 
             if reuse_candidate is not None:
                 # Athena may have killed the session while it sat in the pool.
-                if self.is_session_alive(athena_client, reuse_candidate):
+                state = self._session_state(reuse_candidate)
+                if state is not None and state not in self._DEAD_SESSION_STATES:
+                    with self._lock:
+                        info = self._sessions.get(reuse_candidate)
+                        if info is not None:
+                            info["idle_since"] = None
                     LOGGER.debug(f"Reusing Spark Connect session {reuse_candidate} for key {key}")
                     return reuse_candidate
-                LOGGER.debug(
-                    f"Discarding stale Spark Connect session {reuse_candidate} during reuse"
-                )
-                self.unregister(reuse_candidate)
+                if state is None:
+                    LOGGER.debug(
+                        f"Spark Connect session {reuse_candidate} state is unknown; "
+                        f"skipping it for this acquire"
+                    )
+                    self._undo_attach(reuse_candidate)
+                    skip.add(reuse_candidate)
+                else:
+                    LOGGER.debug(
+                        f"Discarding stale Spark Connect session {reuse_candidate} during reuse"
+                    )
+                    self.unregister(reuse_candidate)
                 continue
 
             if new_session_id is not None:
@@ -198,7 +225,7 @@ class SparkConnectSessionPool:
 
             # Periodically evict dead sessions so stuck slots don't block.
             if time_since_eviction >= self._EVICTION_INTERVAL:
-                evicted = self._evict_dead_sessions(athena_client)
+                evicted = self._evict_dead_sessions()
                 time_since_eviction = 0
                 if evicted:
                     continue
@@ -207,7 +234,8 @@ class SparkConnectSessionPool:
                 raise DbtRuntimeError(
                     f"No Spark Connect session available for key {key} within {timeout}s "
                     f"(max_sessions={max_sessions}, dpu_request={dpu_request}, "
-                    f"dpu_budget={dpu_budget}, last used_dpu={budget_used})"
+                    f"dpu_budget={dpu_budget}, last used_dpu={budget_used}, "
+                    f"draining={self._draining_count()}, unknown_state_skipped={len(skip)})"
                 )
 
             if pushback is not None:
@@ -228,31 +256,84 @@ class SparkConnectSessionPool:
         return random.uniform(0, ceiling)
 
     def _collect_stale_invocations(self, invocation_id: str) -> List[Tuple[str, _SessionInfo]]:
-        """Pop sessions from prior invocations. Caller must hold ``self._lock``.
+        """Pop idle sessions from prior invocations and drain busy ones.
 
-        Prevents cruft across dbt runs in long-lived processes (e.g. dbt Cloud).
+        Caller must hold ``self._lock``. Prevents cruft across dbt runs in
+        long-lived processes (e.g. dbt Cloud). A session another invocation is
+        still using is only marked draining; its last ``release`` terminates it.
         """
-        stale_sids = [
-            sid for sid, info in self._sessions.items() if info["key"][0] != invocation_id
-        ]
-        if not stale_sids:
-            return []
-        LOGGER.debug(
-            f"Removing {len(stale_sids)} stale Spark Connect sessions from prior invocations"
-        )
-        return [(sid, self._sessions.pop(sid)) for sid in stale_sids]
+        idle: List[Tuple[str, _SessionInfo]] = []
+        newly_draining = 0
+        for sid, info in list(self._sessions.items()):
+            if info["key"][0] == invocation_id:
+                continue
+            if info["load"] == 0:
+                idle.append((sid, self._sessions.pop(sid)))
+            elif not info["draining"]:
+                info["draining"] = True
+                newly_draining += 1
+        if idle:
+            LOGGER.debug(
+                f"Removing {len(idle)} stale Spark Connect sessions from prior invocations"
+            )
+        if newly_draining:
+            LOGGER.debug(
+                f"Draining {newly_draining} in-use Spark Connect sessions from prior invocations"
+            )
+        return idle
 
-    def _attach(self, key: SessionKey, session_concurrency: int) -> Optional[str]:
+    def _reclaim_idle_for_budget(
+        self, key: SessionKey, dpu_request: int, dpu_budget: int, used_dpu: int
+    ) -> List[Tuple[str, _SessionInfo]]:
+        """Pop the oldest idle sessions of other keys that free enough DPUs for ``key``.
+
+        Caller must hold ``self._lock`` and terminate the returned entries
+        outside it. Pops nothing unless the idle sessions can free enough.
+        """
+        shortfall = used_dpu + dpu_request - dpu_budget
+        chosen: List[str] = []
+        freed = 0
+        for sid, info in self._sessions.items():
+            if info["key"] == key or info["load"] > 0 or info["draining"]:
+                continue
+            chosen.append(sid)
+            freed += info["dpu"]
+            if freed >= shortfall:
+                break
+        if freed < shortfall:
+            return []
+        LOGGER.info(
+            f"Reclaiming {len(chosen)} idle Spark Connect session(s) {chosen} "
+            f"({freed} DPUs) of other keys to start a session for key {key}"
+        )
+        return [(sid, self._sessions.pop(sid)) for sid in chosen]
+
+    def _attach(
+        self, key: SessionKey, session_concurrency: int, skip: Optional[Set[str]] = None
+    ) -> Optional[str]:
         """Attach to a reusable session by incrementing its load.
 
         Caller must hold ``self._lock``. Increments load before the
         out-of-lock liveness check to prevent oversubscription.
         """
+        skip = skip or set()
         for sid, info in self._sessions.items():
+            if sid in skip:
+                continue
             if info["key"] == key and info["load"] < session_concurrency and not info["draining"]:
                 info["load"] += 1
                 return sid
         return None
+
+    def _undo_attach(self, session_id: str) -> None:
+        with self._lock:
+            info = self._sessions.get(session_id)
+            if info is not None:
+                info["load"] = max(info["load"] - 1, 0)
+
+    def _draining_count(self) -> int:
+        with self._lock:
+            return sum(1 for info in self._sessions.values() if info["draining"])
 
     def _has_room(self, key: SessionKey, max_sessions: int) -> bool:
         """Return True if per-key count < ``max_sessions``. Caller must hold ``self._lock``."""
@@ -302,6 +383,7 @@ class SparkConnectSessionPool:
             "load": 1,
             "dpu": dpu,
             "draining": False,
+            "idle_since": None,
             "spark": None,
         }
         return session_id
@@ -339,20 +421,28 @@ class SparkConnectSessionPool:
             info["spark"] = spark
             return spark
 
-    def _get_session_state(self, athena_client: AthenaClient, session_id: str) -> str:
-        """Return the Athena session state, or empty string on lookup failure."""
+    def _get_session_state(self, athena_client: AthenaClient, session_id: str) -> Optional[str]:
+        """Return the Athena session state, or ``None`` when it cannot be determined."""
         try:
-            return athena_client.get_session_status(SessionId=session_id)["Status"].get(
-                "State", ""
-            )
-        except Exception as e:  # noqa: BLE001 - treat unknown state as dead
+            state = athena_client.get_session_status(SessionId=session_id)["Status"].get("State")
+        except Exception as e:  # noqa: BLE001 - unknown state is not evidence of death
             LOGGER.warning(f"Could not verify Spark Connect session {session_id} state: {e}")
-            return ""
+            return None
+        return state or None
 
-    def is_session_alive(self, athena_client: AthenaClient, session_id: str) -> bool:
+    def _session_state(self, session_id: str) -> Optional[str]:
+        """Look up the state with the client that started the session."""
+        with self._lock:
+            info = self._sessions.get(session_id)
+            client = info["client"] if info is not None else None
+        if client is None:
+            return None
+        return self._get_session_state(client, session_id)
+
+    def is_session_alive(self, session_id: str) -> bool:
         """Return True if Athena reports the session as IDLE/BUSY/CREATED."""
-        state = self._get_session_state(athena_client, session_id)
-        return bool(state) and state not in self._DEAD_SESSION_STATES
+        state = self._session_state(session_id)
+        return state is not None and state not in self._DEAD_SESSION_STATES
 
     def release(self, session_id: str) -> None:
         """Mark the session as idle so it can be reused.
@@ -366,6 +456,8 @@ class SparkConnectSessionPool:
             if info is None:
                 return
             info["load"] = max(info["load"] - 1, 0)
+            if info["load"] == 0:
+                info["idle_since"] = time.monotonic()
             if info["load"] > 0 or not info["draining"]:
                 return
             self._sessions.pop(session_id, None)
@@ -425,15 +517,39 @@ class SparkConnectSessionPool:
             except Exception as e:  # noqa: BLE001 - best-effort cleanup
                 LOGGER.warning(f"Failed to terminate Spark Connect session {session_id}: {e}")
 
-    def _evict_dead_sessions(self, athena_client: AthenaClient) -> int:
-        """Remove sessions that Athena has already terminated or degraded."""
+    def _evict_dead_sessions(self) -> int:
+        """Remove sessions that Athena reports as terminated or degraded.
+
+        Sessions whose state cannot be determined are kept.
+        """
         with self._lock:
             session_ids = list(self._sessions)
 
         evicted = 0
+        idle_timeout_seconds = SESSION_IDLE_TIMEOUT_MIN * 60
         for session_id in session_ids:
-            state = self._get_session_state(athena_client, session_id)
-            if not state or state in self._DEAD_SESSION_STATES:
+            state = self._session_state(session_id)
+            if state is None:
+                with self._lock:
+                    info = self._sessions.get(session_id)
+                    idle_since = info.get("idle_since") if info is not None else None
+                    expired = (
+                        info is not None
+                        and info["load"] == 0
+                        and idle_since is not None
+                        and time.monotonic() - idle_since >= idle_timeout_seconds
+                    )
+                    if expired:
+                        self._sessions.pop(session_id, None)
+                if expired and info is not None:
+                    LOGGER.warning(
+                        f"Dropping Spark Connect session {session_id}: its state is unknown "
+                        f"and it has been idle longer than the session idle timeout"
+                    )
+                    self._terminate_entries([(session_id, info)])
+                    evicted += 1
+                continue
+            if state in self._DEAD_SESSION_STATES:
                 with self._lock:
                     info = self._sessions.pop(session_id, None)
                 if info is not None:

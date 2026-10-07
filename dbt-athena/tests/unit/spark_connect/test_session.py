@@ -39,7 +39,7 @@ def _make_client(session_ids, state="IDLE"):
     return client
 
 
-def _register(pool, session_id, key, athena_client, dpu=1, load=1):
+def _register(pool, session_id, key, athena_client, dpu=1, load=1, idle_since=None):
     """Inject a session into the pool for tests, bypassing acquire()."""
     pool._sessions[session_id] = {
         "key": key,
@@ -47,6 +47,7 @@ def _register(pool, session_id, key, athena_client, dpu=1, load=1):
         "load": load,
         "dpu": dpu,
         "draining": False,
+        "idle_since": idle_since,
         "spark": None,
     }
 
@@ -68,6 +69,10 @@ def _acquire(pool: SparkConnectSessionPool, athena_client: Any, **overrides: Any
     )
     kwargs.update(overrides)
     return pool.acquire(**kwargs)
+
+
+class _Livelock(BaseException):
+    """Aborts a test whose acquire keeps re-probing the same session."""
 
 
 class TestSingleton:
@@ -171,6 +176,20 @@ class TestAcquire:
         with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
             _acquire(pool, client, max_sessions=1, timeout=0.05)
 
+    def test_timeout_reports_draining_and_unknown_state_sessions(self):
+        pool = SparkConnectSessionPool()
+        unknown = MagicMock()
+        unknown.get_session_status.side_effect = Exception("boom")
+        _register(pool, "sid-unknown", ("inv", "fp"), unknown, load=0)
+        _register(pool, "sid-draining", ("inv", "fp-other"), MagicMock(), load=1)
+        pool._sessions["sid-draining"]["draining"] = True
+
+        with pytest.raises(DbtRuntimeError) as excinfo:
+            _acquire(pool, MagicMock(), max_sessions=1, timeout=0.05)
+
+        assert "draining=1" in str(excinfo.value)
+        assert "unknown_state_skipped=1" in str(excinfo.value)
+
 
 class TestSessionStartRetry:
     def test_retries_on_maximum_allowed_sessions(self, monkeypatch):
@@ -203,21 +222,108 @@ class TestEviction:
         _register(pool, "sid-dead", ("inv", "fp"), client)
         client.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
 
-        evicted = pool._evict_dead_sessions(client)
+        evicted = pool._evict_dead_sessions()
 
         assert evicted == 1
         assert "sid-dead" not in pool._snapshot()
 
-    def test_unknown_state_is_evicted(self):
+    def test_unknown_state_is_not_evicted(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
         _register(pool, "sid-x", ("inv", "fp"), client)
         client.get_session_status.side_effect = Exception("boom")
 
-        evicted = pool._evict_dead_sessions(client)
+        evicted = pool._evict_dead_sessions()
 
-        assert evicted == 1
+        assert evicted == 0
+        assert "sid-x" in pool._snapshot()
+
+    def test_unknown_state_idle_past_the_idle_timeout_is_terminated(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        long_ago = time.monotonic() - session_module.SESSION_IDLE_TIMEOUT_MIN * 60 - 1
+        _register(pool, "sid-x", ("inv", "fp"), client, load=0, idle_since=long_ago)
+        client.get_session_status.side_effect = Exception("boom")
+
+        assert pool._evict_dead_sessions() == 1
         assert "sid-x" not in pool._snapshot()
+        client.terminate_session.assert_called_once_with(SessionId="sid-x")
+
+    @pytest.mark.parametrize(
+        "load, idle_for",
+        [(0, session_module.SESSION_IDLE_TIMEOUT_MIN * 60 - 30), (1, 10**6), (0, None)],
+    )
+    def test_unknown_state_is_kept_unless_idle_past_the_idle_timeout(self, load, idle_for):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        idle_since = None if idle_for is None else time.monotonic() - idle_for
+        _register(pool, "sid-x", ("inv", "fp"), client, load=load, idle_since=idle_since)
+        client.get_session_status.side_effect = Exception("boom")
+
+        assert pool._evict_dead_sessions() == 0
+        assert "sid-x" in pool._snapshot()
+        client.terminate_session.assert_not_called()
+
+    def test_release_to_zero_load_starts_idle_clock_and_reuse_clears_it(self):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        client.get_session_status.return_value = {"Status": {"State": "IDLE"}}
+        _register(pool, "sid-x", ("inv", "fp"), client, load=1)
+
+        before = time.monotonic()
+        pool.release("sid-x")
+        assert pool._sessions["sid-x"]["idle_since"] >= before
+
+        assert _acquire(pool, MagicMock()) == "sid-x"
+        assert pool._sessions["sid-x"]["idle_since"] is None
+
+    def test_unknown_same_key_session_past_idle_timeout_is_freed_during_acquire(self):
+        pool = SparkConnectSessionPool()
+        unknown = MagicMock()
+        unknown.get_session_status.side_effect = Exception("boom")
+        long_ago = time.monotonic() - session_module.SESSION_IDLE_TIMEOUT_MIN * 60 - 1
+        _register(pool, "sid-x", ("inv", "fp"), unknown, load=0, idle_since=long_ago)
+
+        sid = _acquire(pool, _make_client(["sid-new"]), max_sessions=1, timeout=2)
+
+        assert sid == "sid-new"
+        assert "sid-x" not in pool._snapshot()
+        unknown.terminate_session.assert_called_once_with(SessionId="sid-x")
+
+    def test_release_with_remaining_load_keeps_idle_clock_unset(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-x", ("inv", "fp"), MagicMock(), load=2)
+
+        pool.release("sid-x")
+
+        assert pool._sessions["sid-x"]["idle_since"] is None
+
+    @pytest.mark.parametrize("status", [{}, {"State": ""}])
+    def test_empty_state_is_not_evicted(self, status):
+        pool = SparkConnectSessionPool()
+        client = MagicMock()
+        _register(pool, "sid-x", ("inv", "fp"), client)
+        client.get_session_status.return_value = {"Status": status}
+
+        assert pool._evict_dead_sessions() == 0
+        assert "sid-x" in pool._snapshot()
+
+    def test_state_is_checked_with_each_sessions_own_client(self):
+        pool = SparkConnectSessionPool()
+        owner_dead = MagicMock()
+        owner_dead.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
+        owner_ok = MagicMock()
+        owner_ok.get_session_status.return_value = {"Status": {"State": "IDLE"}}
+        _register(pool, "sid-ok", ("inv", "fp"), owner_ok)
+        _register(pool, "sid-dead", ("inv", "fp"), owner_dead)
+
+        assert pool._evict_dead_sessions() == 1
+
+        owner_dead.get_session_status.assert_called_once_with(SessionId="sid-dead")
+        owner_ok.get_session_status.assert_called_once_with(SessionId="sid-ok")
+        snapshot = pool._snapshot()
+        assert "sid-dead" not in snapshot
+        assert "sid-ok" in snapshot
 
     def test_idle_session_is_not_evicted(self):
         pool = SparkConnectSessionPool()
@@ -225,7 +331,7 @@ class TestEviction:
         _register(pool, "sid-ok", ("inv", "fp"), client)
         client.get_session_status.return_value = {"Status": {"State": "IDLE"}}
 
-        evicted = pool._evict_dead_sessions(client)
+        evicted = pool._evict_dead_sessions()
 
         assert evicted == 0
         assert "sid-ok" in pool._snapshot()
@@ -408,7 +514,7 @@ class TestCrossInvocationCleanup:
     def test_sessions_from_prior_invocations_are_evicted_on_acquire(self):
         pool = SparkConnectSessionPool()
         stale_client = MagicMock()
-        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client)
+        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client, load=0)
 
         new_client = _make_client(["sid-new"])
         sid = _acquire(pool, new_client, key=("new-inv", "fp"), max_sessions=1)
@@ -423,7 +529,7 @@ class TestCrossInvocationCleanup:
         """Non-transient start_session failures must not leak prior-invocation sessions."""
         pool = SparkConnectSessionPool()
         stale_client = MagicMock()
-        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client)
+        _register(pool, "sid-stale", ("old-inv", "fp"), stale_client, load=0)
 
         new_client = MagicMock()
         new_client.start_session.side_effect = Exception("AccessDeniedException: nope")
@@ -433,6 +539,81 @@ class TestCrossInvocationCleanup:
 
         stale_client.terminate_session.assert_called_once_with(SessionId="sid-stale")
         assert "sid-stale" not in pool._snapshot()
+
+
+class TestStaleInvocationDrain:
+    def test_busy_stale_session_is_drained_not_terminated(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-busy", ("old-inv", "fp"), old_client, load=1)
+
+        sid = _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        assert sid == "sid-new"
+        old_client.terminate_session.assert_not_called()
+        info = pool._snapshot()["sid-busy"]
+        assert info["draining"] is True
+        assert info["load"] == 1
+
+    def test_idle_stale_session_is_terminated(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-idle", ("old-inv", "fp"), old_client, load=0)
+
+        _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        old_client.terminate_session.assert_called_once_with(SessionId="sid-idle")
+        assert "sid-idle" not in pool._snapshot()
+
+    def test_drained_session_is_terminated_by_last_release(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-busy", ("old-inv", "fp"), old_client, load=1)
+        _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        pool.release("sid-busy")
+
+        old_client.terminate_session.assert_called_once_with(SessionId="sid-busy")
+        assert "sid-busy" not in pool._snapshot()
+
+    def test_drained_session_stays_until_every_caller_releases(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-busy", ("old-inv", "fp"), old_client, load=2)
+        _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        pool.release("sid-busy")
+        old_client.terminate_session.assert_not_called()
+        pool.release("sid-busy")
+
+        old_client.terminate_session.assert_called_once_with(SessionId="sid-busy")
+
+    def test_drained_session_is_not_attached(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-busy", ("old-inv", "fp"), MagicMock(), load=1)
+        _acquire(pool, _make_client(["sid-new"]), key=("new-inv", "fp"))
+
+        assert pool._attach(("old-inv", "fp"), session_concurrency=5) is None
+        assert pool._snapshot()["sid-busy"]["load"] == 1
+
+    def test_drained_session_still_counts_toward_dpu_budget(self):
+        pool = SparkConnectSessionPool()
+        old_client = MagicMock()
+        _register(pool, "sid-busy", ("old-inv", "fp"), old_client, dpu=8, load=1)
+        new_client = _make_client(["sid-new"])
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                new_client,
+                key=("new-inv", "fp"),
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        new_client.start_session.assert_not_called()
+        assert pool._used_dpu() == 8
 
 
 class TestDpuBudget:
@@ -550,6 +731,229 @@ class TestDpuBudget:
         assert any("Another process may share" in w for w in warnings)
 
 
+class TestReclaimIdleForBudget:
+    @staticmethod
+    def _no_waiting(monkeypatch):
+        def fail(*_):
+            raise AssertionError("acquire waited instead of reclaiming")
+
+        monkeypatch.setattr(time, "sleep", fail)
+
+    def test_reclaims_idle_session_of_other_key_and_starts_without_waiting(self, monkeypatch):
+        self._no_waiting(monkeypatch)
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-idle", ("inv", "fp-a"), owner, dpu=8, load=0)
+        caller = _make_client(["sid-new"])
+
+        sid = _acquire(pool, caller, key=("inv", "fp-b"), dpu_request=4, dpu_budget=10)
+
+        assert sid == "sid-new"
+        owner.terminate_session.assert_called_once_with(SessionId="sid-idle")
+        caller.terminate_session.assert_not_called()
+        snapshot = pool._snapshot()
+        assert "sid-idle" not in snapshot
+        assert snapshot["sid-new"]["load"] == 1
+
+    def test_reclaimed_session_is_terminated_before_the_new_session_starts(self, monkeypatch):
+        self._no_waiting(monkeypatch)
+        pool = SparkConnectSessionPool()
+        calls: list[str] = []
+        owner = MagicMock()
+        owner.terminate_session.side_effect = lambda **_: calls.append("terminate")
+        _register(pool, "sid-idle", ("inv", "fp-a"), owner, dpu=8, load=0)
+        caller = _make_client(["sid-new"])
+        start = caller.start_session.side_effect
+        caller.start_session.side_effect = lambda **kw: calls.append("start") or next(start)
+
+        _acquire(pool, caller, key=("inv", "fp-b"), dpu_request=4, dpu_budget=10)
+
+        assert calls == ["terminate", "start"]
+
+    def test_logs_reclaimed_session_and_dpus(self, monkeypatch):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-idle", ("inv", "fp-a"), MagicMock(), dpu=8, load=0)
+        infos: list[str] = []
+        monkeypatch.setattr(
+            session_module.LOGGER, "info", lambda msg, *a, **k: infos.append(str(msg))
+        )
+
+        _acquire(
+            pool, _make_client(["sid-new"]), key=("inv", "fp-b"), dpu_request=4, dpu_budget=10
+        )
+
+        assert len(infos) == 1
+        assert "sid-idle" in infos[0]
+        assert "8 DPUs" in infos[0]
+
+    def test_reclaims_oldest_first_and_only_as_many_as_needed(self, monkeypatch):
+        self._no_waiting(monkeypatch)
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp-a"), owner, dpu=4, load=0)
+        _register(pool, "sid-2", ("inv", "fp-b"), owner, dpu=4, load=0)
+        _register(pool, "sid-3", ("inv", "fp-c"), owner, dpu=2, load=0)
+
+        _acquire(
+            pool, _make_client(["sid-new"]), key=("inv", "fp-d"), dpu_request=4, dpu_budget=10
+        )
+
+        owner.terminate_session.assert_called_once_with(SessionId="sid-1")
+        assert set(pool._snapshot()) == {"sid-2", "sid-3", "sid-new"}
+
+    def test_reclaims_several_when_one_is_not_enough(self, monkeypatch):
+        self._no_waiting(monkeypatch)
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-1", ("inv", "fp-a"), owner, dpu=3, load=0)
+        _register(pool, "sid-2", ("inv", "fp-b"), owner, dpu=3, load=0)
+        _register(pool, "sid-3", ("inv", "fp-c"), owner, dpu=4, load=0)
+
+        _acquire(
+            pool, _make_client(["sid-new"]), key=("inv", "fp-d"), dpu_request=6, dpu_budget=10
+        )
+
+        assert owner.terminate_session.call_count == 2
+        assert set(pool._snapshot()) == {"sid-3", "sid-new"}
+
+    def test_does_not_reclaim_sessions_that_are_in_use(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-busy", ("inv", "fp-a"), owner, dpu=8, load=1)
+        caller = _make_client(["sid-new"])
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                caller,
+                key=("inv", "fp-b"),
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        owner.terminate_session.assert_not_called()
+        caller.start_session.assert_not_called()
+        assert "sid-busy" in pool._snapshot()
+
+    def test_reclaims_nothing_when_idle_sessions_cannot_free_enough(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-idle", ("inv", "fp-a"), owner, dpu=2, load=0)
+        _register(pool, "sid-busy", ("inv", "fp-b"), owner, dpu=8, load=1)
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                _make_client(["sid-new"]),
+                key=("inv", "fp-c"),
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        owner.terminate_session.assert_not_called()
+        assert "sid-idle" in pool._snapshot()
+
+    def test_reclaims_nothing_when_key_has_no_room(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-idle", ("inv", "fp-a"), owner, dpu=9, load=0)
+        _register(pool, "sid-own", ("inv", "fp-b"), MagicMock(), dpu=1, load=1)
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                _make_client(["sid-new"]),
+                key=("inv", "fp-b"),
+                max_sessions=1,
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        owner.terminate_session.assert_not_called()
+        assert "sid-idle" in pool._snapshot()
+
+    def test_does_not_reclaim_idle_session_of_same_key(self):
+        pool = SparkConnectSessionPool()
+        own = MagicMock()
+        own.get_session_status.side_effect = Exception("boom")
+        _register(pool, "sid-own", ("inv", "fp-a"), own, dpu=9, load=0)
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                _make_client(["sid-new"]),
+                key=("inv", "fp-a"),
+                max_sessions=3,
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        own.terminate_session.assert_not_called()
+        assert "sid-own" in pool._snapshot()
+
+    def test_does_not_reclaim_draining_session(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-draining", ("inv", "fp-a"), owner, dpu=8, load=0)
+        pool._sessions["sid-draining"]["draining"] = True
+
+        with pytest.raises(DbtRuntimeError, match="No Spark Connect session available"):
+            _acquire(
+                pool,
+                _make_client(["sid-new"]),
+                key=("inv", "fp-b"),
+                dpu_request=4,
+                dpu_budget=10,
+                timeout=0.05,
+            )
+
+        owner.terminate_session.assert_not_called()
+
+    def test_prefers_reusing_idle_session_of_same_key(self):
+        pool = SparkConnectSessionPool()
+        other = MagicMock()
+        own = MagicMock()
+        own.get_session_status.return_value = {"Status": {"State": "IDLE"}}
+        _register(pool, "sid-other", ("inv", "fp-a"), other, dpu=8, load=0)
+        _register(pool, "sid-own", ("inv", "fp-b"), own, dpu=2, load=0)
+        caller = _make_client(["sid-new"])
+
+        sid = _acquire(pool, caller, key=("inv", "fp-b"), dpu_request=4, dpu_budget=10)
+
+        assert sid == "sid-own"
+        other.terminate_session.assert_not_called()
+        caller.start_session.assert_not_called()
+        assert "sid-other" in pool._snapshot()
+
+    def test_does_not_reclaim_when_budget_already_fits(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        _register(pool, "sid-idle", ("inv", "fp-a"), owner, dpu=4, load=0)
+
+        _acquire(
+            pool, _make_client(["sid-new"]), key=("inv", "fp-b"), dpu_request=4, dpu_budget=10
+        )
+
+        owner.terminate_session.assert_not_called()
+        assert "sid-idle" in pool._snapshot()
+
+    def test_reclaimed_session_stops_its_spark_client(self):
+        pool = SparkConnectSessionPool()
+        _register(pool, "sid-idle", ("inv", "fp-a"), MagicMock(), dpu=8, load=0)
+        spark = MagicMock()
+        pool.set_spark("sid-idle", spark)
+
+        _acquire(
+            pool, _make_client(["sid-new"]), key=("inv", "fp-b"), dpu_request=4, dpu_budget=10
+        )
+
+        spark.stop.assert_called_once()
+
+
 class TestAccountCapacityUnavailable:
     def test_retries_on_required_capacity_not_available(self, monkeypatch):
         pool = SparkConnectSessionPool()
@@ -664,6 +1068,62 @@ class TestReuseLivenessCheck:
         assert sid == "sid-replacement"
         assert "sid-stale" not in pool._snapshot()
 
+    def test_state_is_probed_with_the_sessions_own_client_not_the_callers(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.return_value = {"Status": {"State": "IDLE"}}
+        _register(pool, "sid-1", ("inv", "fp"), owner)
+        pool.release("sid-1")
+        caller = MagicMock()
+        caller.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
+
+        sid = _acquire(pool, caller)
+
+        assert sid == "sid-1"
+        owner.get_session_status.assert_called_once_with(SessionId="sid-1")
+        caller.get_session_status.assert_not_called()
+        caller.start_session.assert_not_called()
+
+    def test_unknown_state_session_is_skipped_but_kept_in_pool(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        probes = {"n": 0}
+
+        def failing_status(SessionId):
+            probes["n"] += 1
+            if probes["n"] > 3:
+                raise _Livelock()
+            raise Exception("boom")
+
+        owner.get_session_status.side_effect = failing_status
+        _register(pool, "sid-unknown", ("inv", "fp"), owner)
+        pool.release("sid-unknown")
+        caller = _make_client(["sid-new"])
+
+        sid = _acquire(pool, caller, max_sessions=3)
+
+        assert sid == "sid-new"
+        owner.get_session_status.assert_called_once_with(SessionId="sid-unknown")
+        owner.terminate_session.assert_not_called()
+        snapshot = pool._snapshot()
+        assert snapshot["sid-unknown"]["load"] == 0
+        assert snapshot["sid-new"]["load"] == 1
+
+    def test_unknown_state_session_is_judged_again_by_a_later_eviction(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.side_effect = Exception("boom")
+        _register(pool, "sid-unknown", ("inv", "fp"), owner)
+        pool.release("sid-unknown")
+        _acquire(pool, _make_client(["sid-new"]), max_sessions=3)
+        assert "sid-unknown" in pool._snapshot()
+
+        owner.get_session_status.side_effect = None
+        owner.get_session_status.return_value = {"Status": {"State": "TERMINATED"}}
+
+        assert pool._evict_dead_sessions() == 1
+        assert "sid-unknown" not in pool._snapshot()
+
     def test_alive_session_is_reused(self):
         pool = SparkConnectSessionPool()
         client = MagicMock()
@@ -699,6 +1159,46 @@ class TestReuseLivenessCheck:
         assert "sid-dead" not in snapshot
         assert "sid-alive" in snapshot
         assert sid in {"sid-alive", "sid-fresh"}
+
+
+class TestSessionState:
+    def test_is_session_alive_uses_the_sessions_own_client(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.return_value = {"Status": {"State": "IDLE"}}
+        _register(pool, "sid-1", ("inv", "fp"), owner)
+
+        assert pool.is_session_alive("sid-1") is True
+        owner.get_session_status.assert_called_once_with(SessionId="sid-1")
+
+    @pytest.mark.parametrize("state", ["FAILED", "TERMINATED", "TERMINATING", "DEGRADED"])
+    def test_is_session_alive_false_for_dead_states(self, state):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.return_value = {"Status": {"State": state}}
+        _register(pool, "sid-1", ("inv", "fp"), owner)
+
+        assert pool.is_session_alive("sid-1") is False
+
+    def test_is_session_alive_false_when_state_unknown(self):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.side_effect = Exception("boom")
+        _register(pool, "sid-1", ("inv", "fp"), owner)
+
+        assert pool.is_session_alive("sid-1") is False
+
+    @pytest.mark.parametrize("status", [{}, {"State": ""}])
+    def test_is_session_alive_false_for_empty_state(self, status):
+        pool = SparkConnectSessionPool()
+        owner = MagicMock()
+        owner.get_session_status.return_value = {"Status": status}
+        _register(pool, "sid-1", ("inv", "fp"), owner)
+
+        assert pool.is_session_alive("sid-1") is False
+
+    def test_is_session_alive_false_for_unregistered_session(self):
+        assert SparkConnectSessionPool().is_session_alive("sid-gone") is False
 
 
 class TestSparkClientBinding:
@@ -807,13 +1307,13 @@ class TestSparkClientBinding:
         spark = MagicMock()
         pool.set_spark("sid-dead", spark)
 
-        assert pool._evict_dead_sessions(client) == 1
+        assert pool._evict_dead_sessions() == 1
         spark.stop.assert_called_once()
 
     def test_stale_invocation_cleanup_stops_client(self):
         pool = SparkConnectSessionPool()
         old_client = MagicMock()
-        _register(pool, "sid-stale", ("old-inv", "fp"), old_client)
+        _register(pool, "sid-stale", ("old-inv", "fp"), old_client, load=0)
         spark = MagicMock()
         pool.set_spark("sid-stale", spark)
 

@@ -510,7 +510,7 @@ class SparkConnectSubmitter:
 
             session_ended = (
                 is_grpc_permission_denied(e) or is_session_ended_error(e)
-            ) and not self._pool.is_session_alive(self.athena_client, session_id)
+            ) and not self._pool.is_session_alive(session_id)
             if session_ended:
                 category = SESSION_ENDED
             terminate_session = category is not None
