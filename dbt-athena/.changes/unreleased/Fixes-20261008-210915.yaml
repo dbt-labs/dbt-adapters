@@ -1,0 +1,6 @@
+kind: Fixes
+body: Skip tables of an unknown type and data catalogs Athena does not know when building the catalog, so dbt docs generate no longer fails on a table created outside dbt in a source schema or on a source of another adapter
+time: 2026-10-08T21:09:15.218711+02:00
+custom:
+    Author: David-Banquet
+    Issue: "748"
