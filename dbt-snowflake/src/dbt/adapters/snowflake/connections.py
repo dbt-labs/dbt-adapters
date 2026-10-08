@@ -107,6 +107,7 @@ class SnowflakeCredentials(Credentials):
     user: Optional[str] = None
     warehouse: Optional[str] = None
     role: Optional[str] = None
+    secondary_roles: Optional[str] = None
     password: Optional[str] = None
     authenticator: Optional[str] = None
     private_key: Optional[str] = None
@@ -199,6 +200,7 @@ class SnowflakeCredentials(Credentials):
             "database",
             "warehouse",
             "role",
+            "secondary_roles",
             "schema",
             "authenticator",
             "oauth_client_id",
@@ -227,6 +229,8 @@ class SnowflakeCredentials(Credentials):
         result = {}
         if self.user:
             result["user"] = self.user
+        if self.secondary_roles:
+            result["secondary_roles"] = self.secondary_roles
         if self.password:
             result["password"] = self.password
         if self.host:
