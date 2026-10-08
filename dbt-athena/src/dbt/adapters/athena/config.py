@@ -12,7 +12,12 @@ from dbt.adapters.athena.constants import (
     DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
     DEFAULT_SPARK_PROPERTIES,
     LOGGER,
+    SPARK_CONNECT_ENGINE_VERSION,
 )
+
+
+def is_spark_connect_engine_version(value: Any) -> bool:
+    return str(value) == SPARK_CONNECT_ENGINE_VERSION
 
 
 @lru_cache()
@@ -31,6 +36,14 @@ class AthenaSparkSessionConfig:
     def __init__(self, config: Dict[str, Any], **session_kwargs: Any) -> None:
         self.config = config
         self.session_kwargs = session_kwargs
+
+    @property
+    def spark_engine_version(self) -> str:
+        return str(self.config.get("spark_engine_version", ""))
+
+    @property
+    def is_spark_connect(self) -> bool:
+        return is_spark_connect_engine_version(self.spark_engine_version)
 
     def set_timeout(self) -> int:
         """
@@ -129,22 +142,22 @@ class AthenaSparkSessionConfig:
             ),
         )
 
-        default_engine_config = {
-            "CoordinatorDpuSize": DEFAULT_SPARK_COORDINATOR_DPU_SIZE,
-            "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
-            "DefaultExecutorDpuSize": DEFAULT_SPARK_EXECUTOR_DPU_SIZE,
-            "SparkProperties": default_spark_properties,
-        }
-        engine_config = self.config.get("engine_config", None)
+        # Athena Spark 3.5+ rejects CoordinatorDpuSize, DefaultExecutorDpuSize and
+        # SparkProperties in EngineConfiguration; properties go in Classifications.
+        # https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-getting-started.html
+        user_engine_config = self.config.get("engine_config", None) or {}
+        provided_spark_properties = user_engine_config.pop("SparkProperties", None)
+        if provided_spark_properties:
+            default_spark_properties.update(provided_spark_properties)
 
-        if engine_config:
-            provided_spark_properties = engine_config.get("SparkProperties", None)
-            if provided_spark_properties:
-                default_spark_properties.update(provided_spark_properties)
-                default_engine_config["SparkProperties"] = default_spark_properties
-                engine_config.pop("SparkProperties")
-            default_engine_config.update(engine_config)
-        engine_config = default_engine_config
+        if self.is_spark_connect:
+            engine_config = self._build_spark_connect_engine_config(
+                default_spark_properties, user_engine_config
+            )
+        else:
+            engine_config = self._build_calculations_engine_config(
+                default_spark_properties, user_engine_config
+            )
 
         if not isinstance(engine_config, dict):
             raise TypeError("Engine configuration has to be of type dict")
@@ -155,15 +168,10 @@ class AthenaSparkSessionConfig:
             "DefaultExecutorDpuSize",
             "SparkProperties",
             "AdditionalConfigs",
+            "Classifications",
         }
 
-        if set(engine_config.keys()) - {
-            "CoordinatorDpuSize",
-            "MaxConcurrentDpus",
-            "DefaultExecutorDpuSize",
-            "SparkProperties",
-            "AdditionalConfigs",
-        }:
+        if set(engine_config.keys()) - expected_keys:
             raise KeyError(
                 f"The engine configuration keys provided do not match the expected athena engine keys: {expected_keys}"
             )
@@ -171,4 +179,44 @@ class AthenaSparkSessionConfig:
         if engine_config["MaxConcurrentDpus"] == 1:
             raise KeyError("The lowest value supported for MaxConcurrentDpus is 2")
         LOGGER.debug(f"Setting engine configuration: {engine_config}")
+        return engine_config
+
+    @staticmethod
+    def _build_calculations_engine_config(
+        spark_properties: Dict[str, str],
+        user_engine_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        engine_config: Dict[str, Any] = {
+            "CoordinatorDpuSize": DEFAULT_SPARK_COORDINATOR_DPU_SIZE,
+            "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
+            "DefaultExecutorDpuSize": DEFAULT_SPARK_EXECUTOR_DPU_SIZE,
+            "SparkProperties": spark_properties,
+        }
+        engine_config.update(user_engine_config)
+        engine_config["SparkProperties"] = spark_properties
+        return engine_config
+
+    @staticmethod
+    def _build_spark_connect_engine_config(
+        spark_properties: Dict[str, str],
+        user_engine_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        engine_config: Dict[str, Any] = {
+            "MaxConcurrentDpus": DEFAULT_SPARK_MAX_CONCURRENT_DPUS,
+        }
+        engine_config.update(user_engine_config)
+        for rejected in ("CoordinatorDpuSize", "DefaultExecutorDpuSize", "SparkProperties"):
+            engine_config.pop(rejected, None)
+
+        if spark_properties:
+            classifications = engine_config.get("Classifications", [])
+            merged = {k: str(v) for k, v in spark_properties.items()}
+            existing = next(
+                (c for c in classifications if c.get("Name") == "spark-defaults"), None
+            )
+            if existing:
+                existing.setdefault("Properties", {}).update(merged)
+            else:
+                classifications.append({"Name": "spark-defaults", "Properties": merged})
+            engine_config["Classifications"] = classifications
         return engine_config
