@@ -1,0 +1,11 @@
+kind: Fixes
+body: 'Treat a single-quoted string literal inside a clustering expression (e.g.
+    `to_char(ts, ''MON'')`) as case-sensitive data during configuration-change detection:
+    the surrounding expression text was folded correctly, but a literal''s exact
+    case, and any `)`/`,` characters embedded inside it, previously corrupted the
+    comparison and could cause an unnecessary full refresh on every run. Live-verified
+    against Snowflake'
+time: 2026-09-02T15:49:23.600710+05:30
+custom:
+    Author: itsnamangoyal
+    Issue: ""

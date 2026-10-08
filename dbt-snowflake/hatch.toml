@@ -81,7 +81,7 @@ dependencies = [
 
 [envs.ci.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = "python -m pytest tests/functional --ddtrace"
+integration-tests = "python -m pytest tests/functional --ddtrace -n 12"
 
 [envs.cd]
 pre-install-commands = []
@@ -97,4 +97,4 @@ dependencies = [
 
 [envs.cd.scripts]
 unit-tests = "python -m pytest tests/unit --ddtrace"
-integration-tests = "python -m pytest tests/functional --ddtrace"
+integration-tests = "python -m pytest tests/functional --ddtrace -n 12"
