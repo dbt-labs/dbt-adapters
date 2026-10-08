@@ -11,7 +11,7 @@ contact_links:
     about: dbt Core v1.x bugs, VS Code extension, SQL understanding, docs, and anything else that isn't adapter-specific
 -   name: Participate in Discussions
     url: https://github.com/dbt-labs/dbt-adapters/discussions
-    about: Do you have a Big Idea for dbt-adapters or one of the adapter implementations? Read open discussions, or start a new one
+    about: Have a Big Idea for dbt v2.x adapters or the dbt v1.x adapters in this repo? Read open discussions, or start a new one
 -   name: Ask the community for help
     url: https://github.com/dbt-labs/docs.getdbt.com/discussions
     about: Need help troubleshooting? Check out our guide on how to ask
