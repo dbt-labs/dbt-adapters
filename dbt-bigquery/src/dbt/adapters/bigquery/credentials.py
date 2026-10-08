@@ -68,8 +68,9 @@ class BigQueryCredentials(Credentials):
     # When True, logs the BigQuery job link at INFO level instead of DEBUG
     job_link_info_level_log: Optional[bool] = False
     # When True, skips listing every dataset in the project. dbt-core lists schemas
-    # before a run to decide which ones to create; on projects with many datasets
-    # this is slow, and create_schema is idempotent on BigQuery, so it is not needed.
+    # before a run to decide which ones to create, which is slow on projects with many
+    # datasets. Instead, create_schema and the catalog check each schema they need.
+    # Note that adapter.list_schemas() returns [] while this is on.
     skip_list_datasets: Optional[bool] = False
 
     # Keyfile json creds (unicode or base 64 encoded)

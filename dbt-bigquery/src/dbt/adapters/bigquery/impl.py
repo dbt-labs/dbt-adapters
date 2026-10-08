@@ -496,6 +496,13 @@ class BigQueryAdapter(BaseAdapter):
         # use SQL 'create schema'
         relation = relation.without_identifier()
 
+        # list_schemas returned [] so dbt-core asks us to create every required schema.
+        # Checking existence is a cheap API call, unlike a 'create schema' query job.
+        if self._skip_list_datasets and self.check_schema_exists(
+            relation.database, relation.schema  # type:ignore
+        ):
+            return
+
         fire_event(SchemaCreation(relation=_make_ref_key_dict(relation)))
         kwargs = {
             "relation": relation,
