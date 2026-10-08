@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union
 
 from dbt_common.exceptions import DbtConfigError
 
@@ -145,3 +145,75 @@ def iceberg_version(model: RelationConfig) -> Optional[int]:
 
 def target_file_size(model: RelationConfig) -> Optional[str]:
     return model.config.get("target_file_size") if model.config else None
+
+
+def data_metric_schedule(model: RelationConfig) -> Optional[str]:
+    """The evaluation schedule for the relation's data metric functions.
+
+    Passed through to Snowflake verbatim (for example ``5 MINUTE``,
+    ``USING CRON 0 6 * * * UTC`` or ``TRIGGER_ON_CHANGES``); Snowflake validates the
+    value when the schedule is set.
+    """
+    if not model.config:
+        return None
+
+    schedule = model.config.get("data_metric_schedule")
+    if schedule is None:
+        return None
+    if not isinstance(schedule, str):
+        raise DbtConfigError(
+            f"Unexpected data_metric_schedule configuration: expected a string, got {schedule!r}"
+        )
+
+    schedule = schedule.strip()
+    return schedule or None
+
+
+def data_metric_functions(model: RelationConfig) -> List[Dict[str, Any]]:
+    """The data metric functions configured on the relation.
+
+    Each entry is normalized to ``{"name": <fully qualified dmf>, "arguments": [<column>, ...]}``.
+    A single ``expression`` string is wrapped into a one-element list so that a scalar
+    and a list are handled the same way downstream.
+    """
+    if not model.config:
+        return []
+
+    configured = model.config.get("data_metric_functions")
+    if not configured:
+        return []
+    if not isinstance(configured, list):
+        raise DbtConfigError(
+            "Unexpected data_metric_functions configuration: expected a list of "
+            f"{{metric, expression}} mappings, got {configured!r}"
+        )
+
+    metric_functions: List[Dict[str, Any]] = []
+    for entry in configured:
+        if not isinstance(entry, dict):
+            raise DbtConfigError(
+                "Unexpected data_metric_functions entry: expected a mapping with "
+                f"`metric` and `expression`, got {entry!r}"
+            )
+
+        metric = entry.get("metric")
+        expression = entry.get("expression")
+        if not metric or expression in (None, "", []):
+            raise DbtConfigError(
+                "Each data_metric_functions entry requires a non-empty `metric` and "
+                f"`expression`, got {entry!r}"
+            )
+
+        if isinstance(expression, str):
+            arguments = [expression]
+        elif isinstance(expression, (list, tuple)):
+            arguments = list(expression)
+        else:
+            raise DbtConfigError(
+                "Unexpected data_metric_functions `expression`: expected a column name "
+                f"or list of column names, got {expression!r}"
+            )
+
+        metric_functions.append({"name": metric, "arguments": arguments})
+
+    return metric_functions
