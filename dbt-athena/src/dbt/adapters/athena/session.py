@@ -3,11 +3,12 @@ import threading
 import time
 from functools import cached_property, lru_cache
 from hashlib import md5
-from typing import Any, Dict, NamedTuple, Optional
+from typing import Any, Dict, Hashable, NamedTuple, Optional
 from uuid import UUID
 
 import boto3
 import boto3.session
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from dbt_common.exceptions import DbtRuntimeError
 from dbt_common.invocation import get_invocation_id
@@ -35,6 +36,55 @@ class _AssumeRoleParams(NamedTuple):
     assume_role_duration_seconds: int
     region_name: str
     num_retries: int
+
+
+# Many worker threads share the clients created by _ClientCachingSession, and botocore keeps
+# at most max_pool_connections (10 by default) idle connections per client.
+_SHARED_CLIENT_POOL_SIZE = 64
+
+
+class _ClientCachingSession(boto3.session.Session):
+    """
+    A boto3 session that hands out one shared client per (service, region, config).
+
+    The adapter asks the session for a new client on every Glue/S3/Athena operation. Building a
+    client (endpoint resolution, urllib3 pool, TLS handshake) is CPU-bound and holds the GIL, so
+    at 16-32 threads the adapter plateaus at ~15 operations per second and every Glue/S3 call
+    takes about a second, whatever the thread count. boto3 clients are thread-safe, so sharing
+    them removes that cost.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._shared_clients: Dict[Hashable, Any] = {}
+        self._shared_clients_lock = threading.Lock()
+
+    def client(  # type: ignore[override]
+        self,
+        service_name: str,
+        region_name: Optional[str] = None,
+        *args: Any,
+        config: Optional[Config] = None,
+        **kwargs: Any,
+    ) -> Any:
+        if args or kwargs:
+            return super().client(  # type: ignore[call-overload]
+                service_name, region_name, *args, config=config, **kwargs
+            )
+        key = (service_name, region_name, config)
+        client = self._shared_clients.get(key)
+        if client is None:
+            with self._shared_clients_lock:
+                client = self._shared_clients.get(key)
+                if client is None:
+                    pooled = Config(max_pool_connections=_SHARED_CLIENT_POOL_SIZE)
+                    client = super().client(  # type: ignore[call-overload]
+                        service_name,
+                        region_name,
+                        config=config.merge(pooled) if config else pooled,
+                    )
+                    self._shared_clients[key] = client
+        return client
 
 
 def _assume_role_session(
@@ -85,7 +135,7 @@ def _get_assume_role_session(
         response = sts_client.assume_role(**kwargs)
     except ClientError as e:
         raise DbtRuntimeError(f"Failed to assume role {key.assume_role_arn}: {e}") from e
-    return boto3.session.Session(
+    return _ClientCachingSession(
         aws_access_key_id=response["Credentials"]["AccessKeyId"],
         aws_secret_access_key=response["Credentials"]["SecretAccessKey"],
         aws_session_token=response["Credentials"]["SessionToken"],
@@ -93,13 +143,58 @@ def _get_assume_role_session(
     )
 
 
+# The base session is rebuilt at most this often, so credentials that botocore resolves once
+# and never refreshes (e.g. static keys in a shared credentials file that is rotated by
+# another process) are picked up again during long runs.
+_BASE_SESSION_TTL_SECONDS = 300
+
+
+# dbt-core closes the connection after every node, so without a cache every node pays the
+# full botocore session construction cost (config parsing, credential resolution), which is
+# CPU-bound and serialized by the GIL across worker threads. Mirrors the lru_cache already
+# used for the assume-role path above, including sharing one session across threads.
+@lru_cache(maxsize=8)
+def _cached_base_session(
+    aws_access_key_id: Optional[str],
+    aws_secret_access_key: Optional[str],
+    aws_session_token: Optional[str],
+    region_name: Optional[str],
+    profile_name: Optional[str],
+    _ttl_hash: int,  # artificial value that changes every ttl seconds to force cache invalidation
+) -> boto3.session.Session:
+    return _ClientCachingSession(
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_session_token=aws_session_token,
+        region_name=region_name,
+        profile_name=profile_name,
+    )
+
+
+def _get_base_session(
+    aws_access_key_id: Optional[str],
+    aws_secret_access_key: Optional[str],
+    aws_session_token: Optional[str],
+    region_name: Optional[str],
+    profile_name: Optional[str],
+) -> boto3.session.Session:
+    return _cached_base_session(
+        aws_access_key_id,
+        aws_secret_access_key,
+        aws_session_token,
+        region_name,
+        profile_name,
+        int(time.time() / _BASE_SESSION_TTL_SECONDS),
+    )
+
+
 def get_boto3_session(connection: Connection) -> boto3.session.Session:
-    base_session = boto3.session.Session(
-        aws_access_key_id=connection.credentials.aws_access_key_id,
-        aws_secret_access_key=connection.credentials.aws_secret_access_key,
-        aws_session_token=connection.credentials.aws_session_token,
-        region_name=connection.credentials.region_name,
-        profile_name=connection.credentials.aws_profile_name,
+    base_session = _get_base_session(
+        connection.credentials.aws_access_key_id,
+        connection.credentials.aws_secret_access_key,
+        connection.credentials.aws_session_token,
+        connection.credentials.region_name,
+        connection.credentials.aws_profile_name,
     )
     if connection.credentials.assume_role_arn:
         return _assume_role_session(base_session, connection.credentials)
@@ -107,12 +202,12 @@ def get_boto3_session(connection: Connection) -> boto3.session.Session:
 
 
 def get_boto3_session_from_credentials(credentials: Any) -> boto3.session.Session:
-    base_session = boto3.session.Session(
-        aws_access_key_id=credentials.aws_access_key_id,
-        aws_secret_access_key=credentials.aws_secret_access_key,
-        aws_session_token=credentials.aws_session_token,
-        region_name=credentials.region_name,
-        profile_name=credentials.aws_profile_name,
+    base_session = _get_base_session(
+        credentials.aws_access_key_id,
+        credentials.aws_secret_access_key,
+        credentials.aws_session_token,
+        credentials.region_name,
+        credentials.aws_profile_name,
     )
     if credentials.assume_role_arn:
         return _assume_role_session(base_session, credentials)
