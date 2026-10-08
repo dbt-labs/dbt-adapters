@@ -331,7 +331,13 @@ class BigQueryAdapter(BaseAdapter):
 
     @available
     def list_schemas(self, database: str) -> List[str]:
+        if self._skip_list_datasets:
+            return []
         return self.connections.list_dataset(database)
+
+    @property
+    def _skip_list_datasets(self) -> bool:
+        return bool(self.connections.profile.credentials.skip_list_datasets)
 
     @available.parse(lambda *a, **k: False)
     def check_schema_exists(self, database: str, schema: str) -> bool:
@@ -489,6 +495,13 @@ class BigQueryAdapter(BaseAdapter):
     def create_schema(self, relation: BigQueryRelation) -> None:
         # use SQL 'create schema'
         relation = relation.without_identifier()
+
+        # list_schemas returned [] so dbt-core asks us to create every required schema.
+        # Checking existence is a cheap API call, unlike a 'create schema' query job.
+        if self._skip_list_datasets and self.check_schema_exists(
+            relation.database, relation.schema  # type:ignore
+        ):
+            return
 
         fire_event(SchemaCreation(relation=_make_ref_key_dict(relation)))
         kwargs = {
@@ -1120,9 +1133,13 @@ class BigQueryAdapter(BaseAdapter):
 
         for candidate, schemas in candidates.items():
             database = candidate.database
-            if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
-            if candidate.schema in db_schemas[database]:  # type:ignore
+            if self._skip_list_datasets:
+                exists = self.check_schema_exists(database, candidate.schema)  # type:ignore
+            else:
+                if database not in db_schemas:
+                    db_schemas[database] = set(self.list_schemas(database))  # type:ignore
+                exists = candidate.schema in db_schemas[database]  # type:ignore
+            if exists:
                 result[candidate] = schemas
             else:
                 logger.debug(

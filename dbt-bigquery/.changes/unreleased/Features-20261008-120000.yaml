@@ -1,0 +1,6 @@
+kind: Features
+body: Add skip_list_datasets profile setting to avoid listing every dataset in the project at the start of a run.
+time: 2026-10-08T12:00:00.000000-04:00
+custom:
+    Author: kbaum
+    Issue: "2209"

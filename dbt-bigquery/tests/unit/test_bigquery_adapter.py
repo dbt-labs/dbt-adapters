@@ -2,6 +2,7 @@ from multiprocessing import get_context
 from unittest import mock
 
 import agate
+import collections
 import decimal
 import string
 import random
@@ -1316,3 +1317,95 @@ class TestPartitionConfigRenderWrappedInt64Range:
         """int64 without range config should return the raw field name."""
         config = PartitionConfig(field="id", data_type="int64")
         assert config.render_wrapped() == "id"
+
+
+class TestBigQuerySkipListDatasets(BaseTestBigQueryAdapter):
+    def get_skip_adapter(self) -> BigQueryAdapter:
+        self.raw_profile["outputs"]["oauth_skip_list"] = {
+            **self.raw_profile["outputs"]["oauth"],
+            "skip_list_datasets": True,
+        }
+        return self.get_adapter("oauth_skip_list")
+
+    def test_list_schemas_lists_datasets_by_default(self):
+        adapter = self.get_adapter("oauth")
+        adapter.connections.list_dataset = MagicMock(return_value=["a", "b"])
+
+        assert adapter.list_schemas("test-project") == ["a", "b"]
+        adapter.connections.list_dataset.assert_called_once_with("test-project")
+
+    def test_list_schemas_skips_listing_when_enabled(self):
+        adapter = self.get_skip_adapter()
+        adapter.connections.list_dataset = MagicMock()
+
+        assert adapter.list_schemas("test-project") == []
+        adapter.connections.list_dataset.assert_not_called()
+
+    def test_catalog_schemas_checks_each_schema_when_enabled(self):
+        adapter = self.get_skip_adapter()
+        adapter.connections.list_dataset = MagicMock()
+        adapter.check_schema_exists = MagicMock(
+            side_effect=lambda database, schema: schema == "real_dataset"
+        )
+        CatalogKey = collections.namedtuple("CatalogKey", ["database", "schema"])
+        real = CatalogKey("test-project", "real_dataset")
+        missing = CatalogKey("test-project", "missing_dataset")
+
+        with patch(
+            "dbt.adapters.base.impl.BaseAdapter._get_catalog_schemas",
+            return_value={real: {"real_dataset"}, missing: {"missing_dataset"}},
+        ):
+            result = adapter._get_catalog_schemas([])
+
+        assert set(result.keys()) == {real}
+        adapter.connections.list_dataset.assert_not_called()
+
+    def test_catalog_schemas_uses_list_schemas_by_default(self):
+        adapter = self.get_adapter("oauth")
+        adapter.connections.list_dataset = MagicMock(return_value=["real_dataset"])
+        adapter.check_schema_exists = MagicMock()
+        CatalogKey = collections.namedtuple("CatalogKey", ["database", "schema"])
+        real = CatalogKey("test-project", "real_dataset")
+        missing = CatalogKey("test-project", "missing_dataset")
+
+        with patch(
+            "dbt.adapters.base.impl.BaseAdapter._get_catalog_schemas",
+            return_value={real: {"real_dataset"}, missing: {"missing_dataset"}},
+        ):
+            result = adapter._get_catalog_schemas([])
+
+        assert set(result.keys()) == {real}
+        adapter.connections.list_dataset.assert_called_once_with("test-project")
+        adapter.check_schema_exists.assert_not_called()
+
+    def test_create_schema_skips_existing_dataset_when_enabled(self):
+        adapter = self.get_skip_adapter()
+        adapter.check_schema_exists = MagicMock(return_value=True)
+        adapter.execute_macro = MagicMock()
+        relation = BigQueryRelation.create(database="test-project", schema="real_dataset")
+
+        adapter.create_schema(relation)
+
+        adapter.check_schema_exists.assert_called_once_with("test-project", "real_dataset")
+        adapter.execute_macro.assert_not_called()
+
+    def test_create_schema_creates_missing_dataset_when_enabled(self):
+        adapter = self.get_skip_adapter()
+        adapter.check_schema_exists = MagicMock(return_value=False)
+        adapter.execute_macro = MagicMock()
+        relation = BigQueryRelation.create(database="test-project", schema="new_dataset")
+
+        adapter.create_schema(relation)
+
+        adapter.execute_macro.assert_called_once()
+
+    def test_create_schema_does_not_check_existence_by_default(self):
+        adapter = self.get_adapter("oauth")
+        adapter.check_schema_exists = MagicMock()
+        adapter.execute_macro = MagicMock()
+        relation = BigQueryRelation.create(database="test-project", schema="new_dataset")
+
+        adapter.create_schema(relation)
+
+        adapter.check_schema_exists.assert_not_called()
+        adapter.execute_macro.assert_called_once()
