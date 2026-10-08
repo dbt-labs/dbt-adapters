@@ -247,8 +247,10 @@ class AthenaCursor:
         formatter: AthenaParameterFormatter = AthenaParameterFormatter(),
         poll_delay: Callable[[float], None] = sleep,
         retry_interval_multiplier: int = 1,
+        connection: Optional["AthenaConnection"] = None,
     ) -> None:
         self._client = athena_client
+        self._connection = connection
         self._credentials = credentials
         self._poll_delay = poll_delay
         self._formatter = formatter
@@ -335,8 +337,17 @@ class AthenaCursor:
             status = query_execution.get("Status", {})
             self.state = status.get("State", None)
             LOGGER.debug(f"Athena query {self._query_execution_id} has state {self.state}")
+            statistics = query_execution.get("Statistics", {})
+            if self.state in (
+                AthenaCursor.STATE_SUCCEEDED,
+                AthenaCursor.STATE_FAILED,
+                AthenaCursor.STATE_CANCELLED,
+            ):
+                # failed attempts (e.g. Iceberg commit retries) are billed too
+                scanned = statistics.get("DataScannedInBytes", 0)
+                if self._connection is not None:
+                    self._connection.data_scanned_in_bytes += scanned
             if self.state == AthenaCursor.STATE_SUCCEEDED:
-                statistics = status_response.get("QueryExecution", {}).get("Statistics", {})
                 self.data_scanned_in_bytes = statistics.get("DataScannedInBytes", 0)
                 if self._query_execution_id:
                     plain_text = self._is_plain_text_result(query_execution)
@@ -354,6 +365,13 @@ class AthenaCursor:
                 raise AthenaQueryCancelledError(status.get("StateChangeReason", None))
             # Query is still queued or running; wait before polling again.
             self._poll_delay(self._credentials.poll_interval)
+
+    @property
+    def total_data_scanned_in_bytes(self) -> int:
+        """Bytes scanned by every query run on this cursor's connection (i.e. the whole dbt node)."""
+        if self._connection is not None:
+            return self._connection.data_scanned_in_bytes
+        return self.data_scanned_in_bytes
 
     def cancel(self) -> None:
         if self._query_execution_id:
@@ -666,6 +684,7 @@ class AthenaConnection(Connection):
         self.region_name = self.credentials.region_name
         self._client = None
         self._cursors: WeakSet = WeakSet()
+        self.data_scanned_in_bytes = 0
 
     def connect(self, boto_config_factory: Callable[..., BotoConfig] = get_boto3_config) -> Self:
         boto_config = boto_config_factory(
@@ -682,7 +701,7 @@ class AthenaConnection(Connection):
 
     def cursor(self) -> AthenaCursor:
         if self._client is not None:
-            cursor = AthenaCursor(self._client, self._athena_credentials)
+            cursor = AthenaCursor(self._client, self._athena_credentials, connection=self)
             self._cursors.add(cursor)
             return cursor
         else:
@@ -748,12 +767,13 @@ class AthenaConnectionManager(SQLConnectionManager):
     @classmethod
     def get_response(cls, cursor: AthenaCursor) -> AthenaAdapterResponse:
         code = "OK" if cursor.state == AthenaCursor.STATE_SUCCEEDED else "ERROR"
-        rowcount, data_scanned_in_bytes = cls.process_query_stats(cursor)
+        rowcount, parsed_bytes = cls.process_query_stats(cursor)
         return AthenaAdapterResponse(
             _message=f"{code} {rowcount}",
             rows_affected=rowcount,
             code=code,
-            data_scanned_in_bytes=data_scanned_in_bytes,
+            # the pyathena cursor (connection_manager: pyathena) only knows its own query
+            data_scanned_in_bytes=getattr(cursor, "total_data_scanned_in_bytes", parsed_bytes),
         )
 
     @staticmethod
