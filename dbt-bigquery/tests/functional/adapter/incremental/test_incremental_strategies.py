@@ -31,6 +31,7 @@ from tests.functional.adapter.incremental.incremental_strategy_fixtures import (
     overwrite_day_with_time_ingestion_sql,
     overwrite_day_with_time_partition_datetime_sql,
     overwrite_static_day_sql,
+    overwrite_comment_only_max_partition_token_sql,
 )
 
 
@@ -192,3 +193,24 @@ class TestBigQueryMergeNullUniqueKeyTruthyNullsEquals:
 
         rows = [(row[0], row[1]) for row in table.rows]
         assert rows == [(1, "b_updated"), (None, "a_updated")]
+
+
+class TestBigQueryMaxPartitionCommentToken:
+    """Regression for dbt-labs/dbt-adapters#1907 / #580: a `_dbt_max_partition`
+    token appearing only in comments must not trigger the declare block, which
+    fails with table-not-found on a model's first-ever build."""
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {
+            "incremental_overwrite_comment_token.sql": (
+                overwrite_comment_only_max_partition_token_sql
+            ),
+        }
+
+    def test_first_run_and_incremental_run_succeed(self, project):
+        first_run = run_dbt(["run"])
+        assert len(first_run) == 1
+
+        second_run = run_dbt(["run"])
+        assert len(second_run) == 1
