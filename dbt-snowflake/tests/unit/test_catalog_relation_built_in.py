@@ -168,3 +168,55 @@ def test_iceberg_version_model_overrides_catalog():
     model.config.update({"iceberg_version": 3})
     relation = integration.build_relation(model)
     assert relation.iceberg_version == 3
+
+
+# --- managed storage default behavior flag ---
+
+
+def _make_no_ev_model():
+    """Model with table_format=iceberg but no external_volume in config or catalog."""
+    return SimpleNamespace(
+        database="my_database",
+        schema="my_schema",
+        identifier="my_table",
+        config={"table_format": "iceberg"},
+    )
+
+
+def _make_no_ev_integration():
+    catalog_config = SimpleNamespace(
+        name="SNOWFLAKE",
+        catalog_type="BUILT_IN",
+        external_volume=None,
+        file_format=None,
+        adapter_properties=None,
+    )
+    return BuiltInCatalogIntegration(catalog_config)
+
+
+def test_managed_storage_default_on_emits_snowflake_managed():
+    integration = _make_no_ev_integration()
+    integration.use_snowflake_managed_storage_default = True
+    relation = integration.build_relation(_make_no_ev_model())
+    assert relation.external_volume == "SNOWFLAKE_MANAGED"
+    assert relation.base_location is None
+
+
+def test_managed_storage_default_off_omits_external_volume():
+    integration = _make_no_ev_integration()
+    integration.use_snowflake_managed_storage_default = False
+    relation = integration.build_relation(_make_no_ev_model())
+    assert relation.external_volume is None
+    assert relation.base_location is not None  # generated from schema/identifier
+
+
+def test_explicit_snowflake_managed_in_model_config_always_suppresses_base_location():
+    """Explicit SNOWFLAKE_MANAGED in model config suppresses base_location regardless of the flag."""
+    integration = _make_no_ev_integration()
+    model = _make_no_ev_model()
+    model.config = {"table_format": "iceberg", "external_volume": "SNOWFLAKE_MANAGED"}
+    for flag in (True, False):
+        integration.use_snowflake_managed_storage_default = flag
+        relation = integration.build_relation(model)
+        assert relation.external_volume == "SNOWFLAKE_MANAGED"
+        assert relation.base_location is None

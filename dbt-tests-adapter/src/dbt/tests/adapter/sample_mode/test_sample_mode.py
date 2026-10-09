@@ -39,7 +39,7 @@ class BaseSampleModeTest:
         assert len(result) == expected_row_count, f"{relation_name}:{pformat(result)}"
 
     @mock.patch.dict(os.environ, {"DBT_EXPERIMENTAL_SAMPLE_MODE": "True"})
-    @freezegun.freeze_time("2025-01-03T02:03:0Z")
+    @freezegun.freeze_time("2025-01-03T02:03:0Z", ignore=["snowflake"])
     def test_sample_mode(self, project) -> None:
         _ = run_dbt(["run"])
         self.assert_row_count(
