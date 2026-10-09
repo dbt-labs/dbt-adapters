@@ -661,7 +661,12 @@ class BaseAdapter(metaclass=AdapterMeta):
         """Populate the relations cache for the given schemas. Returns an
         iterable of the schemas populated, as strings.
         """
-        if not cache_schemas:
+        # `cache_schemas=set()` is a meaningful "nothing to cache" (e.g. a
+        # selection with no relational nodes), distinct from `None` ("no
+        # schemas were specified, compute the default"). Treating both as
+        # falsy silently expands an intentionally empty selection to every
+        # schema in the project.
+        if cache_schemas is None:
             cache_schemas = self._get_cache_schemas(relation_configs)
         with executor(self.config) as tpe:
             futures: List[Future[List[BaseRelation]]] = []
