@@ -81,7 +81,12 @@
 
         column_name as "column_name",
         ordinal_position as "column_index",
-        data_type as "column_type",
+        -- data_type is bare NUMBER; compose precision/scale for catalog consumers
+        case
+            when data_type = 'NUMBER' and numeric_precision is not null
+                then 'NUMBER(' || numeric_precision || ',' || coalesce(numeric_scale, 0) || ')'
+            else data_type
+        end as "column_type",
         comment as "column_comment"
     from {{ information_schema }}.columns
 {%- endmacro %}
