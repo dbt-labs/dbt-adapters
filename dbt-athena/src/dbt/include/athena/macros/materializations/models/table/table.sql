@@ -120,7 +120,9 @@
           {% endcall %}
         {%- endif -%}
         {%- do drop_relation(old_relation) -%}
-        {%- do rename_relation(tmp_relation, target_relation) -%}
+        {%- if not try_rename_relation(tmp_relation, target_relation) -%}
+          {%- set query_result = create_iceberg_table_after_unsupported_rename(target_relation, tmp_relation, compiled_code, language, force_batch) -%}
+        {%- endif -%}
       {%- else -%}
         -- delete old tmp iceberg table if it exists
         {%- if old_tmp_relation is not none -%}
@@ -149,20 +151,34 @@
         -- we need to create a python object via the make_temp_relation instead
         {%- set old_relation_bkp = make_temp_relation(old_relation, '__bkp') -%}
 
+        -- Glue IRC can reject ALTER TABLE RENAME, in which case the swap falls back to
+        -- dropping the old table and creating the target directly
+        {%- set bkp_created = false -%}
+        {%- set rename_unsupported = false -%}
         {%- if old_relation_table_type == 'iceberg_table' -%}
-          {{ rename_relation(old_relation, old_relation_bkp) }}
+          {%- set bkp_created = try_rename_relation(old_relation, old_relation_bkp) -%}
+          {%- set rename_unsupported = not bkp_created -%}
+          {%- if rename_unsupported -%}
+            {%- do drop_relation(old_relation) -%}
+          {%- endif -%}
         {%- else  -%}
           {%- do drop_relation_glue(old_relation) -%}
         {%- endif -%}
 
         -- publish the target table doing a final renaming
-        {{ rename_relation(tmp_relation, target_relation) }}
+        {%- if not rename_unsupported -%}
+          {%- set rename_unsupported = not try_rename_relation(tmp_relation, target_relation) -%}
+        {%- endif -%}
 
-        -- if old relation is iceberg_table, we have a backup
+        {%- if rename_unsupported -%}
+          {%- set query_result = create_iceberg_table_after_unsupported_rename(target_relation, tmp_relation, compiled_code, language, force_batch) -%}
+        {%- endif -%}
+
+        -- if the old iceberg table was renamed, we have a backup
         -- therefore we can drop the old relation backup, in all other cases there is nothing to do
         -- in case of switch from hive to iceberg the backup table do not exists
         -- in case of first run, the backup table do not exists
-        {%- if old_relation_table_type == 'iceberg_table' -%}
+        {%- if bkp_created -%}
           {%- do drop_relation(old_relation_bkp) -%}
         {%- endif -%}
 

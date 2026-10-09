@@ -55,6 +55,10 @@ S3_TABLES_CATALOG_TYPE = "s3_tables"
 # Distinct from S3_TABLES_CATALOG_TYPE, which is the dbt catalogs.yml `type` value.
 S3_TABLES_GLUE_CATALOG_PREFIX = "s3tablescatalog"
 
+# Error text Athena returns when an Iceberg ALTER TABLE RENAME is routed through the Glue
+# Iceberg REST catalog, which does not support RenameTable.
+GLUE_IRC_RENAME_UNSUPPORTED_MESSAGE = "ALTER TABLE RENAME queries are not supported by Glue IRC"
+
 # Default catalog registered for every model that does not reference a catalog.
 # Maps to Athena's standard Hive table_type.
 DEFAULT_INFO_SCHEMA_CATALOG = SimpleNamespace(
