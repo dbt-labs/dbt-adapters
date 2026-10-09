@@ -1,0 +1,8 @@
+kind: Fixes
+body: Compare clustering fields case-insensitively in `is_replaceable` so a `cluster_by`
+    config that differs only by letter case no longer forces an unnecessary drop and
+    recreate of the table
+time: 2026-08-07T00:00:00.000000+00:00
+custom:
+    Author: ddamart
+    Issue: "2111"
