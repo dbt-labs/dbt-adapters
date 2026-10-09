@@ -688,6 +688,36 @@ class TestAthenaAdapter:
     def test_quote_seed_column(self, column, quote_config, quote_character, expected):
         assert self.adapter.quote_seed_column(column, quote_config, quote_character) == expected
 
+    def test_quote_seed_column_does_not_change_shared_quote_character(self):
+        seen = []
+        original_quote = AthenaAdapter.quote
+
+        def recording_quote(adapter, identifier):
+            seen.append(adapter.quote_character)
+            return original_quote(adapter, identifier)
+
+        with mock.patch.object(AthenaAdapter, "quote", recording_quote):
+            assert self.adapter.quote_seed_column("col", None, "`") == "`col`"
+
+        # no other thread can observe a backtick quote character
+        assert all(char == '"' for char in seen)
+        assert self.adapter.quote_character == '"'
+        assert self.adapter.quote_seed_column("col", None) == '"col"'
+
+    def test_quote_seed_column_is_thread_safe(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        def quote(i):
+            if i % 2:
+                return self.adapter.quote_seed_column("col", True, "`")
+            return self.adapter.quote_seed_column("col", True)
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(quote, range(400)))
+
+        assert results[0::2] == ['"col"'] * 200
+        assert results[1::2] == ["`col`"] * 200
+
     @mock_aws
     def test__get_one_catalog(self, mock_aws_service):
         mock_aws_service.create_data_catalog()
