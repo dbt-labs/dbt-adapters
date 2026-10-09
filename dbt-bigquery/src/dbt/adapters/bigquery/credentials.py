@@ -1,5 +1,7 @@
 import base64
 import binascii
+import json
+import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
@@ -251,12 +253,41 @@ def _create_google_credentials(credentials: BigQueryCredentials) -> GoogleCreden
         )
 
     elif credentials.method == BigQueryConnectionMethod.EXTERNAL_OAUTH_WIF:
-        creds = _create_identity_pool_credentials(credentials=credentials)
+        creds = _get_identity_pool_credentials(credentials)
 
     else:
         raise FailedToConnectError(f"Invalid `method` in profile: '{credentials.method}'")
 
     return creds
+
+
+class _SharedIdentityPoolCredentials(IdentityPoolCredentials):
+    # Serializes refreshes so concurrent threads fetch one token. Reentrant because, with service
+    # account impersonation, google-auth refreshes a copy of this class from within our refresh.
+    _refresh_lock = threading.RLock()
+
+    def refresh(self, request):
+        stale_token = self.token
+        with self._refresh_lock:
+            if self.valid and self.token != stale_token:
+                return  # another thread refreshed while we waited
+            super().refresh(request)
+
+
+_IDENTITY_POOL_CREDENTIALS: Dict[Tuple, GoogleCredentials] = {}
+
+
+def _get_identity_pool_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
+    # one credentials object per WIF config, so tokens are fetched once per process, not per model
+    key = (
+        credentials.workload_pool_provider_path,
+        credentials.service_account_impersonation_url,
+        json.dumps(credentials.token_endpoint, sort_keys=True),
+        tuple(credentials.scopes or ()),
+    )
+    return _IDENTITY_POOL_CREDENTIALS.setdefault(
+        key, _create_identity_pool_credentials(credentials)
+    )
 
 
 def _create_identity_pool_credentials(credentials: BigQueryCredentials) -> GoogleCredentials:
@@ -287,7 +318,7 @@ def _create_identity_pool_credentials(credentials: BigQueryCredentials) -> Googl
             credentials.service_account_impersonation_url
         )
 
-    creds = IdentityPoolCredentials.from_info(adc_dict)
+    creds = _SharedIdentityPoolCredentials.from_info(adc_dict)
     return creds.with_scopes(credentials.scopes)
 
 
