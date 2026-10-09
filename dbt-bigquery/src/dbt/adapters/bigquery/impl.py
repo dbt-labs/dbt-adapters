@@ -441,17 +441,38 @@ class BigQueryAdapter(BaseAdapter):
         # the implementation of list_relations for other adapters
         try:
             table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
+        except google.api_core.exceptions.NotFound:
+            return []
+        except google.api_core.exceptions.Forbidden as exc:
+            self._warn_list_relations_forbidden(dataset_ref, "tables", exc)
+            return []
+
+        # Listing routines needs a separate permission (bigquery.routines.list), so a
+        # denial here must not discard the tables that were listed successfully.
+        try:
             function_relations = [
                 relation
                 for routine in all_routines
                 if (relation := self._bq_routine_to_relation(routine)) is not None
             ]  # type: ignore[misc]
-            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
-            logger.debug("list_relations_without_caching error: {}".format(str(exc)))
-            return []
+            self._warn_list_relations_forbidden(dataset_ref, "routines", exc)
+            return table_relations  # type: ignore[return-value]
+
+        return table_relations + function_relations  # type: ignore[return-value]
+
+    @staticmethod
+    def _warn_list_relations_forbidden(dataset_ref, kind: str, exc: Exception) -> None:
+        # A denied listing is not the same as an empty dataset: dbt treats every relation
+        # in the dataset as missing, so say so instead of failing silently.
+        logger.warning(
+            f"Permission denied listing {kind} in dataset "
+            f"'{dataset_ref.project}.{dataset_ref.dataset_id}'; dbt will treat it as having "
+            f"no {kind}, which can cause models to be rebuilt instead of updated. "
+            f"Grant the required BigQuery permission to fix this. Error: {exc}"
+        )
 
     def get_relation(
         self, database: str, schema: str, identifier: str
