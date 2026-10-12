@@ -188,3 +188,43 @@ def test_create_ephemeral_from_uses_identifier():
     node = Node(name="name_should_not_be_used", identifier="test")
     ephemeral_relation = BaseRelation.create_ephemeral_from(node)
     assert str(ephemeral_relation) == "__dbt__cte__test"
+
+
+def _db_only(database: str, schema: str, identifier: str) -> BaseRelation:
+    """Mirror what dbt-core RunTask.create_schemas does for each model."""
+    full = BaseRelation.create(
+        database=database,
+        schema=schema,
+        identifier=identifier,
+        type=RelationType.Table,
+    )
+    return full.include(database=True, schema=False, identifier=False)
+
+
+def test_db_only_relations_dedupe_in_a_set():
+    """
+    Relations that render to the same string must compare equal so that
+    `Set[BaseRelation]` deduplicates them.
+
+    Regression test: `RunTask.create_schemas` in dbt-core builds
+    `required_databases: Set[BaseRelation]` from
+    `required.include(database=True, schema=False, identifier=False)`.
+    When this dedup fails, dbt fans out one `list_schemas(database)` future
+    per (database, schema) pair instead of one per unique database, causing
+    N redundant `information_schema.schemata` queries on engines like Trino.
+    """
+    relations = [_db_only("hive", f"schema_{i}", f"table_{i}") for i in range(5)]
+    assert {r.render() for r in relations} == {'"hive"'}
+    assert len({hash(r) for r in relations}) == 1
+    assert relations[0] == relations[1]
+    assert len(set(relations)) == 1
+
+
+def test_relation_eq_matches_hash():
+    """`a == b` must imply `hash(a) == hash(b)`, and the practically harmful
+    inverse (`hash(a) == hash(b) and a != b`) must not be reachable for
+    relations that render identically."""
+    a = _db_only("hive", "schema_a", "table_a")
+    b = _db_only("hive", "schema_b", "table_b")
+    assert hash(a) == hash(b)
+    assert a == b
