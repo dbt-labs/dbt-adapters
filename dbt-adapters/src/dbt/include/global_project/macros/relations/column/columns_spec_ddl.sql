@@ -6,6 +6,29 @@
   {{ return(table_columns_and_constraints()) }}
 {%- endmacro %}
 
+{#
+  Reusable wrapper around the contract-enforcement DDL block.
+
+  Emits a `(col type CONSTRAINT ..., ...)` clause for relations whose contract
+  is enforced, after asserting that the SQL columns match the YAML schema.
+  Callers are still responsible for rewriting the SELECT via
+  `get_select_subquery(sql)` when they need the projection order to match the
+  rendered DDL (e.g. `create table ... as (select ...)`).
+
+  Intended to be reused by any relation-create macro that wants the same
+  contract semantics as `default__create_table_as` — including materialized
+  view / dynamic table / streaming table create macros for adapters whose
+  underlying DB accepts constraint clauses on those relation types.
+#}
+{%- macro get_columns_and_constraints_clause(sql) -%}
+  {{ adapter.dispatch('get_columns_and_constraints_clause', 'dbt')(sql) }}
+{%- endmacro -%}
+
+{% macro default__get_columns_and_constraints_clause(sql) -%}
+  {{ get_assert_columns_equivalent(sql) }}
+  {{ get_table_columns_and_constraints() }}
+{%- endmacro %}
+
 {% macro table_columns_and_constraints() %}
   {# loop through user_provided_columns to create DDL with data types and constraints #}
     {%- set raw_column_constraints = adapter.render_raw_columns_constraints(raw_columns=model['columns']) -%}
