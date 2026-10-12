@@ -620,14 +620,12 @@ class AthenaAdapter(SQLAdapter):
     def quote_seed_column(
         self, column: str, quote_config: Optional[bool], quote_character: Optional[str] = None
     ) -> str:
-        if quote_character:
-            old_value = self.quote_character
-            object.__setattr__(self, "quote_character", quote_character)
-            quoted_column = str(super().quote_seed_column(column, quote_config))
-            object.__setattr__(self, "quote_character", old_value)
-        else:
-            quoted_column = str(super().quote_seed_column(column, quote_config))
-
+        quoted_column = str(super().quote_seed_column(column, quote_config))
+        # Re-quote with the requested character without touching self.quote_character:
+        # the adapter instance is shared by all threads, so changing it temporarily
+        # leaks the wrong quote character into queries rendered by other threads.
+        if quote_character and quoted_column != column:
+            return f"{quote_character}{column}{quote_character}"
         return quoted_column
 
     @available
