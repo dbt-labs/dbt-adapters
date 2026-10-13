@@ -322,17 +322,19 @@ def test_fallback_triggers_regardless_of_error_wording(private_key):
     warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
 
 
-def test_error_message_match_alone_does_not_trigger_fallback(private_key_string):
-    # a modern (PBES2) key must not take the fallback path, even when the
-    # error message mentions an unsupported PBES1-style algorithm
+def test_error_message_match_alone_does_not_trigger_pbes1_fallback(
+    private_key_string, private_key
+):
+    # a modern (PBES2) key must not take the pycryptodome PBES1 path, even when
+    # the error message mentions an unsupported PBES1-style algorithm; it is
+    # handled by the OpenSSL fallback instead
     sneaky = ValueError("Unknown key encryption algorithm: 1.2.840.113549.1.5.10")
     with (
         mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=sneaky),
         mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
     ):
-        with pytest.raises(ValueError) as excinfo:
-            private_key_from_string(private_key_string, PASSPHRASE)
-    assert excinfo.value is sneaky
+        loaded = private_key_from_string(private_key_string, PASSPHRASE)
+    assert serialize(loaded) == serialize(private_key)
     import_key.assert_not_called()
 
 
@@ -355,3 +357,56 @@ def test_other_errors_are_not_caught(private_key):
             private_key_from_string("-----BEGIN PRIVATE KEY-----", PASSPHRASE)
     assert excinfo.value is other_error
     import_key.assert_not_called()
+
+
+# PBES2 key whose PBKDF2 parameters explicitly encode the default PRF
+# (hmacWithSHA1). OpenSSL accepts it; cryptography>=45 rejects it with
+# "DEFAULT value was explicitly encoded", before the passphrase is used.
+def pbes2_explicit_prf_encrypt(private_key, passphrase: str) -> bytes:
+    from Crypto.Cipher import AES
+
+    salt, iv, iterations = os.urandom(8), os.urandom(16), 2048
+    from Crypto.Protocol.KDF import PBKDF2
+
+    derived = PBKDF2(passphrase.encode(), salt, 32, iterations)  # default HMAC-SHA1
+    encrypted = AES.new(derived, AES.MODE_CBC, iv).encrypt(pad(serialize(private_key), 16))
+    prf = DerSequence([DerObjectId("1.2.840.113549.2.7").encode(), b"\x05\x00"]).encode()
+    pbkdf2_params = DerSequence([DerOctetString(salt).encode(), iterations, prf]).encode()
+    kdf = DerSequence([DerObjectId("1.2.840.113549.1.5.12").encode(), pbkdf2_params]).encode()
+    cipher = DerSequence(
+        [DerObjectId("2.16.840.1.101.3.4.1.42").encode(), DerOctetString(iv).encode()]
+    ).encode()
+    pbes2_params = DerSequence([kdf, cipher]).encode()
+    algorithm = DerSequence([DerObjectId("1.2.840.113549.1.5.13").encode(), pbes2_params]).encode()
+    return DerSequence([algorithm, DerOctetString(encrypted).encode()]).encode()
+
+
+@pytest.fixture(scope="session")
+def ec_private_key():
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    return ec.generate_private_key(ec.SECP256R1())
+
+
+@pytest.mark.parametrize("key_fixture", ["private_key", "ec_private_key"])
+@pytest.mark.parametrize("is_pem", [True, False])
+def test_pbes2_explicit_prf_falls_back_to_openssl(key_fixture, is_pem, request):
+    key = request.getfixturevalue(key_fixture)
+    der = pbes2_explicit_prf_encrypt(key, PASSPHRASE)
+    if is_pem:
+        loaded = private_key_from_string(to_pem(der), PASSPHRASE)
+    else:
+        loaded = private_key_from_string(base64.b64encode(der).decode(), PASSPHRASE)
+    assert serialize(loaded) == serialize(key)
+
+
+def test_pbes2_explicit_prf_from_file(private_key, tmp_path):
+    path = tmp_path / "key.pem"
+    path.write_text(to_pem(pbes2_explicit_prf_encrypt(private_key, PASSPHRASE)))
+    assert serialize(private_key_from_file(str(path), PASSPHRASE)) == serialize(private_key)
+
+
+def test_pbes2_explicit_prf_wrong_passphrase_raises(private_key):
+    der = pbes2_explicit_prf_encrypt(private_key, PASSPHRASE)
+    with pytest.raises(ValueError):
+        private_key_from_string(to_pem(der), "wrong-passphrase")

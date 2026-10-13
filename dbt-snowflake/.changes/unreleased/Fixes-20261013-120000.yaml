@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fall back to OpenSSL (pyOpenSSL) to load private keys that cryptography>=45 rejects, such as PBES2 keys with an explicitly encoded default PRF
+time: 2026-10-13T12:00:00.000000-06:00
+custom:
+    Author: ash2shukla
+    Issue: "2198"

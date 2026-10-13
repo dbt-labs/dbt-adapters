@@ -10,6 +10,7 @@ if sys.version_info < (3, 9):
 else:
     from functools import cache
 
+from Crypto.IO import PEM
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -24,6 +25,13 @@ PBES1_DEPRECATION_MESSAGE = (
     "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem` "
     "(on OpenSSL 3, also pass `-provider default -provider legacy`, because PBKDF1 and DES "
     "are only available in the legacy provider)"
+)
+
+NON_CANONICAL_KEY_MESSAGE = (
+    "The Snowflake private key could only be loaded through OpenSSL because its encoding is "
+    "not strict DER, which the `cryptography` library now rejects. Re-encrypt the key to "
+    "avoid this fallback, for example: "
+    "`openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
 )
 
 # PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3, limited
@@ -68,7 +76,6 @@ def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     key itself, rather than by matching cryptography's error message, so this
     keeps working even if cryptography rewords how it reports the failure.
     """
-    from Crypto.IO import PEM
     from Crypto.Util.asn1 import DerObjectId, DerSequence
 
     try:
@@ -86,6 +93,37 @@ def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     return oid in _PBES1_OIDS
 
 
+def _load_private_key_with_openssl(
+    data: bytes,
+    password: Optional[bytes],
+    is_pem: bool,
+    original_error: ValueError,
+) -> RSAPrivateKey:
+    """Fall back to OpenSSL (via pyOpenSSL) for keys cryptography rejects.
+
+    cryptography>=45 parses the EncryptedPrivateKeyInfo envelope strictly, so it
+    rejects keys that OpenSSL accepts, e.g. a PBES2 key whose PBKDF2 parameters
+    explicitly encode the default PRF (hmacWithSHA1): "DEFAULT value was
+    explicitly encoded". The failure happens before the passphrase is used.
+    Raises the original cryptography error if OpenSSL cannot load the key either.
+    """
+    from OpenSSL import crypto  # type: ignore[import-untyped,unused-ignore]
+
+    try:
+        if is_pem:
+            pem = _extract_pem_block(data)
+        else:
+            # pyOpenSSL cannot load encrypted DER, so wrap it in PEM headers
+            pem = PEM.encode(data, "ENCRYPTED PRIVATE KEY").encode()
+        key = crypto.load_privatekey(crypto.FILETYPE_PEM, pem, password).to_cryptography_key()
+    except Exception:
+        # keep cryptography's error, e.g. for a wrong passphrase
+        raise original_error
+
+    logger.warning(NON_CANONICAL_KEY_MESSAGE)
+    return cast(RSAPrivateKey, key)
+
+
 def _load_private_key(
     loader: Callable[..., Any],
     data: bytes,
@@ -97,7 +135,7 @@ def _load_private_key(
     except ValueError as e:
         # cryptography>=45 dropped PBES1 decryption (pyca/cryptography#12949)
         if not _is_pbes1_encrypted(data, is_pem):
-            raise
+            return _load_private_key_with_openssl(data, password, is_pem, e)
         original_error = e
 
     from Crypto.PublicKey import RSA
