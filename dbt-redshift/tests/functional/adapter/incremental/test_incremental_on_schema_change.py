@@ -90,6 +90,68 @@ with source_data as (
 select id, counter::bigint as counter from source_data
 """
 
+# varchar -> bigint has no implicit assignment cast in Redshift, so the copy
+# step of the migration path has to cast explicitly. See #2159.
+_INCREMENTAL_VARCHAR_TO_BIGINT = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns'
+    )
+}}
+with source_data as (
+    select 1 as id, '123' as amount
+    union all select 2, '456'
+)
+{% if is_incremental() %}
+select id, amount::bigint as amount from source_data where id not in (select id from {{ this }})
+{% else %}
+select id, cast(amount as varchar(50)) as amount from source_data
+{% endif %}
+"""
+
+_INCREMENTAL_VARCHAR_TO_BIGINT_TARGET = """
+{{
+    config(materialized='table')
+}}
+with source_data as (
+    select 1 as id, '123' as amount
+    union all select 2, '456'
+)
+select id, amount::bigint as amount from source_data
+"""
+
+_INCREMENTAL_VARCHAR_TO_TIMESTAMP = """
+{{
+    config(
+        materialized='incremental',
+        unique_key='id',
+        on_schema_change='sync_all_columns'
+    )
+}}
+with source_data as (
+    select 1 as id, '2026-01-01 12:00:00' as event_at
+    union all select 2, '2026-01-02 13:30:00'
+)
+{% if is_incremental() %}
+select id, event_at::timestamp as event_at from source_data where id not in (select id from {{ this }})
+{% else %}
+select id, cast(event_at as varchar(50)) as event_at from source_data
+{% endif %}
+"""
+
+_INCREMENTAL_VARCHAR_TO_TIMESTAMP_TARGET = """
+{{
+    config(materialized='table')
+}}
+with source_data as (
+    select 1 as id, '2026-01-01 12:00:00' as event_at
+    union all select 2, '2026-01-02 13:30:00'
+)
+select id, event_at::timestamp as event_at from source_data
+"""
+
 # Test fixtures for special character column names
 _MODEL_A_SPECIAL_CHARS = """
 {{
@@ -283,7 +345,9 @@ class TestIncrementalOnSchemaChangeColumnType(BaseIncrementalOnSchemaChangeSetup
     """Test incremental schema change when column *type* changes (redshift__alter_column_type).
 
     - VARCHAR expand: expand_target_column_types -> native ALTER COLUMN TYPE.
-    - INTEGER -> BIGINT: process_schema_changes -> default add/copy/drop/rename.
+    - INTEGER -> BIGINT: process_schema_changes -> add/copy/drop/rename.
+    - VARCHAR -> BIGINT / TIMESTAMP: same migration path, but across type
+      categories, so the copy step only works because it casts explicitly.
     """
 
     @pytest.fixture(scope="class")
@@ -293,6 +357,10 @@ class TestIncrementalOnSchemaChangeColumnType(BaseIncrementalOnSchemaChangeSetup
             "incremental_varchar_expand_target.sql": _INCREMENTAL_VARCHAR_EXPAND_TARGET,
             "incremental_int_to_bigint.sql": _INCREMENTAL_INT_TO_BIGINT,
             "incremental_int_to_bigint_target.sql": _INCREMENTAL_INT_TO_BIGINT_TARGET,
+            "incremental_varchar_to_bigint.sql": _INCREMENTAL_VARCHAR_TO_BIGINT,
+            "incremental_varchar_to_bigint_target.sql": _INCREMENTAL_VARCHAR_TO_BIGINT_TARGET,
+            "incremental_varchar_to_timestamp.sql": _INCREMENTAL_VARCHAR_TO_TIMESTAMP,
+            "incremental_varchar_to_timestamp_target.sql": _INCREMENTAL_VARCHAR_TO_TIMESTAMP_TARGET,
         }
 
     def test_incremental_varchar_expand_succeeds_and_matches_target(self, project):
@@ -315,4 +383,26 @@ class TestIncrementalOnSchemaChangeColumnType(BaseIncrementalOnSchemaChangeSetup
         check_relations_equal(
             project.adapter,
             ["incremental_int_to_bigint", "incremental_int_to_bigint_target"],
+        )
+
+    def test_incremental_varchar_to_bigint_succeeds_and_matches_target(self, project):
+        select = "incremental_varchar_to_bigint incremental_varchar_to_bigint_target"
+        # First run - creates initial table with a varchar column
+        run_dbt(["run", "--select", select])
+        # Second run - crosses type categories, so the copy step must cast
+        run_dbt(["run", "--select", select])
+        check_relations_equal(
+            project.adapter,
+            ["incremental_varchar_to_bigint", "incremental_varchar_to_bigint_target"],
+        )
+
+    def test_incremental_varchar_to_timestamp_succeeds_and_matches_target(self, project):
+        select = "incremental_varchar_to_timestamp incremental_varchar_to_timestamp_target"
+        # First run - creates initial table with a varchar column
+        run_dbt(["run", "--select", select])
+        # Second run - crosses type categories, so the copy step must cast
+        run_dbt(["run", "--select", select])
+        check_relations_equal(
+            project.adapter,
+            ["incremental_varchar_to_timestamp", "incremental_varchar_to_timestamp_target"],
         )
