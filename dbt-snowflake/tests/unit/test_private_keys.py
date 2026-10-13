@@ -2,6 +2,7 @@ import base64
 import os
 import sys
 import tempfile
+import textwrap
 from typing import Generator
 from unittest import mock
 
@@ -326,20 +327,40 @@ def test_pbes2_explicit_prf_wrong_passphrase_raises(private_key):
         private_key_from_string(to_pem(der), "wrong-passphrase")
 
 
+def single_des_traditional_pem(private_key, passphrase: str) -> str:
+    # pycryptodome's PEM.encode only writes DES-EDE3-CBC, so build the
+    # `DEK-Info: DES-CBC` PEM by hand: OpenSSL EVP_BytesToKey (one MD5 round,
+    # first 8 IV bytes as salt) derives the key
+    der = private_key.private_bytes(
+        serialization.Encoding.DER,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    )
+    iv = os.urandom(8)
+    key = MD5.new(passphrase.encode() + iv).digest()[:8]
+    encrypted = DES.new(key, DES.MODE_CBC, iv).encrypt(pad(der, DES.block_size))
+    body = base64.b64encode(encrypted).decode()
+    lines = textwrap.wrap(body, 64)
+    return (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "Proc-Type: 4,ENCRYPTED\n"
+        f"DEK-Info: DES-CBC,{iv.hex().upper()}\n\n"
+        + "\n".join(lines)
+        + "\n-----END RSA PRIVATE KEY-----\n"
+    )
+
+
 def test_single_des_traditional_pem(private_key):
     # cryptography>=45 rejects traditional PEM encrypted with single DES
     # ("Key encrypted with unknown cipher")
-    pem = PEM.encode(
-        private_key.private_bytes(
-            serialization.Encoding.DER,
-            serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.NoEncryption(),
-        ),
-        "RSA PRIVATE KEY",
-        passphrase=PASSPHRASE.encode(),
-    )
-    loaded = private_key_from_string(pem, PASSPHRASE)
+    pem = single_des_traditional_pem(private_key, PASSPHRASE)
+    assert "DEK-Info: DES-CBC," in pem
+    with pytest.raises((ValueError, UnsupportedAlgorithm)):
+        serialization.load_pem_private_key(pem.encode(), PASSPHRASE.encode())
+    with mock.patch.object(auth.logger, "warning") as warning:
+        loaded = private_key_from_string(pem, PASSPHRASE)
     assert serialize(loaded) == serialize(private_key)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
 # EC P-256 key encrypted with the PKCS#12 PBE pbeWithSHA1And2-KeyTripleDES-CBC
