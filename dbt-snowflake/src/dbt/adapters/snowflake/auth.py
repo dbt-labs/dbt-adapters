@@ -10,10 +10,9 @@ if sys.version_info < (3, 9):
 else:
     from functools import cache
 
-from Crypto.IO import PEM
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from dbt.adapters.events.logging import AdapterLogger
 
 logger = AdapterLogger("Snowflake")
@@ -27,11 +26,11 @@ PBES1_DEPRECATION_MESSAGE = (
     "are only available in the legacy provider)"
 )
 
-NON_CANONICAL_KEY_MESSAGE = (
-    "The Snowflake private key could only be loaded through OpenSSL because its encoding is "
-    "not strict DER, which the `cryptography` library now rejects. Re-encrypt the key to "
-    "avoid this fallback, for example: "
-    "`openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
+NON_STANDARD_KEY_MESSAGE = (
+    "The Snowflake private key was loaded through a fallback because its encoding is rejected "
+    "by the `cryptography` library, for example a PBES2 key with an explicitly encoded default "
+    "PRF or a key encrypted with single DES. Re-encrypt the key with a modern scheme, for "
+    "example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
 )
 
 # PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3, limited
@@ -76,6 +75,7 @@ def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     key itself, rather than by matching cryptography's error message, so this
     keeps working even if cryptography rewords how it reports the failure.
     """
+    from Crypto.IO import PEM
     from Crypto.Util.asn1 import DerObjectId, DerSequence
 
     try:
@@ -93,78 +93,56 @@ def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
     return oid in _PBES1_OIDS
 
 
-def _load_private_key_with_openssl(
-    data: bytes,
-    password: Optional[bytes],
-    is_pem: bool,
-    original_error: ValueError,
-) -> RSAPrivateKey:
-    """Fall back to OpenSSL (via pyOpenSSL) for keys cryptography rejects.
-
-    cryptography>=45 parses the EncryptedPrivateKeyInfo envelope strictly, so it
-    rejects keys that OpenSSL accepts, e.g. a PBES2 key whose PBKDF2 parameters
-    explicitly encode the default PRF (hmacWithSHA1): "DEFAULT value was
-    explicitly encoded". The failure happens before the passphrase is used.
-    Raises the original cryptography error if OpenSSL cannot load the key either.
-    """
-    from OpenSSL import crypto  # type: ignore[import-untyped,unused-ignore]
-
-    try:
-        if is_pem:
-            pem = _extract_pem_block(data)
-        else:
-            # pyOpenSSL cannot load encrypted DER, so wrap it in PEM headers
-            pem = PEM.encode(data, "ENCRYPTED PRIVATE KEY").encode()
-        key = crypto.load_privatekey(crypto.FILETYPE_PEM, pem, password).to_cryptography_key()
-    except Exception:
-        # keep cryptography's error, e.g. for a wrong passphrase
-        raise original_error
-
-    logger.warning(NON_CANONICAL_KEY_MESSAGE)
-    return cast(RSAPrivateKey, key)
-
-
 def _load_private_key(
     loader: Callable[..., Any],
     data: bytes,
     password: Optional[bytes],
     is_pem: bool,
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
     try:
         return loader(data=data, password=password, backend=default_backend())
     except ValueError as e:
-        # cryptography>=45 dropped PBES1 decryption (pyca/cryptography#12949)
-        if not _is_pbes1_encrypted(data, is_pem):
-            return _load_private_key_with_openssl(data, password, is_pem, e)
+        # cryptography>=45 parses keys strictly and no longer loads some that
+        # older versions and OpenSSL accept: PBES1 (pyca/cryptography#12949),
+        # PBES2 with an explicitly encoded default PRF ("DEFAULT value was
+        # explicitly encoded"), single-DES traditional PEM. Retry with pycryptodome.
         original_error = e
 
-    from Crypto.PublicKey import RSA
+    from Crypto.PublicKey import ECC, RSA
 
-    try:
-        key_bytes = _extract_pem_block(data) if is_pem else data
-        # pycryptodome uses a bytes passphrase as-is at runtime; its annotation
-        # only declares str, which raises UnicodeEncodeError for non-ASCII
-        # passphrases, so pass through the exact bytes cryptography received
-        legacy_key = RSA.import_key(key_bytes, passphrase=password)  # type: ignore[arg-type]
-    except (ValueError, IndexError, TypeError):
+    key_bytes = _extract_pem_block(data) if is_pem else data
+    fallback_key = None
+    for key_type in (RSA, ECC):
+        try:
+            # pycryptodome uses a bytes passphrase as-is at runtime; its annotation
+            # only declares str, which raises UnicodeEncodeError for non-ASCII
+            # passphrases, so pass through the exact bytes cryptography received
+            fallback_key = key_type.import_key(key_bytes, passphrase=password)  # type: ignore[arg-type]
+            break
+        except (ValueError, IndexError, TypeError):
+            continue
+    if fallback_key is None:
         # keep cryptography's error, e.g. for a wrong passphrase
         raise original_error
 
-    logger.warning(PBES1_DEPRECATION_MESSAGE)
-    return cast(
-        RSAPrivateKey,
-        serialization.load_der_private_key(
-            data=legacy_key.export_key(format="DER", pkcs=8),
-            password=None,
-            backend=default_backend(),
-        ),
+    logger.warning(
+        PBES1_DEPRECATION_MESSAGE
+        if _is_pbes1_encrypted(data, is_pem)
+        else NON_STANDARD_KEY_MESSAGE
+    )
+    # ECC private keys are always exported as PKCS#8 and take no `pkcs` argument
+    export_args = {"pkcs": 8} if isinstance(fallback_key, RSA.RsaKey) else {}
+    return serialization.load_der_private_key(
+        data=fallback_key.export_key(format="DER", **export_args),
+        password=None,
+        backend=default_backend(),
     )
 
 
 @cache
 def private_key_from_string(
     private_key_string: str, passphrase: Optional[str] = None
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
 
     if passphrase:
         encoded_passphrase = passphrase.encode()
@@ -189,7 +167,7 @@ def private_key_from_string(
 @cache
 def private_key_from_file(
     private_key_path: str, passphrase: Optional[str] = None
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
 
     if passphrase:
         encoded_passphrase = passphrase.encode()
