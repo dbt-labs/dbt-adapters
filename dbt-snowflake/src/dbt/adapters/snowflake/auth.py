@@ -18,22 +18,6 @@ from dbt.adapters.events.logging import AdapterLogger
 
 logger = AdapterLogger("Snowflake")
 
-PBES1_DEPRECATION_MESSAGE = (
-    "The Snowflake private key is encrypted with a legacy PBES1 (PKCS#5 v1.5) scheme, "
-    "which is insecure and no longer supported by the `cryptography` library. "
-    "Support for it will be removed in a future release. Re-encrypt the key with a modern "
-    "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem` "
-    "(on OpenSSL 3, also pass `-provider default -provider legacy`, because PBKDF1 and DES "
-    "are only available in the legacy provider)"
-)
-
-NON_STANDARD_KEY_MESSAGE = (
-    "The Snowflake private key was loaded through a fallback because its encoding is rejected "
-    "by the `cryptography` library, for example a PBES2 key with an explicitly encoded default "
-    "PRF or a key encrypted with single DES. Re-encrypt the key with a modern scheme, for "
-    "example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem`"
-)
-
 NON_STANDARD_KEY_MESSAGE = (
     "The Snowflake private key was loaded through a fallback because its encoding is rejected "
     "by the `cryptography` library, for example a legacy PBES1 / PKCS#12 encryption scheme, a "
