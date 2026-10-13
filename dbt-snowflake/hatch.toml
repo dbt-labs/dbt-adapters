@@ -73,6 +73,7 @@ pre-install-commands = [
 ]
 dependencies = [
     "ddtrace==2.3.0",
+    "pycryptodome>=3.19.1,<4.0",  # builds legacy-encrypted private key fixtures
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "chardet~=6.0",
@@ -89,6 +90,7 @@ pre-install-commands = []
 dependencies = [
     "dbt-tests-adapter>=1.11.0,<2.0",
     "ddtrace==2.3.0",
+    "pycryptodome>=3.19.1,<4.0",  # builds legacy-encrypted private key fixtures
     "pytest>=7.0,<8.0",
     "pytest-csv~=3.0",
     "chardet~=6.0",
