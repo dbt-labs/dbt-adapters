@@ -7,7 +7,7 @@ sources = ["src"]
 
 [envs.default]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-common @ git+https://github.com/SOVALINUX/dbt-common.git@EPMPLXD-9509_dbt_1.12.5",
     "ddtrace<3.18",
     'pre-commit==3.7.0',
     "pytest>=7.0,<10",
@@ -51,7 +51,7 @@ protobuf = "protoc -I=./dbt/adapters/events --python_out=./dbt/adapters/events .
 
 [envs.ci]
 dependencies = [
-    "dbt_common @ git+https://github.com/dbt-labs/dbt-common.git",
+    "dbt-common @ git+https://github.com/SOVALINUX/dbt-common.git@EPMPLXD-9509_dbt_1.12.5",
     "ddtrace<3.18",
     "pytest>=7.0,<8.0",
     "pytest-dotenv",
