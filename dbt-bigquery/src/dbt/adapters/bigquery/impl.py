@@ -877,7 +877,7 @@ class BigQueryAdapter(BaseAdapter):
 
         grantee_list = ", ".join(f'"{g}"' for g in grantees)
 
-        drop_sql = f"DROP ALL ROW ACCESS POLICIES ON {relation}"
+        drop_sql = f"DROP ROW ACCESS POLICY IF EXISTS `{policy_name}` ON {relation}"
         create_sql = (
             f"CREATE ROW ACCESS POLICY `{policy_name}` ON {relation} "
             f"GRANT TO ({grantee_list}) "

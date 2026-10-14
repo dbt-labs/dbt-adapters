@@ -1,6 +1,6 @@
 kind: Features
-body: Add row_access_policy config support for BigQuery tables and incremental models
+body: Add row_access_policy config support for BigQuery tables, incremental models, and views
 time: 2026-10-14T12:00:00.000000-07:00
 custom:
     Author: kevin-hu-datascience
-    Issue: "0"
+    Issue: "2221"

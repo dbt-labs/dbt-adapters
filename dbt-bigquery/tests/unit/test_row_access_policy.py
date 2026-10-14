@@ -50,7 +50,7 @@ class TestPersistRowAccessPolicy(unittest.TestCase):
         assert len(calls) == 2
 
         drop_sql = calls[0][0][0]
-        assert "DROP ALL ROW ACCESS POLICIES ON" in drop_sql
+        assert "DROP ROW ACCESS POLICY IF EXISTS `dbt_row_access`" in drop_sql
         assert "`project.dataset.my_table`" in drop_sql
 
         create_sql = calls[1][0][0]
@@ -67,6 +67,9 @@ class TestPersistRowAccessPolicy(unittest.TestCase):
             "policy_name": "my_custom_policy",
         }
         self.adapter.persist_row_access_policy(self.relation, config)
+
+        drop_sql = self.mock_client.query.call_args_list[0][0][0]
+        assert "DROP ROW ACCESS POLICY IF EXISTS `my_custom_policy`" in drop_sql
 
         create_sql = self.mock_client.query.call_args_list[1][0][0]
         assert "CREATE ROW ACCESS POLICY `my_custom_policy`" in create_sql
