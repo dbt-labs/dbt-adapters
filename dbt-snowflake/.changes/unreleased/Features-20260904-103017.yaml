@@ -1,0 +1,6 @@
+kind: Features
+body: 'Apply SQL-only changes to existing native Snowflake dynamic tables with CREATE OR ALTER, without requiring --full-refresh.'
+time: 2026-09-04T10:30:17+10:00
+custom:
+    Author: shaariqch-carma
+    Issue: "1825"
