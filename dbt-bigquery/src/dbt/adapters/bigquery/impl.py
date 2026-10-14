@@ -192,6 +192,7 @@ class BigqueryConfig(AdapterConfig):
     enable_change_history: Optional[bool] = None
     job_execution_timeout_seconds: Optional[int] = None
     reservation: Optional[str] = None
+    row_access_policy: Optional[Dict[str, Any]] = None
 
 
 class BigQueryAdapter(BaseAdapter):
@@ -843,6 +844,50 @@ class BigQueryAdapter(BaseAdapter):
         table = client.get_table(table_ref)
         table.description = description
         client.update_table(table, ["description"])
+
+    @available.parse_none
+    def persist_row_access_policy(self, relation, policy_config):
+        """Apply a BigQuery row access policy to a table after materialization.
+
+        BigQuery drops row access policies on CREATE OR REPLACE TABLE, so this
+        must be called after every table build to reapply them.
+
+        Args:
+            relation: The target relation (table).
+            policy_config: Dict with keys:
+                - filter_using: SQL predicate (required)
+                - grantees: List of principals to grant access (required)
+                - policy_name: Policy name (optional, defaults to 'dbt_row_access')
+        """
+        if not policy_config:
+            return
+
+        filter_using = policy_config.get("filter_using")
+        grantees = policy_config.get("grantees")
+        policy_name = policy_config.get("policy_name", "dbt_row_access")
+
+        if not filter_using or not grantees:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                "row_access_policy requires both 'filter_using' and 'grantees' keys. "
+                f"Got: {policy_config}"
+            )
+
+        if isinstance(grantees, str):
+            grantees = [grantees]
+
+        grantee_list = ", ".join(f'"{g}"' for g in grantees)
+
+        drop_sql = f"DROP ALL ROW ACCESS POLICIES ON {relation}"
+        create_sql = (
+            f"CREATE ROW ACCESS POLICY `{policy_name}` ON {relation} "
+            f"GRANT TO ({grantee_list}) "
+            f"FILTER USING ({filter_using})"
+        )
+
+        conn = self.connections.get_thread_connection()
+        client = conn.handle
+        client.query(drop_sql).result()
+        client.query(create_sql).result()
 
     @available.parse_none
     @record_function(
