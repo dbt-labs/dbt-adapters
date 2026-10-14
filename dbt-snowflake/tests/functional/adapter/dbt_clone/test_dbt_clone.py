@@ -117,7 +117,8 @@ models:
 
 
 class BaseSnowflakeCloneIceberg:
-    clone_args = ["clone", "--state", "state", "--target", "otherschema"]
+    # A tuple, because run_dbt appends --project-dir/--profiles-dir to the list it is given
+    clone_args = ("clone", "--state", "state", "--target", "otherschema")
 
     @pytest.fixture(scope="class")
     def models(self):
@@ -155,7 +156,7 @@ class TestSnowflakeCloneIcebergTable(BaseSnowflakeCloneIceberg):
         run_and_save_state(project.project_root)
 
         # persist_docs runs after the clone, so this also covers the Iceberg comment DDL
-        results = run_dbt(self.clone_args)
+        results = run_dbt([*self.clone_args])
         assert len(results) == 1
 
         self.assert_cloned_relation_is_iceberg(project, other_schema)
@@ -172,7 +173,7 @@ class TestSnowflakeCloneIcebergTableFullRefresh(BaseSnowflakeCloneIceberg):
             f"create table {project.database}.{other_schema}.iceberg_model as select 1 as id"
         )
 
-        results = run_dbt(self.clone_args + ["--full-refresh"])
+        results = run_dbt([*self.clone_args, "--full-refresh"])
         assert len(results) == 1
 
         self.assert_cloned_relation_is_iceberg(project, other_schema)
