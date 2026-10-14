@@ -949,7 +949,9 @@ class AthenaAdapter(SQLAdapter):
 
         # Convert dict to list of objects for batching
         # Format: [{'Key': 'file.parquet', 'ETag': 'abc123'}, ...]
-        objects_to_delete = [{"Key": file_key, "ETag": etag} for file_key, etag in etags_dict.items()]
+        objects_to_delete = [
+            {"Key": file_key, "ETag": etag} for file_key, etag in etags_dict.items()
+        ]
 
         # Process in batches of 1,000 (AWS limit)
         batch_size = 1000
@@ -972,7 +974,9 @@ class AthenaAdapter(SQLAdapter):
                 # Batch-level error (e.g., permissions, network)
                 error_code = e.response["Error"]["Code"]
                 skipped_count += len(batch)
-                LOGGER.error(f"S3 batch cleanup error: {error_code} - {e.response['Error'].get('Message', '')}")
+                LOGGER.error(
+                    f"S3 batch cleanup error: {error_code} - {e.response['Error'].get('Message', '')}"
+                )
             except Exception as e:
                 # Unexpected error
                 skipped_count += len(batch)

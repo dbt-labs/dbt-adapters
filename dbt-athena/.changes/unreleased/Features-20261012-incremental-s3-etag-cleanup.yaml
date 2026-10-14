@@ -1,0 +1,6 @@
+kind: Features
+body: 'Capture S3 file ETags before an incremental run and delete the unchanged files afterwards (when configured), so Hive incremental tables do not keep stale data files.'
+time: 2026-10-12T10:00:01.000000+00:00
+custom:
+    Author: alinazubik23
+    Issue: incremental-s3-etag-cleanup

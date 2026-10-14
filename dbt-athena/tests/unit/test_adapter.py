@@ -1651,10 +1651,18 @@ class TestAthenaAdapter:
 
         # Create fake S3 files with data
         s3_client = boto3.client("s3", region_name=AWS_REGION)
-        s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
-        s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file1.parquet", Body=b"data1")
-        s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file2.parquet", Body=b"data2")
-        s3_client.put_object(Bucket=BUCKET, Key="tables/test_etag_table/file3.parquet", Body=b"data3")
+        s3_client.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3_client.put_object(
+            Bucket=BUCKET, Key="tables/test_etag_table/file1.parquet", Body=b"data1"
+        )
+        s3_client.put_object(
+            Bucket=BUCKET, Key="tables/test_etag_table/file2.parquet", Body=b"data2"
+        )
+        s3_client.put_object(
+            Bucket=BUCKET, Key="tables/test_etag_table/file3.parquet", Body=b"data3"
+        )
 
         # Setup adapter and create relation
         self.adapter.acquire_connection("dummy")
@@ -1688,7 +1696,9 @@ class TestAthenaAdapter:
 
         # Create bucket but no files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
-        s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
+        s3_client.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
 
         # Setup adapter and create relation
         self.adapter.acquire_connection("dummy")
@@ -1767,7 +1777,13 @@ class TestAthenaAdapter:
                     )
             except s3_client.exceptions.NoSuchKey:
                 # File doesn't exist - NoSuchKey error
-                errors_list.append({"Key": key, "Code": "NoSuchKey", "Message": "The specified key does not exist"})
+                errors_list.append(
+                    {
+                        "Key": key,
+                        "Code": "NoSuchKey",
+                        "Message": "The specified key does not exist",
+                    }
+                )
             except Exception as e:
                 # Unexpected error - InternalError
                 errors_list.append({"Key": key, "Code": "InternalError", "Message": str(e)})
@@ -1808,17 +1824,25 @@ class TestAthenaAdapter:
         # Setup: Create table with S3 location starting with 'increment'
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
+        mock_aws_service.create_table(
+            "increment_source", location="s3://test-dbt-athena/increment_source/"
+        )
 
         # Create S3 files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
-        s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
+        s3_client.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"data1")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file2.parquet", Body=b"data2")
 
         # Capture ETags (these will be "before run" ETags)
-        etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")["ETag"].strip('"')
-        etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")["ETag"].strip('"')
+        etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")[
+            "ETag"
+        ].strip('"')
+        etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")[
+            "ETag"
+        ].strip('"')
 
         etags_before_run = {
             "increment_source/file1.parquet": etag1,
@@ -1836,7 +1860,9 @@ class TestAthenaAdapter:
         # Mock delete_objects to simulate AWS ETag-based conditional deletion
         with self._patch_s3_delete_objects():
             # Call the method - should delete both files (ETags unchanged)
-            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, "increment")
+            result = self.adapter.delete_unchanged_s3_files(
+                relation, etags_before_run, "increment"
+            )
 
         # Assertions
         assert result["deleted"] == 2, f"Expected 2 files deleted, got {result['deleted']}"
@@ -1852,22 +1878,34 @@ class TestAthenaAdapter:
         # Setup
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
+        mock_aws_service.create_table(
+            "increment_source", location="s3://test-dbt-athena/increment_source/"
+        )
 
         # Create S3 files
         s3_client = boto3.client("s3", region_name=AWS_REGION)
-        s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
+        s3_client.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"data1")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file2.parquet", Body=b"data2")
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file3.parquet", Body=b"data3")
 
         # Capture OLD ETags (before modifications)
-        old_etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")["ETag"].strip('"')
-        old_etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")["ETag"].strip('"')
-        old_etag3 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file3.parquet")["ETag"].strip('"')
+        old_etag1 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file1.parquet")[
+            "ETag"
+        ].strip('"')
+        old_etag2 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file2.parquet")[
+            "ETag"
+        ].strip('"')
+        old_etag3 = s3_client.head_object(Bucket=BUCKET, Key="increment_source/file3.parquet")[
+            "ETag"
+        ].strip('"')
 
         # Simulate race condition 1: Modify file1 (changes ETag by overwriting with new content)
-        s3_client.put_object(Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"modified_data")
+        s3_client.put_object(
+            Bucket=BUCKET, Key="increment_source/file1.parquet", Body=b"modified_data"
+        )
 
         # Simulate race condition 2: Add NEW file4 (wasn't in original ETags)
         s3_client.put_object(Bucket=BUCKET, Key="increment_source/file4.parquet", Body=b"new_file")
@@ -1893,15 +1931,21 @@ class TestAthenaAdapter:
         # Mock delete_objects to simulate AWS ETag-based conditional deletion
         with self._patch_s3_delete_objects():
             # Call the method
-            result = self.adapter.delete_unchanged_s3_files(relation, etags_before_run, "increment")
+            result = self.adapter.delete_unchanged_s3_files(
+                relation, etags_before_run, "increment"
+            )
 
         # Assertions:
         # - file1 should be SKIPPED (ETag mismatch - PreconditionFailed)
         # - file2 should be DELETED (ETag match - unchanged)
         # - file3 should be DELETED (ETag match - unchanged)
         # - file4 is IGNORED (not in ETags dict - won't be processed at all)
-        assert result["deleted"] == 2, f"Expected 2 files deleted (file2, file3), got {result['deleted']}"
-        assert result["skipped"] == 1, f"Expected 1 skipped (file1 PreconditionFailed), got {result['skipped']}"
+        assert (
+            result["deleted"] == 2
+        ), f"Expected 2 files deleted (file2, file3), got {result['deleted']}"
+        assert (
+            result["skipped"] == 1
+        ), f"Expected 1 skipped (file1 PreconditionFailed), got {result['skipped']}"
 
         # Verify file1 and file4 still exist (file1 modified, file4 newly added)
         objs = s3_client.list_objects_v2(Bucket=BUCKET, Prefix="increment_source/")
@@ -1919,15 +1963,23 @@ class TestAthenaAdapter:
         # Setup: Create table with location NOT starting with 'increment'
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        mock_aws_service.create_table("regular_table", location="s3://test-dbt-athena/tables/regular_table/")
+        mock_aws_service.create_table(
+            "regular_table", location="s3://test-dbt-athena/tables/regular_table/"
+        )
 
         # Create S3 file
         s3_client = boto3.client("s3", region_name=AWS_REGION)
-        s3_client.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION})
-        s3_client.put_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet", Body=b"data1")
+        s3_client.create_bucket(
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": AWS_REGION}
+        )
+        s3_client.put_object(
+            Bucket=BUCKET, Key="tables/regular_table/file1.parquet", Body=b"data1"
+        )
 
         # Capture ETag
-        etag1 = s3_client.head_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet")["ETag"].strip('"')
+        etag1 = s3_client.head_object(Bucket=BUCKET, Key="tables/regular_table/file1.parquet")[
+            "ETag"
+        ].strip('"')
 
         etags_before_run = {
             "tables/regular_table/file1.parquet": etag1,
@@ -1959,7 +2011,9 @@ class TestAthenaAdapter:
         # Setup
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
-        mock_aws_service.create_table("increment_source", location="s3://test-dbt-athena/increment_source/")
+        mock_aws_service.create_table(
+            "increment_source", location="s3://test-dbt-athena/increment_source/"
+        )
 
         # Setup adapter and relation
         self.adapter.acquire_connection("dummy")

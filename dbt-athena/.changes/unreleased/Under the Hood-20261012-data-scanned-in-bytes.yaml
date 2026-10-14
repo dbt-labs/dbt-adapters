@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: 'Include data_scanned_in_bytes (rounded) in the Athena query status message.'
+time: 2026-10-12T10:00:02.000000+00:00
+custom:
+    Author: yevhenplaksaepam
+    Issue: data-scanned-in-bytes

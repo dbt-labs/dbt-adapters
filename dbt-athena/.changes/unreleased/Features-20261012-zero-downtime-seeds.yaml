@@ -1,0 +1,6 @@
+kind: Features
+body: 'Zero-downtime seeds for Athena: the seed table is built in a temporary location and swapped in, so the existing seed stays queryable while it is reloaded.'
+time: 2026-10-12T10:00:00.000000+00:00
+custom:
+    Author: eg-tan
+    Issue: zero-downtime-seeds
