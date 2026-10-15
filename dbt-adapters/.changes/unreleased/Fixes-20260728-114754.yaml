@@ -1,0 +1,8 @@
+kind: Fixes
+body: Raise a clear error instead of dropping all target columns when column introspection
+    of an incremental model's temporary relation returns no columns. on_schema_change='append_new_columns'
+    warns and continues instead, since it cannot drop columns
+time: 2026-07-28T11:47:54.242865-07:00
+custom:
+    Author: will-sargent-dbtlabs
+    Issue: "1947 1991"

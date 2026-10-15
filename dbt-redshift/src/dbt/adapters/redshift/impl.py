@@ -11,6 +11,7 @@ from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import (
@@ -239,8 +240,74 @@ class RedshiftAdapter(SQLAdapter):
         """
         return bool(self.config.credentials.datasharing)
 
-    @available
-    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[Any]:
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a relation, falling back to the driver when the catalog cannot see it.
+
+        On a datashare consumer database, temp relations stay queryable but are absent from
+        ``information_schema.columns``, ``pg_attribute`` and ``svv_columns``; the empty
+        result makes ``on_schema_change='sync_all_columns'`` drop every column in the
+        target. Only unqualified relations can take the fallback, since the driver query
+        has no database or schema to qualify itself with.
+
+        With ``datasharing`` enabled, a relation dbt minted as a temporary table
+        (``is_temporary``, set by ``redshift__make_temp_relation``) skips the catalog
+        entirely. The catalog queries cost ~90s per temp relation on a datashare consumer
+        and cannot return rows there: neither ``information_schema.columns`` nor
+        ``pg_get_late_binding_view_cols()`` -- which the legacy path calls, expanding every
+        late-binding view in the session -- can see a temp table, and a temp table is never
+        a late-binding view anyway. The driver answers the same question in ~50ms.
+
+        The marker is deliberately gated on ``datasharing`` rather than applied to every
+        connection. Without it the catalog can see temp relations, so the first query
+        returns and the expensive late-binding lookup is never reached -- there is little to
+        win, and the driver path would be describing columns the catalog already describes
+        correctly. Its type names are ground truth for the OIDs it maps, but an unmapped OID
+        falls back to the driver's own label (see ``_temp_relation_data_type``), which is
+        worth risking only where the alternative is no columns at all.
+
+        Relations that are merely unqualified keep the existing behavior on both kinds of
+        connection: describe from the catalog, fall back to the driver only if that comes
+        back empty. That is what still covers a consumer database reached without
+        ``datasharing`` set.
+
+        Both routes require the relation to be unqualified, marker or not -- see
+        ``_is_addressable_unqualified``. Every producer of a marked relation strips schema
+        and database today, so the check never fires; it is here because the driver query
+        cannot express a qualification, so a marked-but-qualified relation would silently
+        describe whatever ``search_path`` resolved the identifier to.
+
+        In an override rather than in the macro so that ``@supports_replay`` records the
+        fallback under the existing ``AdapterGetColumnsInRelationRecord``, and because
+        ``get_columns_in_temp_relation`` is not ``@available`` to Jinja.
+        """
+        if (
+            getattr(relation, "is_temporary", False)
+            and self.use_show_apis()
+            and self._is_addressable_unqualified(relation)
+        ):
+            return self.get_columns_in_temp_relation(relation)
+
+        columns = super().get_columns_in_relation(relation)
+
+        if not columns and self._is_addressable_unqualified(relation):
+            return self.get_columns_in_temp_relation(relation)
+
+        return columns
+
+    @staticmethod
+    def _is_addressable_unqualified(relation: BaseRelation) -> bool:
+        """Whether ``get_columns_in_temp_relation`` can address this relation at all.
+
+        It queries ``select * from <identifier>`` with no database or schema, so a
+        qualified relation would resolve through ``search_path`` to whatever object
+        happens to share the identifier -- describing the wrong thing rather than
+        failing. Both routes to the driver check this: ``is_temporary`` records that dbt
+        minted the relation, which is not the same claim as it still being addressable
+        unqualified.
+        """
+        return not relation.database and not relation.schema
+
+    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """Describe a temporary relation from the driver instead of the catalog.
 
         Needed when the connection's database is a datashare consumer database: temp

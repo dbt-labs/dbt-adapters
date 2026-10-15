@@ -6,7 +6,7 @@ Snapshots hit the identical root cause through a different door: `snapshot.sql` 
 `*__dbt_tmp` staging relation (via `make_temp_relation`, same shape as an incremental temp
 relation) and calls `adapter.get_columns_in_relation` / `adapter.get_missing_columns` on it
 directly -- there is no `on_schema_change` involved, so the guard added for incremental models
-(default__check_for_schema_changes) does not apply here and was never meant to.
+(default__process_schema_changes) does not apply here and was never meant to.
 
 Snapshots also fail *louder* than incremental's silent column drop: a zero-columns read on the
 staging relation makes `source_columns` empty, which renders `snapshot_merge_sql`'s insert

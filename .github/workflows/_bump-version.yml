@@ -83,11 +83,23 @@ jobs:
 
             - name: "Bump version"
               id: version
+              # Skip the bump when the branch is already at the target version, so a
+              # release that failed *after* this step (e.g. in publish) can be retried
+              # with the same version instead of getting stuck. `hatch version X` errors
+              # out with "not higher than the original version" in that case. The steps
+              # below already no-op when final == initial.
               run: |
-                  echo "initial=$(hatch version)" >> $GITHUB_OUTPUT
-                  hatch version ${{ inputs.version }}
+                  initial="$(hatch version)"
+                  echo "initial=$initial" >> $GITHUB_OUTPUT
+                  if [ "$initial" = "$TARGET_VERSION" ]; then
+                      echo "::notice title=Version unchanged::Already at $TARGET_VERSION; skipping bump."
+                  else
+                      hatch version "$TARGET_VERSION"
+                  fi
                   echo "final=$(hatch version)" >> $GITHUB_OUTPUT
               working-directory: ./${{ inputs.package }}
+              env:
+                  TARGET_VERSION: ${{ inputs.version }}
 
             - name: "Update dbt-athena-community version"
               run: sed -i "s/$INITIAL/$FINAL/g" dbt-athena-community/pyproject.toml

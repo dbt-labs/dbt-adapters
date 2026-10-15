@@ -59,6 +59,8 @@ class BuiltInCatalogIntegration(CatalogIntegration):
     storage_serialization_policy = None
     change_tracking = None
     iceberg_version: Optional[int] = None
+    # Set by SnowflakeAdapter.build_catalog_relation from the behavior flag.
+    use_snowflake_managed_storage_default: bool = True
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -117,9 +119,21 @@ class BuiltInCatalogIntegration(CatalogIntegration):
 
         iceberg_version = parse_model.iceberg_version(model) or self.iceberg_version
 
+        ev = parse_model.external_volume(model) or self.external_volume
+        if ev and ev.upper() == "SNOWFLAKE_MANAGED":
+            # Explicit SNOWFLAKE_MANAGED: always suppress base_location.
+            base_loc = None
+        elif not ev and self.use_snowflake_managed_storage_default:
+            # No external_volume configured + behavior flag ON: default to managed storage.
+            ev = "SNOWFLAKE_MANAGED"
+            base_loc = None
+        else:
+            # Real external_volume, or no ev with flag OFF (Snowflake resolves schema/account default).
+            base_loc = parse_model.base_location(model)
+
         return BuiltInCatalogRelation(
-            base_location=parse_model.base_location(model),
-            external_volume=parse_model.external_volume(model) or self.external_volume,
+            base_location=base_loc,
+            external_volume=ev,
             cluster_by=parse_model.cluster_by(model),
             partition_by=parse_model.partition_by(model),
             automatic_clustering=parse_model.automatic_clustering(model),

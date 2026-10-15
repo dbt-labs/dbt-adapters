@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, Optional
 
 from dbt.adapters.contracts.relation import (
@@ -43,6 +43,16 @@ class BigQueryMaterializedViewConfig(BigQueryBaseRelationConfig):
     options: BigQueryOptionsConfig
     partition: Optional[PartitionConfig] = None
     cluster: Optional[BigQueryClusterConfig] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "table_id": self.table_id,
+            "dataset_id": self.dataset_id,
+            "project_id": self.project_id,
+            "options": self.options.to_dict(),
+            "partition": asdict(self.partition) if self.partition is not None else None,
+            "cluster": asdict(self.cluster) if self.cluster is not None else None,
+        }
 
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> "BigQueryMaterializedViewConfig":

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Snowflake seeds now honor the `transient` config instead of silently creating a permanent table
+time: 2026-09-08T19:00:24.480789+05:30
+custom:
+  Author: itsnamangoyal
+  Issue: ""
