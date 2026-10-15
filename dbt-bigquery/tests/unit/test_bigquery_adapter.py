@@ -1319,6 +1319,10 @@ class TestClustersMatch:
             (None, None, True),
             ([], None, True),
             (None, ["a"], False),
+            # BigQuery reports clustering fields unquoted
+            (["event_type", "group"], ["event_type", "`group`"], True),
+            (["externalcustomerid"], ["`ExternalCustomerId`"], True),
+            (["grp"], ["`group`"], False),
         ],
     )
     def test_clusters_match(self, table_fields, conf_cluster, expected):
