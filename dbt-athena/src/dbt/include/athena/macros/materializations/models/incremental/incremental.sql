@@ -107,11 +107,23 @@
     {%- endif -%}
 
     -- rename the current target_relation to a backup_relation
-    {%- do rename_relation(target_relation, relation_bkp) -%}
-    -- rename the new full refreshed tmp_relation to the target_relation
-    {%- do rename_relation(tmp_relation, target_relation) -%}
+    -- Glue IRC can reject ALTER TABLE RENAME, in which case the swap falls back to
+    -- dropping the target and creating it directly
+    {%- set bkp_created = try_rename_relation(target_relation, relation_bkp) -%}
+    {%- set rename_unsupported = not bkp_created -%}
+    {%- if rename_unsupported -%}
+      {%- do drop_relation(target_relation) -%}
+    {%- else -%}
+      -- rename the new full refreshed tmp_relation to the target_relation
+      {%- set rename_unsupported = not try_rename_relation(tmp_relation, target_relation) -%}
+    {%- endif -%}
+    {%- if rename_unsupported -%}
+      {%- set query_result = create_iceberg_table_after_unsupported_rename(target_relation, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- endif -%}
     -- drop the backup_relation
-    {%- do drop_relation(relation_bkp) -%}
+    {%- if bkp_created -%}
+      {%- do drop_relation(relation_bkp) -%}
+    {%- endif -%}
 
     {% set build_sql = "select '" ~ query_result ~ "'" -%}
 

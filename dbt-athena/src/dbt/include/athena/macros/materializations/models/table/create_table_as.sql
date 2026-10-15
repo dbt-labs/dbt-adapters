@@ -241,3 +241,16 @@
     {%- endif -%}
     {{ return(compiled_code_result) }}
 {%- endmacro %}
+
+{#- Fallback for the Iceberg rename swap when Glue IRC rejects ALTER TABLE RENAME: build the target
+    directly from the model code and discard the intermediate table. The target must not exist -#}
+{% macro create_iceberg_table_after_unsupported_rename(target_relation, tmp_relation, compiled_code, language, force_batch) -%}
+  {%- set query_result = safe_create_table_as(False, target_relation, compiled_code, language, force_batch) -%}
+  {%- if language == 'python' -%}
+    {% call statement('create_table', language=language) %}
+      {{ query_result }}
+    {% endcall %}
+  {%- endif -%}
+  {%- do drop_relation(tmp_relation) -%}
+  {{ return(query_result) }}
+{%- endmacro %}

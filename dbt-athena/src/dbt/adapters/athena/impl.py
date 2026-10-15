@@ -56,6 +56,7 @@ from dbt.adapters.athena.constants import (
     DEFAULT_GLUE_CATALOG,
     DEFAULT_INFO_SCHEMA_CATALOG,
     GLUE_CATALOG_TYPE,
+    GLUE_IRC_RENAME_UNSUPPORTED_MESSAGE,
     HIVE_TABLE_FORMAT,
     ICEBERG_TABLE_FORMAT,
     LOGGER,
@@ -247,6 +248,23 @@ class AthenaAdapter(SQLAdapter):
         if not database:
             return False
         return database.lower().startswith(f"{S3_TABLES_GLUE_CATALOG_PREFIX.lower()}/")
+
+    @available
+    def try_rename_statement(self, sql: str) -> bool:
+        """Run a table rename, returning False if Athena rejects it as unsupported by Glue IRC.
+
+        Athena can route Iceberg DDL through the Glue Iceberg REST catalog, which does not
+        support RenameTable. Jinja cannot catch exceptions, so the caller gets a flag to fall
+        back to dropping and recreating the table. Any other failure is raised unchanged.
+        """
+        try:
+            self.execute(sql, auto_begin=True, fetch=False)
+        except DbtRuntimeError as e:
+            if GLUE_IRC_RENAME_UNSUPPORTED_MESSAGE not in str(e):
+                raise
+            LOGGER.debug(f"Rename rejected by Glue IRC, caller will recreate the table: {e}")
+            return False
+        return True
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
