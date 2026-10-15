@@ -1,7 +1,7 @@
 import base64
 import re
 import sys
-from typing import Any, Callable, Optional, cast
+from typing import Any, Callable, Optional
 
 if sys.version_info < (3, 9):
     from functools import lru_cache
@@ -10,40 +10,28 @@ if sys.version_info < (3, 9):
 else:
     from functools import cache
 
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.asymmetric.types import PrivateKeyTypes
 from dbt.adapters.events.logging import AdapterLogger
 
 logger = AdapterLogger("Snowflake")
 
-PBES1_DEPRECATION_MESSAGE = (
-    "The Snowflake private key is encrypted with a legacy PBES1 (PKCS#5 v1.5) scheme, "
-    "which is insecure and no longer supported by the `cryptography` library. "
-    "Support for it will be removed in a future release. Re-encrypt the key with a modern "
-    "scheme, for example: `openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem` "
-    "(on OpenSSL 3, also pass `-provider default -provider legacy`, because PBKDF1 and DES "
-    "are only available in the legacy provider)"
-)
-
-# PKCS#5 v1.5 encryption schemes (PBES1) from RFC 8018, Appendix A.3, limited
-# to the four schemes the pycryptodome fallback can decrypt. cryptography>=45
-# can no longer decrypt any of them (pyca/cryptography#12949). The MD2-based
-# PBES1 schemes are excluded on purpose: no cryptography version ever decrypted
-# them, and pycryptodome cannot either, so such keys fail with cryptography's
-# original error regardless of this set.
-_PBES1_OIDS = frozenset(
-    {
-        "1.2.840.113549.1.5.3",  # pbeWithMD5AndDES-CBC
-        "1.2.840.113549.1.5.6",  # pbeWithMD5AndRC2-CBC
-        "1.2.840.113549.1.5.10",  # pbeWithSHA1AndDES-CBC
-        "1.2.840.113549.1.5.11",  # pbeWithSHA1AndRC2-CBC
-    }
+NON_STANDARD_KEY_MESSAGE = (
+    "The Snowflake private key was loaded through a fallback because its encoding is rejected "
+    "by the `cryptography` library, for example a legacy PBES1 / PKCS#12 encryption scheme, a "
+    "PBES2 key with an explicitly encoded default PRF, or a key encrypted with single DES. "
+    "Support for such keys may be removed in a future release. Re-encrypt the key with a "
+    "modern scheme, for example: "
+    "`openssl pkcs8 -topk8 -v2 aes256 -in old_key.pem -out new_key.pem` "
+    "(on OpenSSL 3, also pass `-provider default -provider legacy` if the old key uses "
+    "legacy algorithms)"
 )
 
 _PEM_BLOCK_PATTERN = re.compile(
-    rb"-----BEGIN (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE) KEY-----.+?"
-    rb"-----END (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE) KEY-----",
+    rb"-----BEGIN (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE|EC PRIVATE) KEY-----.+?"
+    rb"-----END (?:ENCRYPTED PRIVATE|PRIVATE|RSA PRIVATE|EC PRIVATE) KEY-----",
     re.DOTALL,
 )
 
@@ -51,39 +39,20 @@ _PEM_BLOCK_PATTERN = re.compile(
 def _extract_pem_block(data: bytes) -> bytes:
     """Return just the private-key PEM block, without any surrounding text.
 
-    cryptography scans for the PEM block inside surrounding text, but
-    pycryptodome requires the PEM block to be the entire input, so the same
-    text must be stripped before any pycryptodome-based parsing. Returns data
-    unchanged when no PEM block is present.
+    Returns data unchanged when no PEM block is present.
     """
     match = _PEM_BLOCK_PATTERN.search(data)
     return match.group(0) if match else data
 
 
-def _is_pbes1_encrypted(data: bytes, is_pem: bool) -> bool:
-    """Return True when data is an EncryptedPrivateKeyInfo encrypted with one
-    of the PBES1 schemes the pycryptodome fallback can decrypt.
-
-    The scheme is detected by parsing the encryption algorithm OID out of the
-    key itself, rather than by matching cryptography's error message, so this
-    keeps working even if cryptography rewords how it reports the failure.
-    """
-    from Crypto.IO import PEM
-    from Crypto.Util.asn1 import DerObjectId, DerSequence
-
-    try:
-        if is_pem:
-            data = _extract_pem_block(data)
-            der = PEM.decode(data.decode())[0]
-        else:
-            der = data
-        encrypted_key_info = DerSequence().decode(der)
-        encryption_algorithm = cast(bytes, encrypted_key_info[0])
-        algorithm_id = DerSequence().decode(encryption_algorithm)
-        oid = DerObjectId().decode(cast(bytes, algorithm_id[0])).value
-    except (ValueError, TypeError, IndexError):
-        return False
-    return oid in _PBES1_OIDS
+def _der_to_encrypted_pem(der: bytes) -> bytes:
+    # pyOpenSSL cannot load encrypted DER, so wrap it in PEM headers
+    body = base64.encodebytes(der)
+    return (
+        b"-----BEGIN ENCRYPTED PRIVATE KEY-----\n"
+        + body
+        + b"-----END ENCRYPTED PRIVATE KEY-----\n"
+    )
 
 
 def _load_private_key(
@@ -91,42 +60,36 @@ def _load_private_key(
     data: bytes,
     password: Optional[bytes],
     is_pem: bool,
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
     try:
         return loader(data=data, password=password, backend=default_backend())
-    except ValueError as e:
-        # cryptography>=45 dropped PBES1 decryption (pyca/cryptography#12949)
-        if not _is_pbes1_encrypted(data, is_pem):
-            raise
+    except (ValueError, UnsupportedAlgorithm) as e:
+        # cryptography>=45 parses keys strictly and no longer loads some that
+        # older versions and OpenSSL accept, e.g. PBES1 and PKCS#12 PBE
+        # (pyca/cryptography#12949), PBES2 with an explicitly encoded default PRF
+        # ("DEFAULT value was explicitly encoded"), single-DES traditional PEM.
+        # OpenSSL still loads them, so retry through pyOpenSSL.
         original_error = e
 
-    from Crypto.PublicKey import RSA
+    from OpenSSL import crypto  # type: ignore[import-untyped,unused-ignore]
 
+    pem = _extract_pem_block(data) if is_pem else _der_to_encrypted_pem(data)
     try:
-        key_bytes = _extract_pem_block(data) if is_pem else data
-        # pycryptodome uses a bytes passphrase as-is at runtime; its annotation
-        # only declares str, which raises UnicodeEncodeError for non-ASCII
-        # passphrases, so pass through the exact bytes cryptography received
-        legacy_key = RSA.import_key(key_bytes, passphrase=password)  # type: ignore[arg-type]
-    except (ValueError, IndexError, TypeError):
+        # an empty passphrase stops OpenSSL from prompting on the terminal
+        key = crypto.load_privatekey(crypto.FILETYPE_PEM, pem, password or b"")
+        fallback_key = key.to_cryptography_key()
+    except (crypto.Error, ValueError, TypeError, UnsupportedAlgorithm):
         # keep cryptography's error, e.g. for a wrong passphrase
         raise original_error
 
-    logger.warning(PBES1_DEPRECATION_MESSAGE)
-    return cast(
-        RSAPrivateKey,
-        serialization.load_der_private_key(
-            data=legacy_key.export_key(format="DER", pkcs=8),
-            password=None,
-            backend=default_backend(),
-        ),
-    )
+    logger.warning(NON_STANDARD_KEY_MESSAGE)
+    return fallback_key
 
 
 @cache
 def private_key_from_string(
     private_key_string: str, passphrase: Optional[str] = None
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
 
     if passphrase:
         encoded_passphrase = passphrase.encode()
@@ -151,7 +114,7 @@ def private_key_from_string(
 @cache
 def private_key_from_file(
     private_key_path: str, passphrase: Optional[str] = None
-) -> RSAPrivateKey:
+) -> PrivateKeyTypes:
 
     if passphrase:
         encoded_passphrase = passphrase.encode()

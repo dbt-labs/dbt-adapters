@@ -2,17 +2,19 @@ import base64
 import os
 import sys
 import tempfile
+import textwrap
 from typing import Generator
 from unittest import mock
 
 from Crypto.Cipher import ARC2, DES
-from Crypto.Hash import MD2, MD5, SHA1
+from Crypto.Hash import MD5, SHA1
 from Crypto.IO import PEM
 from Crypto.Protocol.KDF import PBKDF1
 from Crypto.Util.asn1 import DerObjectId, DerOctetString, DerSequence
 from Crypto.Util.Padding import pad
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 import pytest
 
 from dbt.adapters.snowflake import auth
@@ -86,19 +88,10 @@ PBES1_SCHEMES = {
     "pbeWithSHA1AndRC2-CBC": ("1.2.840.113549.1.5.11", SHA1, ARC2),
 }
 
-# MD2-based PBES1 schemes: neither cryptography (any version) nor pycryptodome
-# can decrypt them, so they are not declared supported and must never take the
-# fallback path.
-UNSUPPORTED_PBES1_SCHEMES = {
-    "pbeWithMD2AndDES-CBC": ("1.2.840.113549.1.5.1", MD2, DES),
-}
-
-ALL_PBES1_SCHEMES = {**PBES1_SCHEMES, **UNSUPPORTED_PBES1_SCHEMES}
-
 
 def pbes1_encrypt(private_key: rsa.RSAPrivateKey, scheme: str, passphrase: str) -> bytes:
     """Return a DER EncryptedPrivateKeyInfo encrypted with the given PBES1 scheme."""
-    oid, hash_module, cipher_module = ALL_PBES1_SCHEMES[scheme]
+    oid, hash_module, cipher_module = PBES1_SCHEMES[scheme]
     salt, iterations = os.urandom(8), 2048
     derived = PBKDF1(passphrase.encode(), salt, 16, iterations, hash_module)
     cipher_kwargs = {"effective_keylen": 64} if cipher_module is ARC2 else {}
@@ -117,65 +110,6 @@ def to_pem(der: bytes) -> str:
 def clear_key_cache():
     private_key_from_string.cache_clear()
     private_key_from_file.cache_clear()
-
-
-@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
-def test_is_pbes1_encrypted(private_key, scheme):
-    der = pbes1_encrypt(private_key, scheme, PASSPHRASE)
-    assert auth._is_pbes1_encrypted(to_pem(der).encode(), is_pem=True)
-    assert auth._is_pbes1_encrypted(der, is_pem=False)
-
-
-def test_is_pbes1_encrypted_false_for_other_data(private_key, private_key_string):
-    unencrypted_pem = private_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
-    unencrypted_der = private_key.private_bytes(
-        serialization.Encoding.DER,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
-    traditional_pem = private_key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.TraditionalOpenSSL,
-        serialization.NoEncryption(),
-    )
-    # modern PBES2-encrypted key
-    assert not auth._is_pbes1_encrypted(private_key_string.encode(), is_pem=True)
-    # unencrypted PKCS#8, PEM and DER forms
-    assert not auth._is_pbes1_encrypted(unencrypted_pem, is_pem=True)
-    assert not auth._is_pbes1_encrypted(unencrypted_der, is_pem=False)
-    # unencrypted PKCS#1 traditional PEM
-    assert not auth._is_pbes1_encrypted(traditional_pem, is_pem=True)
-    # not a key at all
-    assert not auth._is_pbes1_encrypted(b"-----BEGIN PRIVATE KEY-----", is_pem=True)
-    assert not auth._is_pbes1_encrypted(b"not a key", is_pem=False)
-
-
-def test_pbes1_oids_match_supported_schemes():
-    # every OID declared as fallback-supported must be exercised by the
-    # round-trip tests above, and vice versa
-    assert auth._PBES1_OIDS == {oid for oid, _, _ in PBES1_SCHEMES.values()}
-
-
-@pytest.mark.parametrize("scheme", UNSUPPORTED_PBES1_SCHEMES)
-def test_unsupported_pbes1_scheme_does_not_use_fallback(private_key, scheme):
-    # MD2-based PBES1 keys cannot be decrypted by the fallback (or by any
-    # cryptography version), so they must not be detected as eligible and
-    # must fail with cryptography's original error
-    key_string = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
-    unsupported = ValueError(f"Unknown key encryption algorithm: {ALL_PBES1_SCHEMES[scheme][0]}")
-    with (
-        mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=unsupported),
-        mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
-    ):
-        with pytest.raises(ValueError) as excinfo:
-            private_key_from_string(key_string, PASSPHRASE)
-    assert excinfo.value is unsupported
-    assert not auth._is_pbes1_encrypted(key_string.encode(), is_pem=True)
-    import_key.assert_not_called()
 
 
 @pytest.mark.parametrize("scheme", PBES1_SCHEMES)
@@ -225,7 +159,7 @@ def test_pbes1_non_ascii_passphrase_uses_fallback(private_key):
     ):
         calculated_private_key = private_key_from_string(key_string, NON_ASCII_PASSPHRASE)
     assert serialize(calculated_private_key) == serialize(private_key)
-    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
 @pytest.mark.parametrize("scheme", PBES1_SCHEMES)
@@ -252,7 +186,7 @@ def test_pbes1_trailing_text_uses_fallback(private_key):
     ):
         calculated_private_key = private_key_from_string(key_string, PASSPHRASE)
     assert serialize(calculated_private_key) == serialize(private_key)
-    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="permission issues on Windows")
@@ -267,13 +201,6 @@ def test_pbes1_surrounding_text_from_file(private_key, scheme, tmp_path):
     assert serialize(calculated_private_key) == serialize(private_key)
 
 
-@pytest.mark.parametrize("scheme", PBES1_SCHEMES)
-def test_is_pbes1_encrypted_with_surrounding_text(private_key, scheme):
-    clean = to_pem(pbes1_encrypt(private_key, scheme, PASSPHRASE))
-    messy = f"leading text\n{clean}\ntrailing text".encode()
-    assert auth._is_pbes1_encrypted(messy, is_pem=True)
-
-
 def test_unencrypted_private_key_from_string(private_key):
     key_string = private_key.private_bytes(
         serialization.Encoding.PEM,
@@ -285,13 +212,9 @@ def test_unencrypted_private_key_from_string(private_key):
 
 
 def test_modern_key_does_not_use_fallback(private_key_string, private_key):
-    with (
-        mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
-        mock.patch.object(auth.logger, "warning") as warning,
-    ):
+    with mock.patch.object(auth.logger, "warning") as warning:
         calculated_private_key = private_key_from_string(private_key_string, PASSPHRASE)
     assert serialize(calculated_private_key) == serialize(private_key)
-    import_key.assert_not_called()
     warning.assert_not_called()
 
 
@@ -305,7 +228,7 @@ def test_unsupported_algorithm_uses_fallback_and_warns(private_key):
     ):
         calculated_private_key = private_key_from_string(key_string, PASSPHRASE)
     assert serialize(calculated_private_key) == serialize(private_key)
-    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
 def test_fallback_triggers_regardless_of_error_wording(private_key):
@@ -319,21 +242,19 @@ def test_fallback_triggers_regardless_of_error_wording(private_key):
     ):
         calculated_private_key = private_key_from_string(key_string, PASSPHRASE)
     assert serialize(calculated_private_key) == serialize(private_key)
-    warning.assert_called_once_with(auth.PBES1_DEPRECATION_MESSAGE)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
-def test_error_message_match_alone_does_not_trigger_fallback(private_key_string):
-    # a modern (PBES2) key must not take the fallback path, even when the
-    # error message mentions an unsupported PBES1-style algorithm
+def test_modern_key_rejected_by_cryptography_uses_generic_warning(private_key_string, private_key):
+    # a PBES2 key is not reported as PBES1, whatever the error message says
     sneaky = ValueError("Unknown key encryption algorithm: 1.2.840.113549.1.5.10")
     with (
         mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=sneaky),
-        mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
+        mock.patch.object(auth.logger, "warning") as warning,
     ):
-        with pytest.raises(ValueError) as excinfo:
-            private_key_from_string(private_key_string, PASSPHRASE)
-    assert excinfo.value is sneaky
-    import_key.assert_not_called()
+        loaded = private_key_from_string(private_key_string, PASSPHRASE)
+    assert serialize(loaded) == serialize(private_key)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
 
 
 def test_fallback_failure_raises_original_error(private_key):
@@ -345,13 +266,145 @@ def test_fallback_failure_raises_original_error(private_key):
     assert excinfo.value is unsupported
 
 
-def test_other_errors_are_not_caught(private_key):
+def test_unparseable_key_raises_original_error():
     other_error = ValueError("Could not deserialize key data.")
-    with (
-        mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=other_error),
-        mock.patch("Crypto.PublicKey.RSA.import_key") as import_key,
-    ):
+    with mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=other_error):
         with pytest.raises(ValueError) as excinfo:
             private_key_from_string("-----BEGIN PRIVATE KEY-----", PASSPHRASE)
     assert excinfo.value is other_error
-    import_key.assert_not_called()
+
+
+# PBES2 key whose PBKDF2 parameters explicitly encode the default PRF
+# (hmacWithSHA1). OpenSSL accepts it; cryptography>=45 rejects it with
+# "DEFAULT value was explicitly encoded", before the passphrase is used.
+def pbes2_explicit_prf_encrypt(private_key, passphrase: str) -> bytes:
+    from Crypto.Cipher import AES
+    from Crypto.Protocol.KDF import PBKDF2
+
+    salt, iv, iterations = os.urandom(8), os.urandom(16), 2048
+    derived = PBKDF2(passphrase.encode(), salt, 32, iterations)  # default HMAC-SHA1
+    encrypted = AES.new(derived, AES.MODE_CBC, iv).encrypt(pad(serialize(private_key), 16))
+    prf = DerSequence([DerObjectId("1.2.840.113549.2.7").encode(), b"\x05\x00"]).encode()
+    pbkdf2_params = DerSequence([DerOctetString(salt).encode(), iterations, prf]).encode()
+    kdf = DerSequence([DerObjectId("1.2.840.113549.1.5.12").encode(), pbkdf2_params]).encode()
+    cipher = DerSequence(
+        [DerObjectId("2.16.840.1.101.3.4.1.42").encode(), DerOctetString(iv).encode()]
+    ).encode()
+    pbes2_params = DerSequence([kdf, cipher]).encode()
+    algorithm = DerSequence([DerObjectId("1.2.840.113549.1.5.13").encode(), pbes2_params]).encode()
+    return DerSequence([algorithm, DerOctetString(encrypted).encode()]).encode()
+
+
+@pytest.fixture(scope="session")
+def ec_private_key():
+    return ec.generate_private_key(ec.SECP256R1())
+
+
+@pytest.mark.parametrize("key_fixture", ["private_key", "ec_private_key"])
+@pytest.mark.parametrize("is_pem", [True, False])
+def test_pbes2_explicit_prf(key_fixture, is_pem, request):
+    key = request.getfixturevalue(key_fixture)
+    der = pbes2_explicit_prf_encrypt(key, PASSPHRASE)
+    with mock.patch.object(auth.logger, "warning") as warning:
+        if is_pem:
+            loaded = private_key_from_string(to_pem(der), PASSPHRASE)
+        else:
+            loaded = private_key_from_string(base64.b64encode(der).decode(), PASSPHRASE)
+    assert serialize(loaded) == serialize(key)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="permission issues on Windows")
+def test_pbes2_explicit_prf_from_file(ec_private_key, tmp_path):
+    path = tmp_path / "key.pem"
+    path.write_text(to_pem(pbes2_explicit_prf_encrypt(ec_private_key, PASSPHRASE)))
+    assert serialize(private_key_from_file(str(path), PASSPHRASE)) == serialize(ec_private_key)
+
+
+def test_pbes2_explicit_prf_wrong_passphrase_raises(private_key):
+    der = pbes2_explicit_prf_encrypt(private_key, PASSPHRASE)
+    with pytest.raises(ValueError):
+        private_key_from_string(to_pem(der), "wrong-passphrase")
+
+
+def single_des_traditional_pem(private_key, passphrase: str) -> str:
+    # pycryptodome's PEM.encode only writes DES-EDE3-CBC, so build the
+    # `DEK-Info: DES-CBC` PEM by hand: OpenSSL EVP_BytesToKey (one MD5 round,
+    # first 8 IV bytes as salt) derives the key
+    der = private_key.private_bytes(
+        serialization.Encoding.DER,
+        serialization.PrivateFormat.TraditionalOpenSSL,
+        serialization.NoEncryption(),
+    )
+    iv = os.urandom(8)
+    key = MD5.new(passphrase.encode() + iv).digest()[:8]
+    encrypted = DES.new(key, DES.MODE_CBC, iv).encrypt(pad(der, DES.block_size))
+    body = base64.b64encode(encrypted).decode()
+    lines = textwrap.wrap(body, 64)
+    return (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "Proc-Type: 4,ENCRYPTED\n"
+        f"DEK-Info: DES-CBC,{iv.hex().upper()}\n\n"
+        + "\n".join(lines)
+        + "\n-----END RSA PRIVATE KEY-----\n"
+    )
+
+
+def test_single_des_traditional_pem(private_key):
+    # cryptography>=45 rejects traditional PEM encrypted with single DES
+    # ("Key encrypted with unknown cipher")
+    pem = single_des_traditional_pem(private_key, PASSPHRASE)
+    assert "DEK-Info: DES-CBC," in pem
+    with pytest.raises((ValueError, UnsupportedAlgorithm)):
+        serialization.load_pem_private_key(pem.encode(), PASSPHRASE.encode())
+    with mock.patch.object(auth.logger, "warning") as warning:
+        loaded = private_key_from_string(pem, PASSPHRASE)
+    assert serialize(loaded) == serialize(private_key)
+    warning.assert_called_once_with(auth.NON_STANDARD_KEY_MESSAGE)
+
+
+# EC P-256 key encrypted with the PKCS#12 PBE pbeWithSHA1And2-KeyTripleDES-CBC
+# (`openssl pkcs8 -topk8 -v1 PBE-SHA1-2DES`), which cryptography>=45 cannot load.
+PKCS12_2DES_KEY = """-----BEGIN ENCRYPTED PRIVATE KEY-----
+MIGxMBwGCiqGSIb3DQEMAQQwDgQI67mLpjBKN1MCAggABIGQQcWuCcT26ANhKdaj
+26VQU8sm8i6npue+wzG95L8z4DNTSKD4x6cOIcJtAethMmY3WXOFiAq+hJH1uo0i
+ZkwQEaK8TjqcgfA1ta8u251zkhS0IlqZgQxBEmpZZCOUh2U7126lCJZBjyd5zdZD
++aehZn79a1yyd1cYOm0MFujo0uybLYUDoVipdl02yay3Ygjh
+-----END ENCRYPTED PRIVATE KEY-----
+"""
+PKCS12_2DES_PUBLIC_KEY = b"""-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGLYUWAHMGvso2g8TMYH8oJ0pcCpp
+rnI73QFk+DNCFiy3JDRf/7FvD717VAIiPHJSuQNz/BjW3UT9jMetxaf4Vw==
+-----END PUBLIC KEY-----
+"""
+
+
+def test_pkcs12_pbe_2key_3des():
+    loaded = private_key_from_string(PKCS12_2DES_KEY, PASSPHRASE)
+    assert (
+        loaded.public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        == PKCS12_2DES_PUBLIC_KEY
+    )
+
+
+def test_pkcs12_pbe_2key_3des_wrong_passphrase_raises():
+    with pytest.raises(ValueError):
+        private_key_from_string(PKCS12_2DES_KEY, "wrong-passphrase")
+
+
+def test_explicit_prf_without_passphrase_raises_without_prompting(private_key):
+    # the strict ASN.1 error comes before cryptography checks the passphrase, so
+    # the fallback must not let OpenSSL prompt for one on the terminal
+    der = pbes2_explicit_prf_encrypt(private_key, PASSPHRASE)
+    with pytest.raises(ValueError):
+        private_key_from_string(to_pem(der))
+
+
+def test_unsupported_algorithm_error_uses_fallback(private_key):
+    unsupported = UnsupportedAlgorithm("explicit curve encoding")
+    key_string = to_pem(pbes1_encrypt(private_key, "pbeWithSHA1AndDES-CBC", PASSPHRASE))
+    with mock.patch.object(auth.serialization, "load_pem_private_key", side_effect=unsupported):
+        loaded = private_key_from_string(key_string, PASSPHRASE)
+    assert serialize(loaded) == serialize(private_key)
