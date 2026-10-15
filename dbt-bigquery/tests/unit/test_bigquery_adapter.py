@@ -1,3 +1,4 @@
+import contextvars
 from multiprocessing import get_context
 from unittest import mock
 
@@ -15,7 +16,11 @@ import dbt_common.exceptions.base
 
 import dbt.adapters
 from dbt.adapters.bigquery.relation_configs import PartitionConfig
+from dbt.adapters.base import SchemaSearchMap
 from dbt.adapters.bigquery import BigQueryAdapter, BigQueryRelation
+from dbt.adapters.bigquery.impl import _CATALOG_DATASET_CHECK_LIMIT
+import google.api_core.exceptions
+from google.auth.exceptions import RefreshError
 from google.cloud.bigquery.table import Table
 from dbt.adapters.bigquery.connections import _sanitize_label, _VALIDATE_LABEL_LENGTH_LIMIT
 from dbt_common.clients import agate_helper
@@ -1090,6 +1095,207 @@ class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
         schemas_in_result = {info.schema for info in result.keys()}
         assert "real_dataset" in schemas_in_result
         assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
+
+
+_TEST_CONTEXT_VAR: contextvars.ContextVar = contextvars.ContextVar(
+    "test_context_var", default=None
+)
+
+
+@patch("dbt.adapters.base.impl.BaseAdapter._get_catalog_schemas")
+class TestBigQueryCatalogSchemas(BaseTestBigQueryAdapter):
+    def _get_adapter(self, listed_datasets=(), existing_datasets=None, unknown_datasets=()):
+        adapter = self.get_adapter("oauth")
+        adapter.list_schemas = MagicMock(return_value=list(listed_datasets))
+        existing = set(listed_datasets if existing_datasets is None else existing_datasets)
+        adapter.connections.datasets_exist = MagicMock(
+            side_effect=lambda database, schemas: {
+                schema: None if schema in unknown_datasets else schema in existing
+                for schema in schemas
+            }
+        )
+        return adapter
+
+    def _candidates(self, *schemas, database="dbt-unit-000000"):
+        candidates = SchemaSearchMap()
+        info_schemas = []
+        for schema in schemas:
+            info_schema = BigQueryRelation.create(
+                database=database, schema=schema, identifier="my_table"
+            ).information_schema_only()
+            candidates[info_schema] = {schema}
+            info_schemas.append(info_schema)
+        return candidates, info_schemas
+
+    @staticmethod
+    def _checked_schemas(adapter):
+        return {
+            schema
+            for call in adapter.connections.datasets_exist.call_args_list
+            for schema in call.args[1]
+        }
+
+    def test_few_schemas_are_checked_without_listing(self, mock_super_get_catalog_schemas):
+        adapter = self._get_adapter(existing_datasets=["dummy_schema", "dataset_a"])
+        candidates, info_schemas = self._candidates("dummy_schema", "dataset_a", "missing")
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        adapter.list_schemas.assert_not_called()
+        assert self._checked_schemas(adapter) == {"dummy_schema", "dataset_a", "missing"}
+        assert info_schemas[0] in result
+        assert info_schemas[1] in result
+        assert info_schemas[2] not in result
+
+    def test_schema_with_unknown_existence_is_kept(self, mock_super_get_catalog_schemas):
+        # e.g. no `bigquery.datasets.get`: keep the schema so the catalog query
+        # reports the real error instead of it being silently dropped
+        adapter = self._get_adapter(unknown_datasets=["restricted"])
+        candidates, (info_schema,) = self._candidates("restricted")
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        assert info_schema in result
+
+    def test_databases_are_checked_separately(self, mock_super_get_catalog_schemas):
+        adapter = self._get_adapter(existing_datasets=["dataset_a", "dataset_b"])
+        candidates, info_schemas = self._candidates("dataset_a")
+        other_candidates, other_info_schemas = self._candidates(
+            "dataset_b", database="other-project"
+        )
+        for info_schema in other_info_schemas:
+            candidates[info_schema] = other_candidates[info_schema]
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        checked = {
+            (call.args[0], frozenset(call.args[1]))
+            for call in adapter.connections.datasets_exist.call_args_list
+        }
+        assert checked == {
+            ("dbt-unit-000000", frozenset({"dataset_a"})),
+            ("other-project", frozenset({"dataset_b"})),
+        }
+        assert info_schemas[0] in result
+        assert other_info_schemas[0] in result
+
+    def test_many_schemas_use_list_dataset(self, mock_super_get_catalog_schemas):
+        schemas = [f"dataset_{i}" for i in range(_CATALOG_DATASET_CHECK_LIMIT + 1)]
+        adapter = self._get_adapter(listed_datasets=schemas[:-1])
+        candidates, info_schemas = self._candidates(*schemas)
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        adapter.list_schemas.assert_called_once_with("dbt-unit-000000")
+        assert self._checked_schemas(adapter) == set()
+        assert all(info_schema in result for info_schema in info_schemas[:-1])
+        assert info_schemas[-1] not in result
+
+    def test_many_schemas_check_hidden_datasets_directly(self, mock_super_get_catalog_schemas):
+        # `list_datasets` never returns underscore-prefixed (hidden) datasets
+        schemas = [f"dataset_{i}" for i in range(_CATALOG_DATASET_CHECK_LIMIT)] + ["_hidden"]
+        adapter = self._get_adapter(listed_datasets=schemas[:-1], existing_datasets=schemas)
+        candidates, info_schemas = self._candidates(*schemas)
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        assert self._checked_schemas(adapter) == {"_hidden"}
+        assert all(info_schema in result for info_schema in info_schemas)
+
+    @patch("dbt.adapters.bigquery.impl.LIST_DATASETS_MAX_RESULTS", 3)
+    def test_many_schemas_check_unlisted_when_listing_truncated(
+        self, mock_super_get_catalog_schemas
+    ):
+        schemas = [f"dataset_{i}" for i in range(_CATALOG_DATASET_CHECK_LIMIT + 1)]
+        adapter = self._get_adapter(listed_datasets=schemas[:3], existing_datasets=schemas)
+        candidates, info_schemas = self._candidates(*schemas)
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        assert self._checked_schemas(adapter) == set(schemas[3:])
+        assert all(info_schema in result for info_schema in info_schemas)
+
+    def test_schema_match_is_case_sensitive(self, mock_super_get_catalog_schemas):
+        # BigQuery dataset names are case-sensitive: `Other_Dataset` does not
+        # exist just because `other_dataset` does.
+        schemas = [f"dataset_{i}" for i in range(_CATALOG_DATASET_CHECK_LIMIT)]
+        adapter = self._get_adapter(listed_datasets=schemas + ["other_dataset"])
+        candidates, info_schemas = self._candidates(*schemas, "Other_Dataset")
+        mock_super_get_catalog_schemas.return_value = candidates
+
+        result = adapter._get_catalog_schemas([])
+
+        assert info_schemas[-1] not in result
+
+
+class TestBigQueryDatasetExists(BaseTestBigQueryAdapter):
+    def _stub_client(self, adapter, get_dataset):
+        client = MagicMock()
+        client.get_dataset = MagicMock(side_effect=get_dataset)
+        connection = MagicMock()
+        connection.handle = client
+        adapter.connections.get_thread_connection = MagicMock(return_value=connection)
+        return client
+
+    def test_datasets_exist_checks_each_schema(self):
+        adapter = self.get_adapter("oauth")
+
+        def get_dataset(dataset_ref, **kwargs):
+            if dataset_ref.dataset_id == "missing":
+                raise google.api_core.exceptions.NotFound("missing")
+            if dataset_ref.dataset_id == "restricted":
+                raise google.api_core.exceptions.Forbidden("permission denied")
+            return MagicMock()
+
+        client = self._stub_client(adapter, get_dataset)
+
+        result = adapter.connections.datasets_exist(
+            "dbt-unit-000000", ["existing", "missing", "restricted"]
+        )
+
+        assert result == {"existing": True, "missing": False, "restricted": None}
+        # concurrent checks share the client, so they must not use the
+        # reopen-on-error retry that replaces `connection.handle`
+        assert all("retry" not in call.kwargs for call in client.get_dataset.call_args_list)
+
+    def test_datasets_exist_unknown_on_api_errors(self):
+        adapter = self.get_adapter("oauth")
+        for error in [
+            google.api_core.exceptions.BadRequest("invalid dataset name"),
+            google.api_core.exceptions.ServiceUnavailable("unavailable"),
+            RefreshError("token expired"),
+        ]:
+            with self.subTest(error=type(error).__name__):
+                self._stub_client(adapter, error)
+
+                result = adapter.connections.datasets_exist("dbt-unit-000000", ["dataset_one"])
+
+                assert result == {"dataset_one": None}
+
+    def test_datasets_exist_with_no_schemas_makes_no_calls(self):
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter, lambda *a, **k: MagicMock())
+
+        assert adapter.connections.datasets_exist("dbt-unit-000000", []) == {}
+        client.get_dataset.assert_not_called()
+
+    def test_datasets_exist_workers_inherit_context(self):
+        adapter = self.get_adapter("oauth")
+        seen = []
+        self._stub_client(adapter, lambda *a, **k: seen.append(_TEST_CONTEXT_VAR.get()))
+        token = _TEST_CONTEXT_VAR.set("invocation-context")
+        try:
+            adapter.connections.datasets_exist("dbt-unit-000000", ["a", "b"])
+        finally:
+            _TEST_CONTEXT_VAR.reset(token)
+
+        assert seen == ["invocation-context", "invocation-context"]
 
 
 class TestBigQueryAdapterConversions(TestAdapterConversions):

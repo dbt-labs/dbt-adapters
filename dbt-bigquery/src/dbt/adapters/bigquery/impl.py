@@ -1,3 +1,4 @@
+from collections import defaultdict
 import copy
 from dataclasses import dataclass
 from datetime import datetime
@@ -70,7 +71,11 @@ from dbt.adapters.bigquery.catalogs import (
     BigQueryCatalogRelation,
 )
 from dbt.adapters.bigquery.column import BigQueryColumn, get_nested_column_data_types
-from dbt.adapters.bigquery.connections import BigQueryAdapterResponse, BigQueryConnectionManager
+from dbt.adapters.bigquery.connections import (
+    BigQueryAdapterResponse,
+    BigQueryConnectionManager,
+    LIST_DATASETS_MAX_RESULTS,
+)
 from dbt.adapters.bigquery.dataset import add_access_entry_to_dataset, is_access_entry_in_dataset
 from dbt.adapters.bigquery.python_submissions import (
     ClusterDataprocHelper,
@@ -155,6 +160,10 @@ BIGQUERY_USE_STANDARD_SQL_FOR_PARTITIONS = BehaviorFlag(
 )
 
 _dataset_lock = threading.Lock()
+
+# Catalog generation checks up to this many schemas per project with concurrent
+# `get_dataset` calls; above it, one `list_datasets` pagination is cheaper.
+_CATALOG_DATASET_CHECK_LIMIT = 20
 
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
@@ -1113,21 +1122,42 @@ class BigQueryAdapter(BaseAdapter):
         )
         return super()._catalog_filter_table(table, used_schemas)
 
+    def _existing_catalog_schemas(self, database: str, schemas: Set[str]) -> Set[str]:
+        if len(schemas) <= _CATALOG_DATASET_CHECK_LIMIT:
+            listed: Set[str] = set()
+            unlisted = schemas
+        else:
+            listed = set(self.list_schemas(database))
+            # `list_datasets` omits hidden (underscore-prefixed) datasets and is
+            # truncated at LIST_DATASETS_MAX_RESULTS; check those schemas directly.
+            truncated = len(listed) >= LIST_DATASETS_MAX_RESULTS
+            unlisted = {s for s in schemas - listed if truncated or s.startswith("_")}
+
+        checked = self.connections.datasets_exist(database, unlisted)
+        # Keep schemas whose existence is unknown (None): the catalog query then
+        # reports the real error instead of the schema being silently dropped.
+        return (schemas & listed) | {s for s, exists in checked.items() if exists is not False}
+
     def _get_catalog_schemas(self, relation_config: Iterable[RelationConfig]) -> SchemaSearchMap:
         candidates = super()._get_catalog_schemas(relation_config)
-        db_schemas: Dict[str, Set[str]] = {}
-        result = SchemaSearchMap()
+        schemas_by_database: Dict[Optional[str], Set[str]] = defaultdict(set)
+        for candidate in candidates:
+            if candidate.schema is not None:
+                schemas_by_database[candidate.database].add(candidate.schema)
 
+        existing_schemas = {
+            database: self._existing_catalog_schemas(database, schemas)  # type: ignore[arg-type]
+            for database, schemas in schemas_by_database.items()
+        }
+
+        result = SchemaSearchMap()
         for candidate, schemas in candidates.items():
-            database = candidate.database
-            if database not in db_schemas:
-                db_schemas[database] = set(self.list_schemas(database))  # type:ignore
-            if candidate.schema in db_schemas[database]:  # type:ignore
+            if candidate.schema in existing_schemas.get(candidate.database, set()):
                 result[candidate] = schemas
             else:
                 logger.debug(
                     "Skipping catalog for {}.{} - schema does not exist".format(
-                        database, candidate.schema
+                        candidate.database, candidate.schema
                     )
                 )
         return result
