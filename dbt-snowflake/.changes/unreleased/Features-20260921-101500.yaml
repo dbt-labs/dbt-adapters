@@ -1,0 +1,10 @@
+kind: Features
+body: Add `data_metric_schedule` and `data_metric_functions` model configs to declaratively
+    attach Snowflake data metric functions (DMFs) and set the evaluation schedule on table
+    and incremental models. The adapter reads the currently attached DMFs on each run and
+    converges the relation onto the configured set (setting the schedule, then adding and
+    dropping associations as needed).
+time: 2026-09-21T10:15:00.000000-05:00
+custom:
+    Author: sitelight
+    Issue: "2180"
