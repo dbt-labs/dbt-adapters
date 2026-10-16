@@ -245,6 +245,16 @@ class TestSnowflakeAdapter(unittest.TestCase):
             self.adapter.post_model_hook(config, result)
             self.mock_execute.assert_not_called()
 
+    def test_select_query_comment_added_once(self):
+        # get_column_schema_from_query goes through add_select_query, which must not add
+        # the query comment on top of the one add_standard_query already adds
+        self.cursor.description = [("ID", 0, None, None, 1, 0, False)]
+
+        columns = self.adapter.get_column_schema_from_query("select 1 as id")
+
+        self.mock_execute.assert_called_once_with("/* dbt */\nselect 1 as id", None)
+        self.assertEqual([c.name for c in columns], ["ID"])
+
     def test_cancel_open_connections_empty(self):
         self.assertEqual(len(list(self.adapter.cancel_open_connections())), 0)
 
