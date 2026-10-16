@@ -129,7 +129,7 @@ class SparkAdapter(SQLAdapter):
     }
 
     Relation: TypeAlias = SparkRelation
-    RelationInfo = Tuple[str, str, str]
+    RelationInfo = Tuple[str, str, bool, str]
     Column: TypeAlias = SparkColumn
     ConnectionManager: TypeAlias = SparkConnectionManager
     AdapterSpecificConfigs: TypeAlias = SparkConfig
@@ -171,30 +171,36 @@ class SparkAdapter(SQLAdapter):
     def _get_relation_information(self, row: "agate.Row") -> RelationInfo:
         """relation info was fetched with SHOW TABLES EXTENDED"""
         try:
-            _schema, name, _, information = row
+            _schema, name, is_temporary, information = row
         except ValueError:
             raise DbtRuntimeError(
                 f'Invalid value from "show tables extended ...", got {len(row)} values, expected 4'
             )
 
-        return _schema, name, information
+        return _schema, name, is_temporary, information
 
-    def _get_relation_information_using_describe(self, row: "agate.Row") -> RelationInfo:
+    def _get_relation_information_using_describe(
+        self, row: "agate.Row", schema_relation: BaseRelation
+    ) -> RelationInfo:
         """Relation info fetched using SHOW TABLES and an auxiliary DESCRIBE statement"""
         try:
-            _schema, name, _ = row
+            _schema, name, is_temporary = row
         except ValueError:
             raise DbtRuntimeError(
                 f'Invalid value from "show tables ...", got {len(row)} values, expected 3'
             )
 
-        table_name = f"{_schema}.{name}"
+        if is_temporary:
+            return _schema, name, is_temporary, ""
+
+        table_relation = schema_relation.replace_path(identifier=name).include(identifier=True)
         try:
             table_results = self.execute_macro(
-                DESCRIBE_TABLE_EXTENDED_MACRO_NAME, kwargs={"table_name": table_name}
+                DESCRIBE_TABLE_EXTENDED_MACRO_NAME,
+                kwargs={"table_name": table_relation},
             )
         except DbtRuntimeError as e:
-            logger.debug(f"Error while retrieving information about {table_name}: {e.msg}")
+            logger.debug(f"Error while retrieving information about {table_relation}: {e.msg}")
             table_results = AttrDict()
 
         information = ""
@@ -203,17 +209,26 @@ class SparkAdapter(SQLAdapter):
             if not info_type.startswith("#"):
                 information += f"{info_type}: {info_value}\n"
 
-        return _schema, name, information
+        return _schema, name, is_temporary, information
 
     def _build_spark_relation_list(
         self,
         row_list: "agate.Table",
         relation_info_func: Callable[["agate.Row"], RelationInfo],
+        schema_relation: BaseRelation,
     ) -> List[BaseRelation]:
         """Aggregate relations with format metadata included."""
         relations = []
         for row in row_list:
-            _schema, name, information = relation_info_func(row)
+            returned_schema, name, is_temporary, information = relation_info_func(row)
+            if is_temporary:
+                continue
+
+            relation_schema = returned_schema or schema_relation.schema
+            if schema_relation.database is None and "." in (schema_relation.schema or ""):
+                # Preserve the legacy catalog.namespace schema workaround. Spark
+                # reports only the final namespace component in SHOW results.
+                relation_schema = schema_relation.schema
 
             rel_type: RelationType = (
                 RelationType.View
@@ -225,8 +240,10 @@ class SparkAdapter(SQLAdapter):
             is_iceberg: bool = "Provider: iceberg" in information
 
             relation: BaseRelation = self.Relation.create(
-                schema=_schema,
+                database=schema_relation.database,
+                schema=relation_schema,
                 identifier=name,
+                quote_policy=schema_relation.quote_policy,
                 type=rel_type,
                 information=information,
                 is_delta=is_delta,
@@ -243,12 +260,28 @@ class SparkAdapter(SQLAdapter):
 
         kwargs = {"schema_relation": schema_relation}
 
+        def list_relations_using_show_tables() -> List[BaseRelation]:
+            show_table_rows = self.execute_macro(
+                LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
+            )
+            return self._build_spark_relation_list(
+                row_list=show_table_rows,
+                relation_info_func=lambda row: self._get_relation_information_using_describe(
+                    row, schema_relation
+                ),
+                schema_relation=schema_relation,
+            )
+
         try:
+            if schema_relation.database:
+                return list_relations_using_show_tables()
+
             # Default compute engine behavior: show tables extended
             show_table_extended_rows = self.execute_macro(LIST_RELATIONS_MACRO_NAME, kwargs=kwargs)
             return self._build_spark_relation_list(
                 row_list=show_table_extended_rows,
                 relation_info_func=self._get_relation_information,
+                schema_relation=schema_relation,
             )
         except DbtRuntimeError as e:
             errmsg = getattr(e, "msg", "")
@@ -260,21 +293,9 @@ class SparkAdapter(SQLAdapter):
             elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
                 # this happens with spark-iceberg with v2 iceberg tables
                 # https://issues.apache.org/jira/browse/SPARK-33393
-                show_table_rows = self.execute_macro(
-                    LIST_RELATIONS_SHOW_TABLES_MACRO_NAME, kwargs=kwargs
-                )
-                return self._build_spark_relation_list(
-                    row_list=show_table_rows,
-                    relation_info_func=self._get_relation_information_using_describe,
-                )
+                return list_relations_using_show_tables()
             else:
                 raise
-
-    def get_relation(self, database: str, schema: str, identifier: str) -> Optional[BaseRelation]:
-        if not self.Relation.get_default_include_policy().database:
-            database = None  # type: ignore
-
-        return super().get_relation(database, schema, identifier)
 
     def parse_describe_extended(
         self, relation: BaseRelation, raw_rows: AttrDict
@@ -293,7 +314,7 @@ class SparkAdapter(SQLAdapter):
         table_stats = SparkColumn.convert_table_stats(raw_table_stats)
         return [
             SparkColumn(
-                table_database=None,
+                table_database=relation.database,
                 table_schema=relation.schema,
                 table_name=relation.name,
                 table_type=relation.type,
@@ -351,7 +372,7 @@ class SparkAdapter(SQLAdapter):
         for match_num, match in enumerate(matches):
             column_name, column_type, nullable = match.groups()
             column = SparkColumn(
-                table_database=None,
+                table_database=relation.database,
                 table_schema=relation.schema,
                 table_name=relation.table,
                 table_type=relation.type,
@@ -383,7 +404,7 @@ class SparkAdapter(SQLAdapter):
             as_dict = column.to_column_dict()
             as_dict["column_name"] = as_dict.pop("column", None)
             as_dict["column_type"] = as_dict.pop("dtype")
-            as_dict["table_database"] = None
+            as_dict["table_database"] = relation.database
             yield as_dict
 
     def get_catalog(
@@ -392,23 +413,20 @@ class SparkAdapter(SQLAdapter):
         used_schemas: FrozenSet[Tuple[str, str]],
     ) -> Tuple["agate.Table", List[Exception]]:
         schema_map = self._get_catalog_schemas(relation_configs)
-        if len(schema_map) > 1:
-            raise CompilationError(
-                f"Expected only one database in get_catalog, found " f"{list(schema_map)}"
-            )
 
         with executor(self.config) as tpe:
             futures: List[Future["agate.Table"]] = []
             for info, schemas in schema_map.items():
                 for schema in schemas:
+                    connection_name = f"{info.database}.{schema}" if info.database else schema
                     futures.append(
                         tpe.submit_connected(
                             self,
-                            schema,
+                            connection_name,
                             self._get_one_catalog,
                             info,
                             [schema],
-                            relation_configs,
+                            used_schemas,
                         )
                     )
             catalogs, exceptions = catch_as_completed(futures)
@@ -439,9 +457,7 @@ class SparkAdapter(SQLAdapter):
 
     def check_schema_exists(self, database: str, schema: str) -> bool:
         results = self.execute_macro(LIST_SCHEMAS_MACRO_NAME, kwargs={"database": database})
-
-        exists = True if schema in [row[0] for row in results] else False
-        return exists
+        return schema.lower() in (str(row[0]).lower() for row in results)
 
     def get_rows_different_sql(
         self,
