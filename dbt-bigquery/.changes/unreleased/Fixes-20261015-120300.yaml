@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep a dataset's tables in the relation cache when listing its routines is forbidden, and list tables and routines concurrently
+time: 2026-10-15T12:03:00.000000+00:00
+custom:
+  Author: Kietzmann
+  Issue: "2226"
