@@ -155,8 +155,12 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         # We wait on the attached job, not a resubmitted one.
         existing_job.result.assert_called_once()
 
-    def test_copy_bq_table_resubmits_fresh_job_id_when_prior_job_failed(self):
-        """Terminal-failure resubmission applies to copy jobs too."""
+    def test_copy_bq_table_attaches_when_existing_job_failed(self):
+        """A dead copy job is attached to, not resubmitted under a fresh id.
+
+        copy_bq_table has no retry loop, so a 409 can only come from its own
+        insert being re-sent -- that job is this attempt's outcome.
+        """
         exceptions = dbt.adapters.bigquery.impl.google.cloud.exceptions
         dead_job_id = "copy_job_dead"
         job_ids_used = []
@@ -164,22 +168,23 @@ class TestBigQueryConnectionManager(unittest.TestCase):
         def submit(*args, **kwargs):
             submitted_id = kwargs.get("job_id")
             job_ids_used.append(submitted_id)
-            if submitted_id == dead_job_id:
-                raise exceptions.Conflict(f"Already Exists: Job project:{dead_job_id}")
-            return Mock(job_id=submitted_id)
+            raise exceptions.Conflict(f"Already Exists: Job project:{submitted_id}")
 
         self.connections.generate_job_id = Mock(side_effect=[dead_job_id, "copy_job_fresh"])
         self.mock_client.copy_table.side_effect = submit
-        self.mock_client.get_job.return_value = Mock(
+        dead_job = Mock(
             spec=google.cloud.bigquery.CopyJob,
             job_id=dead_job_id,
             state="DONE",
             error_result={"reason": "backendError", "message": "Error encountered"},
         )
+        self.mock_client.get_job.return_value = dead_job
 
         self._copy_table(write_disposition=dbt.adapters.bigquery.impl.WRITE_TRUNCATE)
 
-        self.assertEqual(job_ids_used, [dead_job_id, "copy_job_fresh"])
+        self.assertEqual(job_ids_used, [dead_job_id])
+        self.mock_client.get_job.assert_called_once_with(dead_job_id)
+        dead_job.result.assert_called_once()
 
     def test_job_is_terminally_failed(self):
         from dbt.adapters.bigquery.retry import job_is_terminally_failed
