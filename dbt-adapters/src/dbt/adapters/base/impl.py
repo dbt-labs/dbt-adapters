@@ -401,7 +401,9 @@ class BaseAdapter(metaclass=AdapterMeta):
 
     @available
     def build_catalog_relation(self, config: RelationConfig) -> Optional[CatalogRelation]:
-        if not config.config:
+        # Nodes without a `config` attribute (e.g. a Macro in a `run-operation`) can't
+        # reference a catalog; return None instead of raising AttributeError.
+        if not getattr(config, "config", None):
             return None
 
         # "catalog" is legacy, but we support it for backward compatibility
