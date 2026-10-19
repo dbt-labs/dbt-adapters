@@ -1062,13 +1062,17 @@ class BaseAdapter(metaclass=AdapterMeta):
         # if the cache is already populated, add this schema in
         # otherwise, skip updating the cache and just ignore
         if self.cache:
-            for relation in relations:
-                self.cache.add(relation)
-            if not relations:
-                # it's possible that there were no relations in some schemas. We want
-                # to insert the schemas we query into the cache's `.schemas` attribute
-                # so we can check it later
-                self.cache.update_schemas([(database, schema)])
+            with self.cache.lock:
+                # Another thread may have cached and then renamed or dropped relations in this
+                # schema while we were listing; applying our older listing would resurrect them.
+                if (database, schema) not in self.cache:
+                    for relation in relations:
+                        self.cache.add(relation)
+                    if not relations:
+                        # it's possible that there were no relations in some schemas. We want
+                        # to insert the schemas we query into the cache's `.schemas` attribute
+                        # so we can check it later
+                        self.cache.update_schemas([(database, schema)])
 
         fire_event(
             ListRelations(

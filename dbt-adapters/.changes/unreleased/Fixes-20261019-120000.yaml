@@ -1,0 +1,6 @@
+kind: Fixes
+body: Don't let a schema listing that finished after the schema was cached overwrite newer cache state, which caused "new key already in cache" rename errors with --no-populate-cache.
+time: 2026-10-19T12:00:00.000000+05:30
+custom:
+  Author: sd-db
+  Issue: "2231"
