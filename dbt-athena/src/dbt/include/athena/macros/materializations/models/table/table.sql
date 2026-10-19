@@ -144,26 +144,42 @@
         {%- endif -%}
 
         {%- set old_relation_table_type = adapter.get_glue_table_type(old_relation).value if old_relation else none -%}
+        {%- set old_location = adapter.get_glue_table_location(old_relation) if old_relation_table_type == 'iceberg_table' else none -%}
+        {%- set tmp_location = adapter.get_glue_table_location(tmp_relation) if old_location else none -%}
 
-        -- we cannot use old_bkp_relation, because it returns None if the relation doesn't exist
-        -- we need to create a python object via the make_temp_relation instead
-        {%- set old_relation_bkp = make_temp_relation(old_relation, '__bkp') -%}
+        {%- if old_location and tmp_location
+              and not (tmp_location.rstrip('/') ~ '/').startswith(old_location.rstrip('/') ~ '/') -%}
+          -- publish the new table by repointing the existing Glue entry in a single UpdateTable call,
+          -- so the target name never disappears for concurrent readers; then drop the tmp entry
+          -- (Glue only, its data is now the target's) and the data of the old table
+          {%- do adapter.swap_table(tmp_relation, target_relation) -%}
+          {%- do adapter.delete_from_glue_catalog(tmp_relation) -%}
+          {%- do adapter.delete_from_s3(old_location) -%}
+          {%- do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) -%}
+        {%- else -%}
+          -- the tmp table shares the old table's location (non-unique s3_data_naming or
+          -- external_location), or the old relation is not an iceberg table: publish by renaming
 
-        {%- if old_relation_table_type == 'iceberg_table' -%}
-          {{ rename_relation(old_relation, old_relation_bkp) }}
-        {%- else  -%}
-          {%- do drop_relation_glue(old_relation) -%}
-        {%- endif -%}
+          -- we cannot use old_bkp_relation, because it returns None if the relation doesn't exist
+          -- we need to create a python object via the make_temp_relation instead
+          {%- set old_relation_bkp = make_temp_relation(old_relation, '__bkp') -%}
 
-        -- publish the target table doing a final renaming
-        {{ rename_relation(tmp_relation, target_relation) }}
+          {%- if old_relation_table_type == 'iceberg_table' -%}
+            {{ rename_relation(old_relation, old_relation_bkp) }}
+          {%- else  -%}
+            {%- do drop_relation_glue(old_relation) -%}
+          {%- endif -%}
 
-        -- if old relation is iceberg_table, we have a backup
-        -- therefore we can drop the old relation backup, in all other cases there is nothing to do
-        -- in case of switch from hive to iceberg the backup table do not exists
-        -- in case of first run, the backup table do not exists
-        {%- if old_relation_table_type == 'iceberg_table' -%}
-          {%- do drop_relation(old_relation_bkp) -%}
+          -- publish the target table doing a final renaming
+          {{ rename_relation(tmp_relation, target_relation) }}
+
+          -- if old relation is iceberg_table, we have a backup
+          -- therefore we can drop the old relation backup, in all other cases there is nothing to do
+          -- in case of switch from hive to iceberg the backup table do not exists
+          -- in case of first run, the backup table do not exists
+          {%- if old_relation_table_type == 'iceberg_table' -%}
+            {%- do drop_relation(old_relation_bkp) -%}
+          {%- endif -%}
         {%- endif -%}
 
       {%- endif -%}
