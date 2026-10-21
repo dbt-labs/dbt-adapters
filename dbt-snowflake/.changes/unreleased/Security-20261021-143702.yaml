@@ -1,0 +1,6 @@
+kind: Security
+body: Require certifi>=2026.10.19 so installations receive the updated CA bundle addressing the eMudhra/emSign certificate incident.
+time: 2026-10-21T14:37:02.451948-04:00
+custom:
+    Author: ChrisWren
+    PR: pending
