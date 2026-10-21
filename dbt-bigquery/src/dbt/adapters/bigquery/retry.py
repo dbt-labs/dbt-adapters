@@ -35,14 +35,9 @@ def _is_rate_limit_error(error: Exception) -> bool:
     return errors[0].get("reason") in _RATE_LIMIT_REASONS
 
 
-def job_is_terminally_failed(job: Any) -> bool:
-    """True when a job is DONE with an error_result."""
-    return job.state == "DONE" and bool(job.error_result)
-
-
-def job_may_have_partially_committed(job: Any) -> bool:
-    """True for SCRIPT jobs, whose earlier statements can commit even if the job fails."""
-    return getattr(job, "statement_type", None) == "SCRIPT"
+def job_is_terminally_failed(job: Optional[Any]) -> bool:
+    """True when a job is known to be DONE with an error_result."""
+    return job is not None and job.state == "DONE" and bool(job.error_result)
 
 
 class RetryFactory:
