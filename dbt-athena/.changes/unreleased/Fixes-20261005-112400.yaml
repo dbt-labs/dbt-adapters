@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop `quote_seed_column` from temporarily changing the shared adapter `quote_character`, which made seeds fail at random with `threads > 1`
+time: 2026-10-05T11:24:00.000000-07:00
+custom:
+    Author: officialpm
+    Issue: "2199"
