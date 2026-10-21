@@ -1,6 +1,6 @@
 kind: Fixes
-body: Read a materialized view's sort key from svv_table_info when Redshift Patch 206+ no
-    longer exposes its internal backing table in the MV's schema, so unchanged sorted
+body: Read a materialized view's sort key from its definition in pg_views when Redshift
+    Patch 206+ no longer exposes its internal backing table, so unchanged sorted
     materialized views are altered in place instead of being fully replaced on every run.
 time: 2026-10-21T19:00:00.000000-05:00
 custom:
