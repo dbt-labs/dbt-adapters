@@ -1,0 +1,9 @@
+kind: Fixes
+body: Retry transient identity provider failures (429, 5xx, dropped connections) with
+    exponential backoff when fetching external-oauth-wif subject tokens, and add a
+    request timeout. Previously a single throttled or failed token request failed the
+    connection.
+time: 2026-10-06T12:00:00.000000-05:00
+custom:
+    Author: tauhid621
+    Issue: ""
