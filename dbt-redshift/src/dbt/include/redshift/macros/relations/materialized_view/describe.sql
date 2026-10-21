@@ -43,6 +43,30 @@
     {%- endset %}
     {% set _column_descriptor = run_query(_column_descriptor_sql) %}
 
+    {#-
+        Redshift Patch 206 moved the internal backing table out of the MV's schema, so the query above
+        returns nothing. Fall back to the first sort key on svv_table_info, which is keyed by the MV itself.
+        svv_table_info only exposes the first sort column, so this is limited to single-column keys
+        (sortkey_num = 1). A multi-column key returns nothing here, compares as changed and triggers
+        a full refresh rather than being mistaken for a single-column key.
+    -#}
+    {% if _column_descriptor | length == 0 %}
+        {%- set _sort_fallback_sql -%}
+            select
+                tb.sortkey1 as column,
+                false as is_dist_key,
+                1 as sort_key_position
+            from svv_table_info tb
+            where tb.table ilike '{{ relation.identifier }}'
+            and tb.schema ilike '{{ relation.schema }}'
+            and tb.database ilike '{{ relation.database }}'
+            and tb.sortkey_num = 1
+            and tb.sortkey1 is not null
+            and tb.sortkey1 not in ('', 'AUTO(SORTKEY)', 'INTERLEAVED')
+        {%- endset %}
+        {% set _column_descriptor = run_query(_sort_fallback_sql) %}
+    {% endif %}
+
     {%- set _query_sql -%}
         select
             vw.definition
