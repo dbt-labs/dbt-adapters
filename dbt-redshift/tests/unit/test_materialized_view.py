@@ -108,3 +108,46 @@ def test_redshift_materialized_view_parse_relation_results_handles_multiples_sor
     assert isinstance(config_dict["sort"], dict)
     assert config_dict["sort"]["sortkey"][0] == "my_column"
     assert config_dict["sort"]["sortkey"][1] == "my_column2"
+
+
+def _parse_with_definition(definition, columns=None):
+    materialized_view = agate.Table.from_object(
+        [], ["database", "schema", "table", "diststyle", "sortkey1", "autorefresh"]
+    )
+    relation_results = {
+        "materialized_view": materialized_view,
+        "query": agate.Table.from_object([{"definition": definition}]),
+    }
+    if columns is not None:
+        relation_results["columns"] = columns
+    return RedshiftMaterializedViewConfig.parse_relation_results(relation_results)
+
+
+@pytest.mark.parametrize(
+    "definition,expected",
+    [
+        (
+            "create materialized view s.mv diststyle even compound sortkey (id, value) as (select 1)",
+            ["id", "value"],
+        ),
+        ("create materialized view s.mv\n diststyle even\n sortkey (id)\n as (select 1);", ["id"]),
+        ('create materialized view s.mv SORTKEY ("my col" ,b) as select 1', ["my col", "b"]),
+    ],
+)
+def test_redshift_materialized_view_parse_sort_key_from_definition(definition, expected):
+    # Redshift Patch 206+ hides the backing table, so there is no `columns` result
+    config_dict = _parse_with_definition(definition)
+
+    assert config_dict["sort"]["sortkey"] == expected
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "create materialized view s.mv interleaved sortkey (a, b) as (select 1)",
+        "create materialized view s.mv diststyle even as (select 1 as sortkey)",
+        "create materialized view s.mv as (select * from t order by x -- sortkey (a)\n)",
+    ],
+)
+def test_redshift_materialized_view_parse_no_sort_key_from_definition(definition):
+    assert "sort" not in _parse_with_definition(definition)
