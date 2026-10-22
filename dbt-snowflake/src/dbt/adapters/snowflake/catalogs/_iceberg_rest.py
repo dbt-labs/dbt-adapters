@@ -28,7 +28,9 @@ class IcebergRestCatalogRelation:
     auto_refresh: Optional[bool] = None
     iceberg_version: Optional[int] = None
     catalog_database: Optional[str] = None
-    base_location: Optional[str] = None
+    # Combined with the schema/identifier of the relation being created in the create macro
+    base_location_root: Optional[str] = None
+    base_location_subpath: Optional[str] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -101,7 +103,9 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             )
 
         try:
-            base_location = parse_model.cld_base_location(model, self.base_location_root)
+            base_location_root, base_location_subpath = parse_model.cld_base_location_parts(
+                model, self.base_location_root
+            )
         except ValueError as exc:
             raise InvalidRelationConfigError(model, model.config, str(exc))
 
@@ -117,5 +121,6 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             or self.max_data_extension_time_in_days,
             iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
             catalog_database=self.catalog_database,
-            base_location=base_location,
+            base_location_root=base_location_root,
+            base_location_subpath=base_location_subpath,
         )
