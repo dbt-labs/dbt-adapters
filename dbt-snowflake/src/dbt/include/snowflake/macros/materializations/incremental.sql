@@ -121,6 +121,7 @@
 	table_format=catalog_relation.table_format,
   ) -%}
 
+  {% set data_metrics = get_data_metrics_config() %}
   {% set existing_relation = load_relation(this) %}
 
   {#-- The temp relation will be a view (faster) or temp table, depending on upsert/merge strategy --#}
@@ -221,6 +222,8 @@
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
   {% do persist_docs(target_relation, model) %}
+
+  {% do apply_data_metrics(target_relation, data_metrics) %}
 
   {% do unset_query_tag(original_query_tag) %}
 

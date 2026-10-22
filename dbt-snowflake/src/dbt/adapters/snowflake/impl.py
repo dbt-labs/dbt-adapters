@@ -53,7 +53,11 @@ from dbt.adapters.snowflake.catalogs import (
     InfoSchemaCatalogIntegration,
     IcebergRestCatalogIntegration,
 )
-from dbt.adapters.snowflake.relation_configs import SnowflakeRelationType
+from dbt.adapters.snowflake.relation_configs import (
+    SnowflakeDataMetricsConfig,
+    SnowflakeRelationType,
+)
+from dbt.adapters.snowflake.relation_configs.data_metrics import SnowflakeIdentifier
 from dbt.adapters.snowflake.relation_configs.interactive_table import INTERACTIVE_TABLE_COLUMNS
 
 from dbt.adapters.snowflake import SnowflakeColumn
@@ -116,6 +120,8 @@ class SnowflakeConfig(AdapterConfig):
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
     immutable_where: Optional[str] = None
+    data_metric_schedule: Optional[str] = None
+    data_metric_functions: Optional[List[Dict[str, Any]]] = None
 
     # extended formats
     table_format: Optional[str] = None
@@ -753,6 +759,57 @@ CALL {proc_name}();
             )
 
         return {"dynamic_table": selected}
+
+    @available
+    def parse_data_metrics_config(
+        self, relation_config: RelationConfig
+    ) -> SnowflakeDataMetricsConfig:
+        return SnowflakeDataMetricsConfig.from_relation_config(relation_config)
+
+    @available
+    def describe_data_metrics(
+        self, relation: SnowflakeRelation, desired: SnowflakeDataMetricsConfig
+    ) -> Dict[str, Any]:
+        """
+        Read the DMF state needed to reconcile `desired` on a table or view.
+        Only the configured halves are read. Associations come from
+        INFORMATION_SCHEMA.DATA_METRIC_FUNCTION_REFERENCES, which is real-time but
+        has no row at all when nothing is attached, so the schedule is read
+        separately with SHOW PARAMETERS (the references view only reports it per
+        association, and in cron form).
+        """
+        object_kind = "view" if relation.type == SnowflakeRelationType.View else "table"
+
+        results: Dict[str, Any] = {}
+        if desired.functions is not None:
+            quoting = relation.quote_policy
+            database = relation.database
+            if quoting.database and database is not None:
+                database = SnowflakeIdentifier.from_metadata(database).sql
+            references_sql = (
+                "select metric_database_name, metric_schema_name, metric_name, ref_arguments "
+                f"from table({database}.information_schema.data_metric_function_references("
+                f"ref_entity_name => '{_sql_literal(relation.render())}', "
+                f"ref_entity_domain => '{object_kind}'))"
+            )
+            res, references = self.execute(references_sql, fetch=True)
+            if res.code != "SUCCESS":
+                raise DbtRuntimeError(
+                    f"Could not get data metric function metadata: {references_sql} failed"
+                )
+            results["function_references"] = references
+
+        if desired.schedule is not None:
+            # `IN TABLE` also accepts views and Iceberg tables.
+            show_sql = f"show parameters like 'DATA_METRIC_SCHEDULE' in table {relation.render()}"
+            res, parameters = self.execute(show_sql, fetch=True)
+            if res.code != "SUCCESS":
+                raise DbtRuntimeError(
+                    f"Could not get data metric schedule metadata: {show_sql} failed"
+                )
+            results["schedule_parameters"] = parameters
+
+        return results
 
     @available
     def describe_interactive_table(self, relation: SnowflakeRelation) -> Dict[str, Any]:

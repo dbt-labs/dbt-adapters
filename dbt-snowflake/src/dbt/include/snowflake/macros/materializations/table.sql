@@ -18,6 +18,8 @@
 	table_format=catalog_relation.table_format
    ) -%}
 
+  {% set data_metrics = get_data_metrics_config() %}
+
   {{ run_hooks(pre_hooks) }}
 
   {% if target_relation.needs_to_drop(existing_relation) %}
@@ -34,6 +36,8 @@
   {% do apply_grants(target_relation, grant_config, should_revoke=should_revoke) %}
 
   {% do persist_docs(target_relation, model) %}
+
+  {% do apply_data_metrics(target_relation, data_metrics) %}
 
   {% do unset_query_tag(original_query_tag) %}
 
