@@ -287,6 +287,7 @@ create iceberg table {{ relation }}
     {%- endif %}
     {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    {{ optional('base_location', (snowflake__iceberg_rest_base_location(relation, catalog_relation) | trim) or none, "'") }}
     {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
@@ -298,6 +299,23 @@ as (
     {{ compiled_code }}
 );
 
+{%- endmacro %}
+
+
+{% macro snowflake__iceberg_rest_base_location(relation, catalog_relation) -%}
+{#-
+    BASE_LOCATION for a table in a catalog-linked database, or empty when no base_location_root is set.
+
+    Built from the relation being created, not the model: incremental runs create a permanent
+    `<model>__dbt_tmp` staging table through this same macro, and it must not share the target's path.
+-#}
+{%- if catalog_relation.base_location_root -%}
+    {%- set path = catalog_relation.base_location_root ~ '/' ~ relation.schema ~ '/' ~ relation.identifier -%}
+    {%- if catalog_relation.base_location_subpath -%}
+        {%- set path = path ~ '/' ~ catalog_relation.base_location_subpath -%}
+    {%- endif -%}
+    {{- dbt.escape_single_quotes(path) -}}
+{%- endif -%}
 {%- endmacro %}
 
 
@@ -357,6 +375,7 @@ create iceberg table {{ relation }} (
 )
 {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
 {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+{{ optional('base_location', (snowflake__iceberg_rest_base_location(relation, catalog_relation) | trim) or none, "'") }}
 {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
 {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
 {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
