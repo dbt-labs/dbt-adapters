@@ -856,7 +856,17 @@ class AthenaAdapter(SQLAdapter):
         """
         This function is invoked by Adapter.get_catalog for each schema.
         """
-        data_catalog = self._get_data_catalog(information_schema.database)  # type:ignore
+        try:
+            data_catalog = self._get_data_catalog(information_schema.database)  # type:ignore
+        except ClientError as e:
+            # sources of another adapter in the same project (e.g. a Trino catalog) reach
+            # the catalog too: skip a data catalog Athena does not know
+            if e.response["Error"]["Code"] == "InvalidRequestException":
+                LOGGER.debug(
+                    f"Data catalog '{information_schema.database}' not found - Ignoring: {e}"
+                )
+                return self._catalog_filter_table(agate.Table.from_object([]), used_schemas)
+            raise e
         data_catalog_type = get_catalog_type(data_catalog)
 
         conn = self.connections.get_thread_connection()
@@ -885,11 +895,16 @@ class AthenaAdapter(SQLAdapter):
 
                 for page in paginator.paginate(**kwargs):
                     for table in page["TableList"]:
-                        catalog.extend(
-                            self._get_one_table_for_catalog(
+                        try:
+                            rows = self._get_one_table_for_catalog(
                                 table, information_schema.database  # type:ignore
                             )
-                        )
+                        except ValueError as e:
+                            # a table of an unknown type, e.g. created outside dbt in a
+                            # source schema, must not fail the whole catalog
+                            LOGGER.debug(f"Skipping table in catalog: {e}")
+                            continue
+                        catalog.extend(rows)
             table = agate.Table.from_object(catalog)
         else:
             with boto3_client_lock:
@@ -909,11 +924,14 @@ class AthenaAdapter(SQLAdapter):
                 while True:
                     response = athena_client.list_table_metadata(**kwargs)
                     for table in response["TableMetadataList"]:
-                        catalog.extend(
-                            self._get_one_table_for_non_glue_catalog(
+                        try:
+                            rows = self._get_one_table_for_non_glue_catalog(
                                 table, schema, information_schema.database  # type:ignore
                             )
-                        )
+                        except ValueError as e:
+                            LOGGER.debug(f"Skipping table in catalog: {e}")
+                            continue
+                        catalog.extend(rows)
                     next_token = response.get("NextToken")
                     if not next_token:
                         break
