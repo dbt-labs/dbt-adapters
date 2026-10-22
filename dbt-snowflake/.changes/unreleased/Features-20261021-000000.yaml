@@ -1,0 +1,6 @@
+kind: Features
+body: Support Cortex Search service models with search_column, attributes, snowflake_warehouse, and target_lag configuration and a SELECT query as the model body.
+time: 2026-10-21T00:00:00+00:00
+custom:
+  Author: zgong
+  Issue: ""
