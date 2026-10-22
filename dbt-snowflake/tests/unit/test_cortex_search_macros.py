@@ -105,6 +105,32 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         )
         self.context["target"] = SimpleNamespace(warehouse="PROFILE_WH")
         self.context["exceptions"] = SimpleNamespace(raise_compiler_error=_raise_compiler_error)
+        with open(os.path.join(GLOBAL_PROJECT_PATH, "macros/utils/literal.sql")) as f:
+            literal_macros = self.jinja_env.from_string(f.read()).make_module(self.context)
+        with open(os.path.join(GLOBAL_PROJECT_PATH, "macros/utils/escape_single_quotes.sql")) as f:
+            escape_macros = self.jinja_env.from_string(f.read()).make_module(self.context)
+        dispatched_macros = {
+            "string_literal": literal_macros.default__string_literal,
+            "escape_single_quotes": self.module(
+                "utils/escape_single_quotes.sql"
+            ).snowflake__escape_single_quotes,
+        }
+        self.context["adapter"].dispatch.side_effect = lambda name, package: dispatched_macros[
+            name
+        ]
+
+        def invoke_macro(macro, value):
+            try:
+                return macro(value)
+            except _MacroReturn as returned:
+                return returned.value
+
+        self.context["dbt"] = SimpleNamespace(
+            string_literal=lambda value: invoke_macro(literal_macros.string_literal, value),
+            escape_single_quotes=lambda value: invoke_macro(
+                escape_macros.escape_single_quotes, value
+            ),
+        )
         self.context["snowflake__get_create_cortex_search_service_sql"] = lambda *args: (
             self.module(
                 "relations/cortex_search/create.sql"
@@ -180,7 +206,7 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
     def test_target_lag_literal_is_escaped(self):
         self.config_values["target_lag"] = "one's hour"
         self.run_materialization()
-        assert "target_lag = 'one''s hour'" in self.main_sql()
+        assert "target_lag = 'one\\'s hour'" in self.main_sql()
 
     def test_all_optional_options_in_create_and_replace(self):
         self.config_values.update(
@@ -234,7 +260,7 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         self.config_values.update(embedding_model=value, comment=value, target_lag=value)
         self.run_materialization()
         for name in ("embedding_model", "comment", "target_lag"):
-            assert f"{name} = 'Bob''s search \\\\ notes'" in self.main_sql()
+            assert f"{name} = 'Bob\\'s search \\\\ notes'" in self.main_sql()
 
     def test_grants_applied_to_service(self):
         existing = _relation(type=SnowflakeRelation.CortexSearchService)
@@ -395,6 +421,24 @@ def test_optional_service_option(key, value, expected):
         test.config_values["primary_key"] = ["doc_id"]
     test.run_materialization()
     assert expected in test.main_sql()
+
+
+@pytest.mark.parametrize(
+    "value,literal",
+    [
+        ("Bob's", r"'Bob\'s'"),
+        (r"\n", r"'\\n'"),
+        ("tail\\", r"'tail\\'"),
+        (r"\'", r"'\\\''"),
+        ("", "''"),
+    ],
+)
+def test_comment_literals_use_snowflake_escaping(value, literal):
+    test = TestCortexSearchServiceMaterialization()
+    test.setUp()
+    test.config_values["comment"] = value
+    test.run_materialization()
+    assert f"comment = {literal} as (" in test.main_sql()
 
 
 @pytest.mark.parametrize("primary_key", [None, []])
