@@ -40,10 +40,14 @@
 {%- endmacro %}
 
 {% macro default__snapshot_hash_arguments(args) -%}
-    md5({%- for arg in args -%}
-        coalesce(cast({{ arg }} as varchar ), '')
-        {% if not loop.last %} || '|' || {% endif %}
-    {%- endfor -%})
+    {%- set parts = [] -%}
+    {%- for arg in args -%}
+        {%- do parts.append("coalesce(cast(" ~ arg ~ " as " ~ dbt.type_string() ~ "), '')") -%}
+        {%- if not loop.last -%}
+            {%- do parts.append("'|'") -%}
+        {%- endif -%}
+    {%- endfor -%}
+    md5({{ dbt.concat(parts) }})
 {%- endmacro %}
 
 {#
