@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass, field
-from typing import Optional, Set, Dict, Any, TYPE_CHECKING
+from typing import Optional, Set, Dict, Any, List, TYPE_CHECKING
 
 from dbt.adapters.relation_configs import (
     RelationResults,
@@ -210,14 +211,53 @@ class RedshiftMaterializedViewConfig(RedshiftRelationConfigBase, RelationConfigV
                 {"dist": RedshiftDistConfig.parse_relation_results(materialized_view)}
             )
 
+        sort_columns: List[Any] = []
         if columns := relation_results.get("columns"):
             sort_columns = [row for row in columns.rows if row.get("sort_key_position", 0) > 0]
-            if sort_columns:
-                config_dict.update(
-                    {"sort": RedshiftSortConfig.parse_relation_results(sort_columns)}
-                )
+        if not sort_columns:
+            # Redshift Patch 206+ no longer exposes the MV's backing table, which is where
+            # the sort key was read from; the MV's own definition still states it
+            sort_columns = cls._parse_sort_columns(query.get("definition"))
+        if sort_columns:
+            config_dict.update({"sort": RedshiftSortConfig.parse_relation_results(sort_columns)})
 
         return config_dict
+
+    @classmethod
+    def _parse_sort_columns(cls, definition: Optional[str]) -> List[Dict[str, Any]]:
+        """
+        Get the ordered sort key columns from the `create materialized view` statement in `pg_views`.
+
+        Args:
+            definition: for example:
+
+            create materialized view my_materialized_view
+                diststyle even
+                compound sortkey (id, value)
+            as (
+                select * from my_base_table
+            );
+
+        Returns: rows shaped like the `columns` relation result, for example:
+
+            [{"column": "id", "sort_key_position": 1}, {"column": "value", "sort_key_position": 2}]
+
+        Interleaved sort keys are not parsed, matching the `columns` relation result, which
+        only reports positive `sort_key_position` values (interleaved ones are negative).
+        """
+        if not definition:
+            return []
+        # only look at the clauses before the select statement
+        header = re.split(r"\bas\s*\(?\s*select\b", definition, maxsplit=1, flags=re.I)[0]
+        match = re.search(r"(interleaved\s+)?(?:compound\s+)?sortkey\s*\(([^)]*)\)", header, re.I)
+        if not match or match.group(1):
+            return []
+        names = [name.strip().strip('"') for name in match.group(2).split(",")]
+        return [
+            {"column": name, "sort_key_position": position}
+            for position, name in enumerate(names, start=1)
+            if name
+        ]
 
     @classmethod
     def _parse_query(cls, query: str) -> str:
