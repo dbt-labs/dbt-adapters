@@ -52,6 +52,46 @@ def base_location(model: RelationConfig) -> Optional[str]:
     return path
 
 
+def normalize_base_location_root(root: Optional[str]) -> Optional[str]:
+    """Strip whitespace and trailing slashes; an explicitly-set but empty root is an error."""
+    if root is None:
+        return None
+    normalized = str(root).strip().rstrip("/").strip()
+    if not normalized:
+        raise ValueError("must not be empty")
+    return normalized
+
+
+def cld_base_location(model: RelationConfig, catalog_root: Optional[str] = None) -> Optional[str]:
+    """
+    BASE_LOCATION for tables in a catalog-linked database (CLD).
+
+    Unlike built-in Iceberg tables there is no `_dbt` default: Snowflake requires an absolute
+    BASE_LOCATION for CLDs that vend credentials, and a default would silently move existing
+    tables for CLDs that don't. BASE_LOCATION is therefore only emitted when
+    `base_location_root` is set (model config wins over the catalog integration).
+    """
+    config = model.config
+    model_root = config.get("base_location_root") if config else None
+    subpath = config.get("base_location_subpath") if config else None
+
+    try:
+        root = normalize_base_location_root(model_root)
+    except ValueError:
+        raise ValueError("base_location_root must not be empty") from None
+    root = root or catalog_root
+
+    if not root:
+        if subpath:
+            raise ValueError("base_location_subpath requires base_location_root to be set")
+        return None
+
+    path = f"{root}/{model.schema}/{model.identifier}"
+    if subpath:
+        path += f"/{str(subpath).strip().strip('/')}"
+    return path
+
+
 def catalog_name(model: RelationConfig) -> Optional[str]:
     if not model.config or not hasattr(model.config, "get"):
         return None

@@ -28,6 +28,7 @@ class IcebergRestCatalogRelation:
     auto_refresh: Optional[bool] = None
     iceberg_version: Optional[int] = None
     catalog_database: Optional[str] = None
+    base_location: Optional[str] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -42,6 +43,7 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
     iceberg_version: Optional[int] = None
+    base_location_root: Optional[str] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
@@ -62,6 +64,15 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             self.iceberg_version = adapter_properties.get(
                 SnowflakeIcebergTableRelationParameters.iceberg_version
             )
+            if "base_location_root" in adapter_properties:
+                try:
+                    self.base_location_root = parse_model.normalize_base_location_root(
+                        adapter_properties["base_location_root"]
+                    )
+                except ValueError as exc:
+                    raise InvalidCatalogIntegrationConfigError(
+                        config.name, f"adapter_properties.base_location_root {exc}"
+                    )
 
         if not self.catalog_linked_database:
             raise InvalidCatalogIntegrationConfigError(
@@ -89,6 +100,11 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
                 "external_volume is not supported for iceberg rest catalog integrations with catalog linked databases",
             )
 
+        try:
+            base_location = parse_model.cld_base_location(model, self.base_location_root)
+        except ValueError as exc:
+            raise InvalidRelationConfigError(model, model.config, str(exc))
+
         return IcebergRestCatalogRelation(
             catalog_name=self.name,
             external_volume=None,
@@ -101,4 +117,5 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             or self.max_data_extension_time_in_days,
             iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
             catalog_database=self.catalog_database,
+            base_location=base_location,
         )

@@ -287,6 +287,7 @@ create iceberg table {{ relation }}
     {%- endif %}
     {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
     {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+    {{ optional('base_location', catalog_relation.base_location, "'") }}
     {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
@@ -357,6 +358,7 @@ create iceberg table {{ relation }} (
 )
 {% if partition_by_string -%} partition by ({{ partition_by_string }}) {%- endif %}
 {{ optional('external_volume', catalog_relation.external_volume, "'") }}
+{{ optional('base_location', catalog_relation.base_location, "'") }}
 {{ optional('iceberg_version', catalog_relation.iceberg_version) }}
 {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
 {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
