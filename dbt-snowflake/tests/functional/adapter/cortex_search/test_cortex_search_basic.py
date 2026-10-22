@@ -28,10 +28,18 @@ SERVICE = """
     materialized='cortex_search_service',
     search_column='body',
     attributes=['region'],
+    primary_key=['doc_id'],
     snowflake_warehouse=target.warehouse,
-    target_lag='1 hour'
+    target_lag='1 hour',
+    embedding_model='snowflake-arctic-embed-m-v1.5',
+    refresh_mode='INCREMENTAL',
+    initialize='ON_CREATE',
+    full_index_build_interval_days=7,
+    request_logging=false,
+    auto_suspend=1800,
+    comment='Support articles'
 ) }}
-select doc_id, doc_name, body, region from {{ ref('support_docs') }}
+select doc_id::varchar as doc_id, doc_name, body, region from {{ ref('support_docs') }}
 """
 
 # A service isn't queryable as a table, so `ref()` is passed to CORTEX_SEARCH_DATA_SCAN

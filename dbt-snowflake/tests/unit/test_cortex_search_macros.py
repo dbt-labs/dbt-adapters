@@ -174,6 +174,60 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         self.run_materialization()
         assert "target_lag = 'one''s hour'" in self.main_sql()
 
+    def test_all_optional_options_in_create_and_replace(self):
+        self.config_values.update(
+            primary_key=['"Document ID"', "region"],
+            embedding_model="snowflake-arctic-embed-m-v1.5",
+            refresh_mode="incremental",
+            initialize="on_create",
+            full_index_build_interval_days=7,
+            request_logging=False,
+            auto_suspend=1800,
+            comment="Support articles",
+        )
+        options = (
+            'on body primary key ("Document ID", region) attributes region '
+            "warehouse = WH target_lag = '1 hour' "
+            "embedding_model = 'snowflake-arctic-embed-m-v1.5' "
+            "refresh_mode = INCREMENTAL initialize = ON_CREATE "
+            "full_index_build_interval_days = 7 request_logging = FALSE "
+            "auto_suspend = 1800 comment = 'Support articles' "
+            f"as ( {BODY} )"
+        )
+        for full_refresh, prefix in [
+            (False, "create cortex search service if not exists"),
+            (True, "create or replace cortex search service"),
+        ]:
+            with self.subTest(full_refresh=full_refresh):
+                self.statements.clear()
+                self.context["should_full_refresh"].return_value = full_refresh
+                self.run_materialization()
+                assert self.main_sql() == f"{prefix} {RELATION} {options}"
+
+    def test_optional_options_omitted_when_unset(self):
+        names = (
+            "primary_key",
+            "embedding_model",
+            "refresh_mode",
+            "initialize",
+            "full_index_build_interval_days",
+            "request_logging",
+            "auto_suspend",
+            "comment",
+        )
+        self.config_values.update(dict.fromkeys(names))
+        self.run_materialization()
+        assert self.main_sql() == (
+            f"create cortex search service if not exists {RELATION} {DDL_BODY}"
+        )
+
+    def test_optional_string_literals_preserve_quotes_and_backslashes(self):
+        value = "Bob's search \\ notes"
+        self.config_values.update(embedding_model=value, comment=value, target_lag=value)
+        self.run_materialization()
+        for name in ("embedding_model", "comment", "target_lag"):
+            assert f"{name} = 'Bob''s search \\\\ notes'" in self.main_sql()
+
     def test_grants_applied_to_service(self):
         existing = _relation(type=SnowflakeRelation.CortexSearchService)
         self.context["adapter"].get_cortex_search_service.return_value = existing
@@ -267,6 +321,30 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         ("attributes", {"region": True}),
         ("attributes", [""]),
         ("attributes", [123]),
+        ("primary_key", "doc_id"),
+        ("primary_key", {"doc_id": True}),
+        ("primary_key", [""]),
+        ("primary_key", [123]),
+        ("embedding_model", ""),
+        ("embedding_model", 123),
+        ("refresh_mode", "AUTO"),
+        ("refresh_mode", ["FULL"]),
+        ("initialize", "IMMEDIATELY"),
+        ("initialize", True),
+        ("full_index_build_interval_days", 0),
+        ("full_index_build_interval_days", -1),
+        ("full_index_build_interval_days", 1.5),
+        ("full_index_build_interval_days", True),
+        ("full_index_build_interval_days", "7"),
+        ("auto_suspend", 1799),
+        ("auto_suspend", -1),
+        ("auto_suspend", 1800.5),
+        ("auto_suspend", True),
+        ("auto_suspend", "1800"),
+        ("request_logging", "false"),
+        ("request_logging", 0),
+        ("request_logging", 1),
+        ("comment", 123),
     ],
 )
 def test_invalid_service_config_fails_before_service_ddl(key, value):
@@ -274,6 +352,47 @@ def test_invalid_service_config_fails_before_service_ddl(key, value):
     test.setUp()
     test.config_values[key] = value
     with pytest.raises(ValueError, match=key):
+        test.run_materialization()
+    assert test.statements == []
+
+
+@pytest.mark.parametrize(
+    "key,value,expected",
+    [
+        ("primary_key", ["doc_id", '"Region Name"'], 'primary key (doc_id, "Region Name")'),
+        (
+            "embedding_model",
+            "snowflake-arctic-embed-l-v2.0",
+            "embedding_model = 'snowflake-arctic-embed-l-v2.0'",
+        ),
+        ("refresh_mode", "full", "refresh_mode = FULL"),
+        ("refresh_mode", " INCREMENTAL ", "refresh_mode = INCREMENTAL"),
+        ("initialize", "on_schedule", "initialize = ON_SCHEDULE"),
+        ("initialize", " ON_CREATE ", "initialize = ON_CREATE"),
+        ("full_index_build_interval_days", 1, "full_index_build_interval_days = 1"),
+        ("request_logging", True, "request_logging = TRUE"),
+        ("request_logging", False, "request_logging = FALSE"),
+        ("auto_suspend", 1800, "auto_suspend = 1800"),
+        ("auto_suspend", 3600, "auto_suspend = 3600"),
+        ("comment", "", "comment = ''"),
+    ],
+)
+def test_optional_service_option(key, value, expected):
+    test = TestCortexSearchServiceMaterialization()
+    test.setUp()
+    test.config_values[key] = value
+    if key == "full_index_build_interval_days":
+        test.config_values["primary_key"] = ["doc_id"]
+    test.run_materialization()
+    assert expected in test.main_sql()
+
+
+@pytest.mark.parametrize("primary_key", [None, []])
+def test_index_rebuild_interval_requires_primary_key(primary_key):
+    test = TestCortexSearchServiceMaterialization()
+    test.setUp()
+    test.config_values.update(primary_key=primary_key, full_index_build_interval_days=7)
+    with pytest.raises(ValueError, match="requires a non-empty `primary_key`"):
         test.run_materialization()
     assert test.statements == []
 
