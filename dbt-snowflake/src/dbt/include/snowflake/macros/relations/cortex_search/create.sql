@@ -17,6 +17,9 @@
             {% do exceptions.raise_compiler_error("cortex_search_service requires a non-empty string for `" ~ name ~ "`.") %}
         {% endif %}
     {% endfor %}
+    {% if not attributes %}
+        {% do exceptions.raise_compiler_error("cortex_search_service requires a non-empty list for `attributes`.") %}
+    {% endif %}
     {% for name, columns in [('attributes', attributes), ('primary_key', primary_key)] %}
         {% if columns is not none %}
             {% if columns is not sequence or columns is string or columns is mapping %}
@@ -59,7 +62,7 @@
     {% endif %}
     on {{ search_column }}
     {% if primary_key %}primary key ({{ primary_key | join(', ') }}){% endif %}
-    {% if attributes %}attributes {{ attributes | join(', ') }}{% endif %}
+    attributes {{ attributes | join(', ') }}
     warehouse = {{ warehouse }}
     target_lag = '{{ snowflake__cortex_search_string_literal(target_lag) }}'
     {% if embedding_model is not none %}embedding_model = '{{ snowflake__cortex_search_string_literal(embedding_model) }}'{% endif %}

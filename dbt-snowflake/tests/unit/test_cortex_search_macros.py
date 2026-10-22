@@ -146,13 +146,11 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
             self.run_materialization()
             assert "create or alter" not in self.main_sql()
 
-    def test_attributes_are_optional(self):
-        for attributes in (None, []):
-            with self.subTest(attributes=attributes):
-                self.statements.clear()
-                self.config_values["attributes"] = attributes
-                self.run_materialization()
-                assert " attributes " not in self.main_sql()
+    def test_missing_attributes_raise_before_service_ddl(self):
+        self.config_values.pop("attributes")
+        with pytest.raises(ValueError, match="requires a non-empty list for `attributes`"):
+            self.run_materialization()
+        assert self.statements == []
 
     def test_multiple_attributes_and_quoted_identifiers(self):
         self.config_values.update(
@@ -318,6 +316,8 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         ("snowflake_warehouse", " "),
         ("snowflake_warehouse", 123),
         ("attributes", "region"),
+        ("attributes", None),
+        ("attributes", []),
         ("attributes", {"region": True}),
         ("attributes", [""]),
         ("attributes", [123]),
