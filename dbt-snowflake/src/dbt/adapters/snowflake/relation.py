@@ -18,6 +18,7 @@ from dbt_common.events.functions import fire_event, warn_or_error
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
+    SnowflakeCortexSearchConfig,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
@@ -46,6 +47,7 @@ class SnowflakeRelation(BaseRelation):
     quote_policy: SnowflakeQuotePolicy = field(default_factory=lambda: SnowflakeQuotePolicy())
     require_alias: bool = False
     relation_configs = {
+        SnowflakeRelationType.CortexSearchService: SnowflakeCortexSearchConfig,
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
         SnowflakeRelationType.InteractiveTable: SnowflakeInteractiveTableConfig,
     }
@@ -112,7 +114,7 @@ class SnowflakeRelation(BaseRelation):
         relation_type: str = config.config.materialized  # type:ignore
 
         if relation_config := cls.relation_configs.get(relation_type):
-            # mypy widens relation_configs' value type to plain `type`; both entries get `from_relation_config` from SnowflakeRelationConfigBase.
+            # mypy widens relation_configs' value type to plain `type`; entries inherit `from_relation_config` from SnowflakeRelationConfigBase.
             return relation_config.from_relation_config(config)  # type:ignore
 
         raise DbtRuntimeError(

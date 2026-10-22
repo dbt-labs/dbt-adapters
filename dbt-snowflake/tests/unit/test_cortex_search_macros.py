@@ -9,6 +9,8 @@ import pytest
 from dbt_common.clients.jinja import MaterializationExtension
 from jinja2 import Environment, FileSystemLoader
 
+from dbt_common.exceptions import CompilationError
+
 from dbt.adapters.snowflake.relation import SnowflakeRelation
 from dbt.include.global_project import PACKAGE_PATH as GLOBAL_PROJECT_PATH
 
@@ -56,6 +58,9 @@ class _MacroTestBase(unittest.TestCase):
             "adapter": mock.Mock(),
             "config": mock.Mock(),
             "return": _raise_return,
+            "optional": lambda *args, **kwargs: self.module("utils/optional.sql").optional(
+                *args, **kwargs
+            ),
         }
 
     def module(self, template_filename):
@@ -93,6 +98,11 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
             "target_lag": "1 hour",
         }
         self.context["config"].get = self.config_values.get
+        self.context["config"].model = SimpleNamespace(
+            config=SimpleNamespace(
+                materialized="cortex_search_service", get=self.config_values.get
+            )
+        )
         self.context["target"] = SimpleNamespace(warehouse="PROFILE_WH")
         self.context["exceptions"] = SimpleNamespace(raise_compiler_error=_raise_compiler_error)
         self.context["snowflake__get_create_cortex_search_service_sql"] = lambda *args: (
@@ -148,7 +158,7 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
 
     def test_missing_attributes_raise_before_service_ddl(self):
         self.config_values.pop("attributes")
-        with pytest.raises(ValueError, match="requires a non-empty list for `attributes`"):
+        with pytest.raises(CompilationError, match="requires a non-empty list for `attributes`"):
             self.run_materialization()
         assert self.statements == []
 
@@ -351,7 +361,7 @@ def test_invalid_service_config_fails_before_service_ddl(key, value):
     test = TestCortexSearchServiceMaterialization()
     test.setUp()
     test.config_values[key] = value
-    with pytest.raises(ValueError, match=key):
+    with pytest.raises(CompilationError, match=key):
         test.run_materialization()
     assert test.statements == []
 
@@ -392,7 +402,7 @@ def test_index_rebuild_interval_requires_primary_key(primary_key):
     test = TestCortexSearchServiceMaterialization()
     test.setUp()
     test.config_values.update(primary_key=primary_key, full_index_build_interval_days=7)
-    with pytest.raises(ValueError, match="requires a non-empty `primary_key`"):
+    with pytest.raises(CompilationError, match="requires a non-empty `primary_key`"):
         test.run_materialization()
     assert test.statements == []
 
@@ -402,7 +412,7 @@ def test_missing_warehouse_fails_before_service_ddl():
     test.setUp()
     test.config_values.pop("snowflake_warehouse")
     test.context["target"].warehouse = None
-    with pytest.raises(ValueError, match="snowflake_warehouse"):
+    with pytest.raises(CompilationError, match="snowflake_warehouse"):
         test.run_materialization()
     assert test.statements == []
 
