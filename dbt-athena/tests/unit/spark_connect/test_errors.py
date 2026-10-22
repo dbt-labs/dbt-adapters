@@ -1,0 +1,159 @@
+import pytest
+
+from dbt.adapters.athena.spark_connect.errors import (
+    classify_transient_spark_error,
+    TRANSIENT_GRPC_STATUS_CODES,
+    TRANSIENT_SPARK_PATTERNS,
+    is_grpc_permission_denied,
+    is_transient_spark_error,
+)
+
+
+class _FakeGrpcCode:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+
+class _FakeGrpcError(Exception):
+    def __init__(self, message: str, code_name: str) -> None:
+        super().__init__(message)
+        self._code = _FakeGrpcCode(code_name)
+
+    def code(self) -> _FakeGrpcCode:
+        return self._code
+
+
+class _FakeGrpcCallableErrorRaises(Exception):
+
+    def code(self):
+        raise RuntimeError("not actually a gRPC error")
+
+
+@pytest.mark.parametrize("pattern", TRANSIENT_SPARK_PATTERNS)
+def test_pattern_match_is_transient(pattern):
+    err = Exception(f"some prefix: {pattern} ; some suffix")
+    assert is_transient_spark_error(err) is True
+
+
+@pytest.mark.parametrize(
+    "err",
+    [
+        Exception(
+            "SparkConnectException: [NO_ACTIVE_SESSION] No active Spark session found. "
+            "Please create a new Spark session before running the code."
+        ),
+        Exception(
+            "An error occurred (InvalidRequestException) when calling the "
+            "GetSessionEndpoint operation: Can not generate Session endpoint URL "
+            "for Session in STOPPED state"
+        ),
+    ],
+)
+def test_session_ended_by_athena_is_transient(err):
+    assert is_transient_spark_error(err) is True
+
+
+def test_unknown_message_is_not_transient():
+    assert is_transient_spark_error(Exception("some unrelated failure")) is False
+
+
+@pytest.mark.parametrize("code_name", sorted(TRANSIENT_GRPC_STATUS_CODES))
+def test_grpc_status_code_is_transient(code_name):
+    assert is_transient_spark_error(_FakeGrpcError("anything", code_name)) is True
+
+
+def test_non_transient_grpc_code_is_not_transient():
+    assert is_transient_spark_error(_FakeGrpcError("boom", "INVALID_ARGUMENT")) is False
+
+
+def test_grpc_transient_via_cause_chain():
+    inner = _FakeGrpcError("rpc unavailable", "UNAVAILABLE")
+    try:
+        raise RuntimeError("wrapper") from inner
+    except RuntimeError as e:
+        assert is_transient_spark_error(e) is True
+
+
+def test_grpc_transient_via_context_chain():
+    try:
+        try:
+            raise _FakeGrpcError("rpc aborted", "ABORTED")
+        except _FakeGrpcError:
+            raise RuntimeError("wrapper")
+    except RuntimeError as e:
+        assert is_transient_spark_error(e) is True
+
+
+def test_deep_cause_chain_walked():
+    deepest = _FakeGrpcError("resource exhausted", "RESOURCE_EXHAUSTED")
+    middle = RuntimeError("middle")
+    middle.__cause__ = deepest
+    outer = RuntimeError("outer")
+    outer.__cause__ = middle
+    assert is_transient_spark_error(outer) is True
+
+
+def test_code_callable_that_raises_does_not_break_classification():
+    assert is_transient_spark_error(_FakeGrpcCallableErrorRaises("nope")) is False
+
+
+def test_code_callable_that_raises_with_transient_message_still_matches_string():
+    err = _FakeGrpcCallableErrorRaises("Pool not running")
+    assert is_transient_spark_error(err) is True
+
+
+def test_non_callable_code_attribute_is_ignored():
+    err = Exception("benign")
+    err.code = "UNAVAILABLE"  # attribute, not method
+    assert is_transient_spark_error(err) is False
+
+
+def test_permission_denied_detected_at_top_level():
+    assert is_grpc_permission_denied(_FakeGrpcError("403", "PERMISSION_DENIED")) is True
+
+
+def test_permission_denied_detected_via_cause_chain():
+    inner = _FakeGrpcError("403", "PERMISSION_DENIED")
+    try:
+        raise RuntimeError("wrapped") from inner
+    except RuntimeError as e:
+        assert is_grpc_permission_denied(e) is True
+
+
+def test_permission_denied_false_for_other_grpc_codes():
+    assert is_grpc_permission_denied(_FakeGrpcError("unavailable", "UNAVAILABLE")) is False
+
+
+def test_permission_denied_false_for_non_grpc_error():
+    assert is_grpc_permission_denied(Exception("plain")) is False
+
+
+@pytest.mark.parametrize(
+    "err, category",
+    [
+        (Exception("Session not active (state: TERMINATED)"), "session_ended"),
+        (Exception("[NO_ACTIVE_SESSION] No active Spark session found."), "session_ended"),
+        (
+            Exception("Can not generate Session endpoint URL for Session in STOPPED state"),
+            "session_ended",
+        ),
+        (Exception("Maximum allowed sessions reached"), "capacity"),
+        (_FakeGrpcError("quota", "RESOURCE_EXHAUSTED"), "capacity"),
+        (Exception("Unable to load credentials from any provider"), "executor_environment"),
+        (Exception("Unable to load region"), "executor_environment"),
+        (Exception("Pool not running"), "connection"),
+        (_FakeGrpcError("down", "UNAVAILABLE"), "connection"),
+        (_FakeGrpcError("slow", "DEADLINE_EXCEEDED"), "connection"),
+        (_FakeGrpcError("aborted", "ABORTED"), "connection"),
+        (_FakeGrpcError("403", "PERMISSION_DENIED"), "connection"),
+        (Exception("some unrelated failure"), None),
+    ],
+)
+def test_classify_transient_spark_error(err, category):
+    assert classify_transient_spark_error(err) == category
+
+
+@pytest.mark.parametrize("code_name", ["FAILED_PRECONDITION", "UNAVAILABLE"])
+def test_session_ended_message_wins_over_grpc_code(code_name):
+    err = _FakeGrpcError("Session not active (state: TERMINATED)", code_name)
+    assert classify_transient_spark_error(err) == "session_ended"
