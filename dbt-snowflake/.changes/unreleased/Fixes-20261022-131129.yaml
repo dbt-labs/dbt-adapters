@@ -3,4 +3,4 @@ body: Emit change_tracking before copy grants, copy tags, row access policy and 
 time: 2026-10-22T13:11:29.000000+00:00
 custom:
     Author: ash2shukla
-    Issue: "2243"
+    Issue: "2244"
