@@ -421,6 +421,11 @@ class RedshiftAdapter(SQLAdapter):
         return bool(self.config.credentials.drop_without_cascade)
 
     @available
+    def skip_transaction_statements(self) -> bool:
+        """True only when the behavior flag AND profile autocommit are both on."""
+        return self.connections._should_skip_transaction_statements()
+
+    @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
