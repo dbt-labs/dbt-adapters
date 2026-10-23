@@ -243,6 +243,34 @@ from dbt.adapters.bigquery.column import (
                 },
             },
         ),
+        # Parent declared with its full array type
+        (
+            {
+                "a_list": {"name": "a_list", "data_type": "ARRAY<STRUCT<>>"},
+                "a_list.a_list_item": {"name": "a_list.a_list_item", "data_type": "INT64"},
+            },
+            None,
+            {"a_list": {"name": "a_list", "data_type": "array<struct<a_list_item INT64>>"}},
+        ),
+        # Parent declared with its full array type + constraint
+        (
+            {
+                "b": {"name": "b", "data_type": "array<struct<>>"},
+                "b.nested": {"name": "b.nested", "data_type": "string"},
+            },
+            {"b": "not null"},
+            {"b": {"name": "b", "data_type": "array<struct<nested string>> not null"}},
+        ),
+        # Array of structs nested inside a struct, declared with its full array type
+        (
+            {
+                "b.items": {"name": "b.items", "data_type": "ARRAY<STRUCT<>>"},
+                "b.items.x": {"name": "b.items.x", "data_type": "int64"},
+                "b.id": {"name": "b.id", "data_type": "int64"},
+            },
+            None,
+            {"b": {"name": "b", "data_type": "struct<items array<struct<x int64>>, id int64>"}},
+        ),
     ],
 )
 def test_get_nested_column_data_types(columns, constraints, expected_nested_columns):
@@ -338,6 +366,14 @@ def test_parse_struct_fields(data_type, expected_fields):
         ),
         # Array type - not a struct, returns as-is
         ("col", "ARRAY<INT64>", "col"),
+        # Array of structs - not a struct, returns as-is
+        ("a_list", "array<struct<a_list_item INT64>>", "a_list"),
+        # Struct holding an array of structs - the array field is selected whole
+        (
+            "col",
+            "struct<id INT64, items array<struct<x INT64>>>",
+            "IF(col IS NULL, NULL, STRUCT(col.id AS id, col.items AS items)) AS col",
+        ),
         # Struct with constraints in field types
         (
             "col",
