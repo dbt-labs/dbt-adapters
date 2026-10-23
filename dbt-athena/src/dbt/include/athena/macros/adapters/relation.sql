@@ -63,8 +63,17 @@
   {{ return(temp_relation) }}
 {% endmacro %}
 
+{% macro athena__rename_relation_sql(from_relation, to_relation) -%}
+  alter table {{ from_relation.render_hive() }} rename to `{{ to_relation.schema }}`.`{{ to_relation.identifier }}`
+{%- endmacro %}
+
 {% macro athena__rename_relation(from_relation, to_relation) %}
   {% call statement('rename_relation') -%}
-    alter table {{ from_relation.render_hive() }} rename to `{{ to_relation.schema }}`.`{{ to_relation.identifier }}`
+    {{ athena__rename_relation_sql(from_relation, to_relation) }}
   {%- endcall %}
 {%- endmacro %}
+
+{#- Returns false instead of raising when Athena rejects the rename because the Glue Iceberg REST catalog does not support it -#}
+{% macro try_rename_relation(from_relation, to_relation) %}
+  {{ return(adapter.try_rename_statement(athena__rename_relation_sql(from_relation, to_relation))) }}
+{% endmacro %}

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fall back to drop and create when Athena rejects an Iceberg table rename because Glue IRC does not support it
+time: 2026-10-09T13:29:10.000000+00:00
+custom:
+    Author: itsnamangoyal
+    Issue: ""

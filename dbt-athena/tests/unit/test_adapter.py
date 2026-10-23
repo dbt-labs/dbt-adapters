@@ -1641,6 +1641,22 @@ class TestAthenaAdapter:
         self.adapter.drop_glue_database(database_name=test_input["Name"])
         assert glue_client.get_databases()["DatabaseList"] == []
 
+    def test_try_rename_statement_returns_true_on_success(self):
+        with patch.object(AthenaAdapter, "execute") as execute:
+            assert self.adapter.try_rename_statement("alter table a rename to b") is True
+        execute.assert_called_once_with("alter table a rename to b", auto_begin=True, fetch=False)
+
+    def test_try_rename_statement_returns_false_when_glue_irc_rejects_rename(self):
+        error = DbtRuntimeError("ALTER TABLE RENAME queries are not supported by Glue IRC")
+        with patch.object(AthenaAdapter, "execute", side_effect=error):
+            assert self.adapter.try_rename_statement("alter table a rename to b") is False
+
+    def test_try_rename_statement_raises_other_runtime_errors(self):
+        error = DbtRuntimeError("Table not found")
+        with patch.object(AthenaAdapter, "execute", side_effect=error):
+            with pytest.raises(DbtRuntimeError, match="Table not found"):
+                self.adapter.try_rename_statement("alter table a rename to b")
+
 
 class TestAthenaFilterCatalog:
     def test__catalog_filter_table(self):
