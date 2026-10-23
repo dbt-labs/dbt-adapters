@@ -41,6 +41,8 @@
 
   {% do persist_docs(target_relation, model) %}
 
+  {{ bigquery__persist_row_access_policy(target_relation, model) }}
+
   {{ return({'relations': [target_relation]}) }}
 
 {% endmaterialization %}
