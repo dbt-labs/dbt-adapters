@@ -35,7 +35,7 @@
 
     {% set full_refresh_mode = should_full_refresh() %}
 
-    -- determine the scenario we're in: create, full_refresh, alter, refresh data
+    -- determine the scenario we're in: create, full_refresh, create_or_alter, refresh data
     {% if existing_relation is none %}
         {% set build_sql = get_create_sql(target_relation, sql) %}
     {% elif full_refresh_mode or not existing_relation.is_dynamic_table %}
@@ -47,11 +47,13 @@
         {% set configuration_changes = snowflake__get_dynamic_table_configuration_changes(existing_relation, config) %}
 
         {% if configuration_changes is none %}
-            {% set build_sql = '' %}
-            {{ exceptions.warn("No configuration changes were identified on: `" ~ target_relation ~ "`. Continuing.") }}
+            {% set build_sql = snowflake__get_create_or_alter_dynamic_table_sql(existing_relation, configuration_changes, target_relation, sql) %}
+            {% if build_sql == '' %}
+                {{ exceptions.warn("No configuration changes were identified on: `" ~ target_relation ~ "`. Continuing.") }}
+            {% endif %}
 
         {% elif on_configuration_change == 'apply' %}
-            {% set build_sql = snowflake__get_alter_dynamic_table_as_sql(existing_relation, configuration_changes, target_relation, sql) %}
+            {% set build_sql = snowflake__get_create_or_alter_dynamic_table_sql(existing_relation, configuration_changes, target_relation, sql) %}
         {% elif on_configuration_change == 'continue' %}
             {% set build_sql = '' %}
             {{ exceptions.warn("Configuration changes were identified and `on_configuration_change` was set to `continue` for `" ~ target_relation ~ "`") }}
