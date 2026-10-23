@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'build_catalog_relation returns None for nodes without a config attribute (e.g. the Macro node of a run-operation) instead of raising AttributeError, so table creation inside run-operation works again on adapters that resolve catalog relations (e.g. dbt-athena 1.11).'
+time: 2026-10-15T00:00:00.000000+00:00
+custom:
+    Author: Minhhnh
+    Issue: "2222"
