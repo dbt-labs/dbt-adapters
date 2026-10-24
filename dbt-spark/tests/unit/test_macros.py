@@ -208,3 +208,15 @@ class TestSparkMacros(unittest.TestCase):
             sql,
             "create table my_table using hudi partitioned by (partition_1,partition_2) clustered by (cluster_1,cluster_2) into 1 buckets location '/mnt/root/my_table' comment 'Description Test' as select 1",
         )
+
+    def test_macros_dateadd_wraps_interval_expression(self):
+        self.default_context["assert_not_null"] = lambda function, arg: f"{function}({arg})"
+        template = self.__get_template("utils/dateadd.sql")
+        interval = "row_number() over (order by generated_number) - 1"
+
+        for datepart, multiplier in [("week", "7"), ("quarter", "3"), ("minute", "60")]:
+            with self.subTest(datepart=datepart):
+                sql = template.module.spark__dateadd(datepart, interval, "my_ts")
+                self.assertIn(
+                    f"cast(({interval}) * {multiplier} as int)", re.sub(r"\s\s+", " ", sql)
+                )
