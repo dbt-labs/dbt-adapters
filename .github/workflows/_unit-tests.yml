@@ -84,6 +84,12 @@ jobs:
         runs-on: ${{ inputs.os }}
         name: "unit-tests - ${{ inputs.package }} - ${{ inputs.branch }} - ${{ inputs.os }} - ${{ inputs.python-version }}"
         steps:
+            # pip's git clone of dbt-core checks out the default branch before switching refs,
+            # and dbt-core main has paths longer than the Windows 260-character limit
+            - name: "Enable git long paths on Windows"
+              run: git config --system core.longpaths true
+              if: runner.os == 'Windows'
+
             - name: "Checkout ${{ inputs.branch }}"
               uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # actions/checkout@v4
               with:

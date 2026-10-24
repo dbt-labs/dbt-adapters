@@ -1,0 +1,10 @@
+kind: Fixes
+body: Retry a query with a fresh job_id when the previous attempt's job failed terminally,
+  instead of reattaching to the dead job and returning the same error. Reattachment
+  is still used when the existing job is running, already succeeded, or is a
+  multi-statement script that may have partially committed, so retries never
+  duplicate committed work.
+time: 2026-08-25T12:00:00.000000-05:00
+custom:
+  Author: tauhid621
+  Issue: ""

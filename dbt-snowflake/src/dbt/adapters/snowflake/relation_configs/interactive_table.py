@@ -107,9 +107,9 @@ class SnowflakeInteractiveTableConfig(SnowflakeRelationConfigBase):
         keys = [raw_cluster_by] if isinstance(raw_cluster_by, str) else list(raw_cluster_by or [])
         if not keys or any(not str(key).strip() for key in keys):
             raise CompilationError(
-                f"interactive_table models require `cluster_by` to name at least one "
-                f"non-blank column; `CREATE INTERACTIVE TABLE` without `CLUSTER BY`, or "
-                f"with only blank entries, is rejected by Snowflake (010405): "
+                f"interactive_table models require every `cluster_by` entry to be "
+                f"non-blank; `CREATE INTERACTIVE TABLE` without `CLUSTER BY`, with no "
+                f"entries, or with any blank entry, is rejected by Snowflake (010405): "
                 f"{relation_config.identifier}"
             )
 
