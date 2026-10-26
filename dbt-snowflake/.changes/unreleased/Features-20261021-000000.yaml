@@ -3,4 +3,4 @@ body: Support Cortex Search service models with a SELECT query as the model body
 time: 2026-10-21T00:00:00+00:00
 custom:
   Author: sfc-gh-zgong
-  Issue: ""
+  Issue: "2258"
