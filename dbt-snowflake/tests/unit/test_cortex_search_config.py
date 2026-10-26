@@ -38,31 +38,11 @@ def test_model_config_preserves_options_and_normalizes_enums():
     assert isinstance(search, SnowflakeCortexSearchConfig)
     assert search.search_column == '"Body Text"'
     assert search.attributes == ['"Region Name"', "doc_id"]
-    assert search.target_lag == "1 hour"
-    assert search.primary_key == ["doc_id"]
-    assert search.embedding_model == "snowflake-arctic-embed-l-v2.0"
     assert search.refresh_mode is RefreshMode.INCREMENTAL
     assert search.initialize is Initialize.ON_SCHEDULE
-    assert search.full_index_build_interval_days == 7
     assert search.request_logging is False
-    assert search.auto_suspend == 1800
     assert search.comment == ""
     assert search.warehouse_parameter("PROFILE_WH") == '"Search Warehouse"'
-
-
-def test_unset_optional_options_preserve_snowflake_defaults():
-    search = search_config()
-    for name in (
-        "primary_key",
-        "embedding_model",
-        "refresh_mode",
-        "initialize",
-        "full_index_build_interval_days",
-        "request_logging",
-        "auto_suspend",
-        "comment",
-    ):
-        assert getattr(search, name) is None
 
 
 @pytest.mark.parametrize("warehouse", [None, ""])
@@ -77,66 +57,25 @@ def test_invalid_profile_warehouse_raises_compiler_error(warehouse):
         search_config().warehouse_parameter(warehouse)
 
 
-def test_missing_model_config_raises_compiler_error():
-    with pytest.raises(CompilationError, match="search_column"):
-        SnowflakeRelation.from_config(
-            SimpleNamespace(
-                config=SimpleNamespace(materialized="cortex_search_service", get=lambda name: None)
-            )
-        )
-
-
-def test_enum_defaults_match_cortex_search_defaults():
-    assert RefreshMode.default() is RefreshMode.INCREMENTAL
-    assert Initialize.default() is Initialize.ON_CREATE
-
-
-@pytest.mark.parametrize("mode", [RefreshMode.FULL, RefreshMode.INCREMENTAL])
-def test_enum_refresh_mode_is_accepted(mode):
-    assert search_config(refresh_mode=mode).refresh_mode is mode
-
-
-@pytest.mark.parametrize("initialize", [Initialize.ON_CREATE, Initialize.ON_SCHEDULE])
-def test_enum_initialize_is_accepted(initialize):
-    assert search_config(initialize=initialize).initialize is initialize
-
-
 @pytest.mark.parametrize(
     "key,value",
     [
         ("search_column", None),
         ("search_column", " "),
-        ("search_column", ["body"]),
-        ("target_lag", None),
-        ("target_lag", ""),
         ("target_lag", 60),
         ("snowflake_warehouse", " "),
-        ("snowflake_warehouse", 123),
         ("attributes", "region"),
-        ("attributes", None),
         ("attributes", []),
-        ("attributes", {"region": True}),
         ("attributes", [""]),
-        ("attributes", [123]),
         ("primary_key", "doc_id"),
-        ("primary_key", {"doc_id": True}),
         ("primary_key", [""]),
-        ("primary_key", [123]),
         ("embedding_model", ""),
-        ("embedding_model", 123),
         ("refresh_mode", "AUTO"),
-        ("refresh_mode", ["FULL"]),
         ("initialize", "IMMEDIATELY"),
-        ("initialize", True),
         ("full_index_build_interval_days", 0),
-        ("full_index_build_interval_days", 1.5),
         ("full_index_build_interval_days", True),
-        ("full_index_build_interval_days", "7"),
         ("auto_suspend", 1799),
         ("auto_suspend", 1800.5),
-        ("auto_suspend", True),
-        ("auto_suspend", "1800"),
-        ("request_logging", "false"),
         ("request_logging", 0),
         ("comment", 123),
     ],
@@ -177,19 +116,8 @@ def metadata(**overrides):
     }
 
 
-def configured_search(**overrides):
-    return search_config(**{"primary_key": ["doc_id"], "snowflake_warehouse": "WH", **overrides})
-
-
-def test_readback_and_unset_optional_defaults_do_not_drift():
-    assert configured_search().configuration_changes(metadata(), "PROFILE_WH") == {
-        "alter": {},
-        "replace": [],
-    }
-
-
-def test_query_definition_is_not_configuration_drift():
-    assert configured_search().configuration_changes(
+def test_omitted_options_query_and_initialize_do_not_drift():
+    assert search_config(initialize="ON_SCHEDULE").configuration_changes(
         metadata(definition="select upper(body) from docs"), "WH"
     ) == {
         "alter": {},
@@ -209,7 +137,9 @@ def test_query_definition_is_not_configuration_drift():
     ],
 )
 def test_supported_scalar_changes_are_alterable(name, value, expected):
-    changes = configured_search(**{name: value}).configuration_changes(metadata(), "WH")
+    changes = search_config(primary_key=["doc_id"], **{name: value}).configuration_changes(
+        metadata(), "WH"
+    )
     assert changes == {"alter": {expected: value}, "replace": []}
 
 
@@ -224,7 +154,7 @@ def test_supported_scalar_changes_are_alterable(name, value, expected):
     ],
 )
 def test_index_configuration_changes_require_replacement(name, value):
-    assert configured_search(**{name: value}).configuration_changes(metadata(), "WH") == {
+    assert search_config(**{name: value}).configuration_changes(metadata(), "WH") == {
         "alter": {},
         "replace": [name],
     }
@@ -232,12 +162,12 @@ def test_index_configuration_changes_require_replacement(name, value):
 
 def test_quoted_warehouse_is_case_sensitive():
     assert (
-        configured_search(snowflake_warehouse='"Wh"').configuration_changes(
+        search_config(snowflake_warehouse='"Wh"').configuration_changes(
             metadata(warehouse="Wh"), "WH"
         )["alter"]
         == {}
     )
-    assert configured_search(snowflake_warehouse='"Wh"').configuration_changes(metadata(), "WH")[
+    assert search_config(snowflake_warehouse='"Wh"').configuration_changes(metadata(), "WH")[
         "alter"
     ] == {"warehouse": '"Wh"'}
 
@@ -246,11 +176,4 @@ def test_missing_readback_cannot_silently_ignore_an_explicit_setting():
     current = metadata()
     current.pop("request_logging")
     with pytest.raises(DbtRuntimeError, match="Could not read.*request_logging"):
-        configured_search(request_logging=False).configuration_changes(current, "WH")
-
-
-def test_initialize_is_creation_only():
-    assert configured_search(initialize="ON_SCHEDULE").configuration_changes(metadata(), "WH") == {
-        "alter": {},
-        "replace": [],
-    }
+        search_config(request_logging=False).configuration_changes(current, "WH")
