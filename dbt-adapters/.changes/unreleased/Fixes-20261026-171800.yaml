@@ -1,0 +1,5 @@
+kind: Fixes
+body: Replace recursive connection retries with an iterative loop so high retry limits do not hit Python's recursion limit.
+time: 2026-10-26T17:30:00+01:00
+custom:
+  Author: methatp0

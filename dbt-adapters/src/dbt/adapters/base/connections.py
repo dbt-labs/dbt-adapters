@@ -1,6 +1,5 @@
 import abc
 import os
-import sys
 from time import sleep
 import traceback
 from multiprocessing.context import SpawnContext
@@ -214,57 +213,54 @@ class BaseConnectionManager(metaclass=abc.ABCMeta):
             or float to be passed to time.sleep.
         :type retry_timeout: Union[Callable[[int], SleepTime], SleepTime] = 1
         :param int _attempts: Parameter used to keep track of the number of attempts in calling the
-            connect function across recursive calls. Passed as an argument to retry_timeout if it
+            connect function across attempts. Passed as an argument to retry_timeout if it
             is a Callable. This parameter should not be set by the initial caller.
         :raises dbt.adapters.exceptions.FailedToConnectError: Upon exhausting all retry attempts without
             successfully acquiring a handle.
         :return: The given connection with its appropriate state and handle attributes set
             depending on whether we successfully acquired a handle or not.
         """
-        timeout = retry_timeout(_attempts) if callable(retry_timeout) else retry_timeout
-        if timeout < 0:
-            raise FailedToConnectError(
-                "retry_timeout cannot be negative or return a negative time."
-            )
-
-        if retry_limit < 0 or retry_limit > sys.getrecursionlimit():
-            # This guard is not perfect others may add to the recursion limit (e.g. built-ins).
+        if retry_limit < 0:
             connection.handle = None
             connection.state = ConnectionState.FAIL  # type: ignore
             raise FailedToConnectError("retry_limit cannot be negative")
 
-        try:
-            connection.handle = connect()
-            connection.state = ConnectionState.OPEN  # type: ignore
-            return connection
+        retryable_exceptions = tuple(retryable_exceptions)
+        attempts = _attempts
+        retries_remaining = retry_limit
 
-        except tuple(retryable_exceptions) as e:
-            if retry_limit <= 0:
+        while True:
+            timeout = retry_timeout(attempts) if callable(retry_timeout) else retry_timeout
+            if timeout < 0:
+                raise FailedToConnectError(
+                    "retry_timeout cannot be negative or return a negative time."
+                )
+
+            try:
+                connection.handle = connect()
+                connection.state = ConnectionState.OPEN  # type: ignore
+                return connection
+
+            except retryable_exceptions as e:
+                if retries_remaining <= 0:
+                    connection.handle = None
+                    connection.state = ConnectionState.FAIL  # type: ignore
+                    raise FailedToConnectError(str(e))
+
+                logger.debug(
+                    f"Got a retryable error when attempting to open a {cls.TYPE} connection.\n"
+                    f"{retries_remaining} attempts remaining. Retrying in {timeout} seconds.\n"
+                    f"Error:\n{e}"
+                )
+
+                sleep(timeout)
+                attempts += 1
+                retries_remaining -= 1
+
+            except Exception as e:
                 connection.handle = None
                 connection.state = ConnectionState.FAIL  # type: ignore
                 raise FailedToConnectError(str(e))
-
-            logger.debug(
-                f"Got a retryable error when attempting to open a {cls.TYPE} connection.\n"
-                f"{retry_limit} attempts remaining. Retrying in {timeout} seconds.\n"
-                f"Error:\n{e}"
-            )
-
-            sleep(timeout)
-            return cls.retry_connection(
-                connection=connection,
-                connect=connect,
-                logger=logger,
-                retry_limit=retry_limit - 1,
-                retry_timeout=retry_timeout,
-                retryable_exceptions=retryable_exceptions,
-                _attempts=_attempts + 1,
-            )
-
-        except Exception as e:
-            connection.handle = None
-            connection.state = ConnectionState.FAIL  # type: ignore
-            raise FailedToConnectError(str(e))
 
     @abc.abstractmethod
     def cancel_open(self) -> Optional[List[str]]:
