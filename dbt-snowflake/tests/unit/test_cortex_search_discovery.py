@@ -1,7 +1,9 @@
+from types import SimpleNamespace
 from unittest import mock
 
 import agate
 import pytest
+from dbt_common.exceptions import DbtRuntimeError
 
 from dbt.adapters.snowflake.impl import SnowflakeAdapter
 from dbt.adapters.snowflake.relation import SnowflakeRelation
@@ -44,3 +46,30 @@ def test_service_discovery(identifier, quoted, names, expected):
     else:
         assert result.identifier == expected
         assert result.is_cortex_search_service
+
+
+@pytest.mark.parametrize("indexing_error", [None, "Change tracking is not enabled on DOCS"])
+def test_describe_service_configuration(indexing_error):
+    adapter = mock.Mock(spec=SnowflakeAdapter)
+    adapter.execute_macro.return_value = agate.Table(
+        [["BODY", "REGION", "WH", "1 hour", indexing_error]],
+        ["SEARCH_COLUMN", "ATTRIBUTE_COLUMNS", "WAREHOUSE", "TARGET_LAG", "INDEXING_ERROR"],
+        column_types=[agate.Text()] * 5,
+    )
+    values = {"search_column": "body", "attributes": ["region"], "target_lag": "2 hours"}
+    model = SimpleNamespace(config=SimpleNamespace(get=values.get))
+    relation = SnowflakeRelation.create(database="db", schema="sch", identifier="search")
+    if indexing_error:
+        with pytest.raises(
+            DbtRuntimeError, match="indexing error.*change tracking.*--full-refresh"
+        ):
+            SnowflakeAdapter.get_cortex_search_service_configuration_changes(
+                adapter, relation, model, "WH"
+            )
+    else:
+        assert SnowflakeAdapter.get_cortex_search_service_configuration_changes(
+            adapter, relation, model, "WH"
+        ) == {"alter": {"target_lag": "2 hours"}, "replace": []}
+    adapter.execute_macro.assert_called_once_with(
+        "snowflake__describe_cortex_search_service", kwargs={"relation": relation}
+    )

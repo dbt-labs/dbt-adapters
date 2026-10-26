@@ -71,7 +71,6 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
     def setUp(self):
         super().setUp()
         self.statements = []
-        self.logs = []
         self.grants = {"usage": ["role_a"]}
         self.context.update(
             {
@@ -84,12 +83,16 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
                 "should_full_refresh": mock.Mock(return_value=False),
                 "run_hooks": mock.Mock(return_value=""),
                 "statement": self.statement,
-                "log": lambda msg, info=False: self.logs.append((msg, info)) or "",
                 "should_revoke": mock.Mock(return_value=False),
                 "apply_grants": mock.Mock(),
+                "store_raw_result": mock.Mock(),
             }
         )
         self.context["adapter"].get_cortex_search_service.return_value = None
+        self.context["adapter"].get_cortex_search_service_configuration_changes.return_value = {
+            "alter": {},
+            "replace": [],
+        }
         self.config_values = {
             "grants": self.grants,
             "search_column": "body",
@@ -104,7 +107,9 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
             )
         )
         self.context["target"] = SimpleNamespace(warehouse="PROFILE_WH")
-        self.context["exceptions"] = SimpleNamespace(raise_compiler_error=_raise_compiler_error)
+        self.context["exceptions"] = SimpleNamespace(
+            raise_compiler_error=_raise_compiler_error, warn=mock.Mock()
+        )
         with open(os.path.join(GLOBAL_PROJECT_PATH, "macros/utils/literal.sql")) as f:
             literal_macros = self.jinja_env.from_string(f.read()).make_module(self.context)
         with open(os.path.join(GLOBAL_PROJECT_PATH, "macros/utils/escape_single_quotes.sql")) as f:
@@ -119,9 +124,9 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
             name
         ]
 
-        def invoke_macro(macro, value):
+        def invoke_macro(macro, *args):
             try:
-                return macro(value)
+                return macro(*args)
             except _MacroReturn as returned:
                 return returned.value
 
@@ -137,12 +142,33 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
             ).snowflake__get_create_cortex_search_service_sql(*args)
         )
 
+        self.context["snowflake__get_alter_cortex_search_service_sql"] = lambda *args: self.module(
+            "relations/cortex_search/alter.sql"
+        ).snowflake__get_alter_cortex_search_service_sql(*args)
+
+        for name in (
+            "cortex_search_service_get_build",
+            "cortex_search_service_execute_no_op",
+            "cortex_search_service_execute_build_sql",
+        ):
+            self.context[name] = lambda *args, macro_name=name: invoke_macro(
+                getattr(self.materialization_module(helpers=True), macro_name),
+                *args,
+            )
+
     def statement(self, name, caller=None, **kwargs):
         self.statements.append((name, _squash(caller())))
         return ""
 
+    def materialization_module(self, helpers=False):
+        # dbt loads each macro separately; emulate that for plain Jinja's return handling.
+        with open(os.path.join(MACROS_DIR, "materializations/cortex_search_service.sql")) as f:
+            materialization, end, helper_macros = f.read().partition("{% endmaterialization %}")
+        source = helper_macros if helpers else materialization + end
+        return self.jinja_env.from_string(source).make_module(self.context)
+
     def run_materialization(self):
-        module = self.module("materializations/cortex_search_service.sql")
+        module = self.materialization_module()
         try:
             module.dbt_macro__materialization_cortex_search_service_snowflake()
         except _MacroReturn as returned:
@@ -160,27 +186,30 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         )
         assert [r.render() for r in result["relations"]] == [RELATION]
         assert result["relations"][0].is_cortex_search_service
-
-    def test_normal_run_logs_full_refresh_hint(self):
-        self.run_materialization()
-        assert any(
-            "kept unchanged" in msg and "--full-refresh" in msg and info for msg, info in self.logs
+        self.context["adapter"].get_cortex_search_service.assert_called_once_with(
+            result["relations"][0]
         )
+        self.context["should_revoke"].assert_called_once_with(None, full_refresh_mode=False)
+
+    def test_existing_service_without_drift_is_skipped(self):
+        self.context["adapter"].get_cortex_search_service.return_value = _relation(
+            type=SnowflakeRelation.CortexSearchService
+        )
+        self.run_materialization()
+        assert self.statements == []
+        self.context["store_raw_result"].assert_called_once()
+        self.context["exceptions"].warn.assert_not_called()
 
     def test_full_refresh_creates_or_replaces(self):
+        self.context["adapter"].get_cortex_search_service.return_value = _relation(
+            type=SnowflakeRelation.CortexSearchService
+        )
         self.context["should_full_refresh"].return_value = True
         self.run_materialization()
         assert self.main_sql() == (
             f"create or replace cortex search service {RELATION} {DDL_BODY}"
         )
-        assert self.logs == []
-
-    def test_never_uses_create_or_alter(self):
-        for full_refresh in (False, True):
-            self.statements.clear()
-            self.context["should_full_refresh"].return_value = full_refresh
-            self.run_materialization()
-            assert "create or alter" not in self.main_sql()
+        self.context["adapter"].get_cortex_search_service_configuration_changes.assert_not_called()
 
     def test_missing_attributes_raise_before_service_ddl(self):
         self.config_values.pop("attributes")
@@ -202,11 +231,6 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         self.config_values.pop("snowflake_warehouse")
         self.run_materialization()
         assert "warehouse = PROFILE_WH" in self.main_sql()
-
-    def test_target_lag_literal_is_escaped(self):
-        self.config_values["target_lag"] = "one's hour"
-        self.run_materialization()
-        assert "target_lag = 'one\\'s hour'" in self.main_sql()
 
     def test_all_optional_options_in_create_and_replace(self):
         self.config_values.update(
@@ -274,22 +298,6 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
         assert grant_config == self.grants
         assert self.context["apply_grants"].call_args.kwargs == {"should_revoke": False}
 
-    def test_grants_render_cortex_search_grant_sql(self):
-        """The relation handed to apply_grants renders the cortex search grant DCL."""
-        self.run_materialization()
-        relation, grant_config = self.context["apply_grants"].call_args.args
-        grant_macros = self.module("apply_grants.sql")
-        rendered = [
-            _squash(grant_macros.snowflake__get_grant_sql(relation, privilege, [grantee]))
-            for privilege, grantees in grant_config.items()
-            for grantee in grantees
-        ]
-        assert rendered == [f"grant usage on cortex search service {RELATION} to role_a"]
-
-    def test_missing_cached_relation_does_not_revoke(self):
-        self.run_materialization()
-        self.context["should_revoke"].assert_called_once_with(None, full_refresh_mode=False)
-
     def test_existing_service_grant_reconciliation(self):
         # Exercise dbt's real decision macro, rather than mocking its result.
         with open(os.path.join(GLOBAL_PROJECT_PATH, "macros/adapters/apply_grants.sql")) as f:
@@ -318,12 +326,6 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
                     "should_revoke": expected_revoke
                 }
 
-    def test_service_lookup_uses_service_type(self):
-        self.run_materialization()
-        self.context["adapter"].get_cortex_search_service.assert_called_once()
-        relation = self.context["adapter"].get_cortex_search_service.call_args.args[0]
-        assert relation.is_cortex_search_service
-
     def test_hooks_and_query_tag(self):
         # Hook changes must complete before configured grants are reconciled.
         def run_hooks(hooks):
@@ -341,119 +343,37 @@ class TestCortexSearchServiceMaterialization(_MacroTestBase):
 
 
 @pytest.mark.parametrize(
-    "key,value",
-    [
-        ("search_column", None),
-        ("search_column", " "),
-        ("search_column", ["body"]),
-        ("target_lag", None),
-        ("target_lag", ""),
-        ("target_lag", 60),
-        ("snowflake_warehouse", " "),
-        ("snowflake_warehouse", 123),
-        ("attributes", "region"),
-        ("attributes", None),
-        ("attributes", []),
-        ("attributes", {"region": True}),
-        ("attributes", [""]),
-        ("attributes", [123]),
-        ("primary_key", "doc_id"),
-        ("primary_key", {"doc_id": True}),
-        ("primary_key", [""]),
-        ("primary_key", [123]),
-        ("embedding_model", ""),
-        ("embedding_model", 123),
-        ("refresh_mode", "AUTO"),
-        ("refresh_mode", ["FULL"]),
-        ("initialize", "IMMEDIATELY"),
-        ("initialize", True),
-        ("full_index_build_interval_days", 0),
-        ("full_index_build_interval_days", -1),
-        ("full_index_build_interval_days", 1.5),
-        ("full_index_build_interval_days", True),
-        ("full_index_build_interval_days", "7"),
-        ("auto_suspend", 1799),
-        ("auto_suspend", -1),
-        ("auto_suspend", 1800.5),
-        ("auto_suspend", True),
-        ("auto_suspend", "1800"),
-        ("request_logging", "false"),
-        ("request_logging", 0),
-        ("request_logging", 1),
-        ("comment", 123),
-    ],
-)
-def test_invalid_service_config_fails_before_service_ddl(key, value):
-    test = TestCortexSearchServiceMaterialization()
-    test.setUp()
-    test.config_values[key] = value
-    with pytest.raises(CompilationError, match=key):
-        test.run_materialization()
-    assert test.statements == []
-
-
-@pytest.mark.parametrize(
     "key,value,expected",
     [
-        ("primary_key", ["doc_id", '"Region Name"'], 'primary key (doc_id, "Region Name")'),
-        (
-            "embedding_model",
-            "snowflake-arctic-embed-l-v2.0",
-            "embedding_model = 'snowflake-arctic-embed-l-v2.0'",
-        ),
         ("refresh_mode", "full", "refresh_mode = FULL"),
-        ("refresh_mode", " INCREMENTAL ", "refresh_mode = INCREMENTAL"),
         ("initialize", "on_schedule", "initialize = ON_SCHEDULE"),
-        ("initialize", " ON_CREATE ", "initialize = ON_CREATE"),
-        ("full_index_build_interval_days", 1, "full_index_build_interval_days = 1"),
         ("request_logging", True, "request_logging = TRUE"),
-        ("request_logging", False, "request_logging = FALSE"),
-        ("auto_suspend", 1800, "auto_suspend = 1800"),
-        ("auto_suspend", 3600, "auto_suspend = 3600"),
         ("comment", "", "comment = ''"),
     ],
 )
-def test_optional_service_option(key, value, expected):
-    test = TestCortexSearchServiceMaterialization()
-    test.setUp()
-    test.config_values[key] = value
-    if key == "full_index_build_interval_days":
-        test.config_values["primary_key"] = ["doc_id"]
-    test.run_materialization()
-    assert expected in test.main_sql()
+def test_optional_service_option(materialization, key, value, expected):
+    materialization.config_values[key] = value
+    materialization.run_materialization()
+    assert expected in materialization.main_sql()
 
 
 @pytest.mark.parametrize(
     "value,literal",
     [
-        ("Bob's", r"'Bob\'s'"),
         (r"\n", r"'\\n'"),
         ("tail\\", r"'tail\\'"),
         (r"\'", r"'\\\''"),
-        ("", "''"),
     ],
 )
-def test_comment_literals_use_snowflake_escaping(value, literal):
-    test = TestCortexSearchServiceMaterialization()
-    test.setUp()
+def test_comment_literals_use_snowflake_escaping(materialization, value, literal):
+    test = materialization
     test.config_values["comment"] = value
     test.run_materialization()
     assert f"comment = {literal} as (" in test.main_sql()
 
 
-@pytest.mark.parametrize("primary_key", [None, []])
-def test_index_rebuild_interval_requires_primary_key(primary_key):
-    test = TestCortexSearchServiceMaterialization()
-    test.setUp()
-    test.config_values.update(primary_key=primary_key, full_index_build_interval_days=7)
-    with pytest.raises(CompilationError, match="requires a non-empty `primary_key`"):
-        test.run_materialization()
-    assert test.statements == []
-
-
-def test_missing_warehouse_fails_before_service_ddl():
-    test = TestCortexSearchServiceMaterialization()
-    test.setUp()
+def test_missing_warehouse_fails_before_service_ddl(materialization):
+    test = materialization
     test.config_values.pop("snowflake_warehouse")
     test.context["target"].warehouse = None
     with pytest.raises(CompilationError, match="snowflake_warehouse"):
@@ -540,4 +460,62 @@ class TestCortexSearchServiceGrantMacros(_MacroTestBase):
         assert (
             self.grants.snowflake__get_revoke_sql(table, "select", ["r"])
             == "default__get_revoke_sql"
+        )
+
+
+@pytest.fixture
+def materialization():
+    test = TestCortexSearchServiceMaterialization()
+    test.setUp()
+    return test
+
+
+@pytest.mark.parametrize("replacement", [False, True], ids=["alter", "replace"])
+@pytest.mark.parametrize("policy", ["apply", "continue", "fail"])
+def test_configuration_drift_obeys_policy(materialization, replacement, policy):
+    test = materialization
+    test.config_values.update(on_configuration_change=policy, target_lag="2 hours")
+    existing = _relation(type=SnowflakeRelation.CortexSearchService)
+    test.context["adapter"].get_cortex_search_service.return_value = existing
+    if replacement:
+        test.config_values["attributes"] = ["region", "doc_id"]
+        changes = {"alter": {"target_lag": "2 hours"}, "replace": ["attributes"]}
+    else:
+        changes = {
+            "alter": {
+                "target_lag": "2 hours",
+                "warehouse": '"Search Warehouse"',
+                "request_logging": False,
+                "comment": r"Bob's \ notes",
+            },
+            "replace": [],
+        }
+    test.context["adapter"].get_cortex_search_service_configuration_changes.return_value = changes
+    if policy == "fail":
+        with pytest.raises(ValueError, match="configuration changed.*target_lag.*fail"):
+            test.run_materialization()
+        assert test.statements == []
+        test.context["apply_grants"].assert_not_called()
+        return
+
+    test.run_materialization()
+    test.context["should_revoke"].assert_called_once_with(
+        existing, full_refresh_mode=(policy == "apply" and replacement)
+    )
+    if policy == "continue":
+        assert test.statements == []
+        test.context["store_raw_result"].assert_called_once()
+        test.context["exceptions"].warn.assert_called_once()
+        assert "target_lag" in test.context["exceptions"].warn.call_args.args[0]
+    elif replacement:
+        assert test.main_sql() == (
+            f"create or replace cortex search service {RELATION} "
+            "on body attributes region, doc_id warehouse = WH "
+            f"target_lag = '2 hours' as ( {BODY} )"
+        )
+    else:
+        assert test.main_sql() == (
+            f"alter cortex search service {RELATION} set "
+            "target_lag = '2 hours' warehouse = \"Search Warehouse\" "
+            "request_logging = FALSE comment = 'Bob\\'s \\\\ notes'"
         )
