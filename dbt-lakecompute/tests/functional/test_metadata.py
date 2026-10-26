@@ -3,6 +3,8 @@
 The service does not grant CREATE_VIEW, so these build tables only.
 """
 
+from uuid import uuid4
+
 import pytest
 
 from dbt.tests.util import run_dbt
@@ -60,6 +62,18 @@ class TestSchemaMetadata:
     def models(self):
         return {"model_simple.sql": model_simple_sql}
 
+    @pytest.fixture
+    def scratch_schema(self, project):
+        """Allocate a separate namespace for each test, including concurrent test runs."""
+        relation = project.adapter.Relation.create(
+            database=project.database, schema=f"{project.test_schema}_{uuid4().hex}"
+        )
+        try:
+            yield relation
+        finally:
+            with project.adapter.connection_named("cleanup_scratch_schema"):
+                project.adapter.drop_schema(relation)
+
     def test_list_schemas_includes_the_test_schema(self, project):
         with project.adapter.connection_named("test"):
             schemas = project.adapter.list_schemas(project.database)
@@ -89,7 +103,7 @@ class TestSchemaMetadata:
         with project.adapter.connection_named("test"):
             assert not project.adapter.check_schema_exists(project.database, wildcard)
 
-    def test_drop_schema_never_emits_cascade(self, project):
+    def test_drop_schema_never_emits_cascade(self, project, scratch_schema, monkeypatch):
         """The service rejects every `cascade` form, so the teardown has to be explicit.
 
         `drop schema ... cascade` fails with `DROP SCHEMA <schema_name> CASCADE is not
@@ -97,30 +111,22 @@ class TestSchemaMetadata:
         the planner rejects CASCADE before `if exists` can short-circuit. A bare
         `drop schema if exists` over a *populated* schema fails in Polaris instead.
         """
-        from dbt.adapters.lakecompute.connections import LakeComputeConnectionManager
-
         sent = []
-        original = LakeComputeConnectionManager.add_query
+        original = project.adapter.connections.execute
 
-        def recording_add_query(self, sql, *args, **kwargs):
+        def recording_execute(sql, *args, **kwargs):
             sent.append(sql)
-            return original(self, sql, *args, **kwargs)
+            return original(sql, *args, **kwargs)
 
-        relation = project.adapter.Relation.create(
-            database=project.database, schema="p2_teardown_check"
-        )
+        relation = scratch_schema
         with project.adapter.connection_named("setup"):
             project.adapter.create_schema(relation)
-        project.run_sql(
-            f"create or replace table {project.database}.p2_teardown_check.t as select 1 as id"
-        )
+        project.run_sql(f"create or replace table {relation}.t as select 1 as id")
 
-        try:
-            LakeComputeConnectionManager.add_query = recording_add_query
+        with monkeypatch.context() as patcher:
+            patcher.setattr(project.adapter.connections, "execute", recording_execute)
             with project.adapter.connection_named("test"):
                 project.adapter.drop_schema(relation)
-        finally:
-            LakeComputeConnectionManager.add_query = original
 
         assert sent, "no SQL was captured"
         assert not any("cascade" in sql.lower() for sql in sent)
@@ -128,28 +134,23 @@ class TestSchemaMetadata:
         teardown = sent[-1]
         assert teardown.index("drop table") < teardown.index("drop schema")
         with project.adapter.connection_named("check"):
-            assert not project.adapter.check_schema_exists(project.database, "p2_teardown_check")
+            assert not project.adapter.check_schema_exists(project.database, relation.schema)
 
-    def test_drop_schema_is_idempotent(self, project):
-        relation = project.adapter.Relation.create(
-            database=project.database, schema="p2_absent_schema"
-        )
+    def test_drop_schema_is_idempotent(self, project, scratch_schema):
         with project.adapter.connection_named("test"):
-            project.adapter.drop_schema(relation)
-            project.adapter.drop_schema(relation)
+            project.adapter.drop_schema(scratch_schema)
+            project.adapter.drop_schema(scratch_schema)
 
-    def test_create_and_drop_schema(self, project):
-        relation = project.adapter.Relation.create(
-            database=project.database, schema="p2_scratch_schema"
-        )
+    def test_create_and_drop_schema(self, project, scratch_schema):
+        relation = scratch_schema
         with project.adapter.connection_named("test"):
             project.adapter.create_schema(relation)
-            assert project.adapter.check_schema_exists(project.database, "p2_scratch_schema")
+            assert project.adapter.check_schema_exists(project.database, relation.schema)
             # create is `if not exists`, so a second call is a no-op rather than an error
             project.adapter.create_schema(relation)
 
             project.adapter.drop_schema(relation)
-            assert not project.adapter.check_schema_exists(project.database, "p2_scratch_schema")
+            assert not project.adapter.check_schema_exists(project.database, relation.schema)
 
 
 class TestRelationMetadata:

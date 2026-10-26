@@ -1,8 +1,13 @@
 """Can we connect, and can we run a query."""
 
 import threading
+from uuid import uuid4
 
+import pytest
+
+from dbt.adapters.contracts.connection import ConnectionState
 from dbt.tests.util import run_dbt
+from dbt_common.exceptions import DbtDatabaseError
 
 
 class TestDebug:
@@ -50,10 +55,26 @@ class TestAdapterPlumbing:
         Without it these come back as `int64` / `string`.
         """
         with project.adapter.connection_named("test"):
-            _, table = project.adapter.connections.execute(
-                "select 1::bigint as i, 'x' as s, 1.5::double as d", fetch=True
+            columns = project.adapter.get_column_schema_from_query(
+                "select 1::bigint as i, 'x' as s, 1.5::double as d"
             )
-        assert len(table.rows) == 1
+        assert [(column.name, column.dtype) for column in columns] == [
+            ("i", "BIGINT"),
+            ("s", "VARCHAR"),
+            ("d", "DOUBLE"),
+        ]
+
+    def test_query_failure_allows_connection_cleanup(self, project):
+        missing_table = f"{project.database}.{project.test_schema}.missing_{uuid4().hex}"
+        with pytest.raises(DbtDatabaseError):
+            with project.adapter.connection_named("failing_query"):
+                connection = project.adapter.connections.get_thread_connection()
+                project.adapter.connections.execute(f"select * from {missing_table}", fetch=True)
+
+        assert connection.state == ConnectionState.CLOSED
+        with project.adapter.connection_named("after_failure"):
+            _, table = project.adapter.connections.execute("select 1 as id", fetch=True)
+        assert table.rows[0][0] == 1
 
     def test_no_query_comment_is_prepended(self, project):
         """Off unless the profile opts in."""

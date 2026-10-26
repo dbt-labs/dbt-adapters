@@ -5,12 +5,13 @@
 * Connections are built by hand with ``autocommit=True``. ``Connection.adbc_clone()`` would
   hardcode ``autocommit=False``, and the service has no transactions, so dbt's transaction
   state machine is reduced to flag-flips.
-* ``get_response`` is pure: dbt calls it twice per statement, so query metadata is read once
-  in ``add_query`` and stashed on the cursor.
+* ``get_response`` is pure: query metadata is read once and stashed on the cursor for the
+  caller and the structured query-status event.
 """
 
 import atexit
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, cast, Dict, Iterable, Iterator, List, Optional, Tuple, TYPE_CHECKING
@@ -21,8 +22,12 @@ from dbt.adapters.contracts.connection import (
     ConnectionState,
 )
 from dbt.adapters.events.logging import AdapterLogger
+from dbt.adapters.events.types import ConnectionUsed, SQLQuery, SQLQueryStatus
 from dbt.adapters.sql import SQLConnectionManager
+from dbt_common.events.contextvars import get_node_info
+from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
+from dbt_common.utils import cast_to_str
 
 from dbt.adapters.lakecompute.credentials import LakeComputeCredentials
 from dbt.adapters.lakecompute.driver import ResolvedDriver, resolve_driver
@@ -294,20 +299,15 @@ class LakeComputeConnectionManager(SQLConnectionManager):
     ) -> Tuple[AdapterResponse, "agate.Table"]:
         """Run ``sql`` and, when asked, materialise its rows.
 
-        Overridden because ``SQLConnectionManager.execute`` never forwards ``fetch`` to
-        ``add_query``, so every fetching query would silently come back empty. The cursor is
-        closed here because each one owns an ``AdbcStatement``.
+        Keep the statement cancellable and translate driver errors until fetching finishes.
+        Each cursor owns an ``AdbcStatement`` and is closed before returning or raising.
         """
         from dbt_common.clients.agate_helper import empty_table
 
         sql = self._add_query_comment(sql)
-        _, cursor = self.add_query(sql, auto_begin, fetch=fetch)
-        try:
-            response = self.get_response(cursor)
+        with self._query(sql, auto_begin, fetch=fetch, close_cursor=True) as (_, cursor):
             table = self.get_result_from_cursor(cursor, limit) if fetch else empty_table()
-        finally:
-            cursor.close()
-        return response, table
+            return self.get_response(cursor), table
 
     def add_select_query(self, sql: str) -> Tuple[Connection, Any]:
         # Same as execute: `get_column_schema_from_query` reads `cursor.description`, which is
@@ -330,6 +330,29 @@ class LakeComputeConnectionManager(SQLConnectionManager):
         ``fetch`` is keyword-only so ``adapter.add_query(...)`` macro calls keep working. A
         ``;``-joined batch is sent verbatim as one request; the service runs every statement.
         """
+        with self._query(sql, auto_begin, bindings, abridge_sql_log, fetch=fetch) as (
+            connection,
+            cursor,
+        ):
+            return connection, cursor
+
+    @contextmanager
+    def _query(
+        self,
+        sql: str,
+        auto_begin: bool,
+        bindings: Optional[Any] = None,
+        abridge_sql_log: bool = False,
+        *,
+        fetch: bool = False,
+        close_cursor: bool = False,
+    ) -> Iterator[Tuple[Connection, Any]]:
+        """Guard execution and optional result consumption as one operation.
+
+        ``add_query`` transfers ownership of a successful cursor to its caller. ``execute``
+        consumes it inside this context and requests cleanup on success too. Failures always
+        close the cursor, after deregistration has waited for any concurrent cancel.
+        """
         if bindings is not None:
             raise DbtRuntimeError(
                 "lakecompute does not support parameter binding; render literals into the SQL "
@@ -340,23 +363,57 @@ class LakeComputeConnectionManager(SQLConnectionManager):
         if auto_begin and connection.transaction_open is False:
             self.begin()
 
+        fire_event(
+            ConnectionUsed(
+                conn_type=self.TYPE,
+                conn_name=cast_to_str(connection.name),
+                node_info=get_node_info(),
+            )
+        )
+
         with self.exception_handler(sql):
             log_sql = f"{sql[:512]}..." if abridge_sql_log else sql
-            logger.debug(f"On {connection.name}: {log_sql}")
+            fire_event(
+                SQLQuery(
+                    conn_name=cast_to_str(connection.name),
+                    sql=log_sql,
+                    node_info=get_node_info(),
+                )
+            )
+            started = time.perf_counter()
 
             cursor = connection.handle.cursor()
-            self._apply_statement_options(cursor)
+            try:
+                with _cancellable(connection, cursor):
+                    self._apply_statement_options(cursor)
+                    if fetch:
+                        cursor.execute(sql)
+                    else:
+                        # execute_update keeps rowcount without producing a result set.
+                        cursor.executemany(sql, None)
 
-            with _cancellable(connection, cursor):
-                if fetch:
-                    cursor.execute(sql)
-                else:
-                    # lands on execute_update with no result set; unlike executescript it
-                    # keeps rowcount and stays cancellable
-                    cursor.executemany(sql, None)
+                    self._collect_metadata(cursor)
+                    yield connection, cursor
 
-            self._collect_metadata(cursor)
-            return connection, cursor
+                    response = self.get_response(cursor)
+                    fire_event(
+                        SQLQueryStatus(
+                            status=str(response),
+                            elapsed=time.perf_counter() - started,
+                            node_info=get_node_info(),
+                            query_id=response.query_id,
+                        )
+                    )
+            except BaseException:
+                # Preserve the query error even if releasing the statement also fails.
+                try:
+                    cursor.close()
+                except Exception as exc:
+                    logger.debug(f"Error closing failed lakecompute cursor: {exc}")
+                raise
+            else:
+                if close_cursor:
+                    cursor.close()
 
     def _apply_statement_options(self, cursor: Any) -> None:
         """Set ``adbc.dbt.*`` attribution options on the statement.
@@ -373,7 +430,6 @@ class LakeComputeConnectionManager(SQLConnectionManager):
             logger.debug(f"lakecompute driver rejected statement options {sorted(options)}: {exc}")
 
     def _statement_options(self) -> Dict[str, str]:
-        from dbt_common.events.contextvars import get_node_info
         from dbt_common.invocation import get_invocation_id
 
         options: Dict[str, str] = {}
