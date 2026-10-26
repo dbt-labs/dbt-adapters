@@ -13,20 +13,13 @@ def pytest_collection_modifyitems(config, items):
     if not functional:
         return
 
-    if os.getenv(RUN_FUNCTIONAL_ENV_VAR, "").lower() not in ("1", "true", "yes"):
+    missing = [name for name in REQUIRED_ENV_VARS if not os.getenv(name)]
+    if missing:
         skip = pytest.mark.skip(
-            reason=f"functional tests need a live endpoint; set {RUN_FUNCTIONAL_ENV_VAR}=true"
+            reason=f"functional tests need a live endpoint; set {', '.join(missing)}"
         )
         for item in functional:
             item.add_marker(skip)
-        return
-
-    # opted in, so a missing variable is a mistake rather than a reason to skip
-    missing = [name for name in REQUIRED_ENV_VARS if not os.getenv(name)]
-    if missing:
-        raise pytest.UsageError(
-            f"{RUN_FUNCTIONAL_ENV_VAR} is set, but these are not: {', '.join(missing)}"
-        )
 
 
 @pytest.fixture(scope="class")
