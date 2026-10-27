@@ -5,7 +5,7 @@ The lake compute (dbt Compute) adapter plugin for dbt-core.
 Lake compute is a remote query service whose workers run DuckDB over Iceberg tables and accept
 DuckDB-dialect SQL.
 
-The adapter is under active development. This release contains the connection layer:
+The adapter is under active development. It currently implements the connection layer:
 authentication, the driver download, the connection manager, and the schema metadata dbt needs
 to connect and resolve relations. `dbt debug`, `dbt compile` and `dbt show` work.
 Materializations, incremental models and seeds are not implemented yet, so do not use
@@ -48,7 +48,7 @@ With a bearer token, the last two auth lines become:
 ```
 
 Set `DBT_COMPUTE_AUTH_TOKEN` to whichever credential you are using. The ADBC driver is fetched
-automatically; see [Driver](#driver) below.
+automatically; see [Driver](#driver) below. Run `dbt debug` to check the connection.
 
 ## Driver
 
@@ -72,6 +72,8 @@ or a platform with no prebuilt artifact.
 
 | Setting | Default | Notes |
 |---|---|---|
+| `database` | — | Required. The catalog to connect to |
+| `schema` | — | Required. The default schema |
 | `method` | `token` | One of `token`, `api_key`, `okta_browser`, `fivetran`. Set explicitly to `fivetran` for a `dct_` PAT |
 | `token` | — | Required with `method: token`; a service bearer token |
 | `api_key` | — | Required with `method: api_key` |
@@ -95,11 +97,12 @@ hatch run unit-tests
 hatch run integration-tests
 ```
 
-Never commit `test.env`.
+Unit tests need no endpoint. Never commit `test.env`.
 
-The functional suite runs against a live endpoint. It needs `DBT_COMPUTE_BASE_URL`,
-`DBT_COMPUTE_AUTH_TOKEN` and `DBT_COMPUTE_DATABASE` (see `test.env.example`); the tests skip
-without them. Set `DBT_COMPUTE_SCHEMA` as well to build everything in one named
+The functional suite runs against a live endpoint. Copy `test.env.example` to `test.env`. It needs
+`DBT_COMPUTE_BASE_URL`, `DBT_COMPUTE_AUTH_TOKEN` and `DBT_COMPUTE_DATABASE`; the tests skip
+without them. `DBT_COMPUTE_AUTH_METHOD` selects the auth method (`fivetran` by default; set `token`
+for a plain bearer token). Set `DBT_COMPUTE_SCHEMA` as well to build everything in one named
 scratch schema rather than a generated name per test file — useful against a shared catalog,
 and it makes leftovers easy to find if a run is interrupted. Pinning the schema means test
 classes cannot run in parallel, so pass `-n0` with it. Every statement is a full round trip at
