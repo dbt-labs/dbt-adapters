@@ -91,6 +91,18 @@ SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_COPY_GRANTS_DEFAULT = BehaviorFlag(
+    name="snowflake_copy_grants_default",
+    default=False,
+    description=(
+        "When enabled, a model without an explicit copy_grants config emits neither COPY GRANTS "
+        "nor IGNORE GRANTS on CREATE OR REPLACE, so Snowflake's default applies (grants are "
+        "copied once BCR-2433 is enabled). When disabled (default), such models emit "
+        "IGNORE GRANTS, preserving the previous behavior of not copying grants. An explicit "
+        "copy_grants: false always emits IGNORE GRANTS."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -176,7 +188,11 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_COPY_GRANTS_DEFAULT,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)
