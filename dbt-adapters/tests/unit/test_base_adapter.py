@@ -10,6 +10,8 @@ import agate
 import pytz
 from dbt.adapters.contracts.connection import AdapterResponse
 
+from tests.unit.fixtures.adapter import BaseAdapterStub
+
 
 class TestBaseAdapterConstraintRendering:
     @pytest.fixture(scope="class")
@@ -553,68 +555,7 @@ class TestListRelationsUncachedSchema:
 class TestRelationsCacheForSchemas:
     @pytest.fixture
     def adapter(self):
-        config = MagicMock()
-
-        class TestAdapter(BaseAdapter):
-            # Set explicitly so this fixture does not depend on other tests
-            # having assigned `BaseAdapter.ConnectionManager` first.
-            ConnectionManager = MagicMock()
-
-            def convert_boolean_type(self, *args, **kwargs):
-                return None
-
-            def convert_date_type(self, *args, **kwargs):
-                return None
-
-            def convert_datetime_type(self, *args, **kwargs):
-                return None
-
-            def convert_number_type(self, *args, **kwargs):
-                return None
-
-            def convert_text_type(self, *args, **kwargs):
-                return None
-
-            def convert_time_type(self, *args, **kwargs):
-                return None
-
-            def create_schema(self, *args, **kwargs):
-                return None
-
-            def date_function(self, *args, **kwargs):
-                return None
-
-            def drop_relation(self, *args, **kwargs):
-                return None
-
-            def drop_schema(self, *args, **kwargs):
-                return None
-
-            def expand_column_types(self, *args, **kwargs):
-                return None
-
-            def get_columns_in_relation(self, *args, **kwargs):
-                return None
-
-            def is_cancelable(self, *args, **kwargs):
-                return False
-
-            def list_relations_without_caching(self, *args, **kwargs):
-                return []
-
-            def list_schemas(self, *args, **kwargs):
-                return []
-
-            def quote(self, *args, **kwargs):
-                return ""
-
-            def rename_relation(self, *args, **kwargs):
-                return None
-
-            def truncate_relation(self, *args, **kwargs):
-                return None
-
-        return TestAdapter(config, MagicMock())
+        return BaseAdapterStub(MagicMock(), MagicMock())
 
     def test_empty_cache_schemas_is_not_expanded_to_default(self, adapter):
         """An explicitly empty `cache_schemas` means "nothing to cache" and
