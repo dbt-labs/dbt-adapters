@@ -556,6 +556,10 @@ class TestRelationsCacheForSchemas:
         config = MagicMock()
 
         class TestAdapter(BaseAdapter):
+            # Set explicitly so this fixture does not depend on other tests
+            # having assigned `BaseAdapter.ConnectionManager` first.
+            ConnectionManager = MagicMock()
+
             def convert_boolean_type(self, *args, **kwargs):
                 return None
 
