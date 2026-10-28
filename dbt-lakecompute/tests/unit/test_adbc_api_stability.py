@@ -6,7 +6,7 @@ can get database sharing *and* autocommit at once (``Connection.adbc_clone()`` h
 dependency bump fails in CI rather than at a customer.
 
 If one of these fails: either pin ``adbc-driver-manager`` below the breaking version, or
-rework ``_new_thread_connection`` and re-point these assertions.
+rework ``_get_or_create_shared_database`` / ``_new_thread_connection`` and re-point these assertions.
 """
 
 import inspect

@@ -114,7 +114,6 @@ class TestConcurrency:
         assert sorted(results) == [0, 1, 2, 3]
         # one shared database for this target, not one per thread
         base_url = project.adapter.config.credentials.resolved_base_url
-        matching = [
-            key for key in conn_module._REGISTRY if dict(key.db_kwargs).get("uri") == base_url
-        ]
+        # registry keys are (path, entrypoint, sorted db_kwargs)
+        matching = [key for key in conn_module._REGISTRY if dict(key[2]).get("uri") == base_url]
         assert len(matching) == 1

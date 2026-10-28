@@ -1,7 +1,7 @@
 """Connection-manager behaviour that needs no database.
 
 Covers the three things in ``connections.py`` that are easy to break by "simplifying":
-query-comment suppression, the flag-only transaction state machine, and the purity of
+query-comment suppression, the no-op transaction methods, and the purity of
 ``get_response``.
 """
 
@@ -20,10 +20,10 @@ from dbt.adapters.lakecompute import connections as connections_module
 from dbt.adapters.lakecompute.connections import (
     LakeComputeAdapterResponse,
     LakeComputeConnectionManager,
-    _ATTR_ACTIVE_STATEMENTS,
+    _ATTR_ACTIVE_STATEMENT,
     _ATTR_QUERY_ID,
     _ATTR_WARNINGS,
-    _DatabaseKey,
+    _get_or_create_shared_database,
 )
 from dbt.adapters.lakecompute.credentials import LakeComputeCredentials
 from dbt.adapters.lakecompute.driver import ResolvedDriver
@@ -177,44 +177,25 @@ class TestQueryComment:
 
 
 class TestTransactions:
-    """Autocommit is structural, so these flip flags and emit no SQL."""
+    """Autocommit is structural: begin/commit are no-ops and never open a transaction."""
 
-    def test_begin_only_sets_the_flag(self):
+    def test_begin_and_commit_never_open_a_transaction(self, query_events):
+        # the base class raises DbtInternalError on a double begin or a bare commit
         manager = make_manager()
         connection = attach_connection(manager)
         manager.begin()
-        assert connection.transaction_open is True
-
-    def test_begin_is_idempotent(self):
-        # the base class raises DbtInternalError on a double begin; we must not
-        manager = make_manager()
-        attach_connection(manager)
         manager.begin()
-        manager.begin()
-
-    def test_commit_clears_the_flag(self):
-        manager = make_manager()
-        connection = attach_connection(manager)
-        connection.transaction_open = True
+        manager.commit()
         manager.commit()
         assert connection.transaction_open is False
+        assert query_events == []
 
-    def test_commit_without_begin_does_not_raise(self):
+    def test_clear_transaction_and_rollback_do_nothing(self, query_events):
         manager = make_manager()
         attach_connection(manager)
-        manager.commit()
-
-    def test_clear_transaction_and_rollback_are_safe_with_no_connection(self):
-        manager = make_manager()
         manager.clear_transaction()
         manager.rollback_if_open()
-
-    def test_begin_and_commit_queries_emit_nothing(self):
-        # no-oping only these would still fire SQLCommit events, which is why the overrides
-        # above exist too -- but they must stay no-ops regardless
-        manager = make_manager()
-        assert manager.add_begin_query() is None
-        assert manager.add_commit_query() is None
+        assert query_events == []
 
 
 class TestGetResponse:
@@ -366,7 +347,7 @@ class TestQueryFailures:
             getattr(manager, method)("select invalid", **kwargs)
 
         assert cursor.closed
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == []
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         # Keep the exception and its traceback alive, as dbt does during release.
         assert error.value.__traceback__ is not None
         manager.release()
@@ -395,7 +376,7 @@ class TestQueryFailures:
         if isinstance(failure, OperationalError):
             assert "timeout_seconds" in str(error.value)
         assert cursor.closed
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == []
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         manager.release()
         assert not any(e.info.name == "SQLQueryStatus" for e in query_events)
 
@@ -476,7 +457,7 @@ class TestCancel:
         connection = prepared(manager, cursor)
 
         def cancel_during_fetch():
-            assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == [cursor.adbc_statement]
+            assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is cursor.adbc_statement
             canceller = threading.Thread(target=manager.cancel, args=(connection,))
             canceller.start()
             canceller.join(timeout=5)
@@ -488,7 +469,7 @@ class TestCancel:
         manager.execute("select n from t", fetch=True, limit=limit)
 
         assert cursor.closed
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == []
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         manager.cancel(connection)
         assert cursor.adbc_statement.cancels == 1
 
@@ -511,7 +492,7 @@ class TestCancel:
 
         manager.add_query("select 1")
 
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == []
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         # nothing in flight, so nothing to cancel
         manager.cancel(connection)
         assert cursor.adbc_statement.cancels == 0
@@ -573,13 +554,13 @@ class TestCancel:
 
         assert cancel_entered.wait(timeout=5)
         assert not query_returned.wait(timeout=0.2)
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == [cursor.adbc_statement]
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is cursor.adbc_statement
         assert not cursor.closed
 
         release_cancel.set()
         worker.join(timeout=5)
         assert query_returned.is_set()
-        assert getattr(connection, _ATTR_ACTIVE_STATEMENTS) == []
+        assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         assert cursor.closed is during_fetch
 
 
@@ -597,7 +578,7 @@ class TestOpen:
             lambda r: taken.append("shared") or object(),
         )
         monkeypatch.setattr(
-            connections_module, "_new_thread_connection", lambda s, r: FakeHandle(FakeAdbcCursor())
+            connections_module, "_new_thread_connection", lambda s: FakeHandle(FakeAdbcCursor())
         )
 
         connection.state = ConnectionState.INIT  # type: ignore[assignment]
@@ -605,32 +586,40 @@ class TestOpen:
         assert taken == ["shared"]
 
 
-class TestDatabaseKey:
-    def _resolved(self, **overrides) -> ResolvedDriver:
-        kwargs = dict(
+class TestSharedDatabaseRegistry:
+    @pytest.fixture(autouse=True)
+    def created(self, monkeypatch):
+        """Record AdbcDatabase constructions without loading a real driver."""
+        from adbc_driver_manager import _lib, dbapi
+
+        created = []
+        monkeypatch.setattr(_lib, "AdbcDatabase", lambda **kwargs: created.append(kwargs))
+        monkeypatch.setattr(dbapi, "_SharedDatabase", lambda database: object())
+        monkeypatch.setattr(connections_module, "_REGISTRY", {})
+        return created
+
+    def _resolved(self, **db_kwargs) -> ResolvedDriver:
+        return ResolvedDriver(
             path="/lib/libadbc_driver_dbt.so",
             entrypoint="AdbcDriverDbtInit",
-            db_kwargs={"uri": "https://endpoint/"},
-        )
-        kwargs.update(overrides)
-        return ResolvedDriver(**kwargs)  # type: ignore[arg-type]
-
-    def test_identical_drivers_share_a_key(self):
-        assert _DatabaseKey.from_resolved(self._resolved()) == _DatabaseKey.from_resolved(
-            self._resolved()
+            db_kwargs=db_kwargs or {"uri": "https://endpoint/"},
         )
 
-    def test_different_db_kwargs_do_not_collide(self):
+    def test_identical_drivers_share_a_database(self, created):
+        a = _get_or_create_shared_database(self._resolved())
+        b = _get_or_create_shared_database(self._resolved())
+        assert a is b
+        assert len(created) == 1
+
+    def test_different_db_kwargs_do_not_collide(self, created):
         """Two targets in one process must not accidentally share a database."""
-        a = _DatabaseKey.from_resolved(self._resolved(db_kwargs={"uri": "https://a/"}))
-        b = _DatabaseKey.from_resolved(self._resolved(db_kwargs={"uri": "https://b/"}))
-        assert a != b
+        a = _get_or_create_shared_database(self._resolved(uri="https://a/"))
+        b = _get_or_create_shared_database(self._resolved(uri="https://b/"))
+        assert a is not b
+        assert len(created) == 2
 
-    def test_kwarg_ordering_does_not_matter(self):
-        a = _DatabaseKey.from_resolved(self._resolved(db_kwargs={"x": "1", "y": "2"}))
-        b = _DatabaseKey.from_resolved(self._resolved(db_kwargs={"y": "2", "x": "1"}))
-        assert a == b
-
-    def test_is_hashable(self):
-        # it is a dict key in the module-level registry
-        assert isinstance(hash(_DatabaseKey.from_resolved(self._resolved())), int)
+    def test_kwarg_ordering_does_not_matter(self, created):
+        a = _get_or_create_shared_database(self._resolved(x="1", y="2"))
+        b = _get_or_create_shared_database(self._resolved(y="2", x="1"))
+        assert a is b
+        assert len(created) == 1
