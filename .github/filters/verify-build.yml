@@ -28,6 +28,12 @@ dbt-bigquery:
 -   'dbt-bigquery/pyproject.toml'
 -   'dbt-adapters/src/**'
 -   'dbt-adapters/pyproject.toml'
+dbt-lakecompute:
+-   'dbt-lakecompute/src/**'
+-   'dbt-lakecompute/hatch.toml'
+-   'dbt-lakecompute/pyproject.toml'
+-   'dbt-adapters/src/**'
+-   'dbt-adapters/pyproject.toml'
 dbt-postgres:
 -   'dbt-postgres/src/**'
 -   'dbt-postgres/hatch.toml'
