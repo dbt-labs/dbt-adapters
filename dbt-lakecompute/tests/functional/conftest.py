@@ -61,3 +61,23 @@ def unique_schema(request, prefix) -> str:
 
     test_file = request.module.__name__.split(".")[-1]
     return f"{prefix}_{test_file}"
+
+
+@pytest.fixture
+def captured_sql(project, monkeypatch):
+    """Every statement the connection manager is handed, in order.
+
+    Records at ``_query``, which ``execute``, ``add_query`` and ``add_select_query`` all go
+    through.
+    """
+    from dbt.adapters.lakecompute.connections import LakeComputeConnectionManager
+
+    sent = []
+    original = LakeComputeConnectionManager._query
+
+    def recording_query(self, sql, *args, **kwargs):
+        sent.append(sql)
+        return original(self, sql, *args, **kwargs)
+
+    monkeypatch.setattr(LakeComputeConnectionManager, "_query", recording_query)
+    return sent
