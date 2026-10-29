@@ -104,6 +104,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.patcher.stop()
         self.load_state_check.stop()
 
+    def test_fail_on_unexpected_existing_relation_flag_defaults_on(self):
+        flag = self.adapter.behavior.snowflake_fail_on_unexpected_existing_relation
+        self.assertTrue(flag.no_warn)
+
     def test_quoting_on_drop_schema(self):
         relation = SnowflakeAdapter.Relation.create(
             database="test_database",

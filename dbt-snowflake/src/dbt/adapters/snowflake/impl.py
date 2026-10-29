@@ -91,6 +91,19 @@ SNOWFLAKE_MANAGED_ICEBERG_DEFAULT = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION = BehaviorFlag(
+    name="snowflake_fail_on_unexpected_existing_relation",
+    default=True,
+    description=(
+        "When enabled (the default), incremental models and snapshots that are not in dbt's "
+        "relation cache are created with CREATE instead of CREATE OR REPLACE. If the table "
+        "exists anyway (for example, the metadata listing that populated the cache was "
+        "incomplete, or the table was created concurrently), the statement fails instead of "
+        "silently replacing the existing table and its data. Disabling this flag restores the "
+        "previous behavior, which can replace existing tables without warning."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -176,7 +189,11 @@ class SnowflakeAdapter(SQLAdapter):
 
     @property
     def _behavior_flags(self) -> list[BehaviorFlag]:
-        return [SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES, SNOWFLAKE_MANAGED_ICEBERG_DEFAULT]
+        return [
+            SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
+            SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
+            SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION,
+        ]
 
     def __init__(self, config, mp_context) -> None:
         super().__init__(config, mp_context)

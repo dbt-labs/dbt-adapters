@@ -94,6 +94,13 @@ class SnowflakeColumnEqualSetup:
         ]
 
 
+# An incremental model's first run creates its table with plain `create` (not `create or
+# replace`), so a stale relation cache fails the run instead of replacing an existing table.
+_expected_incremental_sql_snowflake = _expected_sql_snowflake.replace(
+    "create or replace transient table", "create transient table", 1
+)
+
+
 class TestSnowflakeTableConstraintsColumnsEqual(
     SnowflakeColumnEqualSetup, BaseTableConstraintsColumnsEqual
 ):
@@ -141,7 +148,7 @@ class TestSnowflakeIncrementalConstraintsDdlEnforcement(
 ):
     @pytest.fixture(scope="class")
     def expected_sql(self):
-        return _expected_sql_snowflake
+        return _expected_incremental_sql_snowflake
 
 
 class TestSnowflakeTableConstraintsRollback(BaseConstraintsRollback):
