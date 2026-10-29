@@ -5,11 +5,27 @@ The lake compute (dbt Compute) adapter plugin for dbt-core.
 Lake compute is a remote query service whose workers run DuckDB over Iceberg tables and accept
 DuckDB-dialect SQL.
 
-The adapter is under active development. It currently implements the connection layer:
-authentication, the driver download, the connection manager, and the schema metadata dbt needs
-to connect and resolve relations. `dbt debug`, `dbt compile` and `dbt show` work.
-Materializations, incremental models and seeds are not implemented yet, so do not use
-`dbt run`, `dbt build` or `dbt seed` against this adapter.
+The adapter is under active development. `dbt debug`, `dbt compile`, `dbt show`, `dbt run`
+(tables and ephemeral models) and `dbt test` work; incremental models and seeds are planned.
+
+## Supported and unsupported features
+
+| | |
+|---|---|
+| `dbt debug`, `dbt compile`, `dbt show`, `dbt run`, `dbt test` | supported |
+| `materialized='table'` | supported: built with a single `create or replace table ... as (...)` |
+| `materialized='ephemeral'` | supported: inlined as a CTE, as everywhere else in dbt |
+| Model contracts | columns and types are checked; **constraints cannot be emitted**: a `create ... as (<query>)` has no column list to attach them to, so each declared constraint warns and is skipped |
+| `materialized='incremental'`, `dbt seed` | not yet implemented: each fails when run, with an error naming the model |
+| `dbt docs generate` | not yet implemented |
+| `materialized='view'` | not supported: the catalog does not grant `CreateView`, so it fails when run, with an error naming the model. dbt defaults models to views, so set `+materialized: table` in `dbt_project.yml` |
+| `materialized='materialized_view'`, snapshots, `dbt clone`, dbt unit tests | out of scope: each fails when run, with an error naming the model |
+| Python models | out of scope: no materialization accepts Python, so dbt rejects them |
+| `catalogs.yml` | out of scope |
+| `persist_docs` | ignored, as in v2: the service rejects `comment on` for Iceberg relations, so no comments are written |
+| Grants | ignored, as in v2: configured grants are not applied |
+| Relation renames | not used: relations are replaced with `create or replace` |
+| Dropping a schema | drops its relations first: the service does not support `DROP SCHEMA ... CASCADE` |
 
 Identifiers are never quoted, matching the service's own SQL, and are matched
 case-insensitively: a relation created as `MixedCase` is found by `ref('mixedcase')` and still

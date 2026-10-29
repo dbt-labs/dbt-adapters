@@ -12,6 +12,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Dict
 
+import pyarrow as pa
+
 #: exact arrow type string -> DuckDB name. Prefix cases (decimal, timestamp) are handled below.
 _ARROW_TO_DUCKDB: Dict[str, str] = {
     "null": "NULL",
@@ -46,6 +48,25 @@ def data_type_code_to_name(type_code: Any) -> str:
     looks like an arrow type string. Unknown types come back uppercased rather than raising:
     a wrong label in ``dbt show`` is a cosmetic problem, an exception there is not.
     """
+    # Contracts compare these names. Keep child types and field names instead of
+    # collapsing every nested value to LIST, STRUCT or MAP.
+    if isinstance(type_code, (pa.ListType, pa.LargeListType)):
+        return f"{data_type_code_to_name(type_code.value_type)}[]"
+    if isinstance(type_code, pa.FixedSizeListType):
+        return f"{data_type_code_to_name(type_code.value_type)}[{type_code.list_size}]"
+    if isinstance(type_code, pa.StructType):
+        fields = []
+        for field in type_code:
+            name = field.name.replace('"', '""')
+            fields.append(f'"{name}" {data_type_code_to_name(field.type)}')
+        return f"STRUCT({', '.join(fields)})"
+    if isinstance(type_code, pa.MapType):
+        key = data_type_code_to_name(type_code.key_type)
+        value = data_type_code_to_name(type_code.item_type)
+        return f"MAP({key}, {value})"
+    if isinstance(type_code, pa.DictionaryType):
+        return data_type_code_to_name(type_code.value_type)
+
     name = str(type_code).strip().lower()
 
     if name in _ARROW_TO_DUCKDB:

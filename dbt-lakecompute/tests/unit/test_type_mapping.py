@@ -8,6 +8,7 @@ import datetime
 from decimal import Decimal
 
 import pytest
+import pyarrow as pa
 
 from dbt.adapters.lakecompute.type_mapping import data_type_code_to_name, normalize_value
 
@@ -77,6 +78,31 @@ def test_accepts_a_real_pyarrow_type():
     assert data_type_code_to_name(pa.int64()) == "BIGINT"
     assert data_type_code_to_name(pa.decimal128(10, 2)) == "DECIMAL(10,2)"
     assert data_type_code_to_name(pa.timestamp("us", tz="UTC")) == "TIMESTAMP WITH TIME ZONE"
+
+
+@pytest.mark.parametrize(
+    "arrow,expected",
+    [
+        (pa.list_(pa.int32()), "INTEGER[]"),
+        (pa.large_list(pa.string()), "VARCHAR[]"),
+        (pa.list_(pa.int32(), 2), "INTEGER[2]"),
+        (pa.list_(pa.list_(pa.decimal128(10, 2))), "DECIMAL(10,2)[][]"),
+        (pa.struct([("a", pa.int32())]), 'STRUCT("a" INTEGER)'),
+        (pa.struct([('Mixed"Case', pa.string())]), 'STRUCT("Mixed""Case" VARCHAR)'),
+        (
+            pa.list_(pa.struct([("items", pa.list_(pa.string()))])),
+            'STRUCT("items" VARCHAR[])[]',
+        ),
+        (pa.map_(pa.string(), pa.int32()), "MAP(VARCHAR, INTEGER)"),
+        (
+            pa.map_(pa.int32(), pa.struct([("a", pa.date32())])),
+            'MAP(INTEGER, STRUCT("a" DATE))',
+        ),
+        (pa.dictionary(pa.int32(), pa.int64()), "BIGINT"),
+    ],
+)
+def test_nested_types_keep_the_complete_schema(arrow, expected):
+    assert data_type_code_to_name(arrow) == expected
 
 
 class TestNormalizeValue:
