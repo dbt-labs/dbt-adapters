@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add the dbt-lakecompute adapter connection layer: auth, driver download, connection manager and schema metadata'
+time: 2026-10-26T21:02:03.419989+05:30
+custom:
+    Author: tauhid621
+    Issue: "2255"
