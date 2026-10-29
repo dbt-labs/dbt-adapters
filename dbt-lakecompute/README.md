@@ -6,17 +6,18 @@ Lake compute is a remote query service whose workers run DuckDB over Iceberg tab
 DuckDB-dialect SQL.
 
 The adapter is under active development. `dbt debug`, `dbt compile`, `dbt show`, `dbt run`
-(tables and ephemeral models) and `dbt test` work; incremental models and seeds are planned.
+(tables and ephemeral models), `dbt seed` and `dbt test` work; incremental models are planned.
 
 ## Supported and unsupported features
 
 | | |
 |---|---|
-| `dbt debug`, `dbt compile`, `dbt show`, `dbt run`, `dbt test` | supported |
+| `dbt debug`, `dbt compile`, `dbt show`, `dbt run`, `dbt seed`, `dbt test` | supported |
 | `materialized='table'` | supported: built with a single `create or replace table ... as (...)` |
 | `materialized='ephemeral'` | supported: inlined as a CTE, as everywhere else in dbt |
 | Model contracts | columns and types are checked; **constraints cannot be emitted**: a `create ... as (<query>)` has no column list to attach them to, so each declared constraint warns and is skipped |
-| `materialized='incremental'`, `dbt seed` | not yet implemented: each fails when run, with an error naming the model |
+| `dbt seed` | supported: an existing table is truncated and reloaded (`--full-refresh` drops and recreates it), and rows are inserted as literal `insert ... values` batches of at most 500 rows or 1 MB. Whole-number columns are inferred as `bigint`. **A load is not atomic**: the service has no transactions, so a seed that fails part-way leaves its table empty or partly loaded until it is re-run |
+| `materialized='incremental'` | not yet implemented: fails when run, with an error naming the model |
 | `dbt docs generate` | not yet implemented |
 | `materialized='view'` | not supported: the catalog does not grant `CreateView`, so it fails when run, with an error naming the model. dbt defaults models to views, so set `+materialized: table` in `dbt_project.yml` |
 | `materialized='materialized_view'`, snapshots, `dbt clone`, dbt unit tests | out of scope: each fails when run, with an error naming the model |
