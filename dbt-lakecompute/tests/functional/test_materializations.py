@@ -32,15 +32,11 @@ class TestTableMaterialization:
         results = run_dbt(["run"])
         assert len(results) == 1
 
-        main = [s for s in captured_sql if "create or replace table" in s]
-        assert len(main) == 1
-        assert (
-            main[0]
-            .strip()
-            .startswith(
-                f"create or replace table {project.database}.{project.test_schema}.model_table as ("
-            )
+        create = (
+            f"create or replace table {project.database}.{project.test_schema}.model_table as ("
         )
+        main = [s for s in captured_sql if s.strip().startswith(create)]
+        assert len(main) == 1
         # `create or replace`, so no intermediate relation and nothing renamed
         assert not any("__dbt_tmp" in s or "__dbt_backup" in s for s in captured_sql)
         assert not any("rename" in s.lower() for s in captured_sql)

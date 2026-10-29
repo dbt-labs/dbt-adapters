@@ -18,11 +18,17 @@ class LakeComputeColumn(Column):
     def data_type(self) -> str:
         return self.dtype
 
+    def _scalar_type_name(self) -> str:
+        """``decimal`` for ``DECIMAL(38,2)``; empty for a list or array like ``DECIMAL(38,2)[]``."""
+        if self.dtype.rstrip().endswith("]"):
+            return ""
+        return self.dtype.lower().split("(")[0].strip()
+
     def is_string(self) -> bool:
-        return self.dtype.lower().split("(")[0].strip() in _STRING_TYPES
+        return self._scalar_type_name() in _STRING_TYPES
 
     def is_numeric(self) -> bool:
-        return self.dtype.lower().split("(")[0].strip() in ("decimal", "numeric")
+        return self._scalar_type_name() in ("decimal", "numeric")
 
     def is_float(self) -> bool:
         return self.dtype.lower() in ("real", "float", "float4", "float8", "double")

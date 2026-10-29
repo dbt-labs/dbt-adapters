@@ -79,7 +79,19 @@ class TestTypeClassification:
     def test_numeric_types(self, dtype):
         assert LakeComputeColumn("c", dtype).is_numeric()
 
-    @pytest.mark.parametrize("dtype", ["TIMESTAMP", "DATE", "BOOLEAN", "BLOB", "INTEGER[]"])
+    @pytest.mark.parametrize(
+        "dtype",
+        [
+            "TIMESTAMP",
+            "DATE",
+            "BOOLEAN",
+            "BLOB",
+            "INTEGER[]",
+            "DECIMAL(38,2)[]",
+            "DECIMAL(38,2)[2]",
+            "VARCHAR(10)[]",
+        ],
+    )
     def test_non_numeric_non_string_types(self, dtype):
         column = LakeComputeColumn("c", dtype)
         assert not column.is_string()

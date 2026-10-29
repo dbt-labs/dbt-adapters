@@ -75,6 +75,29 @@ class TestPortedUtils:
         )
         assert self._eval(project, sql) == 2
 
+    @pytest.mark.parametrize(
+        "first_date,second_date,expected",
+        [
+            # same weekday, later first date: no extra correction
+            ("date '2024-01-15'", "date '2024-01-01'", -2),
+            # Tue -> earlier Fri (the dbt-tests-adapter fixture case)
+            ("date '2019-12-31'", "date '2019-12-27'", -1),
+            # Mon -> earlier Wed
+            ("date '2024-01-15'", "date '2024-01-03'", -2),
+            # Wed -> earlier Mon
+            ("date '2024-01-17'", "date '2024-01-01'", -2),
+            # Fri -> later Mon crosses one week boundary
+            ("date '2024-01-05'", "date '2024-01-08'", 1),
+        ],
+    )
+    def test_datediff_week_boundaries(self, project, first_date, second_date, expected):
+        sql = self._render(
+            project,
+            "datediff",
+            {"first_date": first_date, "second_date": second_date, "datepart": "week"},
+        )
+        assert self._eval(project, sql) == expected
+
     def test_generate_series(self, project):
         sql = self._render(project, "generate_series", {"upper_bound": 4})
         rows = project.run_sql(sql, fetch="all")
