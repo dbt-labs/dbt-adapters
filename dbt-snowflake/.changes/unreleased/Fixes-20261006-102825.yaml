@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fail instead of silently replacing an existing table when an incremental model or snapshot's target is missing from dbt's relation cache. Controlled by the new snowflake_fail_on_unexpected_existing_relation behavior flag.
+time: 2026-10-06T10:28:25.000000+00:00
+custom:
+    Author: sfc-gh-fgross sfc-gh-nijain
+    Issue: "2269"
