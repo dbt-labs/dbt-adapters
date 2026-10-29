@@ -146,7 +146,7 @@
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
       {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
-      {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
+      {% do run_query(create_table_as(True, tmp_relation, empty_sql, 'sql', false, compiled_code)) %}
 
       {% do delete_overlapping_partitions(target_relation, tmp_relation, partitioned_by, source_sql=compiled_code) %}
       {% set build_sql = incremental_insert(
@@ -179,7 +179,7 @@
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
       {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
-      {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
+      {% do run_query(create_table_as(True, tmp_relation, empty_sql, 'sql', false, compiled_code)) %}
 
       {% set build_sql = incremental_insert(
           on_schema_change, tmp_relation, target_relation, existing_relation, false, source_sql=compiled_code
@@ -235,7 +235,7 @@
         {% do drop_relation(old_tmp_relation) %}
       {% endif %}
       {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
-      {% do run_query(create_table_as(True, tmp_relation, empty_sql)) %}
+      {% do run_query(create_table_as(True, tmp_relation, empty_sql, 'sql', false, compiled_code)) %}
 
       {% set build_sql = iceberg_merge(
           on_schema_change=on_schema_change,

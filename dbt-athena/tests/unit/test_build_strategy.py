@@ -377,3 +377,57 @@ class TestTableEmptySqlSubqueryWrapping:
             ) _dbt_sbq WITH NO DATA"""
         for rendered in renderings:
             _assert_sql_equal(rendered, expected)
+
+
+# --- contract check on the empty-table CTAS ---
+
+
+def _render_create_table_as_with_contract(compiled_code, contract_sql=None):
+    checked = []
+    config_values = {
+        "materialized": "table",
+        "table_type": "hive",
+        "contract": mock.Mock(enforced=True),
+    }
+    adapter = mock.MagicMock()
+    adapter.generate_s3_location.return_value = "s3://bucket/location"
+    adapter.is_work_group_output_location_enforced.return_value = False
+
+    env = jinja2.Environment(extensions=["jinja2.ext.do"])
+    with open(_CREATE_TABLE_AS_SQL_PATH) as f:
+        template = env.from_string(
+            f.read()
+            + "{{ athena__create_table_as(False, relation, compiled_code, 'sql', false, contract_sql) }}"
+        )
+    template.render(
+        adapter=adapter,
+        config=mock.Mock(
+            get=lambda key, *args, **kwargs: config_values.get(key, kwargs.get("default"))
+        ),
+        target=mock.Mock(),
+        log=lambda *args, **kwargs: "",
+        get_assert_columns_equivalent=lambda sql: checked.append(sql) or "",
+        relation=MockRelation("schema.tbl"),
+        compiled_code=compiled_code,
+        contract_sql=contract_sql,
+    )
+    return checked
+
+
+class TestContractCheckOnEmptyTable:
+    def test_contract_checks_compiled_code_by_default(self):
+        assert _render_create_table_as_with_contract("SELECT 1 AS id") == ["SELECT 1 AS id"]
+
+    def test_contract_checks_contract_sql_not_empty_sql(self):
+        empty_sql = "SELECT * FROM (\nSELECT 1 AS id\n) _dbt_sbq WITH NO DATA"
+        checked = _render_create_table_as_with_contract(empty_sql, contract_sql="SELECT 1 AS id")
+        assert checked == ["SELECT 1 AS id"]
+
+    def test_every_empty_table_creation_passes_the_real_query_to_the_contract(self):
+        calls = []
+        for path in (_INCREMENTAL_SQL_PATH, _CREATE_TABLE_AS_SQL_PATH):
+            with open(path) as f:
+                calls += re.findall(r"create_table_as\([^()]*\bempty_sql\b[^()]*\)", f.read())
+        assert len(calls) == 4
+        for call in calls:
+            assert call.rstrip(")").endswith(", compiled_code"), call

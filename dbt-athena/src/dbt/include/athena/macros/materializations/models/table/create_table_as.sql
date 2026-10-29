@@ -1,9 +1,9 @@
-{% macro create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false) -%}
-  {{ adapter.dispatch('create_table_as', 'athena')(temporary, relation, compiled_code, language, skip_partitioning) }}
+{% macro create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false, contract_sql=none) -%}
+  {{ adapter.dispatch('create_table_as', 'athena')(temporary, relation, compiled_code, language, skip_partitioning, contract_sql) }}
 {%- endmacro %}
 
 
-{% macro athena__create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false) -%}
+{% macro athena__create_table_as(temporary, relation, compiled_code, language='sql', skip_partitioning=false, contract_sql=none) -%}
   {%- set materialized = config.get('materialized', default='table') -%}
   {%- set external_location = config.get('external_location', default=none) -%}
   {%- do log("Skip partitioning: " ~ skip_partitioning) -%}
@@ -33,7 +33,7 @@
 
   {%- set contract_config = config.get('contract') -%}
   {%- if contract_config.enforced -%}
-    {{ get_assert_columns_equivalent(compiled_code) }}
+    {{ get_assert_columns_equivalent(contract_sql if contract_sql is not none else compiled_code) }}
   {%- endif -%}
 
   {%- if native_drop and table_type == 'iceberg' -%}
@@ -212,7 +212,7 @@
         {%- do drop_relation(relation) -%}
 
         {%- set empty_sql = 'SELECT * FROM (\n' ~ compiled_code ~ '\n) _dbt_sbq WITH NO DATA' -%}
-        {%- do run_query(create_table_as(temporary, relation, empty_sql)) -%}
+        {%- do run_query(create_table_as(temporary, relation, empty_sql, 'sql', false, compiled_code)) -%}
 
         {%- set dest_columns = adapter.get_columns_in_relation(relation) -%}
         {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
