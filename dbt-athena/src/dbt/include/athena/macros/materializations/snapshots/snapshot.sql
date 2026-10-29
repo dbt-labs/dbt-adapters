@@ -35,13 +35,18 @@
       {%- do src_columns.append('dbt_internal_source.' + col) -%}
     {%- endfor -%}
     {%- set src_cols_csv = src_columns | join(', ') -%}
+    {%- set valid_to_current = config.get('dbt_valid_to_current') -%}
 
     merge into {{ target }} as dbt_internal_dest
     using {{ source }} as dbt_internal_source
     on dbt_internal_source.dbt_scd_id = dbt_internal_dest.dbt_scd_id
 
     when matched
+     {% if valid_to_current %}
+     and (dbt_internal_dest.dbt_valid_to = {{ valid_to_current }} or dbt_internal_dest.dbt_valid_to is null)
+     {% else %}
      and dbt_internal_dest.dbt_valid_to is null
+     {% endif %}
      and dbt_internal_source.dbt_change_type in ('update', 'delete')
         then update
         set dbt_valid_to = dbt_internal_source.dbt_valid_to
