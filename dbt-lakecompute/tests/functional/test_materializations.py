@@ -113,22 +113,6 @@ class TestUnsupportedMaterializations:
         assert f"model.test.{model}" in log
 
 
-class TestSeedsAreRefused:
-    @pytest.fixture(scope="class")
-    def seeds(self):
-        return {"s.csv": "id,name\n1,a\n"}
-
-    def test_refused_before_anything_is_created(self, project):
-        _, log = run_dbt_and_capture(["seed"], expect_pass=False)
-        assert "'seed' materialization" in log
-        assert "seed.test.s" in log
-        relation = project.adapter.Relation.create(
-            database=project.database, schema=project.test_schema, identifier="s"
-        )
-        with project.adapter.connection_named("check"):
-            assert project.adapter.get_relation(**relation.path.to_dict()) is None
-
-
 class TestPythonModelsAreRefused:
     """Rejected by dbt-core: no materialization here declares `python`."""
 

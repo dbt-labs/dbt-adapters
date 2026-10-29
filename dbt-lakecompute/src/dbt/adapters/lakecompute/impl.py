@@ -1,17 +1,22 @@
 import re
-from typing import List, Optional, Type
+from typing import TYPE_CHECKING, List, Optional, Type
 
 from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.impl import ConstraintSupport
+from dbt.adapters.base.meta import available
 from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.sql import SQLAdapter
 from dbt_common.contracts.constraints import ConstraintType
 from dbt_common.exceptions import DbtDatabaseError
 
+from dbt.adapters.lakecompute import seed
 from dbt.adapters.lakecompute.column import LakeComputeColumn
 from dbt.adapters.lakecompute.connections import LakeComputeConnectionManager
 from dbt.adapters.lakecompute.relation import LakeComputeRelation
+
+if TYPE_CHECKING:
+    import agate
 
 # What `describe` raises for a missing table, or for a table in a missing schema:
 #   Catalog Error: Table with name t does not exist!
@@ -74,6 +79,45 @@ class LakeComputeAdapter(SQLAdapter):
     @classmethod
     def date_function(cls) -> str:
         return "current_date"
+
+    @classmethod
+    def quote(cls, identifier: str) -> str:
+        """Embedded double quotes are doubled, so a seed header like ``a"b`` stays one name."""
+        return '"{}"'.format(identifier.replace('"', '""'))
+
+    @classmethod
+    def convert_number_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
+        import agate
+
+        # DuckDB's `integer` is 32-bit, too narrow for ids and epoch milliseconds. NaN and
+        # Infinity have no precision, but only fit a double.
+        decimals = agate_table.aggregate(agate.MaxPrecision(col_idx))
+        non_finite = any(
+            v is not None and not v.is_finite() for v in agate_table.columns[col_idx].values()
+        )
+        return "double" if decimals or non_finite else "bigint"
+
+    @classmethod
+    def convert_integer_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
+        return "bigint"
+
+    @available
+    def load_seed_rows(
+        self, relation: BaseRelation, agate_table: "agate.Table", quote_config: Optional[bool]
+    ) -> str:
+        """Send the literal ``insert ... values`` batches that load ``agate_table``.
+
+        Returns the first statement, for the compiled file. Statements are generated one at a
+        time, so a large seed is never held as SQL text all at once.
+        """
+        columns = [self.quote_seed_column(c, quote_config) for c in agate_table.column_names]
+        first = ""
+        for sql in seed.insert_statements(relation.render(), columns, agate_table.rows):
+            _, cursor = self.add_query(sql, abridge_sql_log=True)
+            # add_query hands over an open cursor, which owns an AdbcStatement
+            cursor.close()
+            first = first or sql
+        return first
 
     def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
         """No columns for a relation that does not exist, as on every other adapter.
