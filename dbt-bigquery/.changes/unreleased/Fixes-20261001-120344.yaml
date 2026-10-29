@@ -1,0 +1,8 @@
+kind: Fixes
+body: Fix dynamic `insert_overwrite` with `copy_partitions: true` crashing on
+    incremental runs when the partition column contains NULLs by excluding null
+    partitions when collecting the partitions to copy.
+time: 2026-10-01T10:03:44.000000-00:00
+custom:
+    Author: carleondel
+    Issue: "2086"

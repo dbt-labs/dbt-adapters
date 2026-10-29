@@ -189,8 +189,11 @@
     {%- endcall %}
   {%- endif -%}
   {%- set partitions_sql -%}
+    -- IGNORE NULLS: aligned to _dbt_max_partition, which ignores null;
+    -- null partitions cannot be copied and are left in the target relation
     select distinct {{ partition_by.render_wrapped() }}
     from {{ tmp_relation }}
+    where {{ partition_by.render_wrapped() }} is not null
   {%- endset -%}
   {%- set partitions = run_query(partitions_sql).columns[0].values() -%}
   {# We copy the partitions #}
