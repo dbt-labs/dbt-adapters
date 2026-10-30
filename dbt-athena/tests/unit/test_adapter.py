@@ -728,9 +728,33 @@ class TestAthenaAdapter:
         for row in actual.rows.values():
             assert row.values() in expected_rows
 
+        # a table of an unknown type is skipped, the other tables of the schema are kept
         mock_aws_service.create_table_without_type(table_name="qux", database_name="baz")
-        with pytest.raises(ValueError):
-            self.adapter._get_one_catalog(mock_information_schema, {"baz"}, self.used_schemas)
+        mock_aws_service.create_table(table_name="bar", database_name="baz")
+        actual = self.adapter._get_one_catalog(mock_information_schema, {"baz"}, self.used_schemas)
+        assert {row["table_name"] for row in actual.rows} == {"bar"}
+
+    @mock_aws
+    def test__get_one_catalog_unknown_data_catalog(self, mock_aws_service):
+        mock_information_schema = mock.MagicMock()
+        mock_information_schema.database = "trino_prod"
+        not_found = botocore.exceptions.ClientError(
+            {
+                "Error": {
+                    "Code": "InvalidRequestException",
+                    "Message": "DataCatalog trino_prod was not found.",
+                }
+            },
+            "GetDataCatalog",
+        )
+
+        self.adapter.acquire_connection("dummy")
+        with mock.patch.object(self.adapter, "_get_data_catalog", side_effect=not_found):
+            actual = self.adapter._get_one_catalog(
+                mock_information_schema, {"some_schema"}, self.used_schemas
+            )
+
+        assert len(actual.rows) == 0
 
     @mock_aws
     def test__get_one_catalog_by_relations(self, mock_aws_service):
