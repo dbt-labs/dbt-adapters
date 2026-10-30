@@ -13,6 +13,7 @@ from typing import (
     Tuple,
 )
 
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
@@ -42,6 +43,7 @@ from dbt_common.contracts.metadata import (
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
+from dbt_common.record import auto_record_function
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
@@ -299,6 +301,27 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             else:
                 raise
+
+    @auto_record_function("AdapterGetColumnSchemaFromQuery", group="Available")
+    @available.parse(lambda *a, **k: [])
+    def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
+        """Get a list of the Columns with names and data types from the given sql.
+
+        FIXED (NUMBER/DECIMAL) columns also carry their precision and scale, so DDL built
+        from them keeps the declared type. dtype stays FIXED, which contracts compare on.
+        """
+        _, cursor = self.connections.add_select_query(sql)
+        columns = []
+        # https://peps.python.org/pep-0249/#description
+        for column_name, column_type_code, _, _, precision, scale, *_ in cursor.description:
+            column = self.Column.create(
+                column_name, self.connections.data_type_code_to_name(column_type_code)
+            )
+            if column.dtype == "FIXED":
+                column.numeric_precision = precision
+                column.numeric_scale = scale
+            columns.append(column)
+        return columns
 
     def _show_object_metadata(self, relation: SnowflakeRelation) -> Optional[dict]:
         try:

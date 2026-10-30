@@ -16,6 +16,7 @@ from dbt.context.providers import generate_runtime_macro_context
 from dbt.contracts.graph.manifest import ManifestStateCheck
 from dbt_common.clients import agate_helper
 from snowflake import connector as snowflake_connector
+from snowflake.connector.cursor import ResultMetadata
 
 from .utils import (
     config_from_parts_or_dicts,
@@ -835,6 +836,22 @@ class TestSnowflakeAdapter(unittest.TestCase):
         assert isinstance(normalized.columns["bytes"].data_type, agate.Number)
         assert isinstance(normalized.columns["name"].data_type, agate.Text)
         assert isinstance(normalized.columns["kind"].data_type, agate.Text)
+
+    def test_get_column_schema_from_query_keeps_fixed_precision_and_scale(self):
+        self.cursor.description = [
+            ResultMetadata("PRICE", 0, None, None, 38, 2, True),
+            ResultMetadata("NAME", 2, None, 16777216, None, None, True),
+            ResultMetadata("UPDATED_AT", 6, None, None, 0, 9, True),
+        ]
+        price, name, updated_at = self.adapter.get_column_schema_from_query("select 1")
+
+        # dtype stays FIXED so contract checks are unchanged
+        assert price.dtype == "FIXED"
+        assert price.data_type == "FIXED"
+        assert (price.numeric_precision, price.numeric_scale) == (38, 2)
+        # precision and scale are only carried for FIXED
+        assert (name.numeric_precision, name.numeric_scale) == (None, None)
+        assert (updated_at.numeric_precision, updated_at.numeric_scale) == (None, None)
 
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):

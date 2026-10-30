@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep NUMBER/DECIMAL precision and scale when creating Iceberg tables in a Glue catalog-linked database, instead of creating INT columns that round fractional values
+time: 2026-10-30T17:00:30.702301+05:30
+custom:
+    Author: aahel
+    Issue: "2165"

@@ -50,6 +50,50 @@ where id > 2
 """
 
 
+MODEL__GLUE_DECIMAL_TABLE = """
+{{ config(materialized='table', catalog_name='glue_iceberg_rest_catalog') }}
+select
+    1 as id,
+    cast(150.50 as decimal(38,2)) as price,
+    cast(10 as decimal(38,0)) as amount
+"""
+
+MODEL__GLUE_DECIMAL_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='append',
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
+MODEL__GLUE_MERGE_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='merge',
+    unique_key='id',
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
+MODEL__GLUE_DELETE_INSERT_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='delete+insert',
+    unique_key=['id'],
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
+
 class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidation):
 
     @pytest.fixture(scope="class")
@@ -191,12 +235,43 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                     target_file_size='16MB', max_data_extension_time_in_days=1, auto_refresh='true') }}
                     select 1 as id
                 """,
+                "glue_decimal_table.sql": MODEL__GLUE_DECIMAL_TABLE,
+                "glue_decimal_incremental.sql": MODEL__GLUE_DECIMAL_INCREMENTAL,
+                "glue_merge_incremental.sql": MODEL__GLUE_MERGE_INCREMENTAL,
+                "glue_delete_insert_incremental.sql": MODEL__GLUE_DELETE_INSERT_INCREMENTAL,
             }
         }
 
     def test_glue_iceberg_rest_catalog_integration(self, project):
         """Test Glue CLD with 4-step table creation process"""
         result = run_dbt(["run"])
-        assert len(result) == 2
+        assert len(result) == 6
         # Run again to test update path
         run_dbt(["run"])
+
+    def test_glue_iceberg_decimal_keeps_precision_and_scale(self, project):
+        # The second run appends through a __dbt_tmp table, which is built the same way
+        for _ in range(2):
+            run_dbt(["run", "--select", "glue_decimal_table", "glue_decimal_incremental"])
+
+        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+        for identifier in ("glue_decimal_table", "glue_decimal_incremental"):
+            relation = f'{glue_database}."{project.test_schema}"."{identifier}"'
+            rows = project.run_sql(f'select "price", "amount" from {relation}', fetch="all")
+            assert rows
+            for price, amount in rows:
+                assert str(price) == "150.50"
+                assert str(amount) == "10"
+
+    def test_glue_iceberg_incremental_unique_key(self, project):
+        # Glue columns are quoted lowercase, so the second run only matches the existing
+        # row if the unquoted unique_key is quoted for it
+        models = ["glue_decimal_table", "glue_merge_incremental", "glue_delete_insert_incremental"]
+        for _ in range(2):
+            run_dbt(["run", "--select", *models])
+
+        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+        for identifier in ("glue_merge_incremental", "glue_delete_insert_incremental"):
+            relation = f'{glue_database}."{project.test_schema}"."{identifier}"'
+            rows = project.run_sql(f'select "id", "price" from {relation}', fetch="all")
+            assert [(int(id), str(price)) for id, price in rows] == [(1, "150.50")]
