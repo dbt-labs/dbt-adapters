@@ -1,0 +1,6 @@
+kind: Fixes
+body: Propagate CatalogId in LfTagsManager and get_table_versions paginator to support cross-account Glue/Lake Formation catalogs.
+time: 2026-04-10T00:00:00.000000+00:00
+custom:
+    Author: julietaansola
+    Issue: "0"
