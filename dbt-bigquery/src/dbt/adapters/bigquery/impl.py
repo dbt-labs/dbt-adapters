@@ -1,5 +1,3 @@
-from concurrent.futures import ThreadPoolExecutor
-import contextvars
 import copy
 from dataclasses import dataclass
 from datetime import datetime
@@ -425,51 +423,43 @@ class BigQueryAdapter(BaseAdapter):
             schema_relation.database, schema_relation.schema
         )
 
-        # BigQuery paginates tables by alphabetizing them and using the name
-        # of the last table on a page as the key for the next page. If that
-        # key table gets dropped before we run list_relations, then this will
-        # 404. So, we avoid this situation by making the page size sufficiently
-        # large. See https://github.com/dbt-labs/dbt/issues/726.
-        def _materialize_tables() -> List[Any]:
-            return list(client.list_tables(dataset_ref, max_results=100000))
-
-        def _materialize_routines() -> List[Any]:
-            try:
-                return list(client.list_routines(dataset_ref))
-            except google.api_core.exceptions.Forbidden as exc:
-                # `bigquery.routines.list` is a separate IAM permission from
-                # `bigquery.tables.list`; lacking it must not hide the
-                # dataset's tables from the relation cache.
-                logger.debug("list_routines error: {}".format(str(exc)))
-                return []
-
-        # `list_tables` and `list_routines` are independent BigQuery REST
-        # round-trips, so routines are fetched on a worker thread while tables
-        # are fetched on the current one.
-        # This will 404 if the dataset does not exist; we mirror the behavior
-        # of other adapters and return an empty list in that case.
+        # This will 404 if the dataset does not exist. This behavior mirrors
+        # the implementation of list_relations for other adapters
         try:
-            with ThreadPoolExecutor(max_workers=1) as pool:
-                # new threads start with empty contextvars; carry over dbt's
-                # invocation context like dbt's own thread pools do
-                routines_future = pool.submit(
-                    contextvars.copy_context().run, _materialize_routines
-                )
-                all_tables = _materialize_tables()
-                all_routines = routines_future.result()
-
+            all_tables = client.list_tables(
+                dataset_ref,
+                # BigQuery paginates tables by alphabetizing them, and using
+                # the name of the last table on a page as the key for the
+                # next page. If that key table gets dropped before we run
+                # list_relations, then this will 404. So, we avoid this
+                # situation by making the page size sufficiently large.
+                # see: https://github.com/dbt-labs/dbt/issues/726
+                # TODO: cache the list of relations up front, and then we
+                #       won't need to do this
+                max_results=100000,
+            )
             table_relations = [self._bq_table_to_relation(table) for table in all_tables]  # type: ignore[misc]
-            function_relations = [
-                relation
-                for routine in all_routines
-                if (relation := self._bq_routine_to_relation(routine)) is not None
-            ]  # type: ignore[misc]
-            return table_relations + function_relations  # type: ignore[return-value]
         except google.api_core.exceptions.NotFound:
             return []
         except google.api_core.exceptions.Forbidden as exc:
             logger.debug("list_relations_without_caching error: {}".format(str(exc)))
             return []
+
+        # `bigquery.routines.list` is a separate IAM permission from
+        # `bigquery.tables.list`; lacking it must not hide the dataset's tables
+        try:
+            function_relations = [
+                relation
+                for routine in client.list_routines(dataset_ref)
+                if (relation := self._bq_routine_to_relation(routine)) is not None
+            ]  # type: ignore[misc]
+        except google.api_core.exceptions.NotFound:
+            return []
+        except google.api_core.exceptions.Forbidden as exc:
+            logger.debug("list_routines error: {}".format(str(exc)))
+            function_relations = []
+
+        return table_relations + function_relations  # type: ignore[return-value]
 
     def get_relation(
         self, database: str, schema: str, identifier: str

@@ -1,4 +1,3 @@
-import contextvars
 from multiprocessing import get_context
 from unittest import mock
 
@@ -1094,11 +1093,6 @@ class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
         assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
 
 
-_TEST_CONTEXT_VAR: contextvars.ContextVar = contextvars.ContextVar(
-    "test_context_var", default=None
-)
-
-
 class TestBigQueryListRelationsWithoutCaching(BaseTestBigQueryAdapter):
     def _make_relation(self, schema="dataset_one"):
         return BigQueryRelation.create(
@@ -1130,25 +1124,6 @@ class TestBigQueryListRelationsWithoutCaching(BaseTestBigQueryAdapter):
         client.list_tables.assert_called_once()
         client.list_routines.assert_called_once()
         assert result == ["t1", "t2", "r1"]
-
-    def test_routines_worker_inherits_context(self):
-        # dbt's invocation context lives in contextvars, which new threads do not inherit
-        adapter = self.get_adapter("oauth")
-        client = self._stub_client(adapter)
-        seen = []
-
-        def list_routines(*args, **kwargs):
-            seen.append(_TEST_CONTEXT_VAR.get())
-            return iter([])
-
-        client.list_routines.side_effect = list_routines
-        token = _TEST_CONTEXT_VAR.set("invocation-context")
-        try:
-            adapter.list_relations_without_caching(self._make_relation())
-        finally:
-            _TEST_CONTEXT_VAR.reset(token)
-
-        assert seen == ["invocation-context"]
 
     def test_returns_empty_list_on_not_found(self):
         adapter = self.get_adapter("oauth")
