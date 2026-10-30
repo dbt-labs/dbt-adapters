@@ -87,7 +87,7 @@ class LakeComputeAdapter(SQLAdapter):
 
     @available
     def valid_incremental_strategies(self) -> List[str]:
-        """No ``delete+insert`` (not atomic without transactions) or ``merge`` (untested)."""
+        """No ``delete+insert`` (not atomic without transactions) or ``merge`` (not yet implemented)."""
         return ["append", "insert_overwrite"]
 
     @classmethod
