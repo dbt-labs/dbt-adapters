@@ -14,7 +14,7 @@
             to_unix_timestamp(
                 date_add(
                     {{ assert_not_null('date', from_date_or_timestamp) }},
-                    cast({{interval}} * {{multiplier}} as int)
+                    cast(({{interval}}) * {{multiplier}} as int)
                 )
             ) + {{clock_component}}
         )
@@ -32,7 +32,7 @@
             to_unix_timestamp(
                 add_months(
                     {{ assert_not_null('date', from_date_or_timestamp) }},
-                    cast({{interval}} * {{multiplier}} as int)
+                    cast(({{interval}}) * {{multiplier}} as int)
                 )
             ) + {{clock_component}}
         )
@@ -50,7 +50,7 @@
 
         to_timestamp(
             {{ assert_not_null('to_unix_timestamp', from_date_or_timestamp) }}
-            + cast({{interval}} * {{multiplier}} as int)
+            + cast(({{interval}}) * {{multiplier}} as int)
         )
 
     {%- else -%}
