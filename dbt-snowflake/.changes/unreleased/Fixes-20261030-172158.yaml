@@ -1,6 +1,0 @@
-kind: Fixes
-body: Quote unique_key columns in incremental merge and delete+insert models in a Glue catalog-linked database, whose lowercase columns an unquoted key could not match
-time: 2026-10-30T17:21:58.315659+05:30
-custom:
-    Author: aahel
-    Issue: "2165"

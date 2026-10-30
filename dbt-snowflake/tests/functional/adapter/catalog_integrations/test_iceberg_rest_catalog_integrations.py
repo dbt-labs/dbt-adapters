@@ -69,30 +69,6 @@ MODEL__GLUE_DECIMAL_INCREMENTAL = """
 select * from {{ ref('glue_decimal_table') }}
 """
 
-MODEL__GLUE_MERGE_INCREMENTAL = """
-{{
-  config(
-    materialized='incremental',
-    catalog_name='glue_iceberg_rest_catalog',
-    incremental_strategy='merge',
-    unique_key='id',
-  )
-}}
-select * from {{ ref('glue_decimal_table') }}
-"""
-
-MODEL__GLUE_DELETE_INSERT_INCREMENTAL = """
-{{
-  config(
-    materialized='incremental',
-    catalog_name='glue_iceberg_rest_catalog',
-    incremental_strategy='delete+insert',
-    unique_key=['id'],
-  )
-}}
-select * from {{ ref('glue_decimal_table') }}
-"""
-
 MODEL__GLUE_INT_UPGRADE_INCREMENTAL = """
 {{
   config(
@@ -249,8 +225,6 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                 """,
                 "glue_decimal_table.sql": MODEL__GLUE_DECIMAL_TABLE,
                 "glue_decimal_incremental.sql": MODEL__GLUE_DECIMAL_INCREMENTAL,
-                "glue_merge_incremental.sql": MODEL__GLUE_MERGE_INCREMENTAL,
-                "glue_delete_insert_incremental.sql": MODEL__GLUE_DELETE_INSERT_INCREMENTAL,
                 "glue_int_upgrade_incremental.sql": MODEL__GLUE_INT_UPGRADE_INCREMENTAL,
             }
         }
@@ -275,19 +249,6 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
             for price, amount in rows:
                 assert str(price) == "150.50"
                 assert str(amount) == "10"
-
-    def test_glue_iceberg_incremental_unique_key(self, project):
-        # Glue columns are quoted lowercase, so the second run only matches the existing
-        # row if the unquoted unique_key is quoted for it
-        models = ["glue_decimal_table", "glue_merge_incremental", "glue_delete_insert_incremental"]
-        for _ in range(2):
-            run_dbt(["run", "--select", *models])
-
-        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
-        for identifier in ("glue_merge_incremental", "glue_delete_insert_incremental"):
-            relation = f'{glue_database}."{project.test_schema}"."{identifier}"'
-            rows = project.run_sql(f'select "id", "price" from {relation}', fetch="all")
-            assert [(int(id), str(price)) for id, price in rows] == [(1, "150.50")]
 
     def test_glue_iceberg_int_table_needs_full_refresh(self, project):
         # Tables built before this fix have INT where the model now has DECIMAL(p,s), so

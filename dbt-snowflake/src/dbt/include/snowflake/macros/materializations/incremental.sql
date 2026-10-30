@@ -100,25 +100,6 @@
   {{ return(tmp_relation) }}
 {% endmacro %}
 
-
-{% macro snowflake__quote_glue_unique_key(unique_key, dest_columns) %}
-  {#--
-    Glue catalog-linked tables have quoted lowercase columns, so an unquoted unique_key
-    resolves to uppercase and misses them. Swap each key that names a target column for
-    that column, quoted as Snowflake reports it. Quoted keys and expressions pass through.
-  --#}
-  {%- set quoted_columns = {} -%}
-  {%- for column in dest_columns -%}
-    {%- do quoted_columns.update({column.name.lower(): column.quoted}) -%}
-  {%- endfor -%}
-  {%- set keys = [unique_key] if unique_key is string else unique_key -%}
-  {%- set quoted_keys = [] -%}
-  {%- for key in keys -%}
-    {%- do quoted_keys.append(quoted_columns.get(key.strip().lower(), key)) -%}
-  {%- endfor -%}
-  {{ return(quoted_keys[0] if unique_key is string else quoted_keys) }}
-{% endmacro %}
-
 {% materialization incremental, adapter='snowflake', supported_languages=['sql', 'python'] -%}
 
   {% set original_query_tag = set_query_tag() %}
@@ -216,11 +197,6 @@
     {% set dest_columns = process_schema_changes(on_schema_change, tmp_relation, existing_relation) %}
     {% if not dest_columns %}
       {% set dest_columns = adapter.get_columns_in_relation(existing_relation) %}
-    {% endif %}
-
-    {% if unique_key and catalog_relation.catalog_linked_database_type is defined and
-       catalog_relation.catalog_linked_database_type == 'glue' %}
-      {% set unique_key = snowflake__quote_glue_unique_key(unique_key, dest_columns) %}
     {% endif %}
 
     {#-- Get the incremental_strategy, the macro to use for the strategy, and build the sql --#}
