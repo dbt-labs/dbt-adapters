@@ -93,6 +93,18 @@ MODEL__GLUE_DELETE_INSERT_INCREMENTAL = """
 select * from {{ ref('glue_decimal_table') }}
 """
 
+MODEL__GLUE_INT_UPGRADE_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='append',
+    on_schema_change='fail',
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
 
 class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidation):
 
@@ -239,13 +251,14 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                 "glue_decimal_incremental.sql": MODEL__GLUE_DECIMAL_INCREMENTAL,
                 "glue_merge_incremental.sql": MODEL__GLUE_MERGE_INCREMENTAL,
                 "glue_delete_insert_incremental.sql": MODEL__GLUE_DELETE_INSERT_INCREMENTAL,
+                "glue_int_upgrade_incremental.sql": MODEL__GLUE_INT_UPGRADE_INCREMENTAL,
             }
         }
 
-    def test_glue_iceberg_rest_catalog_integration(self, project):
+    def test_glue_iceberg_rest_catalog_integration(self, project, models):
         """Test Glue CLD with 4-step table creation process"""
         result = run_dbt(["run"])
-        assert len(result) == 6
+        assert len(result) == len(models["models"])
         # Run again to test update path
         run_dbt(["run"])
 
@@ -275,3 +288,19 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
             relation = f'{glue_database}."{project.test_schema}"."{identifier}"'
             rows = project.run_sql(f'select "id", "price" from {relation}', fetch="all")
             assert [(int(id), str(price)) for id, price in rows] == [(1, "150.50")]
+
+    def test_glue_iceberg_int_table_needs_full_refresh(self, project):
+        # Tables built before this fix have INT where the model now has DECIMAL(p,s), so
+        # on_schema_change='fail' stops the next run until the table is rebuilt
+        run_dbt(["run", "--select", "glue_decimal_table"])
+        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+        relation = f'{glue_database}."{project.test_schema}"."glue_int_upgrade_incremental"'
+        project.run_sql(f"drop table if exists {relation}")
+        project.run_sql(f'create iceberg table {relation} ("id" INT, "price" INT, "amount" INT)')
+
+        results = run_dbt(["run", "--select", "glue_int_upgrade_incremental"], expect_pass=False)
+        assert "out of sync" in results[0].message
+
+        run_dbt(["run", "--select", "glue_int_upgrade_incremental", "--full-refresh"])
+        rows = project.run_sql(f'select "price", "amount" from {relation}', fetch="all")
+        assert [(str(price), str(amount)) for price, amount in rows] == [("150.50", "10")]

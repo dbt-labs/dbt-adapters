@@ -1,5 +1,5 @@
 kind: Fixes
-body: Keep NUMBER/DECIMAL precision and scale when creating Iceberg tables in a Glue catalog-linked database, instead of creating INT columns that round fractional values
+body: Keep NUMBER/DECIMAL precision and scale when creating Iceberg tables in a Glue catalog-linked database, instead of creating INT columns that round fractional values. Integer columns become DECIMAL(p,0), with precision from the query as in CTAS. Existing incremental tables keep INT until rebuilt with --full-refresh; until then, runs with on_schema_change set to fail or sync_all_columns error.
 time: 2026-10-30T17:00:30.702301+05:30
 custom:
     Author: aahel
