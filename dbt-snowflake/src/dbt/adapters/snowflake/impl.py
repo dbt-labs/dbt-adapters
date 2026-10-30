@@ -112,6 +112,16 @@ class SnowflakeConfig(AdapterConfig):
     tmp_relation_type: Optional[str] = None
     merge_update_columns: Optional[str] = None
     target_lag: Optional[str] = None
+    search_column: Optional[str] = None
+    attributes: Optional[List[str]] = None
+    primary_key: Optional[List[str]] = None
+    embedding_model: Optional[str] = None
+    refresh_mode: Optional[str] = None
+    initialize: Optional[str] = None
+    full_index_build_interval_days: Optional[int] = None
+    request_logging: Optional[bool] = None
+    auto_suspend: Optional[int] = None
+    comment: Optional[str] = None
     scheduler: Optional[str] = None
     row_access_policy: Optional[str] = None
     table_tag: Optional[str] = None
