@@ -76,11 +76,14 @@ class TestAdapterPlumbing:
             _, table = project.adapter.connections.execute("select 1 as id", fetch=True)
         assert table.rows[0][0] == 1
 
-    def test_no_query_comment_is_prepended(self, project):
-        """Off unless the profile opts in."""
+    def test_default_query_comment_is_prepended(self, project):
+        # The fixture's setup adapter has no query header until a dbt command loads it.
+        run_dbt(["show", "--inline", "select 1"])
         with project.adapter.connection_named("test"):
             commented = project.adapter.connections._add_query_comment("select 1")
-        assert commented == "select 1"
+        assert commented.startswith("/* ")
+        assert '"app": "dbt"' in commented
+        assert commented.endswith("*/\nselect 1")
 
 
 class TestConcurrency:
@@ -115,5 +118,9 @@ class TestConcurrency:
         # one shared database for this target, not one per thread
         base_url = project.adapter.config.credentials.resolved_base_url
         # registry keys are (path, entrypoint, sorted db_kwargs)
-        matching = [key for key in conn_module._REGISTRY if dict(key[2]).get("uri") == base_url]
+        matching = [
+            key
+            for key in conn_module._REGISTRY
+            if dict(key[2]).get("adbc.dbt.base_url") == base_url
+        ]
         assert len(matching) == 1

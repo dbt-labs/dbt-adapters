@@ -189,8 +189,7 @@ def _decompressor() -> Any:
     except ImportError as exc:  # pragma: no cover - zstandard is a hard dependency < 3.14
         raise DriverInstallError(
             "Decompressing the lake compute driver needs the `zstandard` package. "
-            "Install it with `pip install zstandard`, or set `driver_path` in your profile "
-            "to a driver you already have on disk."
+            "Install it with `pip install zstandard`."
         ) from exc
 
     return zstandard.ZstdDecompressor().decompressobj()
@@ -232,7 +231,7 @@ def _download(name: str, triplet: DriverTriplet, destination: Path) -> None:
         raise DriverInstallError(
             f"No pinned SHA-256 checksum for the lake compute driver "
             f"{triplet.filename(name)} ({triplet.arch}-{triplet.os}), so it will not be "
-            f"downloaded. Set `driver_path` in your profile to a driver you have on disk."
+            f"downloaded. Use a supported platform with a pinned driver checksum."
         )
 
     logger.info(f"Downloading the lake compute ADBC driver {triplet.version} from {url}")
