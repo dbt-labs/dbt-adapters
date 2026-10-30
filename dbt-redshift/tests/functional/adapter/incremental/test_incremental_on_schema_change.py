@@ -316,3 +316,50 @@ class TestIncrementalOnSchemaChangeColumnType(BaseIncrementalOnSchemaChangeSetup
             project.adapter,
             ["incremental_int_to_bigint", "incremental_int_to_bigint_target"],
         )
+
+
+class TestIncrementalOnSchemaChangeColumnTypeSkipTransactionsAutocommitOff(
+    TestIncrementalOnSchemaChangeColumnType
+):
+    """The skip-transaction flag has no effect with ``autocommit: false``.
+
+    dbt still wraps statements in BEGIN/COMMIT, so growing a varchar column must fall
+    back to the default add/copy/drop/rename path rather than the native
+    ``ALTER COLUMN TYPE``, which Redshift refuses inside a transaction block.
+    """
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_skip_autocommit_transaction_statements": True}}
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "autocommit": False}
+                },
+                "target": "default",
+            }
+        }
+
+
+class TestIncrementalOnSchemaChangeColumnTypeSkipTransactionsAutocommitOn(
+    TestIncrementalOnSchemaChangeColumnType
+):
+    """With ``autocommit: true`` the flag skips BEGIN/COMMIT, so the native ALTER is safe."""
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"redshift_skip_autocommit_transaction_statements": True}}
+
+    @pytest.fixture(scope="class")
+    def profiles_config_update(self, dbt_profile_target, unique_schema):
+        return {
+            "test": {
+                "outputs": {
+                    "default": {**dbt_profile_target, "schema": unique_schema, "autocommit": True}
+                },
+                "target": "default",
+            }
+        }
