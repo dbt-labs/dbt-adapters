@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add dbt-lakecompute incremental models: append with insert by name, and rebuild with create or replace on a first run, full refresh or insert_overwrite, matching v2.'
+time: 2026-10-29T18:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: ""
