@@ -39,6 +39,7 @@ on:
                     - "dbt-tests-adapter"
                     - "dbt-athena"
                     - "dbt-bigquery"
+                    - "dbt-lakecompute"
                     - "dbt-postgres"
                     - "dbt-redshift"
                     - "dbt-snowflake"
