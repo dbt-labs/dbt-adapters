@@ -1187,6 +1187,29 @@ class TestBigQueryAdapterConversions(TestAdapterConversions):
         )
         assert BigQueryAdapter._partitions_match(table, partition_config) is True
 
+    def test_range_partitions_match_ignores_field_case(self):
+        table = Table.from_api_repr(
+            {
+                "tableReference": {
+                    "projectId": "test-project",
+                    "datasetId": "test_dataset",
+                    "tableId": "test_table",
+                },
+                "rangePartitioning": {
+                    "field": "ShopId",
+                    "range": {"start": "0", "end": "100000", "interval": "25"},
+                },
+            }
+        )
+        partition_config = PartitionConfig.parse(
+            {
+                "field": "ShopId",
+                "data_type": "int64",
+                "range": {"start": 0, "end": 100000, "interval": 25},
+            }
+        )
+        assert BigQueryAdapter._partitions_match(table, partition_config) is True
+
 
 class TestBigQueryGrantAccessTo(BaseTestBigQueryAdapter):
     entity = BigQueryRelation.from_dict(
