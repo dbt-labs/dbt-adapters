@@ -1,14 +1,26 @@
 from collections import defaultdict
-from concurrent.futures import TimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import contextmanager
+import contextvars
 from dataclasses import dataclass
 import json
 from multiprocessing.context import SpawnContext
 import re
 import time
-from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Dict,
+    Hashable,
+    List,
+    Optional,
+    Tuple,
+    TYPE_CHECKING,
+)
 import uuid
 
+from google.api_core.exceptions import GoogleAPICallError
 from google.auth.exceptions import RefreshError
 from google.cloud.bigquery import (
     Client,
@@ -52,6 +64,12 @@ logger = AdapterLogger("BigQuery")
 
 
 BQ_QUERY_JOB_SPLIT = "-----Query Job SQL Follows-----"
+
+# `list_dataset` returns at most this many datasets; larger projects are truncated.
+LIST_DATASETS_MAX_RESULTS = 10000
+
+# Upper bound on concurrent `get_dataset` calls issued by `datasets_exist`.
+_MAX_CONCURRENT_DATASET_CHECKS = 20
 
 
 @dataclass
@@ -632,10 +650,53 @@ class BigQueryConnectionManager(BaseConnectionManager):
             # this is similar to how we have to deal with listing tables
             all_datasets = client.list_datasets(
                 project=database.strip("`"),
-                max_results=10000,
+                max_results=LIST_DATASETS_MAX_RESULTS,
                 retry=self._retry.create_reopen_with_deadline(conn),
             )
             return [ds.dataset_id for ds in all_datasets]
+
+    def datasets_exist(self, database: str, schemas: Collection[str]) -> Dict[str, Optional[bool]]:
+        """
+        Check whether each dataset exists, with concurrent `get_dataset` calls.
+
+        A dataset maps to None when its existence cannot be determined (e.g. the
+        caller lacks `bigquery.datasets.get`), so callers can choose a safe default.
+        """
+        if not schemas:
+            return {}
+        client = self.get_thread_connection().handle
+        # The reopen-on-error retry replaces `connection.handle`, which is unsafe
+        # while other threads share the client, so use the client's default retry.
+        with ThreadPoolExecutor(
+            max_workers=min(len(schemas), _MAX_CONCURRENT_DATASET_CHECKS)
+        ) as pool:
+            futures = {
+                # each task needs its own context copy: a Context can only be
+                # entered by one thread at a time
+                schema: pool.submit(
+                    contextvars.copy_context().run,
+                    self._dataset_exists,
+                    client,
+                    database,
+                    schema,
+                )
+                for schema in schemas
+            }
+            return {schema: future.result() for schema, future in futures.items()}
+
+    def _dataset_exists(self, client: Client, database: str, schema: str) -> Optional[bool]:
+        try:
+            client.get_dataset(self.dataset_ref(database, schema))
+        except NotFound:
+            return False
+        except (GoogleAPICallError, RefreshError) as e:
+            logger.debug(
+                "Could not determine whether dataset {}.{} exists: {!r}".format(
+                    database, schema, e
+                )
+            )
+            return None
+        return True
 
     def _query_and_results(
         self,
