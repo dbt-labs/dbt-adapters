@@ -16,6 +16,7 @@ import dbt_common.exceptions.base
 import dbt.adapters
 from dbt.adapters.bigquery.relation_configs import PartitionConfig
 from dbt.adapters.bigquery import BigQueryAdapter, BigQueryRelation
+import google.api_core.exceptions
 from google.cloud.bigquery.table import Table
 from dbt.adapters.bigquery.connections import _sanitize_label, _VALIDATE_LABEL_LENGTH_LIMIT
 from dbt_common.clients import agate_helper
@@ -1090,6 +1091,79 @@ class TestBigQueryCatalogRelationsByInfoSchema(BaseTestBigQueryAdapter):
         schemas_in_result = {info.schema for info in result.keys()}
         assert "real_dataset" in schemas_in_result
         assert "region-us.INFORMATION_SCHEMA" not in schemas_in_result
+
+
+class TestBigQueryListRelationsWithoutCaching(BaseTestBigQueryAdapter):
+    def _make_relation(self, schema="dataset_one"):
+        return BigQueryRelation.create(
+            database="dbt-unit-000000",
+            schema=schema,
+            identifier="ignored",
+        )
+
+    def _stub_client(self, adapter, tables=None, routines=None):
+        client = MagicMock()
+        client.list_tables = MagicMock(return_value=iter(tables or []))
+        client.list_routines = MagicMock(return_value=iter(routines or []))
+
+        connection = MagicMock()
+        connection.handle = client
+
+        adapter.connections.get_thread_connection = MagicMock(return_value=connection)
+        adapter.connections.dataset_ref = MagicMock(return_value="dataset-ref")
+        adapter._bq_table_to_relation = MagicMock(side_effect=lambda t: t)
+        adapter._bq_routine_to_relation = MagicMock(side_effect=lambda r: r)
+        return client
+
+    def test_lists_tables_and_routines_by_default(self):
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter, tables=["t1", "t2"], routines=["r1"])
+
+        result = adapter.list_relations_without_caching(self._make_relation())
+
+        client.list_tables.assert_called_once()
+        client.list_routines.assert_called_once()
+        assert result == ["t1", "t2", "r1"]
+
+    def test_returns_empty_list_on_not_found(self):
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter)
+        client.list_tables.side_effect = google.api_core.exceptions.NotFound("missing dataset")
+
+        result = adapter.list_relations_without_caching(self._make_relation())
+
+        assert result == []
+
+    def test_returns_empty_list_when_tables_forbidden(self):
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter, routines=["r1"])
+        client.list_tables.side_effect = google.api_core.exceptions.Forbidden("permission denied")
+
+        result = adapter.list_relations_without_caching(self._make_relation())
+
+        assert result == []
+
+    def test_keeps_tables_when_routines_forbidden(self):
+        # `bigquery.routines.list` is a separate permission; lacking it must not
+        # make existing tables look absent from the relation cache.
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter, tables=["t1", "t2"])
+        client.list_routines.side_effect = google.api_core.exceptions.Forbidden(
+            "permission denied"
+        )
+
+        result = adapter.list_relations_without_caching(self._make_relation())
+
+        assert result == ["t1", "t2"]
+
+    def test_returns_empty_list_when_routines_not_found(self):
+        adapter = self.get_adapter("oauth")
+        client = self._stub_client(adapter, tables=["t1"])
+        client.list_routines.side_effect = google.api_core.exceptions.NotFound("missing dataset")
+
+        result = adapter.list_relations_without_caching(self._make_relation())
+
+        assert result == []
 
 
 class TestBigQueryAdapterConversions(TestAdapterConversions):
