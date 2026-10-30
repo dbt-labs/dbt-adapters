@@ -85,6 +85,11 @@ class LakeComputeAdapter(SQLAdapter):
         """Embedded double quotes are doubled, so a seed header like ``a"b`` stays one name."""
         return '"{}"'.format(identifier.replace('"', '""'))
 
+    @available
+    def valid_incremental_strategies(self) -> List[str]:
+        """No ``delete+insert`` (not atomic without transactions) or ``merge`` (untested)."""
+        return ["append", "insert_overwrite"]
+
     @classmethod
     def convert_number_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
         import agate

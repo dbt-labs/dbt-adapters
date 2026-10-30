@@ -12,7 +12,7 @@
     {{ get_create_table_as_sql(False, target_relation, sql) }}
   {%- endcall %}
 
-  {% do adapter.cache_added(target_relation.incorporate(dbt_created=True)) %}
+  {% do lakecompute__cache_replaced(existing_relation, target_relation) %}
 
   {{ run_hooks(post_hooks, inside_transaction=True) }}
 
