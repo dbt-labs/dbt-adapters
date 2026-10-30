@@ -85,9 +85,13 @@ class TestStableJobIdAttachesOnConflict:
 
         assert count == 1, f"expected 1 row in copy destination, got {count}"
 
-    def test_resubmits_terminally_failed_job_under_fresh_id(self, project):
-        """A 409 on a job that failed must resubmit under a fresh job_id;
-        attaching would only replay the stored error."""
+    def test_attaches_to_terminally_failed_job_and_replays_its_error(self, project):
+        """A 409 on a job that failed replays that job's stored error.
+
+        The gate row is inserted first, so a fresh submission would succeed. It
+        still fails, proving dbt attached rather than resubmitted. A division by
+        zero is not retryable, so the retry layer mints no fresh job.
+        """
         run_dbt(["run"])
 
         conns = project.adapter.connections
@@ -107,18 +111,24 @@ class TestStableJobIdAttachesOnConflict:
                 conns.generate_job_id = original
                 conns.raw_execute(f"insert into {table} (id) values (1)")
 
-                # 2nd: same job_id -> 409 on the failed job -> resubmit under a fresh id
-                ids = iter([fixed_id])
-                conns.generate_job_id = lambda: next(ids, None) or original()
-                query_job, iterator = conns.raw_execute(query)
+                # 2nd: same job_id -> 409 -> attach and replay the stored error,
+                # even though the query would now succeed.
+                conns.generate_job_id = lambda: fixed_id
+                with pytest.raises(DbtDatabaseError):
+                    conns.raw_execute(query)
             finally:
                 conns.generate_job_id = original
 
-        assert query_job.job_id != fixed_id
+            _, iterator = conns.raw_execute(query)
+
         assert list(iterator)[0][0] == 1
 
-    def test_copy_job_resubmits_after_terminal_failure(self, project):
-        """Copy jobs have no statement_type; a failed one is still resubmitted."""
+    def test_copy_job_attaches_to_terminally_failed_job(self, project):
+        """Copy jobs attach to a failed job too, replaying its error.
+
+        copy_bq_table has no retry loop of its own, so a 409 there can only come
+        from its own insert being re-sent -- that job is the one we want.
+        """
         run_dbt(["run"])
 
         conns = project.adapter.connections
@@ -145,13 +155,15 @@ class TestStableJobIdAttachesOnConflict:
                 conns.generate_job_id = original
                 conns.raw_execute(f"drop table {dst_table}")
 
-                # 2nd: same job_id -> 409 on the failed job -> resubmit under a fresh id
-                ids = iter([fixed_id])
-                conns.generate_job_id = lambda: next(ids, None) or original()
-                conns.copy_bq_table(src, dst, "WRITE_EMPTY")
+                # 2nd: same job_id -> 409 -> attach and replay the stored error,
+                # though the copy would now succeed.
+                conns.generate_job_id = lambda: fixed_id
+                with pytest.raises(DbtDatabaseError):
+                    conns.copy_bq_table(src, dst, "WRITE_EMPTY")
             finally:
                 conns.generate_job_id = original
 
+            conns.copy_bq_table(src, dst, "WRITE_EMPTY")
             _, iterator = conns.raw_execute(f"select id from {dst_table}")
             rows = [row[0] for row in iterator]
 

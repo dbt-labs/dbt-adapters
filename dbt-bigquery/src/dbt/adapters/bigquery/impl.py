@@ -742,12 +742,16 @@ class BigQueryAdapter(BaseAdapter):
         """
         Check if the actual and configured clustering columns for a table
         are a match. BigQuery tables can be replaced if clustering columns
-        match exactly.
+        match exactly. Names are compared case-insensitively because BigQuery
+        column identifiers are not case-sensitive, and surrounding backticks are
+        stripped because BigQuery reports clustering fields unquoted.
         """
         if isinstance(conf_cluster, str):
             conf_cluster = [conf_cluster]
 
-        return table.clustering_fields == conf_cluster
+        return [c.strip("`").lower() for c in (table.clustering_fields or [])] == [
+            c.strip("`").lower() for c in (conf_cluster or [])
+        ]
 
     @available.parse(lambda *a, **k: True)
     @record_function(
