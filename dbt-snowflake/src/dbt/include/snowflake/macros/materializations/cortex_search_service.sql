@@ -11,7 +11,7 @@
 
     {% set query_tag = set_query_tag() %}
     {{ run_hooks(pre_hooks) }}
-    {% set existing_relation = adapter.get_cortex_search_service(target_relation) %}
+    {% set existing_relation = snowflake__get_cortex_search_service(target_relation) %}
     {% set build = cortex_search_service_get_build(existing_relation, target_relation, full_refresh_mode, on_configuration_change) %}
 
     {% if build['sql'] == '' %}
@@ -34,7 +34,9 @@
     {% if existing_relation is none or full_refresh_mode %}
         {% set build_sql = snowflake__get_create_cortex_search_service_sql(target_relation, sql, full_refresh_mode) %}
     {% else %}
-        {% set changes = adapter.get_cortex_search_service_configuration_changes(target_relation, config.model, target.warehouse) %}
+        {% set metadata = snowflake__describe_cortex_search_service(target_relation) %}
+        {% set search = target_relation.from_config(config.model) %}
+        {% set changes = search.configuration_changes(metadata, target.warehouse) %}
         {% set changed_names = changes['replace'] + (changes['alter'].keys() | list) %}
         {% if changed_names %}
             {% if on_configuration_change == 'fail' %}

@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+import agate
 import pytest
 from dbt_common.clients.jinja import MaterializationExtension
 from dbt_common.exceptions import CompilationError
@@ -40,12 +41,17 @@ def config_values():
 @pytest.fixture
 def context(config_values):
     adapter = mock.Mock()
+    adapter.check_schema_exists.return_value = True
     adapter.quote.side_effect = lambda value: f'"{value}"'
-    adapter.get_cortex_search_service_configuration_changes.return_value = {
-        "alter": {},
-        "replace": [],
-    }
     return {
+        "snowflake__describe_cortex_search_service": mock.Mock(
+            return_value={
+                "search_column": "BODY",
+                "attribute_columns": "REGION",
+                "warehouse": "WH",
+                "target_lag": "1 hour",
+            }
+        ),
         "adapter": adapter,
         "config": SimpleNamespace(
             get=config_values.get,
@@ -197,17 +203,16 @@ def test_creation_bypasses_drift(context, render, existing, full_refresh):
         )
     )
     assert build["full_refresh_mode"] is full_refresh
-    context["adapter"].get_cortex_search_service_configuration_changes.assert_not_called()
+    context["snowflake__describe_cortex_search_service"].assert_not_called()
 
 
 @pytest.mark.parametrize("change", ["unchanged", "alter", "replace"])
 @pytest.mark.parametrize("policy", ["apply", "continue", "fail"])
-def test_configuration_policy(context, render, change, policy):
-    changes = {
-        "alter": {} if change == "unchanged" else {"target_lag": "2 hours"},
-        "replace": ["attributes"] if change == "replace" else [],
-    }
-    context["adapter"].get_cortex_search_service_configuration_changes.return_value = changes
+def test_configuration_policy(config_values, context, render, change, policy):
+    if change != "unchanged":
+        config_values["target_lag"] = "2 hours"
+    if change == "replace":
+        config_values["attributes"] = ["doc_id"]
     if policy == "fail" and change != "unchanged":
         with pytest.raises(CompilationError, match="configuration changed.*fail"):
             render(
@@ -252,24 +257,26 @@ def test_materialization_hooks_grants_and_result(
     context["should_revoke"].return_value = False
     context["should_full_refresh"] = lambda: False
     context["cortex_search_service_get_build"] = mock.Mock(return_value=build)
+    context["snowflake__get_cortex_search_service"] = mock.Mock(return_value=SERVICE)
     context["run_hooks"].side_effect = (
         lambda hooks: context["apply_grants"].assert_not_called() or ""
     )
     result = render(MATERIALIZATION, "dbt_macro__materialization_cortex_search_service_snowflake")
-    assert result == {"relations": [SERVICE]}
+    (target_relation,) = result["relations"]
+    assert target_relation.render() == SERVICE.render()
+    assert target_relation.is_cortex_search_service
+    context["snowflake__get_cortex_search_service"].assert_called_once_with(target_relation)
     assert context["run_hooks"].call_args_list == [mock.call(["pre"]), mock.call(["post"])]
-    context["should_revoke"].assert_called_once_with(
-        context["adapter"].get_cortex_search_service.return_value, full_refresh_mode=replaced
-    )
+    context["should_revoke"].assert_called_once_with(SERVICE, full_refresh_mode=replaced)
     context["apply_grants"].assert_called_once_with(
-        SERVICE, config_values["grants"], should_revoke=False
+        target_relation, config_values["grants"], should_revoke=False
     )
     active = (
         "cortex_search_service_execute_build_sql"
         if build_sql
         else "cortex_search_service_execute_no_op"
     )
-    context[active].assert_called_once_with(build_sql if build_sql else SERVICE)
+    context[active].assert_called_once_with(build_sql if build_sql else target_relation)
 
 
 @pytest.mark.parametrize(
@@ -297,20 +304,116 @@ def test_grant_namespace_and_fallback(context, render, name, args, expected):
     fallback.assert_called_once_with(table, *args)
 
 
-def test_show_and_drop_namespace(context, render):
+@pytest.mark.parametrize("indexing_error", [None, "Change tracking is not enabled on DOCS"])
+def test_describe_service_configuration(config_values, context, render, indexing_error):
+    context["run_query"] = mock.Mock(
+        return_value=agate.Table(
+            [["BODY", "REGION", "WH", "1 hour", indexing_error]],
+            ["SEARCH_COLUMN", "ATTRIBUTE_COLUMNS", "WAREHOUSE", "TARGET_LAG", "INDEXING_ERROR"],
+            column_types=[agate.Text()] * 5,
+        )
+    )
+    context["snowflake__describe_cortex_search_service"] = lambda relation: render(
+        "relations/cortex_search/describe.sql",
+        "snowflake__describe_cortex_search_service",
+        relation,
+    )
+    config_values["target_lag"] = "2 hours"
+    if indexing_error:
+        with pytest.raises(
+            CompilationError, match="indexing error.*change tracking.*--full-refresh"
+        ):
+            render(
+                MATERIALIZATION,
+                "cortex_search_service_get_build",
+                SERVICE,
+                SERVICE,
+                False,
+                "apply",
+            )
+    else:
+        build = render(
+            MATERIALIZATION, "cortex_search_service_get_build", SERVICE, SERVICE, False, "apply"
+        )
+        assert " ".join(build["sql"].split()) == (
+            "alter cortex search service db.sch.search set target_lag = '2 hours'"
+        )
+    assert " ".join(context["run_query"].call_args.args[0].split()) == (
+        "describe cortex search service db.sch.search"
+    )
+
+
+@pytest.mark.parametrize("rows", [[], [["BODY"], ["BODY"]]])
+def test_describe_rejects_missing_or_ambiguous_metadata(context, render, rows):
+    context["run_query"] = mock.Mock(
+        return_value=agate.Table(rows, ["SEARCH_COLUMN"], column_types=[agate.Text()])
+    )
+    with pytest.raises(
+        CompilationError, match="Could not read Cortex Search service configuration"
+    ):
+        render(
+            "relations/cortex_search/describe.sql",
+            "snowflake__describe_cortex_search_service",
+            SERVICE,
+        )
+
+
+@pytest.mark.parametrize(
+    "identifier,quoted,names,expected",
+    [
+        ("support_search", False, ["SUPPORT_SEARCH"], "SUPPORT_SEARCH"),
+        ("SupportSearch", True, ["SupportSearch"], "SupportSearch"),
+        ("SupportSearch", True, ["SUPPORTSEARCH"], None),
+        ("support_search", False, ["SUPPORTXSEARCH"], None),
+        ("support_search", False, [], None),
+        ("support_search", False, ["SUPPORTXSEARCH", "SUPPORT_SEARCH"], "SUPPORT_SEARCH"),
+        ("Owner's Search", True, ["Owner's Search"], "Owner's Search"),
+    ],
+)
+def test_service_discovery(context, render, identifier, quoted, names, expected):
+    relation = SnowflakeRelation.create(
+        database="db",
+        schema="sch",
+        identifier=identifier,
+        quote_policy={"identifier": quoted},
+    )
+    context["run_query"] = mock.Mock(
+        return_value=agate.Table([[name] for name in names], ["NAME"], column_types=[agate.Text()])
+    )
+    # A table may exist with the same name; service discovery must ignore it.
+    context["adapter"].get_relation.return_value = relation.incorporate(
+        type=SnowflakeRelation.Table
+    )
+    result = render(
+        "relations/cortex_search/show.sql", "snowflake__get_cortex_search_service", relation
+    )
+    context["adapter"].get_relation.assert_not_called()
+    context["adapter"].check_schema_exists.assert_called_once_with("DB", "SCH")
+    context["run_query"].assert_called_once()
+    identifier_literal = (identifier if quoted else identifier.upper()).replace("'", "''")
+    assert " ".join(context["run_query"].call_args.args[0].split()) == (
+        f"show cortex search services like '{identifier_literal}' in schema DB.SCH"
+    )
+    if expected is None:
+        assert result is None
+    else:
+        assert result.identifier == expected
+        assert result.is_cortex_search_service
+
+
+def test_service_discovery_skips_missing_schema(context, render):
+    context["adapter"].check_schema_exists.return_value = False
+    context["run_query"] = mock.Mock()
+    assert (
+        render("relations/cortex_search/show.sql", "snowflake__get_cortex_search_service", SERVICE)
+        is None
+    )
+    context["run_query"].assert_not_called()
+
+
+def test_drop_namespace(context, render):
     service = SERVICE.incorporate(
         path={"identifier": "Owner's Search"}, quote_policy={"identifier": True}
-    )
-    context["run_query"] = mock.Mock(return_value="services")
-    assert (
-        render(
-            "relations/cortex_search/show.sql", "snowflake__show_cortex_search_service", service
-        )
-        == "services"
-    )
-    assert (
-        " ".join(context["run_query"].call_args.args[0].split())
-        == "show cortex search services like 'Owner''s Search' in schema db.sch"
     )
     context["snowflake__get_drop_cortex_search_service_sql"] = lambda relation: render(
         "relations/cortex_search/drop.sql",

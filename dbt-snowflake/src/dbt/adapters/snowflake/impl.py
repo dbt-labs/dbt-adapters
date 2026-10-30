@@ -418,53 +418,6 @@ class SnowflakeAdapter(SQLAdapter):
             column_types=column_types,
         )
 
-    @available
-    def get_cortex_search_service(
-        self, relation: SnowflakeRelation
-    ) -> Optional[SnowflakeRelation]:
-        # SHOW OBJECTS only lists tables and views. Services also have a separate
-        # namespace, so a cached table with the same name is not an existing service.
-        relation = relation.as_case_sensitive()
-        services = self.execute_macro(
-            "snowflake__show_cortex_search_service", kwargs={"relation": relation}
-        )
-        services = services.rename(column_names=[name.lower() for name in services.column_names])
-        if any(row["name"] == relation.identifier for row in services):
-            return relation.incorporate(type=self.Relation.CortexSearchService)
-        return None
-
-    @available
-    def get_cortex_search_service_configuration_changes(
-        self,
-        relation: SnowflakeRelation,
-        model: RelationConfig,
-        default_warehouse: Optional[str],
-    ) -> Dict[str, Any]:
-        from dbt.adapters.snowflake.relation_configs.cortex_search import (
-            MetadataKey,
-            SnowflakeCortexSearchConfig,
-        )
-
-        results = self.execute_macro(
-            "snowflake__describe_cortex_search_service", kwargs={"relation": relation}
-        )
-        results = results.rename(column_names=[name.lower() for name in results.column_names])
-        if len(results.rows) != 1:
-            raise DbtRuntimeError(
-                f"Could not read Cortex Search service configuration: {relation}"
-            )
-        metadata = dict(zip(results.column_names, results.rows[0]))
-        if metadata.get(MetadataKey.INDEXING_ERROR):
-            raise DbtRuntimeError(
-                f"Cortex Search service {relation.render()} reports an indexing error: "
-                f"{metadata[MetadataKey.INDEXING_ERROR]} Check change tracking on upstream objects. "
-                "After replacing an upstream object, re-enable change tracking and run "
-                "the service with --full-refresh."
-            )
-        return SnowflakeCortexSearchConfig.from_relation_config(model).configuration_changes(
-            metadata, default_warehouse
-        )
-
     def list_relations_without_caching(
         self, schema_relation: SnowflakeRelation
     ) -> List[SnowflakeRelation]:
