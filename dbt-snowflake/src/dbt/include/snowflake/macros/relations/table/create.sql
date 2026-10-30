@@ -345,7 +345,8 @@ as (
 create iceberg table {{ relation }} (
     {%- for column in sql_columns -%}
         {% if column.data_type == "FIXED" %}
-            {%- set data_type = "INT" -%}
+            {#- Keep precision and scale; INT would round DECIMAL(p,s) values with s > 0 -#}
+            {%- set data_type = column.numeric_type("DECIMAL", column.numeric_precision, column.numeric_scale) -%}
         {% elif "character varying" in column.data_type %}
             {%- set data_type = "STRING" -%}
         {% else %}
