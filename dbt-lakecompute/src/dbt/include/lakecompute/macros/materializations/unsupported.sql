@@ -8,14 +8,6 @@
 {%- endmacro %}
 
 
-{% materialization incremental, adapter='lakecompute' %}
-  {{ lakecompute__unsupported_materialization(
-    'incremental',
-    "Incremental models are not implemented yet; use materialized='table'."
-  ) }}
-{% endmaterialization %}
-
-
 {% materialization view, adapter='lakecompute' %}
   {#- Polaris does not grant CREATE_VIEW -#}
   {{ lakecompute__unsupported_materialization(

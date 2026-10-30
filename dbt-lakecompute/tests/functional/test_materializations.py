@@ -92,7 +92,6 @@ class TestUnsupportedMaterializations:
     @pytest.fixture(scope="class")
     def models(self):
         return {
-            "inc.sql": "{{ config(materialized='incremental') }}\nselect 1 as id",
             "v.sql": "{{ config(materialized='view') }}\nselect 1 as id",
             "mv.sql": "{{ config(materialized='materialized_view') }}\nselect 1 as id",
             "fn.sql": "{{ config(materialized='function') }}\nselect 1 as id",
@@ -101,7 +100,6 @@ class TestUnsupportedMaterializations:
     @pytest.mark.parametrize(
         "model,expected",
         [
-            ("inc", "'incremental' materialization"),
             ("v", "'view' materialization"),
             ("mv", "'materialized_view' materialization"),
             ("fn", "'function' materialization"),
