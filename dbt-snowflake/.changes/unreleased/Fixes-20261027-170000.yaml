@@ -1,0 +1,6 @@
+kind: Fixes
+body: Emit IGNORE GRANTS on Snowflake CREATE OR REPLACE for tables, views and clones when copy_grants is not true, preserving the no-copy default ahead of BCR-2433; add snowflake_copy_grants_default behavior flag to defer to Snowflake's default
+time: 2026-10-27T17:00:00.000000+00:00
+custom:
+    Author: ash2shukla
+    Issue: "2261"

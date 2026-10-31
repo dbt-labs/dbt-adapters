@@ -9,6 +9,12 @@ from dbt_common.clients.jinja import get_environment
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation import SnowflakeRelation
 
+APPLY_GRANTS_SQL = os.path.normpath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "../../src/dbt/include/snowflake/macros/apply_grants.sql",
+    )
+)
 CLONE_SQL = os.path.normpath(
     os.path.join(
         os.path.dirname(__file__),
@@ -76,8 +82,19 @@ class TestSnowflakeCloneMacros(unittest.TestCase):
         self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
             key, default
         )
+        flag = mock.Mock()
+        type(flag).no_warn = mock.PropertyMock(return_value=False)
+        self.context["adapter"] = SimpleNamespace(
+            behavior=SimpleNamespace(snowflake_copy_grants_default=flag)
+        )
+        env = get_environment()
+        with open(APPLY_GRANTS_SQL) as f:
+            apply_grants = env.from_string(f.read(), globals=self.context).module
+        self.context["snowflake__copy_grants_clause"] = (
+            apply_grants.dbt_macro__snowflake__copy_grants_clause
+        )
         with open(CLONE_SQL) as f:
-            self.module = get_environment().from_string(f.read(), globals=self.context).module
+            self.module = env.from_string(f.read(), globals=self.context).module
 
     def _macro(self, name):
         def call(*args, **kwargs):
@@ -147,6 +164,21 @@ class TestSnowflakeCloneMacros(unittest.TestCase):
                 target = _relation("target_db", table_format=table_format)
                 sql = re.sub(r"\s+", " ", create_or_replace_clone(target, source)).strip()
                 self.assertTrue(sql.startswith(f"{expected} target_db.analytics.my_model"), sql)
+
+    def test_clone_grants_clause(self):
+        create_or_replace_clone = self._macro("snowflake__create_or_replace_clone")
+        source = _relation("source_db")
+        target = _relation("target_db")
+        cases = [
+            ({}, "ignore grants"),
+            ({"copy_grants": False}, "ignore grants"),
+            ({"copy_grants": True}, "copy grants"),
+        ]
+        for config, expected in cases:
+            with self.subTest(config=config):
+                self.config = config
+                sql = re.sub(r"\s+", " ", create_or_replace_clone(target, source)).strip()
+                self.assertIn(f"clone source_db.analytics.my_model {expected}", sql)
 
     def test_full_refresh_drops_regular_table_and_clones_as_iceberg(self):
         existing = _relation("target_db")
