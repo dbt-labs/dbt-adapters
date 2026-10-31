@@ -46,9 +46,13 @@ except ImportError:
     pass  # done deliberately: setting modules to None explicitly violates MyPy contracts by degrading type semantics
 
 import base64
+import os
 import time
 
 logger = AdapterLogger("Spark")
+
+# CA bundle environment variables, checked in this order
+CA_BUNDLE_VARS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE")
 
 NUMBERS = DECIMALS + (int, float)
 
@@ -689,6 +693,19 @@ class SparkConnectionManager(SQLConnectionManager):
         return type_code.__name__.upper()
 
 
+def _resolve_ca_bundle() -> Optional[str]:
+    """Return the first readable CA bundle configured through the environment."""
+    for name in CA_BUNDLE_VARS:
+        value = os.environ.get(name)
+        if not value:
+            continue
+        if os.path.isfile(value) and os.access(value, os.R_OK):
+            return value
+        msg = f"CA bundle file {value} is not readable, ignoring {name} environment variable"
+        logger.warning(msg)
+    return None
+
+
 def build_ssl_transport(
     host: str,
     port: int,
@@ -705,9 +722,21 @@ def build_ssl_transport(
 
     # newer versions of thrift changed TSSLSocket to no longer
     # directly accept CERT_NONE, so pass ssl context instead
+    ca_bundle = _resolve_ca_bundle()
     ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    if ca_bundle is None:
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+    else:
+        try:
+            ssl_context.load_verify_locations(cafile=ca_bundle)
+        except (ssl.SSLError, OSError) as e:
+            logger.warning(f"Error occurred while loading CA bundle: {e}")
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        else:
+            ssl_context.check_hostname = True
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
     socket = TSSLSocket(host, port, ssl_context=ssl_context)
 
     if auth == "NOSASL":
