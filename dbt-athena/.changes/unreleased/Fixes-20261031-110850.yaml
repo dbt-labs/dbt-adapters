@@ -1,0 +1,6 @@
+kind: Fixes
+body: Create partition-batching staging tables at a temporary location instead of model external_location
+time: 2026-10-31T11:08:50.765468+02:00
+custom:
+    Author: juhoautio-rovio
+    Issue: "422"
