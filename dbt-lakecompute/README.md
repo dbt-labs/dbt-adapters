@@ -1,0 +1,118 @@
+# dbt-lakecompute
+
+The lake compute (dbt Compute) adapter plugin for dbt-core.
+
+Lake compute is a remote query service whose workers run DuckDB over Iceberg tables and accept
+DuckDB-dialect SQL.
+
+The adapter is under active development. `dbt debug`, `dbt compile`, `dbt show`, `dbt run`
+(tables, incremental and ephemeral models), `dbt seed` and `dbt test` work.
+
+## Supported and unsupported features
+
+| | |
+|---|---|
+| `dbt debug`, `dbt compile`, `dbt show`, `dbt run`, `dbt seed`, `dbt test` | supported |
+| `materialized='table'` | supported: built with a single `create or replace table ... as (...)` |
+| `materialized='ephemeral'` | supported: inlined as a CTE, as everywhere else in dbt |
+| Model contracts | columns and types are checked; **constraints cannot be emitted**: a `create ... as (<query>)` has no column list to attach them to, so each declared constraint warns and is skipped |
+| `dbt seed` | supported: an existing table is truncated and reloaded (`--full-refresh` drops and recreates it), and rows are inserted as literal `insert ... values` batches of at most 500 rows or 1 MB. Whole-number columns are inferred as `bigint`. **A load is not atomic**: the service has no transactions, so a seed that fails part-way leaves its table empty or partly loaded until it is re-run |
+| `materialized='incremental'` | supported, strategies `append` (the default) and `insert_overwrite`. `append` sends `insert into ... by name (...)` to an existing table; a first run, `--full-refresh` and `insert_overwrite` rebuild with `create or replace table`. **`insert_overwrite` replaces the whole table**: there is no partition scoping, so `is_incremental()` is always false for it and the model must select its complete dataset. Other strategies (`merge`, `delete+insert`, `microbatch`) fail when run, with an error naming the model. `on_schema_change` is applied before an append, as on dbt's default, with one difference: **a column's type is never changed in place**. `fail` fails on any added, missing or retyped column; `append_new_columns` adds new columns (and, on a contracted model, fails on a type change rather than casting to the old type); `sync_all_columns` adds new columns and, once the append has succeeded, drops missing ones (so an incremental filter can still read them from `{{ this }}`), and fails on a type change. Use `--full-refresh` to change a type. With `ignore`, columns are matched by name: a column the model stops selecting is inserted as NULL, and one the table lacks fails the run. Like seeds, an append is not atomic |
+| `dbt docs generate` | not yet implemented |
+| `materialized='view'` | not supported: the catalog does not grant `CreateView`, so it fails when run, with an error naming the model. dbt defaults models to views, so set `+materialized: table` in `dbt_project.yml` |
+| `materialized='materialized_view'`, snapshots, `dbt clone`, dbt unit tests | out of scope: each fails when run, with an error naming the model |
+| Python models | out of scope: no materialization accepts Python, so dbt rejects them |
+| `catalogs.yml` | out of scope |
+| `persist_docs` | ignored, as in v2: the service rejects `comment on` for Iceberg relations, so no comments are written |
+| Grants | ignored, as in v2: configured grants are not applied |
+| Relation renames | not used: relations are replaced with `create or replace` |
+| Dropping a schema | drops its relations first: the service does not support `DROP SCHEMA ... CASCADE` |
+
+Identifiers are never quoted, matching the service's own SQL, and are matched
+case-insensitively: a relation created as `MixedCase` is found by `ref('mixedcase')` and still
+renders as `MixedCase`.
+
+## Profile
+
+`method` defaults to `token`, which reads `token` — a service bearer token. **For a Fivetran
+personal access token (a `dct_` PAT) use `method: fivetran` and `fivetran_credential` instead:**
+a PAT is exchanged for a session rather than sent as a bearer token, so `method: token` with a
+PAT fails with `401 invalid token`.
+
+Always supply auth material through an environment variable, never inline.
+
+```yaml
+my_project:
+  target: dev
+  outputs:
+    dev:
+      type: lakecompute
+      database: my_database
+      schema: my_schema
+
+      method: fivetran
+      fivetran_credential: "{{ env_var('DBT_COMPUTE_AUTH_TOKEN') }}"
+
+      # optional; falls back to $DBT_COMPUTE_BASE_URL, then the public endpoint
+      base_url: https://api.lake-compute.fivetran.com/
+```
+
+With a bearer token, the last two auth lines become:
+
+```yaml
+      method: token   # the default, so it can be omitted
+      token: "{{ env_var('DBT_COMPUTE_AUTH_TOKEN') }}"
+```
+
+Set `DBT_COMPUTE_AUTH_TOKEN` to whichever credential you are using. The ADBC driver is fetched
+automatically; see [Driver](#driver) below. Run `dbt debug` to check the connection.
+
+## Driver
+
+The adapter needs a closed-source ADBC shared library, which is not published to PyPI. It
+downloads it from dbt's public CDN the first time a connection is opened and caches it
+at `{cache_dir}/com.getdbt/adbc/{arch}-{os}/`, so a machine that already has it downloads
+nothing. Later runs only stat the file.
+
+The driver version is pinned, and every platform artifact is verified against a pinned
+SHA-256. A platform with no pinned checksum is refused rather than installed unverified.
+Both live in [`install.py`](src/dbt/adapters/lakecompute/install.py).
+
+| Variable | Purpose |
+|---|---|
+| `DBT_COMPUTE_DRIVER_CACHE` | Use this directory instead of the OS cache directory. For CI images and air-gapped installs that pre-populate the cache. |
+
+## Connection settings
+
+| Setting | Default | Notes |
+|---|---|---|
+| `database` | — | Required. The catalog to connect to |
+| `schema` | — | Required. The default schema |
+| `method` | `token` | One of `token`, `api_key`, `okta_browser`, `fivetran`. Set explicitly to `fivetran` for a `dct_` PAT |
+| `token` | — | Required with `method: token`; a service bearer token |
+| `api_key` | — | Required with `method: api_key` |
+| `fivetran_credential` | — | Required with `method: fivetran`; a `dct_` PAT |
+| `fivetran_auth_url` | service default | Fivetran API base URL used for PAT exchange |
+| `okta_auth_url`, `okta_token_url`, `okta_client_id` | service defaults | Optional with `method: okta_browser`, which needs no pre-shared secret |
+| `base_url` | public endpoint | profile → `$DBT_COMPUTE_BASE_URL` → default |
+
+## Development
+
+```shell
+cd dbt-lakecompute
+hatch run setup
+hatch run code-quality
+hatch run unit-tests
+hatch run integration-tests
+```
+
+Unit tests need no endpoint. Never commit `test.env`.
+
+The functional suite runs against a live endpoint. Copy `test.env.example` to `test.env`. It needs
+`DBT_COMPUTE_BASE_URL`, `DBT_COMPUTE_AUTH_TOKEN` and `DBT_COMPUTE_DATABASE`; the tests skip
+without them. `DBT_COMPUTE_AUTH_METHOD` selects the auth method (`fivetran` by default; set `token`
+for a plain bearer token). Set `DBT_COMPUTE_SCHEMA` as well to build everything in one named
+scratch schema rather than a generated name per test file — useful against a shared catalog,
+and it makes leftovers easy to find if a run is interrupted. Pinning the schema means test
+classes cannot run in parallel, so pass `-n0` with it. Every statement is a full round trip at
+3–15 seconds, so a run of the whole functional suite takes tens of minutes.

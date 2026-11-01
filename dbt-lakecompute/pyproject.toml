@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+dynamic = ["version"]
+name = "dbt-lakecompute"
+description = "The lake compute adapter plugin for dbt"
+readme = "README.md"
+keywords = ["dbt", "adapter", "adapters", "database", "elt", "dbt-core", "dbt Core", "dbt Cloud", "dbt Labs", "lakecompute", "duckdb", "iceberg", "fivetran"]
+requires-python = ">=3.10.0"
+authors = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
+maintainers = [{ name = "dbt Labs", email = "info@dbtlabs.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "dbt-common>=1.10,<2.0",
+    "dbt-adapters>=1.24.1,<2.0",
+    # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
+    "dbt-core>=1.11.0rc1,<2.0",
+    # the connection layer depends on private API in adbc_driver_manager.dbapi
+    # (_SharedDatabase, Connection.__init__ accepting it). tests/unit/test_adbc_api_stability.py
+    # guards that; keep this pin tight and bump it deliberately.
+    "adbc-driver-manager[dbapi]>=1.9,<2",
+    # pyarrow is NOT optional: ADBC's convert_description raises without it
+    "pyarrow>=14.0",
+    "agate>=1.0,<2.0",
+    "zstandard>=0.22; python_version < '3.14'",
+]
+
+[project.urls]
+Homepage = "https://github.com/dbt-labs/dbt-adapters/tree/main/dbt-lakecompute"
+Documentation = "https://docs.getdbt.com"
+Repository = "https://github.com/dbt-labs/dbt-adapters.git#subdirectory=dbt-lakecompute"
+Issues = "https://github.com/dbt-labs/dbt-adapters/issues"
+Changelog = "https://github.com/dbt-labs/dbt-adapters/blob/main/dbt-lakecompute/CHANGELOG.md"
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit", "tests/functional"]
+addopts = "-v --color=yes -n auto"
+env_files = ["test.env"]

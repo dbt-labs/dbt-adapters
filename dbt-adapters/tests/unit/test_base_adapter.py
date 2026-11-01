@@ -10,6 +10,8 @@ import agate
 import pytz
 from dbt.adapters.contracts.connection import AdapterResponse
 
+from tests.unit.fixtures.adapter import BaseAdapterStub
+
 
 class TestBaseAdapterConstraintRendering:
     @pytest.fixture(scope="class")
@@ -494,3 +496,82 @@ class TestGrantsMacroQuotesGrantees:
         # Verify the SQL structure is correct
         assert result.startswith("revoke select on")
         assert "from" in result
+
+
+class TestListRelationsUncachedSchema:
+    @pytest.fixture
+    def adapter(self, adapter):
+        adapter.config.quoting = {}
+        return adapter
+
+    @staticmethod
+    def _relation(adapter, identifier):
+        return adapter.Relation.create(
+            database="db", schema="analytics", identifier=identifier, type="table"
+        )
+
+    @staticmethod
+    def _cached_identifiers(adapter):
+        return {r.identifier for r in adapter.cache.get_relations("db", "analytics")}
+
+    def test_listing_populates_uncached_schema(self, adapter):
+        listing = [self._relation(adapter, "orders")]
+
+        with patch.object(adapter, "list_relations_without_caching", return_value=listing):
+            assert adapter.list_relations("db", "analytics") == listing
+
+        assert ("db", "analytics") in adapter.cache
+        assert self._cached_identifiers(adapter) == {"orders"}
+
+    def test_empty_listing_marks_schema_cached(self, adapter):
+        with patch.object(adapter, "list_relations_without_caching", return_value=[]):
+            assert adapter.list_relations("db", "analytics") == []
+
+        assert ("db", "analytics") in adapter.cache
+
+    def test_stale_listing_does_not_undo_concurrent_rename(self, adapter):
+        orders = self._relation(adapter, "orders")
+        backup = self._relation(adapter, "orders__dbt_backup")
+
+        def list_while_another_thread_renames(schema_relation):
+            # Another thread populates the schema and renames orders while this listing is in
+            # flight; the listing still reflects the database before the rename.
+            adapter.cache.add(orders)
+            adapter.cache.rename(orders, backup)
+            return [orders]
+
+        with patch.object(
+            adapter,
+            "list_relations_without_caching",
+            side_effect=list_while_another_thread_renames,
+        ):
+            assert adapter.list_relations("db", "analytics") == [orders]
+
+        assert self._cached_identifiers(adapter) == {"orders__dbt_backup"}
+        adapter.cache.rename(self._relation(adapter, "orders__dbt_stg"), orders)
+        assert self._cached_identifiers(adapter) == {"orders", "orders__dbt_backup"}
+
+
+class TestRelationsCacheForSchemas:
+    @pytest.fixture
+    def adapter(self):
+        return BaseAdapterStub(MagicMock(), MagicMock())
+
+    def test_empty_cache_schemas_is_not_expanded_to_default(self, adapter):
+        """An explicitly empty `cache_schemas` means "nothing to cache" and
+        must not be re-expanded to every schema in the project (the bug
+        behind dbt-labs/dbt-adapters#2126)."""
+        with patch.object(adapter, "_get_cache_schemas") as mock_get_cache_schemas:
+            adapter._relations_cache_for_schemas([], cache_schemas=set())
+
+        mock_get_cache_schemas.assert_not_called()
+
+    def test_none_cache_schemas_falls_back_to_computed_schemas(self, adapter):
+        """`cache_schemas=None` (the default) still computes the project-wide
+        default via `_get_cache_schemas`."""
+        with patch.object(
+            adapter, "_get_cache_schemas", return_value=set()
+        ) as mock_get_cache_schemas:
+            adapter._relations_cache_for_schemas([], cache_schemas=None)
+
+        mock_get_cache_schemas.assert_called_once_with([])

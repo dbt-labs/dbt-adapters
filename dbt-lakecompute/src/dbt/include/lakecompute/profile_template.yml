@@ -1,0 +1,17 @@
+fixed:
+  type: lakecompute
+prompts:
+  database:
+    hint: 'the database to build models into'
+  schema:
+    hint: 'the schema to build models into'
+  method:
+    hint: 'auth method: fivetran for a Fivetran personal access token (dct_...)'
+    default: fivetran
+  fivetran_credential:
+    hint: 'Fivetran personal access token; use env_var to keep it out of the file'
+    hide_input: true
+  threads:
+    hint: '1 or more'
+    type: 'int'
+    default: 1
