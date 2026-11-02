@@ -1,0 +1,6 @@
+kind: Fixes
+body: Skip physical dataset existence checks for region-scoped INFORMATION_SCHEMA sources
+time: 2026-08-31T13:53:48Z
+custom:
+    Author: carleondel
+    Issue: "2152"
