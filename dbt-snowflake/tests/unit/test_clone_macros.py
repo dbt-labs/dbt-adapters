@@ -82,11 +82,6 @@ class TestSnowflakeCloneMacros(unittest.TestCase):
         self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
             key, default
         )
-        flag = mock.Mock()
-        type(flag).no_warn = mock.PropertyMock(return_value=False)
-        self.context["adapter"] = SimpleNamespace(
-            behavior=SimpleNamespace(snowflake_copy_grants_default=flag)
-        )
         env = get_environment()
         with open(APPLY_GRANTS_SQL) as f:
             apply_grants = env.from_string(f.read(), globals=self.context).module

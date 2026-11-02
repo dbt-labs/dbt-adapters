@@ -32,13 +32,9 @@ class TestSnowflakeCreateTableInfoSchemaSql(unittest.TestCase):
         catalog_relation = SimpleNamespace(
             is_transient=False, cluster_by=None, change_tracking=True
         )
-        self.copy_grants_default = False
         adapter = SimpleNamespace(
             build_catalog_relation=lambda model: catalog_relation,
         )
-        flag = mock.Mock()
-        type(flag).no_warn = mock.PropertyMock(side_effect=lambda: self.copy_grants_default)
-        adapter.behavior = SimpleNamespace(snowflake_copy_grants_default=flag)
         self.context = {
             "adapter": adapter,
             "config": mock.Mock(),
@@ -99,20 +95,9 @@ class TestSnowflakeCreateTableInfoSchemaSql(unittest.TestCase):
         self.assertIn("ignore grants", sql)
         self.assertNotIn("copy grants", sql)
 
-    def test_unset_copy_grants_emits_ignore_grants_by_default(self):
+    def test_unset_copy_grants_emits_ignore_grants(self):
         sql = self._render()
         self.assertIn("ignore grants", sql)
-
-    def test_unset_copy_grants_defers_to_snowflake_when_flag_enabled(self):
-        self.copy_grants_default = True
-        sql = self._render()
-        self.assertNotIn("ignore grants", sql)
-        self.assertNotIn("copy grants", sql)
-
-    def test_explicit_false_still_emits_ignore_grants_when_flag_enabled(self):
-        self.copy_grants_default = True
-        self.config = {"copy_grants": False}
-        self.assertIn("ignore grants", self._render())
 
     def test_ignore_grants_precedes_copy_tags(self):
         self.config = {"copy_tags": True}
