@@ -35,16 +35,6 @@ class LakeComputeCredentials(Credentials):
     fivetran_credential: Optional[str] = None
     fivetran_auth_url: Optional[str] = None
 
-    warehouse: Optional[str] = None
-    dialect: Optional[str] = None
-    timeout_seconds: Optional[int] = None
-
-    retries: int = 1
-
-    driver_path: Optional[str] = None
-
-    query_comment_enabled: bool = False
-
     _ALIASES = {"dbname": "database"}
 
     @property
@@ -67,14 +57,8 @@ class LakeComputeCredentials(Credentials):
             "database",
             "schema",
             "method",
-            "warehouse",
-            "dialect",
-            "timeout_seconds",
             "okta_auth_url",
             "okta_token_url",
             "okta_client_id",
             "fivetran_auth_url",
-            "retries",
-            "driver_path",
-            "query_comment_enabled",
         )

@@ -1,7 +1,7 @@
 """Connection-manager behaviour that needs no database.
 
 Covers the three things in ``connections.py`` that are easy to break by "simplifying":
-query-comment suppression, the no-op transaction methods, and the purity of
+project query comments, the no-op transaction methods, and the purity of
 ``get_response``.
 """
 
@@ -12,7 +12,8 @@ from types import SimpleNamespace
 import pytest
 
 from adbc_driver_manager import AdbcStatusCode, OperationalError
-from dbt.adapters.contracts.connection import Connection, ConnectionState, Identifier
+from dbt.adapters.contracts.connection import Connection, ConnectionState, Identifier, QueryComment
+from dbt.adapters.exceptions import FailedToConnectError
 from dbt_common.events import get_event_manager
 from dbt_common.exceptions import DbtDatabaseError, DbtRuntimeError
 
@@ -35,13 +36,12 @@ def make_credentials(**overrides) -> LakeComputeCredentials:
     return LakeComputeCredentials(**kwargs)  # type: ignore[arg-type]
 
 
-def make_manager(**credential_overrides) -> LakeComputeConnectionManager:
+def make_manager(query_comment=None, **credential_overrides) -> LakeComputeConnectionManager:
     credentials = make_credentials(**credential_overrides)
     profile = SimpleNamespace(
         credentials=credentials,
         project_name="my_project",
-        # dbt wraps this in /* */ itself and rejects a comment that already contains "*/"
-        query_comment=SimpleNamespace(comment="dbt", append=False),
+        query_comment=query_comment if query_comment is not None else QueryComment(comment=""),
     )
     return LakeComputeConnectionManager(profile, get_context("spawn"))  # type: ignore[arg-type]
 
@@ -163,17 +163,17 @@ def query_events():
 
 
 class TestQueryComment:
-    def test_suppressed_by_default(self):
-        """Off unless the profile opts in."""
-        manager = make_manager()
+    def test_project_setting_disables_comments(self):
+        manager = make_manager(query_comment=QueryComment(comment=""))
         manager.set_query_header({})
-        assert manager.query_header is None
         assert manager._add_query_comment("select 1") == "select 1"
 
-    def test_opt_in_restores_it(self):
-        manager = make_manager(query_comment_enabled=True)
+    @pytest.mark.parametrize("append", [False, True])
+    def test_project_setting_controls_comments(self, append):
+        manager = make_manager(query_comment=QueryComment(comment="my project", append=append))
         manager.set_query_header({})
-        assert manager.query_header is not None
+        expected = "select 1\n/* my project */" if append else "/* my project */\nselect 1"
+        assert manager._add_query_comment("select 1") == expected
 
 
 class TestTransactions:
@@ -374,7 +374,8 @@ class TestQueryFailures:
             manager.execute("select n from t", fetch=True, limit=limit)
 
         if isinstance(failure, OperationalError):
-            assert "timeout_seconds" in str(error.value)
+            assert "query timeout" in str(error.value)
+            assert "timeout_seconds" not in str(error.value)
         assert cursor.closed
         assert getattr(connection, _ATTR_ACTIVE_STATEMENT) is None
         manager.release()
@@ -565,6 +566,26 @@ class TestCancel:
 
 
 class TestOpen:
+    def test_connection_failure_is_reported_without_retry(self, monkeypatch):
+        manager = make_manager(token="tok")
+        connection = attach_connection(manager)
+        connection.state = ConnectionState.INIT
+        resolved = ResolvedDriver(path="/lib/x.so", entrypoint="AdbcDriverDbtInit", db_kwargs={})
+        monkeypatch.setattr(connections_module, "resolve_driver", lambda credentials: resolved)
+        attempts = []
+
+        def fail(resolved):
+            attempts.append(True)
+            raise OperationalError("connection unavailable", status_code=AdbcStatusCode.IO)
+
+        monkeypatch.setattr(connections_module, "_get_or_create_shared_database", fail)
+        with pytest.raises(FailedToConnectError, match="connection unavailable"):
+            LakeComputeConnectionManager.open(connection)
+
+        assert attempts == [True]
+        assert connection.state == ConnectionState.FAIL
+        assert connection._handle is None
+
     def test_open_uses_the_shared_registry(self, monkeypatch):
         manager = make_manager(token="tok")
         connection = attach_connection(manager)
@@ -602,7 +623,7 @@ class TestSharedDatabaseRegistry:
         return ResolvedDriver(
             path="/lib/libadbc_driver_dbt.so",
             entrypoint="AdbcDriverDbtInit",
-            db_kwargs=db_kwargs or {"uri": "https://endpoint/"},
+            db_kwargs=db_kwargs or {"adbc.dbt.base_url": "https://endpoint/"},
         )
 
     def test_identical_drivers_share_a_database(self, created):
@@ -613,8 +634,8 @@ class TestSharedDatabaseRegistry:
 
     def test_different_db_kwargs_do_not_collide(self, created):
         """Two targets in one process must not accidentally share a database."""
-        a = _get_or_create_shared_database(self._resolved(uri="https://a/"))
-        b = _get_or_create_shared_database(self._resolved(uri="https://b/"))
+        a = _get_or_create_shared_database(self._resolved(**{"adbc.dbt.base_url": "https://a/"}))
+        b = _get_or_create_shared_database(self._resolved(**{"adbc.dbt.base_url": "https://b/"}))
         assert a is not b
         assert len(created) == 2
 

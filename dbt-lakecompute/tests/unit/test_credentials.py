@@ -20,9 +20,15 @@ def test_type_is_lakecompute():
 def test_defaults():
     credentials = make_credentials()
     assert credentials.method == "token"
-    assert credentials.retries == 1
-    # off unless the profile opts in
-    assert credentials.query_comment_enabled is False
+
+
+@pytest.mark.parametrize(
+    "setting",
+    ["driver_path", "warehouse", "dialect", "timeout_seconds", "retries", "query_comment_enabled"],
+)
+def test_profile_schema_does_not_advertise_extra_settings(setting):
+    assert setting not in LakeComputeCredentials.json_schema()["properties"]
+    assert setting not in make_credentials()._connection_keys()
 
 
 def test_dbname_alias():

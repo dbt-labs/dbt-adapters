@@ -4,7 +4,7 @@ from dbt.adapters.exceptions import FailedToConnectError
 
 from dbt.adapters.lakecompute.auth import (
     OPTION_AUTH_API_KEY,
-    OPTION_AUTH_FIVETRAN_AUTH_URL,
+    OPTION_AUTH_FIVETRAN_API_URL,
     OPTION_AUTH_FIVETRAN_CREDENTIAL,
     OPTION_AUTH_METHOD,
     OPTION_AUTH_OKTA_CLIENT_ID,
@@ -54,7 +54,7 @@ class TestOptions:
     def test_fivetran_includes_optional_auth_url_only_when_set(self):
         without = auth_options(make_credentials(method="fivetran", fivetran_credential="cred"))
         assert OPTION_AUTH_FIVETRAN_CREDENTIAL in without
-        assert OPTION_AUTH_FIVETRAN_AUTH_URL not in without
+        assert OPTION_AUTH_FIVETRAN_API_URL not in without
 
         with_url = auth_options(
             make_credentials(
@@ -63,7 +63,11 @@ class TestOptions:
                 fivetran_auth_url="https://auth/",
             )
         )
-        assert with_url[OPTION_AUTH_FIVETRAN_AUTH_URL] == "https://auth/"
+        assert with_url == {
+            "adbc.dbt.auth.method": "fivetran",
+            "adbc.dbt.auth.fivetran.credential": "cred",
+            "adbc.dbt.auth.fivetran.api_url": "https://auth/",
+        }
 
     def test_okta_sends_only_present_fields(self):
         options = auth_options(make_credentials(method="okta_browser", okta_client_id="client-1"))
