@@ -3,4 +3,4 @@ body: 'Infer a seed column as `double` when a whole number is past `bigint`''s r
 time: 2026-10-31T16:02:00.000000+05:30
 custom:
     Author: tauhid621
-    Issue: ''
+    Issue: "2280"
