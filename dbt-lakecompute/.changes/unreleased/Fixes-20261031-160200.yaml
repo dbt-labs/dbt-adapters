@@ -1,0 +1,6 @@
+kind: Fixes
+body: 'Infer a seed column as `double` when a whole number is past `bigint`''s range, as v2 does, instead of failing the load.'
+time: 2026-10-31T16:02:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: ''
