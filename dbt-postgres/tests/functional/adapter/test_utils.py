@@ -7,7 +7,7 @@ from dbt.tests.adapter.utils.test_array_construct import BaseArrayConstruct
 from dbt.tests.adapter.utils.test_bool_or import BaseBoolOr
 from dbt.tests.adapter.utils.test_cast import BaseCast
 from dbt.tests.adapter.utils.test_cast_bool_to_text import BaseCastBoolToText
-from dbt.tests.adapter.utils.test_concat import BaseConcat
+from dbt.tests.adapter.utils.test_concat import BaseConcat, BaseConcatSingleField
 from dbt.tests.adapter.utils.test_current_timestamp import BaseCurrentTimestampAware
 from dbt.tests.adapter.utils.test_date import BaseDate
 from dbt.tests.adapter.utils.test_dateadd import BaseDateAdd
@@ -68,6 +68,10 @@ class TestCastBoolToText(BaseCastBoolToText):
 
 
 class TestConcat(BaseConcat):
+    pass
+
+
+class TestConcatSingleField(BaseConcatSingleField):
     pass
 
 

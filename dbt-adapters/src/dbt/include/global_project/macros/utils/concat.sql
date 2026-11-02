@@ -3,5 +3,9 @@
 {%- endmacro %}
 
 {% macro default__concat(fields) -%}
-    {{ fields|join(' || ') }}
+    {%- if fields | length == 1 -%}
+        {{ fields[0] }}
+    {%- else -%}
+        {{ fields | join(' || ') }}
+    {%- endif -%}
 {%- endmacro %}
