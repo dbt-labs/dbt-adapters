@@ -40,6 +40,17 @@ def _models():
     }
 
 
+def _has_select(grants: dict, user: str) -> bool:
+    # Snowflake returns privilege names uppercased (e.g. "SELECT")
+    grantees = [
+        grantee
+        for privilege, users in grants.items()
+        if privilege.lower() == "select"
+        for grantee in users
+    ]
+    return user.lower() in [grantee.lower() for grantee in grantees]
+
+
 def _cleaned_ddl(model_file: str) -> str:
     with open(f"target/run/test/models/{model_file}", "r") as ddl_file:
         return re.sub(r"\s+", " ", ddl_file.read()).lower()
@@ -64,8 +75,7 @@ class TestReplaceGrants(BaseGrants):
             project.run_sql(f"grant select on {object_type} {relation} to role {user}")
 
     def _has_select(self, project, model, user) -> bool:
-        grants = self.get_grants_on_relation(project, model)
-        return user.lower() in [grantee.lower() for grantee in grants.get("select", [])]
+        return _has_select(self.get_grants_on_relation(project, model), user)
 
     def test_replace_ignores_grants_unless_copy_grants(self, project, test_user):
         # first run creates the relations, then grant to a role that dbt does not manage
@@ -158,7 +168,7 @@ class TestCloneReplaceGrants(BaseGrants):
                     fetch=True,
                 )
                 grants = project.adapter.standardize_grants_dict(table)
-            return user.lower() in [g.lower() for g in grants.get("select", [])]
+            return _has_select(grants, user)
 
         assert not has_select(clones["clone_unset"])
         assert has_select(clones["clone_copy"])
