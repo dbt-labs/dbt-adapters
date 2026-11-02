@@ -50,6 +50,38 @@ where id > 2
 """
 
 
+MODEL__GLUE_DECIMAL_TABLE = """
+{{ config(materialized='table', catalog_name='glue_iceberg_rest_catalog') }}
+select
+    1 as id,
+    cast(150.50 as decimal(38,2)) as price,
+    cast(10 as decimal(38,0)) as amount
+"""
+
+MODEL__GLUE_DECIMAL_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='append',
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
+MODEL__GLUE_INT_UPGRADE_INCREMENTAL = """
+{{
+  config(
+    materialized='incremental',
+    catalog_name='glue_iceberg_rest_catalog',
+    incremental_strategy='append',
+    on_schema_change='fail',
+  )
+}}
+select * from {{ ref('glue_decimal_table') }}
+"""
+
+
 class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidation):
 
     @pytest.fixture(scope="class")
@@ -191,12 +223,45 @@ class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValid
                     target_file_size='16MB', max_data_extension_time_in_days=1, auto_refresh='true') }}
                     select 1 as id
                 """,
+                "glue_decimal_table.sql": MODEL__GLUE_DECIMAL_TABLE,
+                "glue_decimal_incremental.sql": MODEL__GLUE_DECIMAL_INCREMENTAL,
+                "glue_int_upgrade_incremental.sql": MODEL__GLUE_INT_UPGRADE_INCREMENTAL,
             }
         }
 
-    def test_glue_iceberg_rest_catalog_integration(self, project):
+    def test_glue_iceberg_rest_catalog_integration(self, project, models):
         """Test Glue CLD with 4-step table creation process"""
         result = run_dbt(["run"])
-        assert len(result) == 2
+        assert len(result) == len(models["models"])
         # Run again to test update path
         run_dbt(["run"])
+
+    def test_glue_iceberg_decimal_keeps_precision_and_scale(self, project):
+        # The second run appends through a __dbt_tmp table, which is built the same way
+        for _ in range(2):
+            run_dbt(["run", "--select", "glue_decimal_table", "glue_decimal_incremental"])
+
+        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+        for identifier in ("glue_decimal_table", "glue_decimal_incremental"):
+            relation = f'{glue_database}."{project.test_schema}"."{identifier}"'
+            rows = project.run_sql(f'select "price", "amount" from {relation}', fetch="all")
+            assert rows
+            for price, amount in rows:
+                assert str(price) == "150.50"
+                assert str(amount) == "10"
+
+    def test_glue_iceberg_int_table_needs_full_refresh(self, project):
+        # Tables built before this fix have INT where the model now has DECIMAL(p,s), so
+        # on_schema_change='fail' stops the next run until the table is rebuilt
+        run_dbt(["run", "--select", "glue_decimal_table"])
+        glue_database = os.getenv("SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE")
+        relation = f'{glue_database}."{project.test_schema}"."glue_int_upgrade_incremental"'
+        project.run_sql(f"drop table if exists {relation}")
+        project.run_sql(f'create iceberg table {relation} ("id" INT, "price" INT, "amount" INT)')
+
+        results = run_dbt(["run", "--select", "glue_int_upgrade_incremental"], expect_pass=False)
+        assert "out of sync" in results[0].message
+
+        run_dbt(["run", "--select", "glue_int_upgrade_incremental", "--full-refresh"])
+        rows = project.run_sql(f'select "price", "amount" from {relation}', fetch="all")
+        assert [(str(price), str(amount)) for price, amount in rows] == [("150.50", "10")]
