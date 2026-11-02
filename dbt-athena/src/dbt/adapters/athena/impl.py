@@ -1741,8 +1741,16 @@ class AthenaAdapter(SQLAdapter):
         return int((hash_value & self.INTEGER_MAX_VALUE_32_BIT_SIGNED) % num_buckets)
 
     @available
-    def format_value_for_partition(self, value: Any, column_type: str) -> Tuple[str, str]:
-        """Formats a value based on its column type for inclusion in a SQL query."""
+    def format_value_for_partition(
+        self, value: Any, column_type: str, table_type: str = "hive"
+    ) -> Tuple[str, str]:
+        """Formats a value based on its column type for inclusion in a SQL query.
+
+        ``table_type`` defaults to ``"hive"`` so existing two-argument callers keep
+        their current behavior. Boolean partition columns are only valid on Iceberg
+        (Hive rejects them, see HIVE-6590), so booleans are formatted only when
+        ``table_type == "iceberg"`` and otherwise fall through to the error below.
+        """
         comp_func = "="  # Default comparison function
         if value is None:
             return "null", " is "
@@ -1756,6 +1764,10 @@ class AthenaAdapter(SQLAdapter):
             return f"DATE'{value}'", comp_func
         elif column_type == "timestamp":
             return f"TIMESTAMP'{value}'", comp_func
+        elif column_type == "boolean" and table_type == "iceberg":
+            # Athena/Presto accepts bare boolean literals (true/false, unquoted).
+            # The distinct partition query returns Python True/False, so lowercase.
+            return str(value).lower(), comp_func
         else:
             # Raise an error for unsupported column types
             raise ValueError(f"Unsupported column type: {column_type}")
