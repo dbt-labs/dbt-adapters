@@ -1,0 +1,6 @@
+kind: Fixes
+body: Refresh AssumeRole credentials so cached clients survive past the STS TTL
+time: 2026-06-02T23:33:52.704151+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1997"
