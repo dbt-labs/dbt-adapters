@@ -10,6 +10,9 @@ dbt-athena:
 dbt-bigquery:
 -   'dbt-bigquery/src/**'
 -   'dbt-bigquery/pyproject.toml'
+dbt-lakecompute:
+-   'dbt-lakecompute/src/**'
+-   'dbt-lakecompute/pyproject.toml'
 dbt-postgres:
 -   'dbt-postgres/src/**'
 -   'dbt-postgres/pyproject.toml'

@@ -4,6 +4,7 @@ import agate
 import pytest
 
 from dbt.adapters.redshift.relation_configs import RedshiftMaterializedViewConfig
+from dbt.adapters.redshift.relation import RedshiftRelation
 
 
 @pytest.mark.parametrize("bool_value", [True, False, "True", "False", "true", "false"])
@@ -108,3 +109,75 @@ def test_redshift_materialized_view_parse_relation_results_handles_multiples_sor
     assert isinstance(config_dict["sort"], dict)
     assert config_dict["sort"]["sortkey"][0] == "my_column"
     assert config_dict["sort"]["sortkey"][1] == "my_column2"
+
+
+def test_materialized_view_config_changeset_returns_none_for_empty_mv():
+    """
+    When svv_table_info returns no rows (empty materialized view),
+    materialized_view_config_changeset should return None (triggers refresh)
+    rather than raising TypeError.
+    """
+    empty_mv_table = agate.Table.from_object(
+        [],
+        ["database", "schema", "table", "diststyle", "sortkey1", "autorefresh"],
+    )
+    relation_results = {
+        "materialized_view": empty_mv_table,
+        "columns": agate.Table.from_object([], ["column", "is_dist_key", "sort_key_position"]),
+        "query": agate.Table.from_object([], ["definition"]),
+    }
+
+    relation_config = Mock()
+    relation_config.identifier = "example"
+    relation_config.schema = "test_schema"
+    relation_config.database = "test_db"
+    relation_config.config.materialized = "materialized_view"
+    relation_config.config.extra.get = lambda x, y=None: None
+    relation_config.config.get = lambda x, y=None: None
+    relation_config.compiled_code = "select id from test_schema.test_table where id > 2"
+
+    result = RedshiftRelation.materialized_view_config_changeset(relation_results, relation_config)
+    assert result is None
+
+
+def _parse_with_definition(definition, columns=None):
+    materialized_view = agate.Table.from_object(
+        [], ["database", "schema", "table", "diststyle", "sortkey1", "autorefresh"]
+    )
+    relation_results = {
+        "materialized_view": materialized_view,
+        "query": agate.Table.from_object([{"definition": definition}]),
+    }
+    if columns is not None:
+        relation_results["columns"] = columns
+    return RedshiftMaterializedViewConfig.parse_relation_results(relation_results)
+
+
+@pytest.mark.parametrize(
+    "definition,expected",
+    [
+        (
+            "create materialized view s.mv diststyle even compound sortkey (id, value) as (select 1)",
+            ["id", "value"],
+        ),
+        ("create materialized view s.mv\n diststyle even\n sortkey (id)\n as (select 1);", ["id"]),
+        ('create materialized view s.mv SORTKEY ("my col" ,b) as select 1', ["my col", "b"]),
+    ],
+)
+def test_redshift_materialized_view_parse_sort_key_from_definition(definition, expected):
+    # Redshift Patch 206+ hides the backing table, so there is no `columns` result
+    config_dict = _parse_with_definition(definition)
+
+    assert config_dict["sort"]["sortkey"] == expected
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        "create materialized view s.mv interleaved sortkey (a, b) as (select 1)",
+        "create materialized view s.mv diststyle even as (select 1 as sortkey)",
+        "create materialized view s.mv as (select * from t order by x -- sortkey (a)\n)",
+    ],
+)
+def test_redshift_materialized_view_parse_no_sort_key_from_definition(definition):
+    assert "sort" not in _parse_with_definition(definition)
