@@ -22,10 +22,18 @@ from dbt.adapters.snowflake.relation_configs import (
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
     SnowflakeDynamicTableRefreshModeConfigChange,
+    SnowflakeDynamicTableSchedulerConfigChange,
     SnowflakeDynamicTableTargetLagConfigChange,
     SnowflakeDynamicTableWarehouseConfigChange,
     SnowflakeDynamicTableImmutableWhereConfigChange,
     SnowflakeDynamicTableClusterByConfigChange,
+    SnowflakeDynamicTableTransientConfigChange,
+    SnowflakeInteractiveTableClusterByConfigChange,
+    SnowflakeInteractiveTableConfig,
+    SnowflakeInteractiveTableConfigChangeset,
+    SnowflakeInteractiveTableInitializationWarehouseConfigChange,
+    SnowflakeInteractiveTableRefreshWarehouseConfigChange,
+    SnowflakeInteractiveTableTargetLagConfigChange,
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
@@ -39,6 +47,7 @@ class SnowflakeRelation(BaseRelation):
     require_alias: bool = False
     relation_configs = {
         SnowflakeRelationType.DynamicTable: SnowflakeDynamicTableConfig,
+        SnowflakeRelationType.InteractiveTable: SnowflakeInteractiveTableConfig,
     }
     renameable_relations: FrozenSet[SnowflakeRelationType] = field(
         default_factory=lambda: frozenset(
@@ -46,6 +55,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
                 SnowflakeRelationType.DynamicTable,  # type: ignore
+                SnowflakeRelationType.InteractiveTable,  # type: ignore
             }
         )
     )
@@ -56,6 +66,7 @@ class SnowflakeRelation(BaseRelation):
                 SnowflakeRelationType.DynamicTable,  # type: ignore
                 SnowflakeRelationType.Table,  # type: ignore
                 SnowflakeRelationType.View,  # type: ignore
+                SnowflakeRelationType.InteractiveTable,  # type: ignore
             }
         )
     )
@@ -63,6 +74,10 @@ class SnowflakeRelation(BaseRelation):
     @property
     def is_dynamic_table(self) -> bool:
         return self.type == SnowflakeRelationType.DynamicTable
+
+    @property
+    def is_interactive_table(self) -> bool:
+        return self.type == SnowflakeRelationType.InteractiveTable
 
     @property
     def is_materialized_view(self) -> bool:
@@ -77,6 +92,10 @@ class SnowflakeRelation(BaseRelation):
         return str(SnowflakeRelationType.DynamicTable)
 
     @classproperty
+    def InteractiveTable(cls) -> str:
+        return str(SnowflakeRelationType.InteractiveTable)
+
+    @classproperty
     def get_relation_type(cls) -> Type[SnowflakeRelationType]:
         return SnowflakeRelationType
 
@@ -85,7 +104,8 @@ class SnowflakeRelation(BaseRelation):
         relation_type: str = config.config.materialized  # type:ignore
 
         if relation_config := cls.relation_configs.get(relation_type):
-            return relation_config.from_relation_config(config)
+            # mypy widens relation_configs' value type to plain `type`; both entries get `from_relation_config` from SnowflakeRelationConfigBase.
+            return relation_config.from_relation_config(config)  # type:ignore
 
         raise DbtRuntimeError(
             f"from_config() is not supported for the provided relation type: {relation_type}"
@@ -93,7 +113,9 @@ class SnowflakeRelation(BaseRelation):
 
     @classmethod
     def dynamic_table_config_changeset(
-        cls, relation_results: RelationResults, relation_config: RelationConfig
+        cls,
+        relation_results: RelationResults,
+        relation_config: RelationConfig,
     ) -> Optional[SnowflakeDynamicTableConfigChangeset]:
         existing_dynamic_table = SnowflakeDynamicTableConfig.from_relation_results(
             relation_results
@@ -102,23 +124,29 @@ class SnowflakeRelation(BaseRelation):
 
         config_change_collection = SnowflakeDynamicTableConfigChangeset()
 
-        if new_dynamic_table.target_lag != existing_dynamic_table.target_lag:
+        if (
+            new_dynamic_table.target_lag_normalized != existing_dynamic_table.target_lag_normalized
+            and new_dynamic_table.target_lag is not None
+        ):
             config_change_collection.target_lag = SnowflakeDynamicTableTargetLagConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.target_lag,
             )
 
-        if new_dynamic_table.snowflake_warehouse != existing_dynamic_table.snowflake_warehouse:
+        if (
+            new_dynamic_table.warehouse_parameter_normalized
+            != existing_dynamic_table.warehouse_parameter_normalized
+        ):
             config_change_collection.snowflake_warehouse = (
                 SnowflakeDynamicTableWarehouseConfigChange(
                     action=RelationConfigChangeAction.alter,  # type:ignore
-                    context=new_dynamic_table.snowflake_warehouse,
+                    context=new_dynamic_table.warehouse_parameter,
                 )
             )
 
         if (
-            new_dynamic_table.snowflake_initialization_warehouse
-            != existing_dynamic_table.snowflake_initialization_warehouse
+            new_dynamic_table.snowflake_initialization_warehouse_normalized
+            != existing_dynamic_table.snowflake_initialization_warehouse_normalized
         ):
             config_change_collection.snowflake_initialization_warehouse = (
                 SnowflakeDynamicTableInitializationWarehouseConfigChange(
@@ -136,6 +164,12 @@ class SnowflakeRelation(BaseRelation):
                 context=new_dynamic_table.refresh_mode,
             )
 
+        if new_dynamic_table.scheduler != existing_dynamic_table.scheduler:
+            config_change_collection.scheduler = SnowflakeDynamicTableSchedulerConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new_dynamic_table.scheduler,
+            )
+
         if new_dynamic_table.immutable_where != existing_dynamic_table.immutable_where:
             config_change_collection.immutable_where = (
                 SnowflakeDynamicTableImmutableWhereConfigChange(
@@ -144,15 +178,90 @@ class SnowflakeRelation(BaseRelation):
                 )
             )
 
-        if new_dynamic_table.cluster_by != existing_dynamic_table.cluster_by:
+        if new_dynamic_table.cluster_by_normalized != existing_dynamic_table.cluster_by_normalized:
             config_change_collection.cluster_by = SnowflakeDynamicTableClusterByConfigChange(
                 action=RelationConfigChangeAction.alter,  # type:ignore
                 context=new_dynamic_table.cluster_by,
             )
 
+        # Transient is only compared when both sides are explicitly known:
+        # - new is None when the user omitted transient from their config ("don't care")
+        # - existing is None when describe_dynamic_table was called without include_transient
+        if (
+            new_dynamic_table.transient is not None
+            and existing_dynamic_table.transient is not None
+            and new_dynamic_table.transient != existing_dynamic_table.transient
+        ):
+            config_change_collection.transient = SnowflakeDynamicTableTransientConfigChange(
+                action=RelationConfigChangeAction.create,  # type: ignore
+                context=new_dynamic_table.transient,
+            )
+
         if config_change_collection.has_changes:
             return config_change_collection
         return None
+
+    @classmethod
+    def interactive_table_config_changeset(
+        cls, relation_results: RelationResults, relation_config: RelationConfig
+    ) -> Optional[SnowflakeInteractiveTableConfigChangeset]:
+        existing = SnowflakeInteractiveTableConfig.from_relation_results(relation_results)
+        new = SnowflakeInteractiveTableConfig.from_relation_config(relation_config)
+
+        changeset = SnowflakeInteractiveTableConfigChangeset()
+
+        if new.target_lag_normalized != existing.target_lag_normalized:
+            if existing.target_lag_normalized is None:
+                action = RelationConfigChangeAction.create  # static -> dynamic
+            elif new.target_lag_normalized is None:
+                action = RelationConfigChangeAction.drop  # dynamic -> static
+            else:
+                action = RelationConfigChangeAction.alter
+            changeset.target_lag = SnowflakeInteractiveTableTargetLagConfigChange(
+                action=action,  # type:ignore
+                context=new.target_lag,
+            )
+
+        if new.cluster_by_normalized != existing.cluster_by_normalized:
+            changeset.cluster_by = SnowflakeInteractiveTableClusterByConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=new.cluster_by,
+            )
+
+        # Snowflake rejects a refresh warehouse on a static table, so a static desired config has none to compare. Gate on `new`; `existing` must stay as Snowflake reported it.
+        if new.target_lag_normalized is not None:
+            desired_refresh_warehouse = new.warehouse_parameter
+            desired_refresh_warehouse_normalized = new.warehouse_parameter_normalized
+        else:
+            desired_refresh_warehouse = None
+            desired_refresh_warehouse_normalized = None
+
+        if desired_refresh_warehouse_normalized != existing.refresh_warehouse_normalized:
+            changeset.refresh_warehouse = SnowflakeInteractiveTableRefreshWarehouseConfigChange(
+                action=RelationConfigChangeAction.alter,  # type:ignore
+                context=desired_refresh_warehouse,
+            )
+
+        # Same static-table rejection as refresh_warehouse above (001420).
+        if new.target_lag_normalized is not None:
+            desired_init_warehouse = new.snowflake_initialization_warehouse
+            desired_init_warehouse_normalized = new.snowflake_initialization_warehouse_normalized
+        else:
+            desired_init_warehouse = None
+            desired_init_warehouse_normalized = None
+
+        if (
+            desired_init_warehouse_normalized
+            != existing.snowflake_initialization_warehouse_normalized
+        ):
+            changeset.snowflake_initialization_warehouse = (
+                SnowflakeInteractiveTableInitializationWarehouseConfigChange(
+                    action=RelationConfigChangeAction.alter,  # type:ignore
+                    context=desired_init_warehouse,
+                )
+            )
+
+        return changeset if changeset.has_changes else None
 
     def as_case_sensitive(self) -> "SnowflakeRelation":
         path_part_map = {}

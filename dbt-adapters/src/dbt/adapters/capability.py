@@ -24,6 +24,9 @@ class Capability(str, Enum):
     MicrobatchConcurrency = "MicrobatchConcurrency"
     """Indicates support running the microbatch incremental materialization strategy concurrently across threads."""
 
+    CatalogsV2 = "CatalogsV2"
+    """Indicates support for catalogs.yml v2 via bridge_v2_catalog."""
+
 
 class Support(str, Enum):
     Unknown = "Unknown"

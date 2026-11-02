@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix schema mismatch error for structured types (OBJECT, ARRAY, MAP) in Iceberg v3 tables by normalizing VARCHAR(134217728) to VARCHAR(16777216)
+time: 2026-03-09T15:39:35.184226-04:00
+custom:
+    Author: jecolvin
+    Issue: "1721"

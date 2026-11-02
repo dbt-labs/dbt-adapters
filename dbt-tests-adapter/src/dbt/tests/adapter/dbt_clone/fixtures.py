@@ -151,3 +151,18 @@ source_based_model_snapshot_sql = """
 
 {% endsnapshot %}
 """
+
+# Table model with grants for testing grant preservation during clone
+table_model_with_grants_sql = """
+{{ config(materialized='table') }}
+select 1 as id, 'test' as name
+"""
+
+clone_model_with_grants_schema_yml = """
+version: 2
+models:
+  - name: my_model
+    config:
+      grants:
+        select: ["{{ env_var('DBT_TEST_USER_1') }}"]
+"""

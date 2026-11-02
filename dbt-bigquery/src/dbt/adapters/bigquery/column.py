@@ -8,6 +8,108 @@ from dbt.adapters.base.column import Column
 
 _PARENT_DATA_TYPE_KEY = "__parent_data_type"
 
+
+def _parse_struct_fields(data_type: str) -> Optional[List[Dict[str, str]]]:
+    """
+    Parse a BigQuery STRUCT type string into a list of field dicts with 'name' and 'data_type'.
+
+    Returns None if the data_type is not a STRUCT or is malformed.
+    Handles trailing constraints like `struct<x INT64> not null` correctly.
+    Handles field types with parenthesised parameters like NUMERIC(10, 2).
+
+    Examples:
+    >>> _parse_struct_fields("struct<x INT64, y STRING>")
+    [{'name': 'x', 'data_type': 'INT64'}, {'name': 'y', 'data_type': 'STRING'}]
+    >>> _parse_struct_fields("struct<a struct<b INT64, c STRING>, d INT64>")
+    [{'name': 'a', 'data_type': 'struct<b INT64, c STRING>'}, {'name': 'd', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("struct<x INT64> not null")
+    [{'name': 'x', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("struct<a NUMERIC(10, 2), b INT64>")
+    [{'name': 'a', 'data_type': 'NUMERIC(10, 2)'}, {'name': 'b', 'data_type': 'INT64'}]
+    >>> _parse_struct_fields("INT64")
+    None
+    """
+    stripped = data_type.strip()
+
+    if not stripped.lower().startswith("struct<"):
+        return None
+
+    # Find the matching closing > by tracking angle-bracket depth.
+    # Parentheses depth is also tracked so that commas inside NUMERIC(10, 2)
+    # style type parameters are not mistaken for angle-bracket nesting changes.
+    start = len("struct<")
+    angle_depth = 1
+    paren_depth = 0
+    i = start
+    while i < len(stripped) and angle_depth > 0:
+        c = stripped[i]
+        if c == "<":
+            angle_depth += 1
+        elif c == ">" and paren_depth == 0:
+            angle_depth -= 1
+        elif c == "(":
+            paren_depth += 1
+        elif c == ")":
+            paren_depth -= 1
+        i += 1
+
+    if angle_depth != 0:
+        # Malformed type string — unbalanced angle brackets
+        return None
+
+    # Validate nothing unexpected follows the closing > (only whitespace or constraints)
+    remainder = stripped[i:]
+    if remainder and not remainder[0].isspace():
+        # Extra non-whitespace immediately after the closing > (e.g. "struct<x INT64>>")
+        return None
+
+    inner = stripped[start : i - 1]
+
+    # Split fields at top-level commas — not inside nested angle brackets or parentheses
+    fields = []
+    angle_depth = 0
+    paren_depth = 0
+    current: List[str] = []
+    for char in inner:
+        if char == "<":
+            angle_depth += 1
+            current.append(char)
+        elif char == ">":
+            angle_depth -= 1
+            if angle_depth < 0:
+                return None
+            current.append(char)
+        elif char == "(":
+            paren_depth += 1
+            current.append(char)
+        elif char == ")":
+            paren_depth -= 1
+            if paren_depth < 0:
+                return None
+            current.append(char)
+        elif char == "," and angle_depth == 0 and paren_depth == 0:
+            fields.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    if current:
+        fields.append("".join(current).strip())
+
+    if angle_depth != 0 or paren_depth != 0:
+        # Malformed inner type string — unbalanced brackets
+        return None
+
+    result = []
+    for field in fields:
+        # Split on first whitespace to get name, rest is the data type (possibly with constraints)
+        parts = field.split(None, 1)
+        if len(parts) == 2:
+            result.append({"name": parts[0], "data_type": parts[1]})
+        elif len(parts) == 1:
+            result.append({"name": parts[0], "data_type": ""})
+    return result
+
+
 Self = TypeVar("Self", bound="BigQueryColumn")
 
 
@@ -126,6 +228,63 @@ class BigQueryColumn(Column):
             kwargs = {"fields": fields}
 
         return SchemaField(self.name, self.dtype, self.mode, **kwargs)
+
+    @classmethod
+    def get_struct_select_expression(cls, column_name: str, data_type: str) -> str:
+        """
+        Generate a SELECT expression that ensures STRUCT fields are selected in the
+        order defined by data_type, regardless of the source field order.
+
+        For non-STRUCT columns, returns the column name as-is.
+        For STRUCT columns, returns an IF(col IS NULL, NULL, STRUCT(...)) expression
+        that explicitly names each field in DDL order, while preserving NULL structs.
+
+        This is used during contract enforcement so that YAML-defined field order in
+        the CREATE TABLE DDL matches the field order in the SELECT subquery.
+
+        Examples:
+        >>> BigQueryColumn.get_struct_select_expression("col", "INT64")
+        'col'
+        >>> BigQueryColumn.get_struct_select_expression("col", "struct<y INT64, x INT64>")
+        'IF(col IS NULL, NULL, STRUCT(col.y AS y, col.x AS x)) AS col'
+        >>> BigQueryColumn.get_struct_select_expression("col", "struct<a struct<b INT64, c STRING>, d INT64>")
+        'IF(col IS NULL, NULL, STRUCT(IF(col.a IS NULL, NULL, STRUCT(col.a.b AS b, col.a.c AS c)) AS a, col.d AS d)) AS col'
+        """
+        fields = _parse_struct_fields(data_type)
+        if fields is None:
+            return column_name
+
+        field_exprs = cls._build_struct_field_expressions(column_name, fields)
+        return (
+            f"IF({column_name} IS NULL, NULL, STRUCT({', '.join(field_exprs)})) AS {column_name}"
+        )
+
+    @classmethod
+    def _build_struct_field_expressions(
+        cls, parent_path: str, fields: List[Dict[str, str]]
+    ) -> List[str]:
+        """
+        Recursively build field expressions for a STRUCT SELECT constructor.
+
+        For each field, if it's a nested struct, wraps the STRUCT() constructor in an
+        IF(...IS NULL, NULL, STRUCT(...)) to preserve NULL semantics. Otherwise, emits
+        `parent.field AS field`.
+        """
+        exprs = []
+        for field in fields:
+            field_name = field["name"]
+            field_type = field["data_type"]
+            field_path = f"{parent_path}.{field_name}"
+
+            nested_fields = _parse_struct_fields(field_type)
+            if nested_fields is not None:
+                nested_exprs = cls._build_struct_field_expressions(field_path, nested_fields)
+                exprs.append(
+                    f"IF({field_path} IS NULL, NULL, STRUCT({', '.join(nested_exprs)})) AS {field_name}"
+                )
+            else:
+                exprs.append(f"{field_path} AS {field_name}")
+        return exprs
 
 
 def get_nested_column_data_types(

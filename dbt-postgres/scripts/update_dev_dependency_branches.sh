@@ -5,6 +5,12 @@ set -e
 dbt_adapters_branch=$1
 dbt_core_branch=$2
 dbt_common_branch=$3
+
+if [[ "${dbt_core_branch}" == "main" ]]; then
+    echo "ERROR: dbt-core branch cannot be 'main'. Use '1.latest' or a specific version branch (e.g. '1.10.latest')." >&2
+    exit 1
+fi
+
 target_req_file="pyproject.toml"
 core_req_sed_pattern="s|dbt-core.git.*#subdirectory=core|dbt-core.git@${dbt_core_branch}#subdirectory=core|g"
 adapters_req_sed_pattern="s|dbt-adapters.git|dbt-adapters.git@${dbt_adapters_branch}|g"

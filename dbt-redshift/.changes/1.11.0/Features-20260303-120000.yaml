@@ -1,0 +1,6 @@
+kind: Features
+body: Migrate catalog macros (`get_catalog`, `get_catalog_relations`) to use SHOW TABLES and SVV_REDSHIFT_COLUMNS when `redshift_use_show_apis` is enabled
+time: 2026-03-03T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "1625"

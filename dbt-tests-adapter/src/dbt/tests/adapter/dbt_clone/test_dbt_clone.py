@@ -257,9 +257,8 @@ class BaseCloneSameTargetAndState(BaseClone):
             "--state",
             "target",
         ]
-
         results, output = run_dbt_and_capture(clone_args, expect_pass=False)
-        assert "Warning: The state and target directories are the same: 'target'" in output
+        assert "The state and target directories are the same: 'target'" in output
 
 
 class TestCloneSameTargetAndState(BaseCloneSameTargetAndState):

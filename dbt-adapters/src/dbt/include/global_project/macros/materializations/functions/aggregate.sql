@@ -38,6 +38,8 @@
         {# generally you dont need to specify the language for sql functions #}
     {% elif language == 'python' %}
         LANGUAGE PYTHON
+    {% elif language == 'javascript' %}
+        LANGUAGE js
     {% else %}
         {{ 'LANGUAGE ' ~ language.upper() }}
     {% endif %}
@@ -62,4 +64,8 @@
 {% macro default__get_function_python_options() %}
     RUNTIME_VERSION = '{{ model.config.get('runtime_version') }}'
     HANDLER = '{{ model.config.get('entry_point') }}'
+    {% set packages = model.config.get('packages', []) %}
+    {% if packages %}
+    PACKAGES = ('{{ packages | join("','") }}')
+    {% endif %}
 {% endmacro %}

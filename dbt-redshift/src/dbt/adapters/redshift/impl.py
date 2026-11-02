@@ -1,16 +1,26 @@
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing.context import SpawnContext
 
 import agate
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.contracts.constraints import ConstraintType
-from typing import List, Optional, Set, Any, Dict, Type, Mapping
+from datetime import datetime, timezone
+from typing import List, Optional, Set, Any, Dict, Tuple, Type, Mapping
 from collections import namedtuple
 from dbt.adapters.base import PythonJobHelper
-from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
+from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport, FreshnessResponse
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.meta import available
-from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
+from dbt.adapters.base.relation import BaseRelation
+from dbt.adapters.capability import (
+    Capability,
+    CapabilityDict,
+    CapabilitySupport,
+    Support,
+)
+from dbt.adapters.protocol import MacroResolverProtocol
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.contracts.connection import AdapterResponse
 from dbt.adapters.events.logging import AdapterLogger
@@ -31,26 +41,103 @@ for package in packages:
     logger.set_adapter_dependency_log_level(package, level)
 
 GET_RELATIONS_MACRO_NAME = "redshift__get_relations"
+SHOW_TABLES_FROM_SCHEMA_MACRO_NAME = "redshift__show_tables_from_schema"
+
+# Redshift type OID -> SQL data type name, as reported by both the legacy path's
+# information_schema.columns.data_type and SHOW COLUMNS. Used to describe temp relations
+# from the driver's cursor description (see get_columns_in_temp_relation); the names have
+# to match whichever of those two paths described the target relation, or schema comparison
+# reports a type change on every run. Verified against SHOW COLUMNS on Redshift 1.0.358853
+# -- note bpchar reports as "character", and varbyte as "binary varying".
+TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
+    16: "boolean",  # bool
+    20: "bigint",  # int8
+    21: "smallint",  # int2
+    23: "integer",  # int4
+    25: "character varying",  # text
+    700: "real",  # float4
+    701: "double precision",  # float8
+    1042: "character",  # bpchar
+    1043: "character varying",  # varchar
+    1082: "date",  # date
+    1083: "time without time zone",  # time
+    1114: "timestamp without time zone",  # timestamp
+    1184: "timestamp with time zone",  # timestamptz
+    1188: "interval year to month",  # intervaly2m
+    1190: "interval day to second",  # intervald2s
+    1266: "time with time zone",  # timetz
+    1700: "numeric",  # numeric
+    2935: "hllsketch",  # hllsketch
+    3000: "geometry",  # geometry
+    3001: "geography",  # geography
+    4000: "super",  # super
+    6551: "binary varying",  # varbyte
+}
+
+# information_schema reports its internal type name where SHOW COLUMNS reports the SQL name,
+# so a fallback column only compares equal if it follows whichever path described the target.
+# Everything else in the map above agrees across both; these are the exceptions, verified in
+# tests/functional/test_type_oid_mapping.py.
+TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE: Dict[int, str] = {
+    1188: "intervaly2m",  # SHOW COLUMNS: interval year to month
+    1190: "intervald2s",  # SHOW COLUMNS: interval day to second
+}
 
 REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS = BehaviorFlag(
     name="redshift_skip_autocommit_transaction_statements",
-    default=True,
+    default=False,
     description=(
         "When autocommit is enabled, skip sending BEGIN/COMMIT/ROLLBACK statements "
         "since each statement is automatically committed. This reduces round-trips "
-        "to the database and avoids unnecessary transaction overhead."
-        "Setting this to False will preserve the legacy behavior of sending BEGIN/COMMIT/ROLLBACK statements."
+        "to the database and avoids unnecessary transaction overhead. "
+        "Setting this to True will enable the optimization."
     ),
 )
 
-REDSHIFT_USE_SHOW_APIS = BehaviorFlag(
-    name="redshift_use_show_apis",
+REDSHIFT_GRANTS_EXTENDED = BehaviorFlag(
+    name="redshift_grants_extended",
     default=False,
     description=(
-        "Use Redshift SVV_* system views instead of PostgreSQL catalog tables "
-        "for metadata queries. Required for cross-database operations with Datasharing. "
+        "Enable groups and roles support in dbt grants config. "
+        "When enabled, grantee names must use 'user:', 'group:', or 'role:' prefixes. "
+        "Unprefixed entries are treated as users for backward compatibility. "
+        "When disabled (default), the legacy behavior is preserved: all grantees are "
+        "treated as plain usernames and only user grants are detected."
     ),
 )
+
+CATALOG_COLUMNS = [
+    "table_database",
+    "table_schema",
+    "table_name",
+    "table_type",
+    "table_comment",
+    "table_owner",
+    "column_name",
+    "column_index",
+    "column_type",
+    "column_comment",
+]
+
+CATALOG_COLUMN_TYPES = [
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Text(),
+    agate.Number(),
+    agate.Text(),
+    agate.Text(),
+]
+
+_SHOW_TABLE_TYPE_MAP = {
+    "TABLE": "BASE TABLE",
+    "VIEW": "VIEW",
+    "MATERIALIZED VIEW": "MATERIALIZED VIEW",
+    "LATE BINDING VIEW": "LATE BINDING VIEW",
+}
 
 
 @dataclass
@@ -98,7 +185,7 @@ class RedshiftAdapter(SQLAdapter):
     def _behavior_flags(self) -> List[BehaviorFlag]:
         return [
             REDSHIFT_SKIP_AUTOCOMMIT_TRANSACTION_STATEMENTS,
-            REDSHIFT_USE_SHOW_APIS,
+            REDSHIFT_GRANTS_EXTENDED,
         ]
 
     @classmethod
@@ -119,7 +206,16 @@ class RedshiftAdapter(SQLAdapter):
         drop_relation() function.
 
         https://docs.aws.amazon.com/redshift/latest/dg/r_DROP_TABLE.html
+
+        Users with no downstream views (no CASCADE side-effects) can opt out
+        of the lock via `allow_concurrent_drops: true` in their profile credentials
+        to allow DROP statements to run in parallel across threads. The DROP
+        still runs inside a fresh transaction context — the lock is the only
+        thing skipped.
         """
+        if self.config.credentials.allow_concurrent_drops:
+            with self.connections.fresh_transaction_without_lock():
+                return super().drop_relation(relation)
         with self.connections.fresh_transaction():
             return super().drop_relation(relation)
 
@@ -137,15 +233,203 @@ class RedshiftAdapter(SQLAdapter):
         return "varchar(24)"
 
     @available
+    def use_show_apis(self) -> bool:
+        """Whether to use Redshift SHOW/SVV_* APIs for metadata queries.
+
+        Returns True when the ``datasharing`` profile config is enabled.
+        """
+        return bool(self.config.credentials.datasharing)
+
+    def get_columns_in_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a relation, falling back to the driver when the catalog cannot see it.
+
+        On a datashare consumer database, temp relations stay queryable but are absent from
+        ``information_schema.columns``, ``pg_attribute`` and ``svv_columns``; the empty
+        result makes ``on_schema_change='sync_all_columns'`` drop every column in the
+        target. Only unqualified relations can take the fallback, since the driver query
+        has no database or schema to qualify itself with.
+
+        With ``datasharing`` enabled, a relation dbt minted as a temporary table
+        (``is_temporary``, set by ``redshift__make_temp_relation``) skips the catalog
+        entirely. The catalog queries cost ~90s per temp relation on a datashare consumer
+        and cannot return rows there: neither ``information_schema.columns`` nor
+        ``pg_get_late_binding_view_cols()`` -- which the legacy path calls, expanding every
+        late-binding view in the session -- can see a temp table, and a temp table is never
+        a late-binding view anyway. The driver answers the same question in ~50ms.
+
+        The marker is deliberately gated on ``datasharing`` rather than applied to every
+        connection. Without it the catalog can see temp relations, so the first query
+        returns and the expensive late-binding lookup is never reached -- there is little to
+        win, and the driver path would be describing columns the catalog already describes
+        correctly. Its type names are ground truth for the OIDs it maps, but an unmapped OID
+        falls back to the driver's own label (see ``_temp_relation_data_type``), which is
+        worth risking only where the alternative is no columns at all.
+
+        Relations that are merely unqualified keep the existing behavior on both kinds of
+        connection: describe from the catalog, fall back to the driver only if that comes
+        back empty. That is what still covers a consumer database reached without
+        ``datasharing`` set.
+
+        Both routes require the relation to be unqualified, marker or not -- see
+        ``_is_addressable_unqualified``. Every producer of a marked relation strips schema
+        and database today, so the check never fires; it is here because the driver query
+        cannot express a qualification, so a marked-but-qualified relation would silently
+        describe whatever ``search_path`` resolved the identifier to.
+
+        In an override rather than in the macro so that ``@supports_replay`` records the
+        fallback under the existing ``AdapterGetColumnsInRelationRecord``, and because
+        ``get_columns_in_temp_relation`` is not ``@available`` to Jinja.
+        """
+        if (
+            getattr(relation, "is_temporary", False)
+            and self.use_show_apis()
+            and self._is_addressable_unqualified(relation)
+        ):
+            return self.get_columns_in_temp_relation(relation)
+
+        columns = super().get_columns_in_relation(relation)
+
+        if not columns and self._is_addressable_unqualified(relation):
+            return self.get_columns_in_temp_relation(relation)
+
+        return columns
+
+    @staticmethod
+    def _is_addressable_unqualified(relation: BaseRelation) -> bool:
+        """Whether ``get_columns_in_temp_relation`` can address this relation at all.
+
+        It queries ``select * from <identifier>`` with no database or schema, so a
+        qualified relation would resolve through ``search_path`` to whatever object
+        happens to share the identifier -- describing the wrong thing rather than
+        failing. Both routes to the driver check this: ``is_temporary`` records that dbt
+        minted the relation, which is not the same claim as it still being addressable
+        unqualified.
+        """
+        return not relation.database and not relation.schema
+
+    def get_columns_in_temp_relation(self, relation: BaseRelation) -> List[BaseColumn]:
+        """Describe a temporary relation from the driver instead of the catalog.
+
+        Needed when the connection's database is a datashare consumer database: temp
+        relations stay queryable but are invisible to ``information_schema.columns``,
+        ``pg_attribute`` and ``svv_columns`` alike, and ``SHOW COLUMNS`` cannot address
+        them because they carry no database or schema.
+
+        Sizes come from ``cursor.ps["row_desc"]``'s ``type_modifier``, not from
+        ``cursor.description``: ``redshift_connector`` hardcodes the PEP 249
+        size/precision/scale fields to ``None`` (see its ``Cursor._getDescription``).
+        Without real sizes, every sized column looks changed against the target on the
+        next run and gets needlessly rewritten.
+        """
+        sql = f"select * from {self.quote(relation.identifier)} limit 0"
+        _, cursor = self.connections.add_select_query(sql)
+
+        # `cursor.ps["row_desc"]` is an internal, undocumented structure of
+        # `redshift_connector`, not a public API -- there is no supported alternative for
+        # reaching `type_modifier`. `_getDescription` builds `cursor.description` from this
+        # same list, in the same order, so index-aligned lookup here is safe.
+        try:
+            row_descriptions = cursor.ps["row_desc"]
+        except (AttributeError, KeyError, TypeError):
+            row_descriptions = []
+
+        columns = []
+        for i, description in enumerate(cursor.description or []):
+            # PEP 249: (name, type_code, display_size, internal_size, precision, scale, null_ok)
+            column_name = description[0]
+            type_code = description[1]
+
+            type_modifier = None
+            if i < len(row_descriptions):
+                type_modifier = row_descriptions[i].get("type_modifier")
+
+            data_type = self._temp_relation_data_type(type_code)
+
+            # Only string and exact-numeric types feed size into Column.data_type, which is
+            # what schema comparison comes down to. For every other type the size fields are
+            # ignored, so leave them unset.
+            char_size = None
+            numeric_precision = None
+            numeric_scale = None
+            if type_modifier is not None and type_modifier >= 0:
+                # Postgres wire-protocol convention: VARHDRSZ (4 bytes) is added to both a
+                # string's declared length and a numeric's packed (precision, scale) pair.
+                # -1 means "no modifier" (unconstrained/default size) and is left unset.
+                raw_modifier = type_modifier - 4
+                if data_type in ("character varying", "character"):
+                    char_size = raw_modifier if raw_modifier > 0 else None
+                elif data_type == "numeric":
+                    numeric_precision = raw_modifier >> 16
+                    numeric_scale = raw_modifier & 0xFFFF
+
+            columns.append(
+                self.Column(
+                    column=column_name,
+                    dtype=data_type,
+                    char_size=char_size,
+                    numeric_precision=numeric_precision,
+                    numeric_scale=numeric_scale,
+                )
+            )
+
+        return columns
+
+    def _temp_relation_data_type(self, type_code: Any) -> str:
+        """Map a driver type code onto the name the target relation's describer reports.
+
+        The target goes through SHOW COLUMNS when ``datasharing`` is on and through
+        information_schema when it is off, and the two disagree on a few type names.
+        """
+        if not self.use_show_apis():
+            data_type = TYPE_OID_TO_INFORMATION_SCHEMA_DATA_TYPE.get(type_code)
+            if data_type is not None:
+                return data_type
+
+        data_type = TYPE_OID_TO_DATA_TYPE.get(type_code)
+        if data_type is not None:
+            return data_type
+
+        # Unmapped OID. The driver's own label is closer than nothing, but its lookup is an
+        # IntEnum call that raises for codes it doesn't recognise either -- and a column
+        # whose type cannot be named at all is better reported than described with an
+        # invented name, which would only fail later as invalid DDL.
+        try:
+            fallback = str(self.connections.data_type_code_to_name(type_code)).lower()
+        except Exception as exc:
+            raise dbt_common.exceptions.DbtRuntimeError(
+                f"Cannot describe temporary relation column: Redshift returned type code "
+                f"{type_code}, which neither dbt-redshift nor redshift_connector "
+                f"recognises. Please report this at "
+                f"https://github.com/dbt-labs/dbt-adapters/issues"
+            ) from exc
+
+        logger.debug(
+            f"No known Redshift data type for type code {type_code}; "
+            f"falling back to {fallback!r}. Schema comparison for this column may be "
+            f"inaccurate -- please report this at "
+            f"https://github.com/dbt-labs/dbt-adapters/issues"
+        )
+        return fallback
+
+    @available
+    def drop_without_cascade(self) -> bool:
+        """Whether to omit CASCADE from DROP statements.
+
+        Returns True when the ``drop_without_cascade`` profile credential
+        is set. Safe only for projects with no downstream dependents.
+        """
+        return bool(self.config.credentials.drop_without_cascade)
+
+    @available
     def verify_database(self, database):
         if database.startswith('"'):
             database = database.strip('"')
         expected = self.config.credentials.database
         ra3_node = self.config.credentials.ra3_node
 
-        if database.lower() != expected.lower() and not ra3_node:
+        if database.lower() != expected.lower() and not ra3_node and not self.use_show_apis():
             raise dbt_common.exceptions.NotImplementedError(
-                "Cross-db references allowed only in RA3.* node. ({} vs {})".format(
+                "Cross-db references allowed only in RA3.* node or with datasharing enabled. ({} vs {})".format(
                     database, expected
                 )
             )
@@ -153,41 +437,270 @@ class RedshiftAdapter(SQLAdapter):
         return ""
 
     @available
-    def merge_relation_tables(
-        self,
-        all_relations: "agate.Table",
-        materialized_views: "agate.Table",
+    def transform_show_tables_for_list_relations(
+        self, show_tables: "agate.Table"
     ) -> "agate.Table":
-        """Merge all relations with materialized view info.
+        """Transform SHOW TABLES FROM SCHEMA output into the relation format dbt expects.
 
-        For each row in all_relations with type 'view', if a matching
-        (database, schema, name) key exists in materialized_views, the type is
-        updated to 'materialized_view'.
-        Returns a new agate Table with the same structure as all_relations.
+        SHOW TABLES returns columns including database_name, schema_name, table_name,
+        table_type (TABLE/VIEW), and table_subtype (REGULAR TABLE, REGULAR VIEW,
+        LATE BINDING VIEW, MATERIALIZED VIEW).
+
+        Returns an agate Table with columns: database, name, schema, type
+        where type is one of: table, view, materialized_view.
         """
-        mv_lookup = {
-            (row["database"], row["schema"], row["name"]) for row in materialized_views.rows
-        }
-
         new_rows = []
-        for row in all_relations.rows:
-            key = (row["database"], row["schema"], row["name"])
-            row_type = (
-                "materialized_view" if key in mv_lookup and row["type"] == "view" else row["type"]
+        # has_subtype is only needed until redshift patch 197 is everywhere
+        has_subtype = "table_subtype" in show_tables.column_names
+        for row in show_tables.rows:
+            table_type = (row["table_type"] or "").strip().upper()
+            if table_type == "VIEW":
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                relation_type = "materialized_view" if subtype == "MATERIALIZED VIEW" else "view"
+            else:
+                relation_type = "table"
+
+            new_rows.append(
+                (
+                    row["database_name"],
+                    row["table_name"],
+                    row["schema_name"],
+                    relation_type,
+                )
             )
-            new_rows.append((row["database"], row["name"], row["schema"], row_type))
 
         return agate.Table(
             new_rows,
-            column_names=all_relations.column_names,
-            column_types=all_relations.column_types,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
         )
+
+    @available
+    def combine_show_tables_and_function_relations(
+        self,
+        table_and_view_relations: "agate.Table",
+        function_relations: "agate.Table",
+    ) -> "agate.Table":
+        """Combine table/view relations with function relations into a single agate.Table.
+
+        Uses explicit agate.Text() column types to avoid type inference issues when
+        function_relations is empty (no user-defined functions in the schema). An empty
+        agate table loaded from SQL has no rows to infer types from, so agate defaults
+        to Integer—which mismatches the explicit Text() types in table_and_view_relations
+        and causes agate.Table.merge() to raise DataTypeError.
+        """
+        all_rows = []
+        for row in table_and_view_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        for row in function_relations.rows:
+            all_rows.append((row["database"], row["name"], row["schema"], row["type"]))
+        return agate.Table(
+            all_rows,
+            column_names=["database", "name", "schema", "type"],
+            column_types=[agate.Text(), agate.Text(), agate.Text(), agate.Text()],
+        )
+
+    @available
+    def build_catalog_from_show_tables_and_svv_columns(
+        self,
+        show_tables_results: List["agate.Table"],
+        svv_columns: "agate.Table",
+    ) -> "agate.Table":
+        """Build the base catalog by joining SHOW TABLES metadata with SVV_REDSHIFT_COLUMNS."""
+        if not show_tables_results or not svv_columns.rows:
+            return agate.Table([], column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES)
+
+        table_meta: Dict[tuple, tuple] = {}
+        for show_table in show_tables_results:
+            # has_subtype is only needed until redshift patch 197 is everywhere
+            has_subtype = "table_subtype" in show_table.column_names
+            for row in show_table.rows:
+                table_type = (row["table_type"] or "").strip().upper()
+                subtype = (row["table_subtype"] or "").strip().upper() if has_subtype else ""
+                catalog_type = _SHOW_TABLE_TYPE_MAP.get(
+                    subtype, _SHOW_TABLE_TYPE_MAP.get(table_type, "BASE TABLE")
+                )
+
+                key = (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+                table_meta[key] = (
+                    row["database_name"],
+                    row["schema_name"],
+                    row["table_name"],
+                    catalog_type,
+                    row["remarks"],
+                    row["owner"],
+                )
+
+        catalog_rows = []
+        for row in svv_columns.rows:
+            meta = table_meta.get(
+                (row["database_name"], row["schema_name"].lower(), row["table_name"].lower())
+            )
+            if meta:
+                catalog_rows.append(
+                    meta
+                    + (
+                        row["column_name"],
+                        row["ordinal_position"],
+                        row["data_type"],
+                        row["remarks"],
+                    )
+                )
+
+        return agate.Table(
+            catalog_rows, column_names=CATALOG_COLUMNS, column_types=CATALOG_COLUMN_TYPES
+        )
+
+    def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
+        """Translate the result of a grants query to match the grants config format.
+
+        When ``redshift_grants_extended`` is disabled (default), the legacy
+        behavior is used: grantees are returned as plain names with no
+        ``user:``/``group:``/``role:`` prefixes, and only user grants are
+        detected (groups and roles are invisible to the legacy query).
+
+        When ``redshift_grants_extended`` is enabled, grantees are returned
+        with prefixes so that groups and roles can be distinguished and
+        idempotently managed.  ``SHOW GRANTS`` is used for cross-database
+        support when ``datasharing`` is enabled; ``svv_relation_privileges``
+        is used otherwise.
+        """
+
+        grants_dict: Dict[str, List[str]] = {}
+        current_user = self.config.credentials.user.lower()
+
+        if not self.behavior.redshift_grants_extended.no_warn:
+            if not self.use_show_apis():
+                # pg_user query returns a 'grantee' column — delegate to base.
+                return super().standardize_grants_dict(grants_table)
+            else:
+                # SHOW GRANTS returns 'identity_name'; return plain names with
+                # no prefix so the config comparison is unchanged from legacy.
+                # Filter to users only and exclude the current dbt runner to
+                # match the pg_user + has_table_privilege() path.
+                for row in grants_table:
+                    if row["identity_type"].lower() != "user":
+                        continue
+                    if row["identity_name"].lower() == current_user:
+                        continue
+                    grantee = row["identity_name"]
+                    privilege = row["privilege_type"].lower()
+                    if privilege in grants_dict:
+                        grants_dict[privilege].append(grantee)
+                    else:
+                        grants_dict[privilege] = [grantee]
+                return grants_dict
+
+        if self.use_show_apis():
+            # SHOW GRANTS path — need to detect groups from the / prefix
+            for row in grants_table:
+                identity_name = row["identity_name"]
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                # Skip Redshift reserved roles — these cannot be modified
+                # via GRANT/REVOKE.  Includes datashare roles (ds:*) and
+                # system-defined roles (sys:*).
+                if identity_name.startswith(("ds:", "sys:")):
+                    continue
+                # Skip the dbt runner — matches pg_user and SVV paths which
+                # exclude current_user to avoid spurious REVOKE-self drift.
+                if identity_type == "user" and identity_name.lower() == current_user:
+                    continue
+                # SHOW GRANTS reports groups as identity_type='role' with a
+                # '/' prefix on identity_name.  This is undocumented behavior.
+                if identity_type == "role" and identity_name.startswith("/"):
+                    grantee = f"group:{identity_name[1:]}"
+                else:
+                    grantee = f"{identity_type}:{identity_name}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
+        else:
+            # svv_relation_privileges path — identity_type is accurate
+            for row in grants_table:
+                identity_name = row["identity_name"]
+                identity_type = row["identity_type"].lower()
+                # Skip PUBLIC grants — not configurable via dbt grants
+                if identity_type == "public":
+                    continue
+                # Skip Redshift reserved roles — these cannot be modified
+                # via GRANT/REVOKE.  Includes datashare roles (ds:*) and
+                # system-defined roles (sys:*).
+                if identity_name.startswith(("ds:", "sys:")):
+                    continue
+                grantee = f"{identity_type}:{identity_name}"
+                privilege = row["privilege_type"].lower()
+                if privilege in grants_dict:
+                    grants_dict[privilege].append(grantee)
+                else:
+                    grants_dict[privilege] = [grantee]
+
+        return grants_dict
+
+    def calculate_freshness_from_metadata_batch(
+        self,
+        sources: List[BaseRelation],
+        macro_resolver: Optional[MacroResolverProtocol] = None,
+    ) -> Tuple[List[Optional[AdapterResponse]], Dict[BaseRelation, FreshnessResponse]]:
+        if not self.use_show_apis():
+            return super().calculate_freshness_from_metadata_batch(sources, macro_resolver)
+
+        source_lookup = {
+            (
+                (source.database or "").lower(),
+                (source.schema or "").lower(),
+                (source.identifier or "").lower(),
+            ): source
+            for source in sources
+        }
+
+        sources_by_schema: Dict[Tuple[str, str], List[BaseRelation]] = {}
+        for source in sources:
+            sources_by_schema.setdefault((source.database or "", source.schema or ""), []).append(
+                source
+            )
+
+        adapter_responses: List[Optional[AdapterResponse]] = []
+        freshness_responses: Dict[BaseRelation, FreshnessResponse] = {}
+
+        for (database, schema), schema_sources in sources_by_schema.items():
+            result = self.execute_macro(
+                SHOW_TABLES_FROM_SCHEMA_MACRO_NAME,
+                kwargs={"database": database, "schema": schema},
+                needs_conn=True,
+            )
+            adapter_response, table = result.response, result.table
+            adapter_responses.append(adapter_response)
+
+            requested_identifiers = {(s.identifier or "").lower() for s in schema_sources}
+            snapshot_time = datetime.now(timezone.utc)
+
+            for row in table:
+                table_name = row["table_name"]
+                if table_name.lower() not in requested_identifiers:
+                    continue
+
+                last_modified = row["last_modified_time"]
+
+                lookup_key = (database.lower(), schema.lower(), table_name.lower())
+                source = source_lookup[lookup_key]
+
+                freshness_responses[source] = self._create_freshness_response(
+                    last_modified, snapshot_time
+                )
+
+        return adapter_responses, freshness_responses
 
     def _get_catalog_schemas(self, manifest):
         # redshift(besides ra3) only allow one database (the main one)
         schemas = super(SQLAdapter, self)._get_catalog_schemas(manifest)
+        allow_multiple_databases = self.config.credentials.ra3_node or self.use_show_apis()
         try:
-            return schemas.flatten(allow_multiple_databases=self.config.credentials.ra3_node)
+            return schemas.flatten(allow_multiple_databases=allow_multiple_databases)
         except dbt_common.exceptions.DbtRuntimeError as exc:
             msg = f"Cross-db references allowed only in {self.type()} RA3.* node. Got {exc.msg}"
             raise dbt_common.exceptions.CompilationError(msg)
@@ -261,22 +774,67 @@ class RedshiftAdapter(SQLAdapter):
     def _unset_query_group(self) -> None:
         self.execute("RESET query_group")
 
-    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
+    def _apply_query_group(self, query_group: Optional[str]) -> None:
+        if query_group is None:
+            self._unset_query_group()
+        else:
+            self._set_query_group(query_group)
 
-        if model_query_group == default_query_group or model_query_group is None:
-            return None
-        self._set_query_group(model_query_group)
+    def _needs_query_group_change(self, config: Mapping[str, Any]) -> bool:
+        model_query_group = config.get("query_group")
+        default_query_group = self.config.credentials.query_group
+        return model_query_group is not None and model_query_group != default_query_group
+
+    def _use_database(self, database: str) -> None:
+        self.execute(f"USE {self.quote(database)}")
+
+    def _reset_database(self) -> None:
+        self.execute("RESET USE")
+
+    @staticmethod
+    def _normalize_database(database: str) -> str:
+        return database.strip('"').lower()
+
+    def _is_different_database(self, database: Optional[str]) -> bool:
+        """Check if the given database differs from the default credentials database."""
+        if database is None:
+            return False
+        return self._normalize_database(str(database)) != self._normalize_database(
+            self.config.credentials.database
+        )
+
+    def _needs_database_change(self, config: Mapping[str, Any]) -> bool:
+        return self.use_show_apis() and self._is_different_database(config.get("database"))
+
+    def pre_model_hook(self, config: Mapping[str, Any]) -> Optional[str]:
+        if self._needs_query_group_change(config):
+            self._set_query_group(str(config.get("query_group")))
+        if self._needs_database_change(config):
+            self._use_database(self._normalize_database(str(config.get("database"))))
         return None
 
     def post_model_hook(self, config: Mapping[str, Any], context: Optional[str]) -> None:
-        default_query_group = self.config.credentials.query_group
-        model_query_group = config.get("query_group")
+        if self._needs_query_group_change(config):
+            self._apply_query_group(self.config.credentials.query_group)
+        if self._needs_database_change(config):
+            self._reset_database()
 
-        if model_query_group == default_query_group:
-            return None
-        elif default_query_group is None and model_query_group is not None:
-            self._unset_query_group()
-        else:
-            self._set_query_group(default_query_group)
+    @contextmanager
+    def _use_database_context(self, relation):
+        """Issue USE <database> / RESET USE around cross-database operations."""
+        needs_use = self.use_show_apis() and self._is_different_database(relation.database)
+        if needs_use:
+            self._use_database(self._normalize_database(str(relation.database)))
+        try:
+            yield
+        finally:
+            if needs_use:
+                self._reset_database()
+
+    def create_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().create_schema(relation)
+
+    def drop_schema(self, relation) -> None:
+        with self._use_database_context(relation):
+            super().drop_schema(relation)

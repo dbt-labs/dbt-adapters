@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from types import MappingProxyType
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 from dbt.adapters.relation_configs import RelationConfigChange
 from dbt.adapters.contracts.relation import RelationConfig
@@ -21,12 +21,27 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
 
     enable_refresh: Optional[bool] = True
     refresh_interval_minutes: Optional[float] = 30
-    expiration_timestamp: Optional[datetime] = None
+    expiration_timestamp: Optional[Union[datetime, str]] = None
     max_staleness: Optional[str] = None
     kms_key_name: Optional[str] = None
     description: Optional[str] = None
     labels: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
     tags: MappingProxyType = field(default_factory=lambda: MappingProxyType({}))
+
+    def to_dict(self) -> Dict[str, Any]:
+        expiration = self.expiration_timestamp
+        if isinstance(expiration, datetime):
+            expiration = expiration.isoformat()
+        return {
+            "enable_refresh": self.enable_refresh,
+            "refresh_interval_minutes": self.refresh_interval_minutes,
+            "expiration_timestamp": expiration,
+            "max_staleness": self.max_staleness,
+            "kms_key_name": self.kms_key_name,
+            "description": self.description,
+            "labels": dict(self.labels) if self.labels is not None else None,
+            "tags": dict(self.tags) if self.tags is not None else None,
+        }
 
     def __hash__(self) -> int:
         """Custom hash method to handle unhashable dict fields."""
@@ -62,6 +77,15 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         def escaped_string(x):
             return f'"""{sql_escape(x)}"""'
 
+        def timestamp(x):
+            if isinstance(x, str):
+                return x
+            # Normalize all datetimes to UTC. If tz-naive, assume the value is in UTC.
+            if x.tzinfo is None:
+                x = x.replace(tzinfo=timezone.utc)
+            x = x.astimezone(timezone.utc)
+            return f"TIMESTAMP '{x.strftime('%Y-%m-%d %H:%M:%S.%f')} UTC'"
+
         def interval(x):
             return x
 
@@ -71,7 +95,7 @@ class BigQueryOptionsConfig(BigQueryBaseRelationConfig):
         option_formatters = {
             "enable_refresh": boolean,
             "refresh_interval_minutes": numeric,
-            "expiration_timestamp": interval,
+            "expiration_timestamp": timestamp,
             "max_staleness": interval,
             "kms_key_name": string,
             "description": escaped_string,

@@ -54,8 +54,10 @@
     {{ get_assert_columns_equivalent(sql) }}
     {%- set sql = get_select_subquery(sql) %}
     {% if backup == false -%}backup no{%- endif %}
+    {%- if not temporary %}
     {{ dist(_dist) }}
     {{ sort(_sort_type, _sort) }}
+    {%- endif %}
   ;
 
   insert into {{ relation.include(database=(not temporary), schema=(not temporary)) }}
@@ -69,8 +71,10 @@
   create {% if temporary -%}temporary{%- endif %} table
     {{ relation.include(database=(not temporary), schema=(not temporary)) }}
     {% if backup == false -%}backup no{%- endif %}
+    {%- if not temporary %}
     {{ dist(_dist) }}
     {{ sort(_sort_type, _sort) }}
+    {%- endif %}
   as (
     {{ sql }}
   );
@@ -98,40 +102,107 @@
 
 
 {% macro redshift__create_schema(relation) -%}
-  {{ postgres__create_schema(relation) }}
+  {% if redshift__use_show_apis() %}
+    {%- call statement('create_schema') -%}
+      create schema if not exists {{ relation.without_identifier() }}
+    {%- endcall -%}
+  {% else %}
+    {{ postgres__create_schema(relation) }}
+  {% endif %}
 {% endmacro %}
 
 
 {% macro redshift__drop_schema(relation) -%}
-  {{ postgres__drop_schema(relation) }}
+  {% if redshift__use_show_apis() %}
+    {%- call statement('drop_schema') -%}
+      drop schema if exists {{ relation.without_identifier() }} cascade
+    {%- endcall -%}
+  {% else %}
+    {{ postgres__drop_schema(relation) }}
+  {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__make_temp_relation(base_relation, suffix) %}
+  {#
+    Same relation postgres__make_temp_relation builds -- fully unqualified, with both
+    schema and database stripped to none -- but flagged as one dbt minted itself, so
+    RedshiftAdapter.get_columns_in_relation can describe it from the driver directly when
+    `datasharing` is enabled. Without the flag we could only infer "temporary" from the
+    absence of a database and schema, which is a negative signal shared with any other
+    unqualified caller.
+
+    The flag is set unconditionally; whether it is acted on is decided in Python, so the
+    marker stays a plain statement of what the relation is.
+  #}
+  {% set temp_relation = postgres__make_temp_relation(base_relation, suffix) %}
+  {{ return(temp_relation.incorporate(is_temporary=True)) }}
 {% endmacro %}
 
 
 {% macro redshift__get_columns_in_relation(relation) -%}
-  {% if redshift__use_show_apis() %}
-    {{ return(redshift__get_columns_in_relation_svv(relation)) }}
+  {# With `datasharing` enabled, relations dbt minted as temp tables do not reach here: #}
+  {# RedshiftAdapter.get_columns_in_relation recognises their is_temporary marker and #}
+  {# describes them from the driver instead, because no catalog view on a datashare consumer #}
+  {# can see them. Everything else -- including temp relations on an ordinary connection, #}
+  {# where information_schema can see them -- comes through the branches below. #}
+
+  {% if not relation.database and not relation.schema %}
+    {{ return(redshift__get_columns_in_relation_unqualified(relation)) }}
+  {% elif redshift__use_show_apis() %}
+    {{ return(redshift__get_columns_in_relation_show(relation)) }}
   {% else %}
     {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
   {% endif %}
 {% endmacro %}
 
 
-{% macro redshift__get_columns_in_relation_svv(relation) -%}
+{% macro redshift__get_columns_in_relation_unqualified(relation) -%}
+  {# An unqualified relation is most likely a temp table, which can never be a late-binding #}
+  {# or external view, so try without pg_get_late_binding_view_cols() first -- it expands #}
+  {# every late-binding view in the session and dominates the legacy query's runtime. #}
+  {# Fall back to the legacy query if nothing matches, for any other caller. #}
   {% call statement('get_columns_in_relation', fetch_result=True) %}
-    select
-      column_name,
-      data_type,
-      character_maximum_length,
-      numeric_precision,
-      numeric_scale
-    from svv_all_columns
-    where database_name = '{{ relation.database }}'
-      and schema_name = '{{ relation.schema }}'
-      and table_name = '{{ relation.identifier }}'
-    order by ordinal_position
+      select
+        column_name,
+        data_type,
+        character_maximum_length,
+        numeric_precision,
+        numeric_scale
+
+      from information_schema."columns"
+      where table_name = '{{ relation.identifier }}'
+      order by ordinal_position
   {% endcall %}
   {% set table = load_result('get_columns_in_relation').table %}
-  {{ return(sql_convert_columns_in_relation(table)) }}
+  {% set columns = sql_convert_columns_in_relation(table) %}
+
+  {% if columns %}
+    {{ return(columns) }}
+  {% endif %}
+  {{ return(redshift__get_columns_in_relation_legacy(relation)) }}
+{% endmacro %}
+
+
+{% macro redshift__get_columns_in_relation_show(relation) -%}
+  {% call statement('get_columns_in_relation', fetch_result=True) %}
+    SHOW COLUMNS FROM TABLE {{ adapter.quote(relation.database) }}.{{ adapter.quote(relation.schema) }}.{{ adapter.quote(relation.identifier) }}
+  {% endcall %}
+  {% set table = load_result('get_columns_in_relation').table %}
+  {% set columns = [] %}
+  {% for row in table %}
+    {# filter out Redshift internal pg.dropped markers that can appear after ALTER TABLE DROP COLUMN #}
+    {% if 'pg.dropped.' not in row['column_name'] %}
+      {% do columns.append(api.Column(
+        column=row['column_name'],
+        dtype=row['data_type'],
+        char_size=row['character_maximum_length'],
+        numeric_precision=row['numeric_precision'],
+        numeric_scale=row['numeric_scale']
+      )) %}
+    {% endif %}
+  {% endfor %}
+  {{ return(columns) }}
 {% endmacro %}
 
 
@@ -255,39 +326,13 @@
 
 {% macro redshift__list_relations_without_caching(schema_relation) %}
   {% if redshift__use_show_apis() %}
-    {# Joining SVV views in Redshift is unreliable as some data is available in leader node but queries run on compute nodes #}
-    {# Therefore, we run two separate queries and merge the results #}
-
-    {% call statement('dbt_all_relations', fetch_result=True) -%}
-      select
-        database_name as database,
-        table_name as name,
-        schema_name as schema,
-        case when table_type = 'VIEW' then 'view' else 'table' end as type
-      from svv_all_tables
-      where schema_name ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
+    {% call statement('show_tables', fetch_result=True) -%}
+      SHOW TABLES FROM SCHEMA {{ adapter.quote(schema_relation.database) }}.{{ adapter.quote(schema_relation.schema) }}
     {% endcall %}
-
-    {% call statement('dbt_materialized_views', fetch_result=True) -%}
-      select
-        trim(database_name) as database,
-        trim(name) as name,
-        trim(schema_name) as schema,
-        'materialized_view' as type
-      from svv_mv_info
-      where trim(schema_name) ilike '{{ schema_relation.schema }}'
-      {% if schema_relation.database %}
-      and database_name = '{{ schema_relation.database }}'
-      {% endif %}
-    {% endcall %}
-
-    {% set all_relations = load_result('dbt_all_relations').table %}
-    {% set materialized_views = load_result('dbt_materialized_views').table %}
-
-    {{ return(adapter.merge_relation_tables(all_relations, materialized_views)) }}
+    {% set show_result = load_result('show_tables').table %}
+    {% set table_and_view_relations = adapter.transform_show_tables_for_list_relations(show_result) %}
+    {% set function_relations = list_function_relations_without_caching(schema_relation) %}
+    {{ return(adapter.combine_show_tables_and_function_relations(table_and_view_relations, function_relations)) }}
   {% else %}
     {% call statement('list_relations_without_caching', fetch_result=True) -%}
       select
@@ -310,9 +355,39 @@
         end as type
       from information_schema.views
       where table_schema ilike '{{ schema_relation.schema }}'
+      union all
+      select distinct
+        '{{ schema_relation.database }}' as database,
+        proname as name,
+        ns.nspname as schema,
+        'function' as type
+      from pg_proc
+      join pg_namespace as ns on pronamespace = ns.oid
+      where ns.nspname ilike '{{ schema_relation.schema }}'
     {% endcall %}
     {{ return(load_result('list_relations_without_caching').table) }}
   {% endif %}
+{% endmacro %}
+
+
+{% macro redshift__list_function_relations_without_caching(schema_relation) %}
+  {#
+    There is no SHOW API equivalent for functions in Redshift (unlike `SHOW TABLES FROM SCHEMA`),
+    so we always use pg_proc regardless of the `use_show_apis` flag. This is safe because
+    Redshift datasharing does not support sharing UDFs or stored procedures across databases,
+    meaning functions are always local to the current database.
+  #}
+  {% call statement('list_function_relations_without_caching', fetch_result=True) -%}
+    select distinct
+      '{{ schema_relation.database }}' as database,
+      proname::varchar as name,
+      ns.nspname::varchar as schema,
+      'function' as type
+    from pg_proc
+    join pg_namespace as ns on pronamespace = ns.oid
+    where ns.nspname ilike '{{ schema_relation.schema }}'
+  {% endcall %}
+  {{ return(load_result('list_function_relations_without_caching').table) }}
 {% endmacro %}
 
 {% macro redshift__information_schema_name(database) -%}
@@ -322,14 +397,24 @@
 
 {% macro redshift__list_schemas(database) %}
   {% if redshift__use_show_apis() %}
+    {# dbt-core's create_schemas passes a pre-quoted identifier via str(relation);
+       other callers pass the raw database name. Only quote when the input is not
+       already wrapped in double-quotes, so the identifier is quoted exactly once —
+       required for databases with hyphens. #}
+    {%- if database.startswith('"') and database.endswith('"') -%}
+      {%- set _quoted_database = database -%}
+    {%- else -%}
+      {%- set _quoted_database = adapter.quote(database) -%}
+    {%- endif -%}
     {% call statement('list_schemas', fetch_result=True) -%}
-      select distinct schema_name as nspname
-      from svv_all_schemas
-      {% if database %}
-      where database_name = '{{ database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ _quoted_database }}
     {% endcall %}
-    {{ return(load_result('list_schemas').table) }}
+    {%- set table = load_result('list_schemas').table -%}
+    {%- set schemas = [] -%}
+    {%- for row in table.rows -%}
+      {%- do schemas.append([row['schema_name']]) -%}
+    {%- endfor -%}
+    {{ return(schemas) }}
   {% else %}
     {{ return(postgres__list_schemas(database)) }}
   {% endif %}
@@ -338,13 +423,13 @@
 {% macro redshift__check_schema_exists(information_schema, schema) %}
   {% if redshift__use_show_apis() %}
     {% call statement('check_schema_exists', fetch_result=True) -%}
-      select count(*) from svv_all_schemas
-      where schema_name = '{{ schema }}'
-      {% if information_schema.database %}
-      and database_name = '{{ information_schema.database }}'
-      {% endif %}
+      SHOW SCHEMAS FROM DATABASE {{ adapter.quote(information_schema.database) }}
+      LIKE '{{ schema }}'
     {% endcall %}
-    {{ return(load_result('check_schema_exists').table) }}
+    {%- set table = load_result('check_schema_exists').table -%}
+
+    {# We return list of list because the base adapter expects column count #}
+    {{ return([[table.rows | length]]) }}
   {% else %}
     {{ return(postgres__check_schema_exists(information_schema, schema)) }}
   {% endif %}
@@ -359,7 +444,12 @@
   {# Override: do not set column comments for LBVs #}
   {% set is_lbv = relation.type == 'view' and config.get('bind') == false %}
   {% if for_columns and config.persist_column_docs() and model.columns and not is_lbv %}
-    {% do run_query(alter_column_comment(relation, model.columns)) %}
+    {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
+    {% set filtered_columns = validate_doc_columns(relation, model.columns, existing_columns) %}
+    {% set alter_comment_sql = alter_column_comment(relation, filtered_columns) %}
+    {% if alter_comment_sql and alter_comment_sql | trim | length > 0 %}
+      {% do run_query(alter_comment_sql) %}
+    {% endif %}
   {% endif %}
 {% endmacro %}
 
@@ -389,6 +479,29 @@
 {% endmacro %}
 
 
+{% macro redshift__alter_column_type(relation, column_name, new_column_type) -%}
+  {#
+    Redshift ALTER COLUMN TYPE only supports VARCHAR and VARBYTE (size changes).
+    For those, use native ALTER; for any other type change, fall back to
+    default add/copy/drop/rename.
+
+    The native ALTER TABLE ALTER COLUMN cannot run inside a transaction block.
+    It is only safe to use when `redshift_skip_autocommit_transaction_statements`
+    is enabled (i.e. we are not wrapping statements in BEGIN/COMMIT).
+    When the flag is off, always use the default migration path.
+  #}
+  {% set type_lower = (new_column_type | lower) | trim %}
+  {% set skip_txn = adapter.behavior.redshift_skip_autocommit_transaction_statements.no_warn %}
+  {% if skip_txn and (type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte') %}
+    {% call statement('alter_column_type') %}
+      alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
+    {% endcall %}
+  {% else %}
+    {{ default__alter_column_type(relation, column_name, new_column_type) }}
+  {% endif %}
+{% endmacro %}
+
+
 {% macro redshift__alter_relation_add_remove_columns(relation, add_columns, remove_columns) %}
 
   {% if add_columns %}
@@ -413,4 +526,12 @@
 
   {% endif %}
 
+{% endmacro %}
+
+
+{% macro redshift__show_tables_from_schema(database, schema) %}
+    {%- call statement('show_tables', fetch_result=True) -%}
+        SHOW TABLES FROM SCHEMA {{ adapter.quote(database) }}.{{ adapter.quote(schema) }}
+    {%- endcall -%}
+    {{ return(load_result('show_tables')) }}
 {% endmacro %}

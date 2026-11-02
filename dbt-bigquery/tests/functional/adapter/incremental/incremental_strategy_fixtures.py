@@ -460,6 +460,102 @@ where date_int >= _dbt_max_partition
 {% endif %}
 """.lstrip()
 
+overwrite_range_with_require_partition_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        cluster_by="id",
+        partition_by={
+            "field": "date_int",
+            "data_type": "int64",
+            "range": {
+                "start": 20200101,
+                "end": 20200110,
+                "interval": 1
+            }
+        },
+        post_hook="
+            create or replace view `{{ schema }}.incremental_overwrite_range_with_require_partition_view`
+            as select * from {{ this }} where date_int is null or date_int is not null
+        ",
+        require_partition_filter=true
+    )
+}}
+
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        select 1 as id, 20200101 as date_int union all
+        select 2 as id, 20200101 as date_int union all
+        select 3 as id, 20200101 as date_int union all
+        select 4 as id, 20200101 as date_int
+
+    {% else %}
+
+        select 10 as id, 20200101 as date_int union all
+        select 20 as id, 20200101 as date_int union all
+        select 30 as id, 20200102 as date_int union all
+        select 40 as id, 20200102 as date_int
+
+    {% endif %}
+
+)
+
+select * from data
+""".lstrip()
+
+overwrite_range_with_interval_sql = """
+{{
+    config(
+        materialized="incremental",
+        incremental_strategy='insert_overwrite',
+        cluster_by="id",
+        partition_by={
+            "field": "id_bucket",
+            "data_type": "int64",
+            "range": {
+                "start": 0,
+                "end": 100,
+                "interval": 10
+            }
+        }
+    )
+}}
+
+
+with data as (
+
+    {% if not is_incremental() %}
+
+        -- all 4 rows are in partition [0, 10)
+        select 1 as id, 1 as id_bucket union all
+        select 2 as id, 2 as id_bucket union all
+        select 3 as id, 3 as id_bucket union all
+        select 4 as id, 4 as id_bucket
+
+    {% else %}
+
+        -- these 3 rows are also in partition [0, 10)
+        -- insert_overwrite should replace the entire partition,
+        -- deleting all 4 original rows and inserting these 3
+        select 10 as id, 4 as id_bucket union all
+        select 20 as id, 5 as id_bucket union all
+        select 30 as id, 6 as id_bucket
+
+    {% endif %}
+
+)
+
+select * from data
+
+{% if is_incremental() %}
+where id_bucket >= _dbt_max_partition
+{% endif %}
+""".lstrip()
+
 overwrite_time_sql = """
 {{
     config(

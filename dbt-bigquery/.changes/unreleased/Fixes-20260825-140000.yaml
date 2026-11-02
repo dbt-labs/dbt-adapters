@@ -1,0 +1,9 @@
+kind: Fixes
+body: Set an explicit WRITE_TRUNCATE disposition on seed load jobs so seeds always
+    replace their contents. Previously the load job relied on BigQuery's default of
+    WRITE_APPEND, so if the pre-load drop was skipped the seed's rows were appended
+    to the existing table instead of replacing it.
+time: 2026-08-25T14:00:00.000000-05:00
+custom:
+    Author: tauhid621
+    Issue: "2144"

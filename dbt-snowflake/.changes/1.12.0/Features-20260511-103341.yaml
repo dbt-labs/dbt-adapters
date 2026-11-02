@@ -1,0 +1,6 @@
+kind: Features
+body: 'Add bridge_v2_catalog support: _v2_to_v1_type, _v2_table_format (uppercase), _translate_v2_properties (linked field map), and Capability.CatalogsV2'
+time: 2026-05-11T10:33:41.118382+05:30
+custom:
+    Author: aahel
+    Issue: "1920"

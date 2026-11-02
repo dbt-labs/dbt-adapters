@@ -1,6 +1,10 @@
 import pytest
 
-from dbt.adapters.bigquery.column import get_nested_column_data_types
+from dbt.adapters.bigquery.column import (
+    BigQueryColumn,
+    get_nested_column_data_types,
+    _parse_struct_fields,
+)
 
 
 @pytest.mark.parametrize(
@@ -244,3 +248,105 @@ from dbt.adapters.bigquery.column import get_nested_column_data_types
 def test_get_nested_column_data_types(columns, constraints, expected_nested_columns):
     actual_nested_columns = get_nested_column_data_types(columns, constraints)
     assert expected_nested_columns == actual_nested_columns
+
+
+@pytest.mark.parametrize(
+    ["data_type", "expected_fields"],
+    [
+        ("INT64", None),
+        ("STRING", None),
+        (
+            "struct<x INT64, y STRING>",
+            [{"name": "x", "data_type": "INT64"}, {"name": "y", "data_type": "STRING"}],
+        ),
+        (
+            "struct<a struct<b INT64, c STRING>, d INT64>",
+            [
+                {"name": "a", "data_type": "struct<b INT64, c STRING>"},
+                {"name": "d", "data_type": "INT64"},
+            ],
+        ),
+        (
+            "struct<nested string not null, nested2 int64>",
+            [
+                {"name": "nested", "data_type": "string not null"},
+                {"name": "nested2", "data_type": "int64"},
+            ],
+        ),
+        # Trailing constraints after closing > must not corrupt inner field parsing
+        (
+            "struct<x INT64, y STRING> not null",
+            [{"name": "x", "data_type": "INT64"}, {"name": "y", "data_type": "STRING"}],
+        ),
+        (
+            "struct<a struct<b INT64>> not null",
+            [{"name": "a", "data_type": "struct<b INT64>"}],
+        ),
+        # Field types with parenthesised parameters — commas inside () are not field separators
+        (
+            "struct<a NUMERIC(10, 2), b INT64>",
+            [{"name": "a", "data_type": "NUMERIC(10, 2)"}, {"name": "b", "data_type": "INT64"}],
+        ),
+        (
+            "struct<a NUMERIC(10, 2), b struct<c NUMERIC(5, 3), d STRING>>",
+            [
+                {"name": "a", "data_type": "NUMERIC(10, 2)"},
+                {"name": "b", "data_type": "struct<c NUMERIC(5, 3), d STRING>"},
+            ],
+        ),
+        # Malformed: missing outer closing > returns None
+        ("struct<x INT64, y STRING", None),
+        # Malformed: missing inner closing > returns None
+        ("struct<a struct<b INT64, c STRING>", None),
+        # Malformed: extra trailing > returns None
+        ("struct<x INT64>>", None),
+    ],
+)
+def test_parse_struct_fields(data_type, expected_fields):
+    assert _parse_struct_fields(data_type) == expected_fields
+
+
+@pytest.mark.parametrize(
+    ["column_name", "data_type", "expected"],
+    [
+        # Non-struct column returns name as-is
+        ("col", "INT64", "col"),
+        ("col", "STRING", "col"),
+        # Simple struct - fields are explicitly selected, NULL struct preserved
+        (
+            "col",
+            "struct<y INT64, x INT64>",
+            "IF(col IS NULL, NULL, STRUCT(col.y AS y, col.x AS x)) AS col",
+        ),
+        # Struct with 3 fields
+        (
+            "struct_data",
+            "struct<y INT64, x INT64, z INT64>",
+            "IF(struct_data IS NULL, NULL, STRUCT(struct_data.y AS y, struct_data.x AS x, struct_data.z AS z)) AS struct_data",
+        ),
+        # Nested struct - NULL semantics preserved at each nesting level
+        (
+            "a",
+            "struct<b struct<c STRING, d INT64>, e INT64>",
+            "IF(a IS NULL, NULL, STRUCT(IF(a.b IS NULL, NULL, STRUCT(a.b.c AS c, a.b.d AS d)) AS b, a.e AS e)) AS a",
+        ),
+        # Deeply nested struct
+        (
+            "a",
+            "struct<b struct<c struct<d STRING>>>",
+            "IF(a IS NULL, NULL, STRUCT(IF(a.b IS NULL, NULL, STRUCT(IF(a.b.c IS NULL, NULL, STRUCT(a.b.c.d AS d)) AS c)) AS b)) AS a",
+        ),
+        # Array type - not a struct, returns as-is
+        ("col", "ARRAY<INT64>", "col"),
+        # Struct with constraints in field types
+        (
+            "col",
+            "struct<x STRING not null, y INT64>",
+            "IF(col IS NULL, NULL, STRUCT(col.x AS x, col.y AS y)) AS col",
+        ),
+        # Empty data_type - returns column name as-is (no struct to parse)
+        ("col", "", "col"),
+    ],
+)
+def test_get_struct_select_expression(column_name, data_type, expected):
+    assert BigQueryColumn.get_struct_select_expression(column_name, data_type) == expected

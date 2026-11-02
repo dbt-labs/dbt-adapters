@@ -8,6 +8,7 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.snowflake import constants, parse_model
+from dbt.adapters.snowflake.constants import SnowflakeIcebergTableRelationParameters
 
 from dbt.adapters.exceptions.compilation import InvalidRelationConfigError
 
@@ -25,6 +26,8 @@ class IcebergRestCatalogRelation:
     target_file_size: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     auto_refresh: Optional[bool] = None
+    iceberg_version: Optional[int] = None
+    catalog_database: Optional[str] = None
 
 
 class IcebergRestCatalogIntegration(CatalogIntegration):
@@ -38,12 +41,14 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
     catalog_linked_database_type: Optional[str] = None
     max_data_extension_time_in_days: Optional[int] = None
     target_file_size: Optional[str] = None
+    iceberg_version: Optional[int] = None
 
     def __init__(self, config: CatalogIntegrationConfig) -> None:
         # we overwrite this because the base provides too much config
         self.name: str = config.name
         self.catalog_name: Optional[str] = config.catalog_name
         self.external_volume: Optional[str] = config.external_volume
+        self.catalog_database: Optional[str] = getattr(config, "catalog_database", None)
         if adapter_properties := config.adapter_properties:
             self.catalog_linked_database = adapter_properties.get("catalog_linked_database")
             self.catalog_linked_database_type = adapter_properties.get(
@@ -53,6 +58,9 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             self.target_file_size = adapter_properties.get("target_file_size")
             self.max_data_extension_time_in_days = adapter_properties.get(
                 "max_data_extension_time_in_days"
+            )
+            self.iceberg_version = adapter_properties.get(
+                SnowflakeIcebergTableRelationParameters.iceberg_version
             )
 
         if not self.catalog_linked_database:
@@ -91,4 +99,6 @@ class IcebergRestCatalogIntegration(CatalogIntegration):
             target_file_size=parse_model.target_file_size(model) or self.target_file_size,
             max_data_extension_time_in_days=parse_model.max_data_extension_time_in_days(model)
             or self.max_data_extension_time_in_days,
+            iceberg_version=parse_model.iceberg_version(model) or self.iceberg_version,
+            catalog_database=self.catalog_database,
         )

@@ -35,6 +35,13 @@ def base_location(model: RelationConfig) -> Optional[str]:
     if not model.config:
         return None
 
+    # Suppress base_location when SNOWFLAKE_MANAGED is explicitly set in model config.
+    # The "no external_volume" case is handled upstream in _built_in.py where the
+    # fully-resolved external_volume (including catalog integration defaults) is known.
+    ev = model.config.get("external_volume")
+    if ev and ev.upper() == "SNOWFLAKE_MANAGED":
+        return None
+
     prefix = (
         model.config.get("base_location_root") or "_dbt"
     )  # use "_dbt" even when users pass in None
@@ -126,6 +133,14 @@ def table_format(model: RelationConfig) -> Optional[str]:
         # make table_format case-insensitive
         return _table_format.upper()
     return None
+
+
+def iceberg_version(model: RelationConfig) -> Optional[int]:
+    return (
+        model.config.get(SnowflakeIcebergTableRelationParameters.iceberg_version)
+        if model.config
+        else None
+    )
 
 
 def target_file_size(model: RelationConfig) -> Optional[str]:

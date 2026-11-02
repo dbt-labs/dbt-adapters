@@ -24,6 +24,7 @@ class FakeCatalogIntegrationConfig(CatalogIntegrationConfig):
     table_format: Optional[str] = None
     external_volume: Optional[str] = None
     file_format: Optional[str] = None
+    catalog_database: Optional[str] = None
     adapter_properties: Optional[Dict[str, Any]] = None
 
 

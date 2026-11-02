@@ -1,0 +1,13 @@
+kind: Fixes
+body: 'Map values by column name rather than column position in the Snowflake `insert_overwrite`
+  incremental strategy, so an enforced contract or a column appended by `on_schema_change`
+  can no longer silently write values into the wrong columns. Three side effects, each
+  matching how the other incremental strategies already behave: with the default
+  `on_schema_change=''ignore''`, a column added to the model is now dropped rather than
+  failing on a column-count mismatch, and a renamed column now errors rather than writing
+  into the old column; with `on_schema_change=''append_new_columns''`, a column removed
+  from the model is now set to null rather than failing on a column-count mismatch'
+time: 2026-08-21T10:15:00.000000-05:00
+custom:
+  Author: tauhid621
+  Issue: "1511"

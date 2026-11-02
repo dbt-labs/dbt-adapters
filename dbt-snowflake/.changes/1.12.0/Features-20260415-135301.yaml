@@ -1,0 +1,6 @@
+kind: Features
+body: Added support for --empty in dbt seed
+time: 2026-04-15T13:53:01.496772+05:30
+custom:
+    Author: sriramr98
+    Issue: "1865"

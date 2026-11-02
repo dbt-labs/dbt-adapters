@@ -9,6 +9,8 @@ from dbt.adapters.catalogs._integration import (
     CatalogIntegration,
     CatalogIntegrationConfig,
     CatalogRelation,
+    CatalogV2,
+    CatalogWriteIntegrationConfig,
 )
 
 from dbt.adapters.catalogs._constants import CATALOG_INTEGRATION_MODEL_CONFIG_NAME

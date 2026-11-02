@@ -3,6 +3,9 @@ from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, TYPE_CHECKING, List, Union, Optional
 
+from dbt_common.events.base_types import EventLevel
+from dbt_common.events.functions import fire_event
+from dbt_common.events.types import Note
 from dbt_common.record import get_record_row_limit_from_env
 
 RECORDER_ROW_LIMIT: Optional[int] = get_record_row_limit_from_env()
@@ -29,11 +32,9 @@ def serialize_agate_table(table: "Table") -> Dict[str, Any]:
     rows = []
 
     if RECORDER_ROW_LIMIT and len(table.rows) > RECORDER_ROW_LIMIT:
-        rows = [
-            [
-                f"Recording Error: Agate table contains {len(table.rows)} rows, maximum is {RECORDER_ROW_LIMIT} rows."
-            ]
-        ]
+        msg = f"Recording Error: Agate table contains {len(table.rows)} rows, maximum is {RECORDER_ROW_LIMIT} rows."
+        fire_event(Note(msg=msg), level=EventLevel.DEBUG)
+        rows = [[msg]]
     else:
         for row in table.rows:
             row = list(map(_column_filter, row))

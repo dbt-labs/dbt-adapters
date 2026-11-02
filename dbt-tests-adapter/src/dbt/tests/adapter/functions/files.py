@@ -26,7 +26,7 @@ functions:
     description: Calculate the price for the xlarge version of a standard item
     config:
       entry_point: price_for_xlarge
-      runtime_version: "3.12"
+      runtime_version: "3.11"
     arguments:
       - name: price
         data_type: float
@@ -138,7 +138,7 @@ functions:
     description: Calculate the price for the xlarge version of a standard item
     config:
       entry_point: price_for_xlarge
-      runtime_version: "3.12"
+      runtime_version: "3.11"
     arguments:
       - name: price
         data_type: float
@@ -148,3 +148,62 @@ functions:
       data_type: float
       description: The resulting xlarge price
 """
+
+# Python UDF that uses a package (numpy) so we can verify packages are templated and the function runs
+MY_UDF_PYTHON_WITH_NUMPY = """
+import numpy as np
+
+def sqrt_input(x: float) -> float:
+    return float(np.sqrt(x))
+""".strip()
+
+MY_UDF_PYTHON_WITH_PACKAGES_YML = """
+functions:
+  - name: sqrt_input
+    description: Return the square root of the input using numpy
+    config:
+      entry_point: sqrt_input
+      runtime_version: "3.11"
+      packages: ["numpy"]
+    arguments:
+      - name: x
+        data_type: float
+        description: The value to take the square root of
+    returns:
+      data_type: float
+      description: The square root of the input
+""".strip()
+
+
+# --- JavaScript UDF fixtures (shared body strings) ---
+# YAML configs stay in adapter-specific files.py due to differing data types.
+
+MY_JS_UDF = """
+return price * 2;
+""".strip()
+
+MASK_PII_JS = """
+if (value === null || value === undefined) {
+    return null;
+}
+var masked = value.substring(0, 2);
+for (var i = 2; i < value.length; i++) {
+    masked += '*';
+}
+return masked;
+""".strip()
+
+SUM_POSITIVE_JS = """
+export function initialState() {
+  return {sum: 0}
+}
+export function aggregate(state, x) {
+  if (x > 0) { state.sum += x; }
+}
+export function merge(state, partialState) {
+  state.sum += partialState.sum;
+}
+export function finalize(state) {
+  return state.sum;
+}
+""".strip()

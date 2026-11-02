@@ -1,0 +1,6 @@
+kind: Fixes
+body: Handle missing table_subtype and decouple ra3_node from use_show_apis
+time: 2026-03-11T09:55:35.525318-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "1745"

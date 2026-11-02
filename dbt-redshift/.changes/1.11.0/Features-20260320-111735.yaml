@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for per-model database switching using USE <database> before model execution and RESET USE after, enabling models targeting a non-default db
+time: 2026-03-20T11:17:35.842313+05:30
+custom:
+    Author: tauhid621
+    Issue: "1786"

@@ -1,13 +1,18 @@
+import os
 import unittest
 from unittest import mock
 import re
 from jinja2 import Environment, FileSystemLoader
 
+MACROS_DIR = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "../../src/dbt/include/snowflake/macros")
+)
+
 
 class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
     def setUp(self):
         self.jinja_env = Environment(
-            loader=FileSystemLoader("src/dbt/include/snowflake/macros"),
+            loader=FileSystemLoader(MACROS_DIR),
             extensions=[
                 "jinja2.ext.do",
             ],
@@ -43,6 +48,7 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
         relation_type="table",
         is_dynamic_table=False,
         is_iceberg_format=False,
+        is_interactive_table=False,
         database="test_db",
         schema="test_schema",
         identifier="test_table",
@@ -52,6 +58,7 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
         mock_relation.type = relation_type
         mock_relation.is_dynamic_table = is_dynamic_table
         mock_relation.is_iceberg_format = is_iceberg_format
+        mock_relation.is_interactive_table = is_interactive_table
         mock_relation.render.return_value = f"{database}.{schema}.{identifier}"
         return mock_relation
 
@@ -180,4 +187,17 @@ class TestSnowflakeAlterRelationCommentMacro(unittest.TestCase):
 
         # Should use iceberg syntax, not dynamic table syntax
         expected = "alter iceberg table test_db.test_schema.test_table set comment = $$This is both dynamic and iceberg$$;"
+        self.assertEqual(sql, expected)
+
+    def test_alter_relation_comment_interactive_table(self):
+        """Test alter_relation_comment for an interactive table"""
+        template = self.__get_template("adapters.sql")
+        relation = self.__create_mock_relation(
+            relation_type="interactive_table", is_interactive_table=True
+        )
+        comment = "This is an interactive table comment"
+
+        sql = self.__run_macro(template, "snowflake__alter_relation_comment", relation, comment)
+
+        expected = "comment on table test_db.test_schema.test_table IS $$This is an interactive table comment$$;"
         self.assertEqual(sql, expected)

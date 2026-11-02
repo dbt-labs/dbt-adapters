@@ -154,7 +154,34 @@ class TestSimpleSeedConfigs(SeedConfigBase):
 
 
 class TestBigQueryEmptySeed(BaseTestEmptySeed):
-    pass
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {
+            "seeds": {
+                "quote_columns": False,
+                "+hours_to_expiration": 2,
+                "+labels": {"contains_pii": "yes", "contains_pie": "no"},
+                "+labels_from_meta": True,
+                "+meta": {"team": "data"},
+            },
+        }
+
+    @staticmethod
+    def table_labels():
+        return {"contains_pii": "yes", "contains_pie": "no", "team": "data"}
+
+    def test__bigquery_empty_seed_applies_table_options(self, project):
+        seed_results = run_dbt(["seed"])
+        assert len(seed_results) == 1
+        with project.adapter.connection_named("_test"):
+            client = project.adapter.connections.get_thread_connection().handle
+            table_id = "{}.{}.{}".format(
+                project.database, project.test_schema, "empty_with_header"
+            )
+            bq_table = client.get_table(table_id)
+
+            assert bq_table.labels == self.table_labels()
+            assert bq_table.expires
 
 
 class TestBigQuerySeedWithUniqueDelimiter(TestSimpleSeedConfigs):

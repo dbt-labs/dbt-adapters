@@ -1,6 +1,12 @@
 import pytest
+from tenacity import retry, retry_if_exception_message, stop_after_attempt, wait_fixed
 
-from dbt.tests.util import run_dbt
+from dbt.tests.adapter.persist_docs.test_persist_docs import (
+    BasePersistDocsAllColumnsMissing,
+    BasePersistDocsQuotedColumnCaseSensitive,
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch,
+)
+from dbt.tests.util import run_dbt, run_dbt_and_capture
 
 from fixtures import (
     _MODELS__MY_FUN_DOCS,
@@ -8,11 +14,28 @@ from fixtures import (
     _MODELS__TABLE_DELTA_MODEL,
     _MODELS__TABLE_DELTA_MODEL_MISSING_COLUMN,
     _PROPERTIES__MODELS,
+    _PROPERTIES__MISSING_COLUMN,
     _PROPERTIES__SEEDS,
     _SEEDS__BASIC,
     _MODELS__VIEW_DELTA_MODEL,
     _VIEW_PROPERTIES_MODELS,
 )
+
+
+# Databricks' CI warehouse intermittently returns TABLE_OR_VIEW_NOT_FOUND on a
+# `describe extended` issued right after the create/seed that produced the
+# relation (read-after-write lag), so only this read-back gets retried.
+@retry(
+    retry=retry_if_exception_message(match=".*TABLE_OR_VIEW_NOT_FOUND.*"),
+    stop=stop_after_attempt(4),
+    wait=wait_fixed(5),
+    reraise=True,
+)
+def _describe_extended(project, relation):
+    return project.run_sql(
+        "describe extended {schema}.{table}".format(schema=project.test_schema, table=relation),
+        fetch="all",
+    )
 
 
 @pytest.mark.skip_profile("apache_spark", "spark_session")
@@ -62,12 +85,7 @@ class TestPersistDocsDeltaTable:
             ("seed", "Seed"),
             ("incremental_delta_model", "Incremental"),
         ]:
-            results = project.run_sql(
-                "describe extended {schema}.{table}".format(
-                    schema=project.test_schema, table=table
-                ),
-                fetch="all",
-            )
+            results = _describe_extended(project, table)
 
             for result in results:
                 if result[0] == "Comment":
@@ -104,12 +122,7 @@ class TestPersistDocsDeltaView:
     def test_delta_comments(self, project):
         run_dbt(["run"])
 
-        results = project.run_sql(
-            "describe extended {schema}.{table}".format(
-                schema=project.test_schema, table="view_delta_model"
-            ),
-            fetch="all",
-        )
+        results = _describe_extended(project, "view_delta_model")
 
         for result in results:
             if result[0] == "Comment":
@@ -147,24 +160,44 @@ class TestPersistDocsMissingColumn:
 
     @pytest.fixture(scope="class")
     def properties(self):
-        return {"schema.yml": _PROPERTIES__MODELS}
+        return {"schema.yml": _PROPERTIES__MISSING_COLUMN}
 
     def test_missing_column(self, project):
         """
-        spark will use our schema to verify all columns exist rather than fail silently
-
-        "resolve" vs "resolved" is intentional; example error message:
-            ('42000', '[42000] [Simba][Hardy] (80) Syntax or semantic analysis error thrown in server while executing query.
-            Error message from server:
-                org.apache.hive.service.cli.HiveSQLException: Error running query: [UNRESOLVED_COLUMN.WITH_SUGGESTION]
-                org.apache.spark.sql.AnalysisException: [UNRESOLVED_COLUMN.WITH_SUGGESTION] A column, variable, or function parameter with name `name` cannot be resolve (80) (SQLExecDirectW)'
-            )
+        With column filtering in alter_column_comment, non-existent columns
+        are now skipped instead of causing DB errors, and a warning is emitted.
         """
         run_dbt(["seed"])
-        res = run_dbt(["run"], expect_pass=False)
-        assert any(
-            [
-                "[UNRESOLVED_COLUMN.WITH_SUGGESTION]" in res[0].message,
-                "Missing field name in table" in res[0].message,
-            ]
+        _, logs = run_dbt_and_capture(["run"])
+        assert (
+            "The following columns are specified in the schema but are not present in the database: column_that_does_not_exist"
+            in logs
         )
+
+
+@pytest.mark.skip_profile("apache_spark", "spark_session")
+class TestPersistDocsAllColumnsMissing(BasePersistDocsAllColumnsMissing):
+    pass
+
+
+@pytest.mark.skip_profile("apache_spark", "spark_session")
+class TestPersistDocsQuotedColumnCaseSensitive(BasePersistDocsQuotedColumnCaseSensitive):
+    pass
+
+
+@pytest.mark.skip_profile("apache_spark", "spark_session")
+class TestPersistDocsQuotedDescriptionNotAppliedOnMismatch(
+    BasePersistDocsQuotedDescriptionNotAppliedOnMismatch
+):
+    @pytest.mark.skip(
+        reason=(
+            "Spark SQL is case-insensitive by default (spark.sql.caseSensitive=false) "
+            "and the Hive metastore stores column names in lowercase, so a "
+            "case-mismatched physical column is physically unreachable. "
+            "Case-sensitivity logic is covered by TestPersistDocsQuotedColumnCaseSensitive. "
+            "Docs: https://spark.apache.org/docs/latest/sql-ref-identifier.html and "
+            "https://kb.databricks.com/sql/fields_already_exists-error-in-sparksql-when-changing-column-name-capitalization"
+        )
+    )
+    def test_quoted_description_not_applied_on_case_mismatch(self, project):
+        pass

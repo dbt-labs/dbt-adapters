@@ -1,7 +1,7 @@
 {% materialization incremental, adapter='athena', supported_languages=['sql', 'python'] -%}
   {% set raw_strategy = config.get('incremental_strategy') or 'insert_overwrite' %}
   {% set is_microbatch = raw_strategy == 'microbatch' %}
-  {% set table_type = config.get('table_type', default='hive') | lower %}
+  {% set table_type = resolve_table_type() %}
   {% set model_language = model['language'] %}
   {% set strategy = validate_get_incremental_strategy(raw_strategy, table_type) %}
   {% set on_schema_change = incremental_validate_on_schema_change(config.get('on_schema_change'), default='ignore') %}
@@ -246,7 +246,11 @@
 
   {% do persist_docs(target_relation, model) %}
 
-  {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) %}
+  {# S3 Tables manages its own Iceberg versioning; the Glue GetTableVersions API is not
+     available for the federated catalog (raises EntityNotFoundException), so skip it. #}
+  {% if not adapter.is_s3_tables_database(target_relation.database) %}
+    {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, False) %}
+  {% endif %}
 
   {{ return({'relations': [target_relation]}) }}
 

@@ -3,6 +3,8 @@ import random
 import pytest
 from google.api_core.exceptions import NotFound
 
+from dbt.tests.util import relation_from_name, run_dbt
+
 from dbt.tests.adapter.utils.test_array_append import BaseArrayAppend
 from dbt.tests.adapter.utils.test_array_concat import BaseArrayConcat
 from dbt.tests.adapter.utils.test_array_construct import BaseArrayConstruct
@@ -17,6 +19,7 @@ from dbt.tests.adapter.utils.test_dateadd import BaseDateAdd
 from dbt.tests.adapter.utils.test_datediff import BaseDateDiff
 from dbt.tests.adapter.utils.test_date_spine import BaseDateSpine
 from dbt.tests.adapter.utils.test_date_trunc import BaseDateTrunc
+from dbt.tests.adapter.utils.test_equals import BaseEquals
 from dbt.tests.adapter.utils.test_escape_single_quotes import BaseEscapeSingleQuotesBackslash
 from dbt.tests.adapter.utils.test_except import BaseExcept
 from dbt.tests.adapter.utils.test_generate_series import BaseGenerateSeries
@@ -141,6 +144,26 @@ class TestDateSpine(BaseDateSpine):
 
 class TestDateTrunc(BaseDateTrunc):
     pass
+
+
+class TestEquals(BaseEquals):
+    @pytest.fixture(scope="class")
+    def seeds(self):
+        # BigQuery's CSV loader doesn't recognize the string "null" as NULL for INT64 columns.
+        # Using empty values instead, which BigQuery correctly interprets as NULL.
+        return {
+            "data_equals.csv": """key_name,x,y,expected
+1,1,1,same
+2,1,2,different
+3,1,,different
+4,2,1,different
+5,2,2,same
+6,2,,different
+7,,1,different
+8,,2,different
+9,,,same
+""",
+        }
 
 
 class TestEscapeSingleQuotes(BaseEscapeSingleQuotesBackslash):

@@ -1,7 +1,3 @@
-{#
-    pyathena converts time zoned timestamps to strings so lets avoid them now()
-#}
-
 {% macro athena__current_timestamp() -%}
   {{ cast_timestamp('now()') }}
 {%- endmacro %}

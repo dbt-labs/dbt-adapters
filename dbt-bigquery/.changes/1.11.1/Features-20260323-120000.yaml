@@ -1,0 +1,6 @@
+kind: Features
+body: Add behavior flag `bigquery_use_standard_sql_for_partitions` to migrate get_partitions_metadata from Legacy SQL to Standard SQL using INFORMATION_SCHEMA.PARTITIONS
+time: 2026-03-23T12:00:00.000000-07:00
+custom:
+  Author: aahel
+  Issue: "1725"

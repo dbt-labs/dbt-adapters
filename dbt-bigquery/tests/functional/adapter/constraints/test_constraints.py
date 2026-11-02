@@ -65,13 +65,20 @@ as (
 );
 """
 
+# The incremental materialization's first build uses `create table` (not
+# `create or replace`), so a stale relation cache errors instead of replacing a
+# live table.
+_expected_incremental_sql_bigquery = _expected_sql_bigquery.replace(
+    "create or replace table", "create table", 1
+)
+
 _expected_struct_sql_bigquery = """
 create or replace table <model_identifier> (
     id struct<nested_column string not null, nested_column2 string>
 )
 OPTIONS()
 as (
-    select id from
+    select IF(id IS NULL, NULL, STRUCT(id.nested_column AS nested_column, id.nested_column2 AS nested_column2)) AS id from
   (
     select STRUCT("test" as nested_column, "test" as nested_column2) as id
   ) as model_subq
@@ -302,7 +309,7 @@ class TestBigQueryIncrementalConstraintsRuntimeDdlEnforcement(
 
     @pytest.fixture(scope="class")
     def expected_sql(self, project):
-        return _expected_sql_bigquery
+        return _expected_incremental_sql_bigquery
 
 
 class TestBigQueryIncrementalConstraintsRollback(BaseIncrementalConstraintsRollback):

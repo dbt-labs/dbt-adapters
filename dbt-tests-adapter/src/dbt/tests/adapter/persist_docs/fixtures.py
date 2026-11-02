@@ -47,7 +47,7 @@ models:
         quote: true
 """
 
-_PROPERITES__SCHEMA_MISSING_COL = """
+_PROPERTIES__SCHEMA_MISSING_COL = """
 version: 2
 models:
   - name: missing_column
@@ -56,6 +56,52 @@ models:
         description: "test id column description"
       - name: column_that_does_not_exist
         description: "comment that cannot be created"
+"""
+
+_MODELS__ALL_COLUMNS_MISSING = """
+{{ config(materialized='table') }}
+select 1 as id
+"""
+
+_PROPERTIES__SCHEMA_ALL_COLUMNS_MISSING = """
+version: 2
+models:
+  - name: all_columns_missing
+    columns:
+      - name: bogus_col_one
+        description: "first bogus column"
+      - name: bogus_col_two
+        description: "second bogus column"
+"""
+
+_MODELS__QUOTED_CASE_SENSITIVE = """
+{{ config(materialized='table') }}
+select 1 as mycol
+"""
+
+_PROPERTIES__SCHEMA_QUOTED_CASE_SENSITIVE = """
+version: 2
+models:
+  - name: quoted_case_sensitive
+    columns:
+      - name: MyCol
+        description: "case-sensitive name; must not silently match mycol"
+        quote: true
+"""
+
+_MODELS__QUOTED_PHYSICAL_CASE_MISMATCH = """
+{{ config(materialized='table') }}
+select 1 as {{ adapter.quote("MyCol") }}
+"""
+
+_PROPERTIES__SCHEMA_QUOTED_PHYSICAL_CASE_MISMATCH = """
+version: 2
+models:
+  - name: quoted_physical_case_mismatch
+    columns:
+      - name: mycol
+        description: "DOCUMENTED_DESCRIPTION_SENTINEL must not be applied to a different-case physical column"
+        quote: true
 """
 
 _PROPERTIES__SCHEMA_YML = """

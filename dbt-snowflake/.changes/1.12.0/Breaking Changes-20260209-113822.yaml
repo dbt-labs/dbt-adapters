@@ -1,0 +1,6 @@
+kind: Breaking Changes
+body: Add transient support for Snowflake dynamic tables via `transient` config option and `snowflake_default_transient_dynamic_tables` behavior flag.
+time: 2026-02-09T11:38:22.629597-08:00
+custom:
+    Author: igorbelianski-cyber
+    Issue: "716"
