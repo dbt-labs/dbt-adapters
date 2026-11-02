@@ -1,0 +1,8 @@
+kind: Fixes
+body: Cache the base boto3 session across connections and share boto3 clients across
+    operations instead of rebuilding them for every executed node and every Glue/S3/Athena
+    call, which serialized runs on CPU-bound botocore construction at high thread counts
+time: 2026-08-27T16:00:00.000000+02:00
+custom:
+    Author: BastienF
+    Issue: "2205"
