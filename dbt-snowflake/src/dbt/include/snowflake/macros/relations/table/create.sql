@@ -128,11 +128,11 @@ create or replace {{ transient }}table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
+    {{ optional('change_tracking', catalog_relation.change_tracking)}}
     {% if copy_grants -%} copy grants {%- endif %}
     {% if copy_tags -%} copy tags {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-    {{ optional('change_tracking', catalog_relation.change_tracking)}}
     as (
         {%- if catalog_relation.cluster_by is not none -%}
         select * from (
@@ -345,7 +345,8 @@ as (
 create iceberg table {{ relation }} (
     {%- for column in sql_columns -%}
         {% if column.data_type == "FIXED" %}
-            {%- set data_type = "INT" -%}
+            {#- Keep precision and scale; INT would round NUMBER(p,s) values with s > 0 -#}
+            {%- set data_type = column.numeric_type("NUMBER", column.numeric_precision, column.numeric_scale) -%}
         {% elif "character varying" in column.data_type %}
             {%- set data_type = "STRING" -%}
         {% else %}

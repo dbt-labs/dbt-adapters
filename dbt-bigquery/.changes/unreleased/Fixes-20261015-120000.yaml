@@ -1,0 +1,8 @@
+kind: Fixes
+body: On a 409 Conflict, attach to the existing BigQuery job instead of resubmitting it.
+    A terminally failed job is retried by the retry layer under a job_id of its own, so
+    job_retries is honored for multi-statement scripts too.
+time: 2026-10-15T12:00:00.000000-05:00
+custom:
+    Author: tauhid621
+    Issue: "2006"
