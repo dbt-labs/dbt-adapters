@@ -1,0 +1,6 @@
+kind: Features
+body: Enforce model contract column-equivalence on materialized view create/full-refresh (gated by new `enforce_contract_on_materialized_view` behavior flag, default `True`), and add reusable `get_columns_and_constraints_clause` macro so adapters whose DB supports MV constraint DDL can opt into rendering them
+time: 2026-05-04T21:11:10.000000+00:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "0"
