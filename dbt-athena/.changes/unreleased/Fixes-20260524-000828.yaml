@@ -1,0 +1,6 @@
+kind: Fixes
+body: Honor dbt_valid_to_current in Iceberg snapshot MERGE condition
+time: 2026-05-24T00:08:28.244125-07:00
+custom:
+    Author: bxm156
+    Issue: "1942"
