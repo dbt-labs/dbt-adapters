@@ -2,6 +2,8 @@
 
   {%- set language = model['language'] -%}
   {%- set identifier = model['alias'] -%}
+  {#-- Validate before pre-hooks or any type/full-refresh drop. --#}
+  {% do adapter.validate_lakehouse_target(config, model, language) %}
   {%- set old_relation = adapter.get_relation(database=database, schema=schema, identifier=identifier) -%}
   {%- set exists_not_as_table = (old_relation is not none and not old_relation.is_table) -%}
   {%- set target_relation = api.Relation.create(database=database, schema=schema, identifier=identifier, type='table') -%}
@@ -24,7 +26,11 @@
   {%- set raw_partition_by = config.get('partition_by', none) -%}
   {%- set partition_by = adapter.parse_partition_by(raw_partition_by) -%}
   {%- set cluster_by = config.get('cluster_by', none) -%}
-  {% if not adapter.is_replaceable(old_relation, partition_by, cluster_by) %}
+  {#-- lakehouse tables always report replaceable (their partition metadata is
+       unreliable), but CREATE OR REPLACE fails server-side on a changed partition
+       spec; an explicit --full-refresh is the recovery path, so it must pre-drop --#}
+  {% set lakehouse_full_refresh = old_relation is not none and old_relation.is_lakehouse and should_full_refresh() %}
+  {% if not adapter.is_replaceable(old_relation, partition_by, cluster_by) or lakehouse_full_refresh %}
     {% do log("Hard refreshing " ~ old_relation ~ " because it is not replaceable") %}
     {% do adapter.drop_relation(old_relation) %}
   {% endif %}
