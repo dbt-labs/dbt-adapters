@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop `dbt docs generate` from dropping existing hidden (underscore-prefixed) datasets and datasets beyond the first 10,000 from the catalog, and check up to 20 catalog schemas concurrently instead of listing every dataset in the project
+time: 2026-10-15T12:02:00.000000+00:00
+custom:
+  Author: Kietzmann
+  Issue: "2225"
