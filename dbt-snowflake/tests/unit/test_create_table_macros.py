@@ -117,8 +117,8 @@ class TestSnowflakeCreateTableIcebergRestWithGlue(unittest.TestCase):
         sql = self._render()
 
         self.assertIn(
-            'create iceberg table glue_db.schema.tbl ( "price" DECIMAL(38,2), '
-            '"amount" DECIMAL(38,0), "name" STRING, "updated_at" TIMESTAMP_LTZ)',
+            'create iceberg table glue_db.schema.tbl ( "price" NUMBER(38,2), '
+            '"amount" NUMBER(38,0), "name" STRING, "updated_at" TIMESTAMP_LTZ)',
             sql,
         )
         self.assertNotIn(" INT", sql)
