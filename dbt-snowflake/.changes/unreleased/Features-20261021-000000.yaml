@@ -1,0 +1,6 @@
+kind: Features
+body: Support Cortex Search service models with a SELECT query as the model body and configuration for search columns, attributes, primary keys, warehouses, target lag, embedding models, refresh mode, initialization, index rebuild intervals, request logging, auto-suspend, and comments.
+time: 2026-10-21T00:00:00+00:00
+custom:
+  Author: sfc-gh-zgong
+  Issue: "2258"

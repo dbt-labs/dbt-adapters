@@ -25,3 +25,4 @@ from dbt.adapters.snowflake.relation_configs.policies import (
     SnowflakeQuotePolicy,
     SnowflakeRelationType,
 )
+from dbt.adapters.snowflake.relation_configs.cortex_search import SnowflakeCortexSearchConfig

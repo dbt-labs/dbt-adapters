@@ -11,6 +11,7 @@ class SnowflakeRelationType(StrEnum):
     External = "external"
     DynamicTable = "dynamic_table"
     InteractiveTable = "interactive_table"
+    CortexSearchService = "cortex_search_service"
     Function = "function"
 
 
