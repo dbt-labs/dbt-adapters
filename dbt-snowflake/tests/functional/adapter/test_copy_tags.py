@@ -46,6 +46,42 @@ _MODEL_INCREMENTAL_COPY_TAGS = """
 select 1 as id
 """
 
+_MODEL_VIEW_COPY_TAGS = """
+{{ config(
+    materialized = 'view',
+    copy_tags = true,
+) }}
+
+select 1 as id
+"""
+
+_MODEL_VIEW_COPY_TAGS_AND_GRANTS = """
+{{ config(
+    materialized = 'view',
+    copy_grants = true,
+    copy_tags = true,
+) }}
+
+select 1 as id
+"""
+
+_MODEL_VIEW_NO_COPY_TAGS = """
+{{ config(
+    materialized = 'view',
+) }}
+
+select 1 as id
+"""
+
+_MODEL_VIEW_COPY_TAGS_DISABLED = """
+{{ config(
+    materialized = 'view',
+    copy_tags = false,
+) }}
+
+select 1 as id
+"""
+
 _DDL_COPY_TAGS = "copy tags"
 _DDL_COPY_GRANTS = "copy grants"
 
@@ -58,11 +94,15 @@ class TestCopyTags:
             "table_copy_tags_and_grants.sql": _MODEL_TABLE_COPY_TAGS_AND_GRANTS,
             "table_no_copy_tags.sql": _MODEL_TABLE_NO_COPY_TAGS,
             "incremental_copy_tags.sql": _MODEL_INCREMENTAL_COPY_TAGS,
+            "view_copy_tags.sql": _MODEL_VIEW_COPY_TAGS,
+            "view_copy_tags_and_grants.sql": _MODEL_VIEW_COPY_TAGS_AND_GRANTS,
+            "view_no_copy_tags.sql": _MODEL_VIEW_NO_COPY_TAGS,
+            "view_copy_tags_disabled.sql": _MODEL_VIEW_COPY_TAGS_DISABLED,
         }
 
     def test_copy_tags(self, project):
         results = run_dbt(["run"])
-        assert len(results) == 4
+        assert len(results) == 8
 
         table_copy_tags_ddl = get_cleaned_model_ddl_from_file("table_copy_tags.sql")
         assert _DDL_COPY_TAGS in table_copy_tags_ddl
@@ -78,9 +118,30 @@ class TestCopyTags:
         incremental_copy_tags_ddl = get_cleaned_model_ddl_from_file("incremental_copy_tags.sql")
         assert _DDL_COPY_TAGS in incremental_copy_tags_ddl
 
+        view_copy_tags_ddl = get_cleaned_model_ddl_from_file("view_copy_tags.sql")
+        assert _DDL_COPY_TAGS in view_copy_tags_ddl
+        assert _DDL_COPY_GRANTS not in view_copy_tags_ddl
+
+        view_both_ddl = get_cleaned_model_ddl_from_file("view_copy_tags_and_grants.sql")
+        assert _DDL_COPY_TAGS in view_both_ddl
+        assert _DDL_COPY_GRANTS in view_both_ddl
+
+        view_no_copy_tags_ddl = get_cleaned_model_ddl_from_file("view_no_copy_tags.sql")
+        assert _DDL_COPY_TAGS not in view_no_copy_tags_ddl
+
+        view_copy_tags_disabled_ddl = get_cleaned_model_ddl_from_file(
+            "view_copy_tags_disabled.sql"
+        )
+        assert _DDL_COPY_TAGS not in view_copy_tags_disabled_ddl
+
     def test_copy_tags_full_refresh(self, project):
-        results = run_dbt(["run", "--select", "table_copy_tags", "--full-refresh"])
-        assert len(results) == 1
+        results = run_dbt(
+            ["run", "--select", "table_copy_tags", "view_copy_tags", "--full-refresh"]
+        )
+        assert len(results) == 2
 
         table_copy_tags_ddl = get_cleaned_model_ddl_from_file("table_copy_tags.sql")
         assert _DDL_COPY_TAGS in table_copy_tags_ddl
+
+        view_copy_tags_ddl = get_cleaned_model_ddl_from_file("view_copy_tags.sql")
+        assert _DDL_COPY_TAGS in view_copy_tags_ddl
