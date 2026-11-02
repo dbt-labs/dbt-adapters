@@ -126,14 +126,6 @@ def _cancellable(connection: Connection, cursor: "dbapi.Cursor") -> Iterator[Non
 class LakeComputeConnectionManager(SQLConnectionManager):
     TYPE = "lakecompute"
 
-    def set_query_header(self, query_header_context: Dict[str, Any]) -> None:
-        # off unless the profile opts in; `_add_query_comment` is a no-op when this is None
-        credentials = cast(LakeComputeCredentials, self.profile.credentials)
-        if credentials.query_comment_enabled:
-            super().set_query_header(query_header_context)
-        else:
-            self.query_header = None
-
     # The connection is autocommit and the service has no transactions. Like Athena and
     # BigQuery, begin/commit do nothing, so `transaction_open` stays False and the base
     # rollback/close paths never call `handle.rollback()`.
@@ -159,7 +151,8 @@ class LakeComputeConnectionManager(SQLConnectionManager):
             connection,
             connect=lambda: _new_thread_connection(_get_or_create_shared_database(resolved)),
             logger=logger,
-            retry_limit=credentials.retries,
+            # Like v2, Lake Compute does not retry connection failures.
+            retry_limit=0,
             retryable_exceptions=(OperationalError,),
         )
 
@@ -206,10 +199,7 @@ class LakeComputeConnectionManager(SQLConnectionManager):
                 ) from exc
 
             if status in ("TIMEOUT", "CANCELLED"):
-                raise DbtDatabaseError(
-                    f"lakecompute query {status.lower()}: {message}. "
-                    f"Consider raising `timeout_seconds` in the profile."
-                ) from exc
+                raise DbtDatabaseError(f"lakecompute query {status.lower()}: {message}") from exc
 
             raise DbtDatabaseError(message) from exc
 

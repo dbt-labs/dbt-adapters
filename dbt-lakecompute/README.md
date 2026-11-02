@@ -82,9 +82,6 @@ Both live in [`install.py`](src/dbt/adapters/lakecompute/install.py).
 |---|---|
 | `DBT_COMPUTE_DRIVER_CACHE` | Use this directory instead of the OS cache directory. For CI images and air-gapped installs that pre-populate the cache. |
 
-Set `driver_path` in the profile to bypass the download entirely — for a locally built driver,
-or a platform with no prebuilt artifact.
-
 ## Connection settings
 
 | Setting | Default | Notes |
@@ -95,14 +92,9 @@ or a platform with no prebuilt artifact.
 | `token` | — | Required with `method: token`; a service bearer token |
 | `api_key` | — | Required with `method: api_key` |
 | `fivetran_credential` | — | Required with `method: fivetran`; a `dct_` PAT |
-| `fivetran_auth_url` | service default | Override the PAT exchange endpoint |
+| `fivetran_auth_url` | service default | Fivetran API base URL used for PAT exchange |
 | `okta_auth_url`, `okta_token_url`, `okta_client_id` | service defaults | Optional with `method: okta_browser`, which needs no pre-shared secret |
 | `base_url` | public endpoint | profile → `$DBT_COMPUTE_BASE_URL` → default |
-| `driver_path` | — | Override the driver library path; skips the CDN download. See [Driver](#driver) |
-| `warehouse`, `dialect` | — | passed through as `adbc.dbt.*` |
-| `timeout_seconds` | — | passed through |
-| `retries` | `1` | connection retry attempts |
-| `query_comment_enabled` | `false` | dbt's query comment is off by default |
 
 ## Development
 
