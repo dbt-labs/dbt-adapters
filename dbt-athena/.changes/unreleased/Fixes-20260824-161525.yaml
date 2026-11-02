@@ -1,0 +1,9 @@
+kind: Fixes
+body: swap_table now inspects the Errors field returned by batch_delete_partition
+    and batch_create_partition during the HA swap and raises a DbtRuntimeError on any
+    per-partition failure, preventing a silent partial swap that leaves Glue partitions
+    pointing at a mix of the old and new S3 paths
+time: 2026-08-24T16:15:25.000000+00:00
+custom:
+    Author: lemon0333
+    Issue: "1842"

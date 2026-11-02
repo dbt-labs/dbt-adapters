@@ -1138,6 +1138,116 @@ class TestAthenaAdapter:
         assert len(target_table_partitions_after) == 26
 
     @mock_aws
+    def test_swap_table_batch_delete_partition_errors_are_raised(
+        self, mock_aws_service, dbt_error_caplog
+    ):
+        """batch_delete_partition can return per-partition errors without raising during
+        the HA swap; verify they are surfaced as a DbtRuntimeError."""
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        self.adapter.acquire_connection("dummy")
+        target_table = "target_table"
+        source_table = "source_table"
+        mock_aws_service.create_table(source_table)
+        mock_aws_service.add_partitions_to_table(DATABASE_NAME, source_table)
+        mock_aws_service.create_table(target_table)
+        mock_aws_service.add_partitions_to_table(DATABASE_NAME, target_table)
+        source_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=source_table,
+        )
+        target_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=target_table,
+        )
+
+        batch_delete_error_response = {
+            "Errors": [
+                {
+                    "PartitionValues": ["2022-01-01"],
+                    "ErrorDetail": {
+                        "ErrorCode": "InternalServiceException",
+                        "ErrorMessage": "Rate exceeded",
+                    },
+                }
+            ]
+        }
+
+        original_make_api_call = botocore.client.BaseClient._make_api_call
+
+        def mock_make_api_call(self, operation_name, api_params):
+            if operation_name == "BatchDeletePartition":
+                return batch_delete_error_response
+            return original_make_api_call(self, operation_name, api_params)
+
+        with patch.object(botocore.client.BaseClient, "_make_api_call", mock_make_api_call):
+            with pytest.raises(
+                DbtRuntimeError,
+                match=r"Failed to delete 1 partition\(s\) during swap of Glue table",
+            ):
+                self.adapter.swap_table(source_relation, target_relation)
+
+        assert "InternalServiceException" in dbt_error_caplog.getvalue()
+        assert "Rate exceeded" in dbt_error_caplog.getvalue()
+
+    @mock_aws
+    def test_swap_table_batch_create_partition_errors_are_raised(
+        self, mock_aws_service, dbt_error_caplog
+    ):
+        """batch_create_partition can return per-partition errors without raising during
+        the HA swap; verify they are surfaced as a DbtRuntimeError."""
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        self.adapter.acquire_connection("dummy")
+        target_table = "target_table"
+        source_table = "source_table"
+        mock_aws_service.create_table(source_table)
+        mock_aws_service.add_partitions_to_table(DATABASE_NAME, source_table)
+        mock_aws_service.create_table(target_table)
+        mock_aws_service.add_partitions_to_table(DATABASE_NAME, target_table)
+        source_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=source_table,
+        )
+        target_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier=target_table,
+        )
+
+        batch_create_error_response = {
+            "Errors": [
+                {
+                    "PartitionValues": ["2022-01-01"],
+                    "ErrorDetail": {
+                        "ErrorCode": "AlreadyExistsException",
+                        "ErrorMessage": "Partition already exists",
+                    },
+                }
+            ]
+        }
+
+        original_make_api_call = botocore.client.BaseClient._make_api_call
+
+        def mock_make_api_call(self, operation_name, api_params):
+            if operation_name == "BatchCreatePartition":
+                return batch_create_error_response
+            return original_make_api_call(self, operation_name, api_params)
+
+        with patch.object(botocore.client.BaseClient, "_make_api_call", mock_make_api_call):
+            with pytest.raises(
+                DbtRuntimeError,
+                match=r"Failed to create 1 partition\(s\) during swap of Glue table",
+            ):
+                self.adapter.swap_table(source_relation, target_relation)
+
+        assert "AlreadyExistsException" in dbt_error_caplog.getvalue()
+        assert "Partition already exists" in dbt_error_caplog.getvalue()
+
+    @mock_aws
     def test__get_glue_table_versions_to_expire(self, mock_aws_service, dbt_debug_caplog):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()
