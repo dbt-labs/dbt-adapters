@@ -1,6 +1,6 @@
 """The ported utility macros render and evaluate correctly in this dialect.
 
-dbt-tests-adapter's utils suites need seeds, which are not implemented yet.
+dbt-tests-adapter's utils suites are not wired up yet.
 """
 
 import pytest

@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -65,10 +66,11 @@ def unique_schema(request, prefix) -> str:
 
 @pytest.fixture
 def captured_sql(project, monkeypatch):
-    """Every statement the connection manager is handed, in order.
+    """Every statement body the connection manager is handed, in order.
 
     Records at ``_query``, which ``execute``, ``add_query`` and ``add_select_query`` all go
-    through.
+    through. Omit the leading query comment when comparing materialization SQL, while
+    sending the original SQL to the driver.
     """
     from dbt.adapters.lakecompute.connections import LakeComputeConnectionManager
 
@@ -76,7 +78,7 @@ def captured_sql(project, monkeypatch):
     original = LakeComputeConnectionManager._query
 
     def recording_query(self, sql, *args, **kwargs):
-        sent.append(sql)
+        sent.append(re.sub(r"^\s*/\*.*?\*/\s*", "", sql, count=1, flags=re.DOTALL))
         return original(self, sql, *args, **kwargs)
 
     monkeypatch.setattr(LakeComputeConnectionManager, "_query", recording_query)

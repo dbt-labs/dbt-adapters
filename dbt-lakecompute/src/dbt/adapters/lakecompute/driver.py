@@ -1,7 +1,7 @@
 """Resolve the ADBC driver shared library and the database options to open it with.
 
-The driver is downloaded from dbt's public CDN on first use (see
-:mod:`dbt.adapters.lakecompute.install`), unless ``driver_path`` names one explicitly.
+The driver is downloaded from dbt's public CDN on first use and cached for later runs
+(see :mod:`dbt.adapters.lakecompute.install`).
 """
 
 from dataclasses import dataclass
@@ -30,32 +30,14 @@ class ResolvedDriver:
 def resolve_driver(credentials: "LakeComputeCredentials") -> ResolvedDriver:
     # validate auth before touching the network, so a missing token is reported without a
     # driver download
-    db_kwargs: Dict[str, str] = {"uri": credentials.resolved_base_url}
+    db_kwargs: Dict[str, str] = {"adbc.dbt.base_url": credentials.resolved_base_url}
     db_kwargs.update(auth_options(credentials))
-    db_kwargs.update(connection_options(credentials))
 
-    if credentials.driver_path:
-        path = credentials.driver_path
-    else:
-        try:
-            path = ensure_driver()
-        except DriverInstallError as exc:
-            raise FailedToConnectError(
-                f"Could not obtain the lake compute ADBC driver ({DRIVER_VERSION}): {exc}"
-            ) from exc
+    try:
+        path = ensure_driver()
+    except DriverInstallError as exc:
+        raise FailedToConnectError(
+            f"Could not obtain the lake compute ADBC driver ({DRIVER_VERSION}): {exc}"
+        ) from exc
 
     return ResolvedDriver(path=path, entrypoint=ENTRYPOINT, db_kwargs=db_kwargs)
-
-
-def connection_options(credentials: "LakeComputeCredentials") -> Dict[str, str]:
-    """Pass-through ``adbc.dbt.*`` database options, omitting anything unset."""
-    options: Dict[str, str] = {}
-    for field_name, option in (
-        ("warehouse", "adbc.dbt.warehouse"),
-        ("dialect", "adbc.dbt.dialect"),
-        ("timeout_seconds", "adbc.dbt.timeout_seconds"),
-    ):
-        value = getattr(credentials, field_name, None)
-        if value is not None and value != "":
-            options[option] = str(value)
-    return options

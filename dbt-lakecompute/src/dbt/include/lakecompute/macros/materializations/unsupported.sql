@@ -8,23 +8,6 @@
 {%- endmacro %}
 
 
-{% materialization incremental, adapter='lakecompute' %}
-  {{ lakecompute__unsupported_materialization(
-    'incremental',
-    "Incremental models are not implemented yet; use materialized='table'."
-  ) }}
-{% endmaterialization %}
-
-
-{% materialization seed, adapter='lakecompute' %}
-  {#- the default seed needs parameter bindings, which the driver lacks -#}
-  {{ lakecompute__unsupported_materialization(
-    'seed',
-    "Seeds are not implemented yet."
-  ) }}
-{% endmaterialization %}
-
-
 {% materialization view, adapter='lakecompute' %}
   {#- Polaris does not grant CREATE_VIEW -#}
   {{ lakecompute__unsupported_materialization(

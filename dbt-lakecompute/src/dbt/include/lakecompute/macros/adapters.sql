@@ -26,3 +26,12 @@
 {% macro lakecompute__drop_view(relation) -%}
   drop view if exists {{ relation.render() }}
 {%- endmacro %}
+
+
+{#- `cache_added` keeps an existing entry, so one of another kind (e.g. external) is dropped first -#}
+{% macro lakecompute__cache_replaced(existing, target) -%}
+  {%- if existing is not none and existing.type != target.type -%}
+    {% do adapter.cache_dropped(existing) %}
+  {%- endif -%}
+  {% do adapter.cache_added(target.incorporate(dbt_created=True)) %}
+{%- endmacro %}

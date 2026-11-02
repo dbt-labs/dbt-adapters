@@ -24,6 +24,15 @@ class TestConstraintSupport:
         }
 
 
+class TestIncrementalStrategies:
+    def test_append_and_insert_overwrite_only(self):
+        adapter = LakeComputeAdapter.__new__(LakeComputeAdapter)
+        assert adapter.valid_incremental_strategies() == ["append", "insert_overwrite"]
+
+    def test_available_to_jinja(self):
+        assert "valid_incremental_strategies" in LakeComputeAdapter._available_
+
+
 class TestGetColumnsInRelation:
     """A missing relation has no columns; every other failure still raises.
 
