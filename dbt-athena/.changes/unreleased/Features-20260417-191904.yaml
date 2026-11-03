@@ -1,0 +1,6 @@
+kind: Features
+body: Add Apache Spark 3.5 support via Spark Connect for Python model execution.
+time: 2026-04-17T19:19:04.031899+09:00
+custom:
+    Author: dtaniwaki
+    Issue: "1854"

@@ -1,0 +1,737 @@
+import sys
+import types
+import warnings
+from unittest.mock import MagicMock
+
+import pytest
+
+
+@pytest.fixture
+def fake_pyspark_modules(monkeypatch):
+
+    class FakePool:
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+        def join(self):
+            pass
+
+    class FakeIterator:
+        _release_thread_pool = FakePool()
+
+        def __init__(self, *args, **kwargs):
+            self._stub = kwargs.get("stub")
+            self._iterator = kwargs.get("iterator")
+            self._metadata = kwargs.get("metadata")
+            self._initial_request = kwargs.get("initial_request")
+            self._last_returned_response_id = kwargs.get("last_returned_response_id")
+
+        @classmethod
+        def shutdown(cls):
+            if cls._release_thread_pool is not None:
+                cls._release_thread_pool.close()
+                cls._release_thread_pool = None
+
+        def _call_iter(self, iter_fun):
+            return iter_fun()
+
+        def _release_until(self, until_response_id):
+            self._released_until = until_response_id
+
+        def _release_all(self):
+            self._released_all = True
+
+    class FakeRetryException(Exception):
+        pass
+
+    class FakeSparkConnectClient:
+        def __init__(self, stub=None, builder=None, artifact_manager=None):
+            self._stub = stub
+            self._builder = builder
+            self._artifact_manager = artifact_manager
+
+        @classmethod
+        def retry_exception(cls, e):
+            import grpc as _grpc
+
+            return isinstance(e, _grpc.RpcError) and e.code() == _grpc.StatusCode.UNAVAILABLE
+
+    class FakeRetrying:
+        def __init__(self, **kwargs):
+            pass
+
+        def __iter__(self):
+            yield "attempt"
+
+    fake_pyspark = types.ModuleType("pyspark")
+    fake_sql = types.ModuleType("pyspark.sql")
+    fake_connect = types.ModuleType("pyspark.sql.connect")
+    # ``pyspark.sql.connect.client`` must be a package so ``pyspark.sql.connect.client.core``
+    # can be imported as a submodule; setting ``__path__`` makes it a namespace package.
+    fake_client = types.ModuleType("pyspark.sql.connect.client")
+    fake_client.__path__ = []  # type: ignore[attr-defined]
+    fake_reattach = types.ModuleType("pyspark.sql.connect.client.reattach")
+    fake_reattach.ExecutePlanResponseReattachableIterator = FakeIterator
+    fake_reattach.RetryException = FakeRetryException
+    fake_core = types.ModuleType("pyspark.sql.connect.client.core")
+    fake_core.SparkConnectClient = FakeSparkConnectClient
+    fake_core.Retrying = FakeRetrying
+    fake_artifact = types.ModuleType("pyspark.sql.connect.client.artifact")
+
+    class FakeArtifactManager:
+        def __init__(self, metadata=None):
+            self._metadata = metadata
+            self.sent_metadata = []
+
+        def add_artifacts(self, *path, pyfile, archive, file):
+            pass
+
+        def _retrieve_responses(self, requests):
+            self.sent_metadata.append(("AddArtifacts", self._metadata))
+            return "responses"
+
+        def is_cached_artifact(self, hash):
+            self.sent_metadata.append(("ArtifactStatus", self._metadata))
+            return False
+
+    fake_artifact.ArtifactManager = FakeArtifactManager
+
+    monkeypatch.setitem(sys.modules, "pyspark", fake_pyspark)
+    monkeypatch.setitem(sys.modules, "pyspark.sql", fake_sql)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect", fake_connect)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client", fake_client)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.reattach", fake_reattach)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.core", fake_core)
+    monkeypatch.setitem(sys.modules, "pyspark.sql.connect.client.artifact", fake_artifact)
+    return types.SimpleNamespace(
+        iterator=FakeIterator,
+        client=FakeSparkConnectClient,
+        retrying=FakeRetrying,
+        retry_exception=FakeRetryException,
+        artifact_manager=FakeArtifactManager,
+    )
+
+
+@pytest.fixture
+def fake_reattach_module(fake_pyspark_modules):
+    return fake_pyspark_modules.iterator
+
+
+@pytest.fixture
+def fake_spark_client_module(fake_pyspark_modules):
+    return fake_pyspark_modules.client
+
+
+@pytest.fixture
+def fake_retrying(fake_pyspark_modules):
+    return fake_pyspark_modules.retrying
+
+
+def _permission_denied():
+    import grpc
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.PERMISSION_DENIED
+
+    return _Err()
+
+
+@pytest.fixture(autouse=True)
+def _reset_patch_state():
+    # The patch module tracks application via a process-wide flag; reset it so each
+    # test exercises a fresh first-application path.
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m._patches_applied = False
+    yield
+    m._patches_applied = False
+
+
+def test_shutdown_becomes_noop_after_patch(fake_reattach_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    pool_before = fake_reattach_module._release_thread_pool
+    assert pool_before is not None
+
+    fake_reattach_module.shutdown()
+
+    assert fake_reattach_module._release_thread_pool is pool_before
+    assert pool_before.closed is False
+
+
+def test_apply_is_idempotent(fake_reattach_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    patched_shutdown = fake_reattach_module.__dict__["shutdown"]
+    apply_pyspark_workarounds()
+
+    assert fake_reattach_module.__dict__["shutdown"] is patched_shutdown
+
+
+def test_release_execute_warning_is_filtered(fake_reattach_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        apply_pyspark_workarounds()
+        warnings.warn("ReleaseExecute failed with exception: Channel closed!")
+        warnings.warn("some other warning")
+
+    messages = [str(w.message) for w in caught]
+    assert "some other warning" in messages
+    assert not any("ReleaseExecute failed" in m for m in messages)
+
+
+def _make_stub_with_builder(token="t1"):
+    builder = MagicMock()
+    builder._auth_token = token
+    builder.metadata.return_value = [("x-aws-proxy-auth", token)]
+    stub = MagicMock(_dbt_athena_builder=builder)
+    return stub, builder
+
+
+def test_client_init_stashes_builder_on_stub(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    builder = MagicMock()
+    builder.metadata.return_value = [("x-aws-proxy-auth", "t")]
+    stub = MagicMock()
+    fake_pyspark_modules.client(stub=stub, builder=builder)
+
+    assert stub._dbt_athena_builder is builder
+
+
+def _rotating_builder():
+    builder = MagicMock()
+    tokens = iter(f"token-{i}" for i in range(1, 100))
+
+    def _metadata():
+        token = next(tokens)
+        builder._auth_token = token
+        return [("x-aws-proxy-auth", token)]
+
+    builder.metadata.side_effect = _metadata
+    return builder
+
+
+def _artifact_manager_with_builder(fake_pyspark_modules, builder):
+    manager = fake_pyspark_modules.artifact_manager(metadata=[("x-aws-proxy-auth", "stale")])
+    fake_pyspark_modules.client(stub=MagicMock(), builder=builder, artifact_manager=manager)
+    return manager
+
+
+def test_client_init_stashes_builder_on_artifact_manager(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    builder = _rotating_builder()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    assert manager._dbt_athena_builder is builder
+
+
+def test_add_artifacts_rpc_uses_a_fresh_token_each_time(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, _rotating_builder())
+
+    assert manager._retrieve_responses([]) == "responses"
+    manager._retrieve_responses([])
+
+    assert manager.sent_metadata == [
+        ("AddArtifacts", [("x-aws-proxy-auth", "token-1")]),
+        ("AddArtifacts", [("x-aws-proxy-auth", "token-2")]),
+    ]
+
+
+def test_artifact_status_rpc_uses_a_fresh_token_each_time(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, _rotating_builder())
+
+    assert manager.is_cached_artifact("h") is False
+    manager.is_cached_artifact("h")
+
+    assert manager.sent_metadata == [
+        ("ArtifactStatus", [("x-aws-proxy-auth", "token-1")]),
+        ("ArtifactStatus", [("x-aws-proxy-auth", "token-2")]),
+    ]
+
+
+def test_artifact_rpcs_keep_metadata_without_a_builder(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    manager = fake_pyspark_modules.artifact_manager(metadata=[("k", "v")])
+
+    manager._retrieve_responses([])
+    manager.is_cached_artifact("h")
+
+    assert manager.sent_metadata == [
+        ("AddArtifacts", [("k", "v")]),
+        ("ArtifactStatus", [("k", "v")]),
+    ]
+
+
+def test_artifact_rpcs_continue_when_metadata_refresh_fails(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    builder = _rotating_builder()
+    builder.metadata.side_effect = RuntimeError("transient")
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    assert manager._retrieve_responses([]) == "responses"
+    assert manager.is_cached_artifact("h") is False
+
+    stale = [("x-aws-proxy-auth", "stale")]
+    assert manager.sent_metadata == [("AddArtifacts", stale), ("ArtifactStatus", stale)]
+
+
+def test_applying_twice_refreshes_once_per_artifact_rpc(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+    apply_pyspark_workarounds()
+    builder = _rotating_builder()
+    manager = _artifact_manager_with_builder(fake_pyspark_modules, builder)
+
+    manager._retrieve_responses([])
+
+    assert builder.metadata.call_count == 1
+
+
+def test_call_iter_refreshes_metadata_on_reattach(fake_reattach_module, fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, builder = _make_stub_with_builder("fresh")
+    iterator = fake_reattach_module(
+        stub=stub, iterator=None, metadata=[("x-aws-proxy-auth", "stale")]
+    )
+    iterator._call_iter(lambda: "ok")
+
+    assert iterator._metadata == [("x-aws-proxy-auth", "fresh")]
+
+
+def test_call_iter_skips_refresh_when_iterator_active(
+    fake_reattach_module, fake_spark_client_module
+):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, builder = _make_stub_with_builder("t")
+    iterator = fake_reattach_module(
+        stub=stub, iterator="existing", metadata=[("x-aws-proxy-auth", "current")]
+    )
+    iterator._call_iter(lambda: "ok")
+
+    builder.metadata.assert_not_called()
+    assert iterator._metadata == [("x-aws-proxy-auth", "current")]
+
+
+def test_call_iter_tolerates_missing_channel_builder(
+    fake_reattach_module, fake_spark_client_module
+):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub = MagicMock(spec=[])
+    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
+
+    iterator._call_iter(lambda: "ok")
+    assert iterator._metadata == [("k", "v")]
+
+
+def test_call_iter_tolerates_builder_metadata_exception(
+    fake_reattach_module, fake_spark_client_module
+):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, builder = _make_stub_with_builder("t")
+    builder.metadata.side_effect = RuntimeError("transient")
+    iterator = fake_reattach_module(stub=stub, iterator=None, metadata=[("k", "v")])
+    iterator._call_iter(lambda: "ok")
+
+    assert iterator._metadata == [("k", "v")]
+
+
+def test_release_until_refreshes_metadata(fake_reattach_module, fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, builder = _make_stub_with_builder("fresh")
+    iterator = fake_reattach_module(
+        stub=stub, iterator="active", metadata=[("x-aws-proxy-auth", "stale")]
+    )
+    iterator._release_until("response-1")
+
+    builder.metadata.assert_called_once()
+    assert iterator._metadata == [("x-aws-proxy-auth", "fresh")]
+    assert iterator._released_until == "response-1"
+
+
+def test_release_all_refreshes_metadata(fake_reattach_module, fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, builder = _make_stub_with_builder("fresh")
+    iterator = fake_reattach_module(
+        stub=stub, iterator="active", metadata=[("x-aws-proxy-auth", "stale")]
+    )
+    iterator._release_all()
+
+    builder.metadata.assert_called_once()
+    assert iterator._metadata == [("x-aws-proxy-auth", "fresh")]
+    assert iterator._released_all is True
+
+
+def test_release_tolerates_missing_channel_builder(fake_reattach_module, fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub = MagicMock(spec=[])
+    iterator = fake_reattach_module(stub=stub, iterator="active", metadata=[("k", "v")])
+    iterator._release_until("r")
+    iterator._release_all()
+
+    assert iterator._released_until == "r"
+    assert iterator._released_all is True
+
+
+def test_retry_exception_still_retries_unavailable(fake_reattach_module, fake_spark_client_module):
+    import grpc
+
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.UNAVAILABLE
+
+    assert fake_spark_client_module.retry_exception(_Err()) is True
+
+
+def test_retry_exception_does_not_retry_unrelated_codes(
+    fake_reattach_module, fake_spark_client_module
+):
+    import grpc
+
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.INVALID_ARGUMENT
+
+    assert fake_spark_client_module.retry_exception(_Err()) is False
+
+
+def test_permission_denied_retried_repeatedly_within_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+
+
+def test_permission_denied_propagates_after_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def test_permission_denied_window_restarts_per_retry_loop(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+    clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+
+
+def test_nested_retry_loop_keeps_outer_window(
+    fake_spark_client_module, fake_retrying, monkeypatch
+):
+    import dbt.adapters.athena.spark_connect.pyspark_patches as m
+
+    m.apply_pyspark_workarounds()
+    clock = [1000.0]
+    monkeypatch.setattr(m.time, "monotonic", lambda: clock[0])
+
+    for _ in fake_retrying():
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        clock[0] += m._PERMISSION_DENIED_RETRY_WINDOW_SECONDS + 1
+        for _ in fake_retrying():
+            assert fake_spark_client_module.retry_exception(_permission_denied()) is True
+        assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def test_permission_denied_outside_retry_loop_propagates(fake_spark_client_module):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    assert fake_spark_client_module.retry_exception(_permission_denied()) is False
+
+
+def _session_not_found():
+    import grpc
+
+    class _Err(grpc.RpcError):
+        def __str__(self):
+            return "[INVALID_HANDLE.SESSION_NOT_FOUND] The handle is invalid."
+
+    return _Err()
+
+
+def _raise(error):
+    def _fn():
+        raise error
+
+    return _fn
+
+
+def test_session_not_found_before_first_response_resends_execute_plan(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    stub.ExecutePlan.return_value = ["first-response"]
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub, iterator=None, metadata=[("k", "v")], initial_request="initial"
+    )
+
+    with pytest.raises(fake_pyspark_modules.retry_exception):
+        iterator._call_iter(_raise(_session_not_found()))
+
+    stub.ExecutePlan.assert_called_once()
+    assert stub.ExecutePlan.call_args.args == ("initial",)
+    assert next(iterator._iterator) == "first-response"
+
+
+def test_session_not_found_after_a_response_propagates(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub,
+        iterator=None,
+        metadata=[("k", "v")],
+        initial_request="initial",
+        last_returned_response_id="r1",
+    )
+    error = _session_not_found()
+
+    with pytest.raises(type(error)):
+        iterator._call_iter(_raise(error))
+    stub.ExecutePlan.assert_not_called()
+
+
+def test_other_rpc_error_before_first_response_propagates(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import apply_pyspark_workarounds
+
+    apply_pyspark_workarounds()
+
+    stub, _ = _make_stub_with_builder("t")
+    iterator = fake_pyspark_modules.iterator(
+        stub=stub, iterator=None, metadata=[("k", "v")], initial_request="initial"
+    )
+    error = _permission_denied()
+
+    with pytest.raises(type(error)):
+        iterator._call_iter(_raise(error))
+    stub.ExecutePlan.assert_not_called()
+
+
+class _FakeArtifactServer:
+    def __init__(self):
+        self.uploaded = []
+        self.payloads = []
+        self.fail_next = False
+        self.hold_uploads = None
+
+    def retrieve(self, requests):
+        if self.hold_uploads is not None:
+            self.hold_uploads.wait(timeout=5)
+        received = []
+        for request in requests:
+            if request.HasField("batch"):
+                received.extend((a.name, a.data.data) for a in request.batch.artifacts)
+            elif request.HasField("begin_chunk"):
+                received.append((request.begin_chunk.name, request.begin_chunk.initial_chunk.data))
+            elif request.HasField("chunk"):
+                name, data = received[-1]
+                received[-1] = (name, data + request.chunk.data)
+        if self.fail_next:
+            self.fail_next = False
+            raise RuntimeError("upload failed")
+        self.uploaded.extend(name for name, _ in received)
+        self.payloads.extend(data for _, data in received)
+        return MagicMock(artifacts=[])
+
+
+@pytest.fixture
+def artifact_server():
+    grpc = pytest.importorskip("grpc")
+    artifact = pytest.importorskip("pyspark.sql.connect.client.artifact")
+    from dbt.adapters.athena.spark_connect.pyspark_patches import _add_artifacts_once
+
+    channel = grpc.insecure_channel("localhost:1")
+    manager = artifact.ArtifactManager(
+        user_id=None,
+        session_id="sid-1",
+        channel=channel,
+        metadata=[],
+    )
+    server = _FakeArtifactServer()
+    manager._retrieve_responses = lambda requests: server.retrieve(requests)
+    server.add = lambda path: _add_artifacts_once(
+        manager, path, pyfile=True, archive=False, file=False
+    )
+    yield server
+    channel.close()
+
+
+def _write_file(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return str(path)
+
+
+def test_same_artifact_from_another_path_is_added_once(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "a" / "utils.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "b" / "utils.zip", b"v1"))
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_artifact_with_changed_content_is_sent_again(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "a" / "utils.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "b" / "utils.zip", b"v2"))
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip", "pyfiles/utils.zip"]
+    assert artifact_server.payloads == [b"v1", b"v2"]
+
+
+def test_uploaded_payload_is_the_full_file_content(artifact_server, tmp_path):
+    large = bytes(range(256)) * 1024
+    artifact_server.add(_write_file(tmp_path / "small.zip", b"v1"))
+    artifact_server.add(_write_file(tmp_path / "large.zip", large))
+
+    assert artifact_server.payloads == [b"v1", large]
+
+
+def test_artifacts_with_different_names_are_each_added(artifact_server, tmp_path):
+    artifact_server.add(_write_file(tmp_path / "one.zip", b"x"))
+    artifact_server.add(_write_file(tmp_path / "two.zip", b"x"))
+
+    assert artifact_server.uploaded == ["pyfiles/one.zip", "pyfiles/two.zip"]
+
+
+def test_failed_upload_is_retried_on_next_add(artifact_server, tmp_path):
+    path = _write_file(tmp_path / "utils.zip", b"v1")
+    artifact_server.fail_next = True
+    with pytest.raises(RuntimeError):
+        artifact_server.add(path)
+
+    artifact_server.add(path)
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_concurrent_adds_of_same_artifact_upload_once(artifact_server, tmp_path):
+    import threading
+
+    first = _write_file(tmp_path / "a" / "utils.zip", b"v1")
+    second = _write_file(tmp_path / "b" / "utils.zip", b"v1")
+    artifact_server.hold_uploads = threading.Event()
+    threads = [threading.Thread(target=artifact_server.add, args=(p,)) for p in (first, second)]
+    for thread in threads:
+        thread.start()
+    threads[0].join(timeout=0.5)
+    artifact_server.hold_uploads.set()
+    for thread in threads:
+        thread.join(timeout=5)
+
+    assert artifact_server.uploaded == ["pyfiles/utils.zip"]
+
+
+def test_apply_installs_artifact_dedupe(fake_pyspark_modules):
+    from dbt.adapters.athena.spark_connect.pyspark_patches import (
+        _add_artifacts_once,
+        apply_pyspark_workarounds,
+    )
+
+    apply_pyspark_workarounds()
+
+    assert fake_pyspark_modules.artifact_manager.add_artifacts is _add_artifacts_once
+
+
+def test_retry_exception_is_disabled_inside_client_retries_disabled(
+    fake_reattach_module, fake_spark_client_module
+):
+    import grpc
+
+    from dbt.adapters.athena.spark_connect.pyspark_patches import (
+        apply_pyspark_workarounds,
+        client_retries_disabled,
+    )
+
+    apply_pyspark_workarounds()
+
+    class _Err(grpc.RpcError):
+        def code(self):
+            return grpc.StatusCode.UNAVAILABLE
+
+    with client_retries_disabled():
+        assert fake_spark_client_module.retry_exception(_Err()) is False
+    assert fake_spark_client_module.retry_exception(_Err()) is True

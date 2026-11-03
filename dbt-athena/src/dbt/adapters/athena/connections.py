@@ -16,6 +16,7 @@ from typing import (
     cast,
     Deque,
     Dict,
+    FrozenSet,
     List,
     Optional,
     Tuple,
@@ -46,7 +47,17 @@ from tenacity import (
 )
 
 from dbt.adapters.athena.config import get_boto3_config
-from dbt.adapters.athena.constants import LOGGER
+from dbt.adapters.athena.constants import (
+    DEFAULT_SPARK_CONNECT_DPU_BUDGET,
+    DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL,
+    DEFAULT_SPARK_CONNECT_MAX_RETRIES,
+    DEFAULT_SPARK_CONNECT_MAX_SESSIONS,
+    DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT,
+    DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY,
+    LOGGER,
+    SESSION_IDLE_TIMEOUT_MIN,
+    SPARK_CONNECT_RETRY_CATEGORIES,
+)
 from dbt.adapters.athena.exceptions import (
     AthenaError,
     AthenaQueryCancelledError,
@@ -54,6 +65,7 @@ from dbt.adapters.athena.exceptions import (
 )
 from dbt.adapters.athena.query_headers import AthenaMacroQueryStringSetter
 from dbt.adapters.athena.session import get_boto3_session
+from dbt.adapters.athena.spark_connect.session import SparkConnectSessionPool
 from dbt.adapters.athena.connections_legacy import (
     AthenaConnectionManager as PyAthenaConnectionManager,
 )
@@ -73,9 +85,21 @@ Row: TypeAlias = Tuple[Cell, ...]
 ColumnMetadata: TypeAlias = Tuple[str, str, None, None, None, None, None]
 
 
+def _is_int_at_least(value: Any, minimum: int) -> bool:
+    try:
+        return int(value) >= minimum
+    except (TypeError, ValueError):
+        return False
+
+
+def _default_if_none(value: Optional[int], default: int) -> int:
+    return default if value is None else value
+
+
 @dataclass
 class AthenaAdapterResponse(AdapterResponse):
     data_scanned_in_bytes: Optional[int] = None
+    spark_session_id: Optional[str] = None
 
 
 @dataclass
@@ -104,12 +128,57 @@ class AthenaCredentials(Credentials):
     s3_data_dir: Optional[str] = None
     s3_data_naming: str = "schema_table_unique"
     spark_work_group: Optional[str] = None
+    spark_connect_max_sessions: Optional[int] = None
+    spark_connect_session_concurrency: Optional[int] = None
+    spark_connect_dpu_budget: Optional[int] = None
+    spark_connect_pool_acquire_timeout: Optional[int] = None
+    spark_connect_max_retries: Optional[int] = None
+    spark_connect_retry_on: Optional[List[str]] = None
+    spark_connect_keepalive_interval: Optional[int] = None
     s3_tmp_table_dir: Optional[str] = None
     # Unfortunately we can not just use dict, must be Dict because we'll get the following error:
     # Credentials in profile "athena", target "athena" invalid: Unable to create schema for 'dict'
     seed_s3_upload_args: Optional[Dict[str, Any]] = None
     lf_tags_database: Optional[Dict[str, str]] = None
     connection_manager: str = "api"
+
+    def __post_init__(self) -> None:
+        for field_name, minimum in (
+            ("spark_connect_max_sessions", 1),
+            ("spark_connect_session_concurrency", 1),
+            ("spark_connect_dpu_budget", 1),
+            ("spark_connect_pool_acquire_timeout", 1),
+            ("spark_connect_max_retries", 0),
+            ("spark_connect_keepalive_interval", 0),
+        ):
+            raw = getattr(self, field_name)
+            if raw is None:
+                continue
+            if not _is_int_at_least(raw, minimum):
+                bound = "non-negative" if minimum == 0 else "positive"
+                raise DbtRuntimeError(
+                    f"{field_name} must be a {bound} integer (got {raw!r}). "
+                    "Omit the field to use the default."
+                )
+            setattr(self, field_name, int(raw))
+
+        retry_on = self.spark_connect_retry_on
+        if retry_on is not None and (
+            not isinstance(retry_on, list)
+            or any(c not in SPARK_CONNECT_RETRY_CATEGORIES for c in retry_on)
+        ):
+            raise DbtRuntimeError(
+                f"spark_connect_retry_on must be a list of {list(SPARK_CONNECT_RETRY_CATEGORIES)} "
+                f"(got {retry_on!r}). Omit the field to retry all of them."
+            )
+
+        idle_timeout_seconds = SESSION_IDLE_TIMEOUT_MIN * 60
+        keepalive_interval = self.spark_connect_keepalive_interval
+        if keepalive_interval is not None and keepalive_interval >= idle_timeout_seconds:
+            raise DbtRuntimeError(
+                f"spark_connect_keepalive_interval must be shorter than the Spark session "
+                f"idle timeout ({idle_timeout_seconds}s), got {keepalive_interval}."
+            )
 
     @property
     def type(self) -> str:
@@ -130,6 +199,44 @@ class AthenaCredentials(Credentials):
     @property
     def effective_num_retries(self) -> int:
         return self.num_boto3_retries or self.num_retries
+
+    @property
+    def effective_spark_connect_max_sessions(self) -> int:
+        return _default_if_none(
+            self.spark_connect_max_sessions, DEFAULT_SPARK_CONNECT_MAX_SESSIONS
+        )
+
+    @property
+    def effective_spark_connect_session_concurrency(self) -> int:
+        return _default_if_none(
+            self.spark_connect_session_concurrency, DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY
+        )
+
+    @property
+    def effective_spark_connect_dpu_budget(self) -> int:
+        return _default_if_none(self.spark_connect_dpu_budget, DEFAULT_SPARK_CONNECT_DPU_BUDGET)
+
+    @property
+    def effective_spark_connect_pool_acquire_timeout(self) -> int:
+        return _default_if_none(
+            self.spark_connect_pool_acquire_timeout, DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT
+        )
+
+    @property
+    def effective_spark_connect_max_retries(self) -> int:
+        return _default_if_none(self.spark_connect_max_retries, DEFAULT_SPARK_CONNECT_MAX_RETRIES)
+
+    @property
+    def effective_spark_connect_retry_on(self) -> FrozenSet[str]:
+        if self.spark_connect_retry_on is None:
+            return frozenset(SPARK_CONNECT_RETRY_CATEGORIES)
+        return frozenset(self.spark_connect_retry_on)
+
+    @property
+    def effective_spark_connect_keepalive_interval(self) -> int:
+        return _default_if_none(
+            self.spark_connect_keepalive_interval, DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL
+        )
 
     def _connection_keys(self) -> Tuple[str, ...]:
         return (
@@ -158,6 +265,13 @@ class AthenaCredentials(Credentials):
             "schema",
             "seed_s3_upload_args",
             "skip_workgroup_check",
+            "spark_connect_dpu_budget",
+            "spark_connect_keepalive_interval",
+            "spark_connect_max_retries",
+            "spark_connect_max_sessions",
+            "spark_connect_pool_acquire_timeout",
+            "spark_connect_retry_on",
+            "spark_connect_session_concurrency",
             "spark_work_group",
             "work_group",
         )
@@ -778,6 +892,17 @@ class AthenaConnectionManager(SQLConnectionManager):
                 LOGGER.debug(f"There was an error parsing query stats {err}")
                 return -1, 0
         return cursor.rowcount, cursor.data_scanned_in_bytes
+
+    def cleanup_all(self) -> None:
+        from dbt_common.invocation import get_invocation_id
+
+        # Releases DPUs now instead of after the session idle timeout.
+        # Scope to this invocation; the singleton is shared across invocations
+        # in dbt Cloud workers and test harnesses.
+        try:
+            SparkConnectSessionPool().terminate_by_invocation(get_invocation_id())
+        finally:
+            super().cleanup_all()
 
     def cancel(self, connection: Connection) -> None:
         if connection.handle:

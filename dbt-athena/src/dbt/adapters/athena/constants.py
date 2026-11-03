@@ -1,8 +1,26 @@
 from types import SimpleNamespace
+from typing import Literal, Tuple
 
 from dbt.adapters.events.logging import AdapterLogger
 
 DEFAULT_THREAD_COUNT = 4
+SPARK_CONNECT_ENGINE_VERSION = "3.5"
+DEFAULT_SPARK_CONNECT_MAX_SESSIONS = 4
+DEFAULT_SPARK_CONNECT_SESSION_CONCURRENCY = 1
+# Spark 3.5 quota "On-demand DPUs per account" (L-E20AD6B8). Adjustable via
+# service-quotas; override per-profile with spark_connect_dpu_budget.
+DEFAULT_SPARK_CONNECT_DPU_BUDGET = 60
+DEFAULT_SPARK_CONNECT_POOL_ACQUIRE_TIMEOUT = 21600  # 6h
+DEFAULT_SPARK_CONNECT_MAX_RETRIES = 3
+SparkConnectRetryCategory = Literal[
+    "session_ended", "capacity", "executor_environment", "connection"
+]
+SPARK_CONNECT_RETRY_CATEGORIES: Tuple[SparkConnectRetryCategory, ...] = (
+    "session_ended",
+    "capacity",
+    "executor_environment",
+    "connection",
+)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_POLLING_INTERVAL = 5
 DEFAULT_SPARK_COORDINATOR_DPU_SIZE = 1
@@ -10,6 +28,8 @@ DEFAULT_SPARK_MAX_CONCURRENT_DPUS = 2
 DEFAULT_SPARK_EXECUTOR_DPU_SIZE = 1
 DEFAULT_CALCULATION_TIMEOUT = 43200  # seconds = 12 hours
 SESSION_IDLE_TIMEOUT_MIN = 10  # minutes
+DEFAULT_SPARK_CONNECT_KEEPALIVE_INTERVAL = SESSION_IDLE_TIMEOUT_MIN * 60 // 2  # seconds
+TOKEN_REFRESH_MARGIN_SECONDS = 120
 
 DEFAULT_SPARK_PROPERTIES = {
     # https://docs.aws.amazon.com/athena/latest/ug/notebooks-spark-table-formats.html
