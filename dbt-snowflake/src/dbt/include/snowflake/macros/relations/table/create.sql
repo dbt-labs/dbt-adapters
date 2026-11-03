@@ -108,7 +108,6 @@ as (
     {%- set transient='' -%}
 {%- endif -%}
 
-{%- set copy_grants = config.get('copy_grants', default=false) -%}
 {%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
@@ -129,7 +128,7 @@ create or replace {{ transient }}table {{ relation }}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
-    {% if copy_grants -%} copy grants {%- endif %}
+    {{ snowflake__copy_grants_clause() }}
     {% if copy_tags -%} copy tags {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
@@ -176,7 +175,6 @@ alter table {{ relation }} resume recluster;
   {%- set partition_by_string = none -%}
 {%- endif -%}
 
-{%- set copy_grants = config.get('copy_grants', default=false) -%}
 {%- set copy_tags = config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
@@ -206,7 +204,7 @@ create or replace iceberg table {{ relation }}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-    {% if copy_grants -%} copy grants {%- endif %}
+    {{ snowflake__copy_grants_clause() }}
     {% if copy_tags -%} copy tags {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}

@@ -48,7 +48,7 @@ create or replace transient table <model_identifier> (
     id integer not null primary key references <foreign_key_model_identifier> (id) unique,
     color text,
     date_day text
-) as ( select
+) ignore grants as ( select
         id,
         color,
         date_day from
@@ -167,7 +167,7 @@ create or replace transient table <model_identifier> (
     primary key (id),
     constraint strange_uniqueness_requirement unique (color, date_day),
     foreign key (id) references <foreign_key_model_identifier> (id)
-) as ( select
+) ignore grants as ( select
         id,
         color,
         date_day from
@@ -190,7 +190,7 @@ create or replace transient table <model_identifier> (
     id integer not null,
     "from" text not null,
     date_day text
-) as (
+) ignore grants as (
     select id, "from", date_day
     from (
         select
