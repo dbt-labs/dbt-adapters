@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix agate warnings during catalog generation
+time: 2025-11-13T16:55:24.942479Z
+custom:
+    Author: physcat
+    Issue: "1135"
