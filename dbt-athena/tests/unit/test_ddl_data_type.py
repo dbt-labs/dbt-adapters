@@ -56,6 +56,8 @@ def _ddl_data_type(col_type, table_type):
         ("array(decimal(38,0))", "hive", "array<decimal(38,0)>"),
         ("array<decimal(38,0)>", "hive", "array<decimal(38,0)>"),
         ("map<string,char(3)>", "hive", "map<string,char(3)>"),
+        # A Trino-style row nested in an array or map keeps its parentheses.
+        ("array(row(n bigint,w integer))", "hive", "array<row(n bigint,w int)>"),
     ],
 )
 def test_ddl_data_type(col_type, table_type, expected):
