@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep the structure of complex types in ddl_data_type, so on_schema_change adds a struct, array or map column with its real type instead of timestamp or binary, and no longer renames nested fields whose name contains a type name
+time: 2026-10-08T16:30:47.145138+02:00
+custom:
+    Author: David-Banquet
+    Issue: "1433"
