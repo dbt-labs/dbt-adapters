@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Write NUMBER(p,s) instead of DECIMAL(p,s) for number columns of Iceberg tables in a Glue catalog-linked database, as dbt Fusion does. The column type Snowflake creates is the same.
+time: 2026-11-02T17:50:23.819547+05:30
+custom:
+    Author: aahel
+    Issue: "2165"
