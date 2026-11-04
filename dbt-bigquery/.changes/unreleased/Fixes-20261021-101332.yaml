@@ -1,0 +1,8 @@
+kind: Fixes
+body: Write a seed's table description once, in the ALTER TABLE options, instead of
+    again through update_table_description. This saves one table update against
+    BigQuery's per-table rate limit.
+time: 2026-10-21T10:13:32.000000+02:00
+custom:
+    Author: jeremychia
+    Issue: "2235"
