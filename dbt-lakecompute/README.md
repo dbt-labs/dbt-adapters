@@ -16,7 +16,7 @@ The adapter is under active development. `dbt debug`, `dbt compile`, `dbt show`,
 | `materialized='table'` | supported: built with a single `create or replace table ... as (...)` |
 | `materialized='ephemeral'` | supported: inlined as a CTE, as everywhere else in dbt |
 | Model contracts | columns and types are checked; **constraints cannot be emitted**: a `create ... as (<query>)` has no column list to attach them to, so each declared constraint warns and is skipped |
-| `dbt seed` | supported: an existing table is truncated and reloaded (`--full-refresh` drops and recreates it), and rows are inserted as literal `insert ... values` batches of at most 500 rows or 1 MB. Whole-number columns are inferred as `bigint`. **A load is not atomic**: the service has no transactions, so a seed that fails part-way leaves its table empty or partly loaded until it is re-run |
+| `dbt seed` | supported: an existing table is truncated and reloaded (`--full-refresh` drops and recreates it), and rows are inserted as literal `insert ... values` batches of at most 500 rows or 1 MB. Whole-number columns are inferred as `bigint`, or `double` when a value is past `bigint`'s range, as in v2 (such a value is rounded). **A load is not atomic**: the service has no transactions, so a seed that fails part-way leaves its table empty or partly loaded until it is re-run |
 | `materialized='incremental'` | supported, strategies `append` (the default) and `insert_overwrite`. `append` sends `insert into ... by name (...)` to an existing table; a first run, `--full-refresh` and `insert_overwrite` rebuild with `create or replace table`. **`insert_overwrite` replaces the whole table**: there is no partition scoping, so `is_incremental()` is always false for it and the model must select its complete dataset. Other strategies (`merge`, `delete+insert`, `microbatch`) fail when run, with an error naming the model. `on_schema_change` is applied before an append, as on dbt's default, with one difference: **a column's type is never changed in place**. `fail` fails on any added, missing or retyped column; `append_new_columns` adds new columns (and, on a contracted model, fails on a type change rather than casting to the old type); `sync_all_columns` adds new columns and, once the append has succeeded, drops missing ones (so an incremental filter can still read them from `{{ this }}`), and fails on a type change. Use `--full-refresh` to change a type. With `ignore`, columns are matched by name: a column the model stops selecting is inserted as NULL, and one the table lacks fails the run. Like seeds, an append is not atomic |
 | `dbt docs generate` | not yet implemented |
 | `materialized='view'` | not supported: the catalog does not grant `CreateView`, so it fails when run, with an error naming the model. dbt defaults models to views, so set `+materialized: table` in `dbt_project.yml` |
@@ -82,9 +82,6 @@ Both live in [`install.py`](src/dbt/adapters/lakecompute/install.py).
 |---|---|
 | `DBT_COMPUTE_DRIVER_CACHE` | Use this directory instead of the OS cache directory. For CI images and air-gapped installs that pre-populate the cache. |
 
-Set `driver_path` in the profile to bypass the download entirely — for a locally built driver,
-or a platform with no prebuilt artifact.
-
 ## Connection settings
 
 | Setting | Default | Notes |
@@ -95,14 +92,9 @@ or a platform with no prebuilt artifact.
 | `token` | — | Required with `method: token`; a service bearer token |
 | `api_key` | — | Required with `method: api_key` |
 | `fivetran_credential` | — | Required with `method: fivetran`; a `dct_` PAT |
-| `fivetran_auth_url` | service default | Override the PAT exchange endpoint |
+| `fivetran_auth_url` | service default | Fivetran API base URL used for PAT exchange |
 | `okta_auth_url`, `okta_token_url`, `okta_client_id` | service defaults | Optional with `method: okta_browser`, which needs no pre-shared secret |
 | `base_url` | public endpoint | profile → `$DBT_COMPUTE_BASE_URL` → default |
-| `driver_path` | — | Override the driver library path; skips the CDN download. See [Driver](#driver) |
-| `warehouse`, `dialect` | — | passed through as `adbc.dbt.*` |
-| `timeout_seconds` | — | passed through |
-| `retries` | `1` | connection retry attempts |
-| `query_comment_enabled` | `false` | dbt's query comment is off by default |
 
 ## Development
 

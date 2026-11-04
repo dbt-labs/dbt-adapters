@@ -17,7 +17,7 @@ OPTION_AUTH_OKTA_AUTH_URL = "adbc.dbt.auth.okta.auth_url"
 OPTION_AUTH_OKTA_TOKEN_URL = "adbc.dbt.auth.okta.token_url"
 OPTION_AUTH_OKTA_CLIENT_ID = "adbc.dbt.auth.okta.client_id"
 OPTION_AUTH_FIVETRAN_CREDENTIAL = "adbc.dbt.auth.fivetran.credential"
-OPTION_AUTH_FIVETRAN_AUTH_URL = "adbc.dbt.auth.fivetran.auth_url"
+OPTION_AUTH_FIVETRAN_API_URL = "adbc.dbt.auth.fivetran.api_url"
 
 
 REQUIRED_FIELD_BY_METHOD: Dict[str, str] = {
@@ -70,7 +70,7 @@ def auth_options(credentials: "LakeComputeCredentials") -> Dict[str, str]:
 
     elif method == LakeComputeAuthMethod.FIVETRAN:
         options[OPTION_AUTH_FIVETRAN_CREDENTIAL] = str(credentials.fivetran_credential)
-        _set_if_present(options, OPTION_AUTH_FIVETRAN_AUTH_URL, credentials.fivetran_auth_url)
+        _set_if_present(options, OPTION_AUTH_FIVETRAN_API_URL, credentials.fivetran_auth_url)
 
     return options
 

@@ -140,3 +140,18 @@ class TestSeedColumnTypes:
     def test_integer(self):
         table = agate.Table([(1,)], ["n"], [agate.Number()])
         assert LakeComputeAdapter.convert_integer_type(table, 0) == "bigint"
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (Decimal("9223372036854775807"), "bigint"),
+            (Decimal("-9223372036854775808"), "bigint"),
+            # past bigint's range, as v2 does: a double, which loads but rounds the value
+            (Decimal("9223372036854775808"), "double"),
+            (Decimal("-9223372036854775809"), "double"),
+        ],
+    )
+    def test_bigint_range(self, value, expected):
+        table = agate.Table([(Decimal("1"),), (None,), (value,)], ["n"], [agate.Number()])
+        assert LakeComputeAdapter.convert_integer_type(table, 0) == expected
+        assert LakeComputeAdapter.convert_number_type(table, 0) == expected
