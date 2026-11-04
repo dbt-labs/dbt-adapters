@@ -1,0 +1,6 @@
+kind: Fixes
+body: Name PostgreSQL built-in types psycopg2 does not register (uuid, money, inet, bit, the geometric types and their arrays) during contract enforcement instead of emitting TypeCodeNotFound and comparing `unknown type_code <oid>`
+time: 2026-09-14T04:00:00.000000-05:00
+custom:
+    Author: tuday2
+    Issue: "2170"

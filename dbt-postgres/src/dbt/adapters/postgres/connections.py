@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Callable, Dict, Optional, Union
 
 from dbt.adapters.contracts.connection import AdapterResponse, Credentials
 from dbt.adapters.events.logging import AdapterLogger
@@ -17,6 +17,104 @@ from typing_extensions import Annotated
 
 
 logger = AdapterLogger("Postgres")
+
+
+# PostgreSQL built-in types that psycopg2 does not register a typecaster for, keyed by the type
+# OID a cursor description reports and valued by the SQL name `format_type(oid, null)` returns.
+#
+# psycopg2 can only name the OIDs it has a typecaster for (`psycopg2.extensions.string_types`),
+# and `uuid`, `money`, `inet`, `bit`, the geometric types and the rest below are not among them.
+# Contract enforcement therefore could not name those columns and fell through to
+# `unknown type_code <oid>` plus a TypeCodeNotFound event (dbt-labs/dbt-core#8353, #8877,
+# #8900), which under `--warn-error` fails every contracted model with such a column.
+#
+# The driver is still consulted first, so every type psycopg2 does name keeps the name it had.
+# This table is only the fallback for the built-ins it does not, plus their array types.
+#
+# Generated from `pg_catalog.pg_type` on PostgreSQL 16.13: `typtype = 'b'`, excluding the
+# pseudo, polymorphic and internal-use categories, minus the OIDs psycopg2 2.9.13 registers.
+# tests/functional/test_type_oid_mapping.py checks every entry against the live catalog.
+TYPE_OID_TO_DATA_TYPE: Dict[int, str] = {
+    22: "int2vector",
+    24: "regproc",
+    27: "tid",
+    28: "xid",
+    29: "cid",
+    30: "oidvector",
+    142: "xml",
+    143: "xml[]",
+    271: "xid8[]",
+    600: "point",
+    601: "lseg",
+    602: "path",
+    603: "box",
+    604: "polygon",
+    628: "line",
+    629: "line[]",
+    650: "cidr",
+    718: "circle",
+    719: "circle[]",
+    774: "macaddr8",
+    775: "macaddr8[]",
+    790: "money",
+    791: "money[]",
+    829: "macaddr",
+    869: "inet",
+    1008: "regproc[]",
+    1010: "tid[]",
+    1011: "xid[]",
+    1012: "cid[]",
+    1017: "point[]",
+    1018: "lseg[]",
+    1019: "path[]",
+    1020: "box[]",
+    1027: "polygon[]",
+    1033: "aclitem",
+    1034: "aclitem[]",
+    1560: "bit",
+    1561: "bit[]",
+    1562: "bit varying",  # varbit
+    1563: "bit varying[]",  # varbit[]
+    1790: "refcursor",
+    2201: "refcursor[]",
+    2202: "regprocedure",
+    2203: "regoper",
+    2204: "regoperator",
+    2205: "regclass",
+    2206: "regtype",
+    2207: "regprocedure[]",
+    2208: "regoper[]",
+    2209: "regoperator[]",
+    2210: "regclass[]",
+    2211: "regtype[]",
+    2949: "txid_snapshot[]",
+    2950: "uuid",
+    2951: "uuid[]",
+    2970: "txid_snapshot",
+    3220: "pg_lsn",
+    3221: "pg_lsn[]",
+    3614: "tsvector",
+    3615: "tsquery",
+    3642: "gtsvector",
+    3643: "tsvector[]",
+    3644: "gtsvector[]",
+    3645: "tsquery[]",
+    3734: "regconfig",
+    3735: "regconfig[]",
+    3769: "regdictionary",
+    3770: "regdictionary[]",
+    4072: "jsonpath",
+    4073: "jsonpath[]",
+    4089: "regnamespace",
+    4090: "regnamespace[]",
+    4096: "regrole",
+    4097: "regrole[]",
+    4191: "regcollation",
+    4192: "regcollation[]",
+    5038: "pg_snapshot",
+    5039: "pg_snapshot[]",
+    5069: "xid8",
+}
 
 
 @dataclass
@@ -279,6 +377,7 @@ class PostgresConnectionManager(SQLConnectionManager):
     def data_type_code_to_name(cls, type_code: Union[int, str]) -> str:
         if type_code in psycopg2.extensions.string_types:
             return psycopg2.extensions.string_types[type_code].name
-        else:
-            warn_or_error(TypeCodeNotFound(type_code=type_code))
-            return f"unknown type_code {type_code}"
+        if type_code in TYPE_OID_TO_DATA_TYPE:
+            return TYPE_OID_TO_DATA_TYPE[type_code]
+        warn_or_error(TypeCodeNotFound(type_code=type_code))
+        return f"unknown type_code {type_code}"
