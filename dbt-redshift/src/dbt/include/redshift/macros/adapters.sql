@@ -491,7 +491,7 @@
     When the flag is off, always use the default migration path.
   #}
   {% set type_lower = (new_column_type | lower) | trim %}
-  {% set skip_txn = adapter.behavior.redshift_skip_autocommit_transaction_statements.no_warn %}
+  {% set skip_txn = adapter.skip_transaction_statements() %}
   {% if skip_txn and (type_lower[:7] == 'varchar' or type_lower[:17] == 'character varying' or type_lower[:7] == 'varbyte') %}
     {% call statement('alter_column_type') %}
       alter table {{ relation.render() }} alter column {{ adapter.quote(column_name) }} type {{ new_column_type }}
