@@ -1,0 +1,6 @@
+kind: Fixes
+body: Keep the array type in model contracts when a parent column declared as ARRAY<STRUCT<>> has dot-notation child columns.
+time: 2026-10-22T20:00:00.000000+02:00
+custom:
+    Author: kbrudnowski
+    Issue: "1862"

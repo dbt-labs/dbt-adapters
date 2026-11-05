@@ -449,7 +449,8 @@ def _format_nested_data_type(
 
         formatted_nested_type = f"""struct<{", ".join(formatted_nested_types)}>"""
 
-        if parent_data_type and parent_data_type.lower() == "array":
+        # the parent may be declared as `array` or with its full type, e.g. `ARRAY<STRUCT<>>`
+        if parent_data_type and parent_data_type.lower().split("<")[0] == "array":
             formatted_nested_type = f"""array<{formatted_nested_type}>"""
 
         if parent_constraints:
