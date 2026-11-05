@@ -623,6 +623,13 @@ class SnowflakeConnectionManager(SQLConnectionManager):
             table = empty_table()
         return response, table
 
+    def add_select_query(self, sql: str) -> Tuple[Connection, Any]:
+        # don't apply the query comment here either
+        # add_query splits the sql at ';' and add_standard_query applies the comment
+        # to each resulting statement, so applying it here as well would add it twice
+        # https://github.com/dbt-labs/dbt-adapters/issues/688
+        return self.add_query(sql, auto_begin=False)
+
     def add_standard_query(self, sql: str, **kwargs) -> Tuple[Connection, Any]:
         # This is the happy path for a single query. Snowflake has a few odd behaviors that
         # require preprocessing within the 'add_query' method below.
