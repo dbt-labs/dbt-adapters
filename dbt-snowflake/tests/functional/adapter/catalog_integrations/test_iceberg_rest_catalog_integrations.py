@@ -5,6 +5,8 @@ from dbt.tests.adapter.catalog_integrations.test_catalog_integration import (
 )
 from dbt.tests.util import run_dbt
 
+from tests.functional.utils import run_dbt_retrying_external_catalog_errors
+
 MODEL__BASIC_ICEBERG_TABLE = """
                             {{ config(materialized='table',
                              catalog_name='basic_iceberg_rest_catalog') }}
@@ -133,9 +135,9 @@ class TestSnowflakeIcebergRestCatalogIntegration(BaseCatalogIntegrationValidatio
         }
 
     def test_basic_iceberg_rest_catalog_integration(self, project):
-        result = run_dbt(["run"])
+        result = run_dbt_retrying_external_catalog_errors(["run"])
         assert len(result) == 4
-        run_dbt(["run"])
+        run_dbt_retrying_external_catalog_errors(["run"])
 
 
 class TestSnowflakeIcebergRestGlueCatalogIntegration(BaseCatalogIntegrationValidation):
