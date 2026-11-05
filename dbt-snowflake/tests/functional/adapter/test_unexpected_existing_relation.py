@@ -65,6 +65,11 @@ def _properties_with_out_of_band_hooks(*model_names):
     return "models:\n" + entries
 
 
+def _explains_how_to_proceed(message):
+    """The failure points at the cause and at the flag that restores the previous behavior."""
+    return "relation cache" in message and FLAG in message
+
+
 def _ids(project, name):
     rows = project.run_sql(
         f"select id from {project.database}.{project.test_schema}.{name}", fetch="all"
@@ -95,6 +100,7 @@ class TestIncrementalUnexpectedExistingRelationFails(_FlagOn):
     def test_run_fails_and_keeps_existing_rows(self, project):
         results = run_dbt(["run"], expect_pass=False)
         assert "already exists" in results[0].message.lower()
+        assert _explains_how_to_proceed(results[0].message)
         assert _ids(project, "incr") == [999]
 
 
@@ -111,6 +117,7 @@ class TestIncrementalUnexpectedExistingRelationFailsByDefault:
     def test_run_fails_and_keeps_existing_rows(self, project):
         results = run_dbt(["run"], expect_pass=False)
         assert "already exists" in results[0].message.lower()
+        assert _explains_how_to_proceed(results[0].message)
         assert _ids(project, "incr") == [999]
 
 
@@ -176,6 +183,7 @@ class TestSnapshotUnexpectedExistingRelationFails(_FlagOn):
     def test_snapshot_fails_and_keeps_existing_rows(self, project):
         results = run_dbt(["snapshot"], expect_pass=False)
         assert "already exists" in results[0].message.lower()
+        assert _explains_how_to_proceed(results[0].message)
         assert _ids(project, "snap") == [999]
 
 
@@ -200,6 +208,7 @@ class TestPythonIncrementalUnexpectedExistingRelationFails(_FlagOn):
     def test_run_fails_and_keeps_existing_rows(self, project):
         results = run_dbt(["run"], expect_pass=False)
         assert "already exists" in results[0].message.lower()
+        assert _explains_how_to_proceed(results[0].message)
         assert _ids(project, "py_incr") == [999]
 
 
@@ -252,6 +261,7 @@ class TestIncrementalUnexpectedExistingRelationWithCopyOptions:
         results = run_dbt(["run"], expect_pass=False)
         message = results[0].message.lower()
         assert "already exists" in message
+        assert _explains_how_to_proceed(results[0].message)
         assert "copy grants" not in message
         assert _ids(project, "incr") == [999]
 
