@@ -1,0 +1,7 @@
+kind: Under the Hood
+body: Add redshift__rename_relation so Redshift does not inherit the Postgres partition-aware
+  rename introduced for dbt-postgres table partitioning
+time: 2026-07-23T10:44:49.526735-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "679"

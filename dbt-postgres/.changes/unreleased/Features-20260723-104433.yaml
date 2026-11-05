@@ -1,0 +1,6 @@
+kind: Features
+body: Add support for native table partitioning via the `partition_by` config
+time: 2026-07-23T10:44:33.112648-07:00
+custom:
+  Author: colin-rogers-dbt
+  Issue: "679"
