@@ -1,0 +1,6 @@
+kind: Fixes
+body: Parenthesize the interval in `spark__dateadd` so expressions such as `x - 1` are multiplied as a whole
+time: 2026-10-23T20:35:41.000000-05:00
+custom:
+    Author: raams95
+    Issue: "1554"
