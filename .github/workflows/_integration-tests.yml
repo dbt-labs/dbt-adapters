@@ -32,7 +32,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: string
-                default: "3.10"
+                default: "3.11"
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -58,7 +58,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+                options: ["3.11", "3.12", "3.13", "3.14"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -423,6 +423,7 @@ jobs:
             SNOWFLAKE_TEST_OAUTH_CLIENT_ID: ${{ vars.SNOWFLAKE_TEST_OAUTH_CLIENT_ID }}
             SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE: ${{ vars.SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE }}
             SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE: ${{ vars.SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_GLUE }}
+            SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_UNITY: ${{ vars.SNOWFLAKE_TEST_CATALOG_LINKED_DATABASE_UNITY }}
             SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET: ${{ secrets.SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET }}
             SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN: ${{ secrets.SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN }}
             SNOWFLAKE_TEST_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_TEST_PRIVATE_KEY }}
