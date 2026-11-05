@@ -127,6 +127,8 @@ class SnowflakeCredentials(Credentials):
     retry_on_database_errors: bool = False
     retry_all: bool = False
     insecure_mode: Optional[bool] = False
+    # connector default before 4.8; passed explicitly to keep behavior stable across versions
+    ocsp_fail_open: bool = True
     # this needs to default to `None` so that we can tell if the user set it; see `__post_init__()`
     reuse_connections: Optional[bool] = None
     s3_stage_vpce_dns_name: Optional[str] = None
@@ -214,6 +216,7 @@ class SnowflakeCredentials(Credentials):
             "retry_on_database_errors",
             "retry_all",
             "insecure_mode",
+            "ocsp_fail_open",
             "reuse_connections",
             "s3_stage_vpce_dns_name",
             "workload_identity_provider",
@@ -466,6 +469,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     client_session_keep_alive=creds.client_session_keep_alive,
                     application="dbt",
                     insecure_mode=creds.insecure_mode,
+                    ocsp_fail_open=creds.ocsp_fail_open,
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
                     ocsp_root_certs_dict_lock_timeout=10,  # cert lock can cause deadlock without timeout, see https://github.com/snowflakedb/snowflake-connector-python/issues/2213
