@@ -711,7 +711,7 @@ class BigQueryAdapter(BaseAdapter):
             conf_part = conf_partition.range or {}
 
             return (
-                dest_part.field == conf_partition.field
+                dest_part.field.lower() == conf_partition.field.lower()
                 and dest_part.range_.start == conf_part.get("start")
                 and dest_part.range_.end == conf_part.get("end")
                 and dest_part.range_.interval == conf_part.get("interval")
