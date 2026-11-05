@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 #   Catalog Error: Table with name "s.t" does not exist because schema "s" does not exist.
 _MISSING_RELATION = re.compile(r"Catalog Error: Table with name .+? does not exist")
 
+_BIGINT_MIN, _BIGINT_MAX = -(2**63), 2**63 - 1
+
 
 def _is_missing_relation(message: str, database: Optional[str]) -> bool:
     """Whether a ``describe`` failure means the relation does not exist.
@@ -100,10 +102,16 @@ class LakeComputeAdapter(SQLAdapter):
         non_finite = any(
             v is not None and not v.is_finite() for v in agate_table.columns[col_idx].values()
         )
-        return "double" if decimals or non_finite else "bigint"
+        if decimals or non_finite:
+            return "double"
+        return cls.convert_integer_type(agate_table, col_idx)
 
     @classmethod
     def convert_integer_type(cls, agate_table: "agate.Table", col_idx: int) -> str:
+        # Past bigint's range, as v2 does: a double, which loads but rounds the value.
+        values = agate_table.columns[col_idx].values()
+        if any(v is not None and not _BIGINT_MIN <= v <= _BIGINT_MAX for v in values):
+            return "double"
         return "bigint"
 
     @available

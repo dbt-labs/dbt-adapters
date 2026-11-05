@@ -34,7 +34,7 @@
       {%- endif %}
       table {{ this_relation }}
       clone {{ defer_relation }}
-      {{ "copy grants" if config.get("copy_grants", false) }}
+      {{ snowflake__copy_grants_clause() }}
       {{ "copy tags" if config.get("copy_tags", false) }}
 {% endmacro %}
 
