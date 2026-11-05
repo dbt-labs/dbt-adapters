@@ -18,6 +18,8 @@ from dbt_common.events.functions import fire_event, warn_or_error
 from dbt.adapters.snowflake import constants
 from dbt.adapters.snowflake.relation_configs import (
     RefreshMode,
+    SnowflakeDataMetricFunctionsConfig,
+    SnowflakeDataMetricFunctionsConfigChangeset,
     SnowflakeDynamicTableConfig,
     SnowflakeDynamicTableConfigChangeset,
     SnowflakeDynamicTableInitializationWarehouseConfigChange,
@@ -261,6 +263,43 @@ class SnowflakeRelation(BaseRelation):
                 )
             )
 
+        return changeset if changeset.has_changes else None
+
+    @classmethod
+    def data_metric_function_changeset(
+        cls,
+        relation_results: RelationResults,
+        relation_config: RelationConfig,
+    ) -> Optional[SnowflakeDataMetricFunctionsConfigChangeset]:
+        """Diff the data metric functions currently attached to a relation against the
+        model's configured DMFs.
+
+        Associations are matched case-insensitively on the fully qualified metric name
+        and the ordered column arguments. Anything configured but not present is added;
+        anything present but not configured is dropped (the config is the source of
+        truth, so an empty config detaches all managed DMFs). The schedule is emitted
+        only when the configured value differs from what Snowflake reports.
+        """
+        existing = SnowflakeDataMetricFunctionsConfig.from_relation_results(relation_results)
+        desired = SnowflakeDataMetricFunctionsConfig.from_relation_config(relation_config)
+
+        existing_by_key = {dmf.comparison_key: dmf for dmf in existing.metric_functions}
+        desired_by_key = {dmf.comparison_key: dmf for dmf in desired.metric_functions}
+
+        to_add = tuple(dmf for key, dmf in desired_by_key.items() if key not in existing_by_key)
+        to_drop = tuple(dmf for key, dmf in existing_by_key.items() if key not in desired_by_key)
+
+        schedule = (
+            desired.schedule
+            if desired.schedule is not None and desired.schedule != existing.schedule
+            else None
+        )
+
+        changeset = SnowflakeDataMetricFunctionsConfigChangeset(
+            schedule=schedule,
+            to_add=to_add,
+            to_drop=to_drop,
+        )
         return changeset if changeset.has_changes else None
 
     def as_case_sensitive(self) -> "SnowflakeRelation":
