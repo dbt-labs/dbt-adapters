@@ -5,6 +5,7 @@ from multiprocessing import get_context
 from contextlib import contextmanager
 from unittest import mock
 
+from dbt.adapters.exceptions import ApproximateMatchError, RelationReturnedMultipleResultsError
 from dbt.adapters.snowflake import SnowflakeAdapter
 from dbt.adapters.snowflake import Plugin as SnowflakePlugin
 from dbt.adapters.snowflake import SnowflakeAdapterResponse
@@ -15,6 +16,7 @@ from dbt.context.query_header import generate_query_header_context
 from dbt.context.providers import generate_runtime_macro_context
 from dbt.contracts.graph.manifest import ManifestStateCheck
 from dbt_common.clients import agate_helper
+from dbt_common.exceptions import DbtDatabaseError
 from snowflake import connector as snowflake_connector
 
 from .utils import (
@@ -767,6 +769,88 @@ class TestSnowflakeAdapter(unittest.TestCase):
             ]
             relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
             assert relation.render() == "test_database.test_schema.test_TABLE"
+
+    @staticmethod
+    def _show_objects_relation(identifier="my_table"):
+        # SHOW OBJECTS in a catalog-linked database returns lowercase schema and table names
+        return SnowflakeAdapter.Relation.create(
+            database="MY_CLD",
+            schema="my_schema",
+            identifier=identifier,
+            quote_policy={"database": True, "schema": True, "identifier": True},
+        )
+
+    @staticmethod
+    def _cld_config(case_sensitivity):
+        config = f'{{"catalog_case_sensitivity":"{case_sensitivity}"}}'
+        return None, agate.Table([[config]], column_names=["config"])
+
+    def test_get_relation_case_insensitive_catalog_linked_database(self):
+        listed = self._show_objects_relation()
+        with (
+            mock.patch.object(self.adapter, "list_relations", return_value=[listed]),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_INSENSITIVE")
+            ) as execute,
+        ):
+            relation = self.adapter.get_relation("my_cld", "my_schema", "my_table")
+            assert relation is listed
+            assert relation.render() == '"MY_CLD"."my_schema"."my_table"'
+            # the database's mode is looked up once and reused
+            self.adapter.get_relation("my_cld", "my_schema", "my_table")
+            execute.assert_called_once()
+            assert (
+                "system$get_catalog_linked_database_config('\"MY_CLD\"')"
+                in execute.call_args[0][0]
+            )
+
+    def test_get_relation_case_insensitive_catalog_linked_database_ambiguous(self):
+        listed = [self._show_objects_relation(), self._show_objects_relation("MY_TABLE")]
+        with (
+            mock.patch.object(self.adapter, "list_relations", return_value=listed),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_INSENSITIVE")
+            ),
+        ):
+            with self.assertRaises(RelationReturnedMultipleResultsError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_case_sensitive_catalog_linked_database(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_SENSITIVE")
+            ),
+        ):
+            with self.assertRaises(ApproximateMatchError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_approximate_match_outside_catalog_linked_database(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(
+                self.adapter,
+                "execute",
+                side_effect=DbtDatabaseError("001006 (22023): SQL compilation error"),
+            ),
+        ):
+            with self.assertRaises(ApproximateMatchError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_exact_match_skips_catalog_linked_database_lookup(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(self.adapter, "execute") as execute,
+        ):
+            relation = self.adapter.get_relation('"MY_CLD"', "my_schema", '"my_table"')
+            assert relation.render() == '"MY_CLD"."my_schema"."my_table"'
+            execute.assert_not_called()
 
     def test_normalize_show_objects_result_fixes_type_mismatch(self):
         # Simulate the type mismatch that occurs across paginated SHOW OBJECTS pages.
