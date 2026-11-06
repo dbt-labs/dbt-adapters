@@ -3,4 +3,4 @@ body: Support microbatch concurrency (`concurrent_batches`) for dbt-spark, inclu
 time: 2026-11-06T14:00:00.000000+01:00
 custom:
     Author: nicor88
-    Issue: "NA"
+    Issue: "2292"
