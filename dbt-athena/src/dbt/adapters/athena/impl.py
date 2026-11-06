@@ -1125,7 +1125,8 @@ class AthenaAdapter(SQLAdapter):
         target_table_version = {
             "Name": target_relation.identifier,
             "StorageDescriptor": src_table["StorageDescriptor"],
-            "PartitionKeys": src_table["PartitionKeys"],
+            # Glue omits PartitionKeys for Iceberg tables created by Athena
+            "PartitionKeys": src_table.get("PartitionKeys", []),
             "TableType": src_table["TableType"],
             "Parameters": src_table["Parameters"],
             "Description": src_table.get("Description", ""),

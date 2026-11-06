@@ -1064,6 +1064,47 @@ class TestAthenaAdapter:
         )
 
     @mock_aws
+    def test_swap_table_iceberg_without_partition_keys(self, mock_aws_service):
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database()
+        self.adapter.acquire_connection("dummy")
+        glue = boto3.client("glue", region_name=AWS_REGION)
+        # Athena creates Iceberg tables in Glue without PartitionKeys
+        for name in ("source_table", "target_table"):
+            glue.create_table(
+                DatabaseName=DATABASE_NAME,
+                TableInput={
+                    "Name": name,
+                    "StorageDescriptor": {
+                        "Columns": [{"Name": "id", "Type": "int"}],
+                        "Location": f"s3://{BUCKET}/tables/{name}",
+                    },
+                    "TableType": "EXTERNAL_TABLE",
+                    "Parameters": {
+                        "metadata_location": f"s3://{BUCKET}/tables/{name}/metadata/00000.metadata.json",
+                        "table_type": "ICEBERG",
+                    },
+                },
+            )
+        source_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier="source_table",
+        )
+        target_relation = self.adapter.Relation.create(
+            database=DATA_CATALOG_NAME,
+            schema=DATABASE_NAME,
+            identifier="target_table",
+        )
+        self.adapter.swap_table(source_relation, target_relation)
+        target = glue.get_table(DatabaseName=DATABASE_NAME, Name="target_table")["Table"]
+        assert target["StorageDescriptor"]["Location"] == f"s3://{BUCKET}/tables/source_table"
+        assert (
+            target["Parameters"]["metadata_location"]
+            == f"s3://{BUCKET}/tables/source_table/metadata/00000.metadata.json"
+        )
+
+    @mock_aws
     def test_swap_table_with_partitions_to_one_without(self, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database()

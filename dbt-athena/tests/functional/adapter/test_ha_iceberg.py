@@ -82,14 +82,16 @@ class TestTableIcebergTableUnique:
         assert second_model_run_result.status == RunStatus.Success
 
         out, _ = capsys.readouterr()
-        # in case of 2nd run we expect that the target table is renamed to __bkp
-        alter_statement = (
-            f"alter table `{project.test_schema}`.`{relation_name}` "
-            f"rename to `{project.test_schema}`.`{relation_name}__bkp`"
+        # in case of 2nd run we expect the target Glue table to be repointed to __ha in one
+        # UpdateTable call, so the target name never disappears, and __ha to be removed from Glue
+        swap_log = (
+            f'Table "awsdatacatalog"."{project.test_schema}"."{relation_name}" swapped with the content of '
+            f'"awsdatacatalog"."{project.test_schema}"."{relation_name}__ha"'
         )
-        delete_bkp_table_log = f'Deleted table from glue catalog: "awsdatacatalog"."{project.test_schema}"."{relation_name}__bkp"'
-        assert alter_statement in out
-        assert delete_bkp_table_log in out
+        delete_ha_table_log = f'Deleted table from glue catalog: "awsdatacatalog"."{project.test_schema}"."{relation_name}__ha"'
+        assert swap_log in out
+        assert delete_ha_table_log in out
+        assert f"rename to `{project.test_schema}`.`{relation_name}__bkp`" not in out
 
         second_models_records_count = project.run_sql(
             model_run_result_row_count_query, fetch="all"
