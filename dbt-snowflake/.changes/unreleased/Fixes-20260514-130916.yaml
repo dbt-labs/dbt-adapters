@@ -1,0 +1,7 @@
+kind: Fixes
+body: Wrap microbatch DELETE+INSERT in an explicit transaction so concurrent readers
+  do not observe an empty intermediate state.
+time: 2026-05-14T13:09:16-08:00
+custom:
+  Author: aalan3
+  PR: "1931"
