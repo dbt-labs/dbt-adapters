@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix connection failure on snowflake-connector-python 5.x when `client_session_keep_alive: true` and `reuse_connections` is unset by no longer passing an explicit `None` to the connector
+time: 2026-11-06T15:45:00.000000-08:00
+custom:
+    Author: officialpm
+    Issue: "2293"
