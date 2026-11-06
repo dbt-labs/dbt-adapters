@@ -45,6 +45,9 @@ def get_postgres_container(client: dagger.Client) -> Tuple[dagger.Container, str
             client.host().file("./dagger/spark-container/hive-txn-schema-2.3.postgres.sql"),
         )
         .with_exposed_port(PG_PORT)
+        # each Spark session touching Iceberg opens its own embedded metastore client and
+        # JDBC pool; the default 100 connections run out under parallel test workers
+        .with_exec(["postgres", "-c", "max_connections=500"])
         .as_service()
     )
 

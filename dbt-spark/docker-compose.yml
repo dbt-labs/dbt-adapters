@@ -22,6 +22,7 @@ services:
 
   dbt-hive-metastore:
     image: postgres:9-alpine
+    command: postgres -c max_connections=500
     volumes:
       - ./.hive-metastore/:/var/lib/postgresql/data
       - ./dagger/spark-container/hive-txn-schema-2.3.postgres.sql:/docker-entrypoint-initdb.d/hive-txn-schema.sql

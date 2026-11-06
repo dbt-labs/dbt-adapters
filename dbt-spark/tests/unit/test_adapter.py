@@ -975,3 +975,64 @@ def test_supports_microbatch_concurrency(target_thrift):
 
     adapter = SparkAdapter(target_thrift, get_context("spawn"))
     assert adapter.supports(Capability.MicrobatchConcurrency)
+
+
+def test_microbatch_concurrency_is_fully_supported(target_thrift):
+    from dbt.adapters.capability import Capability, Support
+
+    adapter = SparkAdapter(target_thrift, get_context("spawn"))
+    assert adapter.capabilities()[Capability.MicrobatchConcurrency].support == Support.Full
+
+
+@pytest.mark.parametrize(
+    "capability",
+    [
+        "SchemaMetadataByRelations",
+        "TableLastModifiedMetadata",
+        "TableLastModifiedMetadataBatch",
+        "GetCatalogForSingleRelation",
+        "CatalogsV2",
+    ],
+)
+def test_only_microbatch_concurrency_capability_is_claimed(target_thrift, capability):
+    # declaring a capability makes dbt-core take a different code path, so guard
+    # against claiming ones dbt-spark does not implement
+    from dbt.adapters.capability import Capability
+
+    adapter = SparkAdapter(target_thrift, get_context("spawn"))
+    assert not adapter.supports(Capability(capability))
+
+
+# `show table extended` output for an Iceberg table created through
+# SparkSessionCatalog over a Hive metastore (captured from Spark 3.1 + Iceberg 1.3):
+# the provider is reported as `hive`, the Iceberg marker is a table property.
+_ICEBERG_IN_HIVE_METASTORE_INFO = (
+    "Database: analytics\nTable: ice\nOwner: dbt\nType: EXTERNAL\nProvider: hive\n"
+    "Table Properties: [current-snapshot-id=3599189271764336036, "
+    'default-partition-spec={"spec-id":0,"fields":[{"name":"ts_day","transform":"day"}]}, '
+    "metadata_location=file:/spark-warehouse/analytics.db/ice/metadata/00000.metadata.json, "
+    "owner=dbt, table_type=ICEBERG, uuid=a6f7194c]\n"
+    "Location: file:/spark-warehouse/analytics.db/ice\n"
+    "InputFormat: org.apache.hadoop.mapred.FileInputFormat\n"
+    "Schema: root\n |-- id: integer (nullable = true)\n"
+)
+
+
+@pytest.mark.parametrize(
+    "information, is_iceberg",
+    [
+        ("Type: MANAGED\nProvider: iceberg\n", True),
+        (_ICEBERG_IN_HIVE_METASTORE_INFO, True),
+        ("Type: MANAGED\nProvider: parquet\n", False),
+        ("Type: MANAGED\nProvider: delta\n", False),
+        # a non-Iceberg table merely mentioning the word in a property value
+        ("Provider: parquet\nTable Properties: [comment=migrated from iceberg]\n", False),
+    ],
+)
+def test_iceberg_detection(target_thrift, information, is_iceberg):
+    adapter = SparkAdapter(target_thrift, get_context("spawn"))
+    rows = [Row(["analytics", "ice", False, information], ["db", "name", "tmp", "info"])]
+    [relation] = adapter._build_spark_relation_list(
+        row_list=rows, relation_info_func=adapter._get_relation_information
+    )
+    assert relation.is_iceberg is is_iceberg

@@ -2,7 +2,14 @@
 
     {%- set dest_columns = adapter.get_columns_in_relation(target_relation) -%}
     {%- set dest_cols_csv = dest_columns | map(attribute='quoted') | join(', ') -%}
-    {% if existing_relation.is_iceberg %}
+    {#-- is_iceberg is none when the relation came from dbt's cache rather than catalog
+         metadata (e.g. microbatch batches after the one that created the table): then
+         fall back to the configured file_format --#}
+    {%- set is_iceberg = existing_relation.is_iceberg -%}
+    {%- if is_iceberg is none -%}
+      {%- set is_iceberg = config.get('file_format') == 'iceberg' -%}
+    {%- endif -%}
+    {% if is_iceberg %}
       {# removed table from statement for iceberg #}
       insert overwrite {{ target_relation }}
       {# removed partition_cols for iceberg as well #}
