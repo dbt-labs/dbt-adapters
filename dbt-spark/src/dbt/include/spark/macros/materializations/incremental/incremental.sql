@@ -16,12 +16,7 @@
   {%- set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) -%}
   {%- set target_relation = this -%}
   {%- set existing_relation = load_relation(this) -%}
-  {% set tmp_relation = this.incorporate(path = {"identifier": this.identifier ~ '__dbt_tmp'}) -%}
-
-  {#-- for SQL model we will create temp view that doesn't have database and schema --#}
-  {%- if language == 'sql'-%}
-    {%- set tmp_relation = tmp_relation.include(database=false, schema=false) -%}
-  {%- endif -%}
+  {%- set tmp_relation = dbt_spark_get_incremental_tmp_relation(this, language) -%}
 
   {#-- Set Overwrite Mode --#}
   {%- if strategy in ['insert_overwrite', 'microbatch'] and partition_by -%}

@@ -39,6 +39,11 @@ def get_postgres_container(client: dagger.Client) -> Tuple[dagger.Container, str
         client.container()
         .from_("postgres:13")
         .with_env_variable("POSTGRES_PASSWORD", "postgres")
+        # Hive txn/lock tables, required by Iceberg's HiveCatalog commit lock
+        .with_file(
+            "/docker-entrypoint-initdb.d/hive-txn-schema.sql",
+            client.host().file("./dagger/spark-container/hive-txn-schema-2.3.postgres.sql"),
+        )
         .with_exposed_port(PG_PORT)
         .as_service()
     )

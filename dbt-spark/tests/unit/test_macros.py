@@ -208,3 +208,42 @@ class TestSparkMacros(unittest.TestCase):
             sql,
             "create table my_table using hudi partitioned by (partition_1,partition_2) clustered by (cluster_1,cluster_2) into 1 buckets location '/mnt/root/my_table' comment 'Description Test' as select 1",
         )
+
+
+class TestSparkIncrementalTmpRelation(unittest.TestCase):
+    """Concurrent microbatch batches must not share a temp relation name."""
+
+    def setUp(self):
+        from dbt.adapters.spark import SparkRelation
+
+        self.jinja_env = Environment(
+            loader=FileSystemLoader("src/dbt/include/spark/macros"),
+            extensions=["jinja2.ext.do"],
+        )
+        self.model = mock.Mock()
+        self.model.batch = None
+        self.returned = []
+        self.context = {"model": self.model, "return": self.returned.append}
+        self.target = SparkRelation.create(schema="analytics", identifier="my_model")
+
+    def _tmp_relation(self, language):
+        template = self.jinja_env.get_template(
+            "materializations/incremental/tmp_relation.sql", globals=self.context
+        )
+        template.module.dbt_spark_get_incremental_tmp_relation(self.target, language)
+        return self.returned[-1]
+
+    def test_sql_model_without_batch_uses_plain_tmp_view(self):
+        tmp = self._tmp_relation("sql")
+        self.assertEqual(tmp.identifier, "my_model__dbt_tmp")
+        self.assertEqual(tmp.render(), "my_model__dbt_tmp")
+
+    def test_sql_microbatch_batch_gets_batch_specific_tmp_view(self):
+        self.model.batch = mock.Mock(id="20200102")
+        tmp = self._tmp_relation("sql")
+        self.assertEqual(tmp.identifier, "my_model__dbt_tmp_20200102")
+        self.assertEqual(tmp.render(), "my_model__dbt_tmp_20200102")
+
+    def test_python_model_keeps_schema(self):
+        tmp = self._tmp_relation("python")
+        self.assertEqual(tmp.render(), "analytics.my_model__dbt_tmp")

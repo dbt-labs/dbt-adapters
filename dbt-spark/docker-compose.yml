@@ -24,6 +24,7 @@ services:
     image: postgres:9-alpine
     volumes:
       - ./.hive-metastore/:/var/lib/postgresql/data
+      - ./dagger/spark-container/hive-txn-schema-2.3.postgres.sql:/docker-entrypoint-initdb.d/hive-txn-schema.sql
     environment:
       - POSTGRES_USER=dbt
       - POSTGRES_PASSWORD=dbt

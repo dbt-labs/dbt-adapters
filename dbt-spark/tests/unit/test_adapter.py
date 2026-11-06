@@ -968,3 +968,10 @@ class TestGetColumnsForCatalogIcebergFallback(unittest.TestCase):
             result = list(adapter._get_columns_for_catalog(relation))
 
         self.assertEqual(result, [])
+
+
+def test_supports_microbatch_concurrency(target_thrift):
+    from dbt.adapters.capability import Capability
+
+    adapter = SparkAdapter(target_thrift, get_context("spawn"))
+    assert adapter.supports(Capability.MicrobatchConcurrency)
