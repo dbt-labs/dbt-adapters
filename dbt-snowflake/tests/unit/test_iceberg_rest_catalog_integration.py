@@ -9,6 +9,7 @@ from dbt.adapters.snowflake.catalogs._iceberg_rest import (
     IcebergRestCatalogRelation,
 )
 from dbt.adapters.catalogs import InvalidCatalogIntegrationConfigError
+from dbt.adapters.exceptions.compilation import InvalidRelationConfigError
 
 
 class TestIcebergRestCatalogIntegration:
