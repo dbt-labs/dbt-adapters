@@ -1,0 +1,6 @@
+kind: Fixes
+body: Relax the google-cloud-storage upper bound to <4.0 so dbt-bigquery can resolve alongside current google-cloud-aiplatform releases on Python 3.13 and 3.14.
+time: 2026-10-28T12:00:00.000000Z
+custom:
+    Author: wallyflops
+    Issue: "2248"
