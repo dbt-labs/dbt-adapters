@@ -1,0 +1,6 @@
+kind: Fixes
+body: Detect Iceberg tables registered in a Hive metastore (reported as `Provider: hive` with a `table_type=ICEBERG` property), and fall back to the `file_format` config when the cached relation has no format metadata, so Iceberg incremental `insert_overwrite`/`microbatch` models work with partition transforms such as `days(event_time)`.
+time: 2026-11-06T18:00:00.000000+01:00
+custom:
+    Author: nicor88
+    Issue: "2292"

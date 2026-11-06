@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 from dbt.adapters.base import AdapterConfig, PythonJobHelper
 from dbt.adapters.base.impl import catch_as_completed, ConstraintSupport
+from dbt.adapters.capability import Capability, CapabilityDict, CapabilitySupport, Support
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.spark import SparkConnectionManager
 from dbt.adapters.spark import SparkRelation
@@ -111,6 +112,12 @@ class SparkAdapter(SQLAdapter):
     INFORMATION_COLUMNS_REGEX = re.compile(r"^ \|-- (.*): (.*) \(nullable = (.*)\b", re.MULTILINE)
     INFORMATION_OWNER_REGEX = re.compile(r"^Owner: (.*)$", re.MULTILINE)
     INFORMATION_STATISTICS_REGEX = re.compile(r"^Statistics: (.*)$", re.MULTILINE)
+    # Iceberg tables registered in a Hive metastore (e.g. through SparkSessionCatalog) are
+    # reported as `Provider: hive` by SHOW TABLE EXTENDED; Iceberg marks them with a
+    # `table_type=ICEBERG` table property instead.
+    INFORMATION_ICEBERG_TABLE_TYPE_REGEX = re.compile(
+        r"^Table Properties: \[.*\btable_type=ICEBERG\b", re.MULTILINE | re.IGNORECASE
+    )
 
     HUDI_METADATA_COLUMNS = [
         "_hoodie_commit_time",
@@ -127,6 +134,10 @@ class SparkAdapter(SQLAdapter):
         ConstraintType.primary_key: ConstraintSupport.NOT_ENFORCED,
         ConstraintType.foreign_key: ConstraintSupport.NOT_ENFORCED,
     }
+
+    _capabilities = CapabilityDict(
+        {Capability.MicrobatchConcurrency: CapabilitySupport(support=Support.Full)}
+    )
 
     Relation: TypeAlias = SparkRelation
     RelationInfo = Tuple[str, str, str]
@@ -222,7 +233,9 @@ class SparkAdapter(SQLAdapter):
             )
             is_delta: bool = "Provider: delta" in information
             is_hudi: bool = "Provider: hudi" in information
-            is_iceberg: bool = "Provider: iceberg" in information
+            is_iceberg: bool = "Provider: iceberg" in information or bool(
+                self.INFORMATION_ICEBERG_TABLE_TYPE_REGEX.search(information)
+            )
 
             relation: BaseRelation = self.Relation.create(
                 schema=_schema,
