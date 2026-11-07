@@ -1,3 +1,4 @@
+import json
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import (
@@ -13,8 +14,10 @@ from typing import (
     Tuple,
 )
 
+from dbt.adapters.base.column import Column as BaseColumn
 from dbt.adapters.base.impl import AdapterConfig, ConstraintSupport
 from dbt.adapters.base.meta import available
+from dbt.adapters.base.relation import BaseRelation
 from dbt.adapters.capability import CapabilityDict, CapabilitySupport, Support, Capability
 from dbt.adapters.catalogs import (
     CatalogIntegration,
@@ -25,6 +28,7 @@ from dbt.adapters.catalogs import (
 from dbt.adapters.contracts.relation import RelationConfig
 from dbt.adapters.sql import SQLAdapter
 from dbt.adapters.events.types import ColTypeChange
+from dbt.adapters.exceptions import ApproximateMatchError
 from dbt.adapters.cache import _make_ref_key_dict
 from dbt.adapters.sql.impl import (
     LIST_SCHEMAS_MACRO_NAME,
@@ -42,6 +46,7 @@ from dbt_common.contracts.metadata import (
 from dbt_common.behavior_flags import BehaviorFlag
 from dbt_common.events.functions import fire_event
 from dbt_common.exceptions import CompilationError, DbtDatabaseError, DbtRuntimeError
+from dbt_common.record import auto_record_function
 from dbt_common.utils import filter_null_values
 
 from dbt.adapters.snowflake import constants, parse_model
@@ -182,6 +187,7 @@ class SnowflakeAdapter(SQLAdapter):
         super().__init__(config, mp_context)
         self.add_catalog_integration(constants.DEFAULT_INFO_SCHEMA_CATALOG)
         self.add_catalog_integration(constants.DEFAULT_BUILT_IN_CATALOG)
+        self._case_insensitive_databases: Dict[str, bool] = {}
 
     def _v2_to_v1_type(self, catalog_type: str) -> str:
         return self._V2_TO_V1_TYPE.get(catalog_type, catalog_type)
@@ -254,6 +260,51 @@ class SnowflakeAdapter(SQLAdapter):
     def _strip_quotes(self, identifier: str) -> str:
         return identifier.strip(self.Relation.quote_character)
 
+    def _make_match(
+        self,
+        relations_list: List[BaseRelation],
+        database: str,
+        schema: str,
+        identifier: str,
+    ) -> List[BaseRelation]:
+        try:
+            return super()._make_match(relations_list, database, schema, identifier)
+        except ApproximateMatchError as exc:
+            # A catalog-linked database in CASE_INSENSITIVE mode stores names in lowercase and
+            # resolves unquoted names case-insensitively, so dbt's uppercased search name and
+            # the lowercase name from SHOW OBJECTS refer to the same object.
+            if not self._is_case_insensitive_catalog_linked_database(exc.relation.database):
+                raise
+
+        search = self._make_match_kwargs(database, schema, identifier)
+        return [
+            relation
+            for relation in relations_list
+            if all(
+                str(relation.path.get_lowered_part(part)) == value.lower()
+                for part, value in search.items()
+            )
+        ]
+
+    def _is_case_insensitive_catalog_linked_database(self, database: Optional[str]) -> bool:
+        if not database:
+            return False
+        if database not in self._case_insensitive_databases:
+            sql = (
+                "select system$get_catalog_linked_database_config("
+                f"'{_sql_literal(self.quote(database))}')"
+            )
+            try:
+                _, table = self.execute(sql, fetch=True)
+                config = json.loads(table[0][0])
+            except (DbtDatabaseError, ValueError, TypeError, IndexError):
+                # 001006: not a catalog-linked database
+                config = {}
+            self._case_insensitive_databases[database] = (
+                str(config.get("catalog_case_sensitivity", "")).upper() == "CASE_INSENSITIVE"
+            )
+        return self._case_insensitive_databases[database]
+
     def _get_warehouse(self) -> Optional[str]:
         _, table = self.execute("select current_warehouse() as warehouse", fetch=True)
         if len(table) == 0 or len(table[0]) == 0:
@@ -299,6 +350,27 @@ class SnowflakeAdapter(SQLAdapter):
                 return []
             else:
                 raise
+
+    @auto_record_function("AdapterGetColumnSchemaFromQuery", group="Available")
+    @available.parse(lambda *a, **k: [])
+    def get_column_schema_from_query(self, sql: str) -> List[BaseColumn]:
+        """Get a list of the Columns with names and data types from the given sql.
+
+        FIXED (NUMBER/DECIMAL) columns also carry their precision and scale, so DDL built
+        from them keeps the declared type. dtype stays FIXED, which contracts compare on.
+        """
+        _, cursor = self.connections.add_select_query(sql)
+        columns = []
+        # https://peps.python.org/pep-0249/#description
+        for column_name, column_type_code, _, _, precision, scale, *_ in cursor.description:
+            column = self.Column.create(
+                column_name, self.connections.data_type_code_to_name(column_type_code)
+            )
+            if column.dtype == "FIXED":
+                column.numeric_precision = precision
+                column.numeric_scale = scale
+            columns.append(column)
+        return columns
 
     def _show_object_metadata(self, relation: SnowflakeRelation) -> Optional[dict]:
         try:

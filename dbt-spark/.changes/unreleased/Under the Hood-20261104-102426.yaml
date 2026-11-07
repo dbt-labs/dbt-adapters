@@ -1,0 +1,6 @@
+kind: Under the Hood
+body: Run dagger integration tests on Python 3.11 since dbt-core 1.latest dropped 3.10
+time: 2026-11-04T10:24:26.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "2285"
