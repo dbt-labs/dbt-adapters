@@ -332,7 +332,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=None,
                     ocsp_root_certs_dict_lock_timeout=10,
                 )
             ]
