@@ -7,6 +7,10 @@
   {%- set file_format = dbt_spark_validate_get_file_format(raw_file_format) -%}
   {%- set strategy = dbt_spark_validate_get_incremental_strategy(raw_strategy, file_format) -%}
 
+  {#-- Custom strategies resolve to a user-defined `get_incremental_<strategy>_sql` macro --#}
+  {%- set is_custom_strategy = strategy not in ['append', 'merge', 'insert_overwrite', 'microbatch'] -%}
+  {%- set custom_strategy_macro = adapter.get_incremental_strategy_macro(context, strategy) if is_custom_strategy else none -%}
+
   {#-- Set vars --#}
 
   {%- set unique_key = config.get('unique_key', none) -%}
@@ -56,9 +60,25 @@
       {{ create_table_as(True, tmp_relation, compiled_code, language) }}
     {%- endcall -%}
     {%- do process_schema_changes(on_schema_change, tmp_relation, existing_relation) -%}
-    {%- call statement('main') -%}
-      {{ dbt_spark_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
-    {%- endcall -%}
+    {%- if is_custom_strategy -%}
+      {%- set dest_columns = adapter.get_columns_in_relation(existing_relation) -%}
+      {%- set strategy_arg_dict = ({
+          'target_relation': target_relation,
+          'temp_relation': tmp_relation,
+          'unique_key': unique_key,
+          'dest_columns': dest_columns,
+          'incremental_predicates': incremental_predicates,
+          'existing_relation': existing_relation,
+          'partition_by': partition_by
+      }) -%}
+      {%- call statement('main') -%}
+        {{ custom_strategy_macro(strategy_arg_dict) }}
+      {%- endcall -%}
+    {%- else -%}
+      {%- call statement('main') -%}
+        {{ dbt_spark_get_incremental_sql(strategy, tmp_relation, target_relation, existing_relation, unique_key, incremental_predicates) }}
+      {%- endcall -%}
+    {%- endif -%}
     {%- if language == 'python' -%}
       {#--
       This is yucky.
