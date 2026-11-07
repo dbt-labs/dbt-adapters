@@ -1539,6 +1539,9 @@ class BigQueryAdapter(BaseAdapter):
 
         return c
 
+    def valid_incremental_strategies(self):
+        return ["merge", "insert_overwrite", "microbatch"]
+
     def debug_query(self):
         """Override for DebugTask method"""
         self.execute("select 1 as id")
