@@ -112,6 +112,12 @@ class TestBuildCatalogRelation:
         node = SimpleNamespace(config=export_config)
         assert self.adapter.build_catalog_relation(node) is None
 
+    def test_node_without_config_attribute_returns_none(self):
+        # A `run-operation` executes with `config.model` set to the Macro being run, which has
+        # no `config` attribute at all; build_catalog_relation must return None, not raise.
+        macro_like = SimpleNamespace(resource_type="macro", name="my_operation")
+        assert self.adapter.build_catalog_relation(macro_like) is None
+
     def test_empty_config_returns_none(self):
         assert self.adapter.build_catalog_relation(SimpleNamespace(config={})) is None
 
