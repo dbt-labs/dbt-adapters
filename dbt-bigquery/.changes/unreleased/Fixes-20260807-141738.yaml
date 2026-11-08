@@ -1,0 +1,6 @@
+kind: Fixes
+body: Merge `labels` across config levels instead of clobbering, so labels set for a whole folder in dbt_project.yml combine with model-specific labels. More specific levels win per label key.
+time: 2026-08-07T14:17:38.959005+02:00
+custom:
+    Author: yochem
+    Issue: "15671"
