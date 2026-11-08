@@ -64,13 +64,22 @@
           {{ query_result }}
         {% endcall %}
       {%- endif -%}
-      -- swap table
-      {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
+      {# Python return-None auto-detection: if tmp does not exist, the model
+         wrote the final relation directly and we skip the swap. #}
+      {%- set tmp_check_ha = adapter.get_relation(
+        database=tmp_relation.database,
+        schema=tmp_relation.schema,
+        identifier=tmp_relation.identifier
+      ) -%}
+      {%- if not (language == 'python' and tmp_check_ha is none) -%}
+        -- swap table
+        {%- set swap_table = adapter.swap_table(tmp_relation, target_relation) -%}
 
-      -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
-      {%- do adapter.delete_from_glue_catalog(tmp_relation) -%}
+        -- delete glue tmp table, do not use drop_relation, as it will remove data of the target table
+        {%- do adapter.delete_from_glue_catalog(tmp_relation) -%}
 
-      {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, True) %}
+        {% do adapter.expire_glue_table_versions(target_relation, versions_to_keep, True) %}
+      {%- endif -%}
 
     {%- else -%}
       -- Here we are in the case of non-ha tables or ha tables but in case of full refresh.
@@ -143,27 +152,38 @@
           {% endcall %}
         {%- endif -%}
 
-        {%- set old_relation_table_type = adapter.get_glue_table_type(old_relation).value if old_relation else none -%}
+        {# Python return-None auto-detection: if tmp does not exist, the model
+           wrote the final relation directly and we skip the __ha rename swap. #}
+        {%- set tmp_check = adapter.get_relation(
+          database=tmp_relation.database,
+          schema=tmp_relation.schema,
+          identifier=tmp_relation.identifier
+        ) -%}
+        {%- if language == 'python' and tmp_check is none -%}
+          {# self-materialized to final, nothing to swap #}
+        {%- else -%}
+          {%- set old_relation_table_type = adapter.get_glue_table_type(old_relation).value if old_relation else none -%}
 
-        -- we cannot use old_bkp_relation, because it returns None if the relation doesn't exist
-        -- we need to create a python object via the make_temp_relation instead
-        {%- set old_relation_bkp = make_temp_relation(old_relation, '__bkp') -%}
+          -- we cannot use old_bkp_relation, because it returns None if the relation doesn't exist
+          -- we need to create a python object via the make_temp_relation instead
+          {%- set old_relation_bkp = make_temp_relation(old_relation, '__bkp') -%}
 
-        {%- if old_relation_table_type == 'iceberg_table' -%}
-          {{ rename_relation(old_relation, old_relation_bkp) }}
-        {%- else  -%}
-          {%- do drop_relation_glue(old_relation) -%}
-        {%- endif -%}
+          {%- if old_relation_table_type == 'iceberg_table' -%}
+            {{ rename_relation(old_relation, old_relation_bkp) }}
+          {%- else  -%}
+            {%- do drop_relation_glue(old_relation) -%}
+          {%- endif -%}
 
-        -- publish the target table doing a final renaming
-        {{ rename_relation(tmp_relation, target_relation) }}
+          -- publish the target table doing a final renaming
+          {{ rename_relation(tmp_relation, target_relation) }}
 
-        -- if old relation is iceberg_table, we have a backup
-        -- therefore we can drop the old relation backup, in all other cases there is nothing to do
-        -- in case of switch from hive to iceberg the backup table do not exists
-        -- in case of first run, the backup table do not exists
-        {%- if old_relation_table_type == 'iceberg_table' -%}
-          {%- do drop_relation(old_relation_bkp) -%}
+          -- if old relation is iceberg_table, we have a backup
+          -- therefore we can drop the old relation backup, in all other cases there is nothing to do
+          -- in case of switch from hive to iceberg the backup table do not exists
+          -- in case of first run, the backup table do not exists
+          {%- if old_relation_table_type == 'iceberg_table' -%}
+            {%- do drop_relation(old_relation_bkp) -%}
+          {%- endif -%}
         {%- endif -%}
 
       {%- endif -%}
