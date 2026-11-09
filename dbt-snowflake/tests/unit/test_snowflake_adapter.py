@@ -299,6 +299,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 ),
             ]
         )
@@ -334,7 +335,38 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=None,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
+            ]
+        )
+
+    def test_ocsp_fail_open_false(self):
+        self.config.credentials = self.config.credentials.replace(ocsp_fail_open=False)
+        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        self.snowflake.assert_not_called()
+        conn.handle
+        self.snowflake.assert_has_calls(
+            [
+                mock.call(
+                    account="test-account",
+                    autocommit=True,
+                    client_session_keep_alive=False,
+                    database="test_database",
+                    role=None,
+                    schema="public",
+                    user="test_user",
+                    warehouse="test_warehouse",
+                    private_key=None,
+                    application="dbt",
+                    insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
+                    session_parameters={},
+                    reuse_connections=True,
+                    ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=False,
+                ),
             ]
         )
 
@@ -363,6 +395,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -400,6 +433,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -436,6 +470,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -468,6 +503,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -504,6 +540,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -540,6 +577,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -576,6 +614,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -610,6 +649,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -642,6 +682,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -673,6 +714,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -709,6 +751,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -747,6 +790,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     session_parameters={},
                     reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )

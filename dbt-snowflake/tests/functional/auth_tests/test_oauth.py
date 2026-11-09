@@ -67,7 +67,7 @@ class TestSnowflakeOauth:
             "type": "snowflake",
             "threads": 4,
             "account": os.getenv("SNOWFLAKE_TEST_ACCOUNT"),
-            "user": os.getenv("SNOWFLAKE_TEST_USER"),
+            "user": os.getenv("SNOWFLAKE_TEST_OAUTH_USER"),
             "oauth_client_id": os.getenv("SNOWFLAKE_TEST_OAUTH_CLIENT_ID"),
             "oauth_client_secret": os.getenv("SNOWFLAKE_TEST_OAUTH_CLIENT_SECRET"),
             "token": os.getenv("SNOWFLAKE_TEST_OAUTH_REFRESH_TOKEN"),
