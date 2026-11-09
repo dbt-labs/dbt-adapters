@@ -22,7 +22,7 @@
   {{ return(adapter.dispatch('persist_docs', 'dbt')(relation, model, for_relation, for_columns)) }}
 {% endmacro %}
 
-{#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names. Returns a filtered column_dict containing only columns that exist. --#}
+{#-- Validates documented columns against the actual database columns. Warns about any columns in column_dict that don't exist in existing_column_names (suppressed during clone operations). Returns a filtered column_dict containing only columns that exist. --#}
 {% macro validate_doc_columns(relation, column_dict, existing_column_names) %}
   {% set existing_lower = existing_column_names | map("lower") | list %}
   {% set missing = [] %}
@@ -40,7 +40,8 @@
       {% do missing.append(col_name) %}
     {% endif %}
   {% endfor %}
-  {% if missing | length > 0 %}
+  {% set is_clone = flags is defined and flags.WHICH == 'clone' %}
+  {% if missing | length > 0 and not is_clone %}
     {{ exceptions.warn("In relation " ~ relation.render() ~ ": The following columns are specified in the schema but are not present in the database: " ~ missing | join(", ")) }}
   {% endif %}
   {{ return(filtered) }}
