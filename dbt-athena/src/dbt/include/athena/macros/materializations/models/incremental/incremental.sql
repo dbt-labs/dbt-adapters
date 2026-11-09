@@ -161,6 +161,34 @@
     %}
     {% do to_drop.append(tmp_relation) %}
 
+  -- Iceberg Delete+Insert Strategy --
+  {% elif strategy == 'delete+insert' and table_type == 'iceberg' %}
+    {% set unique_key = config.get('unique_key') %}
+    {% set incremental_predicates = config.get('predicates', none) or config.get('incremental_predicates', none) %}
+    {% if incremental_predicates is not none and not adapter.is_list(incremental_predicates) %}
+      {% do exceptions.raise_compiler_error('Delete+insert strategy must implement incremental_predicates as a list of predicates when provided.') %}
+    {% endif %}
+    {% if old_tmp_relation is not none %}
+      {% do drop_relation(old_tmp_relation) %}
+    {% endif %}
+    {% set query_result = safe_create_table_as(True, tmp_relation, compiled_code, model_language, force_batch) -%}
+    {%- if model_language == 'python' -%}
+      {% call statement('create_table', language=model_language) %}
+        {{ query_result }}
+      {% endcall %}
+    {%- endif -%}
+    {% set build_sql = iceberg_delete_insert(
+        on_schema_change=on_schema_change,
+        tmp_relation=tmp_relation,
+        target_relation=target_relation,
+        unique_key=unique_key,
+        incremental_predicates=incremental_predicates,
+        existing_relation=existing_relation,
+        force_batch=force_batch,
+      )
+    %}
+    {% do to_drop.append(tmp_relation) %}
+
   -- Iceberge Merge Stategy --
   {% elif strategy == 'merge' and table_type == 'iceberg' %}
     {% set unique_key = config.get('unique_key') %}
