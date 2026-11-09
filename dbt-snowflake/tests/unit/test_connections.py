@@ -292,7 +292,9 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
                 {"disable_ocsp_checks": True, "ocsp_fail_open": True},
             ),
             (4, {"insecure_mode": True}, {"disable_ocsp_checks": True, "ocsp_fail_open": True}),
-            (5, {}, {"crl_check_mode": "ADVISORY"}),
+            # CRL checks are opt-in on 5.x: nothing is passed when the mode is unset
+            (5, {}, {}),
+            (5, {"cert_revocation_check_mode": "ADVISORY"}, {"crl_check_mode": "ADVISORY"}),
             (5, {"cert_revocation_check_mode": "ENABLED"}, {"crl_check_mode": "ENABLED"}),
             (5, {"cert_revocation_check_mode": "DISABLED"}, {"crl_check_mode": "DISABLED"}),
             (5, {"insecure_mode": True}, {"crl_check_mode": "DISABLED"}),
@@ -303,6 +305,7 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
             "4_disabled",
             "4_insecure_mode",
             "5_default",
+            "5_advisory",
             "5_enabled",
             "5_disabled",
             "5_insecure_mode",
@@ -322,7 +325,7 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
     @pytest.mark.parametrize(
         "value,expected",
         [
-            (None, "ADVISORY"),
+            (None, None),
             ("advisory", "ADVISORY"),
             ("Enabled", "ENABLED"),
             ("DISABLED", "DISABLED"),
@@ -334,9 +337,9 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
         )
         assert creds.cert_revocation_check_mode == expected
 
-    def test_default_mode_is_advisory(self, base_credentials):
+    def test_default_mode_is_unset(self, base_credentials):
         creds = connections.SnowflakeCredentials(**base_credentials)
-        assert creds.cert_revocation_check_mode == "ADVISORY"
+        assert creds.cert_revocation_check_mode is None
 
     def test_invalid_mode_raises(self, base_credentials):
         with pytest.raises(DbtConfigError, match="Invalid cert_revocation_check_mode 'strict'"):

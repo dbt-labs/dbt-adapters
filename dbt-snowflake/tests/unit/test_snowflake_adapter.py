@@ -380,8 +380,28 @@ class TestSnowflakeAdapter(unittest.TestCase):
             ]
         )
 
+    def test_no_revocation_args_by_default_on_connector_5(self):
+        self.connector_major_version.return_value = 5
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        conn.handle
+        # CRL checks are opt-in on 5.x, and it has no OCSP, so no revocation options are sent
+        kwargs = self.snowflake.call_args.kwargs
+        for key in (
+            "crl_check_mode",
+            "disable_ocsp_checks",
+            "insecure_mode",
+            "ocsp_fail_open",
+            "ocsp_root_certs_dict_lock_timeout",
+        ):
+            self.assertNotIn(key, kwargs)
+
     def test_revocation_checks_use_crl_on_connector_5(self):
         self.connector_major_version.return_value = 5
+        self.config.credentials = self.config.credentials.replace(
+            cert_revocation_check_mode="ADVISORY"
+        )
+        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
         conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
 
         self.snowflake.assert_not_called()
