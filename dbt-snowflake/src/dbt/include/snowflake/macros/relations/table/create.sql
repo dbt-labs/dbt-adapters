@@ -209,10 +209,10 @@ create {{ maybe_or_replace }}iceberg table {{ relation }}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
     {{ optional('data_retention_time_in_days', catalog_relation.data_retention_time_in_days)}}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
-    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
-    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
     {% if replace -%} {{ snowflake__copy_grants_clause() }} {%- endif %}
     {% if copy_tags -%} copy tags {%- endif %}
+    {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
+    {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}
     select * from (
@@ -296,9 +296,9 @@ create iceberg table {{ relation }}
     {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
     {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
     {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
+    {% if copy_grants -%} copy grants {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-    {% if copy_grants -%} copy grants {%- endif %}
 as (
     {{ compiled_code }}
 );
@@ -367,9 +367,9 @@ create iceberg table {{ relation }} (
 {{ optional('target_file_size', catalog_relation.target_file_size, "'") }}
 {{ optional('auto_refresh', catalog_relation.auto_refresh) }}
 {{ optional('max_data_extension_time_in_days', catalog_relation.max_data_extension_time_in_days)}}
+{% if copy_grants -%} copy grants {%- endif %}
 {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
 {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-{% if copy_grants -%} copy grants {%- endif %}
 ;
 
 {# Step 3: Insert data from the view (in regular DB) into the table (in CLD) #}
