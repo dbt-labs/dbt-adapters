@@ -109,7 +109,9 @@ _MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """
 
 select 1 as id
 """
-_DDL_MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """.incremental_row_access_policy with row access policy always_true on (id) as"""
+_DDL_MODELS_INCREMENTAL_ROW_ACCESS_POLICY = (
+    """.incremental_row_access_policy with row access policy always_true on (id) as"""
+)
 
 _MODELS_INCREMENTAL_TAG = """
 {{ config(
@@ -119,9 +121,7 @@ _MODELS_INCREMENTAL_TAG = """
 
 select 1 as id
 """
-_DDL_MODELS_INCREMENTAL_TAG = (
-    """.incremental_tag with tag (tag_name = 'tag_value')"""
-)
+_DDL_MODELS_INCREMENTAL_TAG = """.incremental_tag with tag (tag_name = 'tag_value')"""
 
 _MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY = """
 {{ config(

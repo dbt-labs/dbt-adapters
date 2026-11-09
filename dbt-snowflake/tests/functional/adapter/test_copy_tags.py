@@ -75,8 +75,10 @@ class TestCopyTags:
         table_no_copy_tags_ddl = get_cleaned_model_ddl_from_file("table_no_copy_tags.sql")
         assert _DDL_COPY_TAGS not in table_no_copy_tags_ddl
 
+        # An incremental model's first run creates its table with plain CREATE (no OR REPLACE),
+        # so there is no table to copy tags from and COPY TAGS is omitted.
         incremental_copy_tags_ddl = get_cleaned_model_ddl_from_file("incremental_copy_tags.sql")
-        assert _DDL_COPY_TAGS in incremental_copy_tags_ddl
+        assert _DDL_COPY_TAGS not in incremental_copy_tags_ddl
 
     def test_copy_tags_full_refresh(self, project):
         results = run_dbt(["run", "--select", "table_copy_tags", "--full-refresh"])
@@ -84,3 +86,9 @@ class TestCopyTags:
 
         table_copy_tags_ddl = get_cleaned_model_ddl_from_file("table_copy_tags.sql")
         assert _DDL_COPY_TAGS in table_copy_tags_ddl
+
+        results = run_dbt(["run", "--select", "incremental_copy_tags", "--full-refresh"])
+        assert len(results) == 1
+
+        incremental_copy_tags_ddl = get_cleaned_model_ddl_from_file("incremental_copy_tags.sql")
+        assert _DDL_COPY_TAGS in incremental_copy_tags_ddl
