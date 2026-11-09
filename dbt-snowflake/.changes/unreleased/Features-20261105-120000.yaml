@@ -1,6 +1,6 @@
 kind: Features
-body: Add `ocsp_fail_open` profile option (default `true`)
+body: 'Add `cert_revocation_check_mode` profile option (`ADVISORY` by default, `ENABLED` or `DISABLED`) for certificate revocation checks: OCSP on snowflake-connector-python 4.x, CRL on 5.x'
 time: 2026-11-05T12:00:00.000000+05:30
 custom:
-    Author: tauhid621
-    Issue: "793"
+    Author: tauhid621 aahel
+    Issue: "793 1529"
