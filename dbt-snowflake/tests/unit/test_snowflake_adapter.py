@@ -297,7 +297,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 ),
@@ -333,12 +332,15 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=None,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
             ]
         )
+        # `reuse_connections` stays None with keep-alive on, and must not reach the
+        # connector: snowflake-connector-python 5.x rejects a None option (#2293)
+        self.assertIsNone(conn.credentials.reuse_connections)
+        self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
 
     def test_ocsp_fail_open_false(self):
         self.config.credentials = self.config.credentials.replace(ocsp_fail_open=False)
@@ -363,7 +365,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=False,
                 ),
@@ -387,7 +388,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     role=None,
                     schema="public",
                     user="test_user",
-                    reuse_connections=True,
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
@@ -431,7 +431,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -468,7 +467,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -501,7 +499,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -538,7 +535,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -575,7 +571,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -612,7 +607,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -647,7 +641,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -680,7 +673,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -712,12 +704,15 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
             ]
         )
+        # dbt still pools connections (see `SnowflakeConnectionManager.release`), but
+        # `reuse_connections` is not a connector option, so it is never passed to it
+        self.assertTrue(conn.credentials.reuse_connections)
+        self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
 
     @mock.patch(
         "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
@@ -749,7 +744,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )
@@ -788,7 +782,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
                     ocsp_fail_open=True,
                 )

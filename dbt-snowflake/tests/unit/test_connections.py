@@ -205,6 +205,54 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeReuseConnections:
+    """`reuse_connections` is dbt's own pooling switch, so it is never passed to the
+    connector. snowflake-connector-python 5.x rejects it when it is None, which it is
+    whenever `client_session_keep_alive` is on (#2293)."""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    @pytest.mark.parametrize(
+        "profile_settings,expected_reuse_connections",
+        [
+            ({}, True),
+            ({"reuse_connections": False}, False),
+            ({"client_session_keep_alive": True}, None),
+            ({"client_session_keep_alive": True, "reuse_connections": False}, False),
+            ({"client_session_keep_alive": True, "reuse_connections": True}, True),
+        ],
+        ids=["default", "off", "keep_alive", "keep_alive_off", "keep_alive_on"],
+    )
+    def test_reuse_connections_is_not_passed_to_connector(
+        self, base_credentials, profile_settings, expected_reuse_connections
+    ):
+        creds = connections.SnowflakeCredentials(**base_credentials, **profile_settings)
+        assert creds.reuse_connections is expected_reuse_connections
+        assert "reuse_connections" not in creds.auth_args()
+
+    @pytest.mark.parametrize(
+        "reuse_connections,released",
+        [(True, False), (False, True), (None, True)],
+    )
+    def test_release_honors_reuse_connections(self, reuse_connections, released):
+        manager = connections.SnowflakeConnectionManager.__new__(
+            connections.SnowflakeConnectionManager
+        )
+        manager.profile = Mock(credentials=Mock(reuse_connections=reuse_connections))
+        with patch.object(connections.SQLConnectionManager, "release") as parent_release:
+            manager.release()
+        assert parent_release.called is released
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 
