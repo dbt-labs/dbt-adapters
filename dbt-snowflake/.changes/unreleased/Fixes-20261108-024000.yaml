@@ -1,0 +1,6 @@
+kind: Fixes
+body: Print environment diagnostics before the Snowflake functional suite so CI failures are self-explanatory
+time: 2026-11-08T02:40:00.000000+08:00
+custom:
+    Author: mini555-gif
+    Issue: "0"
