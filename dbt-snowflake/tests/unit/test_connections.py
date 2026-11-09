@@ -205,10 +205,9 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
-class TestSnowflakeReuseConnections:
-    """`reuse_connections` is dbt's own pooling switch, so it is never passed to the
-    connector. snowflake-connector-python 5.x rejects it when it is None, which it is
-    whenever `client_session_keep_alive` is on (#2293)."""
+class TestSnowflakeCredentialsReuseConnections:
+    """auth_args() never passes reuse_connections to the connector: it is dbt's own
+    pooling switch, read by SnowflakeConnectionManager.release()"""
 
     @pytest.fixture
     def base_credentials(self):
@@ -221,22 +220,32 @@ class TestSnowflakeReuseConnections:
             "schema": "test_schema",
         }
 
-    @pytest.mark.parametrize(
-        "profile_settings,expected_reuse_connections",
-        [
-            ({}, True),
-            ({"reuse_connections": False}, False),
-            ({"client_session_keep_alive": True}, None),
-            ({"client_session_keep_alive": True, "reuse_connections": False}, False),
-            ({"client_session_keep_alive": True, "reuse_connections": True}, True),
-        ],
-        ids=["default", "off", "keep_alive", "keep_alive_off", "keep_alive_on"],
-    )
-    def test_reuse_connections_is_not_passed_to_connector(
-        self, base_credentials, profile_settings, expected_reuse_connections
-    ):
-        creds = connections.SnowflakeCredentials(**base_credentials, **profile_settings)
-        assert creds.reuse_connections is expected_reuse_connections
+    def test_reuse_connections_defaults_to_true(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_unset_with_keep_alive_is_not_passed(self, base_credentials):
+        # when client_session_keep_alive is set, reuse_connections stays None;
+        # passing None to the connector is a hard error on connector 5.x
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True
+        )
+        assert creds.reuse_connections is None
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_false_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=False
+        )
+        assert creds.reuse_connections is False
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_true_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=True
+        )
+        assert creds.reuse_connections is True
         assert "reuse_connections" not in creds.auth_args()
 
     @pytest.mark.parametrize(
