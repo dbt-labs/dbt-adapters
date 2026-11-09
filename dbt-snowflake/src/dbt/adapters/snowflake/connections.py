@@ -48,7 +48,12 @@ from dbt_common.exceptions import (
 from dbt_common.exceptions import DbtDatabaseError
 from dbt_common.record import get_record_mode_from_env, RecorderMode
 from dbt.adapters.exceptions.connection import FailedToConnectError
-from dbt.adapters.contracts.connection import AdapterResponse, Connection, Credentials
+from dbt.adapters.contracts.connection import (
+    AdapterResponse,
+    Connection,
+    ConnectionState,
+    Credentials,
+)
 from dbt.adapters.snowflake.adapter_response import SnowflakeAdapterResponse
 from dbt.adapters.sql import SQLConnectionManager
 from dbt.adapters.events.logging import AdapterLogger
@@ -90,6 +95,14 @@ ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
 }
+
+# Snowflake session tokens are valid for one hour. A request sent with an expired token is answered
+# with 390112 and the connector renews the session and retries. With OpenSSL 4 (cryptography>=47),
+# when that request is large enough that the server answers before the body is fully written, the
+# failed TLS write poisons the following read, the 390112 is never seen, and the query fails with a
+# non-retryable 250003 SSL error. Before a statement this large we send a heartbeat first, so an
+# expired token is renewed on a tiny request instead.
+LARGE_STATEMENT_RENEWAL_CHARS = 100_000
 
 
 @cache
@@ -630,7 +643,20 @@ class SnowflakeConnectionManager(SQLConnectionManager):
     def add_standard_query(self, sql: str, **kwargs) -> Tuple[Connection, Any]:
         # This is the happy path for a single query. Snowflake has a few odd behaviors that
         # require preprocessing within the 'add_query' method below.
+        if len(sql) >= LARGE_STATEMENT_RENEWAL_CHARS:
+            self._renew_session()
         return super().add_query(self._add_query_comment(sql), **kwargs)
+
+    def _renew_session(self) -> None:
+        """Heartbeat the session so an expired token is renewed on a tiny request rather than on
+        the large statement about to be sent. See LARGE_STATEMENT_RENEWAL_CHARS."""
+        connection = self.get_if_exists()
+        # a session that isn't open yet is opened for this statement, with a fresh token
+        if connection is None or connection.state != ConnectionState.OPEN:
+            return
+        # is_valid() heartbeats the session; an expired token is renewed by the connector there
+        if not connection.handle.is_valid():
+            logger.debug("Session heartbeat failed, continuing with the query")
 
     def add_query(
         self,
