@@ -205,6 +205,45 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsReuseConnections:
+    """auth_args() must not pass reuse_connections to the connector unless it is set"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    def test_reuse_connections_defaults_to_true(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.auth_args()["reuse_connections"] is True
+
+    def test_reuse_connections_unset_with_keep_alive_is_not_passed(self, base_credentials):
+        # when client_session_keep_alive is set, reuse_connections stays None;
+        # passing None to the connector is a hard error on connector 5.x
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True
+        )
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_false_is_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=False
+        )
+        assert creds.auth_args()["reuse_connections"] is False
+
+    def test_reuse_connections_explicit_true_is_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=True
+        )
+        assert creds.auth_args()["reuse_connections"] is True
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 

@@ -312,7 +312,10 @@ class SnowflakeCredentials(Credentials):
             result["client_store_temporary_credential"] = True
             # enable mfa token cache for linux
             result["client_request_mfa_token"] = True
-        result["reuse_connections"] = self.reuse_connections
+        # only pass `reuse_connections` when it is set: the connector rejects
+        # an explicit None for this option (hard error since connector 5.x)
+        if self.reuse_connections is not None:
+            result["reuse_connections"] = self.reuse_connections
         result["private_key"] = self._get_private_key()
         return result
 
