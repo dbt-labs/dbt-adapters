@@ -1,0 +1,6 @@
+kind: Features
+body: 'Dispatch macros as lakecompute__, then duckdb__, then default__, matching v2, so packages with duckdb__ implementations work without a lakecompute__ port.'
+time: 2026-11-02T12:00:00.000000+05:30
+custom:
+    Author: tauhid621
+    Issue: "2281"

@@ -31,6 +31,15 @@ dbt-bigquery:
 -   'dbt-bigquery/tests/unit/**'
 -   'dbt-bigquery/tests/__init__.py'
 -   'dbt-bigquery/tests/conftest.py'
+dbt-lakecompute:
+-   'dbt-lakecompute/src/**'
+-   'dbt-lakecompute/hatch.toml'
+-   'dbt-lakecompute/pyproject.toml'
+-   'dbt-adapters/src/**'
+-   'dbt-adapters/pyproject.toml'
+-   'dbt-lakecompute/tests/unit/**'
+-   'dbt-lakecompute/tests/__init__.py'
+-   'dbt-lakecompute/tests/conftest.py'
 dbt-postgres:
 -   'dbt-postgres/src/**'
 -   'dbt-postgres/hatch.toml'

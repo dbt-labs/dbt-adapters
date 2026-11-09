@@ -10,7 +10,7 @@
 # dbt
 
 > [!NOTE]
-> This repository hosts the **v1** generation of dbt adapters. The **v2** adapters are developed in the [dbt-core](https://github.com/dbt-labs/dbt-core) repository.
+> This repository hosts the **v1** generation of dbt adapters. The **v2** adapters are developed in the [dbt](https://github.com/dbt-labs/dbt) repository.
 
 **[dbt](https://www.getdbt.com/)** enables data analysts and engineers to transform their data using the same practices that software engineers use to build applications.
 
@@ -40,19 +40,6 @@ All of our packages are merged off of main except for `dbt-adapters` and `dbt-te
 
 The reason we do this is to allow us to patch the previous minor version with updates (i.e. what's in stable) as needed while preparing what's on main (the next minor release) to be ready for release.
 
-### Upcoming Minor Releases
-
-The following milestones track features that we're planning for the next minor version release of each adapter:
-
-- [dbt-athena v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/3) (2 PRs)
-- [dbt-bigquery v1.12.0](https://github.com/dbt-labs/dbt-adapters/milestone/4) (31 PRs)
-- [dbt-postgres v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/5) (6 PRs)
-- [dbt-redshift v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/2) (24 PRs)
-- [dbt-snowflake v1.12.0](https://github.com/dbt-labs/dbt-adapters/milestone/6) (23 PRs)
-- [dbt-spark v1.11.0](https://github.com/dbt-labs/dbt-adapters/milestone/7) (2 PRs)
-
-**Note:** PRs in these milestones may have been merged to `main` but not yet been promoted to the `stable` branch for patch releases in the current minor version.
-
 # Getting started
 
 ## Install dbt
@@ -66,9 +53,10 @@ The following milestones track features that we're planning for the next minor v
 - Be part of the conversation in the [dbt Community Slack](http://community.getdbt.com/)
 - Read more on the [dbt Community Discourse](https://discourse.getdbt.com)
 
-## Suggest a feature or report a bug
+## Report a bug or suggest a feature
 
-- Submit a bug or a feature as a GitHub [issue](https://github.com/dbt-labs/dbt-adapters/issues/new/choose)
+- Report a bug in a dbt v1.x adapter as a GitHub [issue](https://github.com/dbt-labs/dbt-adapters/issues/new/choose)
+- dbt v1.x adapters are no longer accepting new features. New adapter features are only being added to dbt v2.x; propose them, or report dbt v2.x bugs, in [dbt-labs/dbt](https://github.com/dbt-labs/dbt/issues/new/choose)
 
 ## Contribute
 

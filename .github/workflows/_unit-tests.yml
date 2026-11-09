@@ -32,7 +32,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: string
-                default: "3.10"
+                default: "3.11"
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
@@ -47,6 +47,7 @@ on:
                     - "dbt-athena"
                     - "dbt-athena-community"
                     - "dbt-bigquery"
+                    - "dbt-lakecompute"
                     - "dbt-postgres"
                     - "dbt-redshift"
                     - "dbt-snowflake"
@@ -66,7 +67,7 @@ on:
             python-version:
                 description: "Choose the Python version to test against"
                 type: choice
-                options: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+                options: ["3.11", "3.12", "3.13", "3.14"]
             hatch-env:
                 description: "The hatch environment to run tests on"
                 type: string
