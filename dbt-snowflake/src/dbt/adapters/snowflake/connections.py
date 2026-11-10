@@ -99,6 +99,35 @@ def _connector_major_version() -> int:
     return int(snowflake.connector.__version__.split(".")[0])
 
 
+# The statements dbt issues, with snowflake_fail_on_unexpected_existing_relation enabled, for an
+# incremental model or snapshot whose table is not in the relation cache: a CTAS without OR
+# REPLACE, or for Python models a Snowpark write in errorifexists mode.
+_LEADING_SQL_COMMENTS = re.compile(r"^\s*(?:/\*.*?\*/\s*|--[^\r\n]*\s*)*", re.DOTALL)
+_CREATE_TABLE_AS_WITHOUT_REPLACE = re.compile(
+    r"create\s+(?:transient\s+|iceberg\s+)?table\s+(?!if\s+not\s+exists\b)\S.*?\bas\s*\(",
+    re.IGNORECASE | re.DOTALL,
+)
+_WRITE_MODE_ERROR_IF_EXISTS = 'mode("errorifexists")'
+
+UNEXPECTED_EXISTING_RELATION_HINT = (
+    "The table was not in dbt's relation cache, so dbt used CREATE instead of CREATE OR REPLACE "
+    "to avoid replacing existing data. To replace it, drop the table or run an incremental model "
+    "with --full-refresh. To restore the previous behavior, set the "
+    "`snowflake_fail_on_unexpected_existing_relation` flag to False."
+)
+
+
+def _is_unexpected_existing_relation_error(msg: str, sql: Optional[str]) -> bool:
+    """Whether a CREATE that dbt issued without OR REPLACE failed because the table exists."""
+    if "002002" not in msg or "already exists" not in msg:
+        return False
+    sql = sql or ""
+    if _WRITE_MODE_ERROR_IF_EXISTS in msg or _WRITE_MODE_ERROR_IF_EXISTS in sql:
+        return True
+    statement = _LEADING_SQL_COMMENTS.sub("", sql, count=1)
+    return _CREATE_TABLE_AS_WITHOUT_REPLACE.match(statement) is not None
+
+
 @cache
 def snowflake_private_key(private_key: RSAPrivateKey) -> bytes:
     return private_key.private_bytes(
@@ -479,6 +508,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                         "Please double check your profile and try again."
                     ).format(msg)
                 )
+            elif _is_unexpected_existing_relation_error(msg, sql):
+                raise DbtDatabaseError("{}\n\n{}".format(msg, UNEXPECTED_EXISTING_RELATION_HINT))
             else:
                 raise DbtDatabaseError(msg)
         except Exception as e:

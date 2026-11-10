@@ -41,6 +41,7 @@ class TestSnowflakeCreateTableInfoSchemaSql(unittest.TestCase):
             "adapter": adapter,
             "config": mock.Mock(),
             "model": SimpleNamespace(),
+            "should_replace_on_create": lambda relation: True,
         }
         self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
             key, default
