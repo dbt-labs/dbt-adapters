@@ -1,0 +1,6 @@
+kind: Fixes
+body: Strip terminal semicolons and trailing whitespace from model SQL before wrapping in subqueries (`get_empty_subquery_sql`, `get_select_subquery`, `get_unit_test_sql`, `get_limit_sql`).
+time: 2026-11-10T08:37:00.000000+05:30
+custom:
+  Author: Ankitkj1999
+  Issue: "2229"

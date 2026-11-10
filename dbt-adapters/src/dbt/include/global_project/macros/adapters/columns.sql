@@ -42,6 +42,7 @@
 {% endmacro %}
 
 {% macro get_empty_subquery_sql(select_sql, select_sql_header=none) -%}
+  {%- set select_sql = strip_trailing_semicolon(select_sql) -%}
   {{ return(adapter.dispatch('get_empty_subquery_sql', 'dbt')(select_sql, select_sql_header)) }}
 {% endmacro %}
 
@@ -50,6 +51,7 @@
   Useful for running a query in a 'pre-flight' context, such as model contract enforcement (assert_columns_equivalent macro).
 #}
 {% macro default__get_empty_subquery_sql(select_sql, select_sql_header=none) %}
+    {%- set select_sql = strip_trailing_semicolon(select_sql) -%}
     {%- if select_sql_header is not none -%}
     {{ select_sql_header }}
     {%- endif -%}

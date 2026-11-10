@@ -17,10 +17,14 @@
 
 
 {% macro get_unit_test_sql(main_sql, expected_fixture_sql, expected_column_names) -%}
+  {%- set main_sql = strip_trailing_semicolon(main_sql) -%}
+  {%- set expected_fixture_sql = strip_trailing_semicolon(expected_fixture_sql) -%}
   {{ adapter.dispatch('get_unit_test_sql', 'dbt')(main_sql, expected_fixture_sql, expected_column_names) }}
 {%- endmacro %}
 
 {% macro default__get_unit_test_sql(main_sql, expected_fixture_sql, expected_column_names) -%}
+{%- set main_sql = strip_trailing_semicolon(main_sql) -%}
+{%- set expected_fixture_sql = strip_trailing_semicolon(expected_fixture_sql) -%}
 -- Build actual result given inputs
 with dbt_internal_unit_test_actual as (
   select

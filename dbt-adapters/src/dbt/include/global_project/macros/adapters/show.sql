@@ -15,10 +15,12 @@
     to the calling macro.
 #}
 {%- macro get_limit_subquery_sql(sql, limit) -%}
+  {%- set sql = strip_trailing_semicolon(sql) -%}
   {{ adapter.dispatch('get_limit_sql', 'dbt')(sql, limit) }}
 {%- endmacro -%}
 
 {% macro default__get_limit_sql(sql, limit) %}
+  {%- set sql = strip_trailing_semicolon(sql) -%}
   {{ sql }}
   {% if limit is not none %}
   limit {{ limit }}
