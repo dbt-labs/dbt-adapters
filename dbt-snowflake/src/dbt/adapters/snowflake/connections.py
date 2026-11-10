@@ -246,6 +246,19 @@ class SnowflakeCredentials(Credentials):
             "platform_detection_timeout_seconds",
         )
 
+    def logout_args(self) -> Dict[str, Any]:
+        """Connector arguments for logout on close.
+
+        Connector 5.x emits a FutureWarning on every connect when
+        `enable_server_session_keep_alive_auto_detection` is unset, because its default
+        will change from True to None. Pin True, the current default: on close the
+        connector skips the logout while async queries are still running, matching 4.x.
+        Connector 4.x does not have the option.
+        """
+        if _connector_major_version() >= 5:
+            return {"enable_server_session_keep_alive_auto_detection": True}
+        return {}
+
     def revocation_check_args(self) -> Dict[str, Any]:
         """Connector arguments for certificate revocation checks.
 
@@ -519,6 +532,7 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                     platform_detection_timeout_seconds=creds.platform_detection_timeout_seconds,
                     session_parameters=session_parameters,
                     **creds.revocation_check_args(),
+                    **creds.logout_args(),
                     **creds.auth_args(),
                 )
 

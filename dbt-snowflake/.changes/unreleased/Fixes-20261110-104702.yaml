@@ -1,0 +1,6 @@
+kind: Fixes
+body: Stop the `enable_server_session_keep_alive_auto_detection` FutureWarning that snowflake-connector-python 5.x prints on every connection, by passing its current default (`True`) explicitly
+time: 2026-11-10T10:47:02.407002+05:30
+custom:
+    Author: aahel
+    Issue: "2293"
