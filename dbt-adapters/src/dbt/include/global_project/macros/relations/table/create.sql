@@ -49,10 +49,12 @@
 
 
 {% macro get_select_subquery(sql) %}
+  {%- set sql = strip_trailing_semicolon(sql) -%}
   {{ return(adapter.dispatch('get_select_subquery', 'dbt')(sql)) }}
 {% endmacro %}
 
 {% macro default__get_select_subquery(sql) %}
+    {%- set sql = strip_trailing_semicolon(sql) -%}
     select {{ adapter.dispatch('get_column_names', 'dbt')() }}
     from (
         {{ sql }}
