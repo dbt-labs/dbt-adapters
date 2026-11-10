@@ -260,3 +260,60 @@ class TestEmptySourceColumnsIgnoreStillWorks(_EmptyTempColumns):
         run_dbt(["run", "--select", "incremental_ignore"])
         results = run_dbt(["run", "--select", "incremental_ignore"])
         assert len(results) == 1
+
+
+# Also returns an empty column list for every relation when the empty_target_columns var is set,
+# so the materialization's fallback lookup of the target's columns comes back empty as well.
+_MACRO_EMPTY_TEMP_AND_TARGET_COLUMNS = _MACRO_EMPTY_TEMP_COLUMNS.replace(
+    "{% if '__dbt_tmp' in (relation.identifier or '') %}",
+    "{% if '__dbt_tmp' in (relation.identifier or '') or var('empty_target_columns', false) %}",
+)
+
+
+class _EmptyTargetColumns:
+    """Once the fallback lookup of the target's columns is also empty, the materialization must
+    raise instead of rendering `insert into <target> ()` (dbt-labs/dbt-adapters#2194)."""
+
+    model_name = ""
+
+    @pytest.fixture(scope="class")
+    def macros(self):
+        return {"empty_temp_and_target_columns.sql": _MACRO_EMPTY_TEMP_AND_TARGET_COLUMNS}
+
+    def test_raises_before_rendering_an_insert_without_columns(self, project):
+        run_dbt(["run", "--select", self.model_name])
+
+        results, logs = run_dbt_and_capture(
+            [
+                "--debug",
+                "run",
+                "--select",
+                self.model_name,
+                "--vars",
+                "{empty_target_columns: true}",
+            ],
+            expect_pass=False,
+        )
+        assert len(results) == 1
+        assert "Could not read any columns for" in results[0].message
+        assert "metadata failure rather than an empty table" in results[0].message
+        assert "syntax error" not in results[0].message
+        assert "insert into" not in logs
+
+        assert _column_names(project, self.model_name) == ["id", "field_1", "field_2"]
+
+
+class TestEmptyTargetColumnsIgnoreRaises(_EmptyTargetColumns):
+    model_name = "incremental_ignore_empty_target"
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"incremental_ignore_empty_target.sql": _MODEL_IGNORE}
+
+
+class TestEmptyTargetColumnsAppendNewColumnsRaises(_EmptyTargetColumns):
+    model_name = "incremental_append_empty_target"
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        return {"incremental_append_empty_target.sql": _MODEL_APPEND_NEW_COLUMNS}
