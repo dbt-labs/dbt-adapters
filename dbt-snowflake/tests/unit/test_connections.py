@@ -368,6 +368,31 @@ class TestSnowflakeCredentialsCertRevocationCheckMode:
         assert connections._connector_major_version() in (4, 5)
 
 
+class TestSnowflakeCredentialsLogoutArgs:
+    """Connector 5.x warns when `enable_server_session_keep_alive_auto_detection` is
+    unset, so dbt pins its current default; connector 4.x does not have the option"""
+
+    @pytest.mark.parametrize(
+        "connector_major_version,expected_args",
+        [
+            (4, {}),
+            (5, {"enable_server_session_keep_alive_auto_detection": True}),
+        ],
+    )
+    def test_logout_args(self, connector_major_version, expected_args):
+        creds = connections.SnowflakeCredentials(
+            account="test_account",
+            user="test_user",
+            password="test_password",
+            database="test_db",
+            schema="test_schema",
+        )
+        with patch.object(
+            connections, "_connector_major_version", return_value=connector_major_version
+        ):
+            assert creds.logout_args() == expected_args
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 

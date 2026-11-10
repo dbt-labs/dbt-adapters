@@ -399,6 +399,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
             "ocsp_root_certs_dict_lock_timeout",
         ):
             self.assertNotIn(key, kwargs)
+        # pinned so 5.x doesn't warn that its default will change
+        self.assertIs(kwargs["enable_server_session_keep_alive_auto_detection"], True)
 
     def test_revocation_checks_use_crl_on_connector_5(self):
         self.connector_major_version.return_value = 5
@@ -427,6 +429,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
                     crl_check_mode="ADVISORY",
+                    enable_server_session_keep_alive_auto_detection=True,
                 ),
             ]
         )
