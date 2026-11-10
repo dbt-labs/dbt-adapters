@@ -108,6 +108,160 @@ class TestSnowflakeCreateTableInfoSchemaSql(unittest.TestCase):
         self.assertLess(sql.index("ignore grants"), sql.index("copy tags"))
 
 
+class TestSnowflakeCreateTableBuiltInSql(unittest.TestCase):
+    """CREATE ICEBERG TABLE (Snowflake as the Iceberg catalog) places COPY GRANTS and
+    COPY TAGS before the ROW ACCESS POLICY and TAG clauses:
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-snowflake
+    """
+
+    def setUp(self):
+        self.config = {}
+        catalog_relation = SimpleNamespace(
+            external_volume="my_volume",
+            base_location="my/base/location",
+            iceberg_version=None,
+            storage_serialization_policy=None,
+            max_data_extension_time_in_days=None,
+            data_retention_time_in_days=None,
+            change_tracking=None,
+            cluster_by=None,
+            automatic_clustering=False,
+        )
+        adapter = SimpleNamespace(
+            build_catalog_relation=lambda model: catalog_relation,
+        )
+        self.context = {
+            "adapter": adapter,
+            "config": mock.Mock(),
+            "model": SimpleNamespace(),
+            "get_partition_by_keys": lambda catalog_relation: None,
+            "should_replace_on_create": lambda relation: True,
+        }
+        self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
+            key, default
+        )
+        env = get_environment()
+        with open(OPTIONAL_SQL) as f:
+            optional = env.from_string(f.read(), globals=self.context).module
+        self.context["optional"] = optional.dbt_macro__optional
+        with open(APPLY_GRANTS_SQL) as f:
+            apply_grants = env.from_string(f.read(), globals=self.context).module
+        self.context["snowflake__copy_grants_clause"] = (
+            apply_grants.dbt_macro__snowflake__copy_grants_clause
+        )
+        with open(CREATE_SQL) as f:
+            self.module = env.from_string(f.read(), globals=self.context).module
+
+    def _render(self):
+        sql = self.module.dbt_macro__snowflake__create_table_built_in_sql(
+            "db.schema.tbl", "select 1 as id"
+        )
+        return re.sub(r"\s+", " ", sql).strip().lower()
+
+    def test_copy_clauses_precede_policies(self):
+        self.config = {
+            "copy_grants": True,
+            "copy_tags": True,
+            "row_access_policy": "my_policy on (id)",
+            "table_tag": "env = 'prod'",
+        }
+        sql = self._render()
+
+        self.assertIn("create or replace iceberg table db.schema.tbl", sql)
+        positions = [
+            sql.index(clause)
+            for clause in (
+                "base_location",
+                "copy grants",
+                "copy tags",
+                "with row access policy my_policy on (id)",
+                "with tag (env = 'prod')",
+                "as (",
+            )
+        ]
+        self.assertEqual(positions, sorted(positions), sql)
+
+    def test_ignore_grants_precedes_policies(self):
+        self.config = {
+            "row_access_policy": "my_policy on (id)",
+            "table_tag": "env = 'prod'",
+        }
+        sql = self._render()
+
+        self.assertNotIn("copy grants", sql)
+        self.assertLess(sql.index("ignore grants"), sql.index("with row access policy"))
+        self.assertLess(sql.index("ignore grants"), sql.index("with tag"))
+
+
+class TestSnowflakeCreateTableIcebergRestSql(unittest.TestCase):
+    """CREATE ICEBERG TABLE in a catalog-linked database places COPY GRANTS before the
+    ROW ACCESS POLICY and TAG clauses:
+    https://docs.snowflake.com/en/sql-reference/sql/create-iceberg-table-rest
+    """
+
+    def setUp(self):
+        self.config = {}
+        catalog_relation = SimpleNamespace(
+            external_volume=None,
+            iceberg_version=None,
+            target_file_size=None,
+            auto_refresh=None,
+            max_data_extension_time_in_days=None,
+        )
+        adapter = SimpleNamespace(
+            build_catalog_relation=lambda model: catalog_relation,
+            get_relation=lambda **kwargs: None,
+        )
+        self.context = {
+            "adapter": adapter,
+            "config": mock.Mock(),
+            "model": SimpleNamespace(),
+            "get_partition_by_keys": lambda catalog_relation: None,
+        }
+        self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
+            key, default
+        )
+        env = get_environment()
+        with open(OPTIONAL_SQL) as f:
+            optional = env.from_string(f.read(), globals=self.context).module
+        self.context["optional"] = optional.dbt_macro__optional
+        with open(CREATE_SQL) as f:
+            self.module = env.from_string(f.read(), globals=self.context).module
+
+    def _render(self):
+        sql = self.module.dbt_macro__snowflake__create_table_iceberg_rest_sql(
+            "cld.schema.tbl", "select 1 as id"
+        )
+        return re.sub(r"\s+", " ", sql).strip().lower()
+
+    def test_copy_grants_precedes_policies(self):
+        self.config = {
+            "copy_grants": True,
+            "row_access_policy": "my_policy on (id)",
+            "table_tag": "env = 'prod'",
+        }
+        sql = self._render()
+
+        self.assertIn("create iceberg table cld.schema.tbl", sql)
+        positions = [
+            sql.index(clause)
+            for clause in (
+                "copy grants",
+                "with row access policy my_policy on (id)",
+                "with tag (env = 'prod')",
+                "as (",
+            )
+        ]
+        self.assertEqual(positions, sorted(positions), sql)
+
+    def test_without_copy_grants(self):
+        self.config = {"table_tag": "env = 'prod'"}
+        sql = self._render()
+
+        self.assertNotIn("copy grants", sql)
+        self.assertIn("with tag (env = 'prod') as (", sql)
+
+
 class TestSnowflakeCreateTableIcebergRestWithGlue(unittest.TestCase):
     def setUp(self):
         self.sql_columns = []
@@ -121,7 +275,10 @@ class TestSnowflakeCreateTableIcebergRestWithGlue(unittest.TestCase):
             "get_column_schema_from_query": lambda sql: self.sql_columns,
             "get_partition_by_keys": lambda catalog_relation: None,
         }
-        self.context["config"].get = lambda key, default=None, **kwargs: default
+        self.config = {}
+        self.context["config"].get = lambda key, default=None, **kwargs: self.config.get(
+            key, default
+        )
         env = get_environment()
         with open(OPTIONAL_SQL) as f:
             optional = env.from_string(f.read(), globals=self.context).module
@@ -157,3 +314,23 @@ class TestSnowflakeCreateTableIcebergRestWithGlue(unittest.TestCase):
             sql,
         )
         self.assertNotIn(" INT", sql)
+
+    def test_copy_grants_precedes_policies(self):
+        self.sql_columns = [SnowflakeColumn.create("ID", "NUMBER")]
+        self.config = {
+            "copy_grants": True,
+            "row_access_policy": "my_policy on (id)",
+            "table_tag": "env = 'prod'",
+        }
+        sql = self._render()
+
+        positions = [
+            sql.index(clause)
+            for clause in (
+                "copy grants",
+                "with row access policy my_policy on (id)",
+                "with tag (env = 'prod')",
+                "; insert into",
+            )
+        ]
+        self.assertEqual(positions, sorted(positions), sql)
