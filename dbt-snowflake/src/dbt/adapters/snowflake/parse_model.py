@@ -1,4 +1,4 @@
-from typing import Iterable, List, Optional, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 from dbt_common.exceptions import DbtConfigError
 
@@ -50,6 +50,50 @@ def base_location(model: RelationConfig) -> Optional[str]:
         path += f"/{subpath}"
 
     return path
+
+
+def normalize_base_location_root(root: Optional[str]) -> Optional[str]:
+    """Strip whitespace and trailing slashes; an explicitly-set but empty root is an error."""
+    if root is None:
+        return None
+    normalized = str(root).strip().rstrip("/").strip()
+    if not normalized:
+        raise ValueError("must not be empty")
+    return normalized
+
+
+def cld_base_location_parts(
+    model: RelationConfig, catalog_root: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve (base_location_root, base_location_subpath) for a catalog-linked database (CLD).
+
+    Unlike built-in Iceberg tables there is no `_dbt` default: Snowflake requires an absolute
+    BASE_LOCATION for CLDs that vend credentials, and a default would silently move existing
+    tables for CLDs that don't. BASE_LOCATION is therefore only emitted when
+    `base_location_root` is set (model config wins over the catalog integration).
+
+    The full path is built in the create-table macro from the relation actually being created,
+    since that may differ from the model (e.g. the incremental `__dbt_tmp` staging table).
+    """
+    config = model.config
+    model_root = config.get("base_location_root") if config else None
+    subpath = config.get("base_location_subpath") if config else None
+
+    try:
+        root = normalize_base_location_root(model_root)
+    except ValueError:
+        raise ValueError("base_location_root must not be empty") from None
+    root = root or catalog_root
+    subpath = str(subpath).strip().strip("/").strip() if subpath is not None else None
+    subpath = subpath or None
+
+    if not root:
+        if subpath:
+            raise ValueError("base_location_subpath requires base_location_root to be set")
+        return None, None
+
+    return root, subpath
 
 
 def catalog_name(model: RelationConfig) -> Optional[str]:

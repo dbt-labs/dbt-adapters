@@ -1,0 +1,6 @@
+kind: Features
+body: Support `base_location_root` and `base_location_subpath` for Iceberg REST catalog-linked databases, emitting `BASE_LOCATION` as Snowflake requires for catalogs that vend credentials. There is no default, but `base_location_root` set in project or model config, which was previously ignored for these models, will now be applied to them
+time: 2026-10-22T14:00:00.000000-04:00
+custom:
+    Author: dataders claude
+    Issue: "2249"
