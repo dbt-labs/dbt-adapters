@@ -1,0 +1,6 @@
+kind: Fixes
+body: Skip schemas missing from Glue when building the catalog, so dbt docs generate no longer fails when the store_failures schema does not exist
+time: 2026-10-02T09:38:00.361207+02:00
+custom:
+    Author: David-Banquet
+    Issue: "2195"

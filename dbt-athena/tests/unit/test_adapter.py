@@ -733,6 +733,22 @@ class TestAthenaAdapter:
             self.adapter._get_one_catalog(mock_information_schema, {"baz"}, self.used_schemas)
 
     @mock_aws
+    def test__get_one_catalog_missing_schema(self, mock_aws_service):
+        mock_aws_service.create_data_catalog()
+        mock_aws_service.create_database("foo")
+        mock_aws_service.create_table(table_name="bar", database_name="foo")
+        mock_information_schema = mock.MagicMock()
+        mock_information_schema.database = "awsdatacatalog"
+
+        self.adapter.acquire_connection("dummy")
+        actual = self.adapter._get_one_catalog(
+            mock_information_schema, {"foo", "foo_dbt_test__audit"}, self.used_schemas
+        )
+
+        assert {row["table_schema"] for row in actual.rows} == {"foo"}
+        assert len(actual.rows) == 3
+
+    @mock_aws
     def test__get_one_catalog_by_relations(self, mock_aws_service):
         mock_aws_service.create_data_catalog()
         mock_aws_service.create_database("foo")
