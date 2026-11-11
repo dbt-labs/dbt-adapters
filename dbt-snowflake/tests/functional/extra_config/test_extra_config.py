@@ -99,6 +99,8 @@ select 1 as id
 _DDL_MODELS_VIEW_TAG_AND_ROW_ACCESS_POLICY = """view_tag_and_row_access_policy ignore grants with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
 
 # Incremental model templates
+# These models only run once, so their table is created with plain CREATE (no OR REPLACE), which
+# omits the IGNORE GRANTS clause that table and view DDL carry.
 _MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """
 {{ config(
     materialized = 'incremental',
@@ -107,7 +109,9 @@ _MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """
 
 select 1 as id
 """
-_DDL_MODELS_INCREMENTAL_ROW_ACCESS_POLICY = """.incremental_row_access_policy ignore grants with row access policy always_true on (id) as"""
+_DDL_MODELS_INCREMENTAL_ROW_ACCESS_POLICY = (
+    """.incremental_row_access_policy with row access policy always_true on (id) as"""
+)
 
 _MODELS_INCREMENTAL_TAG = """
 {{ config(
@@ -117,9 +121,7 @@ _MODELS_INCREMENTAL_TAG = """
 
 select 1 as id
 """
-_DDL_MODELS_INCREMENTAL_TAG = (
-    """.incremental_tag ignore grants with tag (tag_name = 'tag_value')"""
-)
+_DDL_MODELS_INCREMENTAL_TAG = """.incremental_tag with tag (tag_name = 'tag_value')"""
 
 _MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY = """
 {{ config(
@@ -130,7 +132,7 @@ _MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY = """
 
 select 1 as id
 """
-_DDL_MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY = """.incremental_tag_and_row_access_policy ignore grants with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
+_DDL_MODELS_INCREMENTAL_TAG_AND_ROW_ACCESS_POLICY = """.incremental_tag_and_row_access_policy with row access policy always_true on (id) with tag (tag_name = 'tag_value') as"""
 
 # Dynamic table model templates
 _MODELS_DYNAMIC_TABLE_ROW_ACCESS_POLICY = (

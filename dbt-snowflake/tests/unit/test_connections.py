@@ -205,6 +205,63 @@ def test_connnections_credentials_replaces_underscores_with_hyphens():
     assert creds.account == "account-id-with-underscores"
 
 
+class TestSnowflakeCredentialsReuseConnections:
+    """auth_args() never passes reuse_connections to the connector: it is dbt's own
+    pooling switch, read by SnowflakeConnectionManager.release()"""
+
+    @pytest.fixture
+    def base_credentials(self):
+        return {
+            "account": "test_account",
+            "user": "test_user",
+            "password": "test_password",
+            "database": "test_db",
+            "warehouse": "test_wh",
+            "schema": "test_schema",
+        }
+
+    def test_reuse_connections_defaults_to_true(self, base_credentials):
+        creds = connections.SnowflakeCredentials(**base_credentials)
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_unset_with_keep_alive_is_not_passed(self, base_credentials):
+        # when client_session_keep_alive is set, reuse_connections stays None;
+        # passing None to the connector is a hard error on connector 5.x
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True
+        )
+        assert creds.reuse_connections is None
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_false_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=False
+        )
+        assert creds.reuse_connections is False
+        assert "reuse_connections" not in creds.auth_args()
+
+    def test_reuse_connections_explicit_true_is_not_passed(self, base_credentials):
+        creds = connections.SnowflakeCredentials(
+            **base_credentials, client_session_keep_alive=True, reuse_connections=True
+        )
+        assert creds.reuse_connections is True
+        assert "reuse_connections" not in creds.auth_args()
+
+    @pytest.mark.parametrize(
+        "reuse_connections,released",
+        [(True, False), (False, True), (None, True)],
+    )
+    def test_release_honors_reuse_connections(self, reuse_connections, released):
+        manager = connections.SnowflakeConnectionManager.__new__(
+            connections.SnowflakeConnectionManager
+        )
+        manager.profile = Mock(credentials=Mock(reuse_connections=reuse_connections))
+        with patch.object(connections.SQLConnectionManager, "release") as parent_release:
+            manager.release()
+        assert parent_release.called is released
+
+
 class TestSnowflakeCredentialsPATAuth:
     """Test suite for Programmatic Access Token (PAT) authentication"""
 
