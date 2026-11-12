@@ -3,7 +3,7 @@
 {% macro redshift__percentile(percentile_field, partition_field, percent) -%}
 
     percentile_cont({{ percent }})
-        within group (order by cast({{ percentile_field }} as {{ dbt.type_float() }}))
+        within group (order by cast({{ percentile_field }} as float))
         over (partition by {{ partition_field }})
 
 {%- endmacro %}
