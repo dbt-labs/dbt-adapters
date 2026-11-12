@@ -19,9 +19,11 @@ from dbt.tests.adapter.utils.test_get_intervals_between import BaseGetIntervalsB
 from dbt.tests.adapter.utils.test_get_powers_of_two import BaseGetPowersOfTwo
 from dbt.tests.adapter.utils.test_hash import BaseHash
 from dbt.tests.adapter.utils.test_intersect import BaseIntersect
+from dbt.tests.adapter.utils.test_json_parse import BaseJsonParse
 from dbt.tests.adapter.utils.test_last_day import BaseLastDay
 from dbt.tests.adapter.utils.test_length import BaseLength
 from dbt.tests.adapter.utils.test_listagg import BaseListagg
+from dbt.tests.adapter.utils.test_percentile import BasePercentile
 from dbt.tests.adapter.utils.test_position import BasePosition
 from dbt.tests.adapter.utils.test_replace import BaseReplace
 from dbt.tests.adapter.utils.test_right import BaseRight
@@ -115,6 +117,10 @@ class TestIntersect(BaseIntersect):
     pass
 
 
+class TestJsonParse(BaseJsonParse):
+    pass
+
+
 class TestLastDay(BaseLastDay):
     pass
 
@@ -124,6 +130,10 @@ class TestLength(BaseLength):
 
 
 class TestListagg(BaseListagg):
+    pass
+
+
+class TestPercentile(BasePercentile):
     pass
 
 
