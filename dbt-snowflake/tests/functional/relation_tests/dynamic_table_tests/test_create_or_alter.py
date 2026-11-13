@@ -1,11 +1,12 @@
 """
 Functional tests for the CREATE OR ALTER dynamic table path (query evolution).
 
-Behavior flag `snowflake_dynamic_table_create_or_alter` makes any native (info schema) dynamic
-table sync its definition in place on every run, so a SQL edit deploys without --full-refresh
-(matching CTAS expirience). For INCREMENTAL/AUTO refresh modes a definition edit reinitializes the
-table (incremental state discarded). Iceberg dynamic tables are excluded (this adapter does not
-apply CREATE OR ALTER to them yet). These require a live Snowflake connection.
+Behavior flag `snowflake_dynamic_table_create_or_alter` makes any native (info schema) or managed
+Iceberg (built_in catalog) dynamic table sync its definition in place on every run, so a SQL edit
+deploys without --full-refresh (matching CTAS experience). For INCREMENTAL/AUTO refresh modes a
+definition edit reinitializes the table (incremental state discarded). Converting between a native
+and an Iceberg dynamic table is rebuilt with CREATE OR REPLACE. These require a live Snowflake
+connection.
 
 Test flow (shared by every test in this module):
   1. ARRANGE -- the `setup` fixture builds a fresh dynamic table (`seed` + `run`); the
@@ -461,33 +462,37 @@ class TestCreateOrAlterTransientDriftErrors:
         assert query_transient_status(project, "dt_coa") is False
 
 
-# Iceberg dynamic table -- deliberately excluded from the COA path by the gate (INFO_SCHEMA only).
-# Snowflake supports CREATE OR ALTER DYNAMIC ICEBERG TABLE (since 2026-08-13), but this adapter
-# does not implement that DDL path yet (tracked as follow-up), so Iceberg keeps create-or-replace.
-DT_ICEBERG_DISABLE = """
-{{ config(materialized='dynamic_table', snowflake_warehouse='DBT_TESTING',
-          refresh_mode='FULL', scheduler='disable',
-          table_format='iceberg', external_volume='s3_iceberg_snow',
-          base_location_subpath='coa_iceberg_guard') }}
-select id, value from {{ ref('my_seed') }}
-"""
-DT_ICEBERG_DISABLE_EVOLVED = """
-{{ config(materialized='dynamic_table', snowflake_warehouse='DBT_TESTING',
-          refresh_mode='FULL', scheduler='disable',
-          table_format='iceberg', external_volume='s3_iceberg_snow',
-          base_location_subpath='coa_iceberg_guard') }}
-select id, value, id * 10 as id_x10 from {{ ref('my_seed') }}
-"""
+# Managed Iceberg dynamic table (built_in catalog) -- synced with CREATE OR ALTER DYNAMIC ICEBERG
+# TABLE, which restates the Iceberg identity (external volume, catalog, base location).
+# Requires the CI Iceberg external volume (`s3_iceberg_snow`), like the other TestIceberg* cases.
+def _dt_iceberg_model(evolved=False, base_location_subpath="coa_iceberg"):
+    cols = "id, value, id * 10 as id_x10" if evolved else "id, value"
+    return (
+        "{{ config(materialized='dynamic_table', snowflake_warehouse='DBT_TESTING', "
+        "refresh_mode='FULL', scheduler='disable', table_format='iceberg', "
+        f"external_volume='s3_iceberg_snow', base_location_subpath='{base_location_subpath}') }}}}\n"
+        f"select {cols} from {{{{ ref('my_seed') }}}}"
+    )
 
 
-class TestCreateOrAlterExcludesIceberg:
-    """The COA path is gated to the native (INFO_SCHEMA) catalog, so an Iceberg dynamic table falls
-    through to the legacy path and a SQL-only edit still no-ops. This is a deliberate scoping
-    decision, not a platform limit: Snowflake supports CREATE OR ALTER DYNAMIC ICEBERG TABLE (since
-    2026-08-13), but this adapter does not implement that DDL path yet (tracked as follow-up).
+DT_ICEBERG_DISABLE = _dt_iceberg_model()
 
-    Requires the CI Iceberg external volume (`s3_iceberg_snow`), like the other TestIceberg* cases.
-    """
+
+def _is_iceberg(project):
+    """Read the live object back with SHOW OBJECTS, not dbt's relation cache."""
+    with project.adapter.connection_named("__test"):
+        schema_relation = project.adapter.Relation.create(
+            database=project.database, schema=project.test_schema, identifier=""
+        ).without_identifier()
+        relations = project.adapter.list_relations_without_caching(schema_relation)
+    matches = [r for r in relations if r.identifier.upper() == "DT_COA"]
+    assert len(matches) == 1
+    return matches[0].is_iceberg_format
+
+
+class TestCreateOrAlterIcebergDeploysInPlace:
+    """With the flag on, a managed Iceberg DT deploys a SQL-only edit in place via
+    CREATE OR ALTER DYNAMIC ICEBERG TABLE: the definition changes and created_on does not."""
 
     @pytest.fixture(scope="class", autouse=True)
     def seeds(self):
@@ -508,13 +513,95 @@ class TestCreateOrAlterExcludesIceberg:
         yield
         project.run_sql(f"drop schema if exists {project.test_schema} cascade")
 
-    def test_iceberg_sql_edit_is_noop_even_with_flag(self, project):
-        update_model(project, "dt_coa", DT_ICEBERG_DISABLE_EVOLVED)
+    def test_iceberg_sql_edit_deploys_in_place(self, project):
+        before_created = _created_on(project)
+        update_model(project, "dt_coa", _dt_iceberg_model(evolved=True))
         _, logs = run_dbt_and_capture(["run"])
         after = describe_dynamic_table(project, "dt_coa")
-        # not evolved: Iceberg is excluded from the COA path in this adapter (see class docstring)
-        assert "id_x10" not in (after.query or "").lower()
-        assert "No configuration changes were identified" in logs
+        assert "id_x10" in (after.query or "").lower()
+        assert "No configuration changes were identified" not in logs
+        assert _created_on(project) == before_created
+        assert _is_iceberg(project)
+
+    def test_iceberg_no_change_run_is_idempotent(self, project):
+        before_created = _created_on(project)
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        assert _created_on(project) == before_created
+
+
+class TestCreateOrAlterIcebergIdentityChangeErrors:
+    """The Iceberg identity cannot change in place: Snowflake rejects a changed base location in
+    CREATE OR ALTER, the error carries the --full-refresh hint, and --full-refresh recovers."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"dt_coa.sql": DT_ICEBERG_DISABLE}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"snowflake_dynamic_table_create_or_alter": True}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup(self, project):
+        run_dbt(["seed"])
+        run_dbt(["run"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    def test_base_location_change_errors_then_full_refresh_recovers(self, project):
+        update_model(
+            project, "dt_coa", _dt_iceberg_model(base_location_subpath="coa_iceberg_moved")
+        )
+        _, logs = run_dbt_and_capture(["run"], expect_pass=False)
+        assert "CREATE OR ALTER" in logs
+        assert "--full-refresh" in logs
+
+        results = run_dbt(["run", "--full-refresh"])
+        assert len(results) == 1
+        assert _is_iceberg(project)
+
+
+class TestCreateOrAlterFormatConversionRebuilds:
+    """CREATE OR ALTER cannot convert between a native and an Iceberg dynamic table, so a format
+    change is rebuilt with CREATE OR REPLACE (no --full-refresh needed) in either direction."""
+
+    @pytest.fixture(scope="class", autouse=True)
+    def seeds(self):
+        yield {"my_seed.csv": SEED}
+
+    @pytest.fixture(scope="class", autouse=True)
+    def models(self):
+        yield {"dt_coa.sql": DT_DISABLE}
+
+    @pytest.fixture(scope="class")
+    def project_config_update(self):
+        return {"flags": {"snowflake_dynamic_table_create_or_alter": True}}
+
+    @pytest.fixture(scope="function", autouse=True)
+    def setup(self, project):
+        run_dbt(["seed"])
+        yield
+        project.run_sql(f"drop schema if exists {project.test_schema} cascade")
+
+    @pytest.mark.parametrize(
+        "start_model, end_model, end_is_iceberg",
+        [(DT_DISABLE, DT_ICEBERG_DISABLE, True), (DT_ICEBERG_DISABLE, DT_DISABLE, False)],
+        ids=["native-to-iceberg", "iceberg-to-native"],
+    )
+    def test_format_change_rebuilds(self, project, start_model, end_model, end_is_iceberg):
+        update_model(project, "dt_coa", start_model)
+        run_dbt(["run", "--full-refresh"])
+        assert _is_iceberg(project) is not end_is_iceberg
+
+        update_model(project, "dt_coa", end_model)
+        results = run_dbt(["run"])
+        assert len(results) == 1
+        assert _is_iceberg(project) is end_is_iceberg
 
 
 class TestCreateOrAlterFlagOffIsNoop:

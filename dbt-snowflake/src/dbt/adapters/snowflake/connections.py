@@ -86,6 +86,26 @@ _TOKEN_REQUEST_URL = "https://{}.snowflakecomputing.com/oauth/token-request"
 
 ACCEPTED_WORKLOAD_IDENTITY_PROVIDERS = ["OIDC", "AZURE", "GCP", "AWS"]
 
+# Appended to a failed Snowflake CREATE OR ALTER: it declares the whole desired end state in place,
+# and Snowflake rejects the changes it cannot apply (column reorders, type narrowing, ...).
+# CREATE OR REPLACE always can.
+CREATE_OR_ALTER_FAILURE_HINT = (
+    "Hint: this statement was a CREATE OR ALTER, which cannot apply every change in place. "
+    "If the error above is a change CREATE OR ALTER does not support, re-run with `--full-refresh` "
+    "to rebuild the object with CREATE OR REPLACE."
+)
+# Snowflake rejects an in-place change to `transient` (error 001521, "Property 'TRANSIENT_DATA'
+# cannot be changed in CREATE OR ALTER"). Offer both recoveries: set `transient` to match the table,
+# or rebuild with the default setting.
+CREATE_OR_ALTER_TRANSIENT_HINT = (
+    "Hint: CREATE OR ALTER cannot change whether a dynamic table is transient, and this model's "
+    "`transient` setting does not match the existing table. If `transient` is not set in the model, "
+    "dbt uses the default (`snowflake_default_transient_dynamic_tables`), so set `transient` "
+    "explicitly to match the table. Or re-run with `--full-refresh` to rebuild the table with the "
+    "default setting; that replaces the table and resets its refresh state."
+)
+_CREATE_OR_ALTER = re.compile(r"create\s+or\s+alter\b", re.IGNORECASE)
+
 ERROR_REDACTION_PATTERNS = {
     re.compile(r"Row Values: \[(.|\n)*\]"): "Row Values: [redacted]",
     re.compile(r"Duplicate field key '(.|\n)*'"): "Duplicate field key '[redacted]'",
@@ -118,6 +138,21 @@ def _is_unexpected_existing_relation_error(msg: str, sql: Optional[str]) -> bool
         return True
     statement = _LEADING_SQL_COMMENTS.sub("", sql, count=1)
     return _CREATE_TABLE_AS_WITHOUT_REPLACE.match(statement) is not None
+
+
+def _create_or_alter_hint(msg: str, sql: Optional[str]) -> Optional[str]:
+    """The recovery hint for an error raised by a CREATE OR ALTER statement, or None.
+
+    Only errors whose own text names CREATE OR ALTER get a hint, so a failure with nothing to do
+    with the statement form (permissions, a suspended warehouse, a dropped connection) is unchanged.
+    """
+    statement = _LEADING_SQL_COMMENTS.sub("", sql or "", count=1)
+    message = msg.lower()
+    if not _CREATE_OR_ALTER.match(statement) or "create or alter" not in message:
+        return None
+    if "transient" in message:
+        return CREATE_OR_ALTER_TRANSIENT_HINT
+    return CREATE_OR_ALTER_FAILURE_HINT
 
 
 @cache
@@ -450,6 +485,8 @@ class SnowflakeConnectionManager(SQLConnectionManager):
                 )
             elif _is_unexpected_existing_relation_error(msg, sql):
                 raise DbtDatabaseError("{}\n\n{}".format(msg, UNEXPECTED_EXISTING_RELATION_HINT))
+            elif (create_or_alter_hint := _create_or_alter_hint(msg, sql)) is not None:
+                raise DbtDatabaseError("{}\n\n{}".format(msg, create_or_alter_hint))
             else:
                 raise DbtDatabaseError(msg)
         except Exception as e:

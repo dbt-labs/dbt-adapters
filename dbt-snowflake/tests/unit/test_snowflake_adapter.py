@@ -256,8 +256,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self, flag_on=True, catalog_type="INFO_SCHEMA", catalog_relation_none=False
     ):
         """Drive adapter.dynamic_table_create_or_alter_enabled with its two collaborators mocked:
-        the behavior flag and the catalog relation. The gate is flag + native catalog only
-        (refresh_mode and scheduler don't factor in, so they are not mocked). catalog_relation_none
+        the behavior flag and the catalog relation. The gate is flag + native or managed Iceberg
+        catalog only (refresh_mode and scheduler don't factor in, so they are not mocked). catalog_relation_none
         makes build_catalog_relation return None (a non-DT / catalog-less model)."""
         with (
             mock.patch.object(
@@ -272,14 +272,18 @@ class TestSnowflakeAdapter(unittest.TestCase):
             return self.adapter.dynamic_table_create_or_alter_enabled(mock.Mock())
 
     def test_dt_coa_enabled_for_native(self):
-        # The gate checks only the flag and the native (INFO_SCHEMA) catalog, so one case suffices
+        # The gate checks only the flag and the catalog type, so one case per catalog suffices
         # -- refresh_mode and scheduler do not affect the decision.
         self.assertTrue(self._dynamic_table_create_or_alter_enabled())
 
-    def test_dt_coa_disabled_for_iceberg(self):
-        # BUILT_IN == Iceberg: deliberately excluded from the COA path for now. Snowflake supports
-        # Iceberg COA (since 2026-08-13); this adapter just hasn't implemented that DDL path yet.
-        self.assertFalse(self._dynamic_table_create_or_alter_enabled(catalog_type="BUILT_IN"))
+    def test_dt_coa_enabled_for_managed_iceberg(self):
+        # BUILT_IN == managed Iceberg (Snowflake is the catalog): synced with
+        # CREATE OR ALTER DYNAMIC ICEBERG TABLE.
+        self.assertTrue(self._dynamic_table_create_or_alter_enabled(catalog_type="BUILT_IN"))
+
+    def test_dt_coa_disabled_for_external_catalog(self):
+        # Externally owned catalogs keep create-or-replace behavior.
+        self.assertFalse(self._dynamic_table_create_or_alter_enabled(catalog_type="ICEBERG_REST"))
 
     def test_dt_coa_disabled_when_flag_off(self):
         self.assertFalse(self._dynamic_table_create_or_alter_enabled(flag_on=False))
