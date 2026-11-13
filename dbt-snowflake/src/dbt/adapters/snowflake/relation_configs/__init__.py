@@ -1,3 +1,8 @@
+from dbt.adapters.snowflake.relation_configs.data_metrics import (
+    SnowflakeDataMetricFunctionAssociation,
+    SnowflakeDataMetricsConfig,
+    SnowflakeDataMetricsConfigChangeset,
+)
 from dbt.adapters.snowflake.relation_configs.dynamic_table import (
     RefreshMode,
     Scheduler,

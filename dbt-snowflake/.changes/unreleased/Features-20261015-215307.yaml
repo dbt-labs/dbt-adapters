@@ -1,0 +1,6 @@
+kind: Features
+body: Support attaching Snowflake data metric functions to table, view, incremental and dynamic table models with model-level `data_metric_functions` and `data_metric_schedule`. Each binding declares its ordered input columns. Function names must be fully qualified, and missing functions fail the model. Database identifiers in DMF metadata queries and schedule SQL literals are escaped. Malformed identifier quoting raises a configuration error.
+time: 2026-10-15T21:53:07.890022+00:00
+custom:
+    Author: sfc-gh-zgong
+    Issue: "2180"
