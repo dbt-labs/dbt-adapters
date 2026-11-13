@@ -1,0 +1,6 @@
+kind: Features
+body: Support microbatch concurrency (`concurrent_batches`) for dbt-spark, including Iceberg tables. Each batch now uses its own temp view so concurrent batches cannot overwrite each other's partitions.
+time: 2026-11-06T14:00:00.000000+01:00
+custom:
+    Author: nicor88
+    Issue: "2292"
