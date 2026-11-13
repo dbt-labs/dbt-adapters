@@ -1,0 +1,6 @@
+kind: Fixes
+body: Warn when BigQuery denies listing tables or routines in a dataset instead of silently treating it as empty, and keep listed tables when only the routines listing is denied
+time: 2026-10-05T11:30:00.000000-07:00
+custom:
+    Author: officialpm
+    Issue: "2145"
