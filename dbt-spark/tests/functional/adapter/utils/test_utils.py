@@ -18,8 +18,10 @@ from dbt.tests.adapter.utils.test_escape_single_quotes import BaseEscapeSingleQu
 from dbt.tests.adapter.utils.test_except import BaseExcept
 from dbt.tests.adapter.utils.test_hash import BaseHash
 from dbt.tests.adapter.utils.test_intersect import BaseIntersect
+from dbt.tests.adapter.utils.test_json_parse import BaseJsonParse
 from dbt.tests.adapter.utils.test_last_day import BaseLastDay
 from dbt.tests.adapter.utils.test_length import BaseLength
+from dbt.tests.adapter.utils.test_percentile import BasePercentile
 from dbt.tests.adapter.utils.test_position import BasePosition
 from dbt.tests.adapter.utils.test_replace import BaseReplace
 from dbt.tests.adapter.utils.test_right import BaseRight
@@ -126,6 +128,13 @@ class TestIntersect(BaseIntersect):
     pass
 
 
+# spark_session loads seed nulls as the string 'None' (see _fix_binding), so the
+# missing-key row's expected null doesn't match json_parse's null result
+@pytest.mark.skip_profile("spark_session")
+class TestJsonParse(BaseJsonParse):
+    pass
+
+
 @pytest.mark.skip_profile("spark_session")  # spark session crashes in CI
 class TestLastDay(BaseLastDay):
     @pytest.fixture(scope="class")
@@ -148,6 +157,10 @@ class TestListagg(BaseListagg):
                 models__test_listagg_no_order_by_sql, "listagg"
             ),
         }
+
+
+class TestPercentile(BasePercentile):
+    pass
 
 
 class TestPosition(BasePosition):
