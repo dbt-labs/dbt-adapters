@@ -126,17 +126,26 @@
 {% macro snowflake__alter_column_comment(relation, column_dict) -%}
     {% set existing_columns = adapter.get_columns_in_relation(relation) | map(attribute="name") | list %}
     {% set filtered_column_dict = validate_doc_columns(relation, column_dict, existing_columns) %}
-    {% if relation.is_dynamic_table -%}
-        {% set relation_type = "table" %}
-    {% elif relation.is_interactive_table -%}
-        {% set relation_type = "table" %}
-    {% else -%}
-        {% set relation_type = relation.type %}
-    {% endif %}
-    alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} alter
-    {% for column_name in existing_columns if (column_name in existing_columns) or (column_name|lower in existing_columns) %}
-        {{ get_column_comment_sql(column_name, filtered_column_dict) }} {{- ',' if not loop.last else ';' }}
+    {% set matching_columns = [] %}
+    {% for column_name in existing_columns %}
+        {% if (column_name in filtered_column_dict) or (column_name|lower in filtered_column_dict) or (column_name|upper in filtered_column_dict) %}
+            {% do matching_columns.append(column_name) %}
+        {% endif %}
     {% endfor %}
+
+    {% if matching_columns | length > 0 %}
+        {% if relation.is_dynamic_table -%}
+            {% set relation_type = "table" %}
+        {% elif relation.is_interactive_table -%}
+            {% set relation_type = "table" %}
+        {% else -%}
+            {% set relation_type = relation.type %}
+        {% endif %}
+        alter {{ relation.get_ddl_prefix_for_alter() }} {{ relation_type }} {{ relation.render() }} alter
+        {% for column_name in matching_columns %}
+            {{ get_column_comment_sql(column_name, filtered_column_dict) }} {{- ',' if not loop.last else ';' }}
+        {% endfor %}
+    {% endif %}
 {% endmacro %}
 
 
