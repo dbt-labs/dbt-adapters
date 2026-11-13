@@ -1,3 +1,33 @@
+{% macro bigquery__diff_column_data_types(source_columns, target_columns) %}
+  {% set result = [] %}
+  {% for sc in source_columns %}
+    {% set matches = [] %}
+    {% for tc in target_columns %}
+      {% if sc.name | lower == tc.name | lower %}
+        {% do matches.append(tc) %}
+      {% endif %}
+    {% endfor %}
+    {% if matches %}
+      {% set tc = matches[0] %}
+      {% if sc.expanded_data_type != tc.expanded_data_type and not sc.can_expand_to(other_column=tc) %}
+        {% do result.append({'column_name': tc.name, 'new_type': sc.expanded_data_type}) %}
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+  {{ return(result) }}
+{% endmacro %}
+
+{% macro bigquery__diff_columns(source_columns, target_columns) %}
+  {% set result = [] %}
+  {% set target_names = target_columns | map(attribute='name') | map('lower') | list %}
+  {% for sc in source_columns %}
+    {% if sc.name | lower not in target_names %}
+      {% do result.append(sc) %}
+    {% endif %}
+  {% endfor %}
+  {{ return(result) }}
+{% endmacro %}
+
 {# BigQuery-specific schema change handling that augments the core macro with
 # STRUCT column synchronization logic. #}
 {% macro bigquery__check_for_schema_changes(source_relation, target_relation) %}
