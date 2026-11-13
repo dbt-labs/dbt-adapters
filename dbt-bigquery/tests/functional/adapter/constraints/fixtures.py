@@ -116,3 +116,41 @@ models:
         constraints:
           - type: unique
 """
+
+my_model_array_of_struct_sql = """
+{{ config(materialized = "table") }}
+
+select [STRUCT(1 AS a_list_item)] as a_list
+"""
+
+my_model_struct_with_array_of_struct_sql = """
+{{ config(materialized = "table") }}
+
+select STRUCT(1 AS id, [STRUCT("test" AS x)] AS items) as b
+"""
+
+model_array_of_struct_schema_yml = """
+version: 2
+models:
+  - name: contract_array_of_struct
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: a_list
+        data_type: ARRAY<STRUCT<>>
+      - name: a_list.a_list_item
+        data_type: int64
+
+  - name: contract_struct_with_array_of_struct
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: b.id
+        data_type: int64
+      - name: b.items
+        data_type: ARRAY<STRUCT<>>
+      - name: b.items.x
+        data_type: string
+"""
