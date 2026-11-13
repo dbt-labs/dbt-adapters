@@ -1,0 +1,6 @@
+kind: Fixes
+body: Omit `base_location` when replacing a dynamic Iceberg table that uses Snowflake-managed storage, instead of rendering `base_location = 'None'`
+time: 2026-11-12T08:13:58.203066-05:00
+custom:
+    Author: DG47
+    Issue: "1911"
