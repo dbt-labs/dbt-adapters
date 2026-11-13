@@ -109,6 +109,33 @@ SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION = BehaviorFlag(
     ),
 )
 
+SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER = BehaviorFlag(
+    name="snowflake_dynamic_table_create_or_alter",
+    default=False,
+    description=(
+        "When enabled, native (info schema) dynamic tables are synced with CREATE OR ALTER DYNAMIC "
+        "TABLE on every run, so edits to the model's SQL are deployed without --full-refresh "
+        "(matching CTAS experience). WARNING: for INCREMENTAL and AUTO refresh modes, a definition "
+        "edit reinitializes the dynamic table (full recompute, incremental state discarded) -- this "
+        "diverges from dbt incremental models, where a logic change requires --full-refresh. CREATE "
+        "OR ALTER does not support every schema change (e.g. column reorder, mid-list insert, type "
+        "narrowing, an incompatible column type change); incompatible edits still require "
+        "--full-refresh, and dbt appends a hint saying so to the error of a failed CREATE OR ALTER. "
+        "Snowflake compares the stored query text literally, so the first sync of an INCREMENTAL or "
+        "AUTO table built by a dbt version that rendered the query with different whitespace may "
+        "reinitialize it once, even when the SQL is unchanged. If `transient` is not set explicitly "
+        "and the effective transient default diverges from the live table (the default flag changed, "
+        "or an explicit `transient` was removed), dbt does not detect it and CREATE OR ALTER attempts "
+        "a transient flip that Snowflake rejects -- recover with --full-refresh. With "
+        "on_configuration_change='continue', a run carrying both a config change and a SQL edit skips "
+        "both. Managed (Snowflake-catalog) Iceberg dynamic tables are synced the same way; their "
+        "Iceberg identity (external volume, base location, Iceberg version) cannot change, and "
+        "converting between a native and an Iceberg dynamic table is rebuilt with CREATE OR REPLACE. "
+        "Dynamic tables in externally owned catalogs keep create-or-replace behavior. When disabled "
+        "(default), behavior is unchanged."
+    ),
+)
+
 # Guard against older dbt-adapters that don't have Capability.CatalogsV2 yet.
 # Remove once dbt-adapters lower bound is bumped to the version that adds it.
 _CATALOGS_V2_CAPABILITY = getattr(Capability, "CatalogsV2", None)  # type: ignore[attr-defined]
@@ -198,6 +225,7 @@ class SnowflakeAdapter(SQLAdapter):
             SNOWFLAKE_DEFAULT_TRANSIENT_DYNAMIC_TABLES,
             SNOWFLAKE_MANAGED_ICEBERG_DEFAULT,
             SNOWFLAKE_FAIL_ON_UNEXPECTED_EXISTING_RELATION,
+            SNOWFLAKE_DYNAMIC_TABLE_CREATE_OR_ALTER,
         ]
 
     def __init__(self, config, mp_context) -> None:
@@ -789,6 +817,29 @@ CALL {proc_name}();
                 )
             return catalog_integration.build_relation(model)
         return None
+
+    @available
+    def dynamic_table_create_or_alter_enabled(self, model: RelationConfig) -> bool:
+        """Whether the opt-in query-evolution (CREATE OR ALTER) path applies to this model.
+
+        True when the behavior flag is on and the model is a native (info schema) dynamic table or
+        a managed Iceberg one (built_in catalog, Snowflake is the Iceberg catalog). Dynamic tables
+        in externally owned catalogs (e.g. ICEBERG_REST) keep create-or-replace behavior.
+        Note: for INCREMENTAL/AUTO dynamic tables a definition edit reinitializes the table (full
+        recompute, incremental state discarded), which diverges from dbt incremental models (where
+        a logic change requires --full-refresh).
+        See https://docs.snowflake.com/en/user-guide/dynamic-tables/modify.
+
+        Args:
+            model (RelationConfig): `config.model` from the jinja context
+        """
+        if not self.behavior.snowflake_dynamic_table_create_or_alter.no_warn:
+            return False
+        catalog_relation = self.build_catalog_relation(model)
+        return getattr(catalog_relation, "catalog_type", None) in (
+            constants.DEFAULT_INFO_SCHEMA_CATALOG.catalog_type,
+            constants.DEFAULT_BUILT_IN_CATALOG.catalog_type,
+        )
 
     @available
     def describe_dynamic_table(
