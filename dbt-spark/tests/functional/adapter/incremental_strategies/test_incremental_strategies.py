@@ -137,7 +137,11 @@ class TestBadStrategies(BaseIncrementalStrategies):
         # assert all models fail with compilation errors
         for result in run_results:
             assert result.status == "error"
-            assert "Compilation Error in model" in result.message
+            # unknown strategies are resolved as custom strategies, which raises a runtime error
+            assert (
+                "Compilation Error in model" in result.message
+                or "Runtime Error in model" in result.message
+            )
 
     @pytest.mark.skip_profile("databricks_http_cluster", "spark_session")
     def test_bad_strategies(self, project):

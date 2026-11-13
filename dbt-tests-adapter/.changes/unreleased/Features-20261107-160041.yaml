@@ -1,0 +1,6 @@
+kind: Features
+body: Add base test class for custom incremental strategies
+time: 2026-11-07T16:00:41.80574-07:00
+custom:
+    Author: dbeatty10
+    Issue: 833 2167
