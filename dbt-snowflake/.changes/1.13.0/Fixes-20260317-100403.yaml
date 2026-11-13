@@ -1,0 +1,6 @@
+kind: Fixes
+body: Fix dbt clone for Iceberg tables by using CREATE ICEBERG TABLE syntax when source is an Iceberg table
+time: 2026-03-17T10:04:03.215641-04:00
+custom:
+    Author: jcolvin
+    Issue: "1767"

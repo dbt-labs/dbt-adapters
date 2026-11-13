@@ -5,6 +5,7 @@ from multiprocessing import get_context
 from contextlib import contextmanager
 from unittest import mock
 
+from dbt.adapters.exceptions import ApproximateMatchError, RelationReturnedMultipleResultsError
 from dbt.adapters.snowflake import SnowflakeAdapter
 from dbt.adapters.snowflake import Plugin as SnowflakePlugin
 from dbt.adapters.snowflake import SnowflakeAdapterResponse
@@ -15,7 +16,9 @@ from dbt.context.query_header import generate_query_header_context
 from dbt.context.providers import generate_runtime_macro_context
 from dbt.contracts.graph.manifest import ManifestStateCheck
 from dbt_common.clients import agate_helper
+from dbt_common.exceptions import DbtDatabaseError
 from snowflake import connector as snowflake_connector
+from snowflake.connector.cursor import ResultMetadata
 
 from .utils import (
     config_from_parts_or_dicts,
@@ -103,6 +106,10 @@ class TestSnowflakeAdapter(unittest.TestCase):
         self.qh_patch.stop()
         self.patcher.stop()
         self.load_state_check.stop()
+
+    def test_fail_on_unexpected_existing_relation_flag_defaults_on(self):
+        flag = self.adapter.behavior.snowflake_fail_on_unexpected_existing_relation
+        self.assertTrue(flag.no_warn)
 
     def test_quoting_on_drop_schema(self):
         relation = SnowflakeAdapter.Relation.create(
@@ -294,8 +301,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 ),
             ]
         )
@@ -329,9 +336,42 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=None,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
+            ]
+        )
+        # `reuse_connections` stays None with keep-alive on, and must not reach the
+        # connector: snowflake-connector-python 5.x rejects a None option (#2293)
+        self.assertIsNone(conn.credentials.reuse_connections)
+        self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
+
+    def test_ocsp_fail_open_false(self):
+        self.config.credentials = self.config.credentials.replace(ocsp_fail_open=False)
+        self.adapter = SnowflakeAdapter(self.config, get_context("spawn"))
+        conn = self.adapter.connections.set_connection_name(name="new_connection_with_new_config")
+
+        self.snowflake.assert_not_called()
+        conn.handle
+        self.snowflake.assert_has_calls(
+            [
+                mock.call(
+                    account="test-account",
+                    autocommit=True,
+                    client_session_keep_alive=False,
+                    database="test_database",
+                    role=None,
+                    schema="public",
+                    user="test_user",
+                    warehouse="test_warehouse",
+                    private_key=None,
+                    application="dbt",
+                    insecure_mode=False,
+                    platform_detection_timeout_seconds=0.0,
+                    session_parameters={},
+                    ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=False,
+                ),
             ]
         )
 
@@ -352,7 +392,6 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     role=None,
                     schema="public",
                     user="test_user",
-                    reuse_connections=True,
                     warehouse="test_warehouse",
                     private_key=None,
                     application="dbt",
@@ -360,6 +399,7 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -395,8 +435,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -431,8 +471,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -463,8 +503,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -499,8 +539,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -535,8 +575,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -571,8 +611,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -605,8 +645,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -637,8 +677,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={"QUERY_TAG": "test_query_tag"},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -668,11 +708,15 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
+        # dbt still pools connections (see `SnowflakeConnectionManager.release`), but
+        # `reuse_connections` is not a connector option, so it is never passed to it
+        self.assertTrue(conn.credentials.reuse_connections)
+        self.assertNotIn("reuse_connections", self.snowflake.call_args.kwargs)
 
     @mock.patch(
         "dbt.adapters.snowflake.SnowflakeCredentials._get_private_key", return_value="test_key"
@@ -704,8 +748,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -742,8 +786,8 @@ class TestSnowflakeAdapter(unittest.TestCase):
                     insecure_mode=False,
                     platform_detection_timeout_seconds=0.0,
                     session_parameters={},
-                    reuse_connections=True,
                     ocsp_root_certs_dict_lock_timeout=10,
+                    ocsp_fail_open=True,
                 )
             ]
         )
@@ -767,6 +811,88 @@ class TestSnowflakeAdapter(unittest.TestCase):
             ]
             relation = self.adapter.get_relation('"test_database"', "test_schema", '"test_TABLE"')
             assert relation.render() == "test_database.test_schema.test_TABLE"
+
+    @staticmethod
+    def _show_objects_relation(identifier="my_table"):
+        # SHOW OBJECTS in a catalog-linked database returns lowercase schema and table names
+        return SnowflakeAdapter.Relation.create(
+            database="MY_CLD",
+            schema="my_schema",
+            identifier=identifier,
+            quote_policy={"database": True, "schema": True, "identifier": True},
+        )
+
+    @staticmethod
+    def _cld_config(case_sensitivity):
+        config = f'{{"catalog_case_sensitivity":"{case_sensitivity}"}}'
+        return None, agate.Table([[config]], column_names=["config"])
+
+    def test_get_relation_case_insensitive_catalog_linked_database(self):
+        listed = self._show_objects_relation()
+        with (
+            mock.patch.object(self.adapter, "list_relations", return_value=[listed]),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_INSENSITIVE")
+            ) as execute,
+        ):
+            relation = self.adapter.get_relation("my_cld", "my_schema", "my_table")
+            assert relation is listed
+            assert relation.render() == '"MY_CLD"."my_schema"."my_table"'
+            # the database's mode is looked up once and reused
+            self.adapter.get_relation("my_cld", "my_schema", "my_table")
+            execute.assert_called_once()
+            assert (
+                "system$get_catalog_linked_database_config('\"MY_CLD\"')"
+                in execute.call_args[0][0]
+            )
+
+    def test_get_relation_case_insensitive_catalog_linked_database_ambiguous(self):
+        listed = [self._show_objects_relation(), self._show_objects_relation("MY_TABLE")]
+        with (
+            mock.patch.object(self.adapter, "list_relations", return_value=listed),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_INSENSITIVE")
+            ),
+        ):
+            with self.assertRaises(RelationReturnedMultipleResultsError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_case_sensitive_catalog_linked_database(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(
+                self.adapter, "execute", return_value=self._cld_config("CASE_SENSITIVE")
+            ),
+        ):
+            with self.assertRaises(ApproximateMatchError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_approximate_match_outside_catalog_linked_database(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(
+                self.adapter,
+                "execute",
+                side_effect=DbtDatabaseError("001006 (22023): SQL compilation error"),
+            ),
+        ):
+            with self.assertRaises(ApproximateMatchError):
+                self.adapter.get_relation("my_cld", "my_schema", "my_table")
+
+    def test_get_relation_exact_match_skips_catalog_linked_database_lookup(self):
+        with (
+            mock.patch.object(
+                self.adapter, "list_relations", return_value=[self._show_objects_relation()]
+            ),
+            mock.patch.object(self.adapter, "execute") as execute,
+        ):
+            relation = self.adapter.get_relation('"MY_CLD"', "my_schema", '"my_table"')
+            assert relation.render() == '"MY_CLD"."my_schema"."my_table"'
+            execute.assert_not_called()
 
     def test_normalize_show_objects_result_fixes_type_mismatch(self):
         # Simulate the type mismatch that occurs across paginated SHOW OBJECTS pages.
@@ -835,6 +961,22 @@ class TestSnowflakeAdapter(unittest.TestCase):
         assert isinstance(normalized.columns["bytes"].data_type, agate.Number)
         assert isinstance(normalized.columns["name"].data_type, agate.Text)
         assert isinstance(normalized.columns["kind"].data_type, agate.Text)
+
+    def test_get_column_schema_from_query_keeps_fixed_precision_and_scale(self):
+        self.cursor.description = [
+            ResultMetadata("PRICE", 0, None, None, 38, 2, True),
+            ResultMetadata("NAME", 2, None, 16777216, None, None, True),
+            ResultMetadata("UPDATED_AT", 6, None, None, 0, 9, True),
+        ]
+        price, name, updated_at = self.adapter.get_column_schema_from_query("select 1")
+
+        # dtype stays FIXED so contract checks are unchanged
+        assert price.dtype == "FIXED"
+        assert price.data_type == "FIXED"
+        assert (price.numeric_precision, price.numeric_scale) == (38, 2)
+        # precision and scale are only carried for FIXED
+        assert (name.numeric_precision, name.numeric_scale) == (None, None)
+        assert (updated_at.numeric_precision, updated_at.numeric_scale) == (None, None)
 
 
 class TestSnowflakeAdapterConversions(TestAdapterConversions):

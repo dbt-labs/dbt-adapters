@@ -145,8 +145,9 @@ class TestGetCatalog:
                 used_schemas=my_schemas,
             )
         # my_seed, my_table, my_view, my_materialized_view each have 3 cols = 12 cols
-        # my_materialized_view creates an underlying table with 2 additional = 5 cols
-        assert len(catalog) == 17
+        # Redshift Patch 206+ moved the MV's internal backing table out of the MV's schema,
+        # so it no longer appears in the catalog (older patches returned 5 more cols = 17)
+        assert len(catalog) == 12
 
 
 class TestGetCatalogDatasharing(TestGetCatalog):

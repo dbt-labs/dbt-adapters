@@ -12,6 +12,11 @@ This document covers the following topics:
 > [!TIP]
 > Visit [Become a contributor](https://docs.getdbt.com/community/contribute) to learn more about contributing at dbt!
 
+> [!IMPORTANT]
+> This repository is for dbt v1.x adapters, which are no longer accepting new features.
+> We welcome bug fixes here, but please don't open feature requests or pull requests that add new features.
+> New adapter features are only being added to dbt v2.x; propose them in [dbt-labs/dbt](https://github.com/dbt-labs/dbt/issues/new?template=feature-request.yml).
+
 The following utilities are needed for developing the packages in this repository:
 
 - `pip`

@@ -1,0 +1,6 @@
+kind: Fixes
+body: Load private keys that cryptography>=45 rejects (legacy PBES1 or PKCS#12 encryption, PBES2 with an explicitly encoded default PRF, single-DES keys; RSA and EC) through pyOpenSSL, replacing pycryptodome
+time: 2026-10-13T12:00:00.000000-06:00
+custom:
+    Author: ash2shukla
+    Issue: "2198"

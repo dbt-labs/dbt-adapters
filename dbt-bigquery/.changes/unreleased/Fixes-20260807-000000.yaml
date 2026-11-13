@@ -1,0 +1,7 @@
+kind: Fixes
+body: Stop dropping and recreating a table when `cluster_by` differs from its clustering
+    fields only by letter case or backtick quoting
+time: 2026-08-07T00:00:00.000000+00:00
+custom:
+    Author: ddamart
+    Issue: "2111"

@@ -6,7 +6,7 @@ import json
 from multiprocessing.context import SpawnContext
 import re
 import time
-from typing import Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, Hashable, List, Optional, Tuple, TYPE_CHECKING
 import uuid
 
 from google.auth.exceptions import RefreshError
@@ -40,7 +40,7 @@ from dbt.adapters.events.types import SQLQuery, SQLQueryStatus
 from dbt.adapters.exceptions.connection import FailedToConnectError
 from dbt.adapters.bigquery.clients import create_bigquery_client
 from dbt.adapters.bigquery.credentials import Priority
-from dbt.adapters.bigquery.retry import RetryFactory
+from dbt.adapters.bigquery.retry import job_is_terminally_failed, RetryFactory
 
 if TYPE_CHECKING:
     # Indirectly imported via agate_helper, which is lazy loaded further downfile.
@@ -223,31 +223,25 @@ class BigQueryConnectionManager(BaseConnectionManager):
         return {}
 
     def generate_job_id(self) -> str:
-        # Generating a fresh job_id for every _query_and_results call to avoid job_id reuse.
-        # Generating a job id instead of persisting a BigQuery-generated one after client.query is called.
-        # Using BigQuery's job_id can lead to a race condition if a job has been started and a termination
-        # is sent before the job_id was stored, leading to a failure to cancel the job.
-        # By predetermining job_ids (uuid4), we can persist the job_id before the job has been kicked off.
-        # Doing this, the race condition only leads to attempting to cancel a job that doesn't exist.
+        # Predetermined (uuid4) rather than persisting the one BigQuery mints during
+        # client.query: a job started before its id was stored could not be cancelled.
+        # Callers decide how long to reuse an id; see raw_execute.
         job_id = str(uuid.uuid4())
         thread_id = self.get_thread_identifier()
         self.jobs_by_thread[thread_id].append(job_id)
         return job_id
 
-    def _submit_or_attach(self, client: Client, job_id: str, submit: Callable):
-        """Submit a job, or attach to the existing one via get_job on 409 Conflict.
+    def _submit_or_attach(self, client: Client, job_id: str, submit: Callable[[], Any]) -> Any:
+        """Submit a job; on 409 Conflict, attach to the existing job.
 
-        A stable job_id makes jobs.insert idempotent: a resubmission (dbt's retry
-        or the client library's transport retry after a lost response) attaches to
-        the in-flight job instead of spawning a second one that re-runs work.
+        A 409 means a previous attempt's insert landed even if its response did
+        not, so that job -- running, succeeded or failed -- is this attempt's
+        outcome. Retrying a failed one under a new job_id is the caller's call.
         """
         try:
             return submit()
         except Conflict:
-            logger.debug(
-                f"Job {job_id} already exists; attaching to the in-flight job "
-                "instead of resubmitting to avoid duplicate execution."
-            )
+            logger.debug(f"Job {job_id} already exists; attaching to it instead of resubmitting.")
             return client.get_job(job_id)
 
     def raw_execute(
@@ -294,17 +288,26 @@ class BigQueryConnectionManager(BaseConnectionManager):
             job_params["job_timeout_ms"] = int(model_timeout * 1000)
 
         with self.exception_handler(sql):
-            # Mint the job_id once, outside the retry closure, so a re-entry
-            # resubmits the same job instead of spawning a duplicate.
+            # Minted outside the retry closure: an attempt that lost its insert
+            # response re-enters with the same id and attaches to the job it
+            # already created instead of duplicating it.
             job_id = self.generate_job_id()
+            last_job: Optional[Any] = None
+
+            def _record_job(job: Any) -> None:
+                nonlocal last_job
+                last_job = job
 
             def _execute_with_retry():
+                nonlocal job_id, last_job
+                # last_job is the previous attempt's job. A dead one would only 409
+                # back onto itself and replay its error, so retry under a fresh id.
+                if job_is_terminally_failed(last_job):
+                    job_id = self.generate_job_id()
+                last_job = None
+
                 return self._query_and_results(
-                    conn,
-                    sql,
-                    job_params,
-                    job_id,
-                    limit=limit,
+                    conn, sql, job_params, job_id, limit=limit, on_job_submitted=_record_job
                 )
 
             retry = self._retry.create_reopen_with_deadline(conn)
@@ -641,6 +644,7 @@ class BigQueryConnectionManager(BaseConnectionManager):
         job_params,
         job_id,
         limit: Optional[int] = None,
+        on_job_submitted: Optional[Callable[[Any], None]] = None,
     ):
         """Query the client and wait for results."""
         client: Client = conn.handle
@@ -656,7 +660,6 @@ class BigQueryConnectionManager(BaseConnectionManager):
             timeout + 30 if timeout else None
         )  # buffer for polling after job execution timeout
         # Cannot reuse job_config if destination is set and ddl is used.
-        # job_id is stable across retries (see raw_execute).
         query_job = self._submit_or_attach(
             client,
             job_id,
@@ -668,6 +671,9 @@ class BigQueryConnectionManager(BaseConnectionManager):
                 timeout=self._retry.create_job_creation_timeout(),
             ),
         )
+        # Reported before polling, so the caller sees the job even if result() raises.
+        if on_job_submitted:
+            on_job_submitted(query_job)
         if (
             query_job.location is not None
             and query_job.job_id is not None

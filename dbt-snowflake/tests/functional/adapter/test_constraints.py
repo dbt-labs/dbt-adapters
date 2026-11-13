@@ -48,7 +48,7 @@ create or replace transient table <model_identifier> (
     id integer not null primary key references <foreign_key_model_identifier> (id) unique,
     color text,
     date_day text
-) as ( select
+) ignore grants as ( select
         id,
         color,
         date_day from
@@ -92,6 +92,14 @@ class SnowflakeColumnEqualSetup:
                 "VARIANT",
             ],
         ]
+
+
+# An incremental model's first run creates its table with plain `create` (not `create or
+# replace`, and so without IGNORE GRANTS), so a stale relation cache fails the run instead of
+# replacing an existing table.
+_expected_incremental_sql_snowflake = _expected_sql_snowflake.replace(
+    "create or replace transient table", "create transient table", 1
+).replace(") ignore grants as (", ") as (", 1)
 
 
 class TestSnowflakeTableConstraintsColumnsEqual(
@@ -141,7 +149,7 @@ class TestSnowflakeIncrementalConstraintsDdlEnforcement(
 ):
     @pytest.fixture(scope="class")
     def expected_sql(self):
-        return _expected_sql_snowflake
+        return _expected_incremental_sql_snowflake
 
 
 class TestSnowflakeTableConstraintsRollback(BaseConstraintsRollback):
@@ -167,7 +175,7 @@ create or replace transient table <model_identifier> (
     primary key (id),
     constraint strange_uniqueness_requirement unique (color, date_day),
     foreign key (id) references <foreign_key_model_identifier> (id)
-) as ( select
+) ignore grants as ( select
         id,
         color,
         date_day from
@@ -190,7 +198,7 @@ create or replace transient table <model_identifier> (
     id integer not null,
     "from" text not null,
     date_day text
-) as (
+) ignore grants as (
     select id, "from", date_day
     from (
         select

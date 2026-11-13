@@ -108,8 +108,11 @@ as (
     {%- set transient='' -%}
 {%- endif -%}
 
-{%- set copy_grants = config.get('copy_grants', default=false) -%}
-{%- set copy_tags = config.get('copy_tags', default=false) -%}
+{%- set replace = should_replace_on_create(relation) -%}
+{%- set maybe_or_replace = 'or replace ' if replace else '' -%}
+
+{#- COPY/IGNORE GRANTS and COPY TAGS refer to the table being replaced; Snowflake rejects them on a CTAS without OR REPLACE -#}
+{%- set copy_tags = replace and config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -123,16 +126,16 @@ as (
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
-create or replace {{ transient }}table {{ relation }}
+create {{ maybe_or_replace }}{{ transient }}table {{ relation }}
     {%- set contract_config = config.get('contract') -%}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
-    {% if copy_grants -%} copy grants {%- endif %}
+    {{ optional('change_tracking', catalog_relation.change_tracking)}}
+    {% if replace -%} {{ snowflake__copy_grants_clause() }} {%- endif %}
     {% if copy_tags -%} copy tags {%- endif %}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-    {{ optional('change_tracking', catalog_relation.change_tracking)}}
     as (
         {%- if catalog_relation.cluster_by is not none -%}
         select * from (
@@ -168,6 +171,8 @@ alter table {{ relation }} resume recluster;
 -#}
 
 {%- set catalog_relation = adapter.build_catalog_relation(config.model) -%}
+{%- set replace = should_replace_on_create(relation) -%}
+{%- set maybe_or_replace = 'or replace ' if replace else '' -%}
 
 {%- set partition_by_keys = get_partition_by_keys(catalog_relation) -%}
 {%- if partition_by_keys -%}
@@ -176,8 +181,8 @@ alter table {{ relation }} resume recluster;
   {%- set partition_by_string = none -%}
 {%- endif -%}
 
-{%- set copy_grants = config.get('copy_grants', default=false) -%}
-{%- set copy_tags = config.get('copy_tags', default=false) -%}
+{#- COPY/IGNORE GRANTS and COPY TAGS refer to the table being replaced; Snowflake rejects them on a CTAS without OR REPLACE -#}
+{%- set copy_tags = replace and config.get('copy_tags', default=false) -%}
 
 {%- set row_access_policy = config.get('row_access_policy', default=none) -%}
 {%- set table_tag = config.get('table_tag', default=none) -%}
@@ -191,7 +196,7 @@ alter table {{ relation }} resume recluster;
 {%- set sql_header = config.get('sql_header', none) -%}
 {{ sql_header if sql_header is not none }}
 
-create or replace iceberg table {{ relation }}
+create {{ maybe_or_replace }}iceberg table {{ relation }}
     {%- if contract_config.enforced %}
     {{ get_table_columns_and_constraints() }}
     {%- endif %}
@@ -206,7 +211,7 @@ create or replace iceberg table {{ relation }}
     {{ optional('change_tracking', catalog_relation.change_tracking)}}
     {% if row_access_policy -%} with row access policy {{ row_access_policy }} {%- endif %}
     {% if table_tag -%} with tag ({{ table_tag }}) {%- endif %}
-    {% if copy_grants -%} copy grants {%- endif %}
+    {% if replace -%} {{ snowflake__copy_grants_clause() }} {%- endif %}
     {% if copy_tags -%} copy tags {%- endif %}
 as (
     {%- if catalog_relation.cluster_by is not none -%}
@@ -345,7 +350,8 @@ as (
 create iceberg table {{ relation }} (
     {%- for column in sql_columns -%}
         {% if column.data_type == "FIXED" %}
-            {%- set data_type = "INT" -%}
+            {#- Keep precision and scale; INT would round NUMBER(p,s) values with s > 0 -#}
+            {%- set data_type = column.numeric_type("NUMBER", column.numeric_precision, column.numeric_scale) -%}
         {% elif "character varying" in column.data_type %}
             {%- set data_type = "STRING" -%}
         {% else %}
@@ -383,6 +389,15 @@ insert into {{ relation }}
     {%- set table_type='transient' -%}
 {% endif %}
 
+{%- if temporary -%}
+    {%- set write_mode = 'overwrite' -%}
+{%- elif should_replace_on_create(target_relation) -%}
+    {%- set write_mode = 'overwrite' -%}
+{%- else -%}
+    {#- Snowpark's errorifexists fails the write when the table already exists -#}
+    {%- set write_mode = 'errorifexists' -%}
+{%- endif %}
+
 {{ compiled_code }}
 
 
@@ -398,7 +413,7 @@ def materialize(session, df, target_relation):
             # session.write_pandas does not have overwrite function
             df = session.createDataFrame(df)
     {% set target_relation_name = resolve_model_name(target_relation) %}
-    df.write.mode("overwrite").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}')
+    df.write.mode("{{ write_mode }}").save_as_table('{{ target_relation_name }}', table_type='{{table_type}}')
 
 
 def main(session):

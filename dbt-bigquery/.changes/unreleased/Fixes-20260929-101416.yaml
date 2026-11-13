@@ -1,0 +1,6 @@
+kind: Fixes
+body: (adapters/bigquery) emit create table instead of create or replace table when the relation cache says an incremental or snapshot target does not exist, so an inconsistent cache fails the run instead of silently replacing the table
+time: 2026-09-29T10:14:16.885982056-07:00
+custom:
+    Author: xuliangs
+    Issue: "15953"
