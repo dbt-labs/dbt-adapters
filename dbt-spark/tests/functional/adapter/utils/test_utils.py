@@ -128,6 +128,9 @@ class TestIntersect(BaseIntersect):
     pass
 
 
+# spark_session loads seed nulls as the string 'None' (see _fix_binding), so the
+# missing-key row's expected null doesn't match json_parse's null result
+@pytest.mark.skip_profile("spark_session")
 class TestJsonParse(BaseJsonParse):
     pass
 
