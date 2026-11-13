@@ -625,11 +625,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
             self.begin()
             yield
-            # The execute() retry mechanism may have closed and reopened
-            # the connection during yield, resetting transaction_open to
-            # False. Restore the flag so commit() can proceed as expected.
-            if not connection.transaction_open:
-                connection.transaction_open = True
             self.commit()
 
             self.begin()
@@ -649,9 +644,6 @@ class RedshiftConnectionManager(SQLConnectionManager):
 
         self.begin()
         yield
-        # See comment in fresh_transaction().
-        if not connection.transaction_open:
-            connection.transaction_open = True
         self.commit()
 
         self.begin()
@@ -715,8 +707,15 @@ class RedshiftConnectionManager(SQLConnectionManager):
             retries -= 1
             # we need to actually close and open to get a new connection
             # otherwise no queries will succeed on this connection
-            self.close(self.get_thread_connection())
-            self.open(self.get_thread_connection())
+            connection = self.get_thread_connection()
+            was_transaction_open = connection.transaction_open
+            self.close(connection)
+            self.open(connection)
+            if was_transaction_open:
+                # close() tore down the transaction the caller believes is
+                # still open; re-begin it so add_query()'s auto_begin check
+                # and a later commit() don't desync from reality
+                self.begin()
             time.sleep(backoff)
             # return with exponential backoff
             return retries, min(max(backoff * 2, 2), 60)
