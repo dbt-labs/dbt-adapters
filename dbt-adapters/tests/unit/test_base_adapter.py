@@ -537,6 +537,7 @@ class TestListRelationsUncachedSchema:
             # Another thread populates the schema and renames orders while this listing is in
             # flight; the listing still reflects the database before the rename.
             adapter.cache.add(orders)
+            adapter.cache.update_schemas([("db", "analytics")])
             adapter.cache.rename(orders, backup)
             return [orders]
 
@@ -550,6 +551,23 @@ class TestListRelationsUncachedSchema:
         assert self._cached_identifiers(adapter) == {"orders__dbt_backup"}
         adapter.cache.rename(self._relation(adapter, "orders__dbt_stg"), orders)
         assert self._cached_identifiers(adapter) == {"orders", "orders__dbt_backup"}
+
+    def test_cache_added_does_not_mark_schema_listed(self, adapter):
+        # With populate_cache off, a materialization that returns its relation without looking
+        # up `this` first gets it added to a schema that nothing has listed yet.
+        semantic_view = self._relation(adapter, "semantic_view")
+        inc = self._relation(adapter, "inc")
+        adapter.cache_added(semantic_view)
+
+        with patch.object(
+            adapter, "list_relations_without_caching", return_value=[inc, semantic_view]
+        ) as list_relations_without_caching:
+            listed = adapter.list_relations("db", "analytics")
+
+        list_relations_without_caching.assert_called_once()
+        assert {r.identifier for r in listed} == {"inc", "semantic_view"}
+        assert ("db", "analytics") in adapter.cache
+        assert self._cached_identifiers(adapter) == {"inc", "semantic_view"}
 
 
 class TestRelationsCacheForSchemas:

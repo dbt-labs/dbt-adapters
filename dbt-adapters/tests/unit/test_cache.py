@@ -48,6 +48,46 @@ class TestEmpty(TestCache):
         self.assertEqual(len(self.cache.get_relations("dbt", "test")), 0)
 
 
+class TestListedSchemas(TestCache):
+    def test_add_does_not_mark_schema_listed(self):
+        self.cache.add(make_relation("DBT", "Foo", "bar"))
+
+        self.assertEqual(self.cache.schemas, {("dbt", "foo")})
+        self.assertNotIn(("dbt", "foo"), self.cache)
+
+    def test_rename_does_not_mark_schema_listed(self):
+        self.cache.rename(make_relation("dbt", "foo", "bar"), make_relation("dbt", "baz", "bar"))
+
+        self.assertIn(("dbt", "baz"), self.cache.schemas)
+        self.assertNotIn(("dbt", "baz"), self.cache)
+
+    def test_update_schemas_marks_schema_listed(self):
+        self.cache.add(make_relation("dbt", "foo", "bar"))
+        self.cache.update_schemas([("DBT", "Foo"), ("dbt", "empty")])
+
+        self.assertIn(("dbt", "foo"), self.cache)
+        self.assertIn(("dbt", "empty"), self.cache)
+        self.assertEqual(self.cache.schemas, {("dbt", "foo"), ("dbt", "empty")})
+
+    def test_drop_schema_unmarks_schema_listed(self):
+        self.cache.add(make_relation("dbt", "foo", "bar"))
+        self.cache.update_schemas([("dbt", "foo")])
+
+        self.cache.drop_schema("dbt", "foo")
+
+        self.assertNotIn(("dbt", "foo"), self.cache)
+        self.assertEqual(self.cache.listed_schemas, set())
+        self.assert_relations_do_not_exist("dbt", "foo", "bar")
+
+    def test_clear_unmarks_schema_listed(self):
+        self.cache.update_schemas([("dbt", "foo")])
+
+        self.cache.clear()
+
+        self.assertNotIn(("dbt", "foo"), self.cache)
+        self.assertEqual(self.cache.listed_schemas, set())
+
+
 class TestDrop(TestCache):
     def setUp(self):
         super().setUp()

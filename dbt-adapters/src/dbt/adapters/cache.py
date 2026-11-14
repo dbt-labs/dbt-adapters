@@ -163,12 +163,16 @@ class RelationsCache:
     :attr threading.RLock lock: The lock around relations, held during updates.
         The adapters also hold this lock while filling the cache.
     :attr Set[str] schemas: The set of known/cached schemas, all lowercased.
+    :attr Set[str] listed_schemas: The schemas whose relations have all been
+        added to the cache, all lowercased. Adding a relation makes its schema
+        known, but not listed.
     """
 
     def __init__(self, log_cache_events: bool = False) -> None:
         self.relations: Dict[_ReferenceKey, _CachedRelation] = {}
         self.lock = threading.RLock()
         self.schemas: Set[Tuple[Optional[str], Optional[str]]] = set()
+        self.listed_schemas: Set[Tuple[Optional[str], Optional[str]]] = set()
         self.log_cache_events = log_cache_events
 
     def add_schema(
@@ -204,22 +208,28 @@ class RelationsCache:
             self._remove_all(to_remove)
             # handle a drop_schema race by using discard() over remove()
             self.schemas.discard(key)
+            self.listed_schemas.discard(key)
 
     def update_schemas(self, schemas: Iterable[Tuple[Optional[str], str]]):
-        """Add multiple schemas to the set of known schemas (case-insensitive)
+        """Mark multiple schemas as listed (case-insensitive): all of their
+        relations have been added to the cache, so lookups in them can be
+        answered from the cache.
 
         :param schemas: An iterable of the schema names to add.
         """
-        self.schemas.update((lowercase(d), s.lower()) for (d, s) in schemas)
+        keys = {(lowercase(d), s.lower()) for (d, s) in schemas}
+        self.schemas.update(keys)
+        self.listed_schemas.update(keys)
 
     def __contains__(self, schema_id: Tuple[Optional[str], str]):
-        """A schema is 'in' the relations cache if it is in the set of cached
-        schemas.
+        """A schema is 'in' the relations cache if it has been listed, so the
+        cache holds all of its relations. A schema that only has relations
+        added one at a time, for example through `cache_added`, is not.
 
         :param schema_id: The db name and schema name to look up.
         """
         db, schema = schema_id
-        return (lowercase(db), schema.lower()) in self.schemas
+        return (lowercase(db), schema.lower()) in self.listed_schemas
 
     def dump_graph(self):
         """Dump a key-only representation of the schema to a dictionary. Every
@@ -284,7 +294,7 @@ class RelationsCache:
         """
         ref_key = _make_ref_key(referenced)
         dep_key = _make_ref_key(dependent)
-        if (ref_key.database, ref_key.schema) not in self:
+        if (ref_key.database, ref_key.schema) not in self.schemas:
             # if we have not cached the referenced schema at all, we must be
             # referring to a table outside our control. There's no need to make
             # a link - we will never drop the referenced relation during a run.
@@ -497,6 +507,7 @@ class RelationsCache:
         with self.lock:
             self.relations.clear()
             self.schemas.clear()
+            self.listed_schemas.clear()
 
     def _list_relations_in_schema(
         self, database: Optional[str], schema: Optional[str]

@@ -1073,11 +1073,9 @@ class BaseAdapter(metaclass=AdapterMeta):
                 if (database, schema) not in self.cache:
                     for relation in relations:
                         self.cache.add(relation)
-                    if not relations:
-                        # it's possible that there were no relations in some schemas. We want
-                        # to insert the schemas we query into the cache's `.schemas` attribute
-                        # so we can check it later
-                        self.cache.update_schemas([(database, schema)])
+                    # Adding relations does not mark their schema as listed, so mark it here, also
+                    # when it has no relations, so later lookups in it are answered from the cache.
+                    self.cache.update_schemas([(database, schema)])
 
         fire_event(
             ListRelations(
